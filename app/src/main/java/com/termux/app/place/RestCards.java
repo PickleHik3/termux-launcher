@@ -281,14 +281,14 @@ public final class RestCards {
         answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
             frontHome);
         answer.mHomeDropPx = drop;
-        answer.mTerminalLiftPx = frontHome ? 0 : SideCards.terminalSideLiftPx(
-            StackLayout.layout(rest.pass, new DockGeometry()).flushBottomInsetPx, true);
+        // The Terminal's own rest's lift, whichever page is in front.
+        answer.mTerminalLiftPx = (frontHome ? otherCards : answer).mTerminalLiftPx;
         return answer;
     }
 
     /**
-     * How far the Terminal's side stands above the container's inner box at this rest
-     * ({@link SideCards#terminalSideLiftPx}); 0 unless apart with the Terminal in front.
+     * How far above its layout the Terminal's side is drawn ({@link SideCards#terminalSideLiftPx}),
+     * the Terminal's own rest's at both rests; 0 unless apart.
      */
     public int terminalSideLiftPx() {
         return mTerminalLiftPx;
@@ -561,6 +561,16 @@ public final class RestCards {
             liftLaidOut(StackView.KEYBOARD_COLUMN, homeDropPx);
             liftLaidOut(StackView.HOST, homeDropPx);
             liftLaidOut(StackView.UNDER, homeDropPx);
+        }
+        // The Terminal's side while the cards stand apart: the container pads nothing, so its
+        // column and its card are laid out the lift lower than they are drawn above.
+        if (keysCard) {
+            mTerminalLiftPx = SideCards.terminalSideLiftPx(insets.stackPaddingPx, true);
+            if (mTerminalLiftPx != 0) {
+                liftLaidOut(StackView.KEYS_CARD, -mTerminalLiftPx);
+                liftLaidOut(StackView.KEYBOARD_COLUMN, -mTerminalLiftPx);
+                liftLaidOut(StackView.UNDER, -mTerminalLiftPx);
+            }
         }
     }
 

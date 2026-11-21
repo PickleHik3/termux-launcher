@@ -256,8 +256,9 @@ public final class SideCardsController {
     }
 
     /**
-     * What the keyboard column's bottom margin stands higher by: the Terminal side's lift while
-     * apart ({@link com.termux.app.place.SideCards#terminalSideLiftPx}), else 0.
+     * How far above its layout the renderer draws the Terminal's side: the Terminal's own rest's
+     * lift while apart, whichever page is in front
+     * ({@link com.termux.app.place.SideCards#terminalSideLiftPx}), else 0.
      */
     public int terminalSideLiftPx() {
         return mTerminalLiftPx;

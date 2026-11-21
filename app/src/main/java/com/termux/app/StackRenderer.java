@@ -372,9 +372,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /**
      * {@link #setSidesApart(boolean, float)} with the Terminal side's lift
-     * ({@code SideCards#terminalSideLiftPx}): the flush inset the keyboard column's margin
-     * carries in place of the container's padding while apart. The keyboard's cut counts it as it
-     * counted the padding, so the keyboard hides where it did.
+     * ({@code SideCards#terminalSideLiftPx}, the Terminal's own rest's whichever page is in
+     * front): the flush inset the container no longer pads while apart. The Terminal's lane rows
+     * are drawn that much higher at every frame, the keyboard's column by the Terminal's share
+     * ({@code SideCards#columnLiftPx}), and the keyboard's cut counts the column's lift as it
+     * counted the padding, so the keyboard hides where it did. No layout carries it.
      */
     public void setSidesApart(boolean apart, float homeDropPx, int terminalLiftPx) {
         float drop = apart ? homeDropPx : 0f;
@@ -388,6 +390,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /** The Terminal side's lift while apart ({@link #setSidesApart(boolean, float, int)}). */
     private int mTerminalLiftPx;
+    /** This frame's Terminal share of the scene (1 at its rest) and the column's lift from it. */
+    private float mTerminalShare;
+    private float mColumnLiftPx;
 
     /** DIAG(two-cards): front/from/to, the renderer's drop and offsets, then the controller's view fields. */
     private void diagTwoCards(@NonNull String phase) {
@@ -534,6 +539,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         boolean landing = mLandingPending;
         mLandingPending = false;
         if (guard != null) guard.check();
+        final float homeShare = mHasEnds ? StackScene.homeShare(mFromHome, mToHome, mEndsProgress)
+            : mViews.frontIsHome() ? 1f : 0f;
+        mTerminalShare = 1f - homeShare;
+        mColumnLiftPx = com.termux.app.place.SideCards.columnLiftPx(mApart, mTerminalLiftPx,
+            mTerminalShare);
         readGeometry(container);
         // A crossing's own travel carries the laid-out keyboard at the seam's reveal
         // (PlaceChromeTravel#keyboardLaidOutPx), so the rest's share joins only at rest.
@@ -602,6 +612,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
         if (layersMoved) invalidateIfShown(R.id.accessory_blur_backdrop);
+        // The keyboard's column is the front page's: it carries the Terminal's lift by its share.
+        View column = mViews.view(R.id.accessory_keyboard_column);
+        if (column != null && column.getTranslationY() != -mColumnLiftPx) {
+            column.setTranslationY(-mColumnLiftPx);
+            mWriteCount++;
+            invalidateIfDressed(R.id.inapp_keyboard_view_host);
+            invalidateIfDressed(R.id.accessory_under_keyboard_stack);
+        }
         View under = mViews.view(R.id.accessory_under_keyboard_stack);
         if (under != null && writeTy(StackScene.V_UNDER, under, mFrame.ty[StackScene.V_UNDER])) {
             if (under.getBackground() != null) under.invalidate();
@@ -622,8 +640,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         writeLanes();
         writeContent();
-        mViews.homeShare(mHasEnds ? StackScene.homeShare(mFromHome, mToHome, mEndsProgress)
-            : mViews.frontIsHome() ? 1f : 0f);
+        mViews.homeShare(homeShare);
         // DIAG(kb-cut): the keyboard's motion and cut on each crossing frame; revert before merge.
         if (mHasEnds && com.termux.app.chrome.MotionLog.enabled) {
             View kb = mViews.view(R.id.inapp_keyboard_container);
@@ -663,7 +680,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             float wantTy = 0f;
             if (host.getParent() == stack) {
                 int lane = stack.getLane(host);
-                if (lane == StackLanes.HOME && mApart) wantTy = mHomeDropPx;
+                // Home's lane its drop, the Terminal's its lift, both whichever page is in front.
+                wantTy = com.termux.app.place.SideCards.laneTyPx(lane, mApart, mHomeDropPx,
+                    mTerminalLiftPx, mTerminalShare);
                 if (lane != StackLanes.STACK) {
                     want = mFrame.sideTx[(lane == StackLanes.HOME ? Side.HOME : Side.TERMINAL)
                         .ordinal()];
@@ -779,8 +798,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         ViewGroup.LayoutParams params = container.getLayoutParams();
         g.containerHeightPx = params != null && params.height > 0 ? params.height
             : Math.max(0, container.getHeight());
-        // While apart the flush inset is the column's margin, not the padding: counted the same.
-        g.stackPaddingBottomPx = container.getPaddingBottom() + mTerminalLiftPx;
+        // While apart the flush inset is the column's lift, not the padding: counted the same.
+        final int columnLift = Math.round(mColumnLiftPx);
+        g.stackPaddingBottomPx = container.getPaddingBottom() + columnLift;
         for (int i = 0; i < StackGeometry.LAYER_COUNT; i++) {
             View layer = mViews.view(LAYER_IDS[i]);
             g.layerPresent[i] = layer != null;
@@ -800,10 +820,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             : keyboard == null ? 0 : Math.max(0, keyboard.getHeight());
         g.keyboardFootPx = Math.min(g.keyboardHeightPx, Math.max(0, mViews.keyboardFootPx()));
         g.keyboardTopPx = keyboard == null ? 0
-            : keyboard.getTop() + (column != null ? column.getTop() : 0);
+            : keyboard.getTop() + (column != null ? column.getTop() : 0) - columnLift;
         g.underShown = under != null && mViews.underKeyboardBandsShown();
         g.belowKeyboardInColumnPx = g.keyboardInColumn ? belowKeyboardInColumnPx(column, under) : 0;
-        g.underTopPx = under == null ? 0 : under.getTop() + (column != null ? column.getTop() : 0);
+        g.underTopPx = under == null ? 0
+            : under.getTop() + (column != null ? column.getTop() : 0) - columnLift;
         g.underBottomPx = under == null ? 0 : g.underTopPx + under.getHeight();
         g.footTopPx = 0;
         g.footBottomPx = 0;

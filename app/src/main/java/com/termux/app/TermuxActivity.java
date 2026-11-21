@@ -18222,11 +18222,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             inAppKeyboardFootApplies(isInAppKeyboardCapsule()));
         mDockFootPx = bottomInsets.dockFootPx;
         // Home's card and the Terminal's extra-keys card, from one answer at rest (a live crossing
-        // lays neither out), before the container's padding and the column's margin: while they
-        // stand apart the container pads nothing and the column carries the Terminal's lift.
+        // lays neither out), before the container's padding: while they stand apart the container
+        // pads nothing and the renderer draws the Terminal's side its lift higher (SideCards).
         boolean sideCardsMoved = !mCrossing.crossing() && mSideCards.update(stackIn);
-        applyDockFootLayout(accessoryStackContainer, bottomInsets,
-            mSideCards.terminalSideLiftPx());
+        applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
         // The in-app keyboard stays laid out while it is down: the container is as tall as
         // the keyboard-up stack, and the scene translates it down (StackScene#keyboardTranslationPx).
@@ -18813,15 +18812,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * the dock's glass host leaves the column for the container's bottom edge while it owns the
      * foot: the one surface from the row's top to the screen's bottom (ADR 0018 §1).
      */
-    /** @param terminalLiftPx the Terminal side's lift the column stands on ({@code SideCards#terminalSideLiftPx}) */
     private void applyDockFootLayout(@NonNull View container,
-                                     @NonNull com.termux.app.place.BottomInsets insets,
-                                     int terminalLiftPx) {
+                                     @NonNull com.termux.app.place.BottomInsets insets) {
         applyDeckBands();
         View column = container.findViewById(R.id.accessory_keyboard_column);
         if (column != null && column.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) column.getLayoutParams();
-            int margin = insets.keyboardColumnMarginPx + Math.max(0, terminalLiftPx);
+            // Never the Terminal's lift: Home's rows stand on this column (SideCards#columnLiftPx).
+            int margin = insets.keyboardColumnMarginPx;
             if (params.bottomMargin != margin) {
                 params.bottomMargin = margin;
                 column.setLayoutParams(params);

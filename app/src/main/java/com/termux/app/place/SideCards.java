@@ -86,15 +86,47 @@ public final class SideCards {
     }
 
     /**
-     * How far the Terminal's side stands above the container's inner box while the cards stand
-     * apart: the flush inset the container no longer pads (the lower half of the Terminal's flush
-     * padding), carried by the keyboard column's bottom margin, so the Terminal's column, rows and
-     * extra-keys card stand where they stood over the padding. 0 otherwise, and 0 while Home is in
-     * front (its pass stands no flush padding). Like {@link #homeSideDropPx}, a number of one
-     * side's rest: it moves with the Terminal's keyboard at rest, never in a crossing.
+     * How far above its layout the Terminal's side is drawn while the cards stand apart: the
+     * padding the container no longer pads at the Terminal's own rest
+     * ({@code BottomInsets#stackPaddingPx} of that rest: the lower half of its flush
+     * padding while its keyboard is down), so the Terminal's lane rows, its extra-keys card and its
+     * keyboard column are drawn where the padding stood them. 0 otherwise. Like
+     * {@link #homeSideDropPx}, a number of one side's rest, read from the Terminal's rest whichever
+     * page is in front: nothing in the layout carries it (the keyboard column, which Home's rows
+     * stand on, never re-margins for it), so a landing on Home moves none of Home's views.
      */
-    public static int terminalSideLiftPx(int flushBottomInsetPx, boolean apart) {
-        return apart ? Math.max(0, flushBottomInsetPx) : 0;
+    public static int terminalSideLiftPx(int terminalRestStackPaddingPx, boolean apart) {
+        return apart ? Math.max(0, terminalRestStackPaddingPx) : 0;
+    }
+
+    /**
+     * The translation the stack's renderer draws a lane's rows at while the cards stand apart
+     * ({@code lane} a {@link StackLanes} constant): Home's lane its drop, the Terminal's lane its
+     * lift (up), and the stack's own lane, which is the front page's, its share of the lift
+     * ({@link #columnLiftPx}). 0 while the cards do not stand apart.
+     *
+     * @param terminalShare how much of the scene is the Terminal's: 1 at its rest, 0 at Home's,
+     *                      between across a crossing
+     */
+    public static float laneTyPx(int lane, boolean apart, float homeDropPx, int terminalLiftPx,
+                                 float terminalShare) {
+        if (!apart) return 0f;
+        if (lane == StackLanes.HOME) return homeDropPx;
+        if (lane == StackLanes.TERMINAL) return -Math.max(0, terminalLiftPx);
+        return -columnLiftPx(true, terminalLiftPx, terminalShare);
+    }
+
+    /**
+     * How far above its layout the keyboard's column is drawn while the cards stand apart: the
+     * column is the front page's (its keyboard and the bands under it), so it carries the
+     * Terminal's lift by the Terminal's share of the scene, all of it at the Terminal's rest and
+     * none at Home's. The scene's value at a landing is the arriving rest's, so the landing's own
+     * rest pass writes nothing new.
+     */
+    public static float columnLiftPx(boolean apart, int terminalLiftPx, float terminalShare) {
+        if (!apart) return 0f;
+        float share = terminalShare < 0f ? 0f : terminalShare > 1f ? 1f : terminalShare;
+        return Math.max(0, terminalLiftPx) * share;
     }
 
     /**

@@ -166,10 +166,10 @@ public class SideCardsParityTest {
     }
 
     /**
-     * The container's inner box has one owner while apart: no padding at either rest, the
-     * Terminal's flush inset carried as its own lift, so the column stands where the padding
-     * stood it (padding + lift is the pass's inset) and Home's pinned card stands on the
-     * container's true bottom whichever page is in front.
+     * The container's inner box has one owner while apart: no padding at either rest, and the
+     * Terminal's flush inset carried as its own lift, the Terminal's own rest's whichever page is
+     * in front, so Home's pinned card stands on the container's true bottom and nothing the
+     * landing lays out carries the Terminal's lift.
      */
     @Test public void whileApartTheContainerPadsNothingAndTheTerminalCarriesItsInset() {
         int lifted = 0;
@@ -182,13 +182,14 @@ public class SideCardsParityTest {
                             hostOf(f, page, up, floating, rendererFor(page.isHome())));
                         controller.update(f.pass(page, up, floating));
                         int inset = f.settle(page, up, floating).flushBottomInsetPx;
+                        // The Terminal's own rest (hostOf gives both sides this keyboard).
+                        int terminalInset = f.settle(PageRef.TERMINAL, up, floating)
+                            .flushBottomInsetPx;
                         boolean apart = controller.apart();
                         int padding = controller.containerPaddingPx(inset);
                         int lift = controller.terminalSideLiftPx();
                         assertEquals(label, apart ? 0 : inset, padding);
-                        assertEquals(label, apart && !page.isHome() ? inset : 0, lift);
-                        // Where the column stood: the padding it stood on, or the lift.
-                        assertEquals(label, apart && page.isHome() ? 0 : inset, padding + lift);
+                        assertEquals(label, apart ? terminalInset : 0, lift);
                         if (lift > 0) lifted++;
                     }
                 }
@@ -226,7 +227,11 @@ public class SideCardsParityTest {
                         assertEquals(label, drop, mHost.getTranslationY(), 0f);
                         assertEquals(label, drop, mUnderlay.getTranslationY(), 0f);
                         assertEquals(label, drop, mHomeRow.getTranslationY(), 0f);
-                        assertEquals(label, 0f, mKeysRow.getTranslationY(), 0f);
+                        // The Terminal's lane: its own rest's lift, at both rests.
+                        float lift = SideCards.terminalSideLiftPx(f.settle(PageRef.TERMINAL, up,
+                            floating).flushBottomInsetPx, apart);
+                        assertEquals(label, -lift, mKeysRow.getTranslationY(), 0f);
+                        assertEquals(label, lift, controller.terminalSideLiftPx(), 0f);
                         // Home's slide: 0 at Home's rest, a container's width to the left otherwise.
                         float tx = apart && !page.isHome() ? -WIDTH : 0f;
                         assertEquals(label, tx, mHost.getTranslationX(), 0f);
@@ -343,6 +348,86 @@ public class SideCardsParityTest {
             }
         }
         assertTrue("some fixtures stand apart", cases > 0);
+    }
+
+    /**
+     * The lanes' numbers have one owner (SideCards#laneTyPx): Home's lane draws its drop and the
+     * Terminal's its lift at every share of the scene, so neither moves at a landing; only the
+     * stack's own lane and the keyboard's column, the front page's, follow the share, and the
+     * scene's value at each end is that end's rest.
+     */
+    @Test public void eachLaneDrawsItsOwnSidesNumberAtEveryShare() {
+        for (float share : new float[] {0f, 0.25f, 0.5f, 1f}) {
+            for (int lift : new int[] {0, 11}) {
+                String label = "share=" + share + " lift=" + lift;
+                assertEquals(label, 7f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, lift, share), 0f);
+                assertEquals(label, -lift,
+                    SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, lift, share), 0f);
+                assertEquals(label, -lift * share,
+                    SideCards.laneTyPx(StackLanes.STACK, true, 7f, lift, share), 0f);
+                assertEquals(label, lift * share, SideCards.columnLiftPx(true, lift, share), 0f);
+                for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})
+                    assertEquals(label, 0f, SideCards.laneTyPx(lane, false, 7f, lift, share), 0f);
+                assertEquals(label, 0f, SideCards.columnLiftPx(false, lift, share), 0f);
+            }
+        }
+    }
+
+    /**
+     * Home's rows stand at Home's own rest whatever the Terminal's keyboard, while apart: they
+     * stand on the keyboard's column as it is laid out (the answer's) and are drawn Home's lane's
+     * number lower, and that sum is the same for the Terminal's keyboard up and down, with either
+     * page in front; where the two sides' columns are one height (no bands under either
+     * keyboard), it is the same with the Terminal in front as with Home. So the landing on Home
+     * moves none of them.
+     */
+    @Test public void homesRowsStandAtHomesRestWhateverTheTerminalsKeyboard() {
+        int cases = 0;
+        int across = 0;
+        for (Fixture f : LayoutFixtures.cardFixtures()) {
+            for (boolean homeUp : new boolean[] {false, true}) {
+                Float wantHome = null;
+                Float wantParked = null;
+                for (boolean terminalUp : new boolean[] {false, true}) {
+                    RestCards atHome = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, terminalUp,
+                        true));
+                    RestCards atTerminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, terminalUp,
+                        homeUp, true));
+                    if (!atHome.apart()) continue;
+                    String label = f.name + " home kb=" + homeUp + " terminal kb=" + terminalUp;
+                    assertTrue(label, atTerminal.apart());
+                    Float home = homeRowsBottom(atHome, 0f);
+                    Float parked = homeRowsBottom(atTerminal, 1f);
+                    if (home == null || parked == null) continue;
+                    if (wantHome == null) wantHome = home;
+                    if (wantParked == null) wantParked = parked;
+                    assertEquals(label + " Home in front", wantHome, home, 0f);
+                    assertEquals(label + " Terminal in front", wantParked, parked, 0f);
+                    if (columnHeight(atHome) == columnHeight(atTerminal)) {
+                        assertEquals(label + " across the landing", home, parked, 0f);
+                        across++;
+                    }
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some fixtures stand apart with a column", cases > 0);
+        assertTrue("some with one column height", across > 0);
+    }
+
+    private static float columnHeight(@NonNull RestCards answer) {
+        com.termux.app.place.ChromeShape.Box column =
+            answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
+        return column == null ? -1f : column.height();
+    }
+
+    /** Where Home's rows are drawn to: the laid-out column's top and Home's lane's number. */
+    @Nullable
+    private static Float homeRowsBottom(@NonNull RestCards answer, float terminalShare) {
+        com.termux.app.place.ChromeShape.Box column = answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
+        if (column == null) return null;
+        return column.top + SideCards.laneTyPx(StackLanes.HOME, answer.apart(),
+            answer.homeSideDropPx(), answer.terminalSideLiftPx(), terminalShare);
     }
 
     /** What the controller lays the Terminal's extra-keys card out at. */
