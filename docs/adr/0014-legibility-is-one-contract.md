@@ -98,6 +98,9 @@ The developer found that surprising: people do not expect what they place to cha
 - Widget glass takes the correction in both modes (it had none), scaled by the widget glass's own
   Opacity by the rule the terminal uses. Bare widgets take the shared ink in the default mode; the
   10-27 amendment above describes them only with Adaptive legibility on.
+- The page bar's pill is a widget surface: it wears a widget's card, lift, veil and even-out
+  (`WidgetBody`), so its ink is solved on the body it draws. The dock's page capsules take the
+  bare-text ink of the wallpaper behind them where they stand over it, the dock's ink on the slab.
 - The Developer switch "Even out glass" is removed.
 - Known gap, not fixed by this: with Adaptive legibility on, the sampler does not follow the
   wallpaper's scroll between Home pages.
