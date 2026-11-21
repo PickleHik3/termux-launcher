@@ -415,7 +415,7 @@ public final class StackLayout {
     public static int restGridEdgeGapPx(@NonNull RestInput in, @NonNull DockLayout rest) {
         DockGeometry.Half half = in.dock.half(in.page);
         return new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
-            in.imeLiftPx, in.page.kind).edgeGapPx;
+            in.imeLiftPx, in.page.kind, in.homeKeyboardAlwaysOn).edgeGapPx;
     }
 
     /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */
