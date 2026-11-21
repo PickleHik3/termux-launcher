@@ -34,8 +34,6 @@ final class AppDrawerCornerTab {
     static final int PASS = 0;
     static final int CONSUME = 1;
 
-    private static final int ACTION_SETTINGS = 1;
-
     interface Host {
         @NonNull ViewGroup view();
 
@@ -46,6 +44,28 @@ final class AppDrawerCornerTab {
         void cancelContent(float x, float y);
 
         void openSettings();
+
+        /** Edit mode as the drawer holds it. */
+        @NonNull AppDrawerEditModel editModel();
+
+        @NonNull AppDrawerViewType viewType();
+
+        @NonNull AppDrawerSection section();
+
+        /** The drawer card's corner radius, in px. */
+        float cardCornerRadiusPx();
+
+        /** How far the chrome there keeps a top corner's tab below the card's top edge. */
+        int cornerClearTopPx();
+
+        /** How far the chrome there keeps a bottom corner's tab above the card's bottom edge. */
+        int cornerClearBottomPx();
+
+        /**
+         * The card's own glass for the tab, held while the tab is out; null where there is none.
+         * Called again with {@code false} once the tab is away.
+         */
+        @Nullable com.termux.app.chrome.DrawerCardGlassStyle tabGlass(boolean wanted);
     }
 
     private final Host mHost;
@@ -56,6 +76,8 @@ final class AppDrawerCornerTab {
     @Nullable private PaneControlsView mTab;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     private boolean mPressMoved;
+    /** The card's glass is asked for while the tab is out. */
+    private boolean mGlassHeld;
     private float mDownX, mDownY;
 
     AppDrawerCornerTab(@NonNull Host host) {
@@ -164,7 +186,72 @@ final class AppDrawerCornerTab {
 
     private void showAt(int corner) {
         PaneControlsView tab = ensureTab();
+        applyButtons(tab);
+        applyPlacement(tab, corner);
+        dress();
         tab.show(corner);
+    }
+
+    /** The buttons the edit model asks for, each id turned into its drawn action. */
+    private void applyButtons(@NonNull PaneControlsView tab) {
+        int[] ids = AppDrawerCornerTabButtons.ids(mHost.editModel(), mHost.viewType(),
+            mHost.section(), AppDrawerCornerTabButtons.EDIT_BUTTON_SHIPPED);
+        java.util.ArrayList<PaneControlsView.Action> actions = new java.util.ArrayList<>(ids.length);
+        android.content.Context context = tab.getContext();
+        for (int id : ids) {
+            switch (id) {
+                case AppDrawerCornerTabButtons.SETTINGS:
+                    actions.add(PaneControlsView.Action.drawn(id,
+                        vectorMark(context, R.drawable.ic_drawer_corner_settings),
+                        PaneControlsView.TINT_PRIMARY,
+                        context.getString(R.string.pane_controls_open_settings)));
+                    break;
+                default:
+                    // Edit, grid size and tick get their drawn actions with edit mode.
+                    break;
+            }
+        }
+        tab.setActions(actions);
+    }
+
+    /**
+     * The tab's room is the card less the chrome in its corner's way, so it comes out of the
+     * edge of that room; the card's corner arc is only the tab's where the tab is at the card's
+     * own edge.
+     */
+    private void applyPlacement(@NonNull PaneControlsView tab, int corner) {
+        boolean top = CornerZones.isTop(corner);
+        int clear = Math.max(0, top ? mHost.cornerClearTopPx() : mHost.cornerClearBottomPx());
+        android.widget.FrameLayout.LayoutParams params =
+            (android.widget.FrameLayout.LayoutParams) tab.getLayoutParams();
+        int topMargin = top ? clear : 0;
+        int bottomMargin = top ? 0 : clear;
+        if (params.topMargin != topMargin || params.bottomMargin != bottomMargin) {
+            params.topMargin = topMargin;
+            params.bottomMargin = bottomMargin;
+            tab.setLayoutParams(params);
+        }
+        tab.setPaneBorder(clear > 0 ? 0f : mHost.cardCornerRadiusPx(), 0f);
+    }
+
+    /** Dresses the tab in the card's own glass, as the section switch is. */
+    private void dress() {
+        PaneControlsView tab = mTab;
+        if (tab == null) return;
+        com.termux.app.chrome.DrawerCardGlassStyle style = mHost.tabGlass(true);
+        mGlassHeld = true;
+        PaneGlass.dressTab(style, tab, TermuxAppSharedPreferences.PAGE_WALL);
+    }
+
+    /** The look may have moved while the tab is out: dress it again. */
+    void refreshGlass() {
+        if (isShown()) dress();
+    }
+
+    private void releaseGlass() {
+        if (!mGlassHeld) return;
+        mGlassHeld = false;
+        mHost.tabGlass(false);
     }
 
     @NonNull
@@ -173,20 +260,13 @@ final class AppDrawerCornerTab {
         if (tab != null) return tab;
         ViewGroup view = mHost.view();
         tab = new PaneControlsView(view.getContext());
-        // Wave 2 adds the Edit button here: one more drawn action with
-        // vectorMark(context, R.drawable.ic_drawer_corner_edit), before the settings gear.
-        tab.setActions(PaneControlsView.Action.drawn(ACTION_SETTINGS,
-            vectorMark(view.getContext(), R.drawable.ic_drawer_corner_settings),
-            PaneControlsView.TINT_PRIMARY,
-            view.getContext().getString(R.string.pane_controls_open_settings)));
         tab.setListener(id -> {
-            if (id != ACTION_SETTINGS) return;
+            if (id != AppDrawerCornerTabButtons.SETTINGS) return;
             dismiss();
             mHost.openSettings();
         });
-        PaneGlass.dressTab(null, tab, TermuxAppSharedPreferences.PAGE_WALL);
-        view.addView(tab, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        view.addView(tab, new android.widget.FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         mTab = tab;
         return tab;
     }
@@ -233,11 +313,16 @@ final class AppDrawerCornerTab {
         return true;
     }
 
-    /** Gone at once and every press forgotten: the drawer closed, changed type or went away. */
+    /**
+     * Gone at once and every press forgotten: the drawer closed, changed type or went away. The
+     * card's glass is held until here, not until a dismiss, so a tab still fading never draws a
+     * frame the cache has let go.
+     */
     void reset() {
         cancelHold();
         mPressedAction = PaneControlsView.ACTION_NONE;
         if (mTab != null) mTab.dismissNow();
+        releaseGlass();
     }
 
     @androidx.annotation.VisibleForTesting

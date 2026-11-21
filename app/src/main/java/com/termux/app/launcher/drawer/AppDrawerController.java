@@ -2011,6 +2011,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                                      boolean heightOnly) {
         // First: the page rows are sized from the pager's usable height, which this inset decides.
         content.setBottomInsetPx(resolveContentBottomInsetPx(content, rect));
+        content.setCardCornerRadiusPx(mOpenRadiusPx);
         float labelHeightPx = resolveCellLabelHeightPx();
         AppDrawerLayoutConfig config = mLayoutConfig;
         // Default is whichever of the two its section shows, sized exactly as that type is.

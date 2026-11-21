@@ -205,7 +205,39 @@ public final class AppDrawerContentView extends FrameLayout
             @Override public void openSettings() {
                 if (mCallbacks != null) mCallbacks.onCornerSettingsRequested();
             }
+
+            @NonNull @Override public AppDrawerEditModel editModel() {
+                return AppDrawerEditModel.OFF;
+            }
+
+            @NonNull @Override public AppDrawerViewType viewType() {
+                return mViewType;
+            }
+
+            @NonNull @Override public AppDrawerSection section() {
+                return mSection;
+            }
+
+            @Override public float cardCornerRadiusPx() {
+                return mCardCornerRadiusPx;
+            }
+
+            @Override public int cornerClearTopPx() {
+                return resolveChrome().cornerTabTopClearPx;
+            }
+
+            @Override public int cornerClearBottomPx() {
+                return resolveChrome().cornerTabBottomClearPx;
+            }
+
+            @Nullable @Override
+            public com.termux.app.chrome.DrawerCardGlassStyle tabGlass(boolean wanted) {
+                return holdTabGlass(wanted);
+            }
         });
+    private float mCardCornerRadiusPx;
+    /** The corner tab is holding the card's glass; the switch may not be. */
+    private boolean mTabGlassWanted;
     /** True only inside {@link #cancelContentTouch}: that cancel is the content's, not the corner tab's. */
     private boolean mCancellingContent;
     @Nullable private LauncherAppDataProvider mProvider;
@@ -3178,6 +3210,25 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     @Nullable private SwitchGlassSource mSwitchGlassSource;
+
+    /** The drawer card's corner radius, for the corner tab's own corner. */
+    public void setCardCornerRadiusPx(float radiusPx) {
+        mCardCornerRadiusPx = Math.max(0f, radiusPx);
+    }
+
+    /**
+     * The card's glass for the corner tab, on any type: held while the tab is out, and kept while
+     * the switch wants it too.
+     */
+    @Nullable
+    private com.termux.app.chrome.DrawerCardGlassStyle holdTabGlass(boolean wanted) {
+        SwitchGlassSource source = mSwitchGlassSource;
+        mTabGlassWanted = wanted;
+        if (source == null) return null;
+        if (wanted) return source.style(true);
+        if (!mSwitchGlassWanted) source.style(false);
+        return null;
+    }
     /** The switch's refracting slab, built while the open drawer wants it and dropped after. */
     @Nullable private com.termux.app.terminal.PaneGlassBackdropView mSwitchGlass;
     @Nullable private Object mSwitchGlassKey;
@@ -3197,6 +3248,7 @@ public final class AppDrawerContentView extends FrameLayout
     /** The Look, the frame or the scheme may have moved: dress again if what it answers changed. */
     public void refreshSwitchGlass() {
         if (mSwitchGlassWanted) applySwitchGlass();
+        mCornerTab.refreshGlass();
     }
 
     /**
@@ -3209,7 +3261,7 @@ public final class AppDrawerContentView extends FrameLayout
         boolean wanted = source != null
             && AppDrawerSectionSwitchGlass.wanted(mViewType, mDrawerOpenForGlass);
         if (!wanted) {
-            if (mSwitchGlassWanted && source != null) source.style(false);
+            if (mSwitchGlassWanted && source != null && !mTabGlassWanted) source.style(false);
             mSwitchGlassWanted = false;
             releaseSwitchGlass();
             return;
