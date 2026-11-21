@@ -49,4 +49,28 @@ public final class LauncherConfigSnapshot {
     public PinnedFolderItem folder(@NonNull String id) {
         return folders.get(id);
     }
+
+    /**
+     * The one answer to "is this folder on the dock?": some dock item, on any dock page or row,
+     * refers to it. A folder on the dock is separate from the drawer; the drawer shows only the
+     * folders this says no to.
+     */
+    public boolean isOnDock(@NonNull String folderId) {
+        for (PinnedItem item : dockItems) {
+            if (item instanceof PinnedFolderItem && folderId.equals(((PinnedFolderItem) item).id)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /** The folders the app drawer owns: every stored folder that is not on the dock. */
+    @NonNull
+    public List<PinnedFolderItem> drawerFolders() {
+        List<PinnedFolderItem> result = new ArrayList<>(folders.size());
+        for (PinnedFolderItem folder : folders.values()) {
+            if (!isOnDock(folder.id)) result.add(folder);
+        }
+        return result;
+    }
 }

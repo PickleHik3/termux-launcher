@@ -6509,7 +6509,7 @@ public final class SuggestionBarView extends GridLayout
         inputs.canAddToFolder = categoryChoiceHandler != null && !linuxApp
             && configRepository != null
             && com.termux.app.launcher.folder.DrawerFolderChoices.showsAddToFolder(
-                allApps, configRepository.loadSnapshot().folders.values(), entry.appRef);
+                allApps, configRepository.loadSnapshot().drawerFolders(), entry.appRef);
         if (folderSource) {
             inputs.customIcon = folderApp != null
                 && getIconResolver().loadOverride(folderApp.iconOverride) != null;
@@ -7288,7 +7288,7 @@ public final class SuggestionBarView extends GridLayout
     private List<PinnedFolderItem> drawerFoldersFor(@NonNull LauncherAppEntry entry) {
         if (configRepository == null) return java.util.Collections.emptyList();
         return com.termux.app.launcher.folder.DrawerFolderChoices.offered(
-            configRepository.loadSnapshot().folders.values(), entry.appRef);
+            configRepository.loadSnapshot().drawerFolders(), entry.appRef);
     }
 
     /**
@@ -7337,7 +7337,7 @@ public final class SuggestionBarView extends GridLayout
     private List<LauncherAppEntry> newFolderSecondApps(@NonNull LauncherAppEntry entry) {
         if (configRepository == null || allApps == null) return java.util.Collections.emptyList();
         List<LauncherAppEntry> second = com.termux.app.launcher.folder.DrawerFolderChoices.secondApps(
-            allApps, configRepository.loadSnapshot().folders.values(), entry.appRef);
+            allApps, configRepository.loadSnapshot().drawerFolders(), entry.appRef);
         List<LauncherAppEntry> android = new ArrayList<>(second.size());
         for (LauncherAppEntry e : second) {
             if (!com.termux.app.x11.X11Apps.isLinuxApp(e.appRef)) android.add(e);
