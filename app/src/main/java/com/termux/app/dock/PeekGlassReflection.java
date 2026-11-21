@@ -270,24 +270,6 @@ public final class PeekGlassReflection {
             || Float.compare(rowDx, mRowDx) != 0 || Float.compare(rowDy, mRowDy) != 0
             || liveNow != mLive || !mShown;
         boolean alphaMoved = Float.compare(alpha, mAlpha) != 0;
-        // DIAG(reflection): what this update moved; revert before merge.
-        if (geometryMoved || alphaMoved) {
-            StringBuilder why = new StringBuilder();
-            if (!mShown) why.append(" wasHidden");
-            if (mCard == null) why.append(" firstCard");
-            else if (!card.equals(mCard)) why.append(" card(axis ").append(mCard.mirrorAxisY)
-                .append("->").append(card.mirrorAxisY).append(" top ").append(mCard.top)
-                .append("->").append(card.top).append(" depth ").append(mCard.reflectionDepth())
-                .append("->").append(card.reflectionDepth()).append(')');
-            if (row != mRow) why.append(" row");
-            if (Float.compare(rowDx, mRowDx) != 0) why.append(" rowDx ").append(mRowDx).append("->").append(rowDx);
-            if (Float.compare(rowDy, mRowDy) != 0) why.append(" rowDy ").append(mRowDy).append("->").append(rowDy);
-            if (liveNow != mLive) why.append(" live ").append(mLive).append("->").append(liveNow);
-            if (alphaMoved) why.append(" alpha ").append(mAlpha).append("->").append(alpha);
-            mDiagWhy = why.toString();
-        } else {
-            mDiagWhy = null;
-        }
         mCard = card;
         mRow = row;
         mRowDx = rowDx;
@@ -334,31 +316,6 @@ public final class PeekGlassReflection {
     }
 
     private float mDrawnOffsetY;
-
-    /** DIAG(reflection): what the last update moved, or null for nothing; revert before merge. */
-    @androidx.annotation.Nullable private String mDiagWhy;
-
-    /** DIAG(reflection): {@link #mDiagWhy}, read once; revert before merge. */
-    @androidx.annotation.Nullable
-    public String takeDiagWhy() {
-        String why = mDiagWhy;
-        mDiagWhy = null;
-        return why;
-    }
-
-    /** DIAG(reflection): the aim and the host view, for the PeekRefl log; revert before merge. */
-    public String diagAim() {
-        PeekReflectionView v = mHostView;
-        PeekGlassGeometry.Card c = mCard;
-        return "shown=" + mShown + " held=" + mHeld + " stale=" + mStaleWhileHeld + " live=" + mLive
-            + " alpha=" + mAlpha + " fade=" + mFade
-            + (c == null ? " card=none" : " axis=" + c.mirrorAxisY + " cardTop=" + c.top
-                + " depth=" + c.reflectionDepth())
-            + " rowDx=" + mRowDx + " rowDy=" + mRowDy + " drawnDy=" + mDrawnOffsetY
-            + (v == null ? " view=none" : " viewTy=" + v.getTranslationY() + " viewH=" + v.getHeight()
-                + " viewVis=" + v.getVisibility() + " viewA=" + v.getAlpha()
-                + " originY=" + v.originY());
-    }
 
     /** DIAG(reflection): the host view's state; revert before merge. */
     public String diagState() {
@@ -419,6 +376,34 @@ public final class PeekGlassReflection {
                                boolean apart, boolean homeRowStands) {
         if (!cardStands || !strengthOn || !surfacesReady) return Sync.CLEAR;
         return apart && !homeRowStands ? Sync.KEEP : Sync.DRAW;
+    }
+
+    /**
+     * The card a sync aims the reflection by. Apart, the reflection is part of Home's card: once
+     * Home has stood at rest it is aimed by Home's rest card whichever page is in front or however
+     * far a crossing has come, so the Terminal's rest finds nothing to re-aim and the landing
+     * nothing to correct. Not apart (or before Home's first rest), the card cut now.
+     */
+    @NonNull
+    public static PeekGlassGeometry.Card aimCard(boolean apart,
+                                                 @androidx.annotation.Nullable PeekGlassGeometry.Card homeRestCard,
+                                                 @NonNull PeekGlassGeometry.Card shown) {
+        return apart && homeRestCard != null ? homeRestCard : shown;
+    }
+
+    /**
+     * Where the row stands over the host for the reflection's aim ({@link #update}'s rowDy), with
+     * {@link #aimCard}'s rule: apart, where Home's rest laid it out, never the live layout read
+     * with another page in front (the Terminal's rows stand the row elsewhere over the parked
+     * host); not apart, where it stood when {@code shown} was cut.
+     *
+     * @param homeRestRows the rows over the host at Home's last rest
+     * @param cutRows      the rows over the host when the shown card was cut
+     */
+    public static float aimRowDy(boolean apart,
+                                 @androidx.annotation.Nullable PeekGlassGeometry.Card homeRestCard,
+                                 float homeRestRows, float cutRows) {
+        return apart && homeRestCard != null ? homeRestRows : cutRows;
     }
 
     /**
