@@ -30124,7 +30124,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFrameContent.isMouseMode() && mark.getTag() == null) {
             mark.setTag("wired");
             mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-            mark.setIconGlyph("\uDB80\uDF7D"); // nf-md-mouse, the extra key's glyph
+            mark.setIconResource(R.drawable.ic_rl_mouse);
             mark.setValue("");
             mark.setOnClickListener(v -> toggleMouseMode());
         }
