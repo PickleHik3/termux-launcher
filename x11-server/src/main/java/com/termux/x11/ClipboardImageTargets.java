@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -135,13 +136,54 @@ final class ClipboardImageTargets {
         }
         if (bitmap == null) throw new IOException("not a picture Android can decode");
         try {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            if (!bitmap.compress(Bitmap.CompressFormat.PNG, 100, out))
-                throw new IOException("PNG encoding failed");
-            if (!withinCap(out.size())) throw new IOException(out.size() + " bytes as PNG");
+            CappedOutputStream out = new CappedOutputStream(MAX_BYTES);
+            boolean encoded = bitmap.compress(Bitmap.CompressFormat.PNG, 100, out);
+            // compress may swallow the stream's exception and just return false.
+            if (out.overflowed()) throw new IOException("over " + MAX_BYTES + " bytes as PNG");
+            if (!encoded) throw new IOException("PNG encoding failed");
             return out.toByteArray();
         } finally {
             bitmap.recycle();
+        }
+    }
+
+    /** A byte buffer that refuses, without keeping them, the bytes that would pass its cap. */
+    static final class CappedOutputStream extends OutputStream {
+        private final ByteArrayOutputStream buffer = new ByteArrayOutputStream();
+        private final int max;
+        private boolean overflowed;
+
+        CappedOutputStream(int max) {
+            this.max = max;
+        }
+
+        boolean overflowed() {
+            return overflowed;
+        }
+
+        int size() {
+            return buffer.size();
+        }
+
+        byte[] toByteArray() {
+            return buffer.toByteArray();
+        }
+
+        @Override
+        public void write(int b) throws IOException {
+            if (buffer.size() + 1L > max) overflow();
+            buffer.write(b);
+        }
+
+        @Override
+        public void write(byte[] b, int off, int len) throws IOException {
+            if (buffer.size() + (long) len > max) overflow();
+            buffer.write(b, off, len);
+        }
+
+        private void overflow() throws IOException {
+            overflowed = true;
+            throw new IOException("over " + max + " bytes");
         }
     }
 

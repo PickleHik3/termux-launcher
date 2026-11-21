@@ -1,5 +1,6 @@
 package com.termux.x11;
 
+import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
@@ -113,5 +114,43 @@ public class ClipboardImageTargetsTest {
         } catch (IOException expected) {
             // refused
         }
+    }
+
+    @Test
+    public void theCappedStreamKeepsWritesUpToTheCap() throws IOException {
+        ClipboardImageTargets.CappedOutputStream out = new ClipboardImageTargets.CappedOutputStream(4);
+        out.write(1);
+        out.write(new byte[]{2, 3, 4}, 0, 3);
+        assertEquals(4, out.size());
+        assertArrayEquals(new byte[]{1, 2, 3, 4}, out.toByteArray());
+        assertFalse(out.overflowed());
+    }
+
+    @Test
+    public void theCappedStreamRefusesAByteOverTheCap() throws IOException {
+        ClipboardImageTargets.CappedOutputStream out = new ClipboardImageTargets.CappedOutputStream(1);
+        out.write(1);
+        try {
+            out.write(2);
+            fail("wrote past the cap");
+        } catch (IOException expected) {
+            // refused
+        }
+        assertEquals(1, out.size());
+        assertTrue(out.overflowed());
+    }
+
+    @Test
+    public void theCappedStreamRefusesAnArrayCrossingTheCapWithoutKeepingIt() throws IOException {
+        ClipboardImageTargets.CappedOutputStream out = new ClipboardImageTargets.CappedOutputStream(4);
+        out.write(new byte[]{1, 2}, 0, 2);
+        try {
+            out.write(new byte[]{3, 4, 5}, 0, 3);
+            fail("wrote past the cap");
+        } catch (IOException expected) {
+            // refused
+        }
+        assertEquals(2, out.size());
+        assertTrue(out.overflowed());
     }
 }
