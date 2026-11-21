@@ -130,7 +130,7 @@ public final class BorderGrabber {
     /**
      * The Home grabber at rest on {@code ground}: the accent toned on the ground's side (the side
      * of the bare-text ink Home's labels take there) and raised from {@link #HOME_REST_ALPHA} only
-     * as far as the contract's graphics tier ({@link OnGlass#TARGET_LARGE_TEXT}) needs. With no
+     * as far as the marks' graphics target ({@link com.termux.app.chrome.PageMarkInk#GRAPHIC}) needs. With no
      * ground, the accent at the rest alpha.
      */
     static int homeColorOn(int ground, int accent) {
@@ -139,7 +139,8 @@ public final class BorderGrabber {
         int base = OnGlass.opaque(ground);
         boolean pale = GlassInk.isPaleSide(WallpaperInk.bareInk(base, HomeLabelInk.DARK_INK,
             HomeLabelInk.PALE_INK), base);
-        return GlassInk.legibleOn(base, accent, pale, OnGlass.TARGET_LARGE_TEXT, rest);
+        return GlassInk.legibleOn(base, accent, pale,
+            com.termux.app.chrome.PageMarkInk.GRAPHIC, rest);
     }
 
     /**

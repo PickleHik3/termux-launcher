@@ -15,10 +15,19 @@ import androidx.annotation.ColorInt;
  */
 public final class PageMarkInk {
 
+    /**
+     * What a mark's target carries over its tier. The ground a mark is solved on is the shared
+     * measurement of the whole wallpaper (and a glass body before its frost), while the patch
+     * really behind the mark can be a little paler or darker: on screen the marks landed 2 to 5%
+     * under their tiers (4.29 for 4.5, 2.90 for 3). Solving this much over keeps them on it.
+     */
+    public static final double HEADROOM = 1.1;
+    /** The graphics tier with {@link #HEADROOM}, for a mark with no current/other pair. */
+    public static final double GRAPHIC = OnGlass.TARGET_LARGE_TEXT * HEADROOM;
     /** The tier the current page's mark is held to. */
-    public static final double CURRENT = OnGlass.TARGET_BODY_TEXT;
+    public static final double CURRENT = OnGlass.TARGET_BODY_TEXT * HEADROOM;
     /** The floor the other marks keep whenever the current one clears {@link #CURRENT}. */
-    public static final double OTHER_FLOOR = OnGlass.TARGET_LARGE_TEXT;
+    public static final double OTHER_FLOOR = GRAPHIC;
     /** How much weaker the other marks read than the current one: the gap between the tiers. */
     public static final double STEP = CURRENT / OTHER_FLOOR;
 
