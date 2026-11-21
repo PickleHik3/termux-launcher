@@ -118,3 +118,26 @@ says what replaces it.
 
 Open while building: which page moves `WallPages` permits (so which interleavings the fold rule
 must handle), the pill's height against Home's grid, and its place under each dock style.
+
+Round two (decided 2026-11-21, built on feat/page-bar):
+
+- **Filled glyphs.** The bar's glyphs are filled shapes (`PageBarGlyphPainter`), the number and the
+  Terminal's chevron cut out so the ground shows through. The current page is filled in the
+  accent, the others in the ink; where the accent and the ink are close (CIELAB distance under
+  25, `PageBarInk`) the others draw at half alpha, so the current glyph is the only solid one.
+  The page switcher key's cap keeps the outline glyphs.
+- **Stack.** A fold draws the front glyph with its count and two plates behind it, each layer cut
+  apart from the one in front by a 1.5-unit gap, so it reads as a stack of cards.
+- **Width.** On Home the pill hugs its glyphs, centred on the window's centre and kept inside the
+  pane. The bar the page switcher key pops up on a workspace page spans the width with equal
+  slots, on an opaque card (it stands over the terminal's text).
+- **Place and room** (`PageBarBand`): the band is the air above the pill and the pill, plus 12dp
+  under it while dock rows stand below; with no dock rows the pill's bottom stands on the dock's
+  own bottom line (its edge gap). With the page bar hidden the band is nothing: Home's grid gets
+  the height. While the in-app keyboard or the system keyboard is up on Home the pill hides and the
+  band keeps its height.
+- **Dock capsules** keep 6dp of air above the dock's own surface on every dock kind
+  (`PageTickStrip.SURFACE_AIR_DP`); the dock is 4dp taller where they show.
+- **Setting.** The page bar's switch is a row of the Home card's Layout list (between Status bar
+  and Apps row), writing the same stored value as before (`app_launcher_home_page_indicator`,
+  `dots` or `off`); the switch under More options is gone.
