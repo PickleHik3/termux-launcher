@@ -43,7 +43,7 @@ import java.util.Map;
  * <h2>Precedence when another surface owns the keyboard</h2>
  *
  * The terminal reaches this resolver through its own view client, so a surface that has taken
- * focus away from the terminal — the wall's Display page, where an X client is being typed into —
+ * focus away from the terminal — the display window, where an X client is being typed into —
  * would otherwise lose every binding. Such a surface offers its keys to
  * {@code TermuxTerminalViewClient#consumeLauncherChord} first, which claims <em>only</em> strokes
  * holding both Ctrl and Alt. That is the launcher's own chord space and where every default

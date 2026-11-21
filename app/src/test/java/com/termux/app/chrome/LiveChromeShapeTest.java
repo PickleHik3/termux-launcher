@@ -221,6 +221,71 @@ public class LiveChromeShapeTest {
         }
     }
 
+    /** Wider than the terminal's gap at this density, so the two are told apart. */
+    private static final float WIDE_MARGIN = 20f;
+
+    private static ChromeShape shapeAt(PlaceLayout layout, LayoutStyle style, float margin,
+                                       boolean terminalGap) {
+        return LiveChromeShape.of(layout, style, 400, 800, THICKNESS, CORNERS, margin, SCREEN,
+            DENSITY, 1, ChromeShapeModel.SplitAxis.SIDE_BY_SIDE, 0f, null, terminalGap);
+    }
+
+    private static final Edge[] EDGES = {Edge.TOP, Edge.BOTTOM, Edge.LEFT, Edge.RIGHT};
+    private static final LayoutStyle[] STYLES = {LayoutStyle.FLOATING, LayoutStyle.DOCKED};
+
+    @Test
+    public void terminalOpeningStandsTheTerminalGapOffTheBarsAndMarginOffTheSides() {
+        float gap = LiveChromeShape.TERMINAL_VERTICAL_GAP_DP * DENSITY;
+        for (LayoutStyle style : STYLES) {
+            for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+                ChromeShape shape = shapeAt(layout, style, WIDE_MARGIN, true);
+                String at = style + " " + layout;
+                assertEquals(at, gap, LiveChromeShape.openingInsetPx(shape, Edge.TOP, 400, 800), D);
+                assertEquals(at, gap,
+                    LiveChromeShape.openingInsetPx(shape, Edge.BOTTOM, 400, 800), D);
+                assertEquals(at, WIDE_MARGIN,
+                    LiveChromeShape.openingInsetPx(shape, Edge.LEFT, 400, 800), D);
+                assertEquals(at, WIDE_MARGIN,
+                    LiveChromeShape.openingInsetPx(shape, Edge.RIGHT, 400, 800), D);
+                // The insert's glass and the terminal's margins are one number.
+                for (Edge edge : EDGES)
+                    assertEquals(at + " " + edge,
+                        LiveChromeShape.openingInsetPx(shape, edge, 400, 800),
+                        LiveChromeShape.terminalOpeningInsetPx(shape, edge, 400, 800, DENSITY), D);
+            }
+        }
+    }
+
+    @Test
+    public void theTerminalIsToldOneNumberWhicheverShapeTheFrameWears() {
+        // Home's own shape keeps Margin round its opening; the terminal parked beside Home is
+        // told the Terminal's gap all the same, so a slide's pre-size and the settle agree and
+        // the terminal never resizes as it lands.
+        for (LayoutStyle style : STYLES) {
+            for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
+                ChromeShape home = shapeAt(layout, style, WIDE_MARGIN, false);
+                ChromeShape terminal = shapeAt(layout, style, WIDE_MARGIN, true);
+                assertEquals(WIDE_MARGIN,
+                    LiveChromeShape.openingInsetPx(home, Edge.TOP, 400, 800), D);
+                for (Edge edge : EDGES)
+                    assertEquals(style + " " + edge,
+                        LiveChromeShape.terminalOpeningInsetPx(terminal, edge, 400, 800, DENSITY),
+                        LiveChromeShape.terminalOpeningInsetPx(home, edge, 400, 800, DENSITY), D);
+            }
+        }
+    }
+
+    @Test
+    public void aMarginNarrowerThanTheTerminalGapIsKept() {
+        float narrow = 3f;
+        for (LayoutStyle style : STYLES) {
+            ChromeShape shape = shapeAt(bottomStack(), style, narrow, true);
+            assertEquals(narrow, LiveChromeShape.openingInsetPx(shape, Edge.TOP, 400, 800), D);
+            assertEquals(narrow,
+                LiveChromeShape.terminalOpeningInsetPx(shape, Edge.BOTTOM, 400, 800, DENSITY), D);
+        }
+    }
+
     @Test
     public void floatingOpeningKeepsMarginFromEveryBarAndScreenEdge() {
         for (PlaceLayout layout : new PlaceLayout[] {bottomStack(), sideBars()}) {
@@ -318,6 +383,29 @@ public class LiveChromeShapeTest {
                 assertNotNull(id.toString(), clip);
                 assertEquals(id + " left", 0, clip.reachLeft);
                 assertEquals(id + " right", 0, clip.reachRight);
+            }
+        }
+    }
+
+    /**
+     * Inner gap is one number: what the editor shows for a stored value, what the panes are laid
+     * out with (the dividers' thickness, {@link LiveChromeShape#paneGapDp}) and what the shape
+     * model stands split panes apart by, under both Styles.
+     */
+    @Test
+    public void theEditorTheDividersAndTheShapeAgreeOnInnerGap() {
+        assertEquals(com.termux.app.surfaces.AppearanceLooks.Control.SPLIT_GAP.max,
+            Math.round(LiveChromeShape.PANE_GAP_CAP_DP));
+        for (LayoutStyle style : STYLES) {
+            for (int stored : new int[] {-1, 0, 2, 10, 24, 30}) {
+                int shown = com.termux.app.surfaces.AppearanceLooks.Control.SPLIT_GAP.clamp(stored);
+                int laidOut = LiveChromeShape.paneGapDp(stored);
+                assertEquals("stored " + stored, shown, laidOut);
+                ChromeShape shape = LiveChromeShape.of(bottomStack(), style, 400, 800, THICKNESS,
+                    CORNERS, MARGIN, SCREEN, DENSITY, 2, ChromeShapeModel.SplitAxis.SIDE_BY_SIDE,
+                    0f, null, true, laidOut * DENSITY);
+                float between = shape.panes().get(1).box.left - shape.panes().get(0).box.right;
+                assertEquals(style + " stored " + stored, laidOut * DENSITY, between, 0.001f);
             }
         }
     }

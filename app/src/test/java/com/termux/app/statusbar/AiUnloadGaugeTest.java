@@ -68,7 +68,7 @@ public class AiUnloadGaugeTest {
     }
 
     @Test public void aTenMinuteWindowTickingEverySecondRedrawsOncePerRowNotPerTick() {
-        // 15dp at 420dpi is about 39px of icon; the ink is about 30 rows of it.
+        // 15dp at 420dpi is about 39px of icon; the ink is about 32 rows of it.
         int inkTop = Math.round(39 * AiUnloadGauge.ROBOT_INK_TOP);
         int inkBottom = Math.round(39 * AiUnloadGauge.ROBOT_INK_BOTTOM);
         AiUnloadGauge gauge = new AiUnloadGauge();

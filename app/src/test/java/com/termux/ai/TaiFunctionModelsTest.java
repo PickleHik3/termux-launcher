@@ -168,6 +168,45 @@ public class TaiFunctionModelsTest {
         assertEquals(Source.PICK, tier1.resolve(TaiFunction.APP_CATEGORIES).source);
     }
 
+    @Test
+    public void tier1AutomaticServesAnInstalledChatModelForTheAssistant() {
+        install(E2B, E2B_BYTES, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        TaiFunctionModels tier1 = models(env(4, 34, GpuPath.YES));
+        Resolution assistant = tier1.resolve(TaiFunction.ASSISTANT);
+        assertEquals(E2B, assistant.modelId);
+        assertEquals(Source.AUTOMATIC, assistant.source);
+        assertEquals(E2B, tier1.resolve(TaiFunction.DAWN_CHAT).modelId);
+    }
+
+    @Test
+    public void tier1AutomaticPicksTheSmallerOfTwoInstalledChatModels() {
+        install(E4B, E4B_BYTES, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        install("zeta", 1_000L, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        install("alpha", 1_000L, TaiModelSpec.CAPABILITY_TEXT_CHAT);
+        assertEquals("alpha", models(env(4, 34, GpuPath.YES)).resolve(TaiFunction.ASSISTANT).modelId);
+    }
+
+    @Test
+    public void tier1AutomaticWithNoChatModelStaysNotSet() {
+        install(TaiModelCatalog.EMBEDDING_GEMMA_300M_ID, 200L, TaiModelSpec.CAPABILITY_TEXT_EMBEDDINGS);
+        Resolution assistant = models(env(4, 34, GpuPath.YES)).resolve(TaiFunction.ASSISTANT);
+        assertNull(assistant.modelId);
+        assertEquals(Source.NONE, assistant.source);
+    }
+
+    @Test
+    public void tier1ExplicitPickBeatsTheInstalledFallbackAndWithoutChoicesStay() {
+        installGemma();
+        TaiFunctionModels tier1 = models(env(4, 34, GpuPath.YES));
+        tier1.set(TaiFunction.ASSISTANT, E4B);
+        assertEquals(E4B, tier1.resolve(TaiFunction.ASSISTANT).modelId);
+        assertEquals(Source.PICK, tier1.resolve(TaiFunction.ASSISTANT).source);
+        assertEquals(WithoutModel.RAW_TEXT, tier1.resolve(TaiFunction.TIDY_DICTATION).without);
+        assertNull(tier1.resolve(TaiFunction.TIDY_DICTATION).modelId);
+        assertEquals(WithoutModel.OFF, tier1.resolve(TaiFunction.APP_CATEGORIES).without);
+        assertNull(tier1.resolve(TaiFunction.APP_CATEGORIES).modelId);
+    }
+
     // ------------------------------------------------------------------------- off and remote
 
     @Test

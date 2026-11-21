@@ -6,9 +6,12 @@ import androidx.annotation.NonNull;
 
 /** Exact integer cell geometry for the measured middle body. */
 public final class WidgetGridMetrics {
-    /** The air between the wall's edge and the first cell, in dp. */
-    public static final float EDGE_DP = 6f;
-    /** The air between two cells, in dp. */
+    /**
+     * The air between two cells, in dp. Fixed on purpose: the rim between the page's edge and the
+     * first cell is Home's Margin, the one number for the air on Home that the user meets, and
+     * every caller passes it in as {@code edgePadding} ({@link WidgetGridCaps} takes the same in
+     * dp). The gap between cells is the grid's own, not a second knob.
+     */
     public static final float GAP_DP = 8f;
 
     @NonNull private final Rect body;
@@ -17,15 +20,29 @@ public final class WidgetGridMetrics {
     private final int edgePadding;
     private final int gap;
     private final boolean rtl;
+    /**
+     * Rows kept empty under the grid's last row: the rows an always-on keyboard took
+     * ({@code LauncherWidgetRepository#shrinkGridRows}). The body is still cut into the grid's
+     * rows plus these, so a cell keeps the height it had before the keyboard took them and the
+     * grid simply ends that many rows sooner, instead of stretching its fewer rows over the body.
+     */
+    private final int reservedRows;
 
     public WidgetGridMetrics(@NonNull Rect body, int actionStripHeight, int edgePadding,
                              int gap, @NonNull WidgetGridDefinition grid, boolean rtl) {
+        this(body, actionStripHeight, edgePadding, gap, grid, rtl, 0);
+    }
+
+    public WidgetGridMetrics(@NonNull Rect body, int actionStripHeight, int edgePadding,
+                             int gap, @NonNull WidgetGridDefinition grid, boolean rtl,
+                             int reservedRows) {
         this.body = new Rect(body);
         this.actionStripHeight = Math.max(0, actionStripHeight);
         this.edgePadding = Math.max(0, edgePadding);
         this.gap = Math.max(0, gap);
         this.grid = grid;
         this.rtl = rtl;
+        this.reservedRows = Math.max(0, reservedRows);
     }
 
     @NonNull public WidgetGridDefinition definition() { return grid; }
@@ -39,11 +56,12 @@ public final class WidgetGridMetrics {
     @NonNull public Rect boundsFor(@NonNull WidgetCellRect cell) {
         Rect content = contentBounds();
         int usableWidth = Math.max(0, content.width() - gap * (grid.columns - 1));
-        int usableHeight = Math.max(0, content.height() - gap * (grid.rows - 1));
+        int rows = grid.rows + reservedRows;
+        int usableHeight = Math.max(0, content.height() - gap * (rows - 1));
         int logicalLeft = edge(usableWidth, grid.columns, cell.left) + gap * cell.left;
         int logicalRight = edge(usableWidth, grid.columns, cell.right) + gap * (cell.right - 1);
-        int top = content.top + edge(usableHeight, grid.rows, cell.top) + gap * cell.top;
-        int bottom = content.top + edge(usableHeight, grid.rows, cell.bottom)
+        int top = content.top + edge(usableHeight, rows, cell.top) + gap * cell.top;
+        int bottom = content.top + edge(usableHeight, rows, cell.bottom)
             + gap * (cell.bottom - 1);
         int left = rtl ? content.right - logicalRight : content.left + logicalLeft;
         int right = rtl ? content.right - logicalLeft : content.left + logicalRight;
@@ -110,7 +128,7 @@ public final class WidgetGridMetrics {
         WidgetGridMetrics that = (WidgetGridMetrics) other;
         return body.equals(that.body) && grid.equals(that.grid)
             && actionStripHeight == that.actionStripHeight && edgePadding == that.edgePadding
-            && gap == that.gap && rtl == that.rtl;
+            && gap == that.gap && rtl == that.rtl && reservedRows == that.reservedRows;
     }
 
     @Override public int hashCode() {
@@ -119,6 +137,7 @@ public final class WidgetGridMetrics {
         result = 31 * result + actionStripHeight;
         result = 31 * result + edgePadding;
         result = 31 * result + gap;
+        result = 31 * result + reservedRows;
         return 31 * result + (rtl ? 1 : 0);
     }
 

@@ -46,6 +46,7 @@ public final class HelpCopy {
                 case "wall.widgets": label = R.string.help_key_widgets; break;
                 case "wall.terminal": label = R.string.help_key_terminal; break;
                 case "wall.display": label = R.string.help_key_display; break;
+                case "wall.assistant": label = R.string.help_key_assistant; break;
                 case "pane.split": label = R.string.help_key_split; break;
                 case "window.new": label = R.string.help_key_window; break;
                 case "session.browser": label = R.string.help_key_sessions; break;
@@ -60,6 +61,12 @@ public final class HelpCopy {
             }
         } else if (KEYBOARD_KEY.equals(name)) label = R.string.help_key_keyboard;
         else if (PASTE_KEY.equals(name)) label = R.string.help_key_paste;
+        // An icon is not a label: a key left with only its icon is called by its key name, or a
+        // key action when it is a tool (an identifier never becomes a label).
+        if (label == 0 && com.termux.shared.termux.extrakeys.ExtraKeyIcons.containsIcon(key.getDisplay())) {
+            if (!name.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX)) return name;
+            label = R.string.help_key_action;
+        }
         return label == 0 ? key.getDisplay() : context.getString(label);
     }
 }

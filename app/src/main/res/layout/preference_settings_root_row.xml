@@ -17,7 +17,7 @@
         style="?attr/materialCardViewFilledStyle"
         android:layout_width="48dp"
         android:layout_height="48dp"
-        app:cardBackgroundColor="?attr/colorSurfaceContainerHigh"
+        app:cardBackgroundColor="?attr/colorSurfaceContainerHighest"
         app:shapeAppearance="?attr/shapeAppearanceCornerMedium">
 
         <ImageView

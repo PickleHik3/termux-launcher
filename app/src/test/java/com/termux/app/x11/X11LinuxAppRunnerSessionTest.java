@@ -157,6 +157,40 @@ public class X11LinuxAppRunnerSessionTest {
         assertEquals("the display is simply brought into view", 1, host.shown);
     }
 
+    @Test public void stoppingTheDisplayEndsTheDesktopEvenIfItsExitNeverComes() {
+        LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
+        runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV, RESTART_WM);
+        idle();
+        assertTrue(X11LinuxAppRunner.isDesktopRunning());
+
+        // A daemon the desktop left behind holds the script's pipes: no exit is ever reported.
+        host.displayRunning = false;
+        runner.onDisplayRunningChanged(false);
+        assertFalse(X11LinuxAppRunner.isDesktopRunning());
+
+        // Tapping the desktop again starts it, not "just shows" a dead one.
+        runner.run(xfce);
+        assertEquals("the display is started for it", 1, host.displayStarts);
+        assertEquals("nothing is asked", 0, host.questions.size());
+    }
+
+    @Test public void theStaleExitOfADesktopEndedWithItsDisplayDoesNothing() {
+        LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
+        runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV, RESTART_WM);
+        idle();
+        runner.onDisplayRunningChanged(false);
+
+        host.listeners.get(0).onExit(143);
+        assertEquals("no window manager restart for a display that is gone", 1, host.scripts.size());
+        assertTrue(host.notices.isEmpty());
+        assertFalse(X11LinuxAppRunner.isDesktopRunning());
+    }
+
+    @Test public void aDisplayStoppedWithNoDesktopChangesNothing() {
+        runner.onDisplayRunningChanged(false);
+        assertTrue(host.scripts.isEmpty());
+    }
+
     @Test public void anOrdinaryAppIsUntouchedByAnyOfIt() {
         LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
         runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV);
@@ -186,6 +220,27 @@ public class X11LinuxAppRunnerSessionTest {
         assertEquals("it is simply started", 1, host.displayStarts);
     }
 
+    @Test public void aTapOnAnAppThatHasAWindowRaisesItAndStartsNothing() {
+        host.raise = true;
+        runner.run(app("mousepad"));
+        assertEquals(1, host.raiseAsked);
+        assertTrue("nothing was launched", host.scripts.isEmpty());
+        assertEquals("the display is brought into view", 1, host.shown);
+    }
+
+    @Test public void aTapOnAnAppWithoutAWindowAsksAndThenLaunches() {
+        host.raise = false;
+        runner.run(app("mousepad"));
+        assertEquals(1, host.raiseAsked);
+        assertEquals(0, host.displayStarts);
+    }
+
+    @Test public void aDesktopTapNeverAsksToRaise() {
+        host.raise = true;
+        runner.run(session("xfce", "Xfce Session", "startxfce4"));
+        assertEquals(0, host.raiseAsked);
+    }
+
     private void idle() {
         Shadows.shadowOf(Looper.getMainLooper())
             .idleFor(X11LinuxAppRunner.QUICK_FAIL_MS, TimeUnit.MILLISECONDS);
@@ -203,11 +258,15 @@ public class X11LinuxAppRunnerSessionTest {
         int shown;
         int displayStarts;
 
-        @Override public boolean isDisplayEnabled() { return true; }
-        @Override public void turnOnDisplay() { }
         @Override public boolean isDisplayRunning() { return displayRunning; }
         @Override public void startDisplay() { displayStarts++; }
-        @Override public void showDisplayPlace() { shown++; }
+        @Override public void showDisplayWindow() { shown++; }
+        boolean raise;
+        int raiseAsked;
+        @Override public boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app) {
+            raiseAsked++;
+            return raise;
+        }
         @Override public void showNotice(@NonNull String message) { notices.add(message); }
 
         @Override public boolean runScript(@NonNull String script,

@@ -1,0 +1,22 @@
+{
+  "home": {
+    "portrait": {
+      "dress.extra_keys": false
+    },
+    "landscape": {
+      "dress.extra_keys": false
+    }
+  },
+  "absent": [
+    "sizes.portrait.dock_height",
+    "sizes.landscape.keyboard_height",
+    "terminal.portrait.keyboard_form",
+    "terminal.wide.keyboard_open",
+    "home.portrait.keyboard_form"
+  ],
+  "sizes": {
+    "wide": {
+      "icon_size": "m"
+    }
+  }
+}

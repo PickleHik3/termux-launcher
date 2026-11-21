@@ -17,7 +17,7 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.Toolbar;
 
 import com.termux.R;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.interact.ShareUtils;
 
 /**
@@ -32,7 +32,7 @@ import com.termux.shared.interact.ShareUtils;
  */
 public final class HelpActivity extends AppCompatActivity {
 
-    /** Which place the reader came from, as a {@link PaneWallPage} name; absent = TERMINAL. */
+    /** Which place the reader came from, as a {@link PageKind} name; absent = TERMINAL. */
     public static final String EXTRA_PLACE = "com.termux.app.help.extra.PLACE";
     /** The topic to open on, and the topic an action in the result is about; absent = home. */
     public static final String EXTRA_TOPIC = "com.termux.app.help.extra.TOPIC";
@@ -66,13 +66,13 @@ public final class HelpActivity extends AppCompatActivity {
      * The whole guide, opened on a place; a topic id opens that page, null opens home. Practice is
      * not offered: a caller that cannot say whether a lesson may start does not offer one.
      */
-    public static Intent intent(Context context, @Nullable PaneWallPage place,
+    public static Intent intent(Context context, @Nullable PageKind place,
                                 @Nullable String topicId, @Nullable Bundle navigation) {
         return intent(context, place, topicId, navigation, false);
     }
 
     /** The same, from a caller that knows whether a practice run may start. */
-    public static Intent intent(Context context, @Nullable PaneWallPage place,
+    public static Intent intent(Context context, @Nullable PageKind place,
                                 @Nullable String topicId, @Nullable Bundle navigation,
                                 boolean practiceAvailable) {
         Intent intent = new Intent(context, HelpActivity.class);
@@ -128,7 +128,7 @@ public final class HelpActivity extends AppCompatActivity {
     /** What the Intent asks for: one topic, or the whole guide from its home page. */
     private void openFromIntent() {
         Intent intent = getIntent();
-        PaneWallPage place = place(intent == null ? null : intent.getStringExtra(EXTRA_PLACE));
+        PageKind place = place(intent == null ? null : intent.getStringExtra(EXTRA_PLACE));
         String topicId = intent == null ? null : intent.getStringExtra(EXTRA_TOPIC);
         if (topicId != null && HelpTopics.entry(topicId) != null) navigation.openTopic(place, topicId);
         else navigation.open(place);
@@ -297,10 +297,12 @@ public final class HelpActivity extends AppCompatActivity {
         @Override public void onScroll(int y) { navigation.setScroll(y); }
     };
 
-    private static PaneWallPage place(@Nullable String name) {
-        if (name == null) return PaneWallPage.TERMINAL;
-        for (PaneWallPage page : PaneWallPage.values()) if (page.name().equals(name)) return page;
-        return PaneWallPage.TERMINAL;
+    private static PageKind place(@Nullable String name) {
+        if (name == null) return PageKind.TERMINAL;
+        // Old intents and saved states name Home "WIDGETS".
+        if ("WIDGETS".equals(name)) return PageKind.HOME;
+        for (PageKind page : PageKind.values()) if (page.name().equals(name)) return page;
+        return PageKind.TERMINAL;
     }
 
     /** The toolbar is dressed from the launcher's own colours, so its glyphs are dressed too. */

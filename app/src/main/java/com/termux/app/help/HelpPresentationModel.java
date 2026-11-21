@@ -1,6 +1,5 @@
 package com.termux.app.help;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -9,6 +8,7 @@ import java.util.Collections;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Set;
+import com.termux.app.page.PageKind;
 
 /**
  * What "Explore this screen" is showing: the place, the controls the view could measure this pass,
@@ -33,15 +33,15 @@ public final class HelpPresentationModel {
     public static final List<String> OVERVIEW_TARGET_IDS = Collections.unmodifiableList(
         Arrays.asList("dock", "status", "border", "prefix", "settings"));
 
-    private PaneWallPage place = PaneWallPage.TERMINAL;
+    private PageKind place = PageKind.TERMINAL;
     private String selectedTargetId;
     private Set<String> measured = Collections.emptySet();
 
     // ---- what the view measured -------------------------------------------------------------
 
     /** Start exploring a place with the controls measured on this pass; nothing is selected. */
-    public void open(PaneWallPage place, Collection<String> measuredTargetIds) {
-        this.place = place == null ? PaneWallPage.TERMINAL : place;
+    public void open(PageKind place, Collection<String> measuredTargetIds) {
+        this.place = place == null ? PageKind.TERMINAL : place;
         this.selectedTargetId = null;
         this.measured = copy(measuredTargetIds);
     }
@@ -51,7 +51,7 @@ public final class HelpPresentationModel {
         this.measured = copy(measuredTargetIds);
     }
 
-    public PaneWallPage place() { return place; }
+    public PageKind place() { return place; }
 
     /** Whether the view could measure this control on the last pass. */
     public boolean isMeasured(String targetId) {

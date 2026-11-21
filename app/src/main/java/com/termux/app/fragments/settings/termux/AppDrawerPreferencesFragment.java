@@ -34,9 +34,9 @@ import java.util.concurrent.Executors;
 /**
  * Dedicated drawer controls. Visibility changes immediately; persistence drives live apply.
  *
- * <p>Only the view type is a preference. Icon size and the per-view column/row counts were removed:
- * each view resolves its geometry from the plane's width, and the category cards size their preview
- * icons to fill the card, so a user-chosen size could only reintroduce dead space.
+ * <p>The view type, icon size, columns and rows are preferences, each Auto by default (the sizing
+ * every view resolves from the plane's width). Columns hide for Categories and rows show for
+ * Horizontal only, following the view type live.
  *
  * <p>Categorization is not a preference either: it is a run, so its two rows are click actions and
  * their state is polled off {@link LauncherCategorySortService}'s static progress fields.
@@ -46,9 +46,14 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
 
     private static final String KEY_CATEGORY_SORT = "app_launcher_category_sort";
     private static final String KEY_CATEGORY_REFRESH = "app_launcher_category_refresh";
+    private static final String KEY_CATEGORY_ORDER_RESET = "app_launcher_category_order_reset";
     private static final String KEY_VIEW_TYPE = "app_launcher_drawer_view_type";
     /** The only drawer layout that renders categories, so the only one the two rows apply to. */
     private static final String VIEW_TYPE_CATEGORIES = "categories";
+    private static final String VIEW_TYPE_DEFAULT = "default";
+    private static final String VIEW_TYPE_HORIZONTAL = "horizontal";
+    private static final String KEY_COLUMNS = "app_launcher_drawer_columns";
+    private static final String KEY_ROWS = "app_launcher_drawer_rows";
     private static final long POLL_INTERVAL_MS = 700L;
     private static final int REQUEST_POST_NOTIFICATIONS = 4711;
 
@@ -136,6 +141,16 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 return true;
             });
         }
+        Preference orderReset = findPreference(KEY_CATEGORY_ORDER_RESET);
+        if (orderReset != null) {
+            orderReset.setPersistent(false);
+            orderReset.setOnPreferenceClickListener(preference -> {
+                new com.termux.app.launcher.data.LauncherCategoryOrderStore(context).clear();
+                AppNotice.show(context,
+                    getString(R.string.settings_app_drawer_category_order_reset_done), false);
+                return true;
+            });
+        }
         updateRefreshSummary(context);
     }
 
@@ -155,11 +170,19 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
      * hidden rather than disabled: nothing on this screen could make them do anything there.
      */
     private void applyCategoryVisibility(@Nullable String viewType) {
-        boolean categories = VIEW_TYPE_CATEGORIES.equals(viewType);
+        boolean categories = VIEW_TYPE_CATEGORIES.equals(viewType) || VIEW_TYPE_DEFAULT.equals(viewType);
         Preference sort = findPreference(KEY_CATEGORY_SORT);
         if (sort != null) sort.setVisible(categories);
         Preference refresh = findPreference(KEY_CATEGORY_REFRESH);
         if (refresh != null) refresh.setVisible(categories);
+        Preference orderReset = findPreference(KEY_CATEGORY_ORDER_RESET);
+        if (orderReset != null) orderReset.setVisible(categories);
+        // Categories' cards are sized by their own width rule, so Columns has nothing to set there;
+        // Rows only means something to the paged grid, which scrolls nowhere else.
+        Preference columns = findPreference(KEY_COLUMNS);
+        if (columns != null) columns.setVisible(!VIEW_TYPE_CATEGORIES.equals(viewType));
+        Preference rows = findPreference(KEY_ROWS);
+        if (rows != null) rows.setVisible(VIEW_TYPE_HORIZONTAL.equals(viewType));
     }
 
     /**
@@ -175,7 +198,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
                 Context current = getContext();
                 if (current == null) return;
                 CategorySortDialogs.showChooser(current, preview,
-                    () -> startSort(current, preview.plan),
+                    () -> startSort(current, preview.onDevicePlan, true),
                     // The old model choice is an entry to the function's picker sheet.
                     () -> TaiFunctionPickerSheet.show(this, TaiFunction.APP_CATEGORIES),
                     () -> updateRefreshSummary(current));
@@ -191,18 +214,20 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     private void startRefresh(@NonNull Context context) {
         appListExecutor.execute(() -> {
             LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
-            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null;
+            // A model the RAM advises against waits for the chooser: only a tap there may load it.
+            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null
+                && (plan.remote || !CategorySortDialogs.ramAdvisesAgainst(context, plan.model));
             handler.post(() -> {
                 if (!isAdded()) return;
                 Context current = getContext();
                 if (current == null) return;
-                if (runnable) startSort(current, plan);
+                if (runnable) startSort(current, plan, false);
                 else openChooser(current);
             });
         });
     }
 
-    private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan) {
+    private void startSort(@NonNull Context context, @NonNull LauncherCategorySortPlan plan, boolean userAsked) {
         if (!plan.hasModel()) {
             openChooser(context);
             return;
@@ -210,6 +235,10 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         Intent intent = new Intent(context, LauncherCategorySortService.class);
         intent.setAction(LauncherCategorySortService.ACTION_SORT);
         intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, plan.model);
+        if (userAsked && !plan.remote) {
+            intent.putExtra(LauncherCategorySortService.EXTRA_USER_ASKED, true);
+            intent.putExtra(LauncherCategorySortService.EXTRA_ACCELERATOR, plan.accelerator);
+        }
         ContextCompat.startForegroundService(context, intent);
         updateRefreshSummary(context);
         handler.removeCallbacks(refreshRunnable);

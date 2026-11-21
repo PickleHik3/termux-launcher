@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An editor choice button's word and glyph: on-primary on the chosen one, on the secondary
+     container on the rest. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:alpha="0.38" android:color="?attr/colorOnSurface" />
+    <item android:state_checked="true" android:color="?attr/colorOnPrimary" />
+    <item android:color="?attr/colorOnSecondaryContainer" />
+</selector>

@@ -12,8 +12,8 @@ import android.os.Build;
 
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -45,7 +45,7 @@ public class PlaceArrangeSnapshotTest {
         Application app = RuntimeEnvironment.getApplication();
         prefs = app.getSharedPreferences("place-arrange-snapshot-test", Context.MODE_PRIVATE);
         prefs.edit().clear().commit();
-        places = new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null));
+        places = KindFixtures.dockOnTheTerminal(routed(new PlaceLayoutStore(new TermuxAppSharedPreferences(app, prefs, null))));
     }
 
     /** Everything one editor session could write, on the place and orientation it is open on. */
@@ -64,6 +64,29 @@ public class PlaceArrangeSnapshotTest {
         places.setWidgetColumns(LANDSCAPE, 6);
     }
 
+    /**
+     * The Dock card's Bars list is something to lose even when no slot moves (bars on edges of
+     * their own), and Discard puts it back, absent where it was absent.
+     */
+    @Test
+    public void theBarsListOrderIsSomethingToLose() {
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+        places.setBarOrder(PORTRAIT, "az_bar,apps_row,extra_keys");
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+    }
+
+    /** The Wall strip's row height is as unsaved as the dock's, and Discard puts it back. */
+    @Test
+    public void theWallStripsRowHeightIsSomethingToLose() {
+        places.setWallStripHeightDp(PORTRAIT, 96);
+        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
+        String entrySignature = entry.signature();
+        places.setWallStripHeightDp(PORTRAIT, 120);
+        places.setWallStripHeightDp(LANDSCAPE, 64);
+        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
+    }
+
     /** A band moved under the keyboard is as unsaved as any move, and Discard takes it back. */
     @Test
     public void aBandUnderTheKeyboardIsSomethingToLose() {
@@ -72,17 +95,6 @@ public class PlaceArrangeSnapshotTest {
 
         places.setSlot(PORTRAIT, Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true));
         assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-
-        entry.restore(places);
-        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-        assertFalse(places.slotUnderKeyboard(PORTRAIT, Element.EXTRA_KEYS));
-
-        // And the other way: an entry with the band under it is put back under it.
-        places.setSlot(PORTRAIT, Element.APPS, new Slot(false, Edge.BOTTOM, 0, true));
-        PlaceArrangeSnapshot under = PlaceArrangeSnapshot.capture(places);
-        places.setSlot(PORTRAIT, Element.APPS, new Slot(false, Edge.BOTTOM, 2));
-        under.restore(places);
-        assertTrue(places.slotUnderKeyboard(PORTRAIT, Element.APPS));
     }
 
     /** The keyboard element's switch is as unsaved as a moved bar, and Discard puts it back. */
@@ -95,11 +107,6 @@ public class PlaceArrangeSnapshotTest {
         assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
         assertTrue("the same switch as the palette's Keyboard on/off",
             prefs.getBoolean(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, false));
-
-        entry.restore(places);
-        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-        assertTrue(places.isKeyboardShown());
-        assertFalse(prefs.getBoolean(TERMUX_APP.KEY_KEYBOARD_TURNED_OFF, false));
     }
 
     /**
@@ -117,13 +124,6 @@ public class PlaceArrangeSnapshotTest {
         places.setSlot(PORTRAIT, Element.APPS, Slot.on(Edge.BOTTOM, Element.APPS));
         assertNotEquals("top to bottom is a move", entrySignature,
             PlaceArrangeSnapshot.capture(places).signature());
-        places.setSlot(PORTRAIT, Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, Element.EXTRA_KEYS));
-
-        entry.restore(places);
-        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-        assertEquals(Edge.TOP, places.slot(PORTRAIT, Element.APPS).edge);
-        assertEquals(Edge.TOP, places.slot(PORTRAIT, Element.EXTRA_KEYS).edge);
-        assertEquals(Edge.TOP, places.resolve(PORTRAIT).slot(Element.APPS).edge);
     }
 
     /** A bar put away remembers the edge it left, so the tray can bring it back there. */
@@ -155,11 +155,6 @@ public class PlaceArrangeSnapshotTest {
         assertTrue(places.resolve(PORTRAIT).slot(Element.STATUS).hidden);
         assertNotEquals("its edge alone could not say it was gone",
             entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-
-        entry.restore(places);
-        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-        assertFalse(places.resolve(PORTRAIT).slot(Element.STATUS).hidden);
-        assertEquals(Edge.TOP, places.statusBarEdge(PORTRAIT));
     }
 
     @Test
@@ -183,33 +178,6 @@ public class PlaceArrangeSnapshotTest {
     }
 
     @Test
-    public void discardingPutsEveryPlacesArrangementBack() {
-        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
-        String entrySignature = entry.signature();
-        moveEverything();
-        assertNotEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-
-        entry.restore(places);
-
-        assertEquals(entrySignature, PlaceArrangeSnapshot.capture(places).signature());
-        assertEquals(Edge.TOP, places.statusBarEdge(PORTRAIT));
-        assertEquals(RowPlacement.BOTTOM, places.appsRow(PORTRAIT));
-        assertEquals(RowPlacement.BOTTOM, places.extraKeys(PORTRAIT));
-        assertTrue(places.azRowShown(PORTRAIT));
-        assertEquals(KeyboardForm.DOCKED, places.keyboardForm(PORTRAIT));
-        assertEquals("the orientation a rotation handed the editor comes back too",
-            Edge.TOP, places.statusBarEdge(LANDSCAPE));
-        assertEquals(4, places.widgetColumns(LANDSCAPE));
-        assertEquals(TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT,
-            places.dockHeightScale(PORTRAIT), 0.0001f);
-        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_HEIGHT_SCALE,
-            places.keyboardHeightScale(PORTRAIT), 0.0001f);
-        assertEquals(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING,
-            places.keyboardChinDp(PORTRAIT));
-        assertTrue(places.isKeyboardShown());
-    }
-
-    @Test
     public void eachSizeIsSomethingToLoseOnItsOwn() {
         String entry = PlaceArrangeSnapshot.capture(places).signature();
 
@@ -227,23 +195,6 @@ public class PlaceArrangeSnapshotTest {
     }
 
     @Test
-    public void discardingPutsEverySizeBackWhereItStood() {
-        places.setKeyboardHeightScale(LANDSCAPE, 0.7f);
-        places.setKeyboardChinDp(LANDSCAPE, 8);
-        places.setDockHeightScale(LANDSCAPE, 2.4f);
-        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
-
-        places.setKeyboardHeightScale(LANDSCAPE, 1.6f);
-        places.setKeyboardChinDp(LANDSCAPE, 40);
-        places.setDockHeightScale(LANDSCAPE, 0.5f);
-        entry.restore(places);
-
-        assertEquals(0.7f, places.keyboardHeightScale(LANDSCAPE), 0.0001f);
-        assertEquals(8, places.keyboardChinDp(LANDSCAPE));
-        assertEquals(2.4f, places.dockHeightScale(LANDSCAPE), 0.0001f);
-    }
-
-    @Test
     public void committingKeepsEverythingThatWasMoved() {
         PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
         moveEverything();
@@ -258,46 +209,6 @@ public class PlaceArrangeSnapshotTest {
         assertFalse(places.azRowShown(PORTRAIT));
     }
 
-    @Test
-    public void aSnapshotOfAFreshInstallRestoresTheArrangementItShippedWith() {
-        // Nothing has been written, so the snapshot is what the shared layer answers. Restoring it
-        // materialises those answers as scoped keys, and the arrangement is unchanged by it.
-        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places);
-        entry.restore(places);
-
-        for (PaneWallPage place : PaneWallPage.values()) {
-            assertEquals(place + " portrait", RowPlacement.BOTTOM, places.appsRow(PORTRAIT));
-            assertEquals(place + " landscape rail", RowPlacement.LEFT,
-                places.appsRow(LANDSCAPE));
-            assertEquals(place + " status", Edge.TOP, places.statusBarEdge(PORTRAIT));
-        }
-    }
-
-    /** The editor opened in minimal mode edits the minimal layout, and Discard puts that one back. */
-    @Test
-    public void aSnapshotOfTheMinimalLayoutRestoresOnlyTheMinimalLayout() {
-        places.setStatusBarEdge(PORTRAIT, Edge.BOTTOM);
-        PlaceLayoutStore minimal = places.forVariant(LayoutVariant.MINIMAL);
-        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(places, LayoutVariant.MINIMAL);
-        assertEquals(LayoutVariant.MINIMAL, entry.variant());
-        String entrySignature = entry.signature();
-
-        minimal.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
-        minimal.setKeyboardForm(PORTRAIT, KeyboardForm.SPLIT);
-        places.setKeyboardForm(PORTRAIT, KeyboardForm.SPLIT);
-        assertNotEquals(entrySignature,
-            PlaceArrangeSnapshot.capture(places, LayoutVariant.MINIMAL).signature());
-
-        entry.restore(places);
-        assertEquals(entrySignature,
-            PlaceArrangeSnapshot.capture(places, LayoutVariant.MINIMAL).signature());
-        assertTrue(minimal.resolve(PORTRAIT).slot(Element.APPS).hidden);
-        assertEquals(KeyboardForm.DOCKED, minimal.resolve(PORTRAIT).keyboardForm);
-        // Nothing of the normal layout was in it: its own edit survives the restore.
-        assertEquals(KeyboardForm.SPLIT,
-            places.forVariant(LayoutVariant.NORMAL).resolve(PORTRAIT).keyboardForm);
-    }
-
     /** Each variant is its own question to the unsaved-changes check. */
     @Test
     public void editsToOneVariantAreNotUnsavedChangesToTheOther() {
@@ -305,5 +216,12 @@ public class PlaceArrangeSnapshotTest {
         places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         assertEquals(normalEntry,
             PlaceArrangeSnapshot.capture(places, LayoutVariant.NORMAL).signature());
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

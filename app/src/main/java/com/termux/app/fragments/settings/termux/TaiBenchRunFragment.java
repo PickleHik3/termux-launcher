@@ -283,7 +283,8 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         int finished = 0;
         for (TaiBenchRunState.Entry entry : state.entries) if (entry.finished()) finished++;
         // One feature run on its own is headed by its name; the whole set by the card's name.
-        String label = !state.featureCheck() ? TaiBenchViews.presetLabel(context, preset)
+        String label = state.voice() ? getString(R.string.tai_bench_voice_label)
+            : !state.featureCheck() ? TaiBenchViews.presetLabel(context, preset)
             : state.planned.size() == 1 ? state.planned.get(0).displayName : getString(R.string.tai_check_run_label);
         String sub = getString(R.string.tai_bench_headline_sub, label, finished, total);
         String title;
@@ -373,6 +374,9 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
                 detail = getString(R.string.tai_bench_step_skipped, entry.reason == null ? "" : entry.reason);
             } else if (entry.status == TaiBenchRunState.EntryStatus.STOPPED) {
                 detail = entry.reason == null ? getString(R.string.tai_bench_step_stopped) : entry.reason;
+            } else if (entry.voice && entry.status == TaiBenchRunState.EntryStatus.DONE) {
+                detail = TaiBenchViews.voiceSummaryLine(context, entry.realtime, entry.wer, entry.loadMs)
+                    + (entry.gpuFellBack() ? " · " + getString(R.string.tai_bench_voice_fell_back) : "");
             } else if (entry.status == TaiBenchRunState.EntryStatus.DONE) {
                 // Sanity is silent unless it failed: then the verdict is Broken and says so.
                 detail = (entry.verdict == null ? "" : TaiBenchViews.verdictLabel(context, entry.verdict) + " · ")
@@ -482,7 +486,8 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
         TaiBenchRunState.Entry last = state.lastFinished;
         if (last != null && last.status == TaiBenchRunState.EntryStatus.DONE) {
             TextView text = TaiBenchViews.body(context, getString(R.string.tai_bench_wait_finished, last.displayName,
-                TaiBenchViews.processorLabel(last.accelerator), TaiBenchViews.tps(context, last.decodeTps))
+                TaiBenchViews.processorLabel(last.accelerator), last.voice ? TaiBenchViews.realtime(context, last.realtime)
+                    : TaiBenchViews.tps(context, last.decodeTps))
                 + (last.rank > 0 ? " · " + getString(R.string.tai_bench_rank, last.rank) : ""));
             waitFinished.addView(text, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             if (last.newBest) {
@@ -527,6 +532,10 @@ public class TaiBenchRunFragment extends Fragment implements TaiBenchSession.Lis
             case READ:
                 dialFigure.setText(TaiBenchViews.waitSeconds(context, dial.value * 1000.0));
                 dialCaption.setText(R.string.tai_bench_dial_read);
+                break;
+            case REALTIME:
+                dialFigure.setText(TaiBenchViews.realtime(context, dial.value));
+                dialCaption.setText(R.string.tai_bench_dial_realtime);
                 break;
             default:
                 dialFigure.setText(R.string.tai_bench_none);

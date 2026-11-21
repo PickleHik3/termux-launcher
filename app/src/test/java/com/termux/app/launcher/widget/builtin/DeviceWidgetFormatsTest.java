@@ -15,20 +15,28 @@ public class DeviceWidgetFormatsTest {
     private static final long HOUR = 60 * MINUTE;
 
     @Test public void memoryIsBinaryGigabytesWithOneDecimal() {
-        assertEquals("5.1/7.7G", DeviceWidgetFormats.memoryPair(
+        assertEquals("5.1/7.7 GB", DeviceWidgetFormats.memoryPair(
             Math.round(5.1 * KB_PER_GIB), Math.round(7.7 * KB_PER_GIB)));
-        assertEquals("9.0/12G", DeviceWidgetFormats.memoryPair(9 * KB_PER_GIB, 12 * KB_PER_GIB));
+        assertEquals("9.0/12 GB", DeviceWidgetFormats.memoryPair(9 * KB_PER_GIB, 12 * KB_PER_GIB));
     }
 
     @Test public void storageIsDecimalGigabytesAndWholeFromTenUp() {
-        assertEquals("156/256G", DeviceWidgetFormats.storagePair(156_000_000_000L, 256_000_000_000L));
-        assertEquals("10/128G", DeviceWidgetFormats.storagePair(9_960_000_000L, 128_000_000_000L));
-        assertEquals("9.9/32G", DeviceWidgetFormats.storagePair(9_940_000_000L, 32_000_000_000L));
+        assertEquals("156/256 GB",
+            DeviceWidgetFormats.storagePair(156_000_000_000L, 256_000_000_000L));
+        assertEquals("10/128 GB", DeviceWidgetFormats.storagePair(9_960_000_000L, 128_000_000_000L));
+        assertEquals("9.9/32 GB", DeviceWidgetFormats.storagePair(9_940_000_000L, 32_000_000_000L));
     }
 
-    @Test public void anUnknownTotalIsADash() {
-        assertEquals(DeviceWidgetFormats.UNKNOWN, DeviceWidgetFormats.memoryPair(100, 0));
-        assertEquals(DeviceWidgetFormats.UNKNOWN, DeviceWidgetFormats.storagePair(-1, -1));
+    @Test public void anUnknownTotalIsLeftOutNotADash() {
+        assertEquals("", DeviceWidgetFormats.memoryPair(100, 0));
+        assertEquals("", DeviceWidgetFormats.storagePair(-1, -1));
+        assertEquals("", DeviceWidgetFormats.celsiusWhole(Integer.MIN_VALUE));
+    }
+
+    @Test public void theTempBarReadsWholeDegrees() {
+        assertEquals("34°C", DeviceWidgetFormats.celsiusWhole(340));
+        assertEquals("25°C", DeviceWidgetFormats.celsiusWhole(254));
+        assertEquals("26°C", DeviceWidgetFormats.celsiusWhole(255));
     }
 
     @Test public void percentIsClampedAndUnknownWithoutAWhole() {
@@ -52,7 +60,8 @@ public class DeviceWidgetFormatsTest {
     @Test public void durationRoundsUpToTheMinute() {
         assertEquals("42 min", DeviceWidgetFormats.duration(41 * MINUTE + 1));
         assertEquals("1 min", DeviceWidgetFormats.duration(0));
-        assertEquals("1 h 5 min", DeviceWidgetFormats.duration(65 * MINUTE));
+        assertEquals("1 h 5 m", DeviceWidgetFormats.duration(65 * MINUTE));
+        assertEquals("1 h 10 m", DeviceWidgetFormats.duration(70 * MINUTE));
         assertEquals("2 h", DeviceWidgetFormats.duration(120 * MINUTE));
         assertEquals(42, DeviceWidgetFormats.minutesRoundedUp(41 * MINUTE + 1));
     }

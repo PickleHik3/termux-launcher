@@ -23,14 +23,13 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import java.util.Set;
 
 /**
- * Everything about Android notifications in one place: the access grant the launcher's
- * notification features share, the dots on apps, the essential rules that pin notifications to the
- * status bar, and the per-app history the shell can read. The rows keep the keys they had on the
- * Launcher and Status bar pages, so saved values carry over.
+ * Everything about Android notifications in one place: the dots on apps, the essential rules that
+ * pin notifications to the status bar, and the per-app history the shell can read. The access grant
+ * they share is on General › Permissions & services; a dot switched on without it asks here. The
+ * rows keep the keys they had on the Launcher and Status bar pages, so saved values carry over.
  */
 @Keep
 public final class NotificationsPreferencesFragment extends MaterialPreferenceFragment {
-    private static final String KEY_ACCESS = "app_launcher_notification_access";
     private static final String KEY_DOTS = "app_launcher_notification_dots";
     private static final String KEY_HISTORY = "notification_history_shell";
 
@@ -43,11 +42,6 @@ public final class NotificationsPreferencesFragment extends MaterialPreferenceFr
         setPreferencesFromResource(R.xml.notifications_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
 
-        Preference access = findPreference(KEY_ACCESS);
-        if (access != null) access.setOnPreferenceClickListener(preference -> {
-            openAccessSettings(context);
-            return true;
-        });
         SwitchPreferenceCompat dots = findPreference(KEY_DOTS);
         if (dots != null) {
             dots.setOnPreferenceChangeListener((preference, newValue) -> {
@@ -70,14 +64,6 @@ public final class NotificationsPreferencesFragment extends MaterialPreferenceFr
 
     private void refresh(@NonNull Context context) {
         boolean allowed = LauncherNotificationAccess.isEnabled(context);
-        Preference access = findPreference(KEY_ACCESS);
-        if (access instanceof StatusActionPreference) {
-            ((StatusActionPreference) access).setState(
-                getString(allowed ? R.string.settings_status_allowed : R.string.settings_status_action_needed),
-                getString(allowed ? R.string.settings_manage_action : R.string.settings_fix_action),
-                allowed ? StatusActionPreference.Tone.POSITIVE : StatusActionPreference.Tone.WARNING);
-            access.setSummary(R.string.settings_notifications_access_summary);
-        }
         SwitchPreferenceCompat dots = findPreference(KEY_DOTS);
         if (dots != null) {
             dots.setSummary(allowed ? R.string.termux_app_launcher_notification_dots_summary

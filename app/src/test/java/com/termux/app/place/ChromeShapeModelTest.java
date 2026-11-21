@@ -642,9 +642,9 @@ public class ChromeShapeModelTest {
         PlaceLayout layout = layout(Slot.on(Edge.TOP, Element.STATUS), GONE, GONE, GONE,
             KeyboardForm.DOCKED, false);
         ChromeShape shape = ChromeShapeModel.shape(input(layout, LayoutStyle.DOCKED)
-            .panes(2, SplitAxis.SIDE_BY_SIDE).build());
+            .paneGap(8f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
 
-        // The area under the status bar, a gutter of 8 inside it, split with 8 between.
+        // The area under the status bar, a gutter of 8 inside it, split with Inner gap 8 between.
         assertBox(shape.opening().box, 8, 48, 392, 792);
         assertEquals(2, shape.panes().size());
         assertBox(shape.panes().get(0).box, 8, 48, 196, 792);
@@ -663,7 +663,7 @@ public class ChromeShapeModelTest {
         // With a bar at a side the frame is joined and has one hole per insert, so the gutter
         // between them is frame glass.
         ChromeShape joined = ChromeShapeModel.shape(input(sideBars(), LayoutStyle.DOCKED)
-            .panes(2, SplitAxis.SIDE_BY_SIDE).build());
+            .paneGap(8f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
         ChromeShape.Card frame = joined.cards().get(0);
         assertEquals(2, frame.holes.size());
         assertBox(frame.hole, 78, 48, 368, 542);
@@ -672,17 +672,17 @@ public class ChromeShapeModelTest {
 
         // The gutter between panes stops at the cap, as Floating's does.
         ChromeShape capped = ChromeShapeModel.shape(input(layout, LayoutStyle.DOCKED).margin(40f)
-            .panes(2, SplitAxis.STACKED).build());
+            .paneGap(40f).panes(2, SplitAxis.STACKED).build());
         assertBox(capped.panes().get(0).box, 40, 80, 360, 408);
         assertBox(capped.panes().get(1).box, 40, 432, 360, 760);
     }
 
     @Test
-    public void aTwoPaneSplitIsTwoCardsWithMarginBetweenUnderFloating() {
+    public void aTwoPaneSplitIsTwoCardsWithTheGapBetweenUnderFloating() {
         PlaceLayout layout = layout(Slot.on(Edge.TOP, Element.STATUS), GONE, GONE, GONE,
             KeyboardForm.DOCKED, false);
         ChromeShape shape = ChromeShapeModel.shape(input(layout, LayoutStyle.FLOATING)
-            .panes(2, SplitAxis.SIDE_BY_SIDE).build());
+            .paneGap(8f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
 
         assertBox(shape.opening().box, 8, 56, 392, 792);
         assertBox(shape.panes().get(0).box, 8, 56, 196, 792);
@@ -698,45 +698,41 @@ public class ChromeShapeModelTest {
         PlaceLayout layout = keyboardOnly(KeyboardForm.DOCKED, false);
         ChromeShape shape = ChromeShapeModel.shape(
             input(layout, LayoutStyle.FLOATING).margin(40f)
-                .panes(2, SplitAxis.STACKED).build());
+                .paneGap(40f).panes(2, SplitAxis.STACKED).build());
 
-        // Margin 40 surrounds the cards, but the gap between panes stops at 24.
+        // Margin 40 surrounds the cards, but a gap of 40 between panes stops at 24.
         assertBox(shape.opening().box, 40, 40, 360, 760);
         assertBox(shape.panes().get(0).box, 40, 40, 360, 388);
         assertBox(shape.panes().get(1).box, 40, 412, 360, 760);
     }
 
     @Test
-    public void theGapBetweenSplitPanesHasAFloorUnderBothStyles() {
+    public void theGapBetweenSplitPanesIsInnerGapUnderBothStylesWhateverMargin() {
         PlaceLayout layout = keyboardOnly(KeyboardForm.DOCKED, false);
         for (LayoutStyle style : new LayoutStyle[] {LayoutStyle.FLOATING, LayoutStyle.DOCKED}) {
-            // Margin 4 is under the floor of 10: the panes still stand 10 apart.
-            ChromeShape small = ChromeShapeModel.shape(input(layout, style).margin(4f)
-                .paneGapFloor(10f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
-            Box a = small.panes().get(0).box;
-            Box b = small.panes().get(1).box;
-            assertEquals(10f, b.left - a.right, D);
-
-            // Margin 16 is above it and applies as it did.
-            ChromeShape wide = ChromeShapeModel.shape(input(layout, style).margin(16f)
-                .paneGapFloor(10f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
-            assertEquals(16f, wide.panes().get(1).box.left - wide.panes().get(0).box.right, D);
-
-            // Margin 40 still stops at the cap of 24.
-            ChromeShape capped = ChromeShapeModel.shape(input(layout, style).margin(40f)
-                .paneGapFloor(10f).panes(2, SplitAxis.SIDE_BY_SIDE).build());
-            assertEquals(24f, capped.panes().get(1).box.left - capped.panes().get(0).box.right,
-                D);
+            for (float margin : new float[] {4f, 16f}) {
+                for (float gap : new float[] {0f, 2f, 10f, 24f}) {
+                    ChromeShape shape = ChromeShapeModel.shape(input(layout, style)
+                        .margin(margin).paneGap(gap).panes(2, SplitAxis.SIDE_BY_SIDE).build());
+                    Box a = shape.panes().get(0).box;
+                    Box b = shape.panes().get(1).box;
+                    assertEquals(style + " margin " + margin + " gap " + gap,
+                        gap, b.left - a.right, D);
+                    // The two panes still fill the opening between them.
+                    assertEquals(shape.opening().box.left, a.left, D);
+                    assertEquals(shape.opening().box.right, b.right, D);
+                }
+            }
         }
     }
 
     @Test
-    public void aSinglePaneIsNotShrunkByTheGapFloor() {
+    public void aSinglePaneIsNotShrunkByTheGap() {
         PlaceLayout layout = keyboardOnly(KeyboardForm.DOCKED, false);
         ChromeShape plain = ChromeShapeModel.shape(input(layout, LayoutStyle.FLOATING).build());
-        ChromeShape floored = ChromeShapeModel.shape(input(layout, LayoutStyle.FLOATING)
-            .paneGapFloor(10f).build());
-        assertBox(floored.panes().get(0).box, plain.panes().get(0).box.left,
+        ChromeShape gapped = ChromeShapeModel.shape(input(layout, LayoutStyle.FLOATING)
+            .paneGap(10f).build());
+        assertBox(gapped.panes().get(0).box, plain.panes().get(0).box.left,
             plain.panes().get(0).box.top, plain.panes().get(0).box.right,
             plain.panes().get(0).box.bottom);
     }

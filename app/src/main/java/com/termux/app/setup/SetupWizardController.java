@@ -1,0 +1,870 @@
+package com.termux.app.setup;
+
+import android.Manifest;
+import android.content.ActivityNotFoundException;
+import android.content.Context;
+import android.content.Intent;
+import android.content.pm.PackageManager;
+import android.net.Uri;
+import android.os.Build;
+import android.provider.Settings;
+import android.graphics.Outline;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewOutlineProvider;
+import android.view.animation.DecelerateInterpolator;
+import android.widget.FrameLayout;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+import androidx.core.content.ContextCompat;
+import androidx.core.graphics.Insets;
+import androidx.core.view.ViewCompat;
+import androidx.core.view.WindowInsetsCompat;
+
+import com.termux.R;
+import com.termux.app.HomeAppChooser;
+import com.termux.app.ReducedMotion;
+import com.termux.app.activities.SettingsActivity;
+import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragment;
+import com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment;
+import com.termux.app.launcher.notifications.LauncherNotificationAccess;
+import com.termux.privileged.PrivilegedBackendManager;
+import com.termux.privileged.ShizukuBackend;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The setup wizard over the live launcher: the launcher's root is scaled into a miniature above a
+ * fixed-height card ({@link SetupSheetView}), the way the Appearance editor does it, so the dock,
+ * the status strip and the wall stay visible while the user picks.
+ *
+ * <p>The pose math is a small copy of {@code surfaces/EditorFramePose} and
+ * {@code AppearanceEditorFrame.setPose}/{@code show} (those are package-private to
+ * {@code surfaces}): the root's pivot is its top centre, the frame's top sits at the status inset
+ * plus 16dp and its bottom 8dp over the card. The wall's gestures are held while the wizard is
+ * open, as the editor's session does through {@code holdPaneWall}.
+ */
+public final class SetupWizardController implements SetupSheetView.Callbacks, SetupCardSheet.Callbacks {
+
+    /** What the wizard needs from the activity. */
+    public interface Host {
+        @NonNull Context context();
+
+        @Nullable <T extends View> T findView(int id);
+
+        /** Holds or releases the wall's gestures. */
+        void holdPaneWall(boolean held);
+
+        int statusBarInsetTop();
+
+        @Nullable TermuxAppSharedPreferences preferences();
+
+        /**
+         * Opens the in-app wallpaper picker. The host calls {@link #resumeFromPicker} when the
+         * person is done with it (including after a photo pick and crop).
+         */
+        void openWallpaperPicker();
+
+        /** Asks for the storage permission the first-run wallpaper card asks for. */
+        void requestWallpaperRead();
+
+        /** Asks for POST_NOTIFICATIONS; the host calls {@link #onNotificationPermissionResult}. */
+        void requestNotificationPermission();
+
+        /** The Appearance editor is open: the card sheet waits for the next start. */
+        boolean isAppearanceEditorOpen();
+    }
+
+    private static final String SHIZUKU_GUIDE_URL =
+        "https://picklehik3.github.io/termux-launcher-site/docs/#wiki/permissions";
+    private static final long POSE_MS = 280L;
+    private static final int TOP_GAP_DP = 16;
+    private static final int GAP_DP = 8;
+    private static final float MIN_SCALE = 0.2f;
+    private static final float MINIATURE_SHEET_FRACTION = 0.53f;
+    private static final float REVIEW_SHEET_FRACTION = 0.78f;
+
+    @NonNull private final Host mHost;
+    private boolean mOpen;
+    /** The wallpaper picker is up: the sheet is hidden and the root unposed, the state kept. */
+    private boolean mSuspended;
+    private boolean mUpdater;
+    @Nullable private SetupState mState;
+    private final List<SetupSection> mSections = new ArrayList<>();
+    private int mIndex;
+    private int mFurthest;
+    @Nullable private FrameLayout mLayer;
+    @Nullable private SetupSheetView mSheet;
+    /** The card sheet after the wizard; set instead of {@link #mSheet} while it is up. */
+    @Nullable private SetupCardSheet mCards;
+    /** The notification permission was asked and refused: Continue goes to the system page. */
+    private boolean mNotificationDenied;
+    @Nullable private View mRoot;
+    @Nullable private ViewOutlineProvider mSavedProvider;
+    private boolean mSavedClip;
+    private boolean mClipped;
+    private int mNavInsetPx;
+    private int mWindowHeightPx;
+    /** A check that opens the cards when they are due is still to run in this session. */
+    private boolean mCardsOfferPending;
+    /** Finish or Skip asked for wallpaper access; the cards open when it is answered. */
+    private boolean mCardsAfterWallpaperAsk;
+
+    public SetupWizardController(@NonNull Host host) {
+        mHost = host;
+    }
+
+    public boolean isOpen() {
+        return mOpen;
+    }
+
+    /** The card sheet after the wizard is up (the wizard's own sheet does not count). */
+    public boolean isCardSheetShowing() {
+        return mOpen && mCards != null;
+    }
+
+    /** The launch is about to check whether the cards are due; until then due cards come first. */
+    public void expectCardsOffer() {
+        mCardsOfferPending = true;
+    }
+
+    /** A check that opens the cards when they are due is still to run in this session. */
+    public boolean isCardsOfferPending() {
+        return mCardsOfferPending;
+    }
+
+    /** Open and showing: false while the wallpaper picker has the screen. */
+    public boolean isActive() {
+        return mOpen && !mSuspended;
+    }
+
+    public boolean isSuspended() {
+        return mOpen && mSuspended;
+    }
+
+    /**
+     * Opens the wizard, with the current settings pre-selected.
+     *
+     * @param updater whether this person has used the app before: they get "Keep my current setup"
+     */
+    public void open(boolean updater) {
+        if (mOpen)
+            return;
+        View root = mHost.findView(R.id.terminal_root_container);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
+        if (root == null || content == null)
+            return;
+        mOpen = true;
+        mUpdater = updater;
+        mRoot = root;
+        mHost.holdPaneWall(true);
+        mState = new SetupState(mHost.context(), updater);
+        mState.setActions(new SetupState.Actions() {
+            @Override public void openWallpaperPicker() {
+                suspendForPicker();
+            }
+            @Override public void requestWallpaperRead() {
+                mHost.requestWallpaperRead();
+            }
+            @Override public void refresh() {
+                refreshCustomize();
+            }
+        });
+        mSuspended = false;
+        mSections.clear();
+        mSections.add(new HomeScreenSection());
+        mSections.add(new CustomizeSection());
+        mSections.add(new MultiplexerSection());
+        mSections.add(new DesktopAppsSection());
+        mSections.add(new AiSection());
+        mSections.add(new PowerSection());
+        mSections.add(new ReviewSection());
+        mIndex = 0;
+        mFurthest = 0;
+
+        mLayer = new FrameLayout(mHost.context());
+        // The layer takes every touch, so the miniature underneath is looked at, not used.
+        mLayer.setClickable(true);
+        mSheet = new SetupSheetView(mHost.context(), updater, this);
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+            Gravity.BOTTOM);
+        mLayer.addView(mSheet, params);
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR)
+            .addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        showSection(mIndex, false);
+    }
+
+    /** Back: the previous section; on the first one nothing (Skip is the way out). */
+    public boolean handleBack() {
+        if (!isActive())
+            return false;
+        SetupCardSheet cards = mCards;
+        if (cards != null) {
+            if (cards.isOnPage()) onPageBack();
+            else close(true);
+            return true;
+        }
+        if (mIndex > 0)
+            showSection(mIndex - 1, true);
+        return true;
+    }
+
+    /** Fits the miniature and the card to the window again, after a turn. */
+    public void relayout() {
+        if (isActive() && mCards != null)
+            layoutCards();
+        else if (isActive())
+            layout(false);
+    }
+
+    /** Drops the wizard with no ceremony: the root back at rest, the wall released. */
+    public void closeImmediately() {
+        close(false);
+    }
+
+    // ------------------------------------------------------------------------- wallpaper picker
+
+    /**
+     * The picker takes the screen: the sheet layer goes, the root goes back to rest at once (the
+     * editor poses it itself), and the state, the section and the snapshot stay.
+     */
+    private void suspendForPicker() {
+        if (!mOpen || mSuspended)
+            return;
+        mSuspended = true;
+        FrameLayout layer = mLayer;
+        if (layer != null)
+            layer.setVisibility(View.GONE);
+        View root = mRoot;
+        if (root != null) {
+            root.animate().cancel();
+            root.setScaleX(1f);
+            root.setScaleY(1f);
+            root.setTranslationX(0f);
+            root.setTranslationY(0f);
+            unclip(root);
+        }
+        mHost.holdPaneWall(false);
+        mHost.openWallpaperPicker();
+    }
+
+    /** The picker is done: the sheet and the miniature come back on the same section. */
+    public void resumeFromPicker() {
+        if (!mOpen || !mSuspended)
+            return;
+        mSuspended = false;
+        mHost.holdPaneWall(true);
+        FrameLayout layer = mLayer;
+        if (layer != null)
+            layer.setVisibility(View.VISIBLE);
+        showSection(mIndex, false);
+    }
+
+    /**
+     * The storage permission was answered: Customize shows whether the wallpaper reads now, or,
+     * when Finish or Skip asked, the cards open. Declined, the look stays as it can be drawn.
+     */
+    public void onWallpaperPermissionResult() {
+        if (mCardsAfterWallpaperAsk) {
+            mCardsAfterWallpaperAsk = false;
+            openCardsIfDue();
+            return;
+        }
+        refreshCustomize();
+    }
+
+    private void refreshCustomize() {
+        if (isActive() && mSections.get(mIndex) instanceof CustomizeSection)
+            showSection(mIndex, false);
+    }
+
+    // ------------------------------------------------------------------------------- sections
+
+    private void showSection(int index, boolean animate) {
+        SetupSection section = mSections.get(index);
+        SetupState state = mState;
+        SetupSheetView sheet = mSheet;
+        if (state == null || sheet == null)
+            return;
+        mIndex = index;
+        mFurthest = Math.max(mFurthest, index);
+        View body = section.createView(mHost.context(), state);
+        sheet.bind(index, mSections.size(), mFurthest,
+            mHost.context().getString(section.nameRes()), body, index == mSections.size() - 1,
+            index > 0);
+        layout(animate);
+        section.onShown();
+    }
+
+    private void layout(boolean animate) {
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
+        SetupSheetView sheet = mSheet;
+        View root = mRoot;
+        if (content == null || sheet == null || root == null || mSuspended)
+            return;
+        if (content.getHeight() <= 0 || root.getHeight() <= 0) {
+            // Not laid out yet: try again on the next frame.
+            content.postOnAnimation(() -> {
+                if (mOpen)
+                    layout(false);
+            });
+            return;
+        }
+        mWindowHeightPx = content.getHeight();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
+        Insets bars = insets == null ? Insets.NONE
+            : insets.getInsets(WindowInsetsCompat.Type.systemBars());
+        int[] contentInWindow = new int[2];
+        content.getLocationInWindow(contentInWindow);
+        mNavInsetPx = Math.max(0, contentInWindow[1] + mWindowHeightPx
+            - (content.getRootView().getHeight() - bars.bottom));
+        boolean miniature = mSections.get(mIndex).showsMiniature();
+        int sheetHeight = Math.round(mWindowHeightPx
+            * (miniature ? MINIATURE_SHEET_FRACTION : REVIEW_SHEET_FRACTION));
+        sheet.setNavInset(mNavInsetPx);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) sheet.getLayoutParams();
+        if (params.height != sheetHeight) {
+            params.height = sheetHeight;
+            sheet.setLayoutParams(params);
+        }
+        if (!miniature) {
+            moveRoot(1f, 0f, animate);
+            return;
+        }
+        float density = mHost.context().getResources().getDisplayMetrics().density;
+        float top = mHost.statusBarInsetTop() + TOP_GAP_DP * density;
+        float bottom = mWindowHeightPx - sheetHeight - GAP_DP * density;
+        float scale = Math.max(MIN_SCALE, Math.min(1f, (bottom - top) / root.getHeight()));
+        moveRoot(scale, top - rootTopInContent(root, content), animate);
+    }
+
+    private static float rootTopInContent(@NonNull View root, @NonNull View content) {
+        float top = 0f;
+        View view = root;
+        while (view != null && view != content) {
+            top += view.getTop();
+            view = view.getParent() instanceof View ? (View) view.getParent() : null;
+        }
+        return top;
+    }
+
+    // ------------------------------------------------------------------------------------ pose
+
+    private void moveRoot(float scale, float translationY, boolean animate) {
+        View root = mRoot;
+        if (root == null)
+            return;
+        root.setPivotX(root.getWidth() / 2f);
+        root.setPivotY(0f);
+        if (scale < 1f)
+            clip(root, scale);
+        root.animate().cancel();
+        Runnable done = () -> {
+            if (scale >= 1f)
+                unclip(root);
+        };
+        if (!animate || ReducedMotion.isEnabled(mHost.context())) {
+            root.setScaleX(scale);
+            root.setScaleY(scale);
+            root.setTranslationX(0f);
+            root.setTranslationY(translationY);
+            done.run();
+            return;
+        }
+        root.animate().scaleX(scale).scaleY(scale).translationX(0f).translationY(translationY)
+            .setDuration(POSE_MS).setInterpolator(new DecelerateInterpolator(2f))
+            .withEndAction(done).start();
+    }
+
+    /** Rounds the miniature's corners; the radius is in the root's own px, so it grows with 1/scale. */
+    private void clip(@NonNull View root, float scale) {
+        if (!mClipped) {
+            mSavedProvider = root.getOutlineProvider();
+            mSavedClip = root.getClipToOutline();
+            mClipped = true;
+        }
+        float radius = SetupUi.dp(root.getContext(), 28) / Math.max(scale, MIN_SCALE);
+        root.setOutlineProvider(new ViewOutlineProvider() {
+            @Override public void getOutline(View view, Outline outline) {
+                outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), radius);
+            }
+        });
+        root.setClipToOutline(true);
+    }
+
+    private void unclip(@NonNull View root) {
+        if (!mClipped)
+            return;
+        root.setClipToOutline(mSavedClip);
+        root.setOutlineProvider(mSavedProvider);
+        mClipped = false;
+    }
+
+    // ---------------------------------------------------------------------------------- finish
+
+    private void close(boolean animate) {
+        mCardsOfferPending = false;
+        if (!mOpen)
+            return;
+        mOpen = false;
+        mSuspended = false;
+        View root = mRoot;
+        if (root != null) {
+            root.animate().cancel();
+            root.setScaleX(1f);
+            root.setScaleY(1f);
+            root.setTranslationX(0f);
+            root.setTranslationY(0f);
+            unclip(root);
+        }
+        FrameLayout layer = mLayer;
+        if (layer != null && layer.getParent() instanceof ViewGroup)
+            ((ViewGroup) layer.getParent()).removeView(layer);
+        mLayer = null;
+        mSheet = null;
+        hidePage();
+        mCards = null;
+        mRoot = null;
+        mHost.holdPaneWall(false);
+    }
+
+    /**
+     * Records that this wizard version ran.
+     *
+     * @param cardsSeen every card that exists now counts as shown, so none is due (Keep)
+     */
+    private void markDone(boolean cardsSeen) {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        if (prefs == null)
+            return;
+        prefs.setSetupWizardVersion(SetupWizardGate.CURRENT);
+        // A user finishing setup now starts with nothing seen, so the sheet that opens right after
+        // Finish or Skip shows every card once. Keep leaves every card seen, as the launch-time
+        // seeding does for earlier users, so nothing is due after it.
+        Context context = mHost.context();
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        boolean changed = cardsSeen ? stored.markSeen(SetupCardSystem.cards(context))
+            : stored.startSeen();
+        // The page indicator note is for users who had the indicator; a new user never did.
+        if (!stored.isDismissed(SetupCards.PAGE_INDICATOR)) {
+            stored.setDismissed(SetupCards.PAGE_INDICATOR, true);
+            changed = true;
+        }
+        if (changed)
+            SetupCardSystem.save(context, stored);
+        // The old tour is gone, but this stays the "has used the app before" marker the gate
+        // reads, and older code paths that read it still see the tour as done (8 is its last run).
+        if (prefs.getFirstBootTourCompletedVersion() < 8)
+            prefs.setFirstBootTourCompletedVersion(8);
+    }
+
+    @Override
+    public void onBack() {
+        if (mIndex > 0)
+            showSection(mIndex - 1, true);
+    }
+
+    @Override
+    public void onSkip() {
+        exit(SetupWizardExit.Way.SKIP);
+    }
+
+    @Override
+    public void onContinue() {
+        if (mIndex < mSections.size() - 1) {
+            showSection(mIndex + 1, true);
+            return;
+        }
+        exit(SetupWizardExit.Way.FINISH);
+    }
+
+    @Override
+    public void onKeepCurrent() {
+        exit(SetupWizardExit.Way.KEEP);
+    }
+
+    /** Leaves the wizard: the choices kept or put back, the wizard done, then the cards. */
+    private void exit(@NonNull SetupWizardExit.Way way) {
+        SetupState state = mState;
+        if (state != null) {
+            if (SetupWizardExit.restoresSnapshot(way))
+                state.restore(state.snapshot());
+            else if (SetupWizardExit.appliesChoices(way))
+                state.apply();
+        }
+        markDone(SetupWizardExit.marksCardsSeen(way));
+        close(true);
+        if (!SetupWizardExit.offersCards(way))
+            return;
+        // A look that follows the system wallpaper needs storage access to draw its glass: asked
+        // here, once, before the cards; the cards open when it is answered.
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        Context context = mHost.context();
+        if (prefs != null && SetupWizardExit.asksWallpaperRead(way,
+                !CustomizeSection.wallpaperReadable(context),
+                prefs.isWallpaperReadPermissionPrompted())) {
+            mCardsAfterWallpaperAsk = true;
+            mCardsOfferPending = true;
+            mHost.requestWallpaperRead();
+            return;
+        }
+        // Right after Finish or Skip: the cards, when any is due.
+        openCardsIfDue();
+    }
+
+    @Override
+    public void onStepTapped(int index) {
+        if (SetupStepPolicy.canJump(mIndex, mFurthest, mSections.size(), index))
+            showSection(index, true);
+    }
+
+
+    // ------------------------------------------------------------------------------ card sheet
+
+    /**
+     * The cards are due at launch: the wizard is done and a card that is open and completable has
+     * never been shown in the sheet. A user who finished setup before the seen set existed gets it
+     * seeded here with every card that exists now, without showing the sheet.
+     */
+    public boolean isCardSheetDue() {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        if (prefs == null)
+            return false;
+        boolean wizardDone = prefs.getSetupWizardVersion() >= SetupWizardGate.CURRENT;
+        if (!wizardDone)
+            return false;
+        Context context = mHost.context();
+        List<SetupCards.Card> cards = SetupCardSystem.cards(context);
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        if (!stored.isSeenKnown()) {
+            stored.markSeen(cards);
+            SetupCardSystem.save(context, stored);
+        }
+        return SetupCards.isDueForLaunch(true, cards,
+            !AiModelDownloads.selected(context).isEmpty(), stored);
+    }
+
+    /**
+     * The one-shot carry-over for someone who did the old tour: every guide chapter counts as
+     * watched. Called with the gate's decision before the wizard opens.
+     */
+    public void migrateFromOldTourIfDue(@NonNull SetupWizardGate.Decision decision) {
+        TermuxAppSharedPreferences prefs = mHost.preferences();
+        android.content.SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        if (store == null)
+            return;
+        if (SetupWizardGate.shouldMigrate(decision,
+                store.getBoolean(SetupWizardGate.KEY_MIGRATED_V1, false)))
+            GuideChapters.migrateFromOldTour(store);
+    }
+
+    /** Opens the card sheet when it is due; true when it is up. */
+    public boolean openCardsIfDue() {
+        // The session's chance: due cards that do not open now wait for the next start.
+        mCardsOfferPending = false;
+        if (mOpen)
+            return true;
+        if (mHost.isAppearanceEditorOpen())
+            return false;
+        if (!isCardSheetDue())
+            return false;
+        openCards();
+        return true;
+    }
+
+    /**
+     * The Appearance editor is opening: a card sheet that is up steps aside for this start. No
+     * card is marked dismissed; it was already marked seen when it opened, so it does not return by itself. The
+     * wizard's own sheet is left alone.
+     */
+    public void stepAsideForEditor() {
+        if (isCardSheetShowing())
+            close(false);
+    }
+
+    /** Opens the card sheet whatever is due (Settings' Setup row). */
+    public void openCards() {
+        openCards(null);
+    }
+
+    /**
+     * Opens the card sheet, straight on one card's page when {@code pageId} names one (Settings'
+     * Learn the basics and Models for this phone rows).
+     */
+    public void openCards(@Nullable String pageId) {
+        mCardsOfferPending = false;
+        if (mOpen) {
+            if (pageId != null)
+                showPage(pageId);
+            return;
+        }
+        View root = mHost.findView(R.id.terminal_root_container);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
+        if (root == null || content == null)
+            return;
+        mOpen = true;
+        mSuspended = false;
+        mRoot = root;
+        mHost.holdPaneWall(true);
+        mLayer = new FrameLayout(mHost.context());
+        mLayer.setClickable(true);
+        SetupCardSheet sheet = new SetupCardSheet(mHost.context(), this);
+        mCards = sheet;
+        mLayer.addView(sheet, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR)
+            .addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
+        List<SetupCards.Card> shown = SetupCardSystem.cards(mHost.context());
+        // Saved now, not on close, so a process kill cannot bring the sheet back.
+        SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+        if (stored.markSeen(shown))
+            SetupCardSystem.save(mHost.context(), stored);
+        sheet.bindList(shown, false);
+        layoutCards();
+        if (pageId != null)
+            showPage(pageId);
+    }
+
+    /** The sheet is 78% of the window; the launcher root stays at rest beneath it. */
+    private void layoutCards() {
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
+        SetupCardSheet sheet = mCards;
+        View root = mRoot;
+        if (content == null || sheet == null || root == null)
+            return;
+        if (content.getHeight() <= 0) {
+            content.postOnAnimation(() -> {
+                if (mOpen && mCards != null)
+                    layoutCards();
+            });
+            return;
+        }
+        mWindowHeightPx = content.getHeight();
+        WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(content);
+        Insets bars = insets == null ? Insets.NONE
+            : insets.getInsets(WindowInsetsCompat.Type.systemBars());
+        int[] contentInWindow = new int[2];
+        content.getLocationInWindow(contentInWindow);
+        mNavInsetPx = Math.max(0, contentInWindow[1] + mWindowHeightPx
+            - (content.getRootView().getHeight() - bars.bottom));
+        sheet.setNavInset(mNavInsetPx);
+        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) sheet.getLayoutParams();
+        int height = Math.round(mWindowHeightPx * REVIEW_SHEET_FRACTION);
+        if (params.height != height) {
+            params.height = height;
+            sheet.setLayoutParams(params);
+        }
+        moveRoot(1f, 0f, false);
+    }
+
+    /** The activity is back in front (a system page was left): the cards read the phone again. */
+    public void onActivityResumed() {
+        refreshCards();
+    }
+
+    /** POST_NOTIFICATIONS was answered. */
+    public void onNotificationPermissionResult(boolean granted) {
+        mNotificationDenied = !granted;
+        refreshCards();
+    }
+
+    private void refreshCards() {
+        SetupCardSheet sheet = mCards;
+        if (mOpen && sheet != null && !sheet.isOnPage())
+            sheet.bindList(SetupCardSystem.cards(mHost.context()), true);
+    }
+
+    private void startSafely(@NonNull Intent intent) {
+        try {
+            mHost.context().startActivity(intent);
+        } catch (ActivityNotFoundException | SecurityException unavailable) {
+            // The phone has no such page; the card stays open.
+        }
+    }
+
+    @Override
+    public void onContinue(@NonNull String id) {
+        Context context = mHost.context();
+        switch (id) {
+            case SetupCards.SHIZUKU: {
+                PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+                manager.initializeIfNeeded(context).thenAccept(ready -> {
+                    manager.requestPrivilegedPermission(ShizukuBackend.PERMISSION_REQUEST_CODE);
+                    FrameLayout layer = mLayer;
+                    if (layer != null)
+                        layer.post(this::refreshCards);
+                });
+                break;
+            }
+            case SetupCards.ACCESSIBILITY:
+                startSafely(new Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS));
+                break;
+            case SetupCards.NOTIFICATIONS:
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !mNotificationDenied
+                    && ContextCompat.checkSelfPermission(context,
+                        Manifest.permission.POST_NOTIFICATIONS)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    mHost.requestNotificationPermission();
+                } else {
+                    startSafely(new Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.getPackageName()));
+                }
+                break;
+            case SetupCards.NOTIFICATION_ACCESS:
+                onNotificationAccess();
+                break;
+            case SetupCards.PINNED:
+                startSafely(SettingsActivity.createFragmentIntent(context,
+                    EssentialNotificationRulesFragment.class,
+                    R.string.settings_essential_notifications_title));
+                break;
+            case SetupCards.HOME:
+                HomeAppChooser.open(context);
+                break;
+            case SetupCards.PAGE_INDICATOR: {
+                startSafely(SettingsActivity.createFragmentIntent(context,
+                    ExtraKeysEditorFragment.class, R.string.settings_edit_extra_keys_title,
+                    null, null));
+                SetupCards.Stored stored = SetupCardSystem.stored(context);
+                stored.completeStep(id, 0);
+                SetupCardSystem.save(context, stored);
+                break;
+            }
+            case SetupCards.PAGE_SWITCHER: {
+                SetupCardSystem.addPageSwitcherKey(context);
+                // Marks the card done even when no bar had a row to put the key on.
+                SetupCards.Stored stored = SetupCardSystem.stored(context);
+                stored.completeStep(id, 0);
+                SetupCardSystem.save(context, stored);
+                refreshCards();
+                break;
+            }
+            default:
+                showPage(id);
+                break;
+        }
+    }
+
+    @Nullable private SetupCardPage mPage;
+
+    private void showPage(@NonNull String id) {
+        SetupCardSheet sheet = mCards;
+        if (sheet == null)
+            return;
+        for (SetupCards.Card card : SetupCardSystem.cards(mHost.context())) {
+            if (card.id.equals(id)) {
+                hidePage();
+                SetupCardPage page = SetupCardPages.create(id);
+                if (page == null) {
+                    sheet.bindPage(card);
+                    return;
+                }
+                mPage = page;
+                sheet.bindPage(page.createView(mHost.context(), card, mPageHost));
+                return;
+            }
+        }
+    }
+
+    /** The page's way back and its bookkeeping, shared by every card page. */
+    private final SetupCardPage.Host mPageHost = new SetupCardPage.Host() {
+        @Override public @NonNull Context context() {
+            return mHost.context();
+        }
+        @Override public void back() {
+            onPageBack();
+        }
+        @Override public void completeStep(@NonNull String cardId, int step) {
+            SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+            stored.completeStep(cardId, step);
+            SetupCardSystem.save(mHost.context(), stored);
+        }
+        @Override public void completeCard(@NonNull String cardId) {
+            SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
+            for (SetupCards.Card card : SetupCardSystem.cards(mHost.context()))
+                if (card.id.equals(cardId))
+                    for (int i = 0; i < card.steps.length; i++) stored.completeStep(cardId, i);
+            SetupCardSystem.save(mHost.context(), stored);
+            onPageBack();
+        }
+        @Override public void startSafely(@NonNull Intent intent) {
+            SetupWizardController.this.startSafely(intent);
+        }
+    };
+
+    /** Stops the page that is up, if any, before the list or another page shows. */
+    private void hidePage() {
+        SetupCardPage page = mPage;
+        mPage = null;
+        if (page != null)
+            page.onHidden();
+    }
+
+    @Override
+    public void onNotificationAccess() {
+        Context context = mHost.context();
+        try {
+            context.startActivity(LauncherNotificationAccess.detailSettingsIntent(context));
+        } catch (ActivityNotFoundException | SecurityException unavailable) {
+            startSafely(LauncherNotificationAccess.listSettingsIntent());
+        }
+    }
+
+    @Override
+    public void onDismiss(@NonNull String id) {
+        setDismissed(id, true);
+    }
+
+    @Override
+    public void onReopen(@NonNull String id) {
+        setDismissed(id, false);
+    }
+
+    private void setDismissed(@NonNull String id, boolean dismissed) {
+        Context context = mHost.context();
+        SetupCards.Stored stored = SetupCardSystem.stored(context);
+        stored.setDismissed(id, dismissed);
+        SetupCardSystem.save(context, stored);
+        refreshCards();
+    }
+
+    @Override
+    public void onOpenLauncher() {
+        close(true);
+    }
+
+    @Override
+    public void onSettings() {
+        startSafely(new Intent(mHost.context(), SettingsActivity.class));
+    }
+
+    @Override
+    public void onPageBack() {
+        hidePage();
+        SetupCardSheet sheet = mCards;
+        if (mOpen && sheet != null)
+            sheet.bindList(SetupCardSystem.cards(mHost.context()), false);
+    }
+
+    @Override
+    public void onShizukuGuide() {
+        startSafely(new Intent(Intent.ACTION_VIEW, Uri.parse(SHIZUKU_GUIDE_URL)));
+    }
+
+    @Override
+    public boolean isShizukuInstalled() {
+        return SetupCardSystem.isShizukuInstalled(mHost.context());
+    }
+
+    @Override
+    public boolean isNotificationAccessOn() {
+        return LauncherNotificationAccess.isEnabled(mHost.context());
+    }
+}

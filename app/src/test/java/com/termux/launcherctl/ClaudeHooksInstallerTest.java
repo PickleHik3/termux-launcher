@@ -3,9 +3,6 @@ package com.termux.launcherctl;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
-import org.robolectric.annotation.Config;
 
 import java.io.File;
 import java.nio.charset.StandardCharsets;
@@ -16,8 +13,6 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 /** org.json is stubbed on the JVM, so these run under Robolectric for the real implementation. */
-@RunWith(RobolectricTestRunner.class)
-@Config(sdk = android.os.Build.VERSION_CODES.P)
 public class ClaudeHooksInstallerTest {
 
     private static final String CTL = "/data/data/com.termux/files/usr/bin/launcherctl";

@@ -47,7 +47,7 @@ import java.util.Objects;
  * out of whichever edge that corner is on — down from a top corner, up from a bottom one — and
  * lines up with whichever side it is on.
  *
- * <p>What the tab holds is the page's own business — the Display page offers power and its
+ * <p>What the tab holds is the page's own business — the display window offers power and its
  * settings, the Widgets page offers its settings and an edit pencil, and while a widget is being
  * edited the same corner reads out the grid's size — so the buttons are handed in as
  * {@link Action}s and this view knows only how to lay them out, draw them and say which one a
@@ -131,6 +131,8 @@ public final class PaneControlsView extends View {
         @Nullable final CharSequence description;
         /** Names the button as it is now, when a fixed {@link #description} would go stale. */
         @Nullable final Description describer;
+        /** Draws at its own cell's centre rather than its hit rectangle's; see {@link #inCell}. */
+        boolean inCell;
 
         private Action(int id, @NonNull String text, boolean isGlyph, @Nullable Mark mark,
                        int tint, @Nullable CharSequence description) {
@@ -166,6 +168,17 @@ public final class PaneControlsView extends View {
         @NonNull
         public static Action glyph(int id, @NonNull String glyph, @NonNull Description describer) {
             return new Action(id, glyph, true, null, TINT_PRIMARY, null, describer);
+        }
+
+        /**
+         * Draws this button at the centre of its own cell. A hit rectangle at either end of the
+         * tab is stretched toward the tab's edge, so a tab of only end buttons would draw them
+         * closer than a cell and a gap; this keeps the pitch the interior buttons have.
+         */
+        @NonNull
+        public Action inCell() {
+            inCell = true;
+            return this;
         }
 
         /** What a screen reader says for this button right now; null when it has no name. */
@@ -258,6 +271,19 @@ public final class PaneControlsView extends View {
     private RectF[] mButtons = new RectF[0];
     /** Each action's asked-for width, in the order they are drawn. */
     private float[] mWidths = new float[0];
+    private float[] mCellCenters = new float[0];
+    private final RectF mDrawBox = new RectF();
+    /**
+     * The tab where it rests once fully out ({@link #restingTabBounds}), kept with what it was laid
+     * out from — the corner, the frame and its border — and laid out again only when one moved or
+     * the actions changed; never by moving the slide's progress.
+     */
+    private final RectF mRestingTab = new RectF();
+    private RectF[] mRestingButtons = new RectF[0];
+    private final RectF mRestingFrame = new RectF();
+    private int mRestingCorner = CornerZones.NONE;
+    private float mRestingBorderPx = -1f;
+    private boolean mRestingValid;
     /** The ids drawn in the error colour rather than the primary one. */
     private final List<Integer> mAlerted = new ArrayList<>();
     @Nullable private ValueAnimator mAnimator;
@@ -279,6 +305,8 @@ public final class PaneControlsView extends View {
     private final GlassAnchor.Placement mPlacement = new GlassAnchor.Placement();
     /** The wallpaper's live x-offset the frost follows, or null while nothing pans. */
     @Nullable private com.termux.app.chrome.WallpaperParallax mParallax;
+    /** Draws the tab's frost again on any frame its page moved: the glass service asks, nobody pushes. */
+    private final com.termux.app.chrome.SlabAim mSlabAim = new com.termux.app.chrome.SlabAim(this);
     @Nullable private ColorFilter mFrostFilter;
     /** The sink dim the frost paint's filter last undid; 255 for the plain frost. */
     private int mFilterKeptBrightness = 0xFF;
@@ -477,6 +505,7 @@ public final class PaneControlsView extends View {
             return;
         }
         mParallax = parallax;
+        mSlabAim.setParallax(parallax);
         mLook = look;
         if (live != mFrostFrame || mFrostShader == null) {
             // CLAMP and a shader, as every other glass surface here draws the same frame: it does
@@ -591,7 +620,11 @@ public final class PaneControlsView extends View {
         mActions.addAll(actions);
         mButtons = new RectF[mActions.size()];
         mWidths = new float[mActions.size()];
+        mCellCenters = new float[mActions.size()];
         for (int i = 0; i < mActions.size(); i++) mButtons[i] = new RectF();
+        mRestingButtons = new RectF[mActions.size()];
+        for (int i = 0; i < mActions.size(); i++) mRestingButtons[i] = new RectF();
+        mRestingValid = false;
         for (int i = mAlerted.size() - 1; i >= 0; i--) {
             if (indexOf(mAlerted.get(i)) < 0) mAlerted.remove(i);
         }
@@ -600,7 +633,7 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * Whether one button reads as an alert: the error colour, as a close does. The Display page's
+     * Whether one button reads as an alert: the error colour, as a close does. The display window's
      * power glyph turns while a display is running.
      */
     public void setActionAlert(int id, boolean alert) {
@@ -717,6 +750,33 @@ public final class PaneControlsView extends View {
         out.set(mTab);
     }
 
+    /**
+     * Where the tab sits once fully out, while it is out or coming out; false when it is down or
+     * going away. Unlike {@link #tabBounds} this does not follow the slide, so chrome that keeps
+     * clear of the tab does not hop along with it.
+     */
+    public boolean restingTabBounds(@NonNull RectF out) {
+        if (!isControlsShown()) return false;
+        if (mActions.isEmpty() || !readFrame()) {
+            out.setEmpty();
+            return false;
+        }
+        int corner = corner();
+        if (!mRestingValid || corner != mRestingCorner || mPaneBorderPx != mRestingBorderPx
+            || !mBounds.equals(mRestingFrame)) {
+            for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
+            CornerTabGeometry.layout(corner, mBounds, mWidths, mActions.size(), dp(8), dp(5),
+                dp(TAB_HEIGHT_DP), mPaneBorderPx, dp(3),
+                dp(CornerTabGeometry.TAB_CORNER_HOLD_DP), 1f, mRestingTab, mRestingButtons);
+            mRestingCorner = corner;
+            mRestingBorderPx = mPaneBorderPx;
+            mRestingFrame.set(mBounds);
+            mRestingValid = true;
+        }
+        out.set(mRestingTab);
+        return !out.isEmpty();
+    }
+
     private int indexOf(int id) {
         for (int i = 0; i < mActions.size(); i++) {
             if (mActions.get(i).id == id) return i;
@@ -765,7 +825,7 @@ public final class PaneControlsView extends View {
         for (int i = 0; i < mActions.size(); i++) mWidths[i] = buttonWidth(mActions.get(i));
         CornerTabGeometry.layout(corner(), mBounds, mWidths, mActions.size(), dp(8), dp(5),
             dp(TAB_HEIGHT_DP), mPaneBorderPx, dp(3),
-            dp(CornerTabGeometry.TAB_CORNER_HOLD_DP), mProgress, mTab, mButtons);
+            dp(CornerTabGeometry.TAB_CORNER_HOLD_DP), mProgress, mTab, mButtons, mCellCenters);
     }
 
     @Override
@@ -831,15 +891,21 @@ public final class PaneControlsView extends View {
                 mFocusRing.inset(dp(2), dp(2));
                 canvas.drawRoundRect(mFocusRing, dp(6), dp(6), mPaint);
             }
+            RectF box = mButtons[i];
+            if (action.inCell) {
+                mDrawBox.set(box);
+                mDrawBox.offset(mCellCenters[i] - box.centerX(), 0f);
+                box = mDrawBox;
+            }
             if (action.mark != null) {
                 mMarkPaint.setStyle(Paint.Style.STROKE);
                 mMarkPaint.setStrokeCap(Paint.Cap.ROUND);
                 mMarkPaint.setStrokeWidth(dp(1.35f));
                 mMarkPaint.setColor(color);
-                action.mark.draw(canvas, mButtons[i], mMarkPaint,
+                action.mark.draw(canvas, box, mMarkPaint,
                     getResources().getDisplayMetrics().density);
             } else {
-                drawText(canvas, mButtons[i], action, color);
+                drawText(canvas, box, action, color);
             }
         }
         canvas.restoreToCount(save);
@@ -848,7 +914,7 @@ public final class PaneControlsView extends View {
     /**
      * The tab's material, inside {@link #mPath}: the app's wallpaper blur at this tab's place
      * on screen under the panel scrim, or the scrim alone, stronger, when there is no blur. One
-     * recipe for every screen — a terminal pane, the Display page, the Widgets page — so the
+     * recipe for every screen — a terminal pane, the display window, the Widgets page — so the
      * buttons read the same wherever the corner is.
      *
      * @param radiusPx the tab's one free corner, which the refraction's rim turns
@@ -859,9 +925,11 @@ public final class PaneControlsView extends View {
         GlassRefraction.Program program = mProgram;
         // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
         // window into its bitmap is one. That pass only feeds another view's blur, so the tab
-        // gives it the scrim alone rather than a draw that throws.
+        // gives it the scrim alone rather than a draw that throws. A frame held in GPU memory
+        // (HardwareFrame) is refused the same way.
         boolean frosted = mFrostFrame != null && !mFrostFrame.isRecycled() && mFrostShader != null
-            && (program == null || canvas.isHardwareAccelerated());
+            && (canvas.isHardwareAccelerated()
+                || (program == null && mFrostFrame.getConfig() != Bitmap.Config.HARDWARE));
         if (frosted) {
             aimFrost(mFrostFrame);
             if (program != null) {
@@ -897,7 +965,7 @@ public final class PaneControlsView extends View {
     }
 
     /**
-     * The dock's grain over the tab's scrim, 0..100; 0 draws none. Static: the shared seeded tile,
+     * The Sheets grain over the tab's scrim, 0..100; 0 draws none. Static: the shared seeded tile,
      * so a tab at rest costs nothing more than before.
      */
     public void setGrainPercent(int percent) {
@@ -952,7 +1020,14 @@ public final class PaneControlsView extends View {
      * cut short is a tab that is out.
      */
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        mSlabAim.attach();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
+        mSlabAim.detach();
         landMotion();
         super.onDetachedFromWindow();
     }

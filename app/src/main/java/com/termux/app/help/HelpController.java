@@ -5,7 +5,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 
 /**
  * Help's whole lifecycle, so the launcher only ever calls a controller: the corner overview, the
@@ -26,7 +26,7 @@ public final class HelpController {
          * Reading happens on {@link HelpActivity}, not over the launcher: open it. A topic id
          * lands on that page; null lands the reader back where they left off.
          */
-        void openHelpScreen(PaneWallPage place, @Nullable String topicId);
+        void openHelpScreen(PageKind place, @Nullable String topicId);
     }
 
     /** Where "Try it" sends the reader; help is already down by the time this is called. */
@@ -57,11 +57,11 @@ public final class HelpController {
     public interface Explorer {
         void setExploreListener(ExploreListener listener);
         /** The curated overview help opens on: a few cards at once over the live launcher. */
-        void overview(PaneWallPage place);
+        void overview(PageKind place);
         /** Enter exploring for a place; {@code selectTopicId} pre-selects, or is null. */
-        void explore(PaneWallPage place, @Nullable String selectTopicId);
+        void explore(PageKind place, @Nullable String selectTopicId);
         /** Explore with the topic selected and its gesture playing. */
-        void demonstrate(PaneWallPage place, String topicId);
+        void demonstrate(PageKind place, String topicId);
         boolean isShowing();
         void dismiss();
         /** True when the explorer consumed Back; false hands it back to the controller. */
@@ -124,12 +124,12 @@ public final class HelpController {
      * The corner tab, Settings and the palette all land here: a few curated cards over the
      * reader's own screen, with the whole guide one Guide button behind it.
      */
-    public void show(@Nullable PaneWallPage place) {
+    public void show(@Nullable PageKind place) {
         ensureViews();
         closeExplorer();
         fromHelpScreen = false;
         handedBack = false;
-        navigation.open(place == null ? PaneWallPage.TERMINAL : place);
+        navigation.open(place == null ? PageKind.TERMINAL : place);
         overviewShowing = true;
         explorer.overview(navigation.place());
         host.onHelpVisibilityChanged(true);
@@ -185,11 +185,11 @@ public final class HelpController {
      * @param topicId the control to select, or null to explore the whole screen.
      * @param gesture whether the topic's gesture plays as well.
      */
-    public void exploreFromHelpScreen(@Nullable PaneWallPage place, @Nullable String topicId,
+    public void exploreFromHelpScreen(@Nullable PageKind place, @Nullable String topicId,
                                       boolean gesture) {
         ensureViews();
         closeExplorer();
-        navigation.open(place == null ? PaneWallPage.TERMINAL : place);
+        navigation.open(place == null ? PageKind.TERMINAL : place);
         fromHelpScreen = true;
         handedBack = false;
         enterExplore(topicId, gesture);
@@ -200,12 +200,12 @@ public final class HelpController {
      * "Try it", asked for on the help screen: the lesson runs on the launcher, and the frame the
      * reader was on is held so {@link #onPracticeEnded()} can take them back to it.
      */
-    public void practiseFromHelpScreen(@Nullable PaneWallPage place, @Nullable String topicId,
+    public void practiseFromHelpScreen(@Nullable PageKind place, @Nullable String topicId,
                                        String lessonId) {
         if (lessonId == null) return;
         ensureViews();
         closeExplorer();
-        navigation.open(place == null ? PaneWallPage.TERMINAL : place);
+        navigation.open(place == null ? PageKind.TERMINAL : place);
         if (topicId != null) navigation.topic(resolve(topicId));
         navigation.practiceStart();
         fromHelpScreen = true;
@@ -255,7 +255,7 @@ public final class HelpController {
     private void handBack(@Nullable String topicId) {
         if (handedBack) return;
         handedBack = true;
-        PaneWallPage place = navigation.place();
+        PageKind place = navigation.place();
         fromHelpScreen = false;
         // Dismissed before the stack is tidied: dismiss() is the one path that tells the host
         // help has gone away, and it only speaks while something is still up.
@@ -327,15 +327,15 @@ public final class HelpController {
                 });
             }
 
-            @Override public void overview(PaneWallPage place) {
+            @Override public void overview(PageKind place) {
                 view().overview(place);
             }
 
-            @Override public void explore(PaneWallPage place, @Nullable String selectTopicId) {
+            @Override public void explore(PageKind place, @Nullable String selectTopicId) {
                 view().explore(place, selectTopicId);
             }
 
-            @Override public void demonstrate(PaneWallPage place, String topicId) {
+            @Override public void demonstrate(PageKind place, String topicId) {
                 view().demonstrate(place, topicId);
             }
 

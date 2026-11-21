@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 import com.termux.BuildConfig;
 import com.termux.R;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiSpeech;
 import com.termux.ai.WhisperLanguageDetection;
 import com.termux.shared.logger.Logger;
 
@@ -40,7 +41,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 /**
  * One dictation (the voice key, or the Dictate key) with the on-device engine: the microphone is
  * read on a capture thread, {@link VoiceActivityDetector} cuts the stream into segments, each segment is written
- * under {@code cacheDir/tai-ipc} and sent through {@link TaiManager#transcribe} on a single
+ * under {@code cacheDir/tai-ipc} and sent through {@link TaiSpeech#transcribe} on a single
  * {@code voice-stt} thread — in order, so results come back in order — and every result reaches
  * the {@link Host} on the main thread. {@code sttWarm} goes out as the microphone opens so the
  * model loads while the user speaks. {@link VoiceFeedback} marks the open, the end and a failure
@@ -410,7 +411,7 @@ public final class VoiceInputSession {
         try {
             JSONObject request = new JSONObject();
             if (!config.modelId.isEmpty()) request.put("model", config.modelId);
-            JSONObject result = TaiManager.getInstance(appContext).sttWarm(request.toString());
+            JSONObject result = TaiManager.getInstance(appContext).speech().sttWarm(request.toString());
             Failure failure = Failure.of(result);
             if (failure != null) fail(failure);
             else warmedPart();
@@ -453,7 +454,7 @@ public final class VoiceInputSession {
             // otherwise leave the pill and the pressed key up for minutes with nothing to show for
             // it. base.en does a short phrase in well under a second, so this has plenty of room.
             long timeoutMs = SEGMENT_TIMEOUT_BASE_MS + SEGMENT_TIMEOUT_AUDIO_MULTIPLIER * segmentMs;
-            JSONObject result = TaiManager.getInstance(appContext).transcribe(request.toString(), timeoutMs);
+            JSONObject result = TaiManager.getInstance(appContext).speech().transcribe(request.toString(), timeoutMs);
             long transcribeMs = (System.nanoTime() - start) / 1_000_000L;
             Failure failure = Failure.of(result);
             if (failure != null) {

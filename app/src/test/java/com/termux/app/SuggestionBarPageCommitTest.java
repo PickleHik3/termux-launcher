@@ -29,12 +29,12 @@ import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
 import com.termux.app.launcher.paging.PageTickStripView;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -93,14 +93,20 @@ public class SuggestionBarPageCommitTest {
     private FrameLayout window;
     private ActivityController<Activity> activity;
 
+    /** The scale the JVM had before this test, put back after it: other tests share the JVM. */
+    private float durationScaleBefore;
+
     @Before
     public void setUp() {
         // Robolectric's default scale of zero would finish every settle inside the frame that
         // starts it, and an animation that cannot be interrupted cannot show this defect.
+        durationScaleBefore = ReflectionHelpers.getStaticField(ValueAnimator.class, "sDurationScale");
         setDurationScale(1f);
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         context.getResources().getConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
         row = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        row.setDockIconSizePx(Math.round(24f * row.getResources().getDisplayMetrics().density));
         row.addView(new View(context), new ViewGroup.LayoutParams(ROW_WIDTH / 2, ROW_HEIGHT));
         // In a window, not free-floating: a detached view queues everything it posts until it is
         // attached, so every deferred render and every timeout the row relies on would sit unrun,
@@ -128,7 +134,7 @@ public class SuggestionBarPageCommitTest {
     @After
     public void tearDown() {
         if (activity != null) activity.pause().stop().destroy();
-        setDurationScale(0f);
+        setDurationScale(durationScaleBefore);
     }
 
     @Test
@@ -163,15 +169,9 @@ public class SuggestionBarPageCommitTest {
         assertEquals(1, page());
     }
 
-    /**
-     * The dock hands the row the band it was given, and that band carries the page ticks' own
-     * strip as well as the icons — so the hint can ask for a height this row is never laid out at.
-     * The gate that waits for it is anti-flicker for the first frame, never a mute switch: a page
-     * swipe under an impossible hint must still land, render and draw.
-     */
+    /** A page swipe lands, renders and draws: the row waits for no bounds. */
     @Test
-    public void aSwipeUnderAnImpossibleHeightHintStillRendersAndDraws() {
-        row.setDockRowHeightHintPx(ROW_HEIGHT + 40);
+    public void aSwipeStillRendersAndDraws() {
         row.reload();
         List<View> beforeSwipe = children();
 
@@ -181,31 +181,28 @@ public class SuggestionBarPageCommitTest {
         assertEquals(1, page());
         assertNotEquals("the committed page must actually be rendered", beforeSwipe, children());
         assertTrue("the row must hold something", row.getChildCount() > 0);
-        assertTrue("the hint must stop deciding once it has had its say",
-            ReflectionHelpers.callInstanceMethod(row, "hasStableRenderBounds"));
-        assertFalse("draw suppression must not outlive the swipe", suppressed());
         assertFalse("the drag is over", dragging());
         assertEquals(0f, row.getTranslationX(), 0.01f);
         assertEquals(0f, offset(), 0.01f);
     }
 
     /**
-     * The A-Z scrub remembers the page it put up so a held letter does not re-render every frame.
-     * A page it was turned away from is not a page it put up — remembering one silenced every
-     * later scrub of the same letter, because the row "already had" matches it had never drawn.
+     * The A-Z scrub renders at once, and remembers the page it put up so a held letter does not
+     * re-render every frame.
      */
     @Test
-    public void aScrubThatCouldNotRenderDoesNotSilenceTheNextOne() throws Exception {
+    public void aScrubRendersAtOnceAndARepeatOfTheSameLetterKeepsThePage() throws Exception {
         row.setAppDataProvider(loadedCatalogue());
-        row.setDockRowHeightHintPx(ROW_HEIGHT + 40);
+        List<View> before = children();
 
         row.previewAzLetter(SCRUB_LETTER, 0, false);
-        List<View> turnedAway = children();
+        List<View> scrubbed = children();
+        assertNotEquals("the scrub renders without waiting", before, scrubbed);
 
         idle();
         row.previewAzLetter(SCRUB_LETTER, 0, false);
 
-        assertNotEquals("the repeat scrub must render", turnedAway, children());
+        assertEquals("the held letter keeps the page it put up", scrubbed, children());
     }
 
     /**
@@ -213,14 +210,16 @@ public class SuggestionBarPageCommitTest {
      * with no neighbouring page left staged behind it and the ticks told where it landed. Cancelled
      * straight on the animator, which is what a host that tears the slide down does — it used to
      * commit the page and walk away from everything the last frame would have tidied, and get away
-     * with it only because the commit's own re-render tidied up after it. Under a height hint the
-     * row can never meet there is no re-render to lean on.
+     * with it only because the commit's own re-render tidied up after it. With no re-render to
+     * lean on.
      */
     @Test
     public void aSettleCutShortLeavesNoHalfSlideBehind() {
         PageTickStripView ticks = new PageTickStripView(context);
-        row.setPageIndicator(ticks);
-        row.setDockRowHeightHintPx(ROW_HEIGHT + 40);
+        com.termux.app.launcher.paging.PageTicksWriter writer =
+            new com.termux.app.launcher.paging.PageTicksWriter();
+        writer.bind(ticks);
+        row.setPageTicksListener(writer::write);
         row.reload();
 
         swipeLeft();
@@ -264,6 +263,8 @@ public class SuggestionBarPageCommitTest {
         ReflectionHelpers.setField(screen, "mPreferences", preferences);
 
         SuggestionBarView bar = new SuggestionBarView(screen, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         ViewGroup plank = screen.findViewById(R.id.apps_bar_plank_layer);
         plank.addView(bar, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -285,10 +286,11 @@ public class SuggestionBarPageCommitTest {
         PlaceLayout layout = arrangement;
         // Stored as well as applied: everything the scrub reads — which band the matches fill and
         // which way the finger travels to reach it — comes from the store through
-        // currentPlaceLayout(), not from the arrangement handed to applyEdgeStacks().
+        // the arrangement on screen (arrangement()), not from the arrangement handed to
+        // applyEdgeStacks().
         PlaceLayoutStore store = ReflectionHelpers.callInstanceMethod(screen, "placeLayoutStore");
         assertNotNull(store);
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             for (PlaceOrientation orientation : PlaceOrientation.values())
                 for (Element element : Element.values())
                     store.setSlot(orientation, element, layout.slot(element));
@@ -361,8 +363,6 @@ public class SuggestionBarPageCommitTest {
         idle();
 
         assertEquals(1, pageOf(bar));
-        assertFalse("draw suppression must not outlive the swipe",
-            (Boolean) ReflectionHelpers.getField(bar, "suppressDrawUntilStableLayout"));
     }
 
     /**
@@ -753,10 +753,6 @@ public class SuggestionBarPageCommitTest {
         List<View> views = new ArrayList<>();
         for (int i = 0; i < row.getChildCount(); i++) views.add(row.getChildAt(i));
         return views;
-    }
-
-    private boolean suppressed() {
-        return ReflectionHelpers.getField(row, "suppressDrawUntilStableLayout");
     }
 
     private boolean dragging() {

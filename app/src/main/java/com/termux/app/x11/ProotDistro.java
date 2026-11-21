@@ -3,6 +3,7 @@ package com.termux.app.x11;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.sound.LauncherSound;
 import com.termux.shared.termux.TermuxConstants;
 
 import java.io.BufferedReader;
@@ -35,13 +36,39 @@ public final class ProotDistro {
      * — not even {@code DISPLAY} — so everything an app needs is passed with {@code -e}. The
      * display is taken from the shell the script runs in, which
      * {@link X11LinuxAppRunner#script} has just exported; the rest mirrors
-     * {@link X11LinuxAppRunner#TOUCH_ENV}, which does the same job for a prefix app.
+     * {@link X11LinuxAppRunner#TOUCH_ENV}, which does the same job for a prefix app. Sound needs
+     * nothing here: the distro's own client drop-in names the launcher's server
+     * ({@code LauncherSound#prepareContainer}). The launcher's session bus is forwarded by
+     * {@link #loginCommand} when there is one.
      *
      * <p>The GPU profile is deliberately not forwarded: it names drivers installed in the prefix,
      * and whether the container has its own is a separate question the spec parks.
      */
     static final List<String> FORWARDED_ENV = Collections.unmodifiableList(Arrays.asList(
         "DISPLAY=${DISPLAY:-:0}", "MOZ_USE_XINPUT2=1"));
+
+    /**
+     * An app's scale variables ({@link X11AppLaunchEnv#SCALE_VARIABLES}), each forwarded only while
+     * the shell running the login has it set, like {@link #FORWARDED_BUS}: an empty value would
+     * override the toolkit's own detection.
+     */
+    static final List<String> FORWARDED_SCALE_ENV;
+    static {
+        List<String> forwarded = new java.util.ArrayList<>();
+        for (String name : X11AppLaunchEnv.SCALE_VARIABLES) {
+            forwarded.add("${" + name + ":+-e " + name + "=$" + name + "}");
+        }
+        FORWARDED_SCALE_ENV = Collections.unmodifiableList(forwarded);
+    }
+
+    /**
+     * The launcher's session bus, as the distro sees it, forwarded only while the shell running
+     * the login was handed one ({@link LauncherSound#DISTRO_BUS_VARIABLE}). Expanded by that
+     * shell into either nothing or one {@code -e} pair: an empty address would stop a distro app
+     * from falling back to a bus of its own.
+     */
+    static final String FORWARDED_BUS = "${" + LauncherSound.DISTRO_BUS_VARIABLE
+        + ":+-e DBUS_SESSION_BUS_ADDRESS=$" + LauncherSound.DISTRO_BUS_VARIABLE + "}";
 
     /**
      * What a container name or a user name may contain. Both go on a command line unquoted, and
@@ -432,6 +459,8 @@ public final class ProotDistro {
         line.append(" -u ").append(container.user.isEmpty() ? "root" : container.user);
         line.append(" --shared-x11");
         for (String variable : FORWARDED_ENV) line.append(" -e ").append(variable);
+        line.append(' ').append(FORWARDED_BUS);
+        for (String forwarded : FORWARDED_SCALE_ENV) line.append(' ').append(forwarded);
         line.append(" -- /bin/sh -c ").append(singleQuote(command));
         return line.toString();
     }

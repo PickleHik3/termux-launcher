@@ -19,10 +19,12 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.ManagedWallpaper;
+import com.termux.app.chrome.MotionLog;
 import com.termux.app.chrome.wallpaper.WallpaperSlots;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.terminal.TerminalActionDispatcher;
+import com.termux.app.wall.pageswitch.PageBarGlassStyle;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -61,11 +63,17 @@ final class DeviceControlRoutes {
             case "/v1/vibrate":
             case "/v1/torch":
             case "/v1/toast":
+            case "/v1/look":
+            case "/v1/layout":
                 return "POST".equals(method);
             case "/v1/battery":
+            case "/v1/motion-log":
                 return "GET".equals(method);
+            case "/v1/motion-log/clear":
+                return "POST".equals(method);
             case "/v1/volume":
             case "/v1/wallpaper":
+            case "/v1/pagebar-glass":
                 return "GET".equals(method) || "POST".equals(method);
             default:
                 return false;
@@ -92,14 +100,164 @@ final class DeviceControlRoutes {
                 return torch(context, arguments);
             case "/v1/battery":
                 return battery(context);
+            case "/v1/motion-log":
+                return motionLogDump();
+            case "/v1/motion-log/clear":
+                MotionLog.clear();
+                return ok();
+            case "/v1/look":
+                return look(context, arguments);
+            case "/v1/layout":
+                return layout(context, arguments);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":
                 return toast(context, arguments);
             case "/v1/wallpaper":
                 return "GET".equals(method) ? wallpaperGet(context) : wallpaperSet(context, arguments);
+            case "/v1/pagebar-glass":
+                return pageBarGlass(context, "POST".equals(method) ? arguments : null);
             default:
                 return error(404, "not_found", "Unknown endpoint");
+        }
+    }
+
+    // ---------------------------------------------------------------------------------- motion log
+
+    /** {@code {"ok":true,"enabled":bool,"count":N,"lines":[...]}}, oldest line first. */
+    @NonNull
+    static JSONObject motionLogDump() throws JSONException {
+        List<String> lines = MotionLog.dump();
+        List<String> counters = MotionLog.counterLines();
+        if (!counters.isEmpty()) {
+            lines.add(MotionLog.COUNTERS_HEADER);
+            lines.addAll(counters);
+        }
+        return ok().put("enabled", MotionLog.enabled).put("count", lines.size())
+            .put("invariants", MotionLog.invariantCount()).put("lines", new org.json.JSONArray(lines));
+    }
+
+    // ---------------------------------------------------------------------------- pagebar-glass
+
+    /**
+     * {@code launcherctl pagebar-glass [concave|well]}, a developer switch on no settings page:
+     * GET (or a POST with no {@code style}) answers {@code {"ok":true,"style":s}}; a POST with
+     * {@code {"style":"concave"|"well"}} stores it and Home's bar dresses again at once
+     * ({@link PageBarGlassStyle#set}). An unknown style is a 400 and changes nothing.
+     */
+    @NonNull
+    @VisibleForTesting
+    static JSONObject pageBarGlass(@NonNull Context context, @Nullable JSONObject arguments)
+            throws JSONException {
+        Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
+        if (arguments != null && arguments.has("style")) {
+            PageBarGlassStyle style = PageBarGlassStyle.parse(arguments.optString("style", ""));
+            if (style == null) {
+                return error(400, "bad_style", "The style must be concave or well");
+            }
+            PageBarGlassStyle.set(app, style);
+            return ok().put("style", style.id);
+        }
+        return ok().put("style", PageBarGlassStyle.current(app).id);
+    }
+
+    // ------------------------------------------------------------------------------------- look
+
+    /**
+     * {@code launcherctl look}: the look grid, answered by {@link LookCommand}. A change re-dresses
+     * the live chrome on the main thread the way the Appearance editor's Done does; with no
+     * launcher running the grid is written all the same and the next start reads it.
+     */
+    @NonNull
+    private static JSONObject look(@NonNull Context context, @NonNull JSONObject arguments)
+            throws JSONException {
+        Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
+        TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
+        if (preferences == null) return error(503, "unavailable", "The launcher's settings are not ready");
+        return LookCommand.handle(preferences.lookGrid(), terminalBackground(preferences), arguments,
+            () -> TerminalActionDispatcher.getInstance().redressChrome());
+    }
+
+    /** The Terminal's Background, over its own preferences. */
+    @NonNull
+    private static LookCommand.TerminalBackground terminalBackground(
+            @NonNull TermuxAppSharedPreferences preferences) {
+        return new LookCommand.TerminalBackground() {
+            @Override
+            public int get(@NonNull LookCommand.Setting setting) {
+                switch (setting) {
+                    case OPACITY: return preferences.getTerminalBackgroundOpacity();
+                    case BLUR: return preferences.getTerminalGlassBlurRadius();
+                    default: return preferences.getTerminalWallpaperDim();
+                }
+            }
+
+            @Override
+            public void set(@NonNull LookCommand.Setting setting, int value) {
+                switch (setting) {
+                    case OPACITY: preferences.setTerminalBackgroundOpacity(value); break;
+                    case BLUR: preferences.setTerminalGlassBlurRadius(value); break;
+                    default: preferences.setTerminalWallpaperDim(value);
+                }
+            }
+        };
+    }
+
+    // ----------------------------------------------------------------------------------- layout
+
+    /**
+     * {@code launcherctl layout get|set <kind>} (ADR 0020 §10): {@code {"op":"get","kind":k}}
+     * answers {@code {"ok":true,"kind":k,"layout":{...}}}; {@code {"op":"set","kind":k,
+     * "layout":{...}}} validates the document (400 naming the field), writes it whole on the main
+     * thread through {@link LayoutCommand}, and re-dresses the live chrome once.
+     */
+    @NonNull
+    private static JSONObject layout(@NonNull Context context, @NonNull JSONObject arguments)
+            throws JSONException {
+        Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
+        String op = arguments.optString("op", "get");
+        String kind = arguments.optString("kind", "");
+        if (!LayoutCommand.isName(kind))
+            return error(400, "bad_kind", LayoutCommand.refusal(kind, "{}"));
+        com.termux.app.place.layout.LayoutStore store =
+            com.termux.app.place.layout.LayoutStore.shared(app);
+        if ("get".equals(op)) {
+            String json = callOnMain(() -> LayoutCommand.get(store, kind));
+            if (json == null) return error(503, "unavailable", "The layouts are not ready");
+            return ok().put("kind", kind).put("layout", new JSONObject(json));
+        }
+        if (!"set".equals(op)) return error(400, "bad_op", "op is get or set");
+        Object document = arguments.opt("layout");
+        String json = document instanceof JSONObject ? document.toString()
+            : document instanceof String ? (String) document : null;
+        if (json == null) return error(400, "bad_layout", "layout is a JSON object");
+        String refused = LayoutCommand.refusal(kind, json);
+        if (refused != null) return error(400, "invalid_layout", refused);
+        String failed = callOnMain(() -> {
+            String why = LayoutCommand.set(store, kind, json);
+            if (why == null) TerminalActionDispatcher.getInstance().redressChrome();
+            return why;
+        });
+        if (failed != null) return error(400, "invalid_layout", failed);
+        return ok().put("kind", kind);
+    }
+
+    /** Runs {@code work} on the main thread and waits for it (the layout store asserts it). */
+    @androidx.annotation.Nullable
+    private static String callOnMain(@NonNull java.util.concurrent.Callable<String> work) {
+        if (android.os.Looper.myLooper() == android.os.Looper.getMainLooper()) {
+            try {
+                return work.call();
+            } catch (Exception e) {
+                return e.getMessage();
+            }
+        }
+        java.util.concurrent.FutureTask<String> task = new java.util.concurrent.FutureTask<>(work);
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(task);
+        try {
+            return task.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            return "the launcher did not answer: " + e;
         }
     }
 

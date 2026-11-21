@@ -14,6 +14,8 @@ import org.robolectric.RobolectricTestRunner;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Round trip: whatever {@link FontInstaller} writes into {@code ~/.termux/fonts.d} has to parse
@@ -21,6 +23,7 @@ import static org.junit.Assert.assertTrue;
  * rejects would break the terminal font for every user at once, silently, at app start.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class ManagedFontConfigParseTest {
 
     @Test

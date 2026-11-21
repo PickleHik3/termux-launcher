@@ -3,7 +3,7 @@ package com.termux.app.x11;
 import androidx.annotation.NonNull;
 
 /**
- * The stops of the display page's scale rail, and how they map onto the display's resolution
+ * The stops of the display window's scale rail, and how they map onto the display's resolution
  * preferences.
  *
  * <p>Scale is the one knob a running display applies at once — the X screen is re-sized as soon

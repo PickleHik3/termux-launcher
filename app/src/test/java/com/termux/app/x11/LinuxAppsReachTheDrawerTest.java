@@ -27,7 +27,7 @@ public class LinuxAppsReachTheDrawerTest {
     @Test public void aDesktopFileChangeIsPushedToTheDrawerAndNotJustTheProvider() throws Exception {
         String body = refreshLinuxAppsBody();
         assertTrue("the drawer is told, or the new app never reaches the screen",
-            body.contains("mAppDrawerController.onAppCatalogChanged()"));
+            body.contains("mSheets.appDrawerControllerIfBuilt().onAppCatalogChanged()"));
         assertTrue("the dock refreshes through the path that fires the catalogue listener",
             body.contains("mSuggestionBarView.refreshAllApps(null)"));
     }

@@ -11,6 +11,7 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import android.app.Application;
 
 /**
  * Where the sessions drawer lands, asserted without a laid-out split.
@@ -19,7 +20,7 @@ import org.robolectric.annotation.Config;
  * area is, which way the layout runs, and how much radius a card of that shape can carry.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class TerminalDrawerMetricsTest {
 
     private static final float DENSITY = 2f;

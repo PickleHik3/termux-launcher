@@ -11,7 +11,7 @@ import android.view.View;
 import android.widget.FrameLayout;
 
 import com.termux.R;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import com.termux.view.TerminalView;
 
 import org.junit.After;
@@ -91,23 +91,23 @@ public class LauncherLayoutDirectionTest {
         assertEquals("column 0 is on the left outside the shell too", View.LAYOUT_DIRECTION_LTR,
             terminal.getLayoutDirection());
 
-        ExtraKeysView keys = new ExtraKeysView(activity, null);
+        ExtraKeysPageView keys = new ExtraKeysPageView(activity, null);
         resolve(keys);
         assertEquals(View.LAYOUT_DIRECTION_LTR, keys.getLayoutDirection());
     }
 
     @Test
-    public void theAppearanceEditorPanelMirrors() {
+    public void theWallpaperSheetOverTheEditorMirrors() {
         TermuxActivity activity = Robolectric.buildActivity(TermuxActivity.class).get();
         FrameLayout parent = new FrameLayout(activity);
         parent.setLayoutDirection(View.LAYOUT_DIRECTION_LTR);
         View panel = LayoutInflater.from(activity)
-            .inflate(R.layout.appearance_editor_panel, parent, false);
+            .inflate(R.layout.appearance_wallpaper_sheet, parent, false);
         parent.addView(panel);
         resolve(parent);
         resolve(panel);
 
-        assertEquals("pinned content root or not, its labels and sliders read right to left",
+        assertEquals("pinned content root or not, its bar reads right to left",
             View.LAYOUT_DIRECTION_RTL, panel.getLayoutDirection());
     }
 

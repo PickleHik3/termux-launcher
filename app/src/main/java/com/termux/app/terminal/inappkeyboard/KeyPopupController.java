@@ -51,6 +51,7 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
             keyboardView.symbolFont());
         mOverlay.setPalette(KeyPopupPalette.resolve(context));
         mOverlay.setReducedMotion(ReducedMotion.isEnabled(context));
+        mOverlay.setIconSource(keyboardView::symbolIcon);
     }
 
     /** The view the popup is drawn in. Attached only while the setting is on. */
@@ -152,8 +153,8 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
         if (anyViewInWindow == null) return null;
         View root = anyViewInWindow.getRootView();
         if (root == null) return null;
-        View content = root.findViewById(android.R.id.content);
-        if (content instanceof ViewGroup) return (ViewGroup) content;
+        ViewGroup notices = com.termux.app.window.WindowLayers.host(root::findViewById, com.termux.app.window.WindowLayer.NOTICES);
+        if (notices != null) return notices;
         return root instanceof ViewGroup ? (ViewGroup) root : null;
     }
 }

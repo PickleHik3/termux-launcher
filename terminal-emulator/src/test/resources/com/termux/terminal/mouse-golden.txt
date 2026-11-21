@@ -1,0 +1,2160 @@
+t=0 f=none left down - pos0 -> \e[M %#
+t=0 f=none left down - pos1 -> 
+t=0 f=none left down S pos0 -> \e[M$%#
+t=0 f=none left down S pos1 -> 
+t=0 f=none left down A pos0 -> \e[M(%#
+t=0 f=none left down A pos1 -> 
+t=0 f=none left down C pos0 -> \e[M0%#
+t=0 f=none left down C pos1 -> 
+t=0 f=none left down SC pos0 -> \e[M4%#
+t=0 f=none left down SC pos1 -> 
+t=0 f=none left up - pos0 -> \e[M#%#
+t=0 f=none left up - pos1 -> 
+t=0 f=none left up S pos0 -> \e[M'%#
+t=0 f=none left up S pos1 -> 
+t=0 f=none left up A pos0 -> \e[M+%#
+t=0 f=none left up A pos1 -> 
+t=0 f=none left up C pos0 -> \e[M3%#
+t=0 f=none left up C pos1 -> 
+t=0 f=none left up SC pos0 -> \e[M7%#
+t=0 f=none left up SC pos1 -> 
+t=0 f=none middle down - pos0 -> \e[M!%#
+t=0 f=none middle down - pos1 -> 
+t=0 f=none middle down S pos0 -> \e[M%%#
+t=0 f=none middle down S pos1 -> 
+t=0 f=none middle down A pos0 -> \e[M)%#
+t=0 f=none middle down A pos1 -> 
+t=0 f=none middle down C pos0 -> \e[M1%#
+t=0 f=none middle down C pos1 -> 
+t=0 f=none middle down SC pos0 -> \e[M5%#
+t=0 f=none middle down SC pos1 -> 
+t=0 f=none middle up - pos0 -> \e[M#%#
+t=0 f=none middle up - pos1 -> 
+t=0 f=none middle up S pos0 -> \e[M'%#
+t=0 f=none middle up S pos1 -> 
+t=0 f=none middle up A pos0 -> \e[M+%#
+t=0 f=none middle up A pos1 -> 
+t=0 f=none middle up C pos0 -> \e[M3%#
+t=0 f=none middle up C pos1 -> 
+t=0 f=none middle up SC pos0 -> \e[M7%#
+t=0 f=none middle up SC pos1 -> 
+t=0 f=none right down - pos0 -> \e[M"%#
+t=0 f=none right down - pos1 -> 
+t=0 f=none right down S pos0 -> \e[M&%#
+t=0 f=none right down S pos1 -> 
+t=0 f=none right down A pos0 -> \e[M*%#
+t=0 f=none right down A pos1 -> 
+t=0 f=none right down C pos0 -> \e[M2%#
+t=0 f=none right down C pos1 -> 
+t=0 f=none right down SC pos0 -> \e[M6%#
+t=0 f=none right down SC pos1 -> 
+t=0 f=none right up - pos0 -> \e[M#%#
+t=0 f=none right up - pos1 -> 
+t=0 f=none right up S pos0 -> \e[M'%#
+t=0 f=none right up S pos1 -> 
+t=0 f=none right up A pos0 -> \e[M+%#
+t=0 f=none right up A pos1 -> 
+t=0 f=none right up C pos0 -> \e[M3%#
+t=0 f=none right up C pos1 -> 
+t=0 f=none right up SC pos0 -> \e[M7%#
+t=0 f=none right up SC pos1 -> 
+t=0 f=none left-moved down - pos0 -> 
+t=0 f=none left-moved down - pos1 -> 
+t=0 f=none left-moved down S pos0 -> 
+t=0 f=none left-moved down S pos1 -> 
+t=0 f=none left-moved down A pos0 -> 
+t=0 f=none left-moved down A pos1 -> 
+t=0 f=none left-moved down C pos0 -> 
+t=0 f=none left-moved down C pos1 -> 
+t=0 f=none left-moved down SC pos0 -> 
+t=0 f=none left-moved down SC pos1 -> 
+t=0 f=none left-moved up - pos0 -> 
+t=0 f=none left-moved up - pos1 -> 
+t=0 f=none left-moved up S pos0 -> 
+t=0 f=none left-moved up S pos1 -> 
+t=0 f=none left-moved up A pos0 -> 
+t=0 f=none left-moved up A pos1 -> 
+t=0 f=none left-moved up C pos0 -> 
+t=0 f=none left-moved up C pos1 -> 
+t=0 f=none left-moved up SC pos0 -> 
+t=0 f=none left-moved up SC pos1 -> 
+t=0 f=none moved down - pos0 -> 
+t=0 f=none moved down - pos1 -> 
+t=0 f=none moved down S pos0 -> 
+t=0 f=none moved down S pos1 -> 
+t=0 f=none moved down A pos0 -> 
+t=0 f=none moved down A pos1 -> 
+t=0 f=none moved down C pos0 -> 
+t=0 f=none moved down C pos1 -> 
+t=0 f=none moved down SC pos0 -> 
+t=0 f=none moved down SC pos1 -> 
+t=0 f=none moved up - pos0 -> 
+t=0 f=none moved up - pos1 -> 
+t=0 f=none moved up S pos0 -> 
+t=0 f=none moved up S pos1 -> 
+t=0 f=none moved up A pos0 -> 
+t=0 f=none moved up A pos1 -> 
+t=0 f=none moved up C pos0 -> 
+t=0 f=none moved up C pos1 -> 
+t=0 f=none moved up SC pos0 -> 
+t=0 f=none moved up SC pos1 -> 
+t=0 f=none wheel-up down - pos0 -> \e[M`%#
+t=0 f=none wheel-up down - pos1 -> 
+t=0 f=none wheel-up down S pos0 -> \e[Md%#
+t=0 f=none wheel-up down S pos1 -> 
+t=0 f=none wheel-up down A pos0 -> \e[Mh%#
+t=0 f=none wheel-up down A pos1 -> 
+t=0 f=none wheel-up down C pos0 -> \e[Mp%#
+t=0 f=none wheel-up down C pos1 -> 
+t=0 f=none wheel-up down SC pos0 -> \e[Mt%#
+t=0 f=none wheel-up down SC pos1 -> 
+t=0 f=none wheel-up up - pos0 -> \e[M#%#
+t=0 f=none wheel-up up - pos1 -> 
+t=0 f=none wheel-up up S pos0 -> \e[M'%#
+t=0 f=none wheel-up up S pos1 -> 
+t=0 f=none wheel-up up A pos0 -> \e[M+%#
+t=0 f=none wheel-up up A pos1 -> 
+t=0 f=none wheel-up up C pos0 -> \e[M3%#
+t=0 f=none wheel-up up C pos1 -> 
+t=0 f=none wheel-up up SC pos0 -> \e[M7%#
+t=0 f=none wheel-up up SC pos1 -> 
+t=0 f=none wheel-down down - pos0 -> \e[Ma%#
+t=0 f=none wheel-down down - pos1 -> 
+t=0 f=none wheel-down down S pos0 -> \e[Me%#
+t=0 f=none wheel-down down S pos1 -> 
+t=0 f=none wheel-down down A pos0 -> \e[Mi%#
+t=0 f=none wheel-down down A pos1 -> 
+t=0 f=none wheel-down down C pos0 -> \e[Mq%#
+t=0 f=none wheel-down down C pos1 -> 
+t=0 f=none wheel-down down SC pos0 -> \e[Mu%#
+t=0 f=none wheel-down down SC pos1 -> 
+t=0 f=none wheel-down up - pos0 -> \e[M#%#
+t=0 f=none wheel-down up - pos1 -> 
+t=0 f=none wheel-down up S pos0 -> \e[M'%#
+t=0 f=none wheel-down up S pos1 -> 
+t=0 f=none wheel-down up A pos0 -> \e[M+%#
+t=0 f=none wheel-down up A pos1 -> 
+t=0 f=none wheel-down up C pos0 -> \e[M3%#
+t=0 f=none wheel-down up C pos1 -> 
+t=0 f=none wheel-down up SC pos0 -> \e[M7%#
+t=0 f=none wheel-down up SC pos1 -> 
+t=0 f=none wheel-left down - pos0 -> \e[Mb%#
+t=0 f=none wheel-left down - pos1 -> 
+t=0 f=none wheel-left down S pos0 -> \e[Mf%#
+t=0 f=none wheel-left down S pos1 -> 
+t=0 f=none wheel-left down A pos0 -> \e[Mj%#
+t=0 f=none wheel-left down A pos1 -> 
+t=0 f=none wheel-left down C pos0 -> \e[Mr%#
+t=0 f=none wheel-left down C pos1 -> 
+t=0 f=none wheel-left down SC pos0 -> \e[Mv%#
+t=0 f=none wheel-left down SC pos1 -> 
+t=0 f=none wheel-left up - pos0 -> \e[M#%#
+t=0 f=none wheel-left up - pos1 -> 
+t=0 f=none wheel-left up S pos0 -> \e[M'%#
+t=0 f=none wheel-left up S pos1 -> 
+t=0 f=none wheel-left up A pos0 -> \e[M+%#
+t=0 f=none wheel-left up A pos1 -> 
+t=0 f=none wheel-left up C pos0 -> \e[M3%#
+t=0 f=none wheel-left up C pos1 -> 
+t=0 f=none wheel-left up SC pos0 -> \e[M7%#
+t=0 f=none wheel-left up SC pos1 -> 
+t=0 f=none wheel-right down - pos0 -> \e[Mc%#
+t=0 f=none wheel-right down - pos1 -> 
+t=0 f=none wheel-right down S pos0 -> \e[Mg%#
+t=0 f=none wheel-right down S pos1 -> 
+t=0 f=none wheel-right down A pos0 -> \e[Mk%#
+t=0 f=none wheel-right down A pos1 -> 
+t=0 f=none wheel-right down C pos0 -> \e[Ms%#
+t=0 f=none wheel-right down C pos1 -> 
+t=0 f=none wheel-right down SC pos0 -> \e[Mw%#
+t=0 f=none wheel-right down SC pos1 -> 
+t=0 f=none wheel-right up - pos0 -> \e[M#%#
+t=0 f=none wheel-right up - pos1 -> 
+t=0 f=none wheel-right up S pos0 -> \e[M'%#
+t=0 f=none wheel-right up S pos1 -> 
+t=0 f=none wheel-right up A pos0 -> \e[M+%#
+t=0 f=none wheel-right up A pos1 -> 
+t=0 f=none wheel-right up C pos0 -> \e[M3%#
+t=0 f=none wheel-right up C pos1 -> 
+t=0 f=none wheel-right up SC pos0 -> \e[M7%#
+t=0 f=none wheel-right up SC pos1 -> 
+t=0 f=1006 left down - pos0 -> \e[<0;5;3M
+t=0 f=1006 left down - pos1 -> \e[<0;240;10M
+t=0 f=1006 left down S pos0 -> \e[<4;5;3M
+t=0 f=1006 left down S pos1 -> \e[<4;240;10M
+t=0 f=1006 left down A pos0 -> \e[<8;5;3M
+t=0 f=1006 left down A pos1 -> \e[<8;240;10M
+t=0 f=1006 left down C pos0 -> \e[<16;5;3M
+t=0 f=1006 left down C pos1 -> \e[<16;240;10M
+t=0 f=1006 left down SC pos0 -> \e[<20;5;3M
+t=0 f=1006 left down SC pos1 -> \e[<20;240;10M
+t=0 f=1006 left up - pos0 -> \e[<0;5;3m
+t=0 f=1006 left up - pos1 -> \e[<0;240;10m
+t=0 f=1006 left up S pos0 -> \e[<4;5;3m
+t=0 f=1006 left up S pos1 -> \e[<4;240;10m
+t=0 f=1006 left up A pos0 -> \e[<8;5;3m
+t=0 f=1006 left up A pos1 -> \e[<8;240;10m
+t=0 f=1006 left up C pos0 -> \e[<16;5;3m
+t=0 f=1006 left up C pos1 -> \e[<16;240;10m
+t=0 f=1006 left up SC pos0 -> \e[<20;5;3m
+t=0 f=1006 left up SC pos1 -> \e[<20;240;10m
+t=0 f=1006 middle down - pos0 -> \e[<1;5;3M
+t=0 f=1006 middle down - pos1 -> \e[<1;240;10M
+t=0 f=1006 middle down S pos0 -> \e[<5;5;3M
+t=0 f=1006 middle down S pos1 -> \e[<5;240;10M
+t=0 f=1006 middle down A pos0 -> \e[<9;5;3M
+t=0 f=1006 middle down A pos1 -> \e[<9;240;10M
+t=0 f=1006 middle down C pos0 -> \e[<17;5;3M
+t=0 f=1006 middle down C pos1 -> \e[<17;240;10M
+t=0 f=1006 middle down SC pos0 -> \e[<21;5;3M
+t=0 f=1006 middle down SC pos1 -> \e[<21;240;10M
+t=0 f=1006 middle up - pos0 -> \e[<1;5;3m
+t=0 f=1006 middle up - pos1 -> \e[<1;240;10m
+t=0 f=1006 middle up S pos0 -> \e[<5;5;3m
+t=0 f=1006 middle up S pos1 -> \e[<5;240;10m
+t=0 f=1006 middle up A pos0 -> \e[<9;5;3m
+t=0 f=1006 middle up A pos1 -> \e[<9;240;10m
+t=0 f=1006 middle up C pos0 -> \e[<17;5;3m
+t=0 f=1006 middle up C pos1 -> \e[<17;240;10m
+t=0 f=1006 middle up SC pos0 -> \e[<21;5;3m
+t=0 f=1006 middle up SC pos1 -> \e[<21;240;10m
+t=0 f=1006 right down - pos0 -> \e[<2;5;3M
+t=0 f=1006 right down - pos1 -> \e[<2;240;10M
+t=0 f=1006 right down S pos0 -> \e[<6;5;3M
+t=0 f=1006 right down S pos1 -> \e[<6;240;10M
+t=0 f=1006 right down A pos0 -> \e[<10;5;3M
+t=0 f=1006 right down A pos1 -> \e[<10;240;10M
+t=0 f=1006 right down C pos0 -> \e[<18;5;3M
+t=0 f=1006 right down C pos1 -> \e[<18;240;10M
+t=0 f=1006 right down SC pos0 -> \e[<22;5;3M
+t=0 f=1006 right down SC pos1 -> \e[<22;240;10M
+t=0 f=1006 right up - pos0 -> \e[<2;5;3m
+t=0 f=1006 right up - pos1 -> \e[<2;240;10m
+t=0 f=1006 right up S pos0 -> \e[<6;5;3m
+t=0 f=1006 right up S pos1 -> \e[<6;240;10m
+t=0 f=1006 right up A pos0 -> \e[<10;5;3m
+t=0 f=1006 right up A pos1 -> \e[<10;240;10m
+t=0 f=1006 right up C pos0 -> \e[<18;5;3m
+t=0 f=1006 right up C pos1 -> \e[<18;240;10m
+t=0 f=1006 right up SC pos0 -> \e[<22;5;3m
+t=0 f=1006 right up SC pos1 -> \e[<22;240;10m
+t=0 f=1006 left-moved down - pos0 -> 
+t=0 f=1006 left-moved down - pos1 -> 
+t=0 f=1006 left-moved down S pos0 -> 
+t=0 f=1006 left-moved down S pos1 -> 
+t=0 f=1006 left-moved down A pos0 -> 
+t=0 f=1006 left-moved down A pos1 -> 
+t=0 f=1006 left-moved down C pos0 -> 
+t=0 f=1006 left-moved down C pos1 -> 
+t=0 f=1006 left-moved down SC pos0 -> 
+t=0 f=1006 left-moved down SC pos1 -> 
+t=0 f=1006 left-moved up - pos0 -> 
+t=0 f=1006 left-moved up - pos1 -> 
+t=0 f=1006 left-moved up S pos0 -> 
+t=0 f=1006 left-moved up S pos1 -> 
+t=0 f=1006 left-moved up A pos0 -> 
+t=0 f=1006 left-moved up A pos1 -> 
+t=0 f=1006 left-moved up C pos0 -> 
+t=0 f=1006 left-moved up C pos1 -> 
+t=0 f=1006 left-moved up SC pos0 -> 
+t=0 f=1006 left-moved up SC pos1 -> 
+t=0 f=1006 moved down - pos0 -> 
+t=0 f=1006 moved down - pos1 -> 
+t=0 f=1006 moved down S pos0 -> 
+t=0 f=1006 moved down S pos1 -> 
+t=0 f=1006 moved down A pos0 -> 
+t=0 f=1006 moved down A pos1 -> 
+t=0 f=1006 moved down C pos0 -> 
+t=0 f=1006 moved down C pos1 -> 
+t=0 f=1006 moved down SC pos0 -> 
+t=0 f=1006 moved down SC pos1 -> 
+t=0 f=1006 moved up - pos0 -> 
+t=0 f=1006 moved up - pos1 -> 
+t=0 f=1006 moved up S pos0 -> 
+t=0 f=1006 moved up S pos1 -> 
+t=0 f=1006 moved up A pos0 -> 
+t=0 f=1006 moved up A pos1 -> 
+t=0 f=1006 moved up C pos0 -> 
+t=0 f=1006 moved up C pos1 -> 
+t=0 f=1006 moved up SC pos0 -> 
+t=0 f=1006 moved up SC pos1 -> 
+t=0 f=1006 wheel-up down - pos0 -> \e[<64;5;3M
+t=0 f=1006 wheel-up down - pos1 -> \e[<64;240;10M
+t=0 f=1006 wheel-up down S pos0 -> \e[<68;5;3M
+t=0 f=1006 wheel-up down S pos1 -> \e[<68;240;10M
+t=0 f=1006 wheel-up down A pos0 -> \e[<72;5;3M
+t=0 f=1006 wheel-up down A pos1 -> \e[<72;240;10M
+t=0 f=1006 wheel-up down C pos0 -> \e[<80;5;3M
+t=0 f=1006 wheel-up down C pos1 -> \e[<80;240;10M
+t=0 f=1006 wheel-up down SC pos0 -> \e[<84;5;3M
+t=0 f=1006 wheel-up down SC pos1 -> \e[<84;240;10M
+t=0 f=1006 wheel-up up - pos0 -> \e[<64;5;3m
+t=0 f=1006 wheel-up up - pos1 -> \e[<64;240;10m
+t=0 f=1006 wheel-up up S pos0 -> \e[<68;5;3m
+t=0 f=1006 wheel-up up S pos1 -> \e[<68;240;10m
+t=0 f=1006 wheel-up up A pos0 -> \e[<72;5;3m
+t=0 f=1006 wheel-up up A pos1 -> \e[<72;240;10m
+t=0 f=1006 wheel-up up C pos0 -> \e[<80;5;3m
+t=0 f=1006 wheel-up up C pos1 -> \e[<80;240;10m
+t=0 f=1006 wheel-up up SC pos0 -> \e[<84;5;3m
+t=0 f=1006 wheel-up up SC pos1 -> \e[<84;240;10m
+t=0 f=1006 wheel-down down - pos0 -> \e[<65;5;3M
+t=0 f=1006 wheel-down down - pos1 -> \e[<65;240;10M
+t=0 f=1006 wheel-down down S pos0 -> \e[<69;5;3M
+t=0 f=1006 wheel-down down S pos1 -> \e[<69;240;10M
+t=0 f=1006 wheel-down down A pos0 -> \e[<73;5;3M
+t=0 f=1006 wheel-down down A pos1 -> \e[<73;240;10M
+t=0 f=1006 wheel-down down C pos0 -> \e[<81;5;3M
+t=0 f=1006 wheel-down down C pos1 -> \e[<81;240;10M
+t=0 f=1006 wheel-down down SC pos0 -> \e[<85;5;3M
+t=0 f=1006 wheel-down down SC pos1 -> \e[<85;240;10M
+t=0 f=1006 wheel-down up - pos0 -> \e[<65;5;3m
+t=0 f=1006 wheel-down up - pos1 -> \e[<65;240;10m
+t=0 f=1006 wheel-down up S pos0 -> \e[<69;5;3m
+t=0 f=1006 wheel-down up S pos1 -> \e[<69;240;10m
+t=0 f=1006 wheel-down up A pos0 -> \e[<73;5;3m
+t=0 f=1006 wheel-down up A pos1 -> \e[<73;240;10m
+t=0 f=1006 wheel-down up C pos0 -> \e[<81;5;3m
+t=0 f=1006 wheel-down up C pos1 -> \e[<81;240;10m
+t=0 f=1006 wheel-down up SC pos0 -> \e[<85;5;3m
+t=0 f=1006 wheel-down up SC pos1 -> \e[<85;240;10m
+t=0 f=1006 wheel-left down - pos0 -> \e[<66;5;3M
+t=0 f=1006 wheel-left down - pos1 -> \e[<66;240;10M
+t=0 f=1006 wheel-left down S pos0 -> \e[<70;5;3M
+t=0 f=1006 wheel-left down S pos1 -> \e[<70;240;10M
+t=0 f=1006 wheel-left down A pos0 -> \e[<74;5;3M
+t=0 f=1006 wheel-left down A pos1 -> \e[<74;240;10M
+t=0 f=1006 wheel-left down C pos0 -> \e[<82;5;3M
+t=0 f=1006 wheel-left down C pos1 -> \e[<82;240;10M
+t=0 f=1006 wheel-left down SC pos0 -> \e[<86;5;3M
+t=0 f=1006 wheel-left down SC pos1 -> \e[<86;240;10M
+t=0 f=1006 wheel-left up - pos0 -> \e[<66;5;3m
+t=0 f=1006 wheel-left up - pos1 -> \e[<66;240;10m
+t=0 f=1006 wheel-left up S pos0 -> \e[<70;5;3m
+t=0 f=1006 wheel-left up S pos1 -> \e[<70;240;10m
+t=0 f=1006 wheel-left up A pos0 -> \e[<74;5;3m
+t=0 f=1006 wheel-left up A pos1 -> \e[<74;240;10m
+t=0 f=1006 wheel-left up C pos0 -> \e[<82;5;3m
+t=0 f=1006 wheel-left up C pos1 -> \e[<82;240;10m
+t=0 f=1006 wheel-left up SC pos0 -> \e[<86;5;3m
+t=0 f=1006 wheel-left up SC pos1 -> \e[<86;240;10m
+t=0 f=1006 wheel-right down - pos0 -> \e[<67;5;3M
+t=0 f=1006 wheel-right down - pos1 -> \e[<67;240;10M
+t=0 f=1006 wheel-right down S pos0 -> \e[<71;5;3M
+t=0 f=1006 wheel-right down S pos1 -> \e[<71;240;10M
+t=0 f=1006 wheel-right down A pos0 -> \e[<75;5;3M
+t=0 f=1006 wheel-right down A pos1 -> \e[<75;240;10M
+t=0 f=1006 wheel-right down C pos0 -> \e[<83;5;3M
+t=0 f=1006 wheel-right down C pos1 -> \e[<83;240;10M
+t=0 f=1006 wheel-right down SC pos0 -> \e[<87;5;3M
+t=0 f=1006 wheel-right down SC pos1 -> \e[<87;240;10M
+t=0 f=1006 wheel-right up - pos0 -> \e[<67;5;3m
+t=0 f=1006 wheel-right up - pos1 -> \e[<67;240;10m
+t=0 f=1006 wheel-right up S pos0 -> \e[<71;5;3m
+t=0 f=1006 wheel-right up S pos1 -> \e[<71;240;10m
+t=0 f=1006 wheel-right up A pos0 -> \e[<75;5;3m
+t=0 f=1006 wheel-right up A pos1 -> \e[<75;240;10m
+t=0 f=1006 wheel-right up C pos0 -> \e[<83;5;3m
+t=0 f=1006 wheel-right up C pos1 -> \e[<83;240;10m
+t=0 f=1006 wheel-right up SC pos0 -> \e[<87;5;3m
+t=0 f=1006 wheel-right up SC pos1 -> \e[<87;240;10m
+t=0 f=1006+1016 left down - pos0 -> \e[<0;60;40M
+t=0 f=1006+1016 left down - pos1 -> \e[<0;3111;150M
+t=0 f=1006+1016 left down S pos0 -> \e[<4;60;40M
+t=0 f=1006+1016 left down S pos1 -> \e[<4;3111;150M
+t=0 f=1006+1016 left down A pos0 -> \e[<8;60;40M
+t=0 f=1006+1016 left down A pos1 -> \e[<8;3111;150M
+t=0 f=1006+1016 left down C pos0 -> \e[<16;60;40M
+t=0 f=1006+1016 left down C pos1 -> \e[<16;3111;150M
+t=0 f=1006+1016 left down SC pos0 -> \e[<20;60;40M
+t=0 f=1006+1016 left down SC pos1 -> \e[<20;3111;150M
+t=0 f=1006+1016 left up - pos0 -> \e[<0;60;40m
+t=0 f=1006+1016 left up - pos1 -> \e[<0;3111;150m
+t=0 f=1006+1016 left up S pos0 -> \e[<4;60;40m
+t=0 f=1006+1016 left up S pos1 -> \e[<4;3111;150m
+t=0 f=1006+1016 left up A pos0 -> \e[<8;60;40m
+t=0 f=1006+1016 left up A pos1 -> \e[<8;3111;150m
+t=0 f=1006+1016 left up C pos0 -> \e[<16;60;40m
+t=0 f=1006+1016 left up C pos1 -> \e[<16;3111;150m
+t=0 f=1006+1016 left up SC pos0 -> \e[<20;60;40m
+t=0 f=1006+1016 left up SC pos1 -> \e[<20;3111;150m
+t=0 f=1006+1016 middle down - pos0 -> \e[<1;60;40M
+t=0 f=1006+1016 middle down - pos1 -> \e[<1;3111;150M
+t=0 f=1006+1016 middle down S pos0 -> \e[<5;60;40M
+t=0 f=1006+1016 middle down S pos1 -> \e[<5;3111;150M
+t=0 f=1006+1016 middle down A pos0 -> \e[<9;60;40M
+t=0 f=1006+1016 middle down A pos1 -> \e[<9;3111;150M
+t=0 f=1006+1016 middle down C pos0 -> \e[<17;60;40M
+t=0 f=1006+1016 middle down C pos1 -> \e[<17;3111;150M
+t=0 f=1006+1016 middle down SC pos0 -> \e[<21;60;40M
+t=0 f=1006+1016 middle down SC pos1 -> \e[<21;3111;150M
+t=0 f=1006+1016 middle up - pos0 -> \e[<1;60;40m
+t=0 f=1006+1016 middle up - pos1 -> \e[<1;3111;150m
+t=0 f=1006+1016 middle up S pos0 -> \e[<5;60;40m
+t=0 f=1006+1016 middle up S pos1 -> \e[<5;3111;150m
+t=0 f=1006+1016 middle up A pos0 -> \e[<9;60;40m
+t=0 f=1006+1016 middle up A pos1 -> \e[<9;3111;150m
+t=0 f=1006+1016 middle up C pos0 -> \e[<17;60;40m
+t=0 f=1006+1016 middle up C pos1 -> \e[<17;3111;150m
+t=0 f=1006+1016 middle up SC pos0 -> \e[<21;60;40m
+t=0 f=1006+1016 middle up SC pos1 -> \e[<21;3111;150m
+t=0 f=1006+1016 right down - pos0 -> \e[<2;60;40M
+t=0 f=1006+1016 right down - pos1 -> \e[<2;3111;150M
+t=0 f=1006+1016 right down S pos0 -> \e[<6;60;40M
+t=0 f=1006+1016 right down S pos1 -> \e[<6;3111;150M
+t=0 f=1006+1016 right down A pos0 -> \e[<10;60;40M
+t=0 f=1006+1016 right down A pos1 -> \e[<10;3111;150M
+t=0 f=1006+1016 right down C pos0 -> \e[<18;60;40M
+t=0 f=1006+1016 right down C pos1 -> \e[<18;3111;150M
+t=0 f=1006+1016 right down SC pos0 -> \e[<22;60;40M
+t=0 f=1006+1016 right down SC pos1 -> \e[<22;3111;150M
+t=0 f=1006+1016 right up - pos0 -> \e[<2;60;40m
+t=0 f=1006+1016 right up - pos1 -> \e[<2;3111;150m
+t=0 f=1006+1016 right up S pos0 -> \e[<6;60;40m
+t=0 f=1006+1016 right up S pos1 -> \e[<6;3111;150m
+t=0 f=1006+1016 right up A pos0 -> \e[<10;60;40m
+t=0 f=1006+1016 right up A pos1 -> \e[<10;3111;150m
+t=0 f=1006+1016 right up C pos0 -> \e[<18;60;40m
+t=0 f=1006+1016 right up C pos1 -> \e[<18;3111;150m
+t=0 f=1006+1016 right up SC pos0 -> \e[<22;60;40m
+t=0 f=1006+1016 right up SC pos1 -> \e[<22;3111;150m
+t=0 f=1006+1016 left-moved down - pos0 -> 
+t=0 f=1006+1016 left-moved down - pos1 -> 
+t=0 f=1006+1016 left-moved down S pos0 -> 
+t=0 f=1006+1016 left-moved down S pos1 -> 
+t=0 f=1006+1016 left-moved down A pos0 -> 
+t=0 f=1006+1016 left-moved down A pos1 -> 
+t=0 f=1006+1016 left-moved down C pos0 -> 
+t=0 f=1006+1016 left-moved down C pos1 -> 
+t=0 f=1006+1016 left-moved down SC pos0 -> 
+t=0 f=1006+1016 left-moved down SC pos1 -> 
+t=0 f=1006+1016 left-moved up - pos0 -> 
+t=0 f=1006+1016 left-moved up - pos1 -> 
+t=0 f=1006+1016 left-moved up S pos0 -> 
+t=0 f=1006+1016 left-moved up S pos1 -> 
+t=0 f=1006+1016 left-moved up A pos0 -> 
+t=0 f=1006+1016 left-moved up A pos1 -> 
+t=0 f=1006+1016 left-moved up C pos0 -> 
+t=0 f=1006+1016 left-moved up C pos1 -> 
+t=0 f=1006+1016 left-moved up SC pos0 -> 
+t=0 f=1006+1016 left-moved up SC pos1 -> 
+t=0 f=1006+1016 moved down - pos0 -> 
+t=0 f=1006+1016 moved down - pos1 -> 
+t=0 f=1006+1016 moved down S pos0 -> 
+t=0 f=1006+1016 moved down S pos1 -> 
+t=0 f=1006+1016 moved down A pos0 -> 
+t=0 f=1006+1016 moved down A pos1 -> 
+t=0 f=1006+1016 moved down C pos0 -> 
+t=0 f=1006+1016 moved down C pos1 -> 
+t=0 f=1006+1016 moved down SC pos0 -> 
+t=0 f=1006+1016 moved down SC pos1 -> 
+t=0 f=1006+1016 moved up - pos0 -> 
+t=0 f=1006+1016 moved up - pos1 -> 
+t=0 f=1006+1016 moved up S pos0 -> 
+t=0 f=1006+1016 moved up S pos1 -> 
+t=0 f=1006+1016 moved up A pos0 -> 
+t=0 f=1006+1016 moved up A pos1 -> 
+t=0 f=1006+1016 moved up C pos0 -> 
+t=0 f=1006+1016 moved up C pos1 -> 
+t=0 f=1006+1016 moved up SC pos0 -> 
+t=0 f=1006+1016 moved up SC pos1 -> 
+t=0 f=1006+1016 wheel-up down - pos0 -> \e[<64;60;40M
+t=0 f=1006+1016 wheel-up down - pos1 -> \e[<64;3111;150M
+t=0 f=1006+1016 wheel-up down S pos0 -> \e[<68;60;40M
+t=0 f=1006+1016 wheel-up down S pos1 -> \e[<68;3111;150M
+t=0 f=1006+1016 wheel-up down A pos0 -> \e[<72;60;40M
+t=0 f=1006+1016 wheel-up down A pos1 -> \e[<72;3111;150M
+t=0 f=1006+1016 wheel-up down C pos0 -> \e[<80;60;40M
+t=0 f=1006+1016 wheel-up down C pos1 -> \e[<80;3111;150M
+t=0 f=1006+1016 wheel-up down SC pos0 -> \e[<84;60;40M
+t=0 f=1006+1016 wheel-up down SC pos1 -> \e[<84;3111;150M
+t=0 f=1006+1016 wheel-up up - pos0 -> \e[<64;60;40m
+t=0 f=1006+1016 wheel-up up - pos1 -> \e[<64;3111;150m
+t=0 f=1006+1016 wheel-up up S pos0 -> \e[<68;60;40m
+t=0 f=1006+1016 wheel-up up S pos1 -> \e[<68;3111;150m
+t=0 f=1006+1016 wheel-up up A pos0 -> \e[<72;60;40m
+t=0 f=1006+1016 wheel-up up A pos1 -> \e[<72;3111;150m
+t=0 f=1006+1016 wheel-up up C pos0 -> \e[<80;60;40m
+t=0 f=1006+1016 wheel-up up C pos1 -> \e[<80;3111;150m
+t=0 f=1006+1016 wheel-up up SC pos0 -> \e[<84;60;40m
+t=0 f=1006+1016 wheel-up up SC pos1 -> \e[<84;3111;150m
+t=0 f=1006+1016 wheel-down down - pos0 -> \e[<65;60;40M
+t=0 f=1006+1016 wheel-down down - pos1 -> \e[<65;3111;150M
+t=0 f=1006+1016 wheel-down down S pos0 -> \e[<69;60;40M
+t=0 f=1006+1016 wheel-down down S pos1 -> \e[<69;3111;150M
+t=0 f=1006+1016 wheel-down down A pos0 -> \e[<73;60;40M
+t=0 f=1006+1016 wheel-down down A pos1 -> \e[<73;3111;150M
+t=0 f=1006+1016 wheel-down down C pos0 -> \e[<81;60;40M
+t=0 f=1006+1016 wheel-down down C pos1 -> \e[<81;3111;150M
+t=0 f=1006+1016 wheel-down down SC pos0 -> \e[<85;60;40M
+t=0 f=1006+1016 wheel-down down SC pos1 -> \e[<85;3111;150M
+t=0 f=1006+1016 wheel-down up - pos0 -> \e[<65;60;40m
+t=0 f=1006+1016 wheel-down up - pos1 -> \e[<65;3111;150m
+t=0 f=1006+1016 wheel-down up S pos0 -> \e[<69;60;40m
+t=0 f=1006+1016 wheel-down up S pos1 -> \e[<69;3111;150m
+t=0 f=1006+1016 wheel-down up A pos0 -> \e[<73;60;40m
+t=0 f=1006+1016 wheel-down up A pos1 -> \e[<73;3111;150m
+t=0 f=1006+1016 wheel-down up C pos0 -> \e[<81;60;40m
+t=0 f=1006+1016 wheel-down up C pos1 -> \e[<81;3111;150m
+t=0 f=1006+1016 wheel-down up SC pos0 -> \e[<85;60;40m
+t=0 f=1006+1016 wheel-down up SC pos1 -> \e[<85;3111;150m
+t=0 f=1006+1016 wheel-left down - pos0 -> \e[<66;60;40M
+t=0 f=1006+1016 wheel-left down - pos1 -> \e[<66;3111;150M
+t=0 f=1006+1016 wheel-left down S pos0 -> \e[<70;60;40M
+t=0 f=1006+1016 wheel-left down S pos1 -> \e[<70;3111;150M
+t=0 f=1006+1016 wheel-left down A pos0 -> \e[<74;60;40M
+t=0 f=1006+1016 wheel-left down A pos1 -> \e[<74;3111;150M
+t=0 f=1006+1016 wheel-left down C pos0 -> \e[<82;60;40M
+t=0 f=1006+1016 wheel-left down C pos1 -> \e[<82;3111;150M
+t=0 f=1006+1016 wheel-left down SC pos0 -> \e[<86;60;40M
+t=0 f=1006+1016 wheel-left down SC pos1 -> \e[<86;3111;150M
+t=0 f=1006+1016 wheel-left up - pos0 -> \e[<66;60;40m
+t=0 f=1006+1016 wheel-left up - pos1 -> \e[<66;3111;150m
+t=0 f=1006+1016 wheel-left up S pos0 -> \e[<70;60;40m
+t=0 f=1006+1016 wheel-left up S pos1 -> \e[<70;3111;150m
+t=0 f=1006+1016 wheel-left up A pos0 -> \e[<74;60;40m
+t=0 f=1006+1016 wheel-left up A pos1 -> \e[<74;3111;150m
+t=0 f=1006+1016 wheel-left up C pos0 -> \e[<82;60;40m
+t=0 f=1006+1016 wheel-left up C pos1 -> \e[<82;3111;150m
+t=0 f=1006+1016 wheel-left up SC pos0 -> \e[<86;60;40m
+t=0 f=1006+1016 wheel-left up SC pos1 -> \e[<86;3111;150m
+t=0 f=1006+1016 wheel-right down - pos0 -> \e[<67;60;40M
+t=0 f=1006+1016 wheel-right down - pos1 -> \e[<67;3111;150M
+t=0 f=1006+1016 wheel-right down S pos0 -> \e[<71;60;40M
+t=0 f=1006+1016 wheel-right down S pos1 -> \e[<71;3111;150M
+t=0 f=1006+1016 wheel-right down A pos0 -> \e[<75;60;40M
+t=0 f=1006+1016 wheel-right down A pos1 -> \e[<75;3111;150M
+t=0 f=1006+1016 wheel-right down C pos0 -> \e[<83;60;40M
+t=0 f=1006+1016 wheel-right down C pos1 -> \e[<83;3111;150M
+t=0 f=1006+1016 wheel-right down SC pos0 -> \e[<87;60;40M
+t=0 f=1006+1016 wheel-right down SC pos1 -> \e[<87;3111;150M
+t=0 f=1006+1016 wheel-right up - pos0 -> \e[<67;60;40m
+t=0 f=1006+1016 wheel-right up - pos1 -> \e[<67;3111;150m
+t=0 f=1006+1016 wheel-right up S pos0 -> \e[<71;60;40m
+t=0 f=1006+1016 wheel-right up S pos1 -> \e[<71;3111;150m
+t=0 f=1006+1016 wheel-right up A pos0 -> \e[<75;60;40m
+t=0 f=1006+1016 wheel-right up A pos1 -> \e[<75;3111;150m
+t=0 f=1006+1016 wheel-right up C pos0 -> \e[<83;60;40m
+t=0 f=1006+1016 wheel-right up C pos1 -> \e[<83;3111;150m
+t=0 f=1006+1016 wheel-right up SC pos0 -> \e[<87;60;40m
+t=0 f=1006+1016 wheel-right up SC pos1 -> \e[<87;3111;150m
+t=1000 f=none left down - pos0 -> \e[M %#
+t=1000 f=none left down - pos1 -> 
+t=1000 f=none left down S pos0 -> \e[M$%#
+t=1000 f=none left down S pos1 -> 
+t=1000 f=none left down A pos0 -> \e[M(%#
+t=1000 f=none left down A pos1 -> 
+t=1000 f=none left down C pos0 -> \e[M0%#
+t=1000 f=none left down C pos1 -> 
+t=1000 f=none left down SC pos0 -> \e[M4%#
+t=1000 f=none left down SC pos1 -> 
+t=1000 f=none left up - pos0 -> \e[M#%#
+t=1000 f=none left up - pos1 -> 
+t=1000 f=none left up S pos0 -> \e[M'%#
+t=1000 f=none left up S pos1 -> 
+t=1000 f=none left up A pos0 -> \e[M+%#
+t=1000 f=none left up A pos1 -> 
+t=1000 f=none left up C pos0 -> \e[M3%#
+t=1000 f=none left up C pos1 -> 
+t=1000 f=none left up SC pos0 -> \e[M7%#
+t=1000 f=none left up SC pos1 -> 
+t=1000 f=none middle down - pos0 -> \e[M!%#
+t=1000 f=none middle down - pos1 -> 
+t=1000 f=none middle down S pos0 -> \e[M%%#
+t=1000 f=none middle down S pos1 -> 
+t=1000 f=none middle down A pos0 -> \e[M)%#
+t=1000 f=none middle down A pos1 -> 
+t=1000 f=none middle down C pos0 -> \e[M1%#
+t=1000 f=none middle down C pos1 -> 
+t=1000 f=none middle down SC pos0 -> \e[M5%#
+t=1000 f=none middle down SC pos1 -> 
+t=1000 f=none middle up - pos0 -> \e[M#%#
+t=1000 f=none middle up - pos1 -> 
+t=1000 f=none middle up S pos0 -> \e[M'%#
+t=1000 f=none middle up S pos1 -> 
+t=1000 f=none middle up A pos0 -> \e[M+%#
+t=1000 f=none middle up A pos1 -> 
+t=1000 f=none middle up C pos0 -> \e[M3%#
+t=1000 f=none middle up C pos1 -> 
+t=1000 f=none middle up SC pos0 -> \e[M7%#
+t=1000 f=none middle up SC pos1 -> 
+t=1000 f=none right down - pos0 -> \e[M"%#
+t=1000 f=none right down - pos1 -> 
+t=1000 f=none right down S pos0 -> \e[M&%#
+t=1000 f=none right down S pos1 -> 
+t=1000 f=none right down A pos0 -> \e[M*%#
+t=1000 f=none right down A pos1 -> 
+t=1000 f=none right down C pos0 -> \e[M2%#
+t=1000 f=none right down C pos1 -> 
+t=1000 f=none right down SC pos0 -> \e[M6%#
+t=1000 f=none right down SC pos1 -> 
+t=1000 f=none right up - pos0 -> \e[M#%#
+t=1000 f=none right up - pos1 -> 
+t=1000 f=none right up S pos0 -> \e[M'%#
+t=1000 f=none right up S pos1 -> 
+t=1000 f=none right up A pos0 -> \e[M+%#
+t=1000 f=none right up A pos1 -> 
+t=1000 f=none right up C pos0 -> \e[M3%#
+t=1000 f=none right up C pos1 -> 
+t=1000 f=none right up SC pos0 -> \e[M7%#
+t=1000 f=none right up SC pos1 -> 
+t=1000 f=none left-moved down - pos0 -> 
+t=1000 f=none left-moved down - pos1 -> 
+t=1000 f=none left-moved down S pos0 -> 
+t=1000 f=none left-moved down S pos1 -> 
+t=1000 f=none left-moved down A pos0 -> 
+t=1000 f=none left-moved down A pos1 -> 
+t=1000 f=none left-moved down C pos0 -> 
+t=1000 f=none left-moved down C pos1 -> 
+t=1000 f=none left-moved down SC pos0 -> 
+t=1000 f=none left-moved down SC pos1 -> 
+t=1000 f=none left-moved up - pos0 -> 
+t=1000 f=none left-moved up - pos1 -> 
+t=1000 f=none left-moved up S pos0 -> 
+t=1000 f=none left-moved up S pos1 -> 
+t=1000 f=none left-moved up A pos0 -> 
+t=1000 f=none left-moved up A pos1 -> 
+t=1000 f=none left-moved up C pos0 -> 
+t=1000 f=none left-moved up C pos1 -> 
+t=1000 f=none left-moved up SC pos0 -> 
+t=1000 f=none left-moved up SC pos1 -> 
+t=1000 f=none moved down - pos0 -> 
+t=1000 f=none moved down - pos1 -> 
+t=1000 f=none moved down S pos0 -> 
+t=1000 f=none moved down S pos1 -> 
+t=1000 f=none moved down A pos0 -> 
+t=1000 f=none moved down A pos1 -> 
+t=1000 f=none moved down C pos0 -> 
+t=1000 f=none moved down C pos1 -> 
+t=1000 f=none moved down SC pos0 -> 
+t=1000 f=none moved down SC pos1 -> 
+t=1000 f=none moved up - pos0 -> 
+t=1000 f=none moved up - pos1 -> 
+t=1000 f=none moved up S pos0 -> 
+t=1000 f=none moved up S pos1 -> 
+t=1000 f=none moved up A pos0 -> 
+t=1000 f=none moved up A pos1 -> 
+t=1000 f=none moved up C pos0 -> 
+t=1000 f=none moved up C pos1 -> 
+t=1000 f=none moved up SC pos0 -> 
+t=1000 f=none moved up SC pos1 -> 
+t=1000 f=none wheel-up down - pos0 -> \e[M`%#
+t=1000 f=none wheel-up down - pos1 -> 
+t=1000 f=none wheel-up down S pos0 -> \e[Md%#
+t=1000 f=none wheel-up down S pos1 -> 
+t=1000 f=none wheel-up down A pos0 -> \e[Mh%#
+t=1000 f=none wheel-up down A pos1 -> 
+t=1000 f=none wheel-up down C pos0 -> \e[Mp%#
+t=1000 f=none wheel-up down C pos1 -> 
+t=1000 f=none wheel-up down SC pos0 -> \e[Mt%#
+t=1000 f=none wheel-up down SC pos1 -> 
+t=1000 f=none wheel-up up - pos0 -> \e[M#%#
+t=1000 f=none wheel-up up - pos1 -> 
+t=1000 f=none wheel-up up S pos0 -> \e[M'%#
+t=1000 f=none wheel-up up S pos1 -> 
+t=1000 f=none wheel-up up A pos0 -> \e[M+%#
+t=1000 f=none wheel-up up A pos1 -> 
+t=1000 f=none wheel-up up C pos0 -> \e[M3%#
+t=1000 f=none wheel-up up C pos1 -> 
+t=1000 f=none wheel-up up SC pos0 -> \e[M7%#
+t=1000 f=none wheel-up up SC pos1 -> 
+t=1000 f=none wheel-down down - pos0 -> \e[Ma%#
+t=1000 f=none wheel-down down - pos1 -> 
+t=1000 f=none wheel-down down S pos0 -> \e[Me%#
+t=1000 f=none wheel-down down S pos1 -> 
+t=1000 f=none wheel-down down A pos0 -> \e[Mi%#
+t=1000 f=none wheel-down down A pos1 -> 
+t=1000 f=none wheel-down down C pos0 -> \e[Mq%#
+t=1000 f=none wheel-down down C pos1 -> 
+t=1000 f=none wheel-down down SC pos0 -> \e[Mu%#
+t=1000 f=none wheel-down down SC pos1 -> 
+t=1000 f=none wheel-down up - pos0 -> \e[M#%#
+t=1000 f=none wheel-down up - pos1 -> 
+t=1000 f=none wheel-down up S pos0 -> \e[M'%#
+t=1000 f=none wheel-down up S pos1 -> 
+t=1000 f=none wheel-down up A pos0 -> \e[M+%#
+t=1000 f=none wheel-down up A pos1 -> 
+t=1000 f=none wheel-down up C pos0 -> \e[M3%#
+t=1000 f=none wheel-down up C pos1 -> 
+t=1000 f=none wheel-down up SC pos0 -> \e[M7%#
+t=1000 f=none wheel-down up SC pos1 -> 
+t=1000 f=none wheel-left down - pos0 -> \e[Mb%#
+t=1000 f=none wheel-left down - pos1 -> 
+t=1000 f=none wheel-left down S pos0 -> \e[Mf%#
+t=1000 f=none wheel-left down S pos1 -> 
+t=1000 f=none wheel-left down A pos0 -> \e[Mj%#
+t=1000 f=none wheel-left down A pos1 -> 
+t=1000 f=none wheel-left down C pos0 -> \e[Mr%#
+t=1000 f=none wheel-left down C pos1 -> 
+t=1000 f=none wheel-left down SC pos0 -> \e[Mv%#
+t=1000 f=none wheel-left down SC pos1 -> 
+t=1000 f=none wheel-left up - pos0 -> \e[M#%#
+t=1000 f=none wheel-left up - pos1 -> 
+t=1000 f=none wheel-left up S pos0 -> \e[M'%#
+t=1000 f=none wheel-left up S pos1 -> 
+t=1000 f=none wheel-left up A pos0 -> \e[M+%#
+t=1000 f=none wheel-left up A pos1 -> 
+t=1000 f=none wheel-left up C pos0 -> \e[M3%#
+t=1000 f=none wheel-left up C pos1 -> 
+t=1000 f=none wheel-left up SC pos0 -> \e[M7%#
+t=1000 f=none wheel-left up SC pos1 -> 
+t=1000 f=none wheel-right down - pos0 -> \e[Mc%#
+t=1000 f=none wheel-right down - pos1 -> 
+t=1000 f=none wheel-right down S pos0 -> \e[Mg%#
+t=1000 f=none wheel-right down S pos1 -> 
+t=1000 f=none wheel-right down A pos0 -> \e[Mk%#
+t=1000 f=none wheel-right down A pos1 -> 
+t=1000 f=none wheel-right down C pos0 -> \e[Ms%#
+t=1000 f=none wheel-right down C pos1 -> 
+t=1000 f=none wheel-right down SC pos0 -> \e[Mw%#
+t=1000 f=none wheel-right down SC pos1 -> 
+t=1000 f=none wheel-right up - pos0 -> \e[M#%#
+t=1000 f=none wheel-right up - pos1 -> 
+t=1000 f=none wheel-right up S pos0 -> \e[M'%#
+t=1000 f=none wheel-right up S pos1 -> 
+t=1000 f=none wheel-right up A pos0 -> \e[M+%#
+t=1000 f=none wheel-right up A pos1 -> 
+t=1000 f=none wheel-right up C pos0 -> \e[M3%#
+t=1000 f=none wheel-right up C pos1 -> 
+t=1000 f=none wheel-right up SC pos0 -> \e[M7%#
+t=1000 f=none wheel-right up SC pos1 -> 
+t=1000 f=1006 left down - pos0 -> \e[<0;5;3M
+t=1000 f=1006 left down - pos1 -> \e[<0;240;10M
+t=1000 f=1006 left down S pos0 -> \e[<4;5;3M
+t=1000 f=1006 left down S pos1 -> \e[<4;240;10M
+t=1000 f=1006 left down A pos0 -> \e[<8;5;3M
+t=1000 f=1006 left down A pos1 -> \e[<8;240;10M
+t=1000 f=1006 left down C pos0 -> \e[<16;5;3M
+t=1000 f=1006 left down C pos1 -> \e[<16;240;10M
+t=1000 f=1006 left down SC pos0 -> \e[<20;5;3M
+t=1000 f=1006 left down SC pos1 -> \e[<20;240;10M
+t=1000 f=1006 left up - pos0 -> \e[<0;5;3m
+t=1000 f=1006 left up - pos1 -> \e[<0;240;10m
+t=1000 f=1006 left up S pos0 -> \e[<4;5;3m
+t=1000 f=1006 left up S pos1 -> \e[<4;240;10m
+t=1000 f=1006 left up A pos0 -> \e[<8;5;3m
+t=1000 f=1006 left up A pos1 -> \e[<8;240;10m
+t=1000 f=1006 left up C pos0 -> \e[<16;5;3m
+t=1000 f=1006 left up C pos1 -> \e[<16;240;10m
+t=1000 f=1006 left up SC pos0 -> \e[<20;5;3m
+t=1000 f=1006 left up SC pos1 -> \e[<20;240;10m
+t=1000 f=1006 middle down - pos0 -> \e[<1;5;3M
+t=1000 f=1006 middle down - pos1 -> \e[<1;240;10M
+t=1000 f=1006 middle down S pos0 -> \e[<5;5;3M
+t=1000 f=1006 middle down S pos1 -> \e[<5;240;10M
+t=1000 f=1006 middle down A pos0 -> \e[<9;5;3M
+t=1000 f=1006 middle down A pos1 -> \e[<9;240;10M
+t=1000 f=1006 middle down C pos0 -> \e[<17;5;3M
+t=1000 f=1006 middle down C pos1 -> \e[<17;240;10M
+t=1000 f=1006 middle down SC pos0 -> \e[<21;5;3M
+t=1000 f=1006 middle down SC pos1 -> \e[<21;240;10M
+t=1000 f=1006 middle up - pos0 -> \e[<1;5;3m
+t=1000 f=1006 middle up - pos1 -> \e[<1;240;10m
+t=1000 f=1006 middle up S pos0 -> \e[<5;5;3m
+t=1000 f=1006 middle up S pos1 -> \e[<5;240;10m
+t=1000 f=1006 middle up A pos0 -> \e[<9;5;3m
+t=1000 f=1006 middle up A pos1 -> \e[<9;240;10m
+t=1000 f=1006 middle up C pos0 -> \e[<17;5;3m
+t=1000 f=1006 middle up C pos1 -> \e[<17;240;10m
+t=1000 f=1006 middle up SC pos0 -> \e[<21;5;3m
+t=1000 f=1006 middle up SC pos1 -> \e[<21;240;10m
+t=1000 f=1006 right down - pos0 -> \e[<2;5;3M
+t=1000 f=1006 right down - pos1 -> \e[<2;240;10M
+t=1000 f=1006 right down S pos0 -> \e[<6;5;3M
+t=1000 f=1006 right down S pos1 -> \e[<6;240;10M
+t=1000 f=1006 right down A pos0 -> \e[<10;5;3M
+t=1000 f=1006 right down A pos1 -> \e[<10;240;10M
+t=1000 f=1006 right down C pos0 -> \e[<18;5;3M
+t=1000 f=1006 right down C pos1 -> \e[<18;240;10M
+t=1000 f=1006 right down SC pos0 -> \e[<22;5;3M
+t=1000 f=1006 right down SC pos1 -> \e[<22;240;10M
+t=1000 f=1006 right up - pos0 -> \e[<2;5;3m
+t=1000 f=1006 right up - pos1 -> \e[<2;240;10m
+t=1000 f=1006 right up S pos0 -> \e[<6;5;3m
+t=1000 f=1006 right up S pos1 -> \e[<6;240;10m
+t=1000 f=1006 right up A pos0 -> \e[<10;5;3m
+t=1000 f=1006 right up A pos1 -> \e[<10;240;10m
+t=1000 f=1006 right up C pos0 -> \e[<18;5;3m
+t=1000 f=1006 right up C pos1 -> \e[<18;240;10m
+t=1000 f=1006 right up SC pos0 -> \e[<22;5;3m
+t=1000 f=1006 right up SC pos1 -> \e[<22;240;10m
+t=1000 f=1006 left-moved down - pos0 -> 
+t=1000 f=1006 left-moved down - pos1 -> 
+t=1000 f=1006 left-moved down S pos0 -> 
+t=1000 f=1006 left-moved down S pos1 -> 
+t=1000 f=1006 left-moved down A pos0 -> 
+t=1000 f=1006 left-moved down A pos1 -> 
+t=1000 f=1006 left-moved down C pos0 -> 
+t=1000 f=1006 left-moved down C pos1 -> 
+t=1000 f=1006 left-moved down SC pos0 -> 
+t=1000 f=1006 left-moved down SC pos1 -> 
+t=1000 f=1006 left-moved up - pos0 -> 
+t=1000 f=1006 left-moved up - pos1 -> 
+t=1000 f=1006 left-moved up S pos0 -> 
+t=1000 f=1006 left-moved up S pos1 -> 
+t=1000 f=1006 left-moved up A pos0 -> 
+t=1000 f=1006 left-moved up A pos1 -> 
+t=1000 f=1006 left-moved up C pos0 -> 
+t=1000 f=1006 left-moved up C pos1 -> 
+t=1000 f=1006 left-moved up SC pos0 -> 
+t=1000 f=1006 left-moved up SC pos1 -> 
+t=1000 f=1006 moved down - pos0 -> 
+t=1000 f=1006 moved down - pos1 -> 
+t=1000 f=1006 moved down S pos0 -> 
+t=1000 f=1006 moved down S pos1 -> 
+t=1000 f=1006 moved down A pos0 -> 
+t=1000 f=1006 moved down A pos1 -> 
+t=1000 f=1006 moved down C pos0 -> 
+t=1000 f=1006 moved down C pos1 -> 
+t=1000 f=1006 moved down SC pos0 -> 
+t=1000 f=1006 moved down SC pos1 -> 
+t=1000 f=1006 moved up - pos0 -> 
+t=1000 f=1006 moved up - pos1 -> 
+t=1000 f=1006 moved up S pos0 -> 
+t=1000 f=1006 moved up S pos1 -> 
+t=1000 f=1006 moved up A pos0 -> 
+t=1000 f=1006 moved up A pos1 -> 
+t=1000 f=1006 moved up C pos0 -> 
+t=1000 f=1006 moved up C pos1 -> 
+t=1000 f=1006 moved up SC pos0 -> 
+t=1000 f=1006 moved up SC pos1 -> 
+t=1000 f=1006 wheel-up down - pos0 -> \e[<64;5;3M
+t=1000 f=1006 wheel-up down - pos1 -> \e[<64;240;10M
+t=1000 f=1006 wheel-up down S pos0 -> \e[<68;5;3M
+t=1000 f=1006 wheel-up down S pos1 -> \e[<68;240;10M
+t=1000 f=1006 wheel-up down A pos0 -> \e[<72;5;3M
+t=1000 f=1006 wheel-up down A pos1 -> \e[<72;240;10M
+t=1000 f=1006 wheel-up down C pos0 -> \e[<80;5;3M
+t=1000 f=1006 wheel-up down C pos1 -> \e[<80;240;10M
+t=1000 f=1006 wheel-up down SC pos0 -> \e[<84;5;3M
+t=1000 f=1006 wheel-up down SC pos1 -> \e[<84;240;10M
+t=1000 f=1006 wheel-up up - pos0 -> \e[<64;5;3m
+t=1000 f=1006 wheel-up up - pos1 -> \e[<64;240;10m
+t=1000 f=1006 wheel-up up S pos0 -> \e[<68;5;3m
+t=1000 f=1006 wheel-up up S pos1 -> \e[<68;240;10m
+t=1000 f=1006 wheel-up up A pos0 -> \e[<72;5;3m
+t=1000 f=1006 wheel-up up A pos1 -> \e[<72;240;10m
+t=1000 f=1006 wheel-up up C pos0 -> \e[<80;5;3m
+t=1000 f=1006 wheel-up up C pos1 -> \e[<80;240;10m
+t=1000 f=1006 wheel-up up SC pos0 -> \e[<84;5;3m
+t=1000 f=1006 wheel-up up SC pos1 -> \e[<84;240;10m
+t=1000 f=1006 wheel-down down - pos0 -> \e[<65;5;3M
+t=1000 f=1006 wheel-down down - pos1 -> \e[<65;240;10M
+t=1000 f=1006 wheel-down down S pos0 -> \e[<69;5;3M
+t=1000 f=1006 wheel-down down S pos1 -> \e[<69;240;10M
+t=1000 f=1006 wheel-down down A pos0 -> \e[<73;5;3M
+t=1000 f=1006 wheel-down down A pos1 -> \e[<73;240;10M
+t=1000 f=1006 wheel-down down C pos0 -> \e[<81;5;3M
+t=1000 f=1006 wheel-down down C pos1 -> \e[<81;240;10M
+t=1000 f=1006 wheel-down down SC pos0 -> \e[<85;5;3M
+t=1000 f=1006 wheel-down down SC pos1 -> \e[<85;240;10M
+t=1000 f=1006 wheel-down up - pos0 -> \e[<65;5;3m
+t=1000 f=1006 wheel-down up - pos1 -> \e[<65;240;10m
+t=1000 f=1006 wheel-down up S pos0 -> \e[<69;5;3m
+t=1000 f=1006 wheel-down up S pos1 -> \e[<69;240;10m
+t=1000 f=1006 wheel-down up A pos0 -> \e[<73;5;3m
+t=1000 f=1006 wheel-down up A pos1 -> \e[<73;240;10m
+t=1000 f=1006 wheel-down up C pos0 -> \e[<81;5;3m
+t=1000 f=1006 wheel-down up C pos1 -> \e[<81;240;10m
+t=1000 f=1006 wheel-down up SC pos0 -> \e[<85;5;3m
+t=1000 f=1006 wheel-down up SC pos1 -> \e[<85;240;10m
+t=1000 f=1006 wheel-left down - pos0 -> \e[<66;5;3M
+t=1000 f=1006 wheel-left down - pos1 -> \e[<66;240;10M
+t=1000 f=1006 wheel-left down S pos0 -> \e[<70;5;3M
+t=1000 f=1006 wheel-left down S pos1 -> \e[<70;240;10M
+t=1000 f=1006 wheel-left down A pos0 -> \e[<74;5;3M
+t=1000 f=1006 wheel-left down A pos1 -> \e[<74;240;10M
+t=1000 f=1006 wheel-left down C pos0 -> \e[<82;5;3M
+t=1000 f=1006 wheel-left down C pos1 -> \e[<82;240;10M
+t=1000 f=1006 wheel-left down SC pos0 -> \e[<86;5;3M
+t=1000 f=1006 wheel-left down SC pos1 -> \e[<86;240;10M
+t=1000 f=1006 wheel-left up - pos0 -> \e[<66;5;3m
+t=1000 f=1006 wheel-left up - pos1 -> \e[<66;240;10m
+t=1000 f=1006 wheel-left up S pos0 -> \e[<70;5;3m
+t=1000 f=1006 wheel-left up S pos1 -> \e[<70;240;10m
+t=1000 f=1006 wheel-left up A pos0 -> \e[<74;5;3m
+t=1000 f=1006 wheel-left up A pos1 -> \e[<74;240;10m
+t=1000 f=1006 wheel-left up C pos0 -> \e[<82;5;3m
+t=1000 f=1006 wheel-left up C pos1 -> \e[<82;240;10m
+t=1000 f=1006 wheel-left up SC pos0 -> \e[<86;5;3m
+t=1000 f=1006 wheel-left up SC pos1 -> \e[<86;240;10m
+t=1000 f=1006 wheel-right down - pos0 -> \e[<67;5;3M
+t=1000 f=1006 wheel-right down - pos1 -> \e[<67;240;10M
+t=1000 f=1006 wheel-right down S pos0 -> \e[<71;5;3M
+t=1000 f=1006 wheel-right down S pos1 -> \e[<71;240;10M
+t=1000 f=1006 wheel-right down A pos0 -> \e[<75;5;3M
+t=1000 f=1006 wheel-right down A pos1 -> \e[<75;240;10M
+t=1000 f=1006 wheel-right down C pos0 -> \e[<83;5;3M
+t=1000 f=1006 wheel-right down C pos1 -> \e[<83;240;10M
+t=1000 f=1006 wheel-right down SC pos0 -> \e[<87;5;3M
+t=1000 f=1006 wheel-right down SC pos1 -> \e[<87;240;10M
+t=1000 f=1006 wheel-right up - pos0 -> \e[<67;5;3m
+t=1000 f=1006 wheel-right up - pos1 -> \e[<67;240;10m
+t=1000 f=1006 wheel-right up S pos0 -> \e[<71;5;3m
+t=1000 f=1006 wheel-right up S pos1 -> \e[<71;240;10m
+t=1000 f=1006 wheel-right up A pos0 -> \e[<75;5;3m
+t=1000 f=1006 wheel-right up A pos1 -> \e[<75;240;10m
+t=1000 f=1006 wheel-right up C pos0 -> \e[<83;5;3m
+t=1000 f=1006 wheel-right up C pos1 -> \e[<83;240;10m
+t=1000 f=1006 wheel-right up SC pos0 -> \e[<87;5;3m
+t=1000 f=1006 wheel-right up SC pos1 -> \e[<87;240;10m
+t=1000 f=1006+1016 left down - pos0 -> \e[<0;60;40M
+t=1000 f=1006+1016 left down - pos1 -> \e[<0;3111;150M
+t=1000 f=1006+1016 left down S pos0 -> \e[<4;60;40M
+t=1000 f=1006+1016 left down S pos1 -> \e[<4;3111;150M
+t=1000 f=1006+1016 left down A pos0 -> \e[<8;60;40M
+t=1000 f=1006+1016 left down A pos1 -> \e[<8;3111;150M
+t=1000 f=1006+1016 left down C pos0 -> \e[<16;60;40M
+t=1000 f=1006+1016 left down C pos1 -> \e[<16;3111;150M
+t=1000 f=1006+1016 left down SC pos0 -> \e[<20;60;40M
+t=1000 f=1006+1016 left down SC pos1 -> \e[<20;3111;150M
+t=1000 f=1006+1016 left up - pos0 -> \e[<0;60;40m
+t=1000 f=1006+1016 left up - pos1 -> \e[<0;3111;150m
+t=1000 f=1006+1016 left up S pos0 -> \e[<4;60;40m
+t=1000 f=1006+1016 left up S pos1 -> \e[<4;3111;150m
+t=1000 f=1006+1016 left up A pos0 -> \e[<8;60;40m
+t=1000 f=1006+1016 left up A pos1 -> \e[<8;3111;150m
+t=1000 f=1006+1016 left up C pos0 -> \e[<16;60;40m
+t=1000 f=1006+1016 left up C pos1 -> \e[<16;3111;150m
+t=1000 f=1006+1016 left up SC pos0 -> \e[<20;60;40m
+t=1000 f=1006+1016 left up SC pos1 -> \e[<20;3111;150m
+t=1000 f=1006+1016 middle down - pos0 -> \e[<1;60;40M
+t=1000 f=1006+1016 middle down - pos1 -> \e[<1;3111;150M
+t=1000 f=1006+1016 middle down S pos0 -> \e[<5;60;40M
+t=1000 f=1006+1016 middle down S pos1 -> \e[<5;3111;150M
+t=1000 f=1006+1016 middle down A pos0 -> \e[<9;60;40M
+t=1000 f=1006+1016 middle down A pos1 -> \e[<9;3111;150M
+t=1000 f=1006+1016 middle down C pos0 -> \e[<17;60;40M
+t=1000 f=1006+1016 middle down C pos1 -> \e[<17;3111;150M
+t=1000 f=1006+1016 middle down SC pos0 -> \e[<21;60;40M
+t=1000 f=1006+1016 middle down SC pos1 -> \e[<21;3111;150M
+t=1000 f=1006+1016 middle up - pos0 -> \e[<1;60;40m
+t=1000 f=1006+1016 middle up - pos1 -> \e[<1;3111;150m
+t=1000 f=1006+1016 middle up S pos0 -> \e[<5;60;40m
+t=1000 f=1006+1016 middle up S pos1 -> \e[<5;3111;150m
+t=1000 f=1006+1016 middle up A pos0 -> \e[<9;60;40m
+t=1000 f=1006+1016 middle up A pos1 -> \e[<9;3111;150m
+t=1000 f=1006+1016 middle up C pos0 -> \e[<17;60;40m
+t=1000 f=1006+1016 middle up C pos1 -> \e[<17;3111;150m
+t=1000 f=1006+1016 middle up SC pos0 -> \e[<21;60;40m
+t=1000 f=1006+1016 middle up SC pos1 -> \e[<21;3111;150m
+t=1000 f=1006+1016 right down - pos0 -> \e[<2;60;40M
+t=1000 f=1006+1016 right down - pos1 -> \e[<2;3111;150M
+t=1000 f=1006+1016 right down S pos0 -> \e[<6;60;40M
+t=1000 f=1006+1016 right down S pos1 -> \e[<6;3111;150M
+t=1000 f=1006+1016 right down A pos0 -> \e[<10;60;40M
+t=1000 f=1006+1016 right down A pos1 -> \e[<10;3111;150M
+t=1000 f=1006+1016 right down C pos0 -> \e[<18;60;40M
+t=1000 f=1006+1016 right down C pos1 -> \e[<18;3111;150M
+t=1000 f=1006+1016 right down SC pos0 -> \e[<22;60;40M
+t=1000 f=1006+1016 right down SC pos1 -> \e[<22;3111;150M
+t=1000 f=1006+1016 right up - pos0 -> \e[<2;60;40m
+t=1000 f=1006+1016 right up - pos1 -> \e[<2;3111;150m
+t=1000 f=1006+1016 right up S pos0 -> \e[<6;60;40m
+t=1000 f=1006+1016 right up S pos1 -> \e[<6;3111;150m
+t=1000 f=1006+1016 right up A pos0 -> \e[<10;60;40m
+t=1000 f=1006+1016 right up A pos1 -> \e[<10;3111;150m
+t=1000 f=1006+1016 right up C pos0 -> \e[<18;60;40m
+t=1000 f=1006+1016 right up C pos1 -> \e[<18;3111;150m
+t=1000 f=1006+1016 right up SC pos0 -> \e[<22;60;40m
+t=1000 f=1006+1016 right up SC pos1 -> \e[<22;3111;150m
+t=1000 f=1006+1016 left-moved down - pos0 -> 
+t=1000 f=1006+1016 left-moved down - pos1 -> 
+t=1000 f=1006+1016 left-moved down S pos0 -> 
+t=1000 f=1006+1016 left-moved down S pos1 -> 
+t=1000 f=1006+1016 left-moved down A pos0 -> 
+t=1000 f=1006+1016 left-moved down A pos1 -> 
+t=1000 f=1006+1016 left-moved down C pos0 -> 
+t=1000 f=1006+1016 left-moved down C pos1 -> 
+t=1000 f=1006+1016 left-moved down SC pos0 -> 
+t=1000 f=1006+1016 left-moved down SC pos1 -> 
+t=1000 f=1006+1016 left-moved up - pos0 -> 
+t=1000 f=1006+1016 left-moved up - pos1 -> 
+t=1000 f=1006+1016 left-moved up S pos0 -> 
+t=1000 f=1006+1016 left-moved up S pos1 -> 
+t=1000 f=1006+1016 left-moved up A pos0 -> 
+t=1000 f=1006+1016 left-moved up A pos1 -> 
+t=1000 f=1006+1016 left-moved up C pos0 -> 
+t=1000 f=1006+1016 left-moved up C pos1 -> 
+t=1000 f=1006+1016 left-moved up SC pos0 -> 
+t=1000 f=1006+1016 left-moved up SC pos1 -> 
+t=1000 f=1006+1016 moved down - pos0 -> 
+t=1000 f=1006+1016 moved down - pos1 -> 
+t=1000 f=1006+1016 moved down S pos0 -> 
+t=1000 f=1006+1016 moved down S pos1 -> 
+t=1000 f=1006+1016 moved down A pos0 -> 
+t=1000 f=1006+1016 moved down A pos1 -> 
+t=1000 f=1006+1016 moved down C pos0 -> 
+t=1000 f=1006+1016 moved down C pos1 -> 
+t=1000 f=1006+1016 moved down SC pos0 -> 
+t=1000 f=1006+1016 moved down SC pos1 -> 
+t=1000 f=1006+1016 moved up - pos0 -> 
+t=1000 f=1006+1016 moved up - pos1 -> 
+t=1000 f=1006+1016 moved up S pos0 -> 
+t=1000 f=1006+1016 moved up S pos1 -> 
+t=1000 f=1006+1016 moved up A pos0 -> 
+t=1000 f=1006+1016 moved up A pos1 -> 
+t=1000 f=1006+1016 moved up C pos0 -> 
+t=1000 f=1006+1016 moved up C pos1 -> 
+t=1000 f=1006+1016 moved up SC pos0 -> 
+t=1000 f=1006+1016 moved up SC pos1 -> 
+t=1000 f=1006+1016 wheel-up down - pos0 -> \e[<64;60;40M
+t=1000 f=1006+1016 wheel-up down - pos1 -> \e[<64;3111;150M
+t=1000 f=1006+1016 wheel-up down S pos0 -> \e[<68;60;40M
+t=1000 f=1006+1016 wheel-up down S pos1 -> \e[<68;3111;150M
+t=1000 f=1006+1016 wheel-up down A pos0 -> \e[<72;60;40M
+t=1000 f=1006+1016 wheel-up down A pos1 -> \e[<72;3111;150M
+t=1000 f=1006+1016 wheel-up down C pos0 -> \e[<80;60;40M
+t=1000 f=1006+1016 wheel-up down C pos1 -> \e[<80;3111;150M
+t=1000 f=1006+1016 wheel-up down SC pos0 -> \e[<84;60;40M
+t=1000 f=1006+1016 wheel-up down SC pos1 -> \e[<84;3111;150M
+t=1000 f=1006+1016 wheel-up up - pos0 -> \e[<64;60;40m
+t=1000 f=1006+1016 wheel-up up - pos1 -> \e[<64;3111;150m
+t=1000 f=1006+1016 wheel-up up S pos0 -> \e[<68;60;40m
+t=1000 f=1006+1016 wheel-up up S pos1 -> \e[<68;3111;150m
+t=1000 f=1006+1016 wheel-up up A pos0 -> \e[<72;60;40m
+t=1000 f=1006+1016 wheel-up up A pos1 -> \e[<72;3111;150m
+t=1000 f=1006+1016 wheel-up up C pos0 -> \e[<80;60;40m
+t=1000 f=1006+1016 wheel-up up C pos1 -> \e[<80;3111;150m
+t=1000 f=1006+1016 wheel-up up SC pos0 -> \e[<84;60;40m
+t=1000 f=1006+1016 wheel-up up SC pos1 -> \e[<84;3111;150m
+t=1000 f=1006+1016 wheel-down down - pos0 -> \e[<65;60;40M
+t=1000 f=1006+1016 wheel-down down - pos1 -> \e[<65;3111;150M
+t=1000 f=1006+1016 wheel-down down S pos0 -> \e[<69;60;40M
+t=1000 f=1006+1016 wheel-down down S pos1 -> \e[<69;3111;150M
+t=1000 f=1006+1016 wheel-down down A pos0 -> \e[<73;60;40M
+t=1000 f=1006+1016 wheel-down down A pos1 -> \e[<73;3111;150M
+t=1000 f=1006+1016 wheel-down down C pos0 -> \e[<81;60;40M
+t=1000 f=1006+1016 wheel-down down C pos1 -> \e[<81;3111;150M
+t=1000 f=1006+1016 wheel-down down SC pos0 -> \e[<85;60;40M
+t=1000 f=1006+1016 wheel-down down SC pos1 -> \e[<85;3111;150M
+t=1000 f=1006+1016 wheel-down up - pos0 -> \e[<65;60;40m
+t=1000 f=1006+1016 wheel-down up - pos1 -> \e[<65;3111;150m
+t=1000 f=1006+1016 wheel-down up S pos0 -> \e[<69;60;40m
+t=1000 f=1006+1016 wheel-down up S pos1 -> \e[<69;3111;150m
+t=1000 f=1006+1016 wheel-down up A pos0 -> \e[<73;60;40m
+t=1000 f=1006+1016 wheel-down up A pos1 -> \e[<73;3111;150m
+t=1000 f=1006+1016 wheel-down up C pos0 -> \e[<81;60;40m
+t=1000 f=1006+1016 wheel-down up C pos1 -> \e[<81;3111;150m
+t=1000 f=1006+1016 wheel-down up SC pos0 -> \e[<85;60;40m
+t=1000 f=1006+1016 wheel-down up SC pos1 -> \e[<85;3111;150m
+t=1000 f=1006+1016 wheel-left down - pos0 -> \e[<66;60;40M
+t=1000 f=1006+1016 wheel-left down - pos1 -> \e[<66;3111;150M
+t=1000 f=1006+1016 wheel-left down S pos0 -> \e[<70;60;40M
+t=1000 f=1006+1016 wheel-left down S pos1 -> \e[<70;3111;150M
+t=1000 f=1006+1016 wheel-left down A pos0 -> \e[<74;60;40M
+t=1000 f=1006+1016 wheel-left down A pos1 -> \e[<74;3111;150M
+t=1000 f=1006+1016 wheel-left down C pos0 -> \e[<82;60;40M
+t=1000 f=1006+1016 wheel-left down C pos1 -> \e[<82;3111;150M
+t=1000 f=1006+1016 wheel-left down SC pos0 -> \e[<86;60;40M
+t=1000 f=1006+1016 wheel-left down SC pos1 -> \e[<86;3111;150M
+t=1000 f=1006+1016 wheel-left up - pos0 -> \e[<66;60;40m
+t=1000 f=1006+1016 wheel-left up - pos1 -> \e[<66;3111;150m
+t=1000 f=1006+1016 wheel-left up S pos0 -> \e[<70;60;40m
+t=1000 f=1006+1016 wheel-left up S pos1 -> \e[<70;3111;150m
+t=1000 f=1006+1016 wheel-left up A pos0 -> \e[<74;60;40m
+t=1000 f=1006+1016 wheel-left up A pos1 -> \e[<74;3111;150m
+t=1000 f=1006+1016 wheel-left up C pos0 -> \e[<82;60;40m
+t=1000 f=1006+1016 wheel-left up C pos1 -> \e[<82;3111;150m
+t=1000 f=1006+1016 wheel-left up SC pos0 -> \e[<86;60;40m
+t=1000 f=1006+1016 wheel-left up SC pos1 -> \e[<86;3111;150m
+t=1000 f=1006+1016 wheel-right down - pos0 -> \e[<67;60;40M
+t=1000 f=1006+1016 wheel-right down - pos1 -> \e[<67;3111;150M
+t=1000 f=1006+1016 wheel-right down S pos0 -> \e[<71;60;40M
+t=1000 f=1006+1016 wheel-right down S pos1 -> \e[<71;3111;150M
+t=1000 f=1006+1016 wheel-right down A pos0 -> \e[<75;60;40M
+t=1000 f=1006+1016 wheel-right down A pos1 -> \e[<75;3111;150M
+t=1000 f=1006+1016 wheel-right down C pos0 -> \e[<83;60;40M
+t=1000 f=1006+1016 wheel-right down C pos1 -> \e[<83;3111;150M
+t=1000 f=1006+1016 wheel-right down SC pos0 -> \e[<87;60;40M
+t=1000 f=1006+1016 wheel-right down SC pos1 -> \e[<87;3111;150M
+t=1000 f=1006+1016 wheel-right up - pos0 -> \e[<67;60;40m
+t=1000 f=1006+1016 wheel-right up - pos1 -> \e[<67;3111;150m
+t=1000 f=1006+1016 wheel-right up S pos0 -> \e[<71;60;40m
+t=1000 f=1006+1016 wheel-right up S pos1 -> \e[<71;3111;150m
+t=1000 f=1006+1016 wheel-right up A pos0 -> \e[<75;60;40m
+t=1000 f=1006+1016 wheel-right up A pos1 -> \e[<75;3111;150m
+t=1000 f=1006+1016 wheel-right up C pos0 -> \e[<83;60;40m
+t=1000 f=1006+1016 wheel-right up C pos1 -> \e[<83;3111;150m
+t=1000 f=1006+1016 wheel-right up SC pos0 -> \e[<87;60;40m
+t=1000 f=1006+1016 wheel-right up SC pos1 -> \e[<87;3111;150m
+t=1002 f=none left down - pos0 -> \e[M %#
+t=1002 f=none left down - pos1 -> 
+t=1002 f=none left down S pos0 -> \e[M$%#
+t=1002 f=none left down S pos1 -> 
+t=1002 f=none left down A pos0 -> \e[M(%#
+t=1002 f=none left down A pos1 -> 
+t=1002 f=none left down C pos0 -> \e[M0%#
+t=1002 f=none left down C pos1 -> 
+t=1002 f=none left down SC pos0 -> \e[M4%#
+t=1002 f=none left down SC pos1 -> 
+t=1002 f=none left up - pos0 -> \e[M#%#
+t=1002 f=none left up - pos1 -> 
+t=1002 f=none left up S pos0 -> \e[M'%#
+t=1002 f=none left up S pos1 -> 
+t=1002 f=none left up A pos0 -> \e[M+%#
+t=1002 f=none left up A pos1 -> 
+t=1002 f=none left up C pos0 -> \e[M3%#
+t=1002 f=none left up C pos1 -> 
+t=1002 f=none left up SC pos0 -> \e[M7%#
+t=1002 f=none left up SC pos1 -> 
+t=1002 f=none middle down - pos0 -> \e[M!%#
+t=1002 f=none middle down - pos1 -> 
+t=1002 f=none middle down S pos0 -> \e[M%%#
+t=1002 f=none middle down S pos1 -> 
+t=1002 f=none middle down A pos0 -> \e[M)%#
+t=1002 f=none middle down A pos1 -> 
+t=1002 f=none middle down C pos0 -> \e[M1%#
+t=1002 f=none middle down C pos1 -> 
+t=1002 f=none middle down SC pos0 -> \e[M5%#
+t=1002 f=none middle down SC pos1 -> 
+t=1002 f=none middle up - pos0 -> \e[M#%#
+t=1002 f=none middle up - pos1 -> 
+t=1002 f=none middle up S pos0 -> \e[M'%#
+t=1002 f=none middle up S pos1 -> 
+t=1002 f=none middle up A pos0 -> \e[M+%#
+t=1002 f=none middle up A pos1 -> 
+t=1002 f=none middle up C pos0 -> \e[M3%#
+t=1002 f=none middle up C pos1 -> 
+t=1002 f=none middle up SC pos0 -> \e[M7%#
+t=1002 f=none middle up SC pos1 -> 
+t=1002 f=none right down - pos0 -> \e[M"%#
+t=1002 f=none right down - pos1 -> 
+t=1002 f=none right down S pos0 -> \e[M&%#
+t=1002 f=none right down S pos1 -> 
+t=1002 f=none right down A pos0 -> \e[M*%#
+t=1002 f=none right down A pos1 -> 
+t=1002 f=none right down C pos0 -> \e[M2%#
+t=1002 f=none right down C pos1 -> 
+t=1002 f=none right down SC pos0 -> \e[M6%#
+t=1002 f=none right down SC pos1 -> 
+t=1002 f=none right up - pos0 -> \e[M#%#
+t=1002 f=none right up - pos1 -> 
+t=1002 f=none right up S pos0 -> \e[M'%#
+t=1002 f=none right up S pos1 -> 
+t=1002 f=none right up A pos0 -> \e[M+%#
+t=1002 f=none right up A pos1 -> 
+t=1002 f=none right up C pos0 -> \e[M3%#
+t=1002 f=none right up C pos1 -> 
+t=1002 f=none right up SC pos0 -> \e[M7%#
+t=1002 f=none right up SC pos1 -> 
+t=1002 f=none left-moved down - pos0 -> \e[M@%#
+t=1002 f=none left-moved down - pos1 -> 
+t=1002 f=none left-moved down S pos0 -> \e[MD%#
+t=1002 f=none left-moved down S pos1 -> 
+t=1002 f=none left-moved down A pos0 -> \e[MH%#
+t=1002 f=none left-moved down A pos1 -> 
+t=1002 f=none left-moved down C pos0 -> \e[MP%#
+t=1002 f=none left-moved down C pos1 -> 
+t=1002 f=none left-moved down SC pos0 -> \e[MT%#
+t=1002 f=none left-moved down SC pos1 -> 
+t=1002 f=none left-moved up - pos0 -> \e[M#%#
+t=1002 f=none left-moved up - pos1 -> 
+t=1002 f=none left-moved up S pos0 -> \e[M'%#
+t=1002 f=none left-moved up S pos1 -> 
+t=1002 f=none left-moved up A pos0 -> \e[M+%#
+t=1002 f=none left-moved up A pos1 -> 
+t=1002 f=none left-moved up C pos0 -> \e[M3%#
+t=1002 f=none left-moved up C pos1 -> 
+t=1002 f=none left-moved up SC pos0 -> \e[M7%#
+t=1002 f=none left-moved up SC pos1 -> 
+t=1002 f=none moved down - pos0 -> 
+t=1002 f=none moved down - pos1 -> 
+t=1002 f=none moved down S pos0 -> 
+t=1002 f=none moved down S pos1 -> 
+t=1002 f=none moved down A pos0 -> 
+t=1002 f=none moved down A pos1 -> 
+t=1002 f=none moved down C pos0 -> 
+t=1002 f=none moved down C pos1 -> 
+t=1002 f=none moved down SC pos0 -> 
+t=1002 f=none moved down SC pos1 -> 
+t=1002 f=none moved up - pos0 -> 
+t=1002 f=none moved up - pos1 -> 
+t=1002 f=none moved up S pos0 -> 
+t=1002 f=none moved up S pos1 -> 
+t=1002 f=none moved up A pos0 -> 
+t=1002 f=none moved up A pos1 -> 
+t=1002 f=none moved up C pos0 -> 
+t=1002 f=none moved up C pos1 -> 
+t=1002 f=none moved up SC pos0 -> 
+t=1002 f=none moved up SC pos1 -> 
+t=1002 f=none wheel-up down - pos0 -> \e[M`%#
+t=1002 f=none wheel-up down - pos1 -> 
+t=1002 f=none wheel-up down S pos0 -> \e[Md%#
+t=1002 f=none wheel-up down S pos1 -> 
+t=1002 f=none wheel-up down A pos0 -> \e[Mh%#
+t=1002 f=none wheel-up down A pos1 -> 
+t=1002 f=none wheel-up down C pos0 -> \e[Mp%#
+t=1002 f=none wheel-up down C pos1 -> 
+t=1002 f=none wheel-up down SC pos0 -> \e[Mt%#
+t=1002 f=none wheel-up down SC pos1 -> 
+t=1002 f=none wheel-up up - pos0 -> \e[M#%#
+t=1002 f=none wheel-up up - pos1 -> 
+t=1002 f=none wheel-up up S pos0 -> \e[M'%#
+t=1002 f=none wheel-up up S pos1 -> 
+t=1002 f=none wheel-up up A pos0 -> \e[M+%#
+t=1002 f=none wheel-up up A pos1 -> 
+t=1002 f=none wheel-up up C pos0 -> \e[M3%#
+t=1002 f=none wheel-up up C pos1 -> 
+t=1002 f=none wheel-up up SC pos0 -> \e[M7%#
+t=1002 f=none wheel-up up SC pos1 -> 
+t=1002 f=none wheel-down down - pos0 -> \e[Ma%#
+t=1002 f=none wheel-down down - pos1 -> 
+t=1002 f=none wheel-down down S pos0 -> \e[Me%#
+t=1002 f=none wheel-down down S pos1 -> 
+t=1002 f=none wheel-down down A pos0 -> \e[Mi%#
+t=1002 f=none wheel-down down A pos1 -> 
+t=1002 f=none wheel-down down C pos0 -> \e[Mq%#
+t=1002 f=none wheel-down down C pos1 -> 
+t=1002 f=none wheel-down down SC pos0 -> \e[Mu%#
+t=1002 f=none wheel-down down SC pos1 -> 
+t=1002 f=none wheel-down up - pos0 -> \e[M#%#
+t=1002 f=none wheel-down up - pos1 -> 
+t=1002 f=none wheel-down up S pos0 -> \e[M'%#
+t=1002 f=none wheel-down up S pos1 -> 
+t=1002 f=none wheel-down up A pos0 -> \e[M+%#
+t=1002 f=none wheel-down up A pos1 -> 
+t=1002 f=none wheel-down up C pos0 -> \e[M3%#
+t=1002 f=none wheel-down up C pos1 -> 
+t=1002 f=none wheel-down up SC pos0 -> \e[M7%#
+t=1002 f=none wheel-down up SC pos1 -> 
+t=1002 f=none wheel-left down - pos0 -> \e[Mb%#
+t=1002 f=none wheel-left down - pos1 -> 
+t=1002 f=none wheel-left down S pos0 -> \e[Mf%#
+t=1002 f=none wheel-left down S pos1 -> 
+t=1002 f=none wheel-left down A pos0 -> \e[Mj%#
+t=1002 f=none wheel-left down A pos1 -> 
+t=1002 f=none wheel-left down C pos0 -> \e[Mr%#
+t=1002 f=none wheel-left down C pos1 -> 
+t=1002 f=none wheel-left down SC pos0 -> \e[Mv%#
+t=1002 f=none wheel-left down SC pos1 -> 
+t=1002 f=none wheel-left up - pos0 -> \e[M#%#
+t=1002 f=none wheel-left up - pos1 -> 
+t=1002 f=none wheel-left up S pos0 -> \e[M'%#
+t=1002 f=none wheel-left up S pos1 -> 
+t=1002 f=none wheel-left up A pos0 -> \e[M+%#
+t=1002 f=none wheel-left up A pos1 -> 
+t=1002 f=none wheel-left up C pos0 -> \e[M3%#
+t=1002 f=none wheel-left up C pos1 -> 
+t=1002 f=none wheel-left up SC pos0 -> \e[M7%#
+t=1002 f=none wheel-left up SC pos1 -> 
+t=1002 f=none wheel-right down - pos0 -> \e[Mc%#
+t=1002 f=none wheel-right down - pos1 -> 
+t=1002 f=none wheel-right down S pos0 -> \e[Mg%#
+t=1002 f=none wheel-right down S pos1 -> 
+t=1002 f=none wheel-right down A pos0 -> \e[Mk%#
+t=1002 f=none wheel-right down A pos1 -> 
+t=1002 f=none wheel-right down C pos0 -> \e[Ms%#
+t=1002 f=none wheel-right down C pos1 -> 
+t=1002 f=none wheel-right down SC pos0 -> \e[Mw%#
+t=1002 f=none wheel-right down SC pos1 -> 
+t=1002 f=none wheel-right up - pos0 -> \e[M#%#
+t=1002 f=none wheel-right up - pos1 -> 
+t=1002 f=none wheel-right up S pos0 -> \e[M'%#
+t=1002 f=none wheel-right up S pos1 -> 
+t=1002 f=none wheel-right up A pos0 -> \e[M+%#
+t=1002 f=none wheel-right up A pos1 -> 
+t=1002 f=none wheel-right up C pos0 -> \e[M3%#
+t=1002 f=none wheel-right up C pos1 -> 
+t=1002 f=none wheel-right up SC pos0 -> \e[M7%#
+t=1002 f=none wheel-right up SC pos1 -> 
+t=1002 f=1006 left down - pos0 -> \e[<0;5;3M
+t=1002 f=1006 left down - pos1 -> \e[<0;240;10M
+t=1002 f=1006 left down S pos0 -> \e[<4;5;3M
+t=1002 f=1006 left down S pos1 -> \e[<4;240;10M
+t=1002 f=1006 left down A pos0 -> \e[<8;5;3M
+t=1002 f=1006 left down A pos1 -> \e[<8;240;10M
+t=1002 f=1006 left down C pos0 -> \e[<16;5;3M
+t=1002 f=1006 left down C pos1 -> \e[<16;240;10M
+t=1002 f=1006 left down SC pos0 -> \e[<20;5;3M
+t=1002 f=1006 left down SC pos1 -> \e[<20;240;10M
+t=1002 f=1006 left up - pos0 -> \e[<0;5;3m
+t=1002 f=1006 left up - pos1 -> \e[<0;240;10m
+t=1002 f=1006 left up S pos0 -> \e[<4;5;3m
+t=1002 f=1006 left up S pos1 -> \e[<4;240;10m
+t=1002 f=1006 left up A pos0 -> \e[<8;5;3m
+t=1002 f=1006 left up A pos1 -> \e[<8;240;10m
+t=1002 f=1006 left up C pos0 -> \e[<16;5;3m
+t=1002 f=1006 left up C pos1 -> \e[<16;240;10m
+t=1002 f=1006 left up SC pos0 -> \e[<20;5;3m
+t=1002 f=1006 left up SC pos1 -> \e[<20;240;10m
+t=1002 f=1006 middle down - pos0 -> \e[<1;5;3M
+t=1002 f=1006 middle down - pos1 -> \e[<1;240;10M
+t=1002 f=1006 middle down S pos0 -> \e[<5;5;3M
+t=1002 f=1006 middle down S pos1 -> \e[<5;240;10M
+t=1002 f=1006 middle down A pos0 -> \e[<9;5;3M
+t=1002 f=1006 middle down A pos1 -> \e[<9;240;10M
+t=1002 f=1006 middle down C pos0 -> \e[<17;5;3M
+t=1002 f=1006 middle down C pos1 -> \e[<17;240;10M
+t=1002 f=1006 middle down SC pos0 -> \e[<21;5;3M
+t=1002 f=1006 middle down SC pos1 -> \e[<21;240;10M
+t=1002 f=1006 middle up - pos0 -> \e[<1;5;3m
+t=1002 f=1006 middle up - pos1 -> \e[<1;240;10m
+t=1002 f=1006 middle up S pos0 -> \e[<5;5;3m
+t=1002 f=1006 middle up S pos1 -> \e[<5;240;10m
+t=1002 f=1006 middle up A pos0 -> \e[<9;5;3m
+t=1002 f=1006 middle up A pos1 -> \e[<9;240;10m
+t=1002 f=1006 middle up C pos0 -> \e[<17;5;3m
+t=1002 f=1006 middle up C pos1 -> \e[<17;240;10m
+t=1002 f=1006 middle up SC pos0 -> \e[<21;5;3m
+t=1002 f=1006 middle up SC pos1 -> \e[<21;240;10m
+t=1002 f=1006 right down - pos0 -> \e[<2;5;3M
+t=1002 f=1006 right down - pos1 -> \e[<2;240;10M
+t=1002 f=1006 right down S pos0 -> \e[<6;5;3M
+t=1002 f=1006 right down S pos1 -> \e[<6;240;10M
+t=1002 f=1006 right down A pos0 -> \e[<10;5;3M
+t=1002 f=1006 right down A pos1 -> \e[<10;240;10M
+t=1002 f=1006 right down C pos0 -> \e[<18;5;3M
+t=1002 f=1006 right down C pos1 -> \e[<18;240;10M
+t=1002 f=1006 right down SC pos0 -> \e[<22;5;3M
+t=1002 f=1006 right down SC pos1 -> \e[<22;240;10M
+t=1002 f=1006 right up - pos0 -> \e[<2;5;3m
+t=1002 f=1006 right up - pos1 -> \e[<2;240;10m
+t=1002 f=1006 right up S pos0 -> \e[<6;5;3m
+t=1002 f=1006 right up S pos1 -> \e[<6;240;10m
+t=1002 f=1006 right up A pos0 -> \e[<10;5;3m
+t=1002 f=1006 right up A pos1 -> \e[<10;240;10m
+t=1002 f=1006 right up C pos0 -> \e[<18;5;3m
+t=1002 f=1006 right up C pos1 -> \e[<18;240;10m
+t=1002 f=1006 right up SC pos0 -> \e[<22;5;3m
+t=1002 f=1006 right up SC pos1 -> \e[<22;240;10m
+t=1002 f=1006 left-moved down - pos0 -> \e[<32;5;3M
+t=1002 f=1006 left-moved down - pos1 -> \e[<32;240;10M
+t=1002 f=1006 left-moved down S pos0 -> \e[<36;5;3M
+t=1002 f=1006 left-moved down S pos1 -> \e[<36;240;10M
+t=1002 f=1006 left-moved down A pos0 -> \e[<40;5;3M
+t=1002 f=1006 left-moved down A pos1 -> \e[<40;240;10M
+t=1002 f=1006 left-moved down C pos0 -> \e[<48;5;3M
+t=1002 f=1006 left-moved down C pos1 -> \e[<48;240;10M
+t=1002 f=1006 left-moved down SC pos0 -> \e[<52;5;3M
+t=1002 f=1006 left-moved down SC pos1 -> \e[<52;240;10M
+t=1002 f=1006 left-moved up - pos0 -> \e[<32;5;3m
+t=1002 f=1006 left-moved up - pos1 -> \e[<32;240;10m
+t=1002 f=1006 left-moved up S pos0 -> \e[<36;5;3m
+t=1002 f=1006 left-moved up S pos1 -> \e[<36;240;10m
+t=1002 f=1006 left-moved up A pos0 -> \e[<40;5;3m
+t=1002 f=1006 left-moved up A pos1 -> \e[<40;240;10m
+t=1002 f=1006 left-moved up C pos0 -> \e[<48;5;3m
+t=1002 f=1006 left-moved up C pos1 -> \e[<48;240;10m
+t=1002 f=1006 left-moved up SC pos0 -> \e[<52;5;3m
+t=1002 f=1006 left-moved up SC pos1 -> \e[<52;240;10m
+t=1002 f=1006 moved down - pos0 -> 
+t=1002 f=1006 moved down - pos1 -> 
+t=1002 f=1006 moved down S pos0 -> 
+t=1002 f=1006 moved down S pos1 -> 
+t=1002 f=1006 moved down A pos0 -> 
+t=1002 f=1006 moved down A pos1 -> 
+t=1002 f=1006 moved down C pos0 -> 
+t=1002 f=1006 moved down C pos1 -> 
+t=1002 f=1006 moved down SC pos0 -> 
+t=1002 f=1006 moved down SC pos1 -> 
+t=1002 f=1006 moved up - pos0 -> 
+t=1002 f=1006 moved up - pos1 -> 
+t=1002 f=1006 moved up S pos0 -> 
+t=1002 f=1006 moved up S pos1 -> 
+t=1002 f=1006 moved up A pos0 -> 
+t=1002 f=1006 moved up A pos1 -> 
+t=1002 f=1006 moved up C pos0 -> 
+t=1002 f=1006 moved up C pos1 -> 
+t=1002 f=1006 moved up SC pos0 -> 
+t=1002 f=1006 moved up SC pos1 -> 
+t=1002 f=1006 wheel-up down - pos0 -> \e[<64;5;3M
+t=1002 f=1006 wheel-up down - pos1 -> \e[<64;240;10M
+t=1002 f=1006 wheel-up down S pos0 -> \e[<68;5;3M
+t=1002 f=1006 wheel-up down S pos1 -> \e[<68;240;10M
+t=1002 f=1006 wheel-up down A pos0 -> \e[<72;5;3M
+t=1002 f=1006 wheel-up down A pos1 -> \e[<72;240;10M
+t=1002 f=1006 wheel-up down C pos0 -> \e[<80;5;3M
+t=1002 f=1006 wheel-up down C pos1 -> \e[<80;240;10M
+t=1002 f=1006 wheel-up down SC pos0 -> \e[<84;5;3M
+t=1002 f=1006 wheel-up down SC pos1 -> \e[<84;240;10M
+t=1002 f=1006 wheel-up up - pos0 -> \e[<64;5;3m
+t=1002 f=1006 wheel-up up - pos1 -> \e[<64;240;10m
+t=1002 f=1006 wheel-up up S pos0 -> \e[<68;5;3m
+t=1002 f=1006 wheel-up up S pos1 -> \e[<68;240;10m
+t=1002 f=1006 wheel-up up A pos0 -> \e[<72;5;3m
+t=1002 f=1006 wheel-up up A pos1 -> \e[<72;240;10m
+t=1002 f=1006 wheel-up up C pos0 -> \e[<80;5;3m
+t=1002 f=1006 wheel-up up C pos1 -> \e[<80;240;10m
+t=1002 f=1006 wheel-up up SC pos0 -> \e[<84;5;3m
+t=1002 f=1006 wheel-up up SC pos1 -> \e[<84;240;10m
+t=1002 f=1006 wheel-down down - pos0 -> \e[<65;5;3M
+t=1002 f=1006 wheel-down down - pos1 -> \e[<65;240;10M
+t=1002 f=1006 wheel-down down S pos0 -> \e[<69;5;3M
+t=1002 f=1006 wheel-down down S pos1 -> \e[<69;240;10M
+t=1002 f=1006 wheel-down down A pos0 -> \e[<73;5;3M
+t=1002 f=1006 wheel-down down A pos1 -> \e[<73;240;10M
+t=1002 f=1006 wheel-down down C pos0 -> \e[<81;5;3M
+t=1002 f=1006 wheel-down down C pos1 -> \e[<81;240;10M
+t=1002 f=1006 wheel-down down SC pos0 -> \e[<85;5;3M
+t=1002 f=1006 wheel-down down SC pos1 -> \e[<85;240;10M
+t=1002 f=1006 wheel-down up - pos0 -> \e[<65;5;3m
+t=1002 f=1006 wheel-down up - pos1 -> \e[<65;240;10m
+t=1002 f=1006 wheel-down up S pos0 -> \e[<69;5;3m
+t=1002 f=1006 wheel-down up S pos1 -> \e[<69;240;10m
+t=1002 f=1006 wheel-down up A pos0 -> \e[<73;5;3m
+t=1002 f=1006 wheel-down up A pos1 -> \e[<73;240;10m
+t=1002 f=1006 wheel-down up C pos0 -> \e[<81;5;3m
+t=1002 f=1006 wheel-down up C pos1 -> \e[<81;240;10m
+t=1002 f=1006 wheel-down up SC pos0 -> \e[<85;5;3m
+t=1002 f=1006 wheel-down up SC pos1 -> \e[<85;240;10m
+t=1002 f=1006 wheel-left down - pos0 -> \e[<66;5;3M
+t=1002 f=1006 wheel-left down - pos1 -> \e[<66;240;10M
+t=1002 f=1006 wheel-left down S pos0 -> \e[<70;5;3M
+t=1002 f=1006 wheel-left down S pos1 -> \e[<70;240;10M
+t=1002 f=1006 wheel-left down A pos0 -> \e[<74;5;3M
+t=1002 f=1006 wheel-left down A pos1 -> \e[<74;240;10M
+t=1002 f=1006 wheel-left down C pos0 -> \e[<82;5;3M
+t=1002 f=1006 wheel-left down C pos1 -> \e[<82;240;10M
+t=1002 f=1006 wheel-left down SC pos0 -> \e[<86;5;3M
+t=1002 f=1006 wheel-left down SC pos1 -> \e[<86;240;10M
+t=1002 f=1006 wheel-left up - pos0 -> \e[<66;5;3m
+t=1002 f=1006 wheel-left up - pos1 -> \e[<66;240;10m
+t=1002 f=1006 wheel-left up S pos0 -> \e[<70;5;3m
+t=1002 f=1006 wheel-left up S pos1 -> \e[<70;240;10m
+t=1002 f=1006 wheel-left up A pos0 -> \e[<74;5;3m
+t=1002 f=1006 wheel-left up A pos1 -> \e[<74;240;10m
+t=1002 f=1006 wheel-left up C pos0 -> \e[<82;5;3m
+t=1002 f=1006 wheel-left up C pos1 -> \e[<82;240;10m
+t=1002 f=1006 wheel-left up SC pos0 -> \e[<86;5;3m
+t=1002 f=1006 wheel-left up SC pos1 -> \e[<86;240;10m
+t=1002 f=1006 wheel-right down - pos0 -> \e[<67;5;3M
+t=1002 f=1006 wheel-right down - pos1 -> \e[<67;240;10M
+t=1002 f=1006 wheel-right down S pos0 -> \e[<71;5;3M
+t=1002 f=1006 wheel-right down S pos1 -> \e[<71;240;10M
+t=1002 f=1006 wheel-right down A pos0 -> \e[<75;5;3M
+t=1002 f=1006 wheel-right down A pos1 -> \e[<75;240;10M
+t=1002 f=1006 wheel-right down C pos0 -> \e[<83;5;3M
+t=1002 f=1006 wheel-right down C pos1 -> \e[<83;240;10M
+t=1002 f=1006 wheel-right down SC pos0 -> \e[<87;5;3M
+t=1002 f=1006 wheel-right down SC pos1 -> \e[<87;240;10M
+t=1002 f=1006 wheel-right up - pos0 -> \e[<67;5;3m
+t=1002 f=1006 wheel-right up - pos1 -> \e[<67;240;10m
+t=1002 f=1006 wheel-right up S pos0 -> \e[<71;5;3m
+t=1002 f=1006 wheel-right up S pos1 -> \e[<71;240;10m
+t=1002 f=1006 wheel-right up A pos0 -> \e[<75;5;3m
+t=1002 f=1006 wheel-right up A pos1 -> \e[<75;240;10m
+t=1002 f=1006 wheel-right up C pos0 -> \e[<83;5;3m
+t=1002 f=1006 wheel-right up C pos1 -> \e[<83;240;10m
+t=1002 f=1006 wheel-right up SC pos0 -> \e[<87;5;3m
+t=1002 f=1006 wheel-right up SC pos1 -> \e[<87;240;10m
+t=1002 f=1006+1016 left down - pos0 -> \e[<0;60;40M
+t=1002 f=1006+1016 left down - pos1 -> \e[<0;3111;150M
+t=1002 f=1006+1016 left down S pos0 -> \e[<4;60;40M
+t=1002 f=1006+1016 left down S pos1 -> \e[<4;3111;150M
+t=1002 f=1006+1016 left down A pos0 -> \e[<8;60;40M
+t=1002 f=1006+1016 left down A pos1 -> \e[<8;3111;150M
+t=1002 f=1006+1016 left down C pos0 -> \e[<16;60;40M
+t=1002 f=1006+1016 left down C pos1 -> \e[<16;3111;150M
+t=1002 f=1006+1016 left down SC pos0 -> \e[<20;60;40M
+t=1002 f=1006+1016 left down SC pos1 -> \e[<20;3111;150M
+t=1002 f=1006+1016 left up - pos0 -> \e[<0;60;40m
+t=1002 f=1006+1016 left up - pos1 -> \e[<0;3111;150m
+t=1002 f=1006+1016 left up S pos0 -> \e[<4;60;40m
+t=1002 f=1006+1016 left up S pos1 -> \e[<4;3111;150m
+t=1002 f=1006+1016 left up A pos0 -> \e[<8;60;40m
+t=1002 f=1006+1016 left up A pos1 -> \e[<8;3111;150m
+t=1002 f=1006+1016 left up C pos0 -> \e[<16;60;40m
+t=1002 f=1006+1016 left up C pos1 -> \e[<16;3111;150m
+t=1002 f=1006+1016 left up SC pos0 -> \e[<20;60;40m
+t=1002 f=1006+1016 left up SC pos1 -> \e[<20;3111;150m
+t=1002 f=1006+1016 middle down - pos0 -> \e[<1;60;40M
+t=1002 f=1006+1016 middle down - pos1 -> \e[<1;3111;150M
+t=1002 f=1006+1016 middle down S pos0 -> \e[<5;60;40M
+t=1002 f=1006+1016 middle down S pos1 -> \e[<5;3111;150M
+t=1002 f=1006+1016 middle down A pos0 -> \e[<9;60;40M
+t=1002 f=1006+1016 middle down A pos1 -> \e[<9;3111;150M
+t=1002 f=1006+1016 middle down C pos0 -> \e[<17;60;40M
+t=1002 f=1006+1016 middle down C pos1 -> \e[<17;3111;150M
+t=1002 f=1006+1016 middle down SC pos0 -> \e[<21;60;40M
+t=1002 f=1006+1016 middle down SC pos1 -> \e[<21;3111;150M
+t=1002 f=1006+1016 middle up - pos0 -> \e[<1;60;40m
+t=1002 f=1006+1016 middle up - pos1 -> \e[<1;3111;150m
+t=1002 f=1006+1016 middle up S pos0 -> \e[<5;60;40m
+t=1002 f=1006+1016 middle up S pos1 -> \e[<5;3111;150m
+t=1002 f=1006+1016 middle up A pos0 -> \e[<9;60;40m
+t=1002 f=1006+1016 middle up A pos1 -> \e[<9;3111;150m
+t=1002 f=1006+1016 middle up C pos0 -> \e[<17;60;40m
+t=1002 f=1006+1016 middle up C pos1 -> \e[<17;3111;150m
+t=1002 f=1006+1016 middle up SC pos0 -> \e[<21;60;40m
+t=1002 f=1006+1016 middle up SC pos1 -> \e[<21;3111;150m
+t=1002 f=1006+1016 right down - pos0 -> \e[<2;60;40M
+t=1002 f=1006+1016 right down - pos1 -> \e[<2;3111;150M
+t=1002 f=1006+1016 right down S pos0 -> \e[<6;60;40M
+t=1002 f=1006+1016 right down S pos1 -> \e[<6;3111;150M
+t=1002 f=1006+1016 right down A pos0 -> \e[<10;60;40M
+t=1002 f=1006+1016 right down A pos1 -> \e[<10;3111;150M
+t=1002 f=1006+1016 right down C pos0 -> \e[<18;60;40M
+t=1002 f=1006+1016 right down C pos1 -> \e[<18;3111;150M
+t=1002 f=1006+1016 right down SC pos0 -> \e[<22;60;40M
+t=1002 f=1006+1016 right down SC pos1 -> \e[<22;3111;150M
+t=1002 f=1006+1016 right up - pos0 -> \e[<2;60;40m
+t=1002 f=1006+1016 right up - pos1 -> \e[<2;3111;150m
+t=1002 f=1006+1016 right up S pos0 -> \e[<6;60;40m
+t=1002 f=1006+1016 right up S pos1 -> \e[<6;3111;150m
+t=1002 f=1006+1016 right up A pos0 -> \e[<10;60;40m
+t=1002 f=1006+1016 right up A pos1 -> \e[<10;3111;150m
+t=1002 f=1006+1016 right up C pos0 -> \e[<18;60;40m
+t=1002 f=1006+1016 right up C pos1 -> \e[<18;3111;150m
+t=1002 f=1006+1016 right up SC pos0 -> \e[<22;60;40m
+t=1002 f=1006+1016 right up SC pos1 -> \e[<22;3111;150m
+t=1002 f=1006+1016 left-moved down - pos0 -> \e[<32;60;40M
+t=1002 f=1006+1016 left-moved down - pos1 -> \e[<32;3111;150M
+t=1002 f=1006+1016 left-moved down S pos0 -> \e[<36;60;40M
+t=1002 f=1006+1016 left-moved down S pos1 -> \e[<36;3111;150M
+t=1002 f=1006+1016 left-moved down A pos0 -> \e[<40;60;40M
+t=1002 f=1006+1016 left-moved down A pos1 -> \e[<40;3111;150M
+t=1002 f=1006+1016 left-moved down C pos0 -> \e[<48;60;40M
+t=1002 f=1006+1016 left-moved down C pos1 -> \e[<48;3111;150M
+t=1002 f=1006+1016 left-moved down SC pos0 -> \e[<52;60;40M
+t=1002 f=1006+1016 left-moved down SC pos1 -> \e[<52;3111;150M
+t=1002 f=1006+1016 left-moved up - pos0 -> \e[<32;60;40m
+t=1002 f=1006+1016 left-moved up - pos1 -> \e[<32;3111;150m
+t=1002 f=1006+1016 left-moved up S pos0 -> \e[<36;60;40m
+t=1002 f=1006+1016 left-moved up S pos1 -> \e[<36;3111;150m
+t=1002 f=1006+1016 left-moved up A pos0 -> \e[<40;60;40m
+t=1002 f=1006+1016 left-moved up A pos1 -> \e[<40;3111;150m
+t=1002 f=1006+1016 left-moved up C pos0 -> \e[<48;60;40m
+t=1002 f=1006+1016 left-moved up C pos1 -> \e[<48;3111;150m
+t=1002 f=1006+1016 left-moved up SC pos0 -> \e[<52;60;40m
+t=1002 f=1006+1016 left-moved up SC pos1 -> \e[<52;3111;150m
+t=1002 f=1006+1016 moved down - pos0 -> 
+t=1002 f=1006+1016 moved down - pos1 -> 
+t=1002 f=1006+1016 moved down S pos0 -> 
+t=1002 f=1006+1016 moved down S pos1 -> 
+t=1002 f=1006+1016 moved down A pos0 -> 
+t=1002 f=1006+1016 moved down A pos1 -> 
+t=1002 f=1006+1016 moved down C pos0 -> 
+t=1002 f=1006+1016 moved down C pos1 -> 
+t=1002 f=1006+1016 moved down SC pos0 -> 
+t=1002 f=1006+1016 moved down SC pos1 -> 
+t=1002 f=1006+1016 moved up - pos0 -> 
+t=1002 f=1006+1016 moved up - pos1 -> 
+t=1002 f=1006+1016 moved up S pos0 -> 
+t=1002 f=1006+1016 moved up S pos1 -> 
+t=1002 f=1006+1016 moved up A pos0 -> 
+t=1002 f=1006+1016 moved up A pos1 -> 
+t=1002 f=1006+1016 moved up C pos0 -> 
+t=1002 f=1006+1016 moved up C pos1 -> 
+t=1002 f=1006+1016 moved up SC pos0 -> 
+t=1002 f=1006+1016 moved up SC pos1 -> 
+t=1002 f=1006+1016 wheel-up down - pos0 -> \e[<64;60;40M
+t=1002 f=1006+1016 wheel-up down - pos1 -> \e[<64;3111;150M
+t=1002 f=1006+1016 wheel-up down S pos0 -> \e[<68;60;40M
+t=1002 f=1006+1016 wheel-up down S pos1 -> \e[<68;3111;150M
+t=1002 f=1006+1016 wheel-up down A pos0 -> \e[<72;60;40M
+t=1002 f=1006+1016 wheel-up down A pos1 -> \e[<72;3111;150M
+t=1002 f=1006+1016 wheel-up down C pos0 -> \e[<80;60;40M
+t=1002 f=1006+1016 wheel-up down C pos1 -> \e[<80;3111;150M
+t=1002 f=1006+1016 wheel-up down SC pos0 -> \e[<84;60;40M
+t=1002 f=1006+1016 wheel-up down SC pos1 -> \e[<84;3111;150M
+t=1002 f=1006+1016 wheel-up up - pos0 -> \e[<64;60;40m
+t=1002 f=1006+1016 wheel-up up - pos1 -> \e[<64;3111;150m
+t=1002 f=1006+1016 wheel-up up S pos0 -> \e[<68;60;40m
+t=1002 f=1006+1016 wheel-up up S pos1 -> \e[<68;3111;150m
+t=1002 f=1006+1016 wheel-up up A pos0 -> \e[<72;60;40m
+t=1002 f=1006+1016 wheel-up up A pos1 -> \e[<72;3111;150m
+t=1002 f=1006+1016 wheel-up up C pos0 -> \e[<80;60;40m
+t=1002 f=1006+1016 wheel-up up C pos1 -> \e[<80;3111;150m
+t=1002 f=1006+1016 wheel-up up SC pos0 -> \e[<84;60;40m
+t=1002 f=1006+1016 wheel-up up SC pos1 -> \e[<84;3111;150m
+t=1002 f=1006+1016 wheel-down down - pos0 -> \e[<65;60;40M
+t=1002 f=1006+1016 wheel-down down - pos1 -> \e[<65;3111;150M
+t=1002 f=1006+1016 wheel-down down S pos0 -> \e[<69;60;40M
+t=1002 f=1006+1016 wheel-down down S pos1 -> \e[<69;3111;150M
+t=1002 f=1006+1016 wheel-down down A pos0 -> \e[<73;60;40M
+t=1002 f=1006+1016 wheel-down down A pos1 -> \e[<73;3111;150M
+t=1002 f=1006+1016 wheel-down down C pos0 -> \e[<81;60;40M
+t=1002 f=1006+1016 wheel-down down C pos1 -> \e[<81;3111;150M
+t=1002 f=1006+1016 wheel-down down SC pos0 -> \e[<85;60;40M
+t=1002 f=1006+1016 wheel-down down SC pos1 -> \e[<85;3111;150M
+t=1002 f=1006+1016 wheel-down up - pos0 -> \e[<65;60;40m
+t=1002 f=1006+1016 wheel-down up - pos1 -> \e[<65;3111;150m
+t=1002 f=1006+1016 wheel-down up S pos0 -> \e[<69;60;40m
+t=1002 f=1006+1016 wheel-down up S pos1 -> \e[<69;3111;150m
+t=1002 f=1006+1016 wheel-down up A pos0 -> \e[<73;60;40m
+t=1002 f=1006+1016 wheel-down up A pos1 -> \e[<73;3111;150m
+t=1002 f=1006+1016 wheel-down up C pos0 -> \e[<81;60;40m
+t=1002 f=1006+1016 wheel-down up C pos1 -> \e[<81;3111;150m
+t=1002 f=1006+1016 wheel-down up SC pos0 -> \e[<85;60;40m
+t=1002 f=1006+1016 wheel-down up SC pos1 -> \e[<85;3111;150m
+t=1002 f=1006+1016 wheel-left down - pos0 -> \e[<66;60;40M
+t=1002 f=1006+1016 wheel-left down - pos1 -> \e[<66;3111;150M
+t=1002 f=1006+1016 wheel-left down S pos0 -> \e[<70;60;40M
+t=1002 f=1006+1016 wheel-left down S pos1 -> \e[<70;3111;150M
+t=1002 f=1006+1016 wheel-left down A pos0 -> \e[<74;60;40M
+t=1002 f=1006+1016 wheel-left down A pos1 -> \e[<74;3111;150M
+t=1002 f=1006+1016 wheel-left down C pos0 -> \e[<82;60;40M
+t=1002 f=1006+1016 wheel-left down C pos1 -> \e[<82;3111;150M
+t=1002 f=1006+1016 wheel-left down SC pos0 -> \e[<86;60;40M
+t=1002 f=1006+1016 wheel-left down SC pos1 -> \e[<86;3111;150M
+t=1002 f=1006+1016 wheel-left up - pos0 -> \e[<66;60;40m
+t=1002 f=1006+1016 wheel-left up - pos1 -> \e[<66;3111;150m
+t=1002 f=1006+1016 wheel-left up S pos0 -> \e[<70;60;40m
+t=1002 f=1006+1016 wheel-left up S pos1 -> \e[<70;3111;150m
+t=1002 f=1006+1016 wheel-left up A pos0 -> \e[<74;60;40m
+t=1002 f=1006+1016 wheel-left up A pos1 -> \e[<74;3111;150m
+t=1002 f=1006+1016 wheel-left up C pos0 -> \e[<82;60;40m
+t=1002 f=1006+1016 wheel-left up C pos1 -> \e[<82;3111;150m
+t=1002 f=1006+1016 wheel-left up SC pos0 -> \e[<86;60;40m
+t=1002 f=1006+1016 wheel-left up SC pos1 -> \e[<86;3111;150m
+t=1002 f=1006+1016 wheel-right down - pos0 -> \e[<67;60;40M
+t=1002 f=1006+1016 wheel-right down - pos1 -> \e[<67;3111;150M
+t=1002 f=1006+1016 wheel-right down S pos0 -> \e[<71;60;40M
+t=1002 f=1006+1016 wheel-right down S pos1 -> \e[<71;3111;150M
+t=1002 f=1006+1016 wheel-right down A pos0 -> \e[<75;60;40M
+t=1002 f=1006+1016 wheel-right down A pos1 -> \e[<75;3111;150M
+t=1002 f=1006+1016 wheel-right down C pos0 -> \e[<83;60;40M
+t=1002 f=1006+1016 wheel-right down C pos1 -> \e[<83;3111;150M
+t=1002 f=1006+1016 wheel-right down SC pos0 -> \e[<87;60;40M
+t=1002 f=1006+1016 wheel-right down SC pos1 -> \e[<87;3111;150M
+t=1002 f=1006+1016 wheel-right up - pos0 -> \e[<67;60;40m
+t=1002 f=1006+1016 wheel-right up - pos1 -> \e[<67;3111;150m
+t=1002 f=1006+1016 wheel-right up S pos0 -> \e[<71;60;40m
+t=1002 f=1006+1016 wheel-right up S pos1 -> \e[<71;3111;150m
+t=1002 f=1006+1016 wheel-right up A pos0 -> \e[<75;60;40m
+t=1002 f=1006+1016 wheel-right up A pos1 -> \e[<75;3111;150m
+t=1002 f=1006+1016 wheel-right up C pos0 -> \e[<83;60;40m
+t=1002 f=1006+1016 wheel-right up C pos1 -> \e[<83;3111;150m
+t=1002 f=1006+1016 wheel-right up SC pos0 -> \e[<87;60;40m
+t=1002 f=1006+1016 wheel-right up SC pos1 -> \e[<87;3111;150m
+t=1003 f=none left down - pos0 -> \e[M %#
+t=1003 f=none left down - pos1 -> 
+t=1003 f=none left down S pos0 -> \e[M$%#
+t=1003 f=none left down S pos1 -> 
+t=1003 f=none left down A pos0 -> \e[M(%#
+t=1003 f=none left down A pos1 -> 
+t=1003 f=none left down C pos0 -> \e[M0%#
+t=1003 f=none left down C pos1 -> 
+t=1003 f=none left down SC pos0 -> \e[M4%#
+t=1003 f=none left down SC pos1 -> 
+t=1003 f=none left up - pos0 -> \e[M#%#
+t=1003 f=none left up - pos1 -> 
+t=1003 f=none left up S pos0 -> \e[M'%#
+t=1003 f=none left up S pos1 -> 
+t=1003 f=none left up A pos0 -> \e[M+%#
+t=1003 f=none left up A pos1 -> 
+t=1003 f=none left up C pos0 -> \e[M3%#
+t=1003 f=none left up C pos1 -> 
+t=1003 f=none left up SC pos0 -> \e[M7%#
+t=1003 f=none left up SC pos1 -> 
+t=1003 f=none middle down - pos0 -> \e[M!%#
+t=1003 f=none middle down - pos1 -> 
+t=1003 f=none middle down S pos0 -> \e[M%%#
+t=1003 f=none middle down S pos1 -> 
+t=1003 f=none middle down A pos0 -> \e[M)%#
+t=1003 f=none middle down A pos1 -> 
+t=1003 f=none middle down C pos0 -> \e[M1%#
+t=1003 f=none middle down C pos1 -> 
+t=1003 f=none middle down SC pos0 -> \e[M5%#
+t=1003 f=none middle down SC pos1 -> 
+t=1003 f=none middle up - pos0 -> \e[M#%#
+t=1003 f=none middle up - pos1 -> 
+t=1003 f=none middle up S pos0 -> \e[M'%#
+t=1003 f=none middle up S pos1 -> 
+t=1003 f=none middle up A pos0 -> \e[M+%#
+t=1003 f=none middle up A pos1 -> 
+t=1003 f=none middle up C pos0 -> \e[M3%#
+t=1003 f=none middle up C pos1 -> 
+t=1003 f=none middle up SC pos0 -> \e[M7%#
+t=1003 f=none middle up SC pos1 -> 
+t=1003 f=none right down - pos0 -> \e[M"%#
+t=1003 f=none right down - pos1 -> 
+t=1003 f=none right down S pos0 -> \e[M&%#
+t=1003 f=none right down S pos1 -> 
+t=1003 f=none right down A pos0 -> \e[M*%#
+t=1003 f=none right down A pos1 -> 
+t=1003 f=none right down C pos0 -> \e[M2%#
+t=1003 f=none right down C pos1 -> 
+t=1003 f=none right down SC pos0 -> \e[M6%#
+t=1003 f=none right down SC pos1 -> 
+t=1003 f=none right up - pos0 -> \e[M#%#
+t=1003 f=none right up - pos1 -> 
+t=1003 f=none right up S pos0 -> \e[M'%#
+t=1003 f=none right up S pos1 -> 
+t=1003 f=none right up A pos0 -> \e[M+%#
+t=1003 f=none right up A pos1 -> 
+t=1003 f=none right up C pos0 -> \e[M3%#
+t=1003 f=none right up C pos1 -> 
+t=1003 f=none right up SC pos0 -> \e[M7%#
+t=1003 f=none right up SC pos1 -> 
+t=1003 f=none left-moved down - pos0 -> \e[M@%#
+t=1003 f=none left-moved down - pos1 -> 
+t=1003 f=none left-moved down S pos0 -> \e[MD%#
+t=1003 f=none left-moved down S pos1 -> 
+t=1003 f=none left-moved down A pos0 -> \e[MH%#
+t=1003 f=none left-moved down A pos1 -> 
+t=1003 f=none left-moved down C pos0 -> \e[MP%#
+t=1003 f=none left-moved down C pos1 -> 
+t=1003 f=none left-moved down SC pos0 -> \e[MT%#
+t=1003 f=none left-moved down SC pos1 -> 
+t=1003 f=none left-moved up - pos0 -> \e[M#%#
+t=1003 f=none left-moved up - pos1 -> 
+t=1003 f=none left-moved up S pos0 -> \e[M'%#
+t=1003 f=none left-moved up S pos1 -> 
+t=1003 f=none left-moved up A pos0 -> \e[M+%#
+t=1003 f=none left-moved up A pos1 -> 
+t=1003 f=none left-moved up C pos0 -> \e[M3%#
+t=1003 f=none left-moved up C pos1 -> 
+t=1003 f=none left-moved up SC pos0 -> \e[M7%#
+t=1003 f=none left-moved up SC pos1 -> 
+t=1003 f=none moved down - pos0 -> \e[MC%#
+t=1003 f=none moved down - pos1 -> 
+t=1003 f=none moved down S pos0 -> \e[MG%#
+t=1003 f=none moved down S pos1 -> 
+t=1003 f=none moved down A pos0 -> \e[MK%#
+t=1003 f=none moved down A pos1 -> 
+t=1003 f=none moved down C pos0 -> \e[MS%#
+t=1003 f=none moved down C pos1 -> 
+t=1003 f=none moved down SC pos0 -> \e[MW%#
+t=1003 f=none moved down SC pos1 -> 
+t=1003 f=none moved up - pos0 -> \e[M#%#
+t=1003 f=none moved up - pos1 -> 
+t=1003 f=none moved up S pos0 -> \e[M'%#
+t=1003 f=none moved up S pos1 -> 
+t=1003 f=none moved up A pos0 -> \e[M+%#
+t=1003 f=none moved up A pos1 -> 
+t=1003 f=none moved up C pos0 -> \e[M3%#
+t=1003 f=none moved up C pos1 -> 
+t=1003 f=none moved up SC pos0 -> \e[M7%#
+t=1003 f=none moved up SC pos1 -> 
+t=1003 f=none wheel-up down - pos0 -> \e[M`%#
+t=1003 f=none wheel-up down - pos1 -> 
+t=1003 f=none wheel-up down S pos0 -> \e[Md%#
+t=1003 f=none wheel-up down S pos1 -> 
+t=1003 f=none wheel-up down A pos0 -> \e[Mh%#
+t=1003 f=none wheel-up down A pos1 -> 
+t=1003 f=none wheel-up down C pos0 -> \e[Mp%#
+t=1003 f=none wheel-up down C pos1 -> 
+t=1003 f=none wheel-up down SC pos0 -> \e[Mt%#
+t=1003 f=none wheel-up down SC pos1 -> 
+t=1003 f=none wheel-up up - pos0 -> \e[M#%#
+t=1003 f=none wheel-up up - pos1 -> 
+t=1003 f=none wheel-up up S pos0 -> \e[M'%#
+t=1003 f=none wheel-up up S pos1 -> 
+t=1003 f=none wheel-up up A pos0 -> \e[M+%#
+t=1003 f=none wheel-up up A pos1 -> 
+t=1003 f=none wheel-up up C pos0 -> \e[M3%#
+t=1003 f=none wheel-up up C pos1 -> 
+t=1003 f=none wheel-up up SC pos0 -> \e[M7%#
+t=1003 f=none wheel-up up SC pos1 -> 
+t=1003 f=none wheel-down down - pos0 -> \e[Ma%#
+t=1003 f=none wheel-down down - pos1 -> 
+t=1003 f=none wheel-down down S pos0 -> \e[Me%#
+t=1003 f=none wheel-down down S pos1 -> 
+t=1003 f=none wheel-down down A pos0 -> \e[Mi%#
+t=1003 f=none wheel-down down A pos1 -> 
+t=1003 f=none wheel-down down C pos0 -> \e[Mq%#
+t=1003 f=none wheel-down down C pos1 -> 
+t=1003 f=none wheel-down down SC pos0 -> \e[Mu%#
+t=1003 f=none wheel-down down SC pos1 -> 
+t=1003 f=none wheel-down up - pos0 -> \e[M#%#
+t=1003 f=none wheel-down up - pos1 -> 
+t=1003 f=none wheel-down up S pos0 -> \e[M'%#
+t=1003 f=none wheel-down up S pos1 -> 
+t=1003 f=none wheel-down up A pos0 -> \e[M+%#
+t=1003 f=none wheel-down up A pos1 -> 
+t=1003 f=none wheel-down up C pos0 -> \e[M3%#
+t=1003 f=none wheel-down up C pos1 -> 
+t=1003 f=none wheel-down up SC pos0 -> \e[M7%#
+t=1003 f=none wheel-down up SC pos1 -> 
+t=1003 f=none wheel-left down - pos0 -> \e[Mb%#
+t=1003 f=none wheel-left down - pos1 -> 
+t=1003 f=none wheel-left down S pos0 -> \e[Mf%#
+t=1003 f=none wheel-left down S pos1 -> 
+t=1003 f=none wheel-left down A pos0 -> \e[Mj%#
+t=1003 f=none wheel-left down A pos1 -> 
+t=1003 f=none wheel-left down C pos0 -> \e[Mr%#
+t=1003 f=none wheel-left down C pos1 -> 
+t=1003 f=none wheel-left down SC pos0 -> \e[Mv%#
+t=1003 f=none wheel-left down SC pos1 -> 
+t=1003 f=none wheel-left up - pos0 -> \e[M#%#
+t=1003 f=none wheel-left up - pos1 -> 
+t=1003 f=none wheel-left up S pos0 -> \e[M'%#
+t=1003 f=none wheel-left up S pos1 -> 
+t=1003 f=none wheel-left up A pos0 -> \e[M+%#
+t=1003 f=none wheel-left up A pos1 -> 
+t=1003 f=none wheel-left up C pos0 -> \e[M3%#
+t=1003 f=none wheel-left up C pos1 -> 
+t=1003 f=none wheel-left up SC pos0 -> \e[M7%#
+t=1003 f=none wheel-left up SC pos1 -> 
+t=1003 f=none wheel-right down - pos0 -> \e[Mc%#
+t=1003 f=none wheel-right down - pos1 -> 
+t=1003 f=none wheel-right down S pos0 -> \e[Mg%#
+t=1003 f=none wheel-right down S pos1 -> 
+t=1003 f=none wheel-right down A pos0 -> \e[Mk%#
+t=1003 f=none wheel-right down A pos1 -> 
+t=1003 f=none wheel-right down C pos0 -> \e[Ms%#
+t=1003 f=none wheel-right down C pos1 -> 
+t=1003 f=none wheel-right down SC pos0 -> \e[Mw%#
+t=1003 f=none wheel-right down SC pos1 -> 
+t=1003 f=none wheel-right up - pos0 -> \e[M#%#
+t=1003 f=none wheel-right up - pos1 -> 
+t=1003 f=none wheel-right up S pos0 -> \e[M'%#
+t=1003 f=none wheel-right up S pos1 -> 
+t=1003 f=none wheel-right up A pos0 -> \e[M+%#
+t=1003 f=none wheel-right up A pos1 -> 
+t=1003 f=none wheel-right up C pos0 -> \e[M3%#
+t=1003 f=none wheel-right up C pos1 -> 
+t=1003 f=none wheel-right up SC pos0 -> \e[M7%#
+t=1003 f=none wheel-right up SC pos1 -> 
+t=1003 f=1006 left down - pos0 -> \e[<0;5;3M
+t=1003 f=1006 left down - pos1 -> \e[<0;240;10M
+t=1003 f=1006 left down S pos0 -> \e[<4;5;3M
+t=1003 f=1006 left down S pos1 -> \e[<4;240;10M
+t=1003 f=1006 left down A pos0 -> \e[<8;5;3M
+t=1003 f=1006 left down A pos1 -> \e[<8;240;10M
+t=1003 f=1006 left down C pos0 -> \e[<16;5;3M
+t=1003 f=1006 left down C pos1 -> \e[<16;240;10M
+t=1003 f=1006 left down SC pos0 -> \e[<20;5;3M
+t=1003 f=1006 left down SC pos1 -> \e[<20;240;10M
+t=1003 f=1006 left up - pos0 -> \e[<0;5;3m
+t=1003 f=1006 left up - pos1 -> \e[<0;240;10m
+t=1003 f=1006 left up S pos0 -> \e[<4;5;3m
+t=1003 f=1006 left up S pos1 -> \e[<4;240;10m
+t=1003 f=1006 left up A pos0 -> \e[<8;5;3m
+t=1003 f=1006 left up A pos1 -> \e[<8;240;10m
+t=1003 f=1006 left up C pos0 -> \e[<16;5;3m
+t=1003 f=1006 left up C pos1 -> \e[<16;240;10m
+t=1003 f=1006 left up SC pos0 -> \e[<20;5;3m
+t=1003 f=1006 left up SC pos1 -> \e[<20;240;10m
+t=1003 f=1006 middle down - pos0 -> \e[<1;5;3M
+t=1003 f=1006 middle down - pos1 -> \e[<1;240;10M
+t=1003 f=1006 middle down S pos0 -> \e[<5;5;3M
+t=1003 f=1006 middle down S pos1 -> \e[<5;240;10M
+t=1003 f=1006 middle down A pos0 -> \e[<9;5;3M
+t=1003 f=1006 middle down A pos1 -> \e[<9;240;10M
+t=1003 f=1006 middle down C pos0 -> \e[<17;5;3M
+t=1003 f=1006 middle down C pos1 -> \e[<17;240;10M
+t=1003 f=1006 middle down SC pos0 -> \e[<21;5;3M
+t=1003 f=1006 middle down SC pos1 -> \e[<21;240;10M
+t=1003 f=1006 middle up - pos0 -> \e[<1;5;3m
+t=1003 f=1006 middle up - pos1 -> \e[<1;240;10m
+t=1003 f=1006 middle up S pos0 -> \e[<5;5;3m
+t=1003 f=1006 middle up S pos1 -> \e[<5;240;10m
+t=1003 f=1006 middle up A pos0 -> \e[<9;5;3m
+t=1003 f=1006 middle up A pos1 -> \e[<9;240;10m
+t=1003 f=1006 middle up C pos0 -> \e[<17;5;3m
+t=1003 f=1006 middle up C pos1 -> \e[<17;240;10m
+t=1003 f=1006 middle up SC pos0 -> \e[<21;5;3m
+t=1003 f=1006 middle up SC pos1 -> \e[<21;240;10m
+t=1003 f=1006 right down - pos0 -> \e[<2;5;3M
+t=1003 f=1006 right down - pos1 -> \e[<2;240;10M
+t=1003 f=1006 right down S pos0 -> \e[<6;5;3M
+t=1003 f=1006 right down S pos1 -> \e[<6;240;10M
+t=1003 f=1006 right down A pos0 -> \e[<10;5;3M
+t=1003 f=1006 right down A pos1 -> \e[<10;240;10M
+t=1003 f=1006 right down C pos0 -> \e[<18;5;3M
+t=1003 f=1006 right down C pos1 -> \e[<18;240;10M
+t=1003 f=1006 right down SC pos0 -> \e[<22;5;3M
+t=1003 f=1006 right down SC pos1 -> \e[<22;240;10M
+t=1003 f=1006 right up - pos0 -> \e[<2;5;3m
+t=1003 f=1006 right up - pos1 -> \e[<2;240;10m
+t=1003 f=1006 right up S pos0 -> \e[<6;5;3m
+t=1003 f=1006 right up S pos1 -> \e[<6;240;10m
+t=1003 f=1006 right up A pos0 -> \e[<10;5;3m
+t=1003 f=1006 right up A pos1 -> \e[<10;240;10m
+t=1003 f=1006 right up C pos0 -> \e[<18;5;3m
+t=1003 f=1006 right up C pos1 -> \e[<18;240;10m
+t=1003 f=1006 right up SC pos0 -> \e[<22;5;3m
+t=1003 f=1006 right up SC pos1 -> \e[<22;240;10m
+t=1003 f=1006 left-moved down - pos0 -> \e[<32;5;3M
+t=1003 f=1006 left-moved down - pos1 -> \e[<32;240;10M
+t=1003 f=1006 left-moved down S pos0 -> \e[<36;5;3M
+t=1003 f=1006 left-moved down S pos1 -> \e[<36;240;10M
+t=1003 f=1006 left-moved down A pos0 -> \e[<40;5;3M
+t=1003 f=1006 left-moved down A pos1 -> \e[<40;240;10M
+t=1003 f=1006 left-moved down C pos0 -> \e[<48;5;3M
+t=1003 f=1006 left-moved down C pos1 -> \e[<48;240;10M
+t=1003 f=1006 left-moved down SC pos0 -> \e[<52;5;3M
+t=1003 f=1006 left-moved down SC pos1 -> \e[<52;240;10M
+t=1003 f=1006 left-moved up - pos0 -> \e[<32;5;3m
+t=1003 f=1006 left-moved up - pos1 -> \e[<32;240;10m
+t=1003 f=1006 left-moved up S pos0 -> \e[<36;5;3m
+t=1003 f=1006 left-moved up S pos1 -> \e[<36;240;10m
+t=1003 f=1006 left-moved up A pos0 -> \e[<40;5;3m
+t=1003 f=1006 left-moved up A pos1 -> \e[<40;240;10m
+t=1003 f=1006 left-moved up C pos0 -> \e[<48;5;3m
+t=1003 f=1006 left-moved up C pos1 -> \e[<48;240;10m
+t=1003 f=1006 left-moved up SC pos0 -> \e[<52;5;3m
+t=1003 f=1006 left-moved up SC pos1 -> \e[<52;240;10m
+t=1003 f=1006 moved down - pos0 -> \e[<35;5;3M
+t=1003 f=1006 moved down - pos1 -> \e[<35;240;10M
+t=1003 f=1006 moved down S pos0 -> \e[<39;5;3M
+t=1003 f=1006 moved down S pos1 -> \e[<39;240;10M
+t=1003 f=1006 moved down A pos0 -> \e[<43;5;3M
+t=1003 f=1006 moved down A pos1 -> \e[<43;240;10M
+t=1003 f=1006 moved down C pos0 -> \e[<51;5;3M
+t=1003 f=1006 moved down C pos1 -> \e[<51;240;10M
+t=1003 f=1006 moved down SC pos0 -> \e[<55;5;3M
+t=1003 f=1006 moved down SC pos1 -> \e[<55;240;10M
+t=1003 f=1006 moved up - pos0 -> \e[<35;5;3m
+t=1003 f=1006 moved up - pos1 -> \e[<35;240;10m
+t=1003 f=1006 moved up S pos0 -> \e[<39;5;3m
+t=1003 f=1006 moved up S pos1 -> \e[<39;240;10m
+t=1003 f=1006 moved up A pos0 -> \e[<43;5;3m
+t=1003 f=1006 moved up A pos1 -> \e[<43;240;10m
+t=1003 f=1006 moved up C pos0 -> \e[<51;5;3m
+t=1003 f=1006 moved up C pos1 -> \e[<51;240;10m
+t=1003 f=1006 moved up SC pos0 -> \e[<55;5;3m
+t=1003 f=1006 moved up SC pos1 -> \e[<55;240;10m
+t=1003 f=1006 wheel-up down - pos0 -> \e[<64;5;3M
+t=1003 f=1006 wheel-up down - pos1 -> \e[<64;240;10M
+t=1003 f=1006 wheel-up down S pos0 -> \e[<68;5;3M
+t=1003 f=1006 wheel-up down S pos1 -> \e[<68;240;10M
+t=1003 f=1006 wheel-up down A pos0 -> \e[<72;5;3M
+t=1003 f=1006 wheel-up down A pos1 -> \e[<72;240;10M
+t=1003 f=1006 wheel-up down C pos0 -> \e[<80;5;3M
+t=1003 f=1006 wheel-up down C pos1 -> \e[<80;240;10M
+t=1003 f=1006 wheel-up down SC pos0 -> \e[<84;5;3M
+t=1003 f=1006 wheel-up down SC pos1 -> \e[<84;240;10M
+t=1003 f=1006 wheel-up up - pos0 -> \e[<64;5;3m
+t=1003 f=1006 wheel-up up - pos1 -> \e[<64;240;10m
+t=1003 f=1006 wheel-up up S pos0 -> \e[<68;5;3m
+t=1003 f=1006 wheel-up up S pos1 -> \e[<68;240;10m
+t=1003 f=1006 wheel-up up A pos0 -> \e[<72;5;3m
+t=1003 f=1006 wheel-up up A pos1 -> \e[<72;240;10m
+t=1003 f=1006 wheel-up up C pos0 -> \e[<80;5;3m
+t=1003 f=1006 wheel-up up C pos1 -> \e[<80;240;10m
+t=1003 f=1006 wheel-up up SC pos0 -> \e[<84;5;3m
+t=1003 f=1006 wheel-up up SC pos1 -> \e[<84;240;10m
+t=1003 f=1006 wheel-down down - pos0 -> \e[<65;5;3M
+t=1003 f=1006 wheel-down down - pos1 -> \e[<65;240;10M
+t=1003 f=1006 wheel-down down S pos0 -> \e[<69;5;3M
+t=1003 f=1006 wheel-down down S pos1 -> \e[<69;240;10M
+t=1003 f=1006 wheel-down down A pos0 -> \e[<73;5;3M
+t=1003 f=1006 wheel-down down A pos1 -> \e[<73;240;10M
+t=1003 f=1006 wheel-down down C pos0 -> \e[<81;5;3M
+t=1003 f=1006 wheel-down down C pos1 -> \e[<81;240;10M
+t=1003 f=1006 wheel-down down SC pos0 -> \e[<85;5;3M
+t=1003 f=1006 wheel-down down SC pos1 -> \e[<85;240;10M
+t=1003 f=1006 wheel-down up - pos0 -> \e[<65;5;3m
+t=1003 f=1006 wheel-down up - pos1 -> \e[<65;240;10m
+t=1003 f=1006 wheel-down up S pos0 -> \e[<69;5;3m
+t=1003 f=1006 wheel-down up S pos1 -> \e[<69;240;10m
+t=1003 f=1006 wheel-down up A pos0 -> \e[<73;5;3m
+t=1003 f=1006 wheel-down up A pos1 -> \e[<73;240;10m
+t=1003 f=1006 wheel-down up C pos0 -> \e[<81;5;3m
+t=1003 f=1006 wheel-down up C pos1 -> \e[<81;240;10m
+t=1003 f=1006 wheel-down up SC pos0 -> \e[<85;5;3m
+t=1003 f=1006 wheel-down up SC pos1 -> \e[<85;240;10m
+t=1003 f=1006 wheel-left down - pos0 -> \e[<66;5;3M
+t=1003 f=1006 wheel-left down - pos1 -> \e[<66;240;10M
+t=1003 f=1006 wheel-left down S pos0 -> \e[<70;5;3M
+t=1003 f=1006 wheel-left down S pos1 -> \e[<70;240;10M
+t=1003 f=1006 wheel-left down A pos0 -> \e[<74;5;3M
+t=1003 f=1006 wheel-left down A pos1 -> \e[<74;240;10M
+t=1003 f=1006 wheel-left down C pos0 -> \e[<82;5;3M
+t=1003 f=1006 wheel-left down C pos1 -> \e[<82;240;10M
+t=1003 f=1006 wheel-left down SC pos0 -> \e[<86;5;3M
+t=1003 f=1006 wheel-left down SC pos1 -> \e[<86;240;10M
+t=1003 f=1006 wheel-left up - pos0 -> \e[<66;5;3m
+t=1003 f=1006 wheel-left up - pos1 -> \e[<66;240;10m
+t=1003 f=1006 wheel-left up S pos0 -> \e[<70;5;3m
+t=1003 f=1006 wheel-left up S pos1 -> \e[<70;240;10m
+t=1003 f=1006 wheel-left up A pos0 -> \e[<74;5;3m
+t=1003 f=1006 wheel-left up A pos1 -> \e[<74;240;10m
+t=1003 f=1006 wheel-left up C pos0 -> \e[<82;5;3m
+t=1003 f=1006 wheel-left up C pos1 -> \e[<82;240;10m
+t=1003 f=1006 wheel-left up SC pos0 -> \e[<86;5;3m
+t=1003 f=1006 wheel-left up SC pos1 -> \e[<86;240;10m
+t=1003 f=1006 wheel-right down - pos0 -> \e[<67;5;3M
+t=1003 f=1006 wheel-right down - pos1 -> \e[<67;240;10M
+t=1003 f=1006 wheel-right down S pos0 -> \e[<71;5;3M
+t=1003 f=1006 wheel-right down S pos1 -> \e[<71;240;10M
+t=1003 f=1006 wheel-right down A pos0 -> \e[<75;5;3M
+t=1003 f=1006 wheel-right down A pos1 -> \e[<75;240;10M
+t=1003 f=1006 wheel-right down C pos0 -> \e[<83;5;3M
+t=1003 f=1006 wheel-right down C pos1 -> \e[<83;240;10M
+t=1003 f=1006 wheel-right down SC pos0 -> \e[<87;5;3M
+t=1003 f=1006 wheel-right down SC pos1 -> \e[<87;240;10M
+t=1003 f=1006 wheel-right up - pos0 -> \e[<67;5;3m
+t=1003 f=1006 wheel-right up - pos1 -> \e[<67;240;10m
+t=1003 f=1006 wheel-right up S pos0 -> \e[<71;5;3m
+t=1003 f=1006 wheel-right up S pos1 -> \e[<71;240;10m
+t=1003 f=1006 wheel-right up A pos0 -> \e[<75;5;3m
+t=1003 f=1006 wheel-right up A pos1 -> \e[<75;240;10m
+t=1003 f=1006 wheel-right up C pos0 -> \e[<83;5;3m
+t=1003 f=1006 wheel-right up C pos1 -> \e[<83;240;10m
+t=1003 f=1006 wheel-right up SC pos0 -> \e[<87;5;3m
+t=1003 f=1006 wheel-right up SC pos1 -> \e[<87;240;10m
+t=1003 f=1006+1016 left down - pos0 -> \e[<0;60;40M
+t=1003 f=1006+1016 left down - pos1 -> \e[<0;3111;150M
+t=1003 f=1006+1016 left down S pos0 -> \e[<4;60;40M
+t=1003 f=1006+1016 left down S pos1 -> \e[<4;3111;150M
+t=1003 f=1006+1016 left down A pos0 -> \e[<8;60;40M
+t=1003 f=1006+1016 left down A pos1 -> \e[<8;3111;150M
+t=1003 f=1006+1016 left down C pos0 -> \e[<16;60;40M
+t=1003 f=1006+1016 left down C pos1 -> \e[<16;3111;150M
+t=1003 f=1006+1016 left down SC pos0 -> \e[<20;60;40M
+t=1003 f=1006+1016 left down SC pos1 -> \e[<20;3111;150M
+t=1003 f=1006+1016 left up - pos0 -> \e[<0;60;40m
+t=1003 f=1006+1016 left up - pos1 -> \e[<0;3111;150m
+t=1003 f=1006+1016 left up S pos0 -> \e[<4;60;40m
+t=1003 f=1006+1016 left up S pos1 -> \e[<4;3111;150m
+t=1003 f=1006+1016 left up A pos0 -> \e[<8;60;40m
+t=1003 f=1006+1016 left up A pos1 -> \e[<8;3111;150m
+t=1003 f=1006+1016 left up C pos0 -> \e[<16;60;40m
+t=1003 f=1006+1016 left up C pos1 -> \e[<16;3111;150m
+t=1003 f=1006+1016 left up SC pos0 -> \e[<20;60;40m
+t=1003 f=1006+1016 left up SC pos1 -> \e[<20;3111;150m
+t=1003 f=1006+1016 middle down - pos0 -> \e[<1;60;40M
+t=1003 f=1006+1016 middle down - pos1 -> \e[<1;3111;150M
+t=1003 f=1006+1016 middle down S pos0 -> \e[<5;60;40M
+t=1003 f=1006+1016 middle down S pos1 -> \e[<5;3111;150M
+t=1003 f=1006+1016 middle down A pos0 -> \e[<9;60;40M
+t=1003 f=1006+1016 middle down A pos1 -> \e[<9;3111;150M
+t=1003 f=1006+1016 middle down C pos0 -> \e[<17;60;40M
+t=1003 f=1006+1016 middle down C pos1 -> \e[<17;3111;150M
+t=1003 f=1006+1016 middle down SC pos0 -> \e[<21;60;40M
+t=1003 f=1006+1016 middle down SC pos1 -> \e[<21;3111;150M
+t=1003 f=1006+1016 middle up - pos0 -> \e[<1;60;40m
+t=1003 f=1006+1016 middle up - pos1 -> \e[<1;3111;150m
+t=1003 f=1006+1016 middle up S pos0 -> \e[<5;60;40m
+t=1003 f=1006+1016 middle up S pos1 -> \e[<5;3111;150m
+t=1003 f=1006+1016 middle up A pos0 -> \e[<9;60;40m
+t=1003 f=1006+1016 middle up A pos1 -> \e[<9;3111;150m
+t=1003 f=1006+1016 middle up C pos0 -> \e[<17;60;40m
+t=1003 f=1006+1016 middle up C pos1 -> \e[<17;3111;150m
+t=1003 f=1006+1016 middle up SC pos0 -> \e[<21;60;40m
+t=1003 f=1006+1016 middle up SC pos1 -> \e[<21;3111;150m
+t=1003 f=1006+1016 right down - pos0 -> \e[<2;60;40M
+t=1003 f=1006+1016 right down - pos1 -> \e[<2;3111;150M
+t=1003 f=1006+1016 right down S pos0 -> \e[<6;60;40M
+t=1003 f=1006+1016 right down S pos1 -> \e[<6;3111;150M
+t=1003 f=1006+1016 right down A pos0 -> \e[<10;60;40M
+t=1003 f=1006+1016 right down A pos1 -> \e[<10;3111;150M
+t=1003 f=1006+1016 right down C pos0 -> \e[<18;60;40M
+t=1003 f=1006+1016 right down C pos1 -> \e[<18;3111;150M
+t=1003 f=1006+1016 right down SC pos0 -> \e[<22;60;40M
+t=1003 f=1006+1016 right down SC pos1 -> \e[<22;3111;150M
+t=1003 f=1006+1016 right up - pos0 -> \e[<2;60;40m
+t=1003 f=1006+1016 right up - pos1 -> \e[<2;3111;150m
+t=1003 f=1006+1016 right up S pos0 -> \e[<6;60;40m
+t=1003 f=1006+1016 right up S pos1 -> \e[<6;3111;150m
+t=1003 f=1006+1016 right up A pos0 -> \e[<10;60;40m
+t=1003 f=1006+1016 right up A pos1 -> \e[<10;3111;150m
+t=1003 f=1006+1016 right up C pos0 -> \e[<18;60;40m
+t=1003 f=1006+1016 right up C pos1 -> \e[<18;3111;150m
+t=1003 f=1006+1016 right up SC pos0 -> \e[<22;60;40m
+t=1003 f=1006+1016 right up SC pos1 -> \e[<22;3111;150m
+t=1003 f=1006+1016 left-moved down - pos0 -> \e[<32;60;40M
+t=1003 f=1006+1016 left-moved down - pos1 -> \e[<32;3111;150M
+t=1003 f=1006+1016 left-moved down S pos0 -> \e[<36;60;40M
+t=1003 f=1006+1016 left-moved down S pos1 -> \e[<36;3111;150M
+t=1003 f=1006+1016 left-moved down A pos0 -> \e[<40;60;40M
+t=1003 f=1006+1016 left-moved down A pos1 -> \e[<40;3111;150M
+t=1003 f=1006+1016 left-moved down C pos0 -> \e[<48;60;40M
+t=1003 f=1006+1016 left-moved down C pos1 -> \e[<48;3111;150M
+t=1003 f=1006+1016 left-moved down SC pos0 -> \e[<52;60;40M
+t=1003 f=1006+1016 left-moved down SC pos1 -> \e[<52;3111;150M
+t=1003 f=1006+1016 left-moved up - pos0 -> \e[<32;60;40m
+t=1003 f=1006+1016 left-moved up - pos1 -> \e[<32;3111;150m
+t=1003 f=1006+1016 left-moved up S pos0 -> \e[<36;60;40m
+t=1003 f=1006+1016 left-moved up S pos1 -> \e[<36;3111;150m
+t=1003 f=1006+1016 left-moved up A pos0 -> \e[<40;60;40m
+t=1003 f=1006+1016 left-moved up A pos1 -> \e[<40;3111;150m
+t=1003 f=1006+1016 left-moved up C pos0 -> \e[<48;60;40m
+t=1003 f=1006+1016 left-moved up C pos1 -> \e[<48;3111;150m
+t=1003 f=1006+1016 left-moved up SC pos0 -> \e[<52;60;40m
+t=1003 f=1006+1016 left-moved up SC pos1 -> \e[<52;3111;150m
+t=1003 f=1006+1016 moved down - pos0 -> \e[<35;60;40M
+t=1003 f=1006+1016 moved down - pos1 -> \e[<35;3111;150M
+t=1003 f=1006+1016 moved down S pos0 -> \e[<39;60;40M
+t=1003 f=1006+1016 moved down S pos1 -> \e[<39;3111;150M
+t=1003 f=1006+1016 moved down A pos0 -> \e[<43;60;40M
+t=1003 f=1006+1016 moved down A pos1 -> \e[<43;3111;150M
+t=1003 f=1006+1016 moved down C pos0 -> \e[<51;60;40M
+t=1003 f=1006+1016 moved down C pos1 -> \e[<51;3111;150M
+t=1003 f=1006+1016 moved down SC pos0 -> \e[<55;60;40M
+t=1003 f=1006+1016 moved down SC pos1 -> \e[<55;3111;150M
+t=1003 f=1006+1016 moved up - pos0 -> \e[<35;60;40m
+t=1003 f=1006+1016 moved up - pos1 -> \e[<35;3111;150m
+t=1003 f=1006+1016 moved up S pos0 -> \e[<39;60;40m
+t=1003 f=1006+1016 moved up S pos1 -> \e[<39;3111;150m
+t=1003 f=1006+1016 moved up A pos0 -> \e[<43;60;40m
+t=1003 f=1006+1016 moved up A pos1 -> \e[<43;3111;150m
+t=1003 f=1006+1016 moved up C pos0 -> \e[<51;60;40m
+t=1003 f=1006+1016 moved up C pos1 -> \e[<51;3111;150m
+t=1003 f=1006+1016 moved up SC pos0 -> \e[<55;60;40m
+t=1003 f=1006+1016 moved up SC pos1 -> \e[<55;3111;150m
+t=1003 f=1006+1016 wheel-up down - pos0 -> \e[<64;60;40M
+t=1003 f=1006+1016 wheel-up down - pos1 -> \e[<64;3111;150M
+t=1003 f=1006+1016 wheel-up down S pos0 -> \e[<68;60;40M
+t=1003 f=1006+1016 wheel-up down S pos1 -> \e[<68;3111;150M
+t=1003 f=1006+1016 wheel-up down A pos0 -> \e[<72;60;40M
+t=1003 f=1006+1016 wheel-up down A pos1 -> \e[<72;3111;150M
+t=1003 f=1006+1016 wheel-up down C pos0 -> \e[<80;60;40M
+t=1003 f=1006+1016 wheel-up down C pos1 -> \e[<80;3111;150M
+t=1003 f=1006+1016 wheel-up down SC pos0 -> \e[<84;60;40M
+t=1003 f=1006+1016 wheel-up down SC pos1 -> \e[<84;3111;150M
+t=1003 f=1006+1016 wheel-up up - pos0 -> \e[<64;60;40m
+t=1003 f=1006+1016 wheel-up up - pos1 -> \e[<64;3111;150m
+t=1003 f=1006+1016 wheel-up up S pos0 -> \e[<68;60;40m
+t=1003 f=1006+1016 wheel-up up S pos1 -> \e[<68;3111;150m
+t=1003 f=1006+1016 wheel-up up A pos0 -> \e[<72;60;40m
+t=1003 f=1006+1016 wheel-up up A pos1 -> \e[<72;3111;150m
+t=1003 f=1006+1016 wheel-up up C pos0 -> \e[<80;60;40m
+t=1003 f=1006+1016 wheel-up up C pos1 -> \e[<80;3111;150m
+t=1003 f=1006+1016 wheel-up up SC pos0 -> \e[<84;60;40m
+t=1003 f=1006+1016 wheel-up up SC pos1 -> \e[<84;3111;150m
+t=1003 f=1006+1016 wheel-down down - pos0 -> \e[<65;60;40M
+t=1003 f=1006+1016 wheel-down down - pos1 -> \e[<65;3111;150M
+t=1003 f=1006+1016 wheel-down down S pos0 -> \e[<69;60;40M
+t=1003 f=1006+1016 wheel-down down S pos1 -> \e[<69;3111;150M
+t=1003 f=1006+1016 wheel-down down A pos0 -> \e[<73;60;40M
+t=1003 f=1006+1016 wheel-down down A pos1 -> \e[<73;3111;150M
+t=1003 f=1006+1016 wheel-down down C pos0 -> \e[<81;60;40M
+t=1003 f=1006+1016 wheel-down down C pos1 -> \e[<81;3111;150M
+t=1003 f=1006+1016 wheel-down down SC pos0 -> \e[<85;60;40M
+t=1003 f=1006+1016 wheel-down down SC pos1 -> \e[<85;3111;150M
+t=1003 f=1006+1016 wheel-down up - pos0 -> \e[<65;60;40m
+t=1003 f=1006+1016 wheel-down up - pos1 -> \e[<65;3111;150m
+t=1003 f=1006+1016 wheel-down up S pos0 -> \e[<69;60;40m
+t=1003 f=1006+1016 wheel-down up S pos1 -> \e[<69;3111;150m
+t=1003 f=1006+1016 wheel-down up A pos0 -> \e[<73;60;40m
+t=1003 f=1006+1016 wheel-down up A pos1 -> \e[<73;3111;150m
+t=1003 f=1006+1016 wheel-down up C pos0 -> \e[<81;60;40m
+t=1003 f=1006+1016 wheel-down up C pos1 -> \e[<81;3111;150m
+t=1003 f=1006+1016 wheel-down up SC pos0 -> \e[<85;60;40m
+t=1003 f=1006+1016 wheel-down up SC pos1 -> \e[<85;3111;150m
+t=1003 f=1006+1016 wheel-left down - pos0 -> \e[<66;60;40M
+t=1003 f=1006+1016 wheel-left down - pos1 -> \e[<66;3111;150M
+t=1003 f=1006+1016 wheel-left down S pos0 -> \e[<70;60;40M
+t=1003 f=1006+1016 wheel-left down S pos1 -> \e[<70;3111;150M
+t=1003 f=1006+1016 wheel-left down A pos0 -> \e[<74;60;40M
+t=1003 f=1006+1016 wheel-left down A pos1 -> \e[<74;3111;150M
+t=1003 f=1006+1016 wheel-left down C pos0 -> \e[<82;60;40M
+t=1003 f=1006+1016 wheel-left down C pos1 -> \e[<82;3111;150M
+t=1003 f=1006+1016 wheel-left down SC pos0 -> \e[<86;60;40M
+t=1003 f=1006+1016 wheel-left down SC pos1 -> \e[<86;3111;150M
+t=1003 f=1006+1016 wheel-left up - pos0 -> \e[<66;60;40m
+t=1003 f=1006+1016 wheel-left up - pos1 -> \e[<66;3111;150m
+t=1003 f=1006+1016 wheel-left up S pos0 -> \e[<70;60;40m
+t=1003 f=1006+1016 wheel-left up S pos1 -> \e[<70;3111;150m
+t=1003 f=1006+1016 wheel-left up A pos0 -> \e[<74;60;40m
+t=1003 f=1006+1016 wheel-left up A pos1 -> \e[<74;3111;150m
+t=1003 f=1006+1016 wheel-left up C pos0 -> \e[<82;60;40m
+t=1003 f=1006+1016 wheel-left up C pos1 -> \e[<82;3111;150m
+t=1003 f=1006+1016 wheel-left up SC pos0 -> \e[<86;60;40m
+t=1003 f=1006+1016 wheel-left up SC pos1 -> \e[<86;3111;150m
+t=1003 f=1006+1016 wheel-right down - pos0 -> \e[<67;60;40M
+t=1003 f=1006+1016 wheel-right down - pos1 -> \e[<67;3111;150M
+t=1003 f=1006+1016 wheel-right down S pos0 -> \e[<71;60;40M
+t=1003 f=1006+1016 wheel-right down S pos1 -> \e[<71;3111;150M
+t=1003 f=1006+1016 wheel-right down A pos0 -> \e[<75;60;40M
+t=1003 f=1006+1016 wheel-right down A pos1 -> \e[<75;3111;150M
+t=1003 f=1006+1016 wheel-right down C pos0 -> \e[<83;60;40M
+t=1003 f=1006+1016 wheel-right down C pos1 -> \e[<83;3111;150M
+t=1003 f=1006+1016 wheel-right down SC pos0 -> \e[<87;60;40M
+t=1003 f=1006+1016 wheel-right down SC pos1 -> \e[<87;3111;150M
+t=1003 f=1006+1016 wheel-right up - pos0 -> \e[<67;60;40m
+t=1003 f=1006+1016 wheel-right up - pos1 -> \e[<67;3111;150m
+t=1003 f=1006+1016 wheel-right up S pos0 -> \e[<71;60;40m
+t=1003 f=1006+1016 wheel-right up S pos1 -> \e[<71;3111;150m
+t=1003 f=1006+1016 wheel-right up A pos0 -> \e[<75;60;40m
+t=1003 f=1006+1016 wheel-right up A pos1 -> \e[<75;3111;150m
+t=1003 f=1006+1016 wheel-right up C pos0 -> \e[<83;60;40m
+t=1003 f=1006+1016 wheel-right up C pos1 -> \e[<83;3111;150m
+t=1003 f=1006+1016 wheel-right up SC pos0 -> \e[<87;60;40m
+t=1003 f=1006+1016 wheel-right up SC pos1 -> \e[<87;3111;150m

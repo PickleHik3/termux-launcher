@@ -94,7 +94,7 @@ public final class TerminalHintSurface {
     }
 
     /**
-     * The same dress for a panel that rises from the terminal's <em>bottom</em> edge — the workspace
+     * The same dress for a panel that rises from the terminal's <em>bottom</em> edge — the Terminal
      * prompts and the scrollback search bar — so the whole family reads as part of the terminal
      * window wherever it arrives from. The corners are simply the other way up: the terminal's own
      * radius where the panel sits in its bottom corners, the free radius where it leaves the edge.

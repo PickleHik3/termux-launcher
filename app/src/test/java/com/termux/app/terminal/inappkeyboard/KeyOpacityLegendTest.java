@@ -142,10 +142,20 @@ public class KeyOpacityLegendTest {
         AppearanceLooks.Control keys = AppearanceLooks.Control.KEY_OPACITY;
         assertEquals(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_OPACITY, keys.min);
         assertEquals(TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, keys.max);
-        assertTrue(AppearanceLooks.controls(AppearanceLooks.Target.KEYBOARD).contains(keys));
-        assertTrue("not a global control", !AppearanceLooks.controls(null, true).contains(keys));
-        assertTrue(AppearanceLooks.controls(AppearanceLooks.Target.KEYBOARD).size()
-            <= AppearanceLooks.MAX_CONTROLS);
+        // The Keyboard card's (in its glass strip since 2026-10-25), and no other card's.
+        com.termux.app.surfaces.EditorRows.Offers offers =
+            new com.termux.app.surfaces.EditorRows.Offers(true, true);
+        boolean onKeyboard = false;
+        for (com.termux.app.surfaces.EditorRows.Spec spec
+                : com.termux.app.surfaces.EditorRows.rows(com.termux.app.surfaces.EditorCard.KEYBOARD, offers))
+            onKeyboard |= spec.row == com.termux.app.surfaces.EditorRows.Row.KEY_OPACITY;
+        assertTrue("the Keyboard card offers Key opacity", onKeyboard);
+        for (com.termux.app.surfaces.EditorCard card : com.termux.app.surfaces.EditorCard.values()) {
+            if (card == com.termux.app.surfaces.EditorCard.KEYBOARD) continue;
+            for (com.termux.app.surfaces.EditorRows.Spec spec
+                    : com.termux.app.surfaces.EditorRows.rows(card, offers))
+                assertTrue(card.name(), spec.row != com.termux.app.surfaces.EditorRows.Row.KEY_OPACITY);
+        }
 
         Context context = context();
         SharedPreferences store = context.getSharedPreferences("key-opacity-legend-test",

@@ -1,0 +1,160 @@
+package com.termux.app.place;
+
+import static org.junit.Assert.assertEquals;
+
+import androidx.annotation.NonNull;
+
+import com.termux.app.chrome.Dress;
+import com.termux.app.chrome.DressResolver;
+import com.termux.app.dock.DockGeometry;
+import com.termux.app.dock.DockLayout;
+import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
+import com.termux.app.place.PlaceChromeTravel.Frame;
+import com.termux.app.place.PlaceChromeTravel.Rest;
+import com.termux.app.wall.PageRef;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
+
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.junit.runners.Parameterized;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.List;
+
+/**
+ * The Terminal's grid on the round trip Home ⇄ Terminal with its keyboard closed: each
+ * page's room is its own rest's ({@link PageRoom}), so the terminal's page is laid out at the
+ * Terminal's rest wherever the wall stands: not as either crossing begins, not mid-slide, not at
+ * either landing, and a crossing gives nothing back and takes nothing. The crossing is driven
+ * the way the activity drives it (doSyncChromeTravel, doSettlePlaceChrome); the rests are the
+ * layout fixtures' own. The page's height is the window less the room of the Terminal's rest.
+ */
+@RunWith(Parameterized.class)
+public class TerminalRoundTripParityTest {
+
+    @Parameterized.Parameters(name = "{0}, {1}")
+    public static List<Object[]> cases() {
+        List<Object[]> out = new ArrayList<>();
+        for (LayoutFixtures.Fixture f : LayoutFixtures.ALL) {
+            out.add(new Object[] {f, "Floating"});
+            out.add(new Object[] {f, "Docked"});
+        }
+        return out;
+    }
+
+    private static final int WIDTH = 1000;
+    private static final float STEP = 0.05f;
+    private static final List<PageKind> ROW =
+        Arrays.asList(PageKind.HOME, PageKind.TERMINAL);
+
+    private final LayoutFixtures.Fixture f;
+    private final boolean floating;
+
+    public TerminalRoundTripParityTest(LayoutFixtures.Fixture fixture, String style) {
+        f = fixture;
+        floating = style.equals("Floating");
+    }
+
+    // ---- The adapter: only the page's inset is read ----
+
+    private static final class Views implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
+            Crossing.Keyboard {
+        @Override public void translate(float dockPx, float keyboardPx) {}
+        @Override public void sink(float px) {}
+        @Override public void alpha(float status, float side) {}
+        @Override public void rideX(float px) {}
+        @Override public void cover(int px) {}
+        @Override public void preRoll(@NonNull PageKind target) {}
+    }
+
+    private static final class Stored implements DressResolver.Source {
+        @Override public boolean minimal() { return false; }
+        @Override public boolean homeLayout() { return true; }
+        @NonNull @Override public DockStyle dockDesign(@NonNull LayoutVariant variant) {
+            return variant == LayoutVariant.HOME ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY;
+        }
+        @Override public boolean searchField(@NonNull LayoutVariant variant) {
+            return variant == LayoutVariant.HOME;
+        }
+        @Override public boolean drawerTile(@NonNull LayoutVariant variant) {
+            return variant == LayoutVariant.HOME;
+        }
+        @Override public boolean shows(@NonNull com.termux.app.page.PageKind kind,
+                                       @NonNull Element element) {
+            return kind != com.termux.app.page.PageKind.HOME
+                || element != Element.EXTRA_KEYS;
+        }
+        @NonNull @Override public WallShape shape() {
+            return WallShape.of(LayoutStyle.DOCKED, 12, 8);
+        }
+    }
+
+    private final Views views = new Views();
+    private final Crossing crossing = new Crossing(views, views, views, views);
+
+    private SeamCrossing.Endpoint end(@NonNull PageKind page) {
+        Dress dress = new DressResolver(new Stored()).dressOf(page);
+        PageRef ref = PageRef.of(page);
+        PlaceLayout layout = f.layoutOf(ref);
+        LayoutStyle style = floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED;
+        ResolvedArrangement arranged = page == PageKind.HOME
+            ? ResolvedArrangement.of(layout, style, f.homeDesign, true, true,
+                PlaceOrientation.PORTRAIT, LayoutVariant.HOME, PageRef.HOME)
+            : ResolvedArrangement.of(layout, style, DockStyle.GLASS_TRAY, false, false,
+                PlaceOrientation.PORTRAIT, LayoutVariant.NORMAL, PageRef.TERMINAL);
+        return SeamCrossing.Endpoint.of(ref, dress, null, arranged, layout,
+            SeamDress.StackDress.of(dress.shape(), 1f, 1f, 0), false);
+    }
+
+    private DockLayout dockRest(@NonNull PageKind page) {
+        PageRef ref = PageRef.of(page);
+        return DockGeometry.compute(f.snapshot(ref, floating).restOf(ref));
+    }
+
+    /** The terminal's page as it is laid out: the window less the room of the Terminal's rest. */
+    private int terminalPagePx() {
+        return f.heightPx - PageRoom.bottomInsetPx(f.rest(PageRef.TERMINAL, PageRef.TERMINAL,
+            false, floating));
+    }
+
+    /** One slide from {@code from}, landed on the other half, asserting the page every frame. */
+    private void slide(@NonNull PageKind from, int restPx) {
+        PageKind to = from == PageKind.HOME ? PageKind.TERMINAL
+            : PageKind.HOME;
+        String way = f + (floating ? ", Floating" : ", Docked") + ", " + from + " → " + to;
+        PlaceChromeTravel.States states = place -> new Rest(false, false, true);
+        boolean begun = false;
+        for (float t = STEP; t <= 1f + 1e-4f; t += STEP) {
+            float fraction = Math.min(1f, t);
+            float offset = from == PageKind.HOME ? -fraction * WIDTH : fraction * WIDTH;
+            Frame frame = PlaceChromeTravel.at(ROW, from, offset, WIDTH, states);
+            if (!begun) {
+                crossing.begin(end(from), end(to), SeamCrossing.Stage.of(false, () -> false,
+                    false), dockRest(from), dockRest(to), 1);
+                begun = true;
+            }
+            SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
+            if (answers.relayout()) crossing.seam().standLayout();
+            float translation = crossing.stack(answers, answers.dockReveal(), 0, 200, 150);
+            crossing.coverAt(translation);
+            assertEquals(way + " at " + fraction, restPx, terminalPagePx());
+        }
+        crossing.land(PageRef.of(to), 1);
+        crossing.end();
+        assertEquals(way + ", landed", restPx, terminalPagePx());
+    }
+
+    @Test
+    public void theTerminalsGridNeverChangesOnARoundTripThroughHome() {
+        int restPx = terminalPagePx();
+        assertEquals(f.heightPx - f.settle(PageRef.TERMINAL, false, floating).contentReservationPx,
+            restPx);
+        slide(PageKind.TERMINAL, restPx);
+        slide(PageKind.HOME, restPx);
+        // And again: the second round trip finds everything as the first left it.
+        slide(PageKind.TERMINAL, restPx);
+        slide(PageKind.HOME, restPx);
+    }
+}

@@ -35,15 +35,19 @@ public final class GlassSurfaceFactory {
     }
 
     GlassSurfaceFactory(@NonNull ChromeRenderer.Surfaces surfaces, @Nullable ChromeInk ink) {
-        this(surfaces, ink, null);
+        this(surfaces, ink, null, null);
     }
 
     private GlassSurfaceFactory(@NonNull ChromeRenderer.Surfaces surfaces, @Nullable ChromeInk ink,
-                                @Nullable GlassLook lookOverride) {
+                                @Nullable GlassLook lookOverride, @Nullable ElementGlass element) {
         mSurfaces = surfaces;
         mInk = ink;
         mLookOverride = lookOverride;
+        mElement = element;
     }
+
+    /** The element whose own tint colour and rim this factory draws in; null for the wall's. */
+    @Nullable private final ElementGlass mElement;
 
     /** A preset's tint and rim standing in for the live preferences'; null reads the preferences. */
     @Nullable private final GlassLook mLookOverride;
@@ -51,7 +55,18 @@ public final class GlassSurfaceFactory {
     /** This factory's material, drawn in {@code look} instead of the preferences' (the preset tiles). */
     @NonNull
     public GlassSurfaceFactory withLook(@NonNull GlassLook look) {
-        return new GlassSurfaceFactory(mSurfaces, mInk, look);
+        return new GlassSurfaceFactory(mSurfaces, mInk, look, mElement);
+    }
+
+    /**
+     * This factory's material as {@code element} wears it: its own tint colour and rim where it
+     * holds them (ADR 0017), the wall's otherwise. Build {@code element} where the surface is
+     * built ({@link ElementGlass#of}); this keeps it, it does not read the store again.
+     */
+    @NonNull
+    public GlassSurfaceFactory forElement(@Nullable ElementGlass element) {
+        if (element == mElement) return this;
+        return new GlassSurfaceFactory(mSurfaces, mInk, mLookOverride, element);
     }
 
     /**
@@ -61,7 +76,9 @@ public final class GlassSurfaceFactory {
      */
     @NonNull
     public GlassLook look() {
-        return mLookOverride != null ? mLookOverride : GlassLook.of(mSurfaces.preferences());
+        GlassLook base = mLookOverride != null ? mLookOverride
+            : GlassLook.of(mSurfaces.preferences());
+        return mElement != null ? mElement.look(base) : base;
     }
 
     /**
@@ -108,8 +125,8 @@ public final class GlassSurfaceFactory {
     /** The dock's tint strength, percent: what every dock-material surface wears. */
     private int dockTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        return preferences != null ? preferences.getDockTintStrength()
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+        return preferences != null ? preferences.getDockTintStrength(mSurfaces.stackLookPage())
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     /**
@@ -165,7 +182,7 @@ public final class GlassSurfaceFactory {
                                 int tintStrengthPercent) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getDockGlassGrain()
+            ? preferences.getDockGlassGrain(mSurfaces.stackLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, tintStrengthPercent);
     }
@@ -173,8 +190,8 @@ public final class GlassSurfaceFactory {
     /** The status bar's tint strength, percent. */
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        return preferences != null ? preferences.getStatusBarTintStrength()
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+        return preferences != null ? preferences.getStatusBarTintStrength(mSurfaces.statusLookPage())
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     @NonNull
@@ -233,7 +250,7 @@ public final class GlassSurfaceFactory {
                                      boolean glassDrawsEdge) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getStatusBarGrain()
+            ? preferences.getStatusBarGrain(mSurfaces.statusLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         // Height-clamped like the outline clip (min(configured, height/2)): the compact pill's
         // baked stroke must curve exactly with the clip, or the corners double up.
@@ -313,7 +330,7 @@ public final class GlassSurfaceFactory {
                                               @Nullable GlassBackdropCache.Band veilOf) {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         int grain = preferences != null
-            ? preferences.getStatusBarGrain()
+            ? preferences.getStatusBarGrain(mSurfaces.statusLookPage())
             : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_STATUS_BAR_GRAIN;
         return surface(barAlpha, sliceStart, sliceEnd, true, grain, 0f, ChromeEdgeRule.NONE, null,
             veilOf, statusTintStrength());
@@ -393,8 +410,18 @@ public final class GlassSurfaceFactory {
      * The veil {@code band}'s glass is drawn with, for a surface that lays its own tint rather than
      * going through {@link #surface}: {@link Color#TRANSPARENT} for no band, or none needed.
      */
-    int bandVeil(@Nullable GlassBackdropCache.Band band) {
+    public int bandVeil(@Nullable GlassBackdropCache.Band band) {
         return band != null && mInk != null ? mInk.bandVeil(band) : Color.TRANSPARENT;
+    }
+
+    /**
+     * The even-out matrix {@code band}'s frame is drawn through ahead of its frost
+     * ({@link ChromeInk#bandEvenOutMatrix}, measured on the rect the band's content last asked
+     * about), or null: no band, no even-out for it, or the identity.
+     */
+    @Nullable
+    android.graphics.ColorMatrix bandEvenOut(@Nullable GlassBackdropCache.Band band) {
+        return band != null && mInk != null ? mInk.bandEvenOutMatrix(band, null) : null;
     }
 
     /**
@@ -403,6 +430,14 @@ public final class GlassSurfaceFactory {
      */
     void noteBandBlur(@Nullable GlassBackdropCache.Band band, int blurRadiusDp) {
         if (band != null && mInk != null) mInk.noteBandBlur(band, blurRadiusDp);
+    }
+
+    /**
+     * Tells the ink whether {@code band}'s own frame is up ({@link ChromeInk#noteBandFrame}): a
+     * frame covers the page's dim. Nothing for no band or no ink.
+     */
+    void noteBandFrame(@Nullable GlassBackdropCache.Band band, boolean framed) {
+        if (band != null && mInk != null) mInk.noteBandFrame(band, framed);
     }
 
     /**
@@ -425,6 +460,8 @@ public final class GlassSurfaceFactory {
         mInk.noteBandGlass(band, clamped, withFoot, sliceStart, sliceEnd, base);
         // The glass under it is the dock's, blurred at the dock's radius.
         mInk.noteBandBlur(band, mSurfaces.effectiveDockBlurRadiusDp());
+        // And it stands on the dock's frame where that is up, which covers the page's dim.
+        mInk.noteBandFrame(band, mInk.bandFramed(GlassBackdropCache.Band.DOCK));
         int veil = mInk.bandVeil(band);
         if (Color.alpha(veil) <= 0) return null;
         GradientDrawable layer = new GradientDrawable();
@@ -473,6 +510,15 @@ public final class GlassSurfaceFactory {
     public static boolean frostDrawsEdge(@Nullable android.widget.ImageView frost) {
         if (frost == null || frost.getVisibility() != android.view.View.VISIBLE) return false;
         SharedFrameDrawable shared = SharedFrameDrawable.of(frost.getDrawable());
+        return shared != null && shared.refracts();
+    }
+
+    /** As {@link #frostDrawsEdge(android.widget.ImageView)}, for the frost a bar's glass view holds. */
+    public static boolean frostDrawsEdge(@Nullable BarGlassView bar) {
+        if (bar == null || bar.getVisibility() != android.view.View.VISIBLE || !bar.frostShown()) {
+            return false;
+        }
+        SharedFrameDrawable shared = SharedFrameDrawable.of(bar.getFrost());
         return shared != null && shared.refracts();
     }
 

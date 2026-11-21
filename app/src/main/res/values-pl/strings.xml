@@ -64,6 +64,5 @@
     <string name="title_rename_session">Ustaw nazwę sesji</string>
     <string name="shared_user_label">Użytkownik &TERMUX_APP_NAME;</string>
     <string name="action_kill_process">Zakończ sesję (%d)</string>
-    <string name="termux_style_preferences_title">Wygląd &TERMUX_APP_NAME;</string>
     <string name="donate_preference_title">Przekaż darowiznę</string>
 </resources>

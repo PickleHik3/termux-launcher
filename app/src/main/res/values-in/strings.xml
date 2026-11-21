@@ -71,7 +71,6 @@
     <string name="termux_crash_report_notifications_enabled_title">Notifikasi Laporan Kerusakan</string>
     <string name="termux_crash_report_notifications_enabled_off">Nonaktifkan notifikasi untuk laporan kerusakan.</string>
     <string name="termux_crash_report_notifications_enabled_on">Menampilkan pemberitahuan untuk laporan kerusakan. (Default)</string>
-    <string name="termux_style_preferences_title">Tampilan &TERMUX_APP_NAME;</string>
     <string name="action_file_received_open_directory">Buka direktori</string>
     <string name="error_termux_service_start_failed_general">Gagal memulai TermuxService. Periksa logcat untuk pesan pengecualian.</string>
     <string name="error_termux_service_start_failed_bg">Gagal memulai TermuxService saat aplikasi berada di latar belakang karena pembatasan latar belakang Android.</string>

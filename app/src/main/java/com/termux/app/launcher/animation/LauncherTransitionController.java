@@ -8,6 +8,7 @@ import android.graphics.RectF;
 import android.os.Build;
 import android.os.SystemClock;
 import android.text.TextUtils;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -22,7 +23,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 public final class LauncherTransitionController {
 
     private static final String LOG_TAG = "LauncherTransitionController";
-    private static final int SAFE_MODE_FAILURE_THRESHOLD = 3;
+    /** Set by the first controller of a process; safe mode lapses on each cold start. */
+    private static boolean sProcessStarted;
     /**
      * How long a HOME resolution is trusted without an {@link #invalidateDefaultHome} call. The
      * preferred-home broadcast is not delivered on every Android build (a role change need not
@@ -42,6 +44,13 @@ public final class LauncherTransitionController {
     public LauncherTransitionController(@NonNull Activity activity, @NonNull TermuxAppSharedPreferences preferences) {
         this.activity = activity;
         this.preferences = preferences;
+        boolean first = !sProcessStarted;
+        sProcessStarted = true;
+        if (LauncherTransitionPolicy.shouldClearSafeModeOnStart(
+            preferences.isAppLauncherAnimationSafeMode(), first)) {
+            preferences.setAppLauncherAnimationSafeMode(false);
+            Logger.logInfo(LOG_TAG, "Launcher animation safe mode cleared on cold start.");
+        }
     }
 
     public boolean isLauncherAnimationEnabled() {
@@ -63,7 +72,17 @@ public final class LauncherTransitionController {
             && isDefaultHome();
     }
 
-    public void maybeHandleGestureContract(@Nullable Intent intent, @Nullable SuggestionBarView suggestionBarView) {
+    /**
+     * Answers the system's gesture contract with the icon the leaving app shrinks into: its dock
+     * icon, else its icon on the page in front (Home, or the drawer when it is open). With no
+     * icon the contract is left unanswered, so the system plays its default animation when its
+     * own wait ends; that is not an error and never counts toward safe mode.
+     *
+     * @param root the window's content, searched for Home and drawer icons
+     */
+    public void maybeHandleGestureContract(@Nullable Intent intent,
+                                           @Nullable SuggestionBarView suggestionBarView,
+                                           @Nullable View root, boolean drawerOpen) {
         if (!shouldUseAdvancedAnimations()) {
             return;
         }
@@ -71,33 +90,52 @@ public final class LauncherTransitionController {
         if (contract == null) {
             return;
         }
-        if (suggestionBarView == null) {
-            Logger.logDebug(LOG_TAG, "Skipping gesture contract handoff: suggestion bar unavailable.");
-            return;
-        }
-
-        RectF iconBounds = suggestionBarView.getLaunchIconBounds(contract.componentName);
-        if (iconBounds == null || iconBounds.width() <= 0f || iconBounds.height() <= 0f) {
-            recordFailure("icon_bounds_missing");
-            return;
-        }
-
-        if (contract.sendEndPosition(iconBounds)) {
-            transitionFailureCount = 0;
-            if (preferences.isAppLauncherAnimationSafeMode()) {
-                preferences.setAppLauncherAnimationSafeMode(false);
+        try {
+            String pkg = contract.componentName.getPackageName();
+            RectF dock = suggestionBarView == null ? null
+                : validBounds(suggestionBarView.getLaunchIconBounds(contract.componentName));
+            RectF home = null;
+            RectF drawer = null;
+            if (dock == null) {
+                if (drawerOpen) drawer = validBounds(LaunchIconLocator.find(root, pkg, true));
+                else home = validBounds(LaunchIconLocator.find(root, pkg, false));
             }
-        } else {
-            recordFailure("callback_failed");
+            LauncherTransitionPolicy.Source source = LauncherTransitionPolicy.pickSource(
+                dock != null, home != null, drawer != null, drawerOpen);
+            RectF bounds = source == LauncherTransitionPolicy.Source.DOCK ? dock
+                : source == LauncherTransitionPolicy.Source.HOME ? home
+                : source == LauncherTransitionPolicy.Source.DRAWER ? drawer : null;
+            if (bounds == null) {
+                Logger.logInfo(LOG_TAG, "Gesture handoff none pkg=" + pkg
+                    + ": no icon, the system plays its default");
+                return;
+            }
+            if (contract.sendEndPosition(bounds)) {
+                Logger.logInfo(LOG_TAG, "Gesture handoff sent source="
+                    + source.name().toLowerCase(java.util.Locale.ROOT) + " pkg=" + pkg
+                    + " bounds=" + bounds.toShortString());
+                transitionFailureCount = 0;
+            } else {
+                recordFailure("callback_failed");
+            }
+        } catch (RuntimeException e) {
+            Logger.logStackTraceWithMessage(LOG_TAG, "Gesture handoff failed", e);
+            recordFailure("exception");
         }
+    }
+
+    @Nullable
+    private static RectF validBounds(@Nullable RectF bounds) {
+        return bounds != null && bounds.width() > 0f && bounds.height() > 0f ? bounds : null;
     }
 
     private void recordFailure(@NonNull String reason) {
         transitionFailureCount++;
-        Logger.logDebug(LOG_TAG, "Launcher transition fallback reason=" + reason + " count=" + transitionFailureCount);
-        if (transitionFailureCount >= SAFE_MODE_FAILURE_THRESHOLD && !preferences.isAppLauncherAnimationSafeMode()) {
+        Logger.logInfo(LOG_TAG, "Gesture handoff error reason=" + reason + " count=" + transitionFailureCount);
+        if (LauncherTransitionPolicy.shouldLatchSafeMode(transitionFailureCount)
+            && !preferences.isAppLauncherAnimationSafeMode()) {
             preferences.setAppLauncherAnimationSafeMode(true);
-            Logger.logWarn(LOG_TAG, "Enabling launcher animation safe mode after repeated failures.");
+            Logger.logWarn(LOG_TAG, "Enabling launcher animation safe mode after repeated errors.");
         }
     }
 

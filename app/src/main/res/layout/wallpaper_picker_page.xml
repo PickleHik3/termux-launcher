@@ -10,7 +10,9 @@
        a 4dp progress bar, invisible until Done is applying;
        the pager (the rest of the height): Lock then Home, each a small label ("Lock screen",
          "Home screen") over a card at the 360x800 aspect of the lock cutout, the neighbour peeking
-         (WallpaperPickerPage sizes the cards, less the label, and the padding);
+         (WallpaperPickerPage sizes the cards, less the label, and the padding); while the
+         launcher is not the home app, one card instead, labelled "Termux Launcher", and under it
+         the round "Also set as phone wallpaper" with one line saying what it changes;
        the thumbnail strip card: Same as Home (Lock only) then up to five photos last applied
          (six tiles), in equal cells across the row (no heading, no pre-made backgrounds); each
          thumbnail is at most 112 tall and shrinks, aspect kept, so six fit the row's width
@@ -47,6 +49,41 @@
         android:layout_weight="1"
         android:clipToPadding="false"
         android:overScrollMode="never" />
+
+    <!-- Only while the launcher is not the home app (WallpaperPickerPage shows it under the one
+         card): the round "Also set as phone wallpaper" and one line under it. The check's text
+         starts after its 24dp ring and 12dp start padding, so the line under it starts 36dp in. -->
+    <LinearLayout
+        android:id="@+id/wallpaper_picker_app_only_row"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginStart="24dp"
+        android:layout_marginEnd="24dp"
+        android:layout_marginBottom="4dp"
+        android:orientation="vertical"
+        android:visibility="gone">
+
+        <androidx.appcompat.widget.AppCompatCheckBox
+            android:id="@+id/wallpaper_picker_also_phone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:button="@drawable/wallpaper_round_check"
+            android:minHeight="48dp"
+            android:paddingStart="12dp"
+            android:text="@string/wallpaper_picker_also_set_phone"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            android:textColor="?attr/colorOnSurface" />
+
+        <TextView
+            android:id="@+id/wallpaper_picker_also_phone_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="36dp"
+            android:text="@string/wallpaper_picker_also_set_phone_hint"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+    </LinearLayout>
 
     <com.google.android.material.card.MaterialCardView
         android:id="@+id/wallpaper_picker_strip_card"

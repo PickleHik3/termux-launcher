@@ -1,0 +1,602 @@
+package com.termux.app.assistant;
+
+import android.content.Context;
+import android.graphics.Rect;
+import android.graphics.drawable.GradientDrawable;
+import android.view.Gravity;
+import android.view.View;
+import android.view.ViewGroup;
+import android.widget.FrameLayout;
+import android.widget.ImageButton;
+import android.widget.ImageView;
+import android.widget.LinearLayout;
+import android.widget.TextView;
+
+import androidx.annotation.NonNull;
+import androidx.recyclerview.widget.RecyclerView;
+
+import com.google.android.material.button.MaterialButton;
+import com.termux.R;
+
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+/**
+ * The thread's rows (sheet 01): your message, an answer with its actions, the status lines, the
+ * error row and the divider. An answer streaming in changes only its own row's text; rows that did
+ * not change are not touched, so earlier answers are never rebuilt.
+ */
+final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadAdapter.Holder> {
+
+    /** What the row's buttons do. */
+    interface Actions {
+        void copy(@NonNull String text);
+
+        void share(@NonNull String text);
+
+        void retry(long messageId);
+
+        void errorAction(@NonNull AssistantRows.Row row);
+
+        void useE2b(@NonNull AssistantRows.Row row);
+    }
+
+    private static final float USER_MAX_FRACTION = 0.84f;
+    private static final float ANSWER_MAX_FRACTION = 0.92f;
+
+    private final Actions actions;
+    private AssistantUi.Palette palette;
+    private List<AssistantRows.Row> rows = new ArrayList<>();
+    /** Answers whose thinking is open; not saved, so a chat opens with every one closed. */
+    private final Set<Long> expandedThinking = new HashSet<>();
+
+    AssistantThreadAdapter(@NonNull Actions actions, @NonNull AssistantUi.Palette palette) {
+        this.actions = actions;
+        this.palette = palette;
+        setHasStableIds(true);
+    }
+
+    void setPalette(@NonNull AssistantUi.Palette palette) {
+        this.palette = palette;
+        notifyDataSetChanged();
+    }
+
+    @NonNull
+    List<AssistantRows.Row> rows() {
+        return Collections.unmodifiableList(rows);
+    }
+
+    /** Shows {@code next}; only the rows that differ are told. */
+    void submit(@NonNull List<AssistantRows.Row> next) {
+        List<AssistantRows.Row> old = rows;
+        rows = next;
+        boolean sameShape = old.size() == next.size();
+        for (int i = 0; sameShape && i < next.size(); i++) {
+            if (!old.get(i).key.equals(next.get(i).key)) sameShape = false;
+        }
+        if (!sameShape) {
+            notifyDataSetChanged();
+            return;
+        }
+        for (int i = 0; i < next.size(); i++) {
+            if (!old.get(i).equals(next.get(i))) notifyItemChanged(i);
+        }
+    }
+
+    @Override
+    public int getItemCount() {
+        return rows.size();
+    }
+
+    @Override
+    public long getItemId(int position) {
+        return rows.get(position).key.hashCode();
+    }
+
+    @Override
+    public int getItemViewType(int position) {
+        return rows.get(position).type.ordinal();
+    }
+
+    @NonNull
+    @Override
+    public Holder onCreateViewHolder(@NonNull ViewGroup parent, int viewType) {
+        Context context = parent.getContext();
+        AssistantRows.Type type = AssistantRows.Type.values()[viewType];
+        switch (type) {
+            case USER: return new UserHolder(context);
+            case ANSWER: return new AnswerHolder(context, actions, expandedThinking);
+            case WORKING: return new StatusHolder(context, false);
+            case WAITING: return new StatusHolder(context, true);
+            case ERROR: return new ErrorHolder(context, actions);
+            default: return new CutoffHolder(context);
+        }
+    }
+
+    @Override
+    public void onBindViewHolder(@NonNull Holder holder, int position) {
+        holder.setGrouped(isLaterInUserGroup(rows, position));
+        holder.bind(rows.get(position), palette);
+    }
+
+    /** Whether the row is a user message directly after another user message (no answer between). */
+    static boolean isLaterInUserGroup(@NonNull List<AssistantRows.Row> list, int position) {
+        return position > 0 && position < list.size()
+            && list.get(position).type == AssistantRows.Type.USER
+            && list.get(position - 1).type == AssistantRows.Type.USER;
+    }
+
+    abstract static class Holder extends RecyclerView.ViewHolder {
+        Holder(@NonNull View itemView) {
+            super(itemView);
+            itemView.setLayoutParams(new RecyclerView.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+        }
+
+        /** Told before bind: the row is a later message of a run of user messages. */
+        void setGrouped(boolean grouped) {
+        }
+
+        abstract void bind(@NonNull AssistantRows.Row row, @NonNull AssistantUi.Palette p);
+    }
+
+    /** Spacing: 24 between messages. */
+    static final class Gap extends RecyclerView.ItemDecoration {
+        private final int gapPx;
+        private final int groupedPx;
+
+        Gap(int gapPx) {
+            this.gapPx = gapPx;
+            this.groupedPx = Math.max(1, Math.round(2f * (float) gapPx / 24f));
+        }
+
+        @Override
+        public void getItemOffsets(@NonNull Rect outRect, @NonNull View view, @NonNull RecyclerView parent,
+                                   @NonNull RecyclerView.State state) {
+            int position = parent.getChildAdapterPosition(view);
+            boolean grouped = position > 0 && parent.getAdapter() instanceof AssistantThreadAdapter
+                && isLaterInUserGroup(((AssistantThreadAdapter) parent.getAdapter()).rows, position);
+            outRect.top = position == 0 ? 0 : grouped ? groupedPx : gapPx;
+        }
+    }
+
+    // ------------------------------------------------------------------------------- you
+
+    /** A text view that never grows wider than a fraction of the width it is offered. */
+    private static final class CappedTextView extends TextView {
+        CappedTextView(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int offered = MeasureSpec.getSize(widthMeasureSpec);
+            int cap = Math.round(offered * USER_MAX_FRACTION);
+            int mode = MeasureSpec.getMode(widthMeasureSpec);
+            if (mode == MeasureSpec.UNSPECIFIED) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                return;
+            }
+            super.onMeasure(MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST), heightMeasureSpec);
+        }
+    }
+
+    private static final class UserHolder extends Holder {
+        private final TextView text;
+        private final GradientDrawable bubble = new GradientDrawable();
+        private final float[] radii = new float[8];
+        private final float big;
+        private final float small;
+        private boolean grouped;
+
+        UserHolder(@NonNull Context context) {
+            super(new FrameLayout(context));
+            big = AssistantUi.dp(context, 20);
+            small = AssistantUi.dp(context, 6);
+            text = new CappedTextView(context);
+            AssistantUi.body(text, 0);
+            int h = AssistantUi.dp(context, 14);
+            int v = AssistantUi.dp(context, 9);
+            text.setPadding(h, v, h, v);
+            text.setTextIsSelectable(false);
+            text.setBackground(bubble);
+            ((FrameLayout) itemView).addView(text, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END));
+        }
+
+        @Override
+        void setGrouped(boolean grouped) {
+            this.grouped = grouped;
+        }
+
+        @Override
+        void bind(@NonNull AssistantRows.Row row, @NonNull AssistantUi.Palette p) {
+            // Top-left, top-right, bottom-right, bottom-left: 20 20 6 20; later in a group 20 6 6 20.
+            setRadii(radii, big, grouped ? small : big, small, big);
+            bubble.setCornerRadii(radii);
+            bubble.setColor(p.primaryContainer);
+            text.setTextColor(p.onPrimaryContainer);
+            text.setText(row.text);
+            text.setContentDescription(itemView.getContext().getString(R.string.assistant_you, row.text));
+        }
+    }
+
+    private static void setRadii(float[] out, float tl, float tr, float br, float bl) {
+        out[0] = tl; out[1] = tl; out[2] = tr; out[3] = tr;
+        out[4] = br; out[5] = br; out[6] = bl; out[7] = bl;
+    }
+
+    /** A bubble that wraps its content up to a fraction of the width it is offered. */
+    private static final class CappedColumn extends LinearLayout {
+        CappedColumn(Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            int mode = MeasureSpec.getMode(widthMeasureSpec);
+            if (mode == MeasureSpec.UNSPECIFIED) {
+                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+                return;
+            }
+            int cap = Math.round(MeasureSpec.getSize(widthMeasureSpec) * ANSWER_MAX_FRACTION);
+            super.onMeasure(MeasureSpec.makeMeasureSpec(cap, MeasureSpec.AT_MOST), heightMeasureSpec);
+        }
+    }
+
+    // ----------------------------------------------------------------------------- answer
+
+    private static final class AnswerHolder extends Holder {
+        private final LinearLayout column;
+        private final GradientDrawable bubble = new GradientDrawable();
+        private final float[] radii = new float[8];
+        private final LinearLayout actionsRow;
+        private final TextView stopped;
+        private final ImageButton copy;
+        private final ImageButton share;
+        private final ImageButton retry;
+        private final TextView speed;
+        private final Actions actions;
+        private final Set<Long> expanded;
+        private final LinearLayout thinkingHeader;
+        private final ImageView thinkingChevron;
+        private final TextView thinkingLabel;
+        private final LinearLayout thinkingBody;
+        private final View thinkingRule;
+        private final TextView thinkingText;
+        private String boundThinking = "";
+        private AssistantRows.Row row;
+
+        AnswerHolder(@NonNull Context context, @NonNull Actions actions, @NonNull Set<Long> expanded) {
+            super(new LinearLayout(context));
+            this.actions = actions;
+            this.expanded = expanded;
+            LinearLayout root = (LinearLayout) itemView;
+            root.setOrientation(LinearLayout.VERTICAL);
+            thinkingHeader = new LinearLayout(context);
+            thinkingHeader.setOrientation(LinearLayout.HORIZONTAL);
+            thinkingHeader.setGravity(Gravity.CENTER_VERTICAL);
+            thinkingHeader.setMinimumHeight(AssistantUi.dp(context, 40));
+            thinkingHeader.setPaddingRelative(0, 0, AssistantUi.dp(context, 12), 0);
+            thinkingHeader.setBackground(AssistantUi.rippleBackground(context));
+            thinkingChevron = new ImageView(context);
+            thinkingChevron.setImageResource(R.drawable.ic_assistant_chevron);
+            thinkingChevron.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams cp = new LinearLayout.LayoutParams(AssistantUi.dp(context, 18),
+                AssistantUi.dp(context, 18));
+            cp.setMarginEnd(AssistantUi.dp(context, 4));
+            thinkingHeader.addView(thinkingChevron, cp);
+            thinkingLabel = AssistantUi.text(context);
+            thinkingHeader.addView(thinkingLabel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            root.addView(thinkingHeader, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            thinkingBody = new CappedColumn(context);
+            thinkingBody.setOrientation(LinearLayout.HORIZONTAL);
+            thinkingRule = new View(context);
+            thinkingBody.addView(thinkingRule, new LinearLayout.LayoutParams(AssistantUi.dp(context, 2),
+                ViewGroup.LayoutParams.MATCH_PARENT));
+            thinkingText = AssistantUi.text(context);
+            thinkingText.setPaddingRelative(AssistantUi.dp(context, 10), 0, 0, 0);
+            thinkingBody.addView(thinkingText, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams bp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            bp.setMarginStart(AssistantUi.dp(context, 12));
+            bp.bottomMargin = AssistantUi.dp(context, 8);
+            root.addView(thinkingBody, bp);
+            thinkingHeader.setOnClickListener(v -> {
+                if (row == null) return;
+                if (!expanded.remove(row.messageId)) expanded.add(row.messageId);
+                applyThinkingOpen(row);
+            });
+            column = new CappedColumn(context);
+            column.setOrientation(LinearLayout.VERTICAL);
+            int bh = AssistantUi.dp(context, 14);
+            int bv = AssistantUi.dp(context, 11);
+            column.setPadding(bh, bv, bh, bv);
+            float big = AssistantUi.dp(context, 20);
+            float small = AssistantUi.dp(context, 6);
+            // Top-left, top-right, bottom-right, bottom-left: 20 20 20 6.
+            setRadii(radii, big, big, big, small);
+            bubble.setCornerRadii(radii);
+            column.setBackground(bubble);
+            root.addView(column, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            actionsRow = new LinearLayout(context);
+            actionsRow.setOrientation(LinearLayout.HORIZONTAL);
+            actionsRow.setGravity(Gravity.CENTER_VERTICAL);
+            stopped = AssistantUi.text(context);
+            stopped.setText(R.string.assistant_stopped);
+            stopped.setPaddingRelative(AssistantUi.dp(context, 14), 0, AssistantUi.dp(context, 2), 0);
+            actionsRow.addView(stopped, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            copy = AssistantUi.iconButton(context, R.drawable.ic_assistant_copy, R.string.assistant_copy, 0, 20f);
+            share = AssistantUi.iconButton(context, R.drawable.ic_assistant_share, R.string.assistant_share, 0, 20f);
+            retry = AssistantUi.iconButton(context, R.drawable.ic_assistant_refresh, R.string.assistant_try_again, 0, 20f);
+            int size = AssistantUi.dp(context, 40);
+            int ipad = AssistantUi.dp(context, 10);
+            copy.setPadding(ipad, ipad, ipad, ipad);
+            share.setPadding(ipad, ipad, ipad, ipad);
+            retry.setPadding(ipad, ipad, ipad, ipad);
+            copy.setMinimumWidth(size);
+            copy.setMinimumHeight(size);
+            share.setMinimumWidth(size);
+            share.setMinimumHeight(size);
+            retry.setMinimumWidth(size);
+            retry.setMinimumHeight(size);
+            actionsRow.addView(copy, new LinearLayout.LayoutParams(size, size));
+            actionsRow.addView(share, new LinearLayout.LayoutParams(size, size));
+            actionsRow.addView(retry, new LinearLayout.LayoutParams(size, size));
+            speed = AssistantUi.text(context);
+            speed.setPaddingRelative(AssistantUi.dp(context, 8), 0, 0, 0);
+            actionsRow.addView(speed, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            ap.setMarginStart(-AssistantUi.dp(context, 6));
+            root.addView(actionsRow, ap);
+            copy.setOnClickListener(v -> {
+                if (row != null) actions.copy(row.text);
+            });
+            share.setOnClickListener(v -> {
+                if (row != null) actions.share(row.text);
+            });
+            retry.setOnClickListener(v -> {
+                if (row != null) actions.retry(row.messageId);
+            });
+        }
+
+        private void bindThinking(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
+            Context c = thinkingLabel.getContext();
+            AssistantUi.setVisible(thinkingHeader, r.hasThinking());
+            if (!r.hasThinking()) {
+                AssistantUi.setVisible(thinkingBody, false);
+                boundThinking = "";
+                return;
+            }
+            AssistantUi.meta(thinkingLabel, p.onSurfaceVariant);
+            thinkingChevron.setColorFilter(p.onSurfaceVariant);
+            thinkingLabel.setText(thinkingLabel(c, r));
+            AssistantUi.bodySmall(thinkingText, p.onSurfaceVariant);
+            thinkingRule.setBackgroundColor(p.outlineVariant);
+            applyThinkingOpen(r);
+        }
+
+        /** Shows or hides the thinking text as the adapter's set says; the text is set only while open. */
+        private void applyThinkingOpen(@NonNull AssistantRows.Row r) {
+            Context c = thinkingLabel.getContext();
+            boolean open = expanded.contains(r.messageId);
+            thinkingChevron.setRotation(open ? 0f : -90f);
+            thinkingHeader.setContentDescription(c.getString(open ? R.string.assistant_thinking_hide
+                : R.string.assistant_thinking_show));
+            AssistantUi.setVisible(thinkingBody, open);
+            if (open && !r.thinking.equals(boundThinking)) {
+                boundThinking = r.thinking;
+                thinkingText.setText(r.thinking);
+            }
+        }
+
+        private static String thinkingLabel(@NonNull Context c, @NonNull AssistantRows.Row r) {
+            if (r.thinkingLive) return c.getString(R.string.assistant_thinking_live);
+            // The time was lost (the process died mid-thought).
+            if (r.thinkingMs < 0L) return c.getString(R.string.assistant_thought);
+            return c.getString(R.string.assistant_thought_for, AssistantSpeed.timeWithUnit(r.thinkingMs,
+                c.getString(R.string.assistant_speed_seconds)));
+        }
+
+        private void bindSpeed(@NonNull AssistantRows.Row r) {
+            Context c = speed.getContext();
+            String time = AssistantSpeed.time(r.durationMs);
+            String seconds = AssistantSpeed.isClock(r.durationMs) ? time
+                : c.getString(R.string.assistant_speed_seconds, time);
+            int tps = AssistantSpeed.tokensPerSecond(r.durationMs, r.ttftMs, r.tokens);
+            if (tps > 0) {
+                String tpsText = String.format(java.util.Locale.getDefault(), "%d", tps);
+                speed.setText(c.getString(R.string.assistant_speed_both,
+                    c.getString(R.string.assistant_speed_tps, tpsText), seconds));
+                speed.setContentDescription(c.getString(R.string.assistant_speed_desc_both, tpsText,
+                    AssistantSpeed.spokenSeconds(r.durationMs)));
+            } else {
+                speed.setText(seconds);
+                speed.setContentDescription(c.getString(R.string.assistant_speed_desc_time,
+                    AssistantSpeed.spokenSeconds(r.durationMs)));
+            }
+        }
+
+        @Override
+        void bind(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
+            row = r;
+            bindThinking(r, p);
+            AssistantUi.setVisible(column, !r.text.isEmpty());
+            bubble.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(p.surfaceHigh, 184));
+            if (!r.text.isEmpty()) {
+                AssistantMarkdownViews.bind(column, AssistantMarkdown.parse(r.text), p,
+                    code -> actions.copy(code));
+            }
+            boolean hasSpeed = !r.streaming && r.durationMs > 0L;
+            boolean any = !r.streaming && (r.stopped || r.copyShare || r.retry || hasSpeed);
+            AssistantUi.setVisible(actionsRow, any);
+            AssistantUi.meta(stopped, p.onSurfaceVariant);
+            AssistantUi.setVisible(stopped, r.stopped);
+            AssistantUi.setVisible(copy, r.copyShare);
+            AssistantUi.setVisible(share, r.copyShare);
+            AssistantUi.setVisible(retry, r.retry);
+            AssistantUi.meta(speed, p.onSurfaceVariant);
+            AssistantUi.setVisible(speed, hasSpeed);
+            if (hasSpeed) bindSpeed(r);
+            AssistantUi.tint(copy, p.onSurfaceVariant);
+            AssistantUi.tint(share, p.onSurfaceVariant);
+            AssistantUi.tint(retry, p.onSurfaceVariant);
+            itemView.setContentDescription(null);
+            itemView.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_NONE);
+        }
+    }
+
+    // ------------------------------------------------------------------------------ status
+
+    private static final class StatusHolder extends Holder {
+        private final TextView text;
+        private final boolean waiting;
+
+        StatusHolder(@NonNull Context context, boolean waiting) {
+            super(new FrameLayout(context));
+            this.waiting = waiting;
+            text = AssistantUi.text(context);
+            text.setText(waiting ? R.string.assistant_waiting : R.string.assistant_working);
+            ((FrameLayout) itemView).addView(text, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                AssistantUi.dp(context, 20), waiting ? Gravity.END : Gravity.START));
+        }
+
+        @Override
+        void bind(@NonNull AssistantRows.Row row, @NonNull AssistantUi.Palette p) {
+            AssistantUi.bodySmall(text, p.onSurfaceVariant);
+        }
+    }
+
+    // ------------------------------------------------------------------------------- error
+
+    private static final class ErrorHolder extends Holder {
+        private final LinearLayout card;
+        private final ImageView icon;
+        private final TextView title;
+        private final TextView body;
+        private final MaterialButton main;
+        private final MaterialButton alt;
+        private final Actions actions;
+        private AssistantRows.Row row;
+
+        ErrorHolder(@NonNull Context context, @NonNull Actions actions) {
+            super(new FrameLayout(context));
+            this.actions = actions;
+            card = new LinearLayout(context);
+            card.setOrientation(LinearLayout.HORIZONTAL);
+            int h = AssistantUi.dp(context, 16);
+            int v = AssistantUi.dp(context, 12);
+            card.setPadding(h, v, h, v);
+            icon = new ImageView(context);
+            icon.setImageResource(R.drawable.ic_assistant_error);
+            icon.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+            LinearLayout.LayoutParams ip = new LinearLayout.LayoutParams(AssistantUi.dp(context, 20),
+                AssistantUi.dp(context, 20));
+            ip.setMarginEnd(AssistantUi.dp(context, 10));
+            ip.topMargin = AssistantUi.dp(context, 0);
+            card.addView(icon, ip);
+            LinearLayout col = new LinearLayout(context);
+            col.setOrientation(LinearLayout.VERTICAL);
+            title = AssistantUi.text(context);
+            body = AssistantUi.text(context);
+            col.addView(title);
+            col.addView(body);
+            LinearLayout buttons = new LinearLayout(context);
+            buttons.setOrientation(LinearLayout.HORIZONTAL);
+            buttons.setGravity(Gravity.START);
+            main = new MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            alt = new MaterialButton(context, null, com.google.android.material.R.attr.materialButtonOutlinedStyle);
+            buttons.addView(main);
+            LinearLayout.LayoutParams altParams = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            altParams.setMarginStart(AssistantUi.dp(context, 8));
+            buttons.addView(alt, altParams);
+            col.addView(buttons);
+            card.addView(col, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            ((FrameLayout) itemView).addView(card, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            card.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+            main.setOnClickListener(v1 -> {
+                if (row != null) actions.errorAction(row);
+            });
+            alt.setOnClickListener(v1 -> {
+                if (row != null) actions.useE2b(row);
+            });
+        }
+
+        @Override
+        void bind(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
+            row = r;
+            Context context = itemView.getContext();
+            AssistantRows.ErrorKind kind = r.error == null ? AssistantRows.ErrorKind.OTHER : r.error;
+            card.setBackground(AssistantUi.fill(p.errorContainer, AssistantUi.dp(context, 16)));
+            AssistantUi.bodySmall(title, p.onErrorContainer);
+            AssistantUi.bodySmall(body, p.onErrorContainer);
+            title.setText(AssistantRows.errorTitle(kind));
+            int bodyRes = AssistantRows.errorBody(kind, r.offerE2b);
+            AssistantUi.setVisible(body, bodyRes != 0);
+            if (bodyRes != 0) body.setText(bodyRes);
+            icon.setColorFilter(p.onErrorContainer);
+            AssistantRows.ErrorAction action = AssistantRows.errorAction(kind);
+            main.setText(action == AssistantRows.ErrorAction.CHOOSE_MODEL ? R.string.assistant_choose_model
+                : R.string.assistant_try_again);
+            main.setTextColor(p.onErrorContainer);
+            main.setStrokeColor(android.content.res.ColorStateList.valueOf(p.onErrorContainer));
+            AssistantUi.setVisible(main, r.retry || action == AssistantRows.ErrorAction.CHOOSE_MODEL);
+            alt.setText(R.string.assistant_use_e2b);
+            alt.setTextColor(p.onErrorContainer);
+            alt.setStrokeColor(android.content.res.ColorStateList.valueOf(p.onErrorContainer));
+            AssistantUi.setVisible(alt, r.offerE2b && r.retry);
+        }
+    }
+
+    // ------------------------------------------------------------------------------ cut-off
+
+    private static final class CutoffHolder extends Holder {
+        private final View left;
+        private final View right;
+        private final TextView text;
+
+        CutoffHolder(@NonNull Context context) {
+            super(new LinearLayout(context));
+            LinearLayout row = (LinearLayout) itemView;
+            row.setOrientation(LinearLayout.HORIZONTAL);
+            row.setGravity(Gravity.CENTER_VERTICAL);
+            left = new View(context);
+            right = new View(context);
+            text = AssistantUi.text(context);
+            text.setText(R.string.assistant_cutoff);
+            text.setGravity(Gravity.CENTER_HORIZONTAL);
+            text.setMaxWidth(AssistantUi.dp(context, 290));
+            int gap = AssistantUi.dp(context, 12);
+            int min = AssistantUi.dp(context, 12);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, 1, 1f);
+            lp.setMarginEnd(gap);
+            row.addView(left, lp);
+            row.addView(text, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            LinearLayout.LayoutParams rp = new LinearLayout.LayoutParams(0, 1, 1f);
+            rp.setMarginStart(gap);
+            row.addView(right, rp);
+            left.setMinimumWidth(min);
+            right.setMinimumWidth(min);
+        }
+
+        @Override
+        void bind(@NonNull AssistantRows.Row row, @NonNull AssistantUi.Palette p) {
+            AssistantUi.meta(text, p.onSurfaceVariant);
+            left.setBackgroundColor(p.outlineVariant);
+            right.setBackgroundColor(p.outlineVariant);
+        }
+    }
+}

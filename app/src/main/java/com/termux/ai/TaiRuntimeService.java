@@ -40,6 +40,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
@@ -62,11 +63,17 @@ public final class TaiRuntimeService extends Service {
     static final int MSG_IDLE_EXIT = 5;
     private static final long MIB = 1024L * 1024L;
 
-    private final ExecutorService executor = Executors.newSingleThreadExecutor(runnable -> {
-        Thread thread = new Thread(runnable, "tai-runtime-service");
-        thread.setDaemon(true);
-        return thread;
-    });
+    /**
+     * The serial lane for native work: chat and completion generations with their ids and
+     * priorities (ADR 0027 §4), and loads, keep warm, embeddings, tokenize, preflight and the
+     * benchmarks as plain jobs at normal priority, all one at a time in the order they came. It is
+     * the runtime-process TaiManager's own queue ({@link TaiManager#runtimeQueue}), so a direct
+     * in-process generation is ordered against it too; it lives with the process, not the service.
+     */
+    @NonNull
+    private GenerationQueue lane() {
+        return TaiManager.getRuntimeProcessInstance(this).runtimeQueue();
+    }
     private final ExecutorService controlExecutor = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, "tai-runtime-control");
         thread.setDaemon(true);
@@ -107,6 +114,14 @@ public final class TaiRuntimeService extends Service {
     });
     /** Image generations running now; the service stays in the foreground while one runs. */
     private final AtomicInteger imageInFlight = new AtomicInteger();
+    /** The depth maker has a lane of its own: one thread, so photos are made one at a time and nothing else waits. */
+    private final ExecutorService depthExecutor = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "tai-runtime-depth");
+        thread.setDaemon(true);
+        return thread;
+    });
+    /** Depth runs going now; the service stays in the foreground while one runs. */
+    private final AtomicInteger depthInFlight = new AtomicInteger();
     /**
      * Carries out what the watch decides. Evictions take the router's load lock, so a load in
      * progress holds them up; that must stall neither the watch tick (which also publishes
@@ -171,6 +186,33 @@ public final class TaiRuntimeService extends Service {
         // id is ours, and nothing of ours is posted under it until ensureForeground() runs.
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager != null) manager.cancel(NOTIFICATION_ID);
+        startGpuProbe();
+    }
+
+    /** How long the lane waits for the start-up GPU probe before native work goes ahead anyway. */
+    static final long GPU_PROBE_LANE_WAIT_MS = 3_000L;
+
+    /**
+     * The GPU probe, once per app build (later starts read its cache file): here and never in the
+     * launcher's process, so a driver that crashes takes down only this one. It runs on a thread of
+     * its own; the lane holds native work back until it is done (or {@link #GPU_PROBE_LANE_WAIT_MS}
+     * has passed, should a driver hang), so the first load does not meet the drivers mid-probe and
+     * sees the probed GPU path.
+     */
+    private void startGpuProbe() {
+        CountDownLatch probed = new CountDownLatch(1);
+        TaiPlatformCaps.probeAsync(this, probed::countDown);
+        try {
+            lane().submitTask(() -> {
+                try {
+                    probed.await(GPU_PROBE_LANE_WAIT_MS, TimeUnit.MILLISECONDS);
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                }
+            });
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "could not hold the lane for the GPU probe: " + message(e));
+        }
     }
 
     @Nullable
@@ -189,11 +231,18 @@ public final class TaiRuntimeService extends Service {
         cancelIdleExitCheck();
         releaseBenchWakeLock();
         watchScheduler.shutdownNow();
-        executor.shutdownNow();
+        // The lane outlives the service (it is the process's); what still waits on it was asked for
+        // through this service and must not run after it. The running job is left as it was.
+        try {
+            lane().cancelWaiting();
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "could not clear the lane on destroy: " + message(e));
+        }
         controlExecutor.shutdownNow();
         sttExecutor.shutdownNow();
         ttsExecutor.shutdownNow();
         imageExecutor.shutdownNow();
+        depthExecutor.shutdownNow();
         pressureExecutor.shutdownNow();
         super.onDestroy();
         if (idleExitAnnounced) {
@@ -225,6 +274,16 @@ public final class TaiRuntimeService extends Service {
             String body = data.getString(TaiRuntimeIpc.KEY_BODY, null);
             String bodyFile = data.getString(TaiRuntimeIpc.KEY_BODY_FILE, null);
             Messenger replyTo = message.replyTo;
+            if (TaiRuntimeIpc.OP_GPU_PROBE.equals(operation)) {
+                // From a one-off client that lets go right after: it is not the client an idle-exit
+                // notice should reach, nor use of the runtime. It waits for the start-up probe, so
+                // neither the main thread nor any lane is held by it.
+                inFlight.incrementAndGet();
+                Thread thread = new Thread(() -> runRequest(replyTo, requestId, operation, body, bodyFile), "tai-gpu-probe-reply");
+                thread.setDaemon(true);
+                thread.start();
+                return;
+            }
             // A request means the client kept the binding; whatever exit was announced is off.
             lastClient = replyTo;
             idleExitAnnounced = false;
@@ -242,8 +301,14 @@ public final class TaiRuntimeService extends Service {
                 inFlight.decrementAndGet();
                 return;
             }
+            if (TaiRuntimeIpc.OP_CANCEL.equals(operation) && data.containsKey(TaiRuntimeIpc.KEY_GENERATION_ID)) {
+                // One generation by id; a cancel without an id is the cancel-all below.
+                String generationId = data.getString(TaiRuntimeIpc.KEY_GENERATION_ID, "");
+                controlExecutor.execute(() -> runCancelById(replyTo, requestId, generationId, bodyFile));
+                return;
+            }
             if (isConcurrentControlOperation(operation)) {
-                // Generation occupies the serial native-work executor. Control operations need an
+                // Generation occupies the serial native-work lane. Control operations need an
                 // independent lane so they can signal it instead of queuing behind it.
                 controlExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
@@ -260,10 +325,98 @@ public final class TaiRuntimeService extends Service {
                 imageExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
                 return;
             }
+            if (isDepthOperation(operation)) {
+                depthExecutor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+                return;
+            }
             // Raised as the bench is queued, so everything already ahead of it on the serial lane
             // is still served and everything after it is refused at once rather than left to wait.
             if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) benchRunning.set(true);
-            executor.execute(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+            if (isGenerationOperation(operation)) {
+                // A client that sends no id still gets one, so the queue can name it.
+                String generationId = data.getString(TaiRuntimeIpc.KEY_GENERATION_ID, requestId);
+                TaiRuntimeLink.Priority priority = TaiRuntimeLink.Priority.fromWire(data.getString(TaiRuntimeIpc.KEY_PRIORITY));
+                lane().submit(generationId, priority, new GenerationQueue.Job() {
+                    @Override
+                    public void run() {
+                        runRequest(replyTo, requestId, operation, body, bodyFile);
+                    }
+
+                    @Override
+                    public void onWaiting() {
+                        sendGenerationState(replyTo, requestId, TaiRuntimeIpc.STATE_WAITING);
+                    }
+
+                    @Override
+                    public void onStarted() {
+                        sendGenerationState(replyTo, requestId, TaiRuntimeIpc.STATE_STARTED);
+                    }
+
+                    @Override
+                    public void onCancelled() {
+                        finishCancelledWhileWaiting(replyTo, requestId, operation, bodyFile);
+                    }
+                });
+                return;
+            }
+            lane().submitTask(() -> runRequest(replyTo, requestId, operation, body, bodyFile));
+        }
+    }
+
+    /** Chat and completion: the operations that go through the lane with an id and a priority. */
+    static boolean isGenerationOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_OPENAI_CHAT.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION.equals(operation)
+            || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation);
+    }
+
+    /**
+     * A cancel by id: a waiting generation leaves the lane (it answers its own client with
+     * {@code generation_cancelled}), the running one is stopped, any other id is left alone.
+     */
+    private void runCancelById(@NonNull Messenger replyTo, @NonNull String requestId, @NonNull String generationId,
+                               @Nullable String bodyFile) {
+        try {
+            GenerationQueue.CancelOutcome outcome = lane().cancel(generationId);
+            JSONObject result = new JSONObject();
+            result.put("ok", true);
+            result.put("id", generationId);
+            result.put("cancelled", outcome != GenerationQueue.CancelOutcome.NONE);
+            result.put("was", outcome == GenerationQueue.CancelOutcome.REMOVED_WAITING ? "waiting"
+                : outcome == GenerationQueue.CancelOutcome.STOPPED_RUNNING ? "running" : "none");
+            sendResponse(replyTo, requestId, result);
+        } catch (Throwable throwable) {
+            sendResponse(replyTo, requestId, error(500, "tai_runtime_service_error", message(throwable)));
+        } finally {
+            deleteBodyFile(bodyFile);
+            inFlight.decrementAndGet();
+        }
+    }
+
+    /**
+     * Ends a generation that was cancelled before its turn, as {@link #runRequest} would have ended
+     * it: the client hears {@code generation_cancelled} the way the chat routes report their own
+     * errors (an OpenAI error event and a done for a stream, an OpenAI error reply otherwise).
+     */
+    private void finishCancelledWhileWaiting(@NonNull Messenger replyTo, @NonNull String requestId,
+                                             @NonNull String operation, @Nullable String bodyFile) {
+        try {
+            JSONObject error = InProcessTaiRuntimeLink.cancelledWhileWaiting();
+            if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
+                || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)) {
+                sendStreamEvent(replyTo, requestId, error);
+                sendStreamDone(replyTo, requestId);
+            } else {
+                sendResponse(replyTo, requestId, error);
+            }
+        } catch (IOException ignored) {
+            // The client is gone; nothing is waiting for the answer.
+        } finally {
+            deleteBodyFile(bodyFile);
+            lastActivityMs = System.currentTimeMillis();
+            inFlight.decrementAndGet();
+            updateForegroundAfterOperation();
         }
     }
 
@@ -271,6 +424,7 @@ public final class TaiRuntimeService extends Service {
         return TaiRuntimeIpc.OP_CANCEL.equals(operation) || TaiRuntimeIpc.OP_UNLOAD_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_UNLOAD_CHAT_MODEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STOP.equals(operation) || TaiRuntimeIpc.OP_IMAGE_CANCEL.equals(operation)
+            || TaiRuntimeIpc.OP_DEPTH_CANCEL.equals(operation)
             || TaiRuntimeIpc.OP_TTS_PAUSE.equals(operation) || TaiRuntimeIpc.OP_TTS_RESUME.equals(operation)
             || TaiRuntimeIpc.OP_TTS_STATE.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_SKIP_WAIT.equals(operation)
@@ -297,6 +451,11 @@ public final class TaiRuntimeService extends Service {
             || TaiRuntimeIpc.OP_BENCHMARK.equals(operation)
             || TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)
             || TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation);
+    }
+
+    /** The depth maker runs on {@link #depthExecutor}; its cancel is a control operation, not one of these. */
+    static boolean isDepthOperation(@NonNull String operation) {
+        return TaiRuntimeIpc.OP_DEPTH_MAKE.equals(operation);
     }
 
     /** Image generation runs on {@link #imageExecutor}; its cancel is a control operation, not one of these. */
@@ -329,9 +488,11 @@ public final class TaiRuntimeService extends Service {
     ) {
         boolean speech = isTtsOperation(operation);
         boolean image = isImageOperation(operation);
+        boolean depth = isDepthOperation(operation);
         boolean bench = TaiRuntimeIpc.OP_BENCH_RUN.equals(operation);
         if (speech) ttsInFlight.incrementAndGet();
         if (image) imageInFlight.incrementAndGet();
+        if (depth) depthInFlight.incrementAndGet();
         try {
             String payload = body != null ? body : readBodyFile(bodyFile);
             // The deadline runs from here, the start of the load, not from the caller's request.
@@ -342,12 +503,13 @@ public final class TaiRuntimeService extends Service {
                 // Before the work, so a first load is watched too: nothing else starts the watch until it ends.
                 startRuntimeWatch();
                 ensureForeground("On-device AI runtime", speech ? "Speaking" : image ? "Generating an image"
-                    : bench ? "Benchmarking" : "Preparing " + operation);
+                    : depth ? "Making a depth image" : bench ? "Benchmarking" : "Preparing " + operation);
             }
             if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_OPENAI_COMPLETION_STREAM.equals(operation)
                 || TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)
                 || TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)
+                || TaiRuntimeIpc.OP_DEPTH_MAKE.equals(operation)
                 || bench) {
                 runStreamRequest(replyTo, requestId, operation, payload);
                 return;
@@ -363,8 +525,9 @@ public final class TaiRuntimeService extends Service {
             }
             if (speech) ttsInFlight.decrementAndGet();
             if (image) imageInFlight.decrementAndGet();
+            if (depth) depthInFlight.decrementAndGet();
             deleteBodyFile(bodyFile);
-            if (!isStatusOperation(operation)) lastActivityMs = System.currentTimeMillis();
+            if (!isStatusOperation(operation) && !TaiRuntimeIpc.OP_GPU_PROBE.equals(operation)) lastActivityMs = System.currentTimeMillis();
             inFlight.decrementAndGet();
             updateForegroundAfterOperation();
         }
@@ -412,13 +575,13 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_CANCEL:
                 return manager.cancelRuntime();
             case TaiRuntimeIpc.OP_BENCH_SKIP_WAIT:
-                return manager.skipBenchCooldown();
+                return manager.benchHost().skipBenchCooldown();
             case TaiRuntimeIpc.OP_BENCH_HOLD:
-                return manager.holdBench(body);
+                return manager.benchHost().holdBench(body);
             case TaiRuntimeIpc.OP_OPENAI_CHAT:
-                return manager.openAiChatCompletions(body);
+                return manager.runtimeHost().generateHere(TaiRuntimeLink.Kind.CHAT, body);
             case TaiRuntimeIpc.OP_OPENAI_COMPLETION:
-                return manager.openAiCompletions(body);
+                return manager.runtimeHost().generateHere(TaiRuntimeLink.Kind.COMPLETION, body);
             case TaiRuntimeIpc.OP_EMBEDDINGS:
                 return manager.embeddings(body);
             case TaiRuntimeIpc.OP_TOKENIZE:
@@ -426,25 +589,29 @@ public final class TaiRuntimeService extends Service {
             case TaiRuntimeIpc.OP_PREFLIGHT:
                 return manager.preflight(body);
             case TaiRuntimeIpc.OP_BENCHMARK:
-                return manager.benchmark(body);
+                return manager.benchHost().benchmark(body);
             case TaiRuntimeIpc.OP_TRANSCRIBE:
-                return manager.transcribe(body);
+                return manager.speech().transcribe(body);
             case TaiRuntimeIpc.OP_STT_WARM:
-                return manager.sttWarm(body);
+                return manager.speech().sttWarm(body);
             case TaiRuntimeIpc.OP_TTS_SPEAK:
-                return manager.speak(body);
+                return manager.speech().speak(body);
             case TaiRuntimeIpc.OP_TTS_WARM:
-                return manager.ttsWarm(body);
+                return manager.speech().ttsWarm(body);
             case TaiRuntimeIpc.OP_TTS_STOP:
-                return manager.stopSpeaking();
+                return manager.speech().stopSpeaking();
             case TaiRuntimeIpc.OP_TTS_PAUSE:
-                return manager.pauseSpeaking();
+                return manager.speech().pauseSpeaking();
             case TaiRuntimeIpc.OP_TTS_RESUME:
-                return manager.resumeSpeaking();
+                return manager.speech().resumeSpeaking();
             case TaiRuntimeIpc.OP_TTS_STATE:
-                return manager.speechState();
+                return manager.speech().speechState();
             case TaiRuntimeIpc.OP_IMAGE_CANCEL:
-                return manager.cancelImage();
+                return manager.images().cancelImage();
+            case TaiRuntimeIpc.OP_DEPTH_CANCEL:
+                return manager.depth().cancel();
+            case TaiRuntimeIpc.OP_GPU_PROBE:
+                return TaiPlatformCaps.probeReply(TaiPlatformCaps.probe(this));
             default:
                 return error(400, "bad_runtime_operation", "Unknown On-device AI runtime operation: " + operation);
         }
@@ -469,15 +636,17 @@ public final class TaiRuntimeService extends Service {
             }
         };
         if (TaiRuntimeIpc.OP_TTS_SYNTHESIZE.equals(operation)) {
-            manager.synthesizeSpeechToEvents(body, sink);
+            manager.speech().synthesizeSpeechToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_IMAGE_GENERATE.equals(operation)) {
-            manager.generateImageToEvents(body, sink);
+            manager.images().generateImageToEvents(body, sink);
+        } else if (TaiRuntimeIpc.OP_DEPTH_MAKE.equals(operation)) {
+            manager.depth().makeToEvents(body, sink);
         } else if (TaiRuntimeIpc.OP_BENCH_RUN.equals(operation)) {
-            manager.benchRun(body, sink);
+            manager.benchHost().benchRun(body, sink);
         } else if (TaiRuntimeIpc.OP_OPENAI_CHAT_STREAM.equals(operation)) {
-            manager.openAiChatCompletionsStream(body, sink);
+            manager.runtimeHost().streamHere(TaiRuntimeLink.Kind.CHAT, body, sink);
         } else {
-            manager.openAiCompletionsStream(body, sink);
+            manager.runtimeHost().streamHere(TaiRuntimeLink.Kind.COMPLETION, body, sink);
         }
     }
 
@@ -499,7 +668,10 @@ public final class TaiRuntimeService extends Service {
             || isTtsOperation(operation)
             // Image generation holds the GPU for seconds to minutes; it must not be cut off when
             // the launcher goes to the background, nor run in the little-core cpuset.
-            || isImageOperation(operation);
+            || isImageOperation(operation)
+            // A few seconds of CPU; the little-core cpuset would triple them, and leaving the
+            // launcher must not cut the run off.
+            || isDepthOperation(operation);
     }
 
     /** A chat model is held, coming up, warm or generating: the foreground and presence cases. */
@@ -524,6 +696,8 @@ public final class TaiRuntimeService extends Service {
                 ensureForeground("On-device AI runtime", chat ? state.status : "Speaking");
             } else if (imageInFlight.get() > 0) {
                 ensureForeground("On-device AI runtime", chat ? state.status : "Generating an image");
+            } else if (depthInFlight.get() > 0) {
+                ensureForeground("On-device AI runtime", chat ? state.status : "Making a depth image");
             } else if (chat) {
                 ensureForeground("On-device AI runtime", state.status);
             } else if (foreground) {
@@ -631,8 +805,8 @@ public final class TaiRuntimeService extends Service {
         if (info == null) return;
         TaiMemInfo.Reading memory = TaiMemInfo.read(this);
         TaiLoadBudget.Conditions conditions = TaiMemInfo.conditions(this);
-        long hold = TaiLoadBudget.floorBytes(false, conditions);
-        long peak = TaiLoadBudget.floorBytes(true, conditions);
+        long hold = TaiLoadBudget.floorBytes(false, conditions, info.totalMem);
+        long peak = TaiLoadBudget.floorBytes(true, conditions, info.totalMem);
         long critical = TaiLoadBudget.criticalFloorBytes(conditions);
         TaiPressureWatch.Tier tier = TaiPressureWatch.tier(memory.availBytes, hold, peak, critical, info.lowMemory);
         applyTier(tier, residents, holding, memory.availBytes, hold, peak, critical, info.lowMemory, "poll");
@@ -670,7 +844,7 @@ public final class TaiRuntimeService extends Service {
      * The STT limit is the settings value the app process sent with its last speech request.
      */
     private void evaluateIdle(@NonNull List<TaiResidency.Entry> residents) {
-        long sttIdleMs = TaiManager.getRuntimeProcessInstance(this).sttIdleLimitMs();
+        long sttIdleMs = TaiManager.getRuntimeProcessInstance(this).speech().sttIdleLimitMs();
         List<TaiResidency.Entry> expired = TaiPressureWatch.idleExpired(residents, System.currentTimeMillis(), sttIdleMs);
         if (expired.isEmpty()) return;
         queuePressureAction(() -> evict(expired, "idle"));
@@ -997,6 +1171,13 @@ public final class TaiRuntimeService extends Service {
         data.putString(TaiRuntimeIpc.KEY_REQUEST_ID, requestId);
         data.putString(TaiRuntimeIpc.KEY_EVENT, event.toString());
         sendOrThrow(replyTo, TaiRuntimeIpc.MSG_STREAM_EVENT, data);
+    }
+
+    private void sendGenerationState(@NonNull Messenger replyTo, @NonNull String requestId, @NonNull String state) {
+        Bundle data = new Bundle();
+        data.putString(TaiRuntimeIpc.KEY_REQUEST_ID, requestId);
+        data.putString(TaiRuntimeIpc.KEY_STATE, state);
+        send(replyTo, TaiRuntimeIpc.MSG_GENERATION_STATE, data);
     }
 
     private void sendStreamDone(@NonNull Messenger replyTo, @NonNull String requestId) throws IOException {

@@ -44,6 +44,27 @@ public final class GlassVibrancy {
     }
 
     /**
+     * The colour matrix a frame is baked through: {@code percent}'s saturation (as
+     * {@code ColorMatrix.setSaturation}), then {@code frameTint}'s hue shift. A live picture takes
+     * the same one after its blur ({@link LiveStoredParity}), so the two routes match. Pure.
+     */
+    @NonNull
+    public static float[] bakeMatrix(int percent, int frameTint) {
+        float sat = saturation(percent);
+        float inv = 1f - sat;
+        float r = 0.213f * inv;
+        float g = 0.715f * inv;
+        float b = 0.072f * inv;
+        float[] m = new float[20];
+        m[0] = r + sat; m[1] = g; m[2] = b;
+        m[5] = r; m[6] = g + sat; m[7] = b;
+        m[10] = r; m[11] = g; m[12] = b + sat;
+        m[18] = 1f;
+        if (frameTint == GlassFrameTint.NONE) return m;
+        return LiveStoredParity.concat(GlassFrameTint.matrix(frameTint), m);
+    }
+
+    /**
      * {@code frame} at {@code percent}'s saturation and then {@code frameTint}'s hue shift
      * ({@link GlassFrameTint}), in one pass, as a new bitmap; {@code frame} is recycled. Null when
      * the copy cannot be made, which the cache treats as a frame that failed to blur.
@@ -53,10 +74,7 @@ public final class GlassVibrancy {
         Bitmap out = null;
         try {
             out = Bitmap.createBitmap(frame.getWidth(), frame.getHeight(), Bitmap.Config.ARGB_8888);
-            ColorMatrix matrix = new ColorMatrix();
-            matrix.setSaturation(saturation(percent));
-            if (frameTint != GlassFrameTint.NONE)
-                matrix.postConcat(new ColorMatrix(GlassFrameTint.matrix(frameTint)));
+            ColorMatrix matrix = new ColorMatrix(bakeMatrix(percent, frameTint));
             Paint paint = new Paint(Paint.FILTER_BITMAP_FLAG);
             paint.setColorFilter(new ColorMatrixColorFilter(matrix));
             new Canvas(out).drawBitmap(frame, 0f, 0f, paint);

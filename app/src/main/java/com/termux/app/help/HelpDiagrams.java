@@ -72,6 +72,7 @@ public final class HelpDiagrams {
             case "fix_stats": return R.drawable.help_diagram_fix_stats;
             case "fix_support": return R.drawable.help_diagram_fix_support;
             case "fix_display": return R.drawable.help_diagram_fix_display;
+            case "fix_process_limit": return R.drawable.help_diagram_fix_process_limit;
             case "fix_action": return R.drawable.help_diagram_fix_action;
             default: return 0;
         }

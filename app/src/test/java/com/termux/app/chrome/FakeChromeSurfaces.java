@@ -55,6 +55,8 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
 
     // ---- what the test observes
     @NonNull final List<ChromeSpec> applied = new ArrayList<>();
+    /** Run inside every apply, after it is recorded: what the apply does to the window. */
+    @androidx.annotation.Nullable Runnable onApply;
     int invariantsEnforced;
     int terminalGlassFrostUpdates;
     int captureCount;
@@ -96,6 +98,14 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
         return legibility;
     }
 
+    /** Adaptive legibility as the preferences would answer it; on, so tests measure each rect. */
+    boolean adaptive = true;
+
+    @Override
+    public boolean adaptiveLegibility() {
+        return adaptive;
+    }
+
     @Override
     public int orientation() {
         return orientation;
@@ -119,6 +129,41 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public int wallpaperDimColor() {
         return dim;
+    }
+
+    /**
+     * {@link ChromeRenderer.Surfaces#groundUnder}: the ground of the page in front, under every
+     * rect; null leaves it at the wall-wide dim.
+     */
+    Integer frontGround;
+
+    @Override
+    public int groundUnder(@NonNull android.graphics.Rect screenRect) {
+        return frontGround != null ? frontGround : dim;
+    }
+
+    /** {@link ChromeRenderer.Surfaces#homeGround}; null leaves it at the wall-wide dim. */
+    Integer homeGround;
+
+    @Override
+    public int homeGround() {
+        return homeGround != null ? homeGround : dim;
+    }
+
+    /** {@link ChromeRenderer.Surfaces#paneGlassSlabs}: the panes are glass slabs. */
+    boolean paneSlabs;
+
+    @Override
+    public boolean paneGlassSlabs() {
+        return paneSlabs;
+    }
+
+    /** {@link ChromeRenderer.Surfaces#wallpaperHintColor}; transparent for none. */
+    int wallpaperHint = 0;
+
+    @Override
+    public int wallpaperHintColor() {
+        return wallpaperHint;
     }
 
     @Override
@@ -223,6 +268,7 @@ final class FakeChromeSurfaces implements ChromeRenderer.Surfaces {
     @Override
     public void applyChromeSpec(@NonNull ChromeSpec spec) {
         applied.add(spec);
+        if (onApply != null) onApply.run();
         if (chrome != null && applyRequestsScopes != 0 && applyRequestsRemaining > 0) {
             applyRequestsRemaining--;
             chrome.requestSync(applyRequestsScopes);

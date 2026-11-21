@@ -58,6 +58,21 @@ public class AppDrawerPlaneCloseGateTest {
         slop = ViewConfiguration.get(context).getScaledTouchSlop();
     }
 
+    /**
+     * Terminal open on pong: the icons came in over the Terminal before the card's glass picture
+     * was under them. The content's fade is multiplied by the material gate.
+     */
+    @Test
+    public void theContentWaitsForTheMaterialGate() {
+        plane.setContentGate(0f);
+        plane.setFrame(new AppDrawerTransitionGeometry.Frame(0f, 0f, 100f, 100f), 0f, 1f);
+        assertEquals(0f, plane.getContentHost().getAlpha(), 0f);
+        assertEquals(android.view.View.INVISIBLE, plane.getContentHost().getVisibility());
+        plane.setContentGate(1f);
+        assertEquals(1f, plane.getContentHost().getAlpha(), 0f);
+        assertEquals(android.view.View.VISIBLE, plane.getContentHost().getVisibility());
+    }
+
     // ------------------------------------------------------------------ no gate: B-1
 
     @Test

@@ -32,7 +32,6 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     private static final String KEY_STORAGE = "app_launcher_storage_access";
-    private static final String KEY_HELP = "app_launcher_help";
     private static final String KEY_NOTIFICATION_ACCESS = "app_launcher_notification_access";
     private static final String KEY_ACCESSIBILITY_LOCK = "app_launcher_accessibility_lock_access";
     private static final String KEY_NOTIFICATION_SETTINGS = "app_launcher_notification_settings";
@@ -50,7 +49,7 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
 
     @androidx.annotation.StringRes
     protected int titleRes() {
-        return R.string.settings_destination_launcher_apps;
+        return R.string.settings_section_dock_drawer;
     }
 
     @Override
@@ -63,9 +62,13 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         setPreferencesFromResource(preferencesXml(), rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         configurePermissionActions(context);
-        configureHelp(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
+        Preference linuxApps = findPreference(TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS);
+        if (linuxApps != null) {
+            if (!com.termux.app.x11.X11ServerSupport.isAvailable(context)) linuxApps.setVisible(false);
+            linuxApps.setPreferenceDataStore(new DrawerAppsDataStore(context));
+        }
 
         Preference lockMethodPreference = findPreference("app_launcher_az_lock_method");
         if (lockMethodPreference != null) {
@@ -82,14 +85,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             defaultAppsPreference.setOnPreferenceClickListener(preference -> {
                 Context ctx = getContext();
                 if (ctx != null) PinnedAppsEditor.show(ctx, null);
-                return true;
-            });
-        }
-
-        Preference setHomePreference = findPreference("app_launcher_set_home");
-        if (setHomePreference != null) {
-            setHomePreference.setOnPreferenceClickListener(preference -> {
-                openHomeLauncherSettings(context);
                 return true;
             });
         }
@@ -113,13 +108,40 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         }
     }
 
+    /** Show Linux apps in drawer: the launcher's own key, and the drawer re-reads its list on a change. */
+    private static final class DrawerAppsDataStore extends androidx.preference.PreferenceDataStore {
+        private final Context context;
+
+        DrawerAppsDataStore(@NonNull Context context) {
+            this.context = context.getApplicationContext();
+        }
+
+        @Override
+        public void putBoolean(String key, boolean value) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences launcher =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+            if (launcher == null) return;
+            launcher.setX11DrawerAppsEnabled(value);
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context).refreshAsync(null, null);
+        }
+
+        @Override
+        public boolean getBoolean(String key, boolean defValue) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences launcher =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+            return launcher == null ? defValue : launcher.isX11DrawerAppsEnabled();
+        }
+    }
+
     private void updateDrawerLayoutSummary() {
         Preference layout = findPreference("app_launcher_drawer_layout");
         if (layout == null || getContext() == null) return;
         String value = TermuxStylePreferencesDataStore.getInstance(getContext()).getString(
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE);
-        int summary = TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
+        int summary = TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT.equals(value)
+            ? R.string.settings_app_drawer_view_type_default
+            : TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
             ? R.string.settings_app_drawer_view_type_horizontal
             : TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES.equals(value)
                 ? R.string.settings_app_drawer_view_type_categories
@@ -162,17 +184,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         });
         setClickListener(KEY_APP_PERMISSIONS, preference -> {
             openAppDetails(context);
-            return true;
-        });
-    }
-
-
-    /** Help, for a user who has not found the corner tabs yet: its own screen, over Settings. */
-    private void configureHelp(@NonNull Context context) {
-        setClickListener(KEY_HELP, preference -> {
-            // An ordinary screen on top of this one: Back comes back to Settings, so nothing
-            // has to bounce through the home screen to read the guide.
-            startActivity(com.termux.app.help.HelpActivity.intent(context, null, null, null));
             return true;
         });
     }
@@ -250,11 +261,6 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
             })
             .setNegativeButton(android.R.string.cancel, null)
             .show();
-    }
-
-    /** The same chooser the run's last card offers, so both doors behave the same way. */
-    private void openHomeLauncherSettings(Context context) {
-        com.termux.app.HomeAppChooser.open(context);
     }
 
     private boolean startSettingsIntent(Context context, Intent intent) {

@@ -35,6 +35,28 @@ public final class WidgetSizeOptionsPolicy {
 
     private WidgetSizeOptionsPolicy() {}
 
+    /**
+     * The options for a widget whose cell is {@code portraitWidthPx} × {@code portraitHeightPx}
+     * upright and {@code landscapeWidthPx} × {@code landscapeHeightPx} turned: one grid serves both
+     * orientations (ADR 0020 §12), so both sizes are known before the screen ever turns, and the
+     * provider gets the min/max union and both entries of OPTION_APPWIDGET_SIZES at once.
+     * {@link Result#changed} is false when the values are the ones {@code previous} holds, so the
+     * caller pushes only a change.
+     */
+    @NonNull
+    public static Result calculateBoth(@Nullable Bundle previous, int portraitWidthPx,
+                                       int portraitHeightPx, int landscapeWidthPx,
+                                       int landscapeHeightPx, float density, int sdkInt) {
+        Result upright = calculate(previous, portraitWidthPx, portraitHeightPx, density,
+            Configuration.ORIENTATION_PORTRAIT, sdkInt);
+        if (!upright.valid) return upright;
+        Result both = calculate(upright.options, landscapeWidthPx, landscapeHeightPx, density,
+            Configuration.ORIENTATION_LANDSCAPE, sdkInt);
+        if (!both.valid) return both;
+        Bundle old = previous == null ? new Bundle() : previous;
+        return new Result(true, !effectivelyEqual(old, both.options, sdkInt), both.options);
+    }
+
     @NonNull
     public static Result calculate(@Nullable Bundle previous, int widthPx, int heightPx,
                                    float density, int orientation, int sdkInt) {

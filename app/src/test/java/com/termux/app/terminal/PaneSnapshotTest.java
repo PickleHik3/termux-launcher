@@ -22,6 +22,7 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
 import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
+import android.app.Application;
 
 /**
  * What a frozen pane may show. A copy has no ground, plate or square corner of its own: it is the
@@ -29,7 +30,7 @@ import org.robolectric.annotation.GraphicsMode;
  * applied when the bitmap is drawn.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE) // clipPath needs real path geometry.
 public class PaneSnapshotTest {
 

@@ -12,9 +12,12 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** Robolectric because the colour maths goes through androidx ColorUtils. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class KeybindGroupPaletteTest {
 
     private static final int GLASS = 0xFF14171A;

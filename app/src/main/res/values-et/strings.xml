@@ -45,6 +45,5 @@
     <string name="termux_debugging_preferences_summary">Silumise eelistused</string>
     <string name="termux_logging_header">Logimine</string>
     <string name="termux_log_level_title">Logimistase</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; välimus</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; kasutaja</string>
 </resources>

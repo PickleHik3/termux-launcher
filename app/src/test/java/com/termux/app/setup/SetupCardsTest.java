@@ -1,0 +1,290 @@
+package com.termux.app.setup;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
+
+import org.junit.Test;
+
+import java.util.Arrays;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
+
+public class SetupCardsTest {
+
+    private static final Set<String> NONE = new HashSet<>();
+
+    private static List<SetupCards.Card> build(boolean desktop, boolean ai, boolean home,
+                                               SetupCards.Stored stored, String... done) {
+        return SetupCards.build(new SetupCards.Facts(desktop, ai, home), stored,
+            new HashSet<>(Arrays.asList(done)));
+    }
+
+    private static String ids(List<SetupCards.Card> cards) {
+        StringBuilder out = new StringBuilder();
+        for (SetupCards.Card card : cards) out.append(card.id).append(',');
+        return out.toString();
+    }
+
+    @Test
+    public void everyoneGetsPermissionCardsAndGuide() {
+        assertEquals("shizuku,accessibility,notifications,notificationAccess,pinned,pageSwitcher,pageIndicator,guide,",
+            ids(build(false, false, false, new SetupCards.Stored())));
+    }
+
+    @Test
+    public void optionalCardsFollowTheirFacts() {
+        assertEquals("shizuku,accessibility,notifications,notificationAccess,pinned,display,ai,home,pageSwitcher,pageIndicator,guide,",
+            ids(build(true, true, true, new SetupCards.Stored())));
+        assertTrue(ids(build(true, false, false, new SetupCards.Stored())).contains("display"));
+        assertFalse(ids(build(true, false, false, new SetupCards.Stored())).contains("ai"));
+    }
+
+    @Test
+    public void systemDoneIsRecomputedNotStored() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        List<SetupCards.Card> cards = build(false, false, false, stored, SetupCards.SHIZUKU);
+        assertEquals(SetupCards.State.DONE, cards.get(0).state);
+        assertEquals(1, cards.get(0).completed);
+        assertEquals(SetupCards.State.OPEN, cards.get(1).state);
+        assertFalse(stored.toJson().contains("shizuku"));
+    }
+
+    @Test
+    public void dismissedCardsAreNotOpenAndDoneBeatsDismissed() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.setDismissed(SetupCards.ACCESSIBILITY, true);
+        stored.setDismissed(SetupCards.SHIZUKU, true);
+        List<SetupCards.Card> cards = build(false, false, false, stored, SetupCards.SHIZUKU);
+        assertEquals(SetupCards.State.DONE, cards.get(0).state);
+        assertEquals(SetupCards.State.DISMISSED, cards.get(1).state);
+        assertEquals(6, SetupCards.openCount(cards));
+    }
+
+    @Test
+    public void manualStepsCountOnTheStubCards() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.completeStep(SetupCards.DISPLAY, 0);
+        stored.completeStep(SetupCards.DISPLAY, 1);
+        SetupCards.Card display = build(true, false, false, stored).get(5);
+        assertEquals(SetupCards.DISPLAY, display.id);
+        assertEquals(2, display.completed);
+        assertEquals(SetupCards.State.OPEN, display.state);
+        stored.completeStep(SetupCards.DISPLAY, 2);
+        assertEquals(SetupCards.State.DONE, build(true, false, false, stored).get(5).state);
+    }
+
+    @Test
+    public void dueNeedsTheWizardDoneAndAnOpenCard() {
+        List<SetupCards.Card> open = build(false, false, false, new SetupCards.Stored());
+        assertTrue(SetupCards.isDue(true, open));
+        assertFalse(SetupCards.isDue(false, open));
+        SetupCards.Stored stored = new SetupCards.Stored();
+        for (SetupCards.Card card : open) stored.setDismissed(card.id, true);
+        assertFalse(SetupCards.isDue(true, build(false, false, false, stored)));
+    }
+
+    @Test
+    public void storedRoundTripsAndSurvivesGarbage() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.setDismissed(SetupCards.AI, true);
+        stored.completeStep(SetupCards.AI, 1);
+        SetupCards.Stored back = SetupCards.Stored.parse(stored.toJson());
+        assertTrue(back.isDismissed(SetupCards.AI));
+        assertEquals(1, back.manualCount(SetupCards.AI, 2));
+        assertFalse(SetupCards.Stored.parse("not json").isDismissed(SetupCards.AI));
+        assertFalse(SetupCards.Stored.parse(null).isDismissed(SetupCards.AI));
+    }
+
+    @Test
+    public void reopenMakesADismissedCardOpenAgain() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.setDismissed(SetupCards.PINNED, true);
+        stored.setDismissed(SetupCards.PINNED, false);
+        assertEquals(SetupCards.State.OPEN, build(false, false, false, stored).get(4).state);
+    }
+
+    @Test
+    public void aSheetWithOnlyStubsOpenIsNotDue() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        List<SetupCards.Card> all = build(true, true, true, stored);
+        for (SetupCards.Card card : all)
+            if (SetupCards.isSystemChecked(card.id)) stored.setDismissed(card.id, true);
+        List<SetupCards.Card> cards = build(true, true, true, stored);
+        assertTrue(SetupCards.openCount(cards) > 0);
+        assertFalse(SetupCards.isDue(true, cards));
+    }
+
+    @Test
+    public void aiCardIsDoneFromSystemAndDueOnlyOnceSelected() {
+        SetupCards.Facts facts = new SetupCards.Facts(false, true, false);
+        SetupCards.Stored stored = new SetupCards.Stored();
+        for (String id : new String[] {SetupCards.SHIZUKU, SetupCards.ACCESSIBILITY,
+            SetupCards.NOTIFICATIONS, SetupCards.NOTIFICATION_ACCESS, SetupCards.PINNED,
+            SetupCards.PAGE_INDICATOR})
+            stored.setDismissed(id, true);
+        List<SetupCards.Card> untouched = SetupCards.build(facts, stored,
+            java.util.Collections.emptySet());
+        assertFalse(SetupCards.isDue(true, untouched, false));
+        assertTrue(SetupCards.isDue(true, untouched, true));
+        List<SetupCards.Card> landed = SetupCards.build(facts, stored,
+            java.util.Collections.singleton(SetupCards.AI));
+        for (SetupCards.Card card : landed)
+            if (SetupCards.AI.equals(card.id)) assertEquals(SetupCards.State.DONE, card.state);
+        assertFalse(SetupCards.isDue(true, landed, true));
+    }
+
+    private static boolean dueAtLaunch(SetupCards.Stored stored, boolean desktop, boolean ai,
+                                       boolean home, String... done) {
+        return SetupCards.isDueForLaunch(true, build(desktop, ai, home, stored, done), true, stored);
+    }
+
+    @Test
+    public void oldJsonWithoutSeenParsesAndIsNotKnown() {
+        SetupCards.Stored stored = SetupCards.Stored.parse(
+            "{\"dismissed\":[\"pinned\"],\"steps\":{\"display\":[0]}}");
+        assertFalse(stored.isSeenKnown());
+        assertTrue(stored.isDismissed("pinned"));
+        assertFalse(stored.toJson().contains("seen"));
+        assertFalse(SetupCards.isDueForLaunch(true, build(false, false, false, stored), false, stored));
+    }
+
+    @Test
+    public void migrationSeedsEveryExistingCardWithNoShow() {
+        SetupCards.Stored stored = SetupCards.Stored.parse("{\"dismissed\":[],\"steps\":{}}");
+        stored.markSeen(build(true, false, true, stored));
+        assertTrue(stored.isSeenKnown());
+        assertTrue(stored.isSeen("shizuku") && stored.isSeen("display") && stored.isSeen("home"));
+        assertFalse(stored.isSeen("ai"));
+        assertFalse(dueAtLaunch(stored, true, false, true));
+        SetupCards.Stored again = SetupCards.Stored.parse(stored.toJson());
+        assertTrue(again.isSeenKnown());
+        assertTrue(again.isSeen("home"));
+    }
+
+    @Test
+    public void freshUserIsNotDueAfterTheSheetShowedTheCards() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        assertTrue(stored.startSeen());
+        assertFalse(stored.startSeen());
+        assertTrue(dueAtLaunch(stored, true, false, false));
+        stored.markSeen(build(true, false, false, stored));
+        assertFalse(dueAtLaunch(stored, true, false, false));
+    }
+
+    @Test
+    public void aNewCardIdMakesItDueOnceThenNot() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.markSeen(build(false, false, false, stored));
+        assertFalse(dueAtLaunch(stored, false, false, false));
+        // home now exists for the first time.
+        assertTrue(dueAtLaunch(stored, false, false, true));
+        stored.markSeen(build(false, false, true, stored));
+        assertFalse(dueAtLaunch(stored, false, false, true));
+    }
+
+    @Test
+    public void aNewCardThatIsDoneOrDismissedIsNotDue() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.markSeen(build(false, false, false, stored));
+        assertFalse(dueAtLaunch(stored, false, false, true, SetupCards.HOME));
+        stored.setDismissed(SetupCards.HOME, true);
+        assertFalse(dueAtLaunch(stored, false, false, true));
+        // a new stub card (display) is not completable, so it does not bring the sheet either
+        assertFalse(dueAtLaunch(stored, true, false, false));
+    }
+
+    @Test
+    public void pageIndicatorNoteIsDueOnceForAnUpgraderThenNot() {
+        SetupCards.Stored stored = SetupCards.Stored.parse(
+            "{\"dismissed\":[],\"steps\":{},\"seen\":[\"shizuku\",\"accessibility\","
+                + "\"notifications\",\"notificationAccess\",\"pinned\",\"pageSwitcher\","
+                + "\"guide\"]}");
+        assertTrue(dueAtLaunch(stored, false, false, false));
+        stored.markSeen(build(false, false, false, stored));
+        assertFalse(dueAtLaunch(stored, false, false, false));
+    }
+
+    @Test
+    public void pageIndicatorNoteIsNotDueWhenTheKeyIsThereOrItWasActedOn() {
+        String seen = "{\"dismissed\":[],\"steps\":{},\"seen\":[\"shizuku\",\"accessibility\","
+                + "\"notifications\",\"notificationAccess\",\"pinned\",\"pageSwitcher\","
+                + "\"guide\"]}";
+        assertFalse(dueAtLaunch(SetupCards.Stored.parse(seen), false, false, false,
+            SetupCards.PAGE_INDICATOR));
+        SetupCards.Stored acted = SetupCards.Stored.parse(seen);
+        acted.completeStep(SetupCards.PAGE_INDICATOR, 0);
+        assertFalse(dueAtLaunch(acted, false, false, false));
+        SetupCards.Stored dismissed = SetupCards.Stored.parse(seen);
+        dismissed.setDismissed(SetupCards.PAGE_INDICATOR, true);
+        assertFalse(dueAtLaunch(dismissed, false, false, false));
+    }
+
+    @Test
+    public void reopenStillWorksAndIsUnaffectedBySeen() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.markSeen(build(false, false, false, stored));
+        stored.setDismissed(SetupCards.PINNED, true);
+        stored.setDismissed(SetupCards.PINNED, false);
+        assertEquals(SetupCards.State.OPEN, build(false, false, false, stored).get(4).state);
+        assertTrue(SetupCards.openCount(build(false, false, false, stored)) > 0);
+        assertFalse(dueAtLaunch(stored, false, false, false));
+    }
+
+    private static SetupCards.Card pageSwitcher(List<SetupCards.Card> cards) {
+        for (SetupCards.Card card : cards)
+            if (SetupCards.PAGE_SWITCHER.equals(card.id)) return card;
+        throw new AssertionError("no page switcher card");
+    }
+
+    @Test
+    public void pageSwitcherCardExistsForBothFactsWithWordingAndButtonsByFacts() {
+        SetupCards.Card home = pageSwitcher(build(false, false, true, new SetupCards.Stored()));
+        SetupCards.Card terminal = pageSwitcher(build(false, false, false, new SetupCards.Stored()));
+        assertEquals(com.termux.R.string.setup_card_page_switcher_name, home.name);
+        assertEquals(home.name, terminal.name);
+        assertEquals(com.termux.R.string.setup_card_page_switcher_description, home.description);
+        assertEquals(com.termux.R.string.setup_card_page_switcher_description_terminal,
+            terminal.description);
+        assertTrue(home.offersAction);
+        assertFalse(terminal.offersAction);
+    }
+
+    @Test
+    public void pageSwitcherIsNotCompletableUnderTerminalOnly() {
+        assertFalse(SetupCards.isCompletable(SetupCards.PAGE_SWITCHER, true));
+        assertTrue(SetupCards.isCompletable(
+            pageSwitcher(build(false, false, true, new SetupCards.Stored())), false));
+        assertFalse(SetupCards.isCompletable(
+            pageSwitcher(build(false, false, false, new SetupCards.Stored())), false));
+    }
+
+    @Test
+    public void pageSwitcherBringsTheSheetOnceForAnUpdatingHomeUser() {
+        SetupCards.Stored stored = new SetupCards.Stored();
+        // An earlier user: every card then known was seeded as seen; the new id was not.
+        stored.markSeen(build(false, false, true, stored, SetupCards.SHIZUKU));
+        stored.seen.remove(SetupCards.PAGE_SWITCHER);
+        assertTrue(dueAtLaunch(stored, false, false, true));
+        stored.markSeen(build(false, false, true, stored));
+        assertFalse(dueAtLaunch(stored, false, false, true));
+        // Used as a terminal only it never brings the sheet by itself.
+        SetupCards.Stored terminal = new SetupCards.Stored();
+        terminal.markSeen(build(false, false, false, terminal));
+        terminal.seen.remove(SetupCards.PAGE_SWITCHER);
+        assertFalse(dueAtLaunch(terminal, false, false, false));
+    }
+
+    @Test
+    public void pageSwitcherIsDoneFromTheBarsOrAfterAdd() {
+        assertEquals(SetupCards.State.DONE, pageSwitcher(build(false, false, true,
+            new SetupCards.Stored(), SetupCards.PAGE_SWITCHER)).state);
+        SetupCards.Stored stored = new SetupCards.Stored();
+        stored.completeStep(SetupCards.PAGE_SWITCHER, 0);
+        assertEquals(SetupCards.State.DONE,
+            pageSwitcher(build(false, false, true, stored)).state);
+        assertEquals(SetupCards.State.OPEN,
+            pageSwitcher(build(false, false, true, new SetupCards.Stored())).state);
+    }
+}

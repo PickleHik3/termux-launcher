@@ -72,4 +72,15 @@ public class TermuxActivityDockImeLiftTest {
             .build();
         assertEquals(0, TermuxActivity.dockImeLiftPx(navShown, 0));
     }
+
+    /** #309: the geometry pass hands the renderer whether Home's keyboard covers its rows. */
+    @Test
+    public void theGeometryPassTellsTheRendererWhetherHomesKeyboardCoversTheDock() throws Exception {
+        java.nio.file.Path source = java.nio.file.Paths.get("src/main/java/com/termux/app/TermuxActivity.java");
+        if (!java.nio.file.Files.exists(source))
+            source = java.nio.file.Paths.get("app/src/main/java/com/termux/app/TermuxActivity.java");
+        String activity = new String(java.nio.file.Files.readAllBytes(source),
+            java.nio.charset.StandardCharsets.UTF_8);
+        org.junit.Assert.assertTrue(activity.contains("mStackRenderer.setHomeCover(homeRowsCovered(), systemImeTakePx())"));
+    }
 }

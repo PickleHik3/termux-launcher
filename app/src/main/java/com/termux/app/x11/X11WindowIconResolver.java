@@ -23,10 +23,10 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The app icon a Display-place window chip wears: the window's {@code WM_CLASS} traced back to an
- * installed app's desktop file, its PNG loaded from the prefix or from the distro container the
- * app lives in, and the artwork reduced to a single-colour silhouette small enough to sit behind a
- * chip's label.
+ * The app icon and name the display window's chip wears: the window's {@code WM_CLASS} traced back
+ * to an installed app's desktop file, its {@code Name} read as the drawer lists it, its PNG loaded
+ * from the prefix or from the distro container the app lives in, and the artwork reduced to a
+ * single-colour silhouette small enough to sit behind a chip's label.
  *
  * <p>A window says which app drew it through the class part of its {@code WM_CLASS}; a desktop
  * file says which class its app will set through {@code StartupWMClass}, and where it does not,
@@ -37,8 +37,8 @@ import java.util.concurrent.Executors;
  * {@code Firefox}).
  *
  * <p>Matching and the silhouette are pure and tested; the file reading and decoding they need
- * happen on a background thread, and a resolved icon reaches the bar through a callback on the
- * main thread. Results are cached per class — misses included, so a window from something that is
+ * happen on a background thread, and a resolved icon and name reach the bar through a callback on
+ * the main thread. Results are cached per class — misses included, so a window from something that is
  * not installed is not looked up again every time the bar syncs.
  */
 public final class X11WindowIconResolver {
@@ -60,17 +60,34 @@ public final class X11WindowIconResolver {
     /** How many silhouettes are kept. A display with more open apps than this re-resolves. */
     private static final int MAX_CACHED = 32;
 
-    /** Told, on the main thread, that a class now has an icon — or is known not to have one. */
+    /**
+     * Told, on the main thread, what a class resolved to: its app's icon and name, either null
+     * when the class matches no installed app or the app has no icon.
+     */
     public interface Callback {
-        void onWindowIconResolved(@NonNull String wmClass, @Nullable Bitmap icon);
+        void onWindowAppResolved(@NonNull String wmClass, @Nullable Bitmap icon,
+                                 @Nullable String name);
     }
+
+    /** One class's answer: the matched app's silhouette and name, either possibly missing. */
+    private static final class Resolved {
+        @Nullable final Bitmap icon;
+        @Nullable final String name;
+
+        Resolved(@Nullable Bitmap icon, @Nullable String name) {
+            this.icon = icon;
+            this.name = name;
+        }
+    }
+
+    private static final Resolved NOTHING = new Resolved(null, null);
 
     @NonNull private final Resources resources;
     @NonNull private final Callback callback;
     @NonNull private final Handler main = new Handler(Looper.getMainLooper());
     @NonNull private final ExecutorService worker = Executors.newSingleThreadExecutor();
-    /** Class (lower-cased) to its silhouette, or null for a class known to have none. */
-    @NonNull private final Map<String, Bitmap> cache = new HashMap<>();
+    /** Class (lower-cased) to what it resolved to; {@link #NOTHING} for a class matching no app. */
+    @NonNull private final Map<String, Resolved> cache = new HashMap<>();
     @NonNull private final Set<String> pending = new HashSet<>();
 
     public X11WindowIconResolver(@NonNull Resources resources, @NonNull Callback callback) {
@@ -85,17 +102,34 @@ public final class X11WindowIconResolver {
      */
     @Nullable
     public Bitmap iconFor(@NonNull String wmClass) {
+        Resolved resolved = resolved(wmClass);
+        return resolved == null ? null : resolved.icon;
+    }
+
+    /**
+     * The {@code Name} of the installed app {@code wmClass} belongs to when it is already known,
+     * else null — resolved alongside the icon, so asking for either starts both.
+     */
+    @Nullable
+    public String nameFor(@NonNull String wmClass) {
+        Resolved resolved = resolved(wmClass);
+        return resolved == null ? null : resolved.name;
+    }
+
+    @Nullable
+    private Resolved resolved(@NonNull String wmClass) {
         String key = key(wmClass);
         if (key.isEmpty()) return null;
-        if (cache.containsKey(key)) return cache.get(key);
+        Resolved known = cache.get(key);
+        if (known != null) return known;
         if (!pending.add(key)) return null;
         worker.execute(() -> {
-            Bitmap icon = resolve(wmClass);
+            Resolved resolved = resolve(wmClass);
             main.post(() -> {
                 pending.remove(key);
                 if (cache.size() >= MAX_CACHED) cache.clear();
-                cache.put(key, icon);
-                callback.onWindowIconResolved(wmClass, icon);
+                cache.put(key, resolved);
+                callback.onWindowAppResolved(wmClass, resolved.icon, resolved.name);
             });
         });
         return null;
@@ -111,22 +145,28 @@ public final class X11WindowIconResolver {
         worker.shutdownNow();
     }
 
-    /** The whole background half: catalogue scan, icon file, decode, silhouette. */
-    @Nullable
-    private Bitmap resolve(@NonNull String wmClass) {
+    /** The whole background half: catalogue scan, the app's name, icon file, decode, silhouette. */
+    @NonNull
+    private Resolved resolve(@NonNull String wmClass) {
+        LinuxAppCatalog.LinuxApp app;
         try {
-            LinuxAppCatalog.LinuxApp app = match(
-                LinuxAppCatalog.scan(LinuxAppCatalog.roots()), wmClass);
-            if (app == null) return null;
+            app = match(LinuxAppCatalog.scan(LinuxAppCatalog.roots()), wmClass);
+        } catch (RuntimeException e) {
+            return NOTHING;
+        }
+        if (app == null) return NOTHING;
+        String name = app.name.trim().isEmpty() ? null : app.name.trim();
+        try {
             File file = LinuxAppIcons.find(app);
-            if (file == null) return null;
+            if (file == null) return new Resolved(null, name);
             Drawable drawable = LinuxAppIcons.load(resources, file);
             Bitmap source = drawable instanceof BitmapDrawable
                 ? ((BitmapDrawable) drawable).getBitmap() : null;
-            return source == null ? null : silhouette(source, SILHOUETTE_PX);
+            return new Resolved(source == null ? null : silhouette(source, SILHOUETTE_PX), name);
         } catch (RuntimeException | OutOfMemoryError e) {
-            // An icon is decoration: a malformed PNG or a tight moment must not take the bar down.
-            return null;
+            // An icon is decoration: a malformed PNG or a tight moment must not take the bar down,
+            // nor cost the chip the app's name.
+            return new Resolved(null, name);
         }
     }
 

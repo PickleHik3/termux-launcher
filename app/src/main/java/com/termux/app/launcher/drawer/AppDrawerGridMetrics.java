@@ -17,8 +17,8 @@ import androidx.annotation.NonNull;
  * columns instead of dropping the last one to a floor, while the clamp keeps a tablet-width plane
  * and a very narrow one both legible.
  *
- * <p>Instances are immutable results of {@link #resolve}. B-7 will feed the deferred grid
- * preferences in through the same entry point; none of them are read here.
+ * <p>Instances are immutable results of {@link #resolve}, which also takes the user's icon size and
+ * column count (0 is Automatic for both).
  */
 public final class AppDrawerGridMetrics {
 
@@ -32,14 +32,49 @@ public final class AppDrawerGridMetrics {
     public static final float ICON_CELL_FRACTION = 0.58f;
     /** Gap between the icon and its label. */
     public static final float LABEL_GAP_DP = 6f;
-    /** Padding under the label, so two rows do not read as one block. */
-    public static final float ROW_BOTTOM_DP = 10f;
+    /**
+     * Air above the icon inside a row: the highlight bead's padding plus its spare, so the bead
+     * has the same room above the icon as beside it and under the label.
+     */
+    public static final float ROW_TOP_DP =
+        AppDrawerHighlightShape.PADDING_DP + AppDrawerHighlightShape.SPARE_DP;
+    /**
+     * Padding under the label, so two rows do not read as one block; the same figure as
+     * {@link #ROW_TOP_DP}, which takes it from what used to be a 10dp tail.
+     */
+    public static final float ROW_BOTTOM_DP = ROW_TOP_DP;
+
+    /**
+     * {@link #ROW_TOP_DP} in whole pixels: the bead's padding and its spare, each rounded the way
+     * the cell rounds them, so the air above the icon never comes up short of what the bead asks
+     * for (at density 2.75 the dp figure is 19.25 while the bead needs 17 + 3).
+     */
+    public static float rowTopPx(float density) {
+        float d = density > 0f ? density : 1f;
+        return Math.round(AppDrawerHighlightShape.PADDING_DP * d)
+            + Math.max(1, Math.round(AppDrawerHighlightShape.SPARE_DP * d));
+    }
+
+    /** {@link #ROW_BOTTOM_DP} in whole pixels; the same figure as {@link #rowTopPx}. */
+    public static float rowBottomPx(float density) {
+        return rowTopPx(density);
+    }
+    /**
+     * Air a label keeps inside its own cell on each side, so two long names never touch and the
+     * outer columns stand off the card's edge. Every layout's cell label reads it.
+     */
+    public static final float LABEL_SIDE_INSET_DP = 4f;
+
+    /** {@link #LABEL_SIDE_INSET_DP} in pixels. */
+    public static float labelSideInsetPx(float density) {
+        return LABEL_SIDE_INSET_DP * (density > 0f ? density : 1f);
+    }
 
     /** Columns across the plane, always within {@link #MIN_COLUMNS}..{@link #MAX_COLUMNS}. */
     public final int columns;
     /** Content width divided by {@link #columns}; never negative. */
     public final float cellWidthPx;
-    /** Rendered icon size, capped at {@link #MAX_ICON_DP}. */
+    /** Rendered icon size; capped at {@link #MAX_ICON_DP} on Automatic, at the cell on a chosen size. */
     public final float iconPx;
     /** Icon, gap, label and bottom padding. */
     public final float rowHeightPx;
@@ -80,7 +115,26 @@ public final class AppDrawerGridMetrics {
         return resolve(contentWidthPx, density, labelHeightPx, requestedColumns, 0);
     }
 
-    /** Explicit icon target is applied before the established cell-width and 48dp clamps. */
+    /**
+     * The icon sizes Settings offers, in dp: Home's three presets ({@code HomeIconSize}). Anything
+     * else asked of the metrics is Automatic.
+     */
+    public static final int[] ICON_STEPS_DP = {48, 54, 60};
+
+    /** Whether {@code dp} is one of {@link #ICON_STEPS_DP}; 0 (Automatic) and strays are not. */
+    public static boolean isIconStep(int dp) {
+        for (int step : ICON_STEPS_DP) if (step == dp) return true;
+        return false;
+    }
+
+    /**
+     * A chosen icon size is honoured and the {@link #MAX_ICON_DP} ceiling is Automatic's alone.
+     * With Automatic columns the count drops (never below {@link #MIN_COLUMNS}) until the cell
+     * holds the icon; with chosen columns, or at the minimum, the icon is capped to what the cell
+     * holds. Automatic icon and columns resolve exactly as they always did.
+     *
+     * @param requestedIconDp {@code 0} for Automatic, else one of {@link #ICON_STEPS_DP}
+     */
     @NonNull
     public static AppDrawerGridMetrics resolve(float contentWidthPx, float density,
                                                float labelHeightPx, int requestedColumns,
@@ -89,16 +143,22 @@ public final class AppDrawerGridMetrics {
         // is rebuilt on every configuration change, so a degenerate frame must degrade, not poison.
         float d = density > 0f ? density : 1f;
         float width = Math.max(0f, contentWidthPx);
-        int columns = requestedColumns == 0
-            ? resolveColumns(width / d)
-            : Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, requestedColumns));
+        boolean chosenIcon = isIconStep(requestedIconDp);
+        float iconTargetPx = (chosenIcon ? requestedIconDp : MAX_ICON_DP) * d;
+        int columns;
+        if (requestedColumns == 0) {
+            columns = resolveColumns(width / d);
+            if (chosenIcon) {
+                int holding = (int) Math.floor(width / (iconTargetPx / ICON_CELL_FRACTION));
+                columns = Math.max(MIN_COLUMNS, Math.min(columns, holding));
+            }
+        } else {
+            columns = Math.max(MIN_COLUMNS, Math.min(MAX_COLUMNS, requestedColumns));
+        }
         float cellWidthPx = width / columns;
-        float iconTargetPx = requestedIconDp == 36 || requestedIconDp == 40
-            || requestedIconDp == 44 || requestedIconDp == 48
-            ? requestedIconDp * d : MAX_ICON_DP * d;
         float iconPx = Math.min(iconTargetPx, cellWidthPx * ICON_CELL_FRACTION);
-        float rowHeightPx = iconPx + (LABEL_GAP_DP * d)
-            + Math.max(0f, labelHeightPx) + (ROW_BOTTOM_DP * d);
+        float rowHeightPx = rowTopPx(d) + iconPx + (LABEL_GAP_DP * d)
+            + Math.max(0f, labelHeightPx) + rowBottomPx(d);
         return new AppDrawerGridMetrics(columns, cellWidthPx, iconPx, rowHeightPx);
     }
 

@@ -121,6 +121,23 @@ public final class PaneGlass {
     public static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
                                 @Nullable PaneGlassBackdropView backdrop,
                                 float requestedRadiusPx, boolean terminalPane) {
+        return apply(style, frame, backdrop, requestedRadiusPx, terminalPane, true);
+    }
+
+    /**
+     * {@link #apply(PaneSurfaceStyle, View, PaneGlassBackdropView, float)} for a small slab whose
+     * radius is its own (the page bar's capsule and bubble): {@code requestedRadiusPx} is used as
+     * given, not capped against {@code frame}'s size.
+     */
+    public static boolean applyAtRadius(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                        @Nullable PaneGlassBackdropView backdrop,
+                                        float requestedRadiusPx) {
+        return apply(style, frame, backdrop, requestedRadiusPx, false, false);
+    }
+
+    private static boolean apply(@Nullable PaneSurfaceStyle style, @NonNull View frame,
+                                 @Nullable PaneGlassBackdropView backdrop,
+                                 float requestedRadiusPx, boolean terminalPane, boolean capRadius) {
         if (backdrop == null) return false;
         if (!isActive(style)) {
             backdrop.setVeilSource(null);
@@ -134,8 +151,8 @@ public final class PaneGlass {
         }
         // Against the frame's own size, not the window's: after four or five splits a pane is a
         // few rows tall and the window's radius would be half of it.
-        float radiusPx = PaneShape.radiusForBounds(requestedRadiusPx,
-            frame.getWidth(), frame.getHeight());
+        float radiusPx = capRadius ? PaneShape.radiusForBounds(requestedRadiusPx,
+            frame.getWidth(), frame.getHeight()) : requestedRadiusPx;
         backdrop.setGlass(style.paneGlassBlurFrame(), style.paneGlassBlurFrameRect(),
             style.paneGlassTintColor(), style.paneGlassGrainLayer(),
             style.paneGlassGrainStrength(), radiusPx, style.paneGlassFrostFilter(),
@@ -144,15 +161,31 @@ public final class PaneGlass {
         // gradient rim here as well would put two borders on a lone pane.
         backdrop.setRim(NO_RIM, style);
         backdrop.setParallax(style.wallpaperParallax());
-        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
-        // what that tint covers.
-        com.termux.app.chrome.GlassRefraction.Look refraction = style.paneGlassRefraction();
-        backdrop.setRefraction(refraction == null ? null
-            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
+        applyEdgeLight(style, frame, backdrop);
         backdrop.setClearFrame(style.paneGlassClearFrame());
         backdrop.setVisibility(View.VISIBLE);
+        // The slab answers for this pane now; the bare frame's answer would count it twice.
+        if (terminalPane && style != null) style.paneGlassForget(frame);
         backdrop.setVeilSource(terminalPane ? style : null);
         return true;
+    }
+
+    /**
+     * The slab's refraction, and with it the gathered light along its edge, for {@code frame}: the
+     * style's while the edge shows, none while a terminal effect's bezel stands over it. Under the
+     * bezel the bend is hidden anyway, and the light along the outline leaks past the bezel's
+     * anti-aliased edge as a thin bright ring round the solid frame. The frost and tint inside the
+     * screen are drawn either way. Called by {@link #apply} and again when the effect comes or goes.
+     */
+    public static void applyEdgeLight(@NonNull PaneSurfaceStyle style, @NonNull View frame,
+                                      @NonNull PaneGlassBackdropView backdrop) {
+        boolean bezel = frame instanceof PaneContentFrame && ((PaneContentFrame) frame).bezelWorn();
+        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
+        // what that tint covers.
+        com.termux.app.chrome.GlassRefraction.Look refraction =
+            bezel ? null : style.paneGlassRefraction();
+        backdrop.setRefraction(refraction == null ? null
+            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
     }
 
     /** Scratch for {@link #measureBarePane}; main thread only, as every dress pass is. */
@@ -167,13 +200,29 @@ public final class PaneGlass {
      * veil is capped at none anyway. Nothing before the frame is laid out.
      */
     static void measureBarePane(@NonNull PaneSurfaceStyle style, @NonNull View frame) {
+        // A bare pane draws no frame, so even-out never applies to it: it keeps the mean ground.
         if (frame.getWidth() <= 0 || frame.getHeight() <= 0) return;
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(frame, sBareLocation,
             sBareRootLocation);
         sBareRect.set(sBareLocation[0], sBareLocation[1],
             sBareLocation[0] + frame.getWidth(), sBareLocation[1] + frame.getHeight());
-        style.paneGlassVeil(sBareRect);
+        style.paneGlassVeil(sBareRect, frame);
+        if (sForgetWired.put(frame, Boolean.TRUE) == null) {
+            frame.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(@NonNull View v) {
+                    style.paneGlassPark(v, false);
+                }
+
+                @Override public void onViewDetachedFromWindow(@NonNull View v) {
+                    style.paneGlassPark(v, true);
+                }
+            });
+        }
     }
+
+    /** Bare frames already watching for their detach, so each is wired once. */
+    private static final java.util.WeakHashMap<View, Boolean> sForgetWired =
+        new java.util.WeakHashMap<>();
 
     /**
      * {@code foreground} as the terminal renderer draws faint (SGR 2) text: each channel at two
@@ -196,12 +245,16 @@ public final class PaneGlass {
      * frost refresh or a new look reaches the tab in the same pass as the slab.
      */
     public static void dressTab(@Nullable PaneSurfaceStyle style,
-                                @Nullable com.termux.app.wall.PaneControlsView tab) {
+                                @Nullable com.termux.app.wall.PaneControlsView tab,
+                                int pageId) {
         if (tab == null) return;
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(
                 tab.getContext(), false);
-        tab.setGrainPercent(preferences == null ? 0 : preferences.getDockGlassGrain());
+        // The window tab is a transient control over the pane (a Home float's too): Global's
+        // grain as it is, with no sheet floor (ADR 0031).
+        tab.setGrainPercent(preferences == null ? 0
+            : com.termux.app.chrome.SheetGlass.global(preferences).grainPercent);
         if (style == null) {
             tab.setPaneGlass(null, EMPTY_RECT, null);
             return;
@@ -219,10 +272,9 @@ public final class PaneGlass {
      * such move has to re-aim the matrix.
      *
      * <p>A wall page sliding is not a layout move — the wall translates its pages — and this
-     * listener never sees it. The wall's owner re-aims every slab per frame of a slide instead
-     * ({@code onWallMoved} on the pages, {@code invalidatePaneGlassPositions} on the terminal),
-     * and the slab reads the page's translation off the wall itself, so the frost stays glued to
-     * the wallpaper while the page travels over it.</p>
+     * listener never sees it. The glass service asks every registered slab on each frame that
+     * draws ({@code SlabAim}), and the slab reads the page's translation off the wall itself, so
+     * the frost stays glued to the wallpaper while the page travels over it.</p>
      */
     public static void followLayout(@Nullable PaneGlassBackdropView backdrop) {
         if (backdrop == null) return;

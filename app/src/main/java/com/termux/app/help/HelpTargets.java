@@ -11,15 +11,15 @@ import com.termux.app.AzScrubRowView;
 import com.termux.app.launcher.widget.WidgetCellRect;
 import com.termux.app.launcher.widget.WidgetGridMetrics;
 import com.termux.app.launcher.widget.WidgetGridView;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.wall.BorderDrag;
 import com.termux.app.wall.BorderGrabber;
 import com.termux.app.wall.PaneWallLayout;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.x11.DisplayScaleRailView;
 import com.termux.app.x11.DisplayTouchpadView;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -83,13 +83,13 @@ public final class HelpTargets {
     public HelpTargets(ViewFinder finder, View overlay) {
         this.finder = finder; this.overlay = overlay; this.context = overlay.getContext();
     }
-    public Snapshot measure(PaneWallPage place) {
+    public Snapshot measure(PageKind place) {
         Rect wall = rect(finder.findHelpView(R.id.terminal_pane_wall));
         if (wall == null) wall = new Rect(0, 0, overlay.getWidth(), overlay.getHeight());
         Snapshot s = new Snapshot(wall);
         View root = finder.findHelpView(android.R.id.content);
         View bar = finder.findHelpView(R.id.terminal_window_bar);
-        if (place != PaneWallPage.WIDGETS) {
+        if (place != PageKind.HOME) {
             if (bar instanceof TerminalWindowBar) {
                 TerminalWindowBar windows = (TerminalWindowBar) bar;
                 // The chips and the + are one box and one hint: the + is the chip strip's own
@@ -114,13 +114,13 @@ public final class HelpTargets {
         // Launcher settings live on a keyboard corner rather than in the chrome, so the places
         // that carry the keyboard point at the cog itself: the box is the glyph, which is the
         // thing the user swipes off. The Widgets page keeps its keyboard down, so it has no cog.
-        if (place != PaneWallPage.WIDGETS) add(s, "settings", keyCornerRect(SETTINGS_KEY), 0);
+        if (place != PageKind.HOME) add(s, "settings", keyCornerRect(SETTINGS_KEY), 0);
         // The page's own border and the pill on its bottom edge are on every place, because the
         // wall draws them round every page alike.
         pageBorder(s, wall);
         keyboardGrabber(s, wall);
-        if (place != PaneWallPage.TERMINAL) add(s, "corners", wallCorner(wall), 0);
-        if (place == PaneWallPage.TERMINAL) {
+        if (place != PageKind.TERMINAL) add(s, "corners", wallCorner(wall), 0);
+        if (place == PageKind.TERMINAL) {
             add(s, "sessions", finder.findHelpView(R.id.terminal_sessions_indicator));
             if (finder.paneCount() > 1) {
                 View divider = tagged(root);
@@ -128,12 +128,16 @@ public final class HelpTargets {
             }
             // A dock that is a rail down one side reads off its own measured rect: whoever draws
             // help asks which edge of the wall it is past, so nothing here has to say.
-            add(s, "dock", firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host));
+            add(s, "dock", firstShown(
+                com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.ROW),
+                com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.EDGE_HOST)));
             add(s, "az", firstOfType(root, AzScrubRowView.class));
             paneCorner(s);
             // The row as one box, for the topic that is about the row; every cap is measured
             // separately below, for the labels shown while the row is the selected control.
-            ExtraKeysView row = firstOfType(root, ExtraKeysView.class);
+            ExtraKeysPageView row = firstOfType(root, ExtraKeysPageView.class);
             add(s, "keys", rect(row), radius(row));
             // The row that was just measured, not a second walk for it: one search, one answer.
             extraKeys(row, s);
@@ -141,7 +145,9 @@ public final class HelpTargets {
             // space bar with its swipes. Each is measured on the keys it is about.
             add(s, "prefix", union(keyRect("ctrl"), keyRect("alt")), 0);
             add(s, "space", keyRect("space"), 0);
-        } else if (place == PaneWallPage.DISPLAY) {
+        } else if (place == PageKind.ASSISTANT) {
+            // The Assistant page has no controls of its own to point at yet (ADR 0022).
+        } else if (place == PageKind.DISPLAY) {
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),
                 radius(rail));
@@ -201,7 +207,7 @@ public final class HelpTargets {
         add(s, "keyboard_grabber", out, 0);
     }
 
-    /** The top-left corner square of a page that is not the terminal: the Widgets or Display page. */
+    /** The top-left corner square of a page that is not the terminal: the Widgets or display window. */
     private Rect wallCorner(Rect wall) {
         float density = context.getResources().getDisplayMetrics().density;
         int size = Math.round(com.termux.app.chrome.CornerZones.clampSize(
@@ -226,19 +232,20 @@ public final class HelpTargets {
 
     /** The widgets that are out, as one box: the topic is about the cluster, not about CPU. */
     private void stats(Snapshot s) {
-        int[] ids = {R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram, R.id.terminal_status_widget_weather};
+        int[] ids = {R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
+            R.id.terminal_status_widget_battery, R.id.terminal_status_widget_weather};
         Rect bounds = null;
         for (int id : ids) bounds = union(bounds, rect(finder.findHelpView(id)));
         add(s, "stats", bounds, radius(finder.findHelpView(R.id.terminal_status_stats_cluster)));
     }
     private void extraKeys(View view, Snapshot s) {
         if (rect(view) == null || view == overlay) return;
-        if (view instanceof ExtraKeysView) {
-            ExtraKeysView row = (ExtraKeysView) view;
+        if (view instanceof ExtraKeysPageView) {
+            ExtraKeysPageView row = (ExtraKeysPageView) view;
             int measured = 0, defined = 0;
             for (int i = 0; i < row.getChildCount(); i++) {
                 Rect r = rect(row.getChildAt(i));
-                ExtraKeyButton key = row.definitionForChild(i);
+                ExtraKeyButton key = row.keyAt(i);
                 if (r != null) measured++;
                 if (key != null) defined++;
                 if (r == null || key == null) continue;

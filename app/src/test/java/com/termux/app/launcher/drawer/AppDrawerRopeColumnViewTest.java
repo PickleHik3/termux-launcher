@@ -2,6 +2,7 @@ package com.termux.app.launcher.drawer;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -68,6 +69,34 @@ public class AppDrawerRopeColumnViewTest {
             View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         parent.layout(0, 0, width, HEIGHT);
+    }
+
+    // ------------------------------------------------------------------ the card's bottom
+
+    /**
+     * The card's bottom crossing the strip as the keyboard comes or goes: the letters spread
+     * evenly over the part of the strip the card shows, re-resolved in place (no allocation per
+     * frame), and back over the whole strip once nothing cuts it. Before, the letters kept the
+     * spacing of the strip's laid-out height and the card's bottom cut the last ones off.
+     */
+    @Test
+    public void theLettersSpreadOverThePartOfTheStripTheCardShows() {
+        AppDrawerRopeMetrics full = column.metrics();
+        float fullSlot = full.slotHeightPx;
+
+        column.setVisibleBottomPx(HEIGHT / 2f);
+        AppDrawerRopeMetrics cut = column.metrics();
+
+        assertSame("resolved in place", full, cut);
+        assertEquals(HEIGHT / 2f, cut.availableHeightPx, 0f);
+        assertTrue("the last letter is above the card's bottom",
+            cut.centerYForIndex(cut.letterCount - 1) + cut.slotHeightPx / 2f <= HEIGHT / 2f);
+        assertTrue("the track is centred in what is shown",
+            Math.abs(cut.trackTopPx - (HEIGHT / 2f - cut.trackTopPx - cut.trackHeightPx)) < 1f);
+
+        column.setVisibleBottomPx(Float.POSITIVE_INFINITY);
+        assertEquals(HEIGHT, column.metrics().availableHeightPx, 0f);
+        assertEquals(fullSlot, column.metrics().slotHeightPx, 0f);
     }
 
     // ------------------------------------------------------------------ the claim

@@ -35,16 +35,30 @@ public class AppDrawerSearchControllerTest {
         assertEquals("one twoone two", search.query());
     }
 
-    /** Copy, cut and select-all in the query stay unhandled: swallowed, and the query untouched. */
-    @Test public void copyCutAndSelectAllAreSwallowedWithoutEffect() {
-        AppDrawerSearchController search = activeSearch(() -> "never read");
+    /** Copy and cut take the whole query; select all makes the next letter replace it. */
+    @Test public void copyCutAndSelectAllActOnTheQuery() {
+        java.util.List<String> copied = new java.util.ArrayList<>();
+        AppDrawerSearchController search = activeSearch(new ClipboardText() {
+            @Override public String read() { return null; }
+            @Override public void write(String text) { copied.add(text); }
+        });
         search.replaceQuery("gr", 2);
 
         assertTrue(search.interceptKeyValue(KeyValue.getKeyByName("copy"), false, false, false));
-        assertTrue(search.interceptKeyValue(KeyValue.getKeyByName("cut"), false, false, false));
+        assertEquals("gr", search.query());
+        assertEquals(java.util.Collections.singletonList("gr"), copied);
+
         assertTrue(
             search.interceptKeyValue(KeyValue.getKeyByName("selectAll"), false, false, false));
-        assertEquals("gr", search.query());
+        assertTrue(search.interceptKeyValue(KeyValue.makeCharKey('f'), false, false, false));
+        assertEquals("f", search.query());
+
+        assertTrue(search.interceptKeyValue(KeyValue.getKeyByName("cut"), false, false, false));
+        assertEquals("", search.query());
+        assertEquals("f", copied.get(1));
+
+        assertTrue(search.interceptKeyValue(KeyValue.getKeyByName("undo"), false, false, false));
+        assertEquals("f", search.query());
     }
 
     /**

@@ -15,6 +15,7 @@ import org.json.JSONObject;
 
 public final class TaiModelCatalog {
     /** The one Parakeet speech-to-text entry; the speech model picker's "Parakeet" engine. */
+    public static final String WHISPER_BASE_GPU_ID = "whisper-base-gpu";
     public static final String PARAKEET_TDT_V3_ID = "parakeet-tdt-0.6b-v3";
     /** The one speech-output entry: KittenTTS nano 0.8, the Model centre's "Voice output" row. */
     public static final String KITTEN_TTS_NANO_ID = "kittentts-nano-0.8";
@@ -24,17 +25,31 @@ public final class TaiModelCatalog {
     public static final String EMBEDDING_GEMMA_2_TEXT_VISION_440M_ID = "embeddinggemma-2-text-vision-440m";
     /** EmbeddingGemma 2 Text 270M: the smaller text-only EmbeddingGemma 2. */
     public static final String EMBEDDING_GEMMA_2_TEXT_270M_ID = "embeddinggemma-2-text-270m";
+    /** Depth graphs for photo wallpapers: tool models run once by {@link DepthMaker}, never listed. */
+    public static final String DEPTH_ANYTHING_3_SMALL_ID = "depth-anything-3-small";
+    public static final String DEPTH_ANYTHING_V2_SMALL_ID = "depth-anything-v2-small";
     private static final Map<String, CatalogEntry> BUILT_IN_ENTRIES = buildEntries();
     private static volatile Map<String, CatalogEntry> entries = BUILT_IN_ENTRIES;
+    private static volatile Map<String, CatalogEntry> listed = withoutTools(BUILT_IN_ENTRIES);
     private TaiModelCatalog() {}
 
     /** Drops a remote overlay a test applied, so the next test sees the built-in catalogue. */
     @androidx.annotation.VisibleForTesting
     public static synchronized void resetForTesting() {
         entries = BUILT_IN_ENTRIES;
+        listed = withoutTools(BUILT_IN_ENTRIES);
     }
 
-    @NonNull public static Map<String, CatalogEntry> entries() { return entries; }
+    /** The catalogue every list reads: model entries only. The depth tool models are found by {@link #get}. */
+    @NonNull public static Map<String, CatalogEntry> entries() { return listed; }
+
+    private static Map<String, CatalogEntry> withoutTools(@NonNull Map<String, CatalogEntry> all) {
+        LinkedHashMap<String, CatalogEntry> out = new LinkedHashMap<>();
+        for (Map.Entry<String, CatalogEntry> entry : all.entrySet()) {
+            if (!TaiModelSpec.isVisionTool(entry.getValue().endpointCapabilities)) out.put(entry.getKey(), entry.getValue());
+        }
+        return Collections.unmodifiableMap(out);
+    }
     @Nullable public static CatalogEntry get(@Nullable String modelId) { return modelId == null ? null : entries.get(modelId); }
 
     /** {@link #entries()} minus speech models (speech-to-text and speech output) and embedding-only
@@ -48,6 +63,7 @@ public final class TaiModelCatalog {
         for (Map.Entry<String, CatalogEntry> entry : entries.entrySet()) {
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT)) continue;
             if (entry.getValue().endpointCapabilities.contains(TaiModelSpec.CAPABILITY_TEXT_TO_SPEECH)) continue;
+            if (TaiModelSpec.isVisionTool(entry.getValue().endpointCapabilities)) continue;
             if (isImageGeneration(entry.getValue())) continue;
             if (isEmbeddingOnly(entry.getValue())) continue;
             chat.put(entry.getKey(), entry.getValue());
@@ -119,7 +135,7 @@ public final class TaiModelCatalog {
     @Nullable
     public static CatalogEntry downloadEntry(@NonNull JSONObject download) {
         String modelId = download.optString("modelId", "").trim();
-        if (modelId.isEmpty() || entries().containsKey(modelId)) return null;
+        if (modelId.isEmpty() || entries.containsKey(modelId)) return null;
         String path = download.optString("path", download.optString("url", ""));
         String backend = download.optString("backend", TaiModelSpec.inferBackend(path));
         String format = download.optString("format", TaiModelSpec.inferFormat(path));
@@ -200,6 +216,7 @@ public final class TaiModelCatalog {
             } catch (Exception ignored) {}
         }
         entries = Collections.unmodifiableMap(merged);
+        listed = withoutTools(merged);
     }
 
     @NonNull
@@ -278,6 +295,18 @@ public final class TaiModelCatalog {
                 "7c71a5d8f9b59f93ab17e63b568ef674716420bc8bbabcc5da315ab0576b96ef",
                 "small.en/acft_whisper_small.en_10s_drq.tflite", 286_276_128L,
                 "58edc288e8aad1da2a3df0545edadf5f1c6119ff70682e37031119ad89130daf")));
+        // Whisper Base at full float precision, run on the GPU (litert-community/whisper-base). One
+        // 30 s window, no window choice. The GPU's FP16 default turns this graph's text to garbage, so
+        // the entry asks for FP32 (CatalogEntry#gpuPrecisionFp32) and defaults to the GPU. The
+        // tokenizer is the same multilingual openai/whisper-base one the ACFT base entry uses.
+        entries.put(WHISPER_BASE_GPU_ID, whisperGpuFp32Available(
+            WHISPER_BASE_GPU_ID, "Whisper Base · GPU", "Speech-to-text (multilingual, GPU)",
+            "litert-community/whisper-base", "ba2c613646edc2b72f5a51fa0b5b0b322e436101",
+            "whisper_base_30s_f32.tflite", 290_082_636L,
+            "83f90febae74f6db2b671d792ce844f93de5dfa6d6743cdba8c7a208c8dd708a",
+            "277 MB", "6GB+",
+            whisperTokenizerSidecar("whisper-base", "e37978b90ca9030d5170a5c07aadb050351a65bb",
+                "27fc476bfe7f17299480be2273fc0608e4d5a99aba2ab5dec5374b4482d1a566")));
         // NVIDIA Parakeet TDT 0.6B v3 (25 European languages, auto-detected; CC-BY-4.0 weights),
         // Google's int8 stateful LiteRT conversion: one 5 s graph, no window choice, served by
         // ParakeetSttRuntime. The tokenizer.json sidecar comes from NVIDIA's own repo (the
@@ -366,7 +395,33 @@ public final class TaiModelCatalog {
                 hfSidecar(embeddingGemmaRepo, embeddingGemmaRevision, "sentencepiece.model",
                     "d6daa52d93d7aad10e8388bd526c4e501d914b47177398d1d9621f1fe48438c7"))));
 
+        // Depth graphs for photo wallpapers, LiteRT .tflite run once on the CPU by DepthMaker. Not
+        // gated; sizes and hashes from the Hugging Face API (LFS sha256), revisions pinned.
+        entries.put(DEPTH_ANYTHING_3_SMALL_ID, visionAvailable(
+            DEPTH_ANYTHING_3_SMALL_ID, "Depth Anything 3 Small", "Depth for photo wallpapers",
+            "litert-community/Depth-Anything-3-Small", "5cd25d936e3fde2edef68f53b4123401454ac9c8",
+            "da3_small_gpu_fp16.tflite", "Apache-2.0", 55_035_456L,
+            "e170369a72ba1bba7486a4d2de555639fccd0595a9bb5b5349f7733ed4aebd1f",
+            "depth-anything-3", "fp16", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION, "Depth", "55 MB", "4GB+"));
+        entries.put(DEPTH_ANYTHING_V2_SMALL_ID, visionAvailable(
+            DEPTH_ANYTHING_V2_SMALL_ID, "Depth Anything V2 Small", "Depth for photo wallpapers",
+            "litert-community/depth-anything-v2-small", "178427e448dbf4da93b1e7b1b2abc103ad329bd6",
+            "tflite/depth_anything_v2_small_wi8_afp32.tflite", "Apache-2.0", 27_733_680L,
+            "f74509422e4a9270a354b249a9193abdd4903354be63701262238a7f4b869611",
+            "depth-anything-v2", "int8", TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION, "Depth", "28 MB", "4GB+"));
+
         return Collections.unmodifiableMap(entries);
+    }
+
+    /** A depth entry: one hash-pinned .tflite, no sidecars, one vision capability. */
+    private static CatalogEntry visionAvailable(String id, String name, String role, String repo, String revision,
+                                                String artifactPath, String license, long size, String sha256,
+                                                String architecture, String quantization, String capability,
+                                                String tag, String sizeEstimate, String ramTier) {
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, license, size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, architecture, quantization,
+            128, 128, 128, ramGb(ramTier), sha256, setOf(capability), null, null,
+            "wallpaper_vision", "wallpaper_vision", tags(tag), sizeEstimate, ramTier, false, true, "");
     }
 
     private static CatalogEntry liteRtAvailable(String id, String name, String jobGroup, String priority, boolean recommended,
@@ -395,6 +450,20 @@ public final class TaiModelCatalog {
             128, 128, 128, ramGb(ramTier), defaultSha256, capabilities, null, null,
             "speech_to_text", "speech_to_text", tags("Speech"), sizeEstimate, ramTier, false, true, "",
             sidecars, windows);
+    }
+
+    /** The GPU full-precision Whisper entry: one 30 s graph that is also its only window variant. */
+    private static CatalogEntry whisperGpuFp32Available(String id, String name, String role, String repo, String revision,
+                                                        String artifactPath, long size, String sha256,
+                                                        String sizeEstimate, String ramTier,
+                                                        CatalogEntry.Sidecar tokenizerSidecar) {
+        LinkedHashMap<Integer, CatalogEntry.WindowVariant> windows = new LinkedHashMap<>();
+        windows.put(30, new CatalogEntry.WindowVariant(30, artifactPath, size, sha256));
+        return new CatalogEntry(id, name, role, repo, revision, artifactPath, "Apache-2.0", size,
+            false, TaiModelSpec.BACKEND_LITERT_LM, TaiModelSpec.FORMAT_LITERTLM, "whisper-acft", "float32",
+            128, 128, 128, ramGb(ramTier), sha256, setOf(TaiModelSpec.CAPABILITY_SPEECH_TO_TEXT), null, null,
+            "speech_to_text", "speech_to_text", tags("Speech"), sizeEstimate, ramTier, false, true, "",
+            Collections.singletonList(tokenizerSidecar), windows, true);
     }
 
     /** A Parakeet TDT speech-to-text entry: one 5 s graph (its only window variant, so
@@ -575,6 +644,9 @@ public final class TaiModelCatalog {
          *  5s/10s pair; Parakeet's one 5s graph). Empty for every non-speech entry.
          *  {@link #withWindow} swaps the active artifact. */
         public final Map<Integer, WindowVariant> speechWindows;
+        /** Speech-only: the graph is only right at full float precision on the GPU (FP16 gives garbage
+         *  text), so it defaults to the GPU at FP32 and never falls back to the CPU on its own. */
+        public final boolean gpuPrecisionFp32;
 
         private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId,
                              String revision, @Nullable String artifactPath, String license, long sizeBytes,
@@ -605,6 +677,24 @@ public final class TaiModelCatalog {
                              LinkedHashSet<String> displayCapabilityTags, String sizeEstimate, String ramTier,
                              boolean recommended, boolean downloadAvailable, String unavailableReason,
                              @Nullable List<Sidecar> sidecars, @Nullable Map<Integer, WindowVariant> speechWindows) {
+            this(modelId, displayName, roleHint, repositoryId, revision, artifactPath, license, sizeBytes, gated, backend,
+                format, architecture, quantization, endpointContextWindow, sourceContextWindow, defaultMaxOutputTokens,
+                recommendedRamGb, sha256, sourceCapabilities, endpointCapabilities, toolMode, jobGroup, priority,
+                displayCapabilityTags, sizeEstimate, ramTier, recommended, downloadAvailable, unavailableReason,
+                sidecars, speechWindows, false);
+        }
+
+        private CatalogEntry(String modelId, String displayName, String roleHint, String repositoryId, String revision,
+                             String artifactPath, String license, long sizeBytes, boolean gated, String backend,
+                             String format, String architecture, @Nullable String quantization,
+                             int endpointContextWindow, int sourceContextWindow, int defaultMaxOutputTokens,
+                             int recommendedRamGb, @Nullable String sha256, LinkedHashSet<String> sourceCapabilities,
+                             @Nullable LinkedHashSet<String> endpointCapabilities, @Nullable String toolMode,
+                             String jobGroup, String priority, LinkedHashSet<String> displayCapabilityTags,
+                             String sizeEstimate, String ramTier, boolean recommended, boolean downloadAvailable,
+                             String unavailableReason, @Nullable List<Sidecar> sidecars,
+                             @Nullable Map<Integer, WindowVariant> speechWindows, boolean gpuPrecisionFp32) {
+            this.gpuPrecisionFp32 = gpuPrecisionFp32;
             this.modelId = modelId; this.displayName = displayName; this.roleHint = roleHint;
             this.repositoryId = repositoryId; this.revision = revision; this.artifactPath = artifactPath;
             this.license = license; this.sizeBytes = sizeBytes; this.gated = gated; this.backend = backend;
@@ -641,7 +731,7 @@ public final class TaiModelCatalog {
                 endpointContextWindow, sourceContextWindow, defaultMaxOutputTokens, recommendedRamGb,
                 variant.sha256, sourceCapabilities, endpointCapabilities, toolMode, jobGroup, priority,
                 displayCapabilityTags, sizeEstimate, ramTier, recommended, downloadAvailable, unavailableReason,
-                sidecars, speechWindows);
+                sidecars, speechWindows, gpuPrecisionFp32);
         }
 
         /** A required extra file (e.g. Whisper's {@code tokenizer.json} from the paired

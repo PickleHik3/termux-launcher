@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terminal › TUI app themes: the tools that follow the terminal's colours. The key is the one the
+     old Look page held; the Appearance editor's Global card links here. -->
+<PreferenceScreen xmlns:app="http://schemas.android.com/apk/res-auto">
+
+    <MultiSelectListPreference
+        app:key="theme_templates_enabled"
+        app:title="@string/settings_theme_templates_title"
+        app:summary="@string/settings_theme_templates_summary_none" />
+
+</PreferenceScreen>

@@ -12,7 +12,7 @@ import android.widget.EditText;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 
 import org.junit.After;
 import org.junit.Test;
@@ -51,13 +51,13 @@ public class HelpActivityTest {
         return activity;
     }
 
-    private Intent intent(@Nullable PaneWallPage place, @Nullable String topicId,
+    private Intent intent(@Nullable PageKind place, @Nullable String topicId,
                           @Nullable Bundle navigation) {
         return HelpActivity.intent(org.robolectric.RuntimeEnvironment.getApplication(),
             place, topicId, navigation);
     }
 
-    private HelpActivity openWithPractice(PaneWallPage place, String topicId) {
+    private HelpActivity openWithPractice(PageKind place, String topicId) {
         controller = Robolectric.buildActivity(HelpActivity.class,
             HelpActivity.intent(org.robolectric.RuntimeEnvironment.getApplication(), place,
                 topicId, null, true)).setup();
@@ -100,7 +100,7 @@ public class HelpActivityTest {
     /** A topic of the Display group, which the Terminal place has no control for. */
     private static HelpTopics.Entry displayTopic() {
         for (HelpTopics.Entry entry : HelpTopics.inGroup(HelpTopics.Group.DISPLAY))
-            if (!entry.places.contains(PaneWallPage.TERMINAL)) return entry;
+            if (!entry.places.contains(PageKind.TERMINAL)) return entry;
         throw new AssertionError("every Display topic is on the Terminal place too");
     }
 
@@ -116,7 +116,7 @@ public class HelpActivityTest {
 
     @Test public void aTopicExtraOpensThatTopicPage() {
         HelpTopics.Entry entry = topicWithTarget();
-        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        open(intent(PageKind.TERMINAL, entry.id, null));
         assertEquals(HelpNavigation.Screen.TOPIC, activity.navigation().screen());
         assertEquals(entry.id, activity.navigation().id());
         String page = activity.panel().pageText();
@@ -131,7 +131,7 @@ public class HelpActivityTest {
      */
     @Test public void aDisplayTopicReadsWhateverPlaceTheReaderCameFrom() {
         HelpTopics.Entry entry = displayTopic();
-        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        open(intent(PageKind.TERMINAL, entry.id, null));
         String page = activity.panel().pageText();
         assertFalse(page.contains(string(R.string.help_topic_unavailable)));
         assertTrue(page.contains(string(entry.summaryRes)));
@@ -141,7 +141,7 @@ public class HelpActivityTest {
     // ---- moving about ------------------------------------------------------------------------
 
     @Test public void backPopsOnePageAndFinishesAtTheRoot() {
-        open(intent(PaneWallPage.TERMINAL, null, null));
+        open(intent(PageKind.TERMINAL, null, null));
         HelpTopics.Entry entry = HelpTopics.inGroup(HelpTopics.Group.FIND_YOUR_WAY).get(0);
         tap(string(entry.titleRes));
         assertEquals(HelpNavigation.Screen.TOPIC, activity.navigation().screen());
@@ -155,7 +155,7 @@ public class HelpActivityTest {
     }
 
     @Test public void theToolbarSearchActionOpensTheSearchPageWithAField() {
-        open(intent(PaneWallPage.TERMINAL, null, null));
+        open(intent(PageKind.TERMINAL, null, null));
         MenuItem search = searchItem();
         assertTrue(activity.onOptionsItemSelected(search));
         assertEquals(HelpNavigation.Screen.SEARCH, activity.navigation().screen());
@@ -181,7 +181,7 @@ public class HelpActivityTest {
 
     @Test public void showOnScreenFinishesWithTheActionTheTopicAndThePageStack() {
         HelpTopics.Entry entry = topicWithTarget();
-        open(intent(PaneWallPage.DISPLAY, entry.id, null));
+        open(intent(PageKind.DISPLAY, entry.id, null));
         withCaller();
         tap(string(R.string.help_show_on_screen));
 
@@ -199,11 +199,11 @@ public class HelpActivityTest {
         assertTrue(restored.restoreState(saved));
         assertEquals(HelpNavigation.Screen.TOPIC, restored.screen());
         assertEquals(entry.id, restored.id());
-        assertEquals(PaneWallPage.DISPLAY, restored.place());
+        assertEquals(PageKind.DISPLAY, restored.place());
     }
 
     @Test public void exploreFromHelpHomeFinishesWithTheExploreAction() {
-        open(intent(PaneWallPage.TERMINAL, null, null));
+        open(intent(PageKind.TERMINAL, null, null));
         withCaller();
         tap(string(R.string.help_home_explore));
         assertTrue(activity.isFinishing());
@@ -216,7 +216,7 @@ public class HelpActivityTest {
 
     @Test public void practiceFinishesWithTheLessonItIsAbout() {
         HelpTopics.Entry entry = lessonTopic();
-        openWithPractice(PaneWallPage.TERMINAL, entry.id);
+        openWithPractice(PageKind.TERMINAL, entry.id);
         withCaller();
         tap(string(R.string.help_try_it));
         Intent result = result();
@@ -232,12 +232,12 @@ public class HelpActivityTest {
      */
     @Test public void practiceIsOnlyOfferedWhenTheCallerSaysItMay() {
         HelpTopics.Entry entry = lessonTopic();
-        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        open(intent(PageKind.TERMINAL, entry.id, null));
         assertNull("Try it was offered with no caller to honour it",
             activity.panel().named(string(R.string.help_try_it)));
         controller.close();
 
-        openWithPractice(PaneWallPage.TERMINAL, entry.id);
+        openWithPractice(PageKind.TERMINAL, entry.id);
         assertNotNull("Try it was not offered to a reader who may practise",
             activity.panel().named(string(R.string.help_try_it)));
     }
@@ -248,7 +248,7 @@ public class HelpActivityTest {
      */
     @Test public void withNoCallerTheAskGoesToTheLauncher() {
         HelpTopics.Entry entry = topicWithTarget();
-        open(intent(PaneWallPage.DISPLAY, entry.id, null));
+        open(intent(PageKind.DISPLAY, entry.id, null));
         tap(string(R.string.help_show_on_screen));
 
         assertTrue(activity.isFinishing());
@@ -269,7 +269,7 @@ public class HelpActivityTest {
     /** With a caller waiting on the result, that is the only way the ask travels. */
     @Test public void withACallerTheAskComesBackAsTheResult() {
         HelpTopics.Entry entry = topicWithTarget();
-        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        open(intent(PageKind.TERMINAL, entry.id, null));
         Shadows.shadowOf(activity).setCallingActivity(
             new ComponentName(activity, com.termux.app.TermuxActivity.class));
         tap(string(R.string.help_show_on_screen));
@@ -287,16 +287,16 @@ public class HelpActivityTest {
     @Test public void aNavigationExtraLandsTheReaderOnThePageTheyLeft() {
         HelpTopics.Entry entry = topicWithTarget();
         HelpNavigation left = new HelpNavigation();
-        left.open(PaneWallPage.WIDGETS);
+        left.open(PageKind.HOME);
         left.topic(entry.id);
         left.setScroll(42);
 
-        open(intent(PaneWallPage.TERMINAL, null, left.saveState()));
+        open(intent(PageKind.TERMINAL, null, left.saveState()));
         assertEquals(HelpNavigation.Screen.TOPIC, activity.navigation().screen());
         assertEquals(entry.id, activity.navigation().id());
         assertEquals(42, activity.navigation().frame().scroll);
         // The place came with the stack, not from the Intent's own extra.
-        assertEquals(PaneWallPage.WIDGETS, activity.navigation().place());
+        assertEquals(PageKind.HOME, activity.navigation().place());
         assertTrue(activity.panel().pageText().contains(string(entry.summaryRes)));
 
         // The stack came back whole: Back has the home page under the topic.
@@ -307,13 +307,13 @@ public class HelpActivityTest {
 
     @Test public void theScreenKeepsItsPageAcrossRecreation() {
         HelpTopics.Entry entry = topicWithTarget();
-        open(intent(PaneWallPage.TERMINAL, entry.id, null));
+        open(intent(PageKind.TERMINAL, entry.id, null));
         Bundle state = new Bundle();
         controller.saveInstanceState(state);
         assertNotNull(state.getBundle("help_navigation"));
 
         controller = Robolectric.buildActivity(HelpActivity.class,
-            intent(PaneWallPage.TERMINAL, null, null)).create(state).start().resume().visible();
+            intent(PageKind.TERMINAL, null, null)).create(state).start().resume().visible();
         activity = controller.get();
         assertEquals(HelpNavigation.Screen.TOPIC, activity.navigation().screen());
         assertEquals(entry.id, activity.navigation().id());

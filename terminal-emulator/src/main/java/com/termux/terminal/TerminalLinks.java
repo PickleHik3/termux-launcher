@@ -32,7 +32,7 @@ public final class TerminalLinks {
         String hyperlink = term.getHyperlinkUriAt(row, column);
         if (hyperlink != null) return new Link(hyperlink, true);
         if (!detectUrls) return null;
-        UrlDetector.UrlSpan span = UrlDetector.at(term.getScreen(), column, row);
+        UrlDetector.UrlSpan span = UrlDetector.at(term.getContent(), column, row);
         return span == null ? null : new Link(span.url, false);
     }
 }

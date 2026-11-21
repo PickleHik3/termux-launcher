@@ -27,7 +27,7 @@ phone's own recognizer, which types its result straight away. Until you choose, 
   keyboard stops it.
 - **The Dictate key**, `tool:voice.dictate` (**Dictate**), starts or stops a dictation on Home,
   Terminal and Display, with the keyboard up, down, or not the launcher's at all. It is not on the
-  row out of the box; add it from **Settings → Keyboard → Terminal extra keys**.
+  row out of the box; add it from **Settings → Keyboard → Extra keys**.
 - **The Android recognizer.** With **Speech engine** set to **Android system**, both keys open the
   phone's recognizer and its result is typed directly, without the card. The on-device engine also
   falls back to it, with a one-line notice, when it cannot start: no speech model, the microphone

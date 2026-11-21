@@ -193,4 +193,29 @@ public class WidgetGridSizePopupTest {
         assertEquals(4, (int) info.getRangeInfo().getCurrent());
         assertEquals(GridSizeWheelPolicy.columns().maximum(), (int) info.getRangeInfo().getMax());
     }
+
+    /** A wheel of words reads the word of its stop and reports the stop's index; no rows, no ×. */
+    @Test
+    public void aWheelOfChoicesReadsItsWordsAndReportsTheStop() {
+        Activity activity = activity();
+        View page = page(activity);
+        Sizes sizes = new Sizes();
+        WidgetGridSizePopup popup = WidgetGridSizePopup.show(page, new RectF(500f, 0f, 590f, 32f),
+            WidgetGridSizePopup.WheelSpec.choices(new String[] {"Auto", "4", "5", "6"}, 0),
+            null, sizes);
+
+        List<GridSizeWheelView> wheels = wheels(popup.content());
+        assertEquals("no rows wheel", 1, wheels.size());
+        assertEquals("Auto", wheels.get(0).valueText());
+        assertEquals("Columns Auto", wheels.get(0).getContentDescription().toString());
+
+        float step = GridSizeWheelPolicy.STEP_DP
+            * activity.getResources().getDisplayMetrics().density;
+        drag(wheels.get(0), -step);
+        assertEquals("4", wheels.get(0).valueText());
+        assertEquals(java.util.Collections.singletonList("1x0"), sizes.log);
+
+        drag(wheels.get(0), step * 5f);
+        assertEquals("held at the first stop", "Auto", wheels.get(0).valueText());
+    }
 }

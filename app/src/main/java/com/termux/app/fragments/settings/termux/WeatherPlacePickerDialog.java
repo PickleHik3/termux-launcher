@@ -22,12 +22,12 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
  * <p>Tapping a result stores its label and coordinates together, so the weather is fetched for
  * exactly the place that was tapped without searching again. "Use device location" clears both.
  */
-final class WeatherPlacePickerDialog {
+public final class WeatherPlacePickerDialog {
 
     private WeatherPlacePickerDialog() {}
 
     /** Shows the picker; {@code onChanged} runs after a place is picked or cleared. */
-    static void show(@NonNull Context context, @Nullable Runnable onChanged) {
+    public static void show(@NonNull Context context, @Nullable Runnable onChanged) {
         float density = context.getResources().getDisplayMetrics().density;
         int padH = Math.round(24 * density);
         WeatherPlaceSearchView search = new WeatherPlaceSearchView(context);

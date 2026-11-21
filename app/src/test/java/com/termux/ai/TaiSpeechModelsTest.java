@@ -25,6 +25,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The speech model picker's state: plain names, which installed model is in use (a stale id
@@ -32,6 +34,7 @@ import static org.junit.Assert.assertTrue;
  * switch that downloads first and deletes the old graph after — or keeps it on failure.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiSpeechModelsTest {
     private Context context;
     private TaiModelStore store;

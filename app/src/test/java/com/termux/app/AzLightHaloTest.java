@@ -180,21 +180,21 @@ public class AzLightHaloTest {
         }
     }
 
-    /** The most-used page keeps its warm tint, and now clears the floor while it sleeps. */
+    /** A capsule at rest still clears the decoration floor. */
     @Test
-    public void theMostUsedPagesTickStillReadsWhileItSleeps() {
+    public void aCapsuleAtRestStillReads() {
         PageTickStripView strip = new PageTickStripView(RuntimeEnvironment.getApplication());
         strip.setAccentColor(LIGHT_INK);
         strip.setGlassInk(AZ_GLASS,
             OnGlass.resolveBare(AZ_GLASS, NIGHT_INK, OnGlass.TARGET_LARGE_TEXT).ink);
-        strip.setPages(3, 0f, 2);
+        strip.setPages(3, 0f);
         double sleeping = OnGlass.ratio(
             GlassInk.effective(strip.tickColorAt(2), AZ_GLASS), AZ_GLASS);
-        assertTrue("a sleeping dynamic tick is still a visible tick: " + sleeping,
+        assertTrue("a resting capsule is still visible: " + sleeping,
             sleeping >= OnGlass.TARGET_DECORATION - 0.001d);
     }
 
-    /** Unmeasured, the ticks are the accent faded by proximity, exactly as before this round. */
+    /** Unmeasured, the resting capsule is the neutral ink at half and the current one the accent. */
     @Test
     public void anUnmeasuredStripFadesTheAccentAsItAlwaysDid() {
         PageTickStripView strip = new PageTickStripView(RuntimeEnvironment.getApplication());

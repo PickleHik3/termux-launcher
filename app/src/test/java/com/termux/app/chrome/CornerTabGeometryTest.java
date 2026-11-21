@@ -8,6 +8,8 @@ import android.graphics.RectF;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Where a corner tab lands, and what shape it is. One rule serves the Widgets page, the Display
@@ -17,6 +19,7 @@ import org.robolectric.RobolectricTestRunner;
  * edge, and never crosses the far side however narrow the frame gets.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class CornerTabGeometryTest {
 
     private static final float GAP = 8f;
@@ -57,6 +60,24 @@ public class CornerTabGeometryTest {
 
     private static RectF frame() {
         return new RectF(0f, 0f, 600f, 800f);
+    }
+
+    /**
+     * Hit rectangles at the ends stretch toward the tab's edge, so their centres are not one cell
+     * and a gap apart; the cell centres always are, on every corner, with the frame's corner hold.
+     */
+    @Test
+    public void cellCentresStandOneCellAndAGapApartEvenWhenEndRectanglesStretch() {
+        float[] centers = new float[2];
+        for (int corner : CORNERS) {
+            CornerTabGeometry.layout(corner, frame(), PAIR, 2, GAP, PAD, HEIGHT, 0f, MARGIN, 8f,
+                1f, mTab, mButtons, centers);
+            assertEquals(String.valueOf(corner), 38f, Math.abs(centers[1] - centers[0]), 0.001f);
+            float cell0 = CornerZones.isLeft(corner) ? mTab.left + PAD + 15f : mTab.left + PAD + 15f;
+            assertEquals(cell0, centers[0], 0.001f);
+            // The hit rectangles' own centres are closer than that: the pitch this fixes.
+            assertTrue(Math.abs(mButtons[1].centerX() - mButtons[0].centerX()) < 38f);
+        }
     }
 
     @Test

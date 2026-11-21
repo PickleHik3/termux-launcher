@@ -36,7 +36,9 @@ public class AppDrawerOverlayHierarchyTest {
         View host = activity.findViewById(R.id.app_drawer_host);
         View accessory = activity.findViewById(R.id.accessory_stack_container);
         View contentRoot = activity.findViewById(R.id.activity_termux_root_relative_layout);
-        assertSame(host.getParent(), contentRoot.getParent());
+        // The drawer stands in the sheets layer, a sibling of the body that holds the accessory stack.
+        assertSame(activity.findViewById(R.id.window_layer_sheets), host.getParent());
+        assertSame(((View) host.getParent()).getParent(), contentRoot.getParent());
         assertTrue(isDescendant(accessory, contentRoot));
         assertFalse(isDescendant(host, accessory));
         assertFalse(isDescendant(accessory, host));

@@ -7,9 +7,6 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.tour.TourGesture;
-import com.termux.app.tour.TourRun;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -18,6 +15,7 @@ import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.termux.app.page.PageKind;
 
 /** The one catalogue the whole help centre reads: complete, stable and self-consistent. */
 public class HelpTopicsTest {
@@ -30,8 +28,11 @@ public class HelpTopicsTest {
         "settings", "scale", "touchpad", "pinned", "border", "keyboard_grabber", "corners");
     private static final List<String> WIDGETS_TARGETS = Arrays.asList("status", "widget", "empty",
         "border", "keyboard_grabber", "corners");
+    /** The Assistant page has no controls of its own yet; only the chrome's targets (ADR 0022). */
+    private static final List<String> ASSISTANT_TARGETS = Arrays.asList("status", "border",
+        "keyboard_grabber", "corners");
 
-    /** The forty-nine topics of the guide, by group, in the order the guide lists them. */
+    /** The fifty topics of the guide, by group, in the order the guide lists them. */
     private static final List<String> THE_GUIDE = Arrays.asList(
         "places", "corners", "minimal", "palette", "status", "stats", "pinned_notifications",
         "dock", "az", "organize_apps", "widget", "pages",
@@ -43,17 +44,18 @@ public class HelpTopicsTest {
         "tlstore", "on_device_ai",
         "scale", "display_apps", "display_keys", "gui_apps", "touchpad",
         "fix_keyboard", "fix_dock", "fix_action", "fix_shortcuts", "fix_stats", "fix_display",
-        "fix_support");
+        "fix_process_limit", "fix_support");
 
-    private static List<String> targetsOf(PaneWallPage place) {
+    private static List<String> targetsOf(PageKind place) {
         switch (place) {
             case TERMINAL: return TERMINAL_TARGETS;
             case DISPLAY: return DISPLAY_TARGETS;
+            case ASSISTANT: return ASSISTANT_TARGETS;
             default: return WIDGETS_TARGETS;
         }
     }
 
-    private List<String> ids(PaneWallPage place) {
+    private List<String> ids(PageKind place) {
         List<String> ids = new ArrayList<>();
         for (HelpTopics.Entry entry : HelpTopics.forPlace(place)) ids.add(entry.id);
         return ids;
@@ -113,7 +115,7 @@ public class HelpTopicsTest {
         assertEquals(HelpTopics.Group.DISPLAY.sectionRes, HelpTopics.Group.MISSING.sectionRes);
         assertNotEquals(HelpTopics.Group.DISPLAY.labelRes, HelpTopics.Group.MISSING.labelRes);
         assertEquals(9, HelpTopics.Group.values().length);
-        assertEquals(49, HelpTopics.all().size());
+        assertEquals(50, HelpTopics.all().size());
     }
 
     @Test public void theCatalogueIsListedGroupByGroup() {
@@ -135,7 +137,7 @@ public class HelpTopicsTest {
     }
 
     @Test public void everyTargetTheLauncherMeasuresHasExactlyOneTopicOnThatPlace() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (String targetId : targetsOf(place)) {
                 HelpTopics.Entry entry = HelpTopics.forTarget(place, targetId);
                 assertNotNull(place + "/" + targetId, entry);
@@ -156,7 +158,7 @@ public class HelpTopicsTest {
                 continue;
             }
             assertFalse(entry.id, entry.places.isEmpty());
-            for (PaneWallPage place : entry.places) {
+            for (PageKind place : entry.places) {
                 assertTrue(entry.id + " on " + place, targetsOf(place).contains(entry.targetId));
             }
         }
@@ -164,8 +166,8 @@ public class HelpTopicsTest {
 
     @Test public void theSameControlOnSeveralPlacesIsOneTopic() {
         HelpTopics.Entry status = HelpTopics.entry("status");
-        assertEquals(3, status.places.size());
-        for (PaneWallPage place : PaneWallPage.values()) {
+        assertEquals(4, status.places.size());
+        for (PageKind place : PageKind.values()) {
             assertTrue(place.name(), status.onPlace(place));
             assertEquals(status, HelpTopics.forTarget(place, "status"));
             // The three border controls are on every place, as the wall draws them round every page.
@@ -174,19 +176,19 @@ public class HelpTopicsTest {
             assertEquals("corners", HelpTopics.forTarget(place, "corners").id);
         }
         // The cog sits on the in-app keyboard, which the Widgets page keeps down.
-        assertNotNull(HelpTopics.forTarget(PaneWallPage.TERMINAL, "settings"));
-        assertNotNull(HelpTopics.forTarget(PaneWallPage.DISPLAY, "settings"));
-        assertNull(HelpTopics.forTarget(PaneWallPage.WIDGETS, "settings"));
+        assertNotNull(HelpTopics.forTarget(PageKind.TERMINAL, "settings"));
+        assertNotNull(HelpTopics.forTarget(PageKind.DISPLAY, "settings"));
+        assertNull(HelpTopics.forTarget(PageKind.HOME, "settings"));
         // The same target id means two different things on two places, so it is two topics.
-        assertEquals("windows", HelpTopics.forTarget(PaneWallPage.TERMINAL, "windows").id);
-        assertEquals("display_apps", HelpTopics.forTarget(PaneWallPage.DISPLAY, "windows").id);
+        assertEquals("windows", HelpTopics.forTarget(PageKind.TERMINAL, "windows").id);
+        assertEquals("display_apps", HelpTopics.forTarget(PageKind.DISPLAY, "windows").id);
     }
 
     @Test public void everyPlacesCatalogueIsTheTopicsWhoseControlItHas() {
-        assertEquals(15, HelpTopics.sizeFor(PaneWallPage.TERMINAL));
-        assertEquals(10, HelpTopics.sizeFor(PaneWallPage.DISPLAY));
-        assertEquals(6, HelpTopics.sizeFor(PaneWallPage.WIDGETS));
-        for (PaneWallPage place : PaneWallPage.values()) {
+        assertEquals(15, HelpTopics.sizeFor(PageKind.TERMINAL));
+        assertEquals(10, HelpTopics.sizeFor(PageKind.DISPLAY));
+        assertEquals(6, HelpTopics.sizeFor(PageKind.HOME));
+        for (PageKind place : PageKind.values()) {
             List<String> ids = ids(place);
             assertEquals(ids.size(), new HashSet<>(ids).size());
             Set<Integer> indices = new HashSet<>();
@@ -199,23 +201,23 @@ public class HelpTopicsTest {
             }
         }
         assertEquals("pinned_notifications",
-            HelpTopics.forTarget(PaneWallPage.DISPLAY, "pinned").id);
+            HelpTopics.forTarget(PageKind.DISPLAY, "pinned").id);
         assertNull("the display has no Set up or Start topic any more",
-            HelpTopics.forTarget(PaneWallPage.DISPLAY, "setup"));
-        assertNull(HelpTopics.forTarget(PaneWallPage.DISPLAY, "start"));
-        assertNull(HelpTopics.forTarget(PaneWallPage.WIDGETS, "sessions"));
-        assertNull(HelpTopics.forTarget(PaneWallPage.TERMINAL, "widget"));
+            HelpTopics.forTarget(PageKind.DISPLAY, "setup"));
+        assertNull(HelpTopics.forTarget(PageKind.DISPLAY, "start"));
+        assertNull(HelpTopics.forTarget(PageKind.HOME, "sessions"));
+        assertNull(HelpTopics.forTarget(PageKind.TERMINAL, "widget"));
     }
 
     @Test public void aLookupTakesEitherATopicIdOrATargetId() {
-        assertEquals("display_apps", HelpTopics.entry(PaneWallPage.DISPLAY, "windows").id);
-        assertEquals("display_apps", HelpTopics.entry(PaneWallPage.DISPLAY, "display_apps").id);
-        assertEquals("hierarchy", HelpTopics.entry(PaneWallPage.TERMINAL, "sessions").id);
-        assertEquals("shortcuts", HelpTopics.entry(PaneWallPage.TERMINAL, "prefix").id);
+        assertEquals("display_apps", HelpTopics.entry(PageKind.DISPLAY, "windows").id);
+        assertEquals("display_apps", HelpTopics.entry(PageKind.DISPLAY, "display_apps").id);
+        assertEquals("hierarchy", HelpTopics.entry(PageKind.TERMINAL, "sessions").id);
+        assertEquals("shortcuts", HelpTopics.entry(PageKind.TERMINAL, "prefix").id);
         // A topic with no control at all still resolves: it is read, not pointed at.
-        assertEquals("copy_paste", HelpTopics.entry(PaneWallPage.WIDGETS, "copy_paste").id);
-        assertNull(HelpTopics.entry(PaneWallPage.WIDGETS, "sessions"));
-        assertNull(HelpTopics.entry(PaneWallPage.TERMINAL, "nothing_by_this_name"));
+        assertEquals("copy_paste", HelpTopics.entry(PageKind.HOME, "copy_paste").id);
+        assertNull(HelpTopics.entry(PageKind.HOME, "sessions"));
+        assertNull(HelpTopics.entry(PageKind.TERMINAL, "nothing_by_this_name"));
     }
 
     @Test public void aGestureIsOfferedOnlyWhereOneIsImplemented() {
@@ -228,20 +230,17 @@ public class HelpTopicsTest {
         }
         assertEquals(new HashSet<>(Arrays.asList("dock", "status", "space", "az", "places",
             "keyboard_swipe")), withGesture);
-        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, HelpTopics.entry("dock").gesture);
         // The status bar does not page any more; its swipe is the fold, down from the top border.
-        assertEquals(TourGesture.DRAG_DOWN, HelpTopics.entry("status").gesture);
-        assertEquals(TourGesture.HOLD_DRAG, HelpTopics.entry("places").gesture);
-        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("keyboard_swipe").gesture);
-        assertEquals(TourGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
-        assertEquals(TourGesture.SCRUB, HelpTopics.entry("az").gesture);
+        assertEquals(HelpGesture.DRAG_DOWN, HelpTopics.entry("status").gesture);
+        assertEquals(HelpGesture.HOLD_DRAG, HelpTopics.entry("places").gesture);
+        assertEquals(HelpGesture.SWIPE_UP, HelpTopics.entry("keyboard_swipe").gesture);
+        assertEquals(HelpGesture.SWIPE_UP, HelpTopics.entry("space").gesture);
+        assertEquals(HelpGesture.SCRUB, HelpTopics.entry("az").gesture);
     }
 
-    @Test public void everyPracticeIdNamesALessonTheRunActuallyHas() {
-        assertEquals(TourRun.lessons().size(), HelpTopics.LESSON_IDS.size());
-        for (String lessonId : HelpTopics.LESSON_IDS) {
-            assertTrue(lessonId, TourRun.lessons().contains(lessonId));
-        }
+    @Test public void everyPracticeIdIsOneOfTheLessonIds() {
+        assertEquals(6, HelpTopics.LESSON_IDS.size());
         Set<String> used = new HashSet<>();
         for (HelpTopics.Entry entry : HelpTopics.all()) {
             if (entry.lessonId == null) continue;
@@ -253,7 +252,7 @@ public class HelpTopicsTest {
 
     @Test public void theSixLessonsAreReachedFromTheTopicsThatTeachThem() {
         assertEquals(HelpTopics.LESSON_FIND_HELP, HelpTopics.entry("corners").lessonId);
-        assertEquals(HelpTopics.LESSON_BORDER_DRAG, HelpTopics.entry("places").lessonId);
+        assertEquals(HelpTopics.LESSON_PAGE_SWIPE, HelpTopics.entry("places").lessonId);
         assertEquals(HelpTopics.LESSON_KEYBOARD, HelpTopics.entry("keyboard_swipe").lessonId);
         assertEquals(HelpTopics.LESSON_STATUS_SWIPE, HelpTopics.entry("status").lessonId);
         assertEquals(HelpTopics.LESSON_FIND_APPS, HelpTopics.entry("dock").lessonId);
@@ -309,6 +308,6 @@ public class HelpTopicsTest {
         assertTrue(HelpTopics.topicOnly("corners"));
         assertFalse(HelpTopics.topicOnly("dock"));
         assertFalse(HelpTopics.topicOnly(null));
-        assertTrue(ids(PaneWallPage.TERMINAL).containsAll(Arrays.asList("keys", "corners")));
+        assertTrue(ids(PageKind.TERMINAL).containsAll(Arrays.asList("keys", "corners")));
     }
 }

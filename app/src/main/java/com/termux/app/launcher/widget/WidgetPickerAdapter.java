@@ -197,7 +197,9 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         LinearLayout labels = new LinearLayout(parent.getContext()); labels.setOrientation(LinearLayout.VERTICAL);
         TextView title = new TextView(parent.getContext()); title.setTag("title");
         TextView span = new TextView(parent.getContext()); span.setTag("span");
-        labels.addView(title); labels.addView(span);
+        TextView description = new TextView(parent.getContext()); description.setTag("description");
+        description.setAlpha(0.7f); description.setVisibility(View.GONE);
+        labels.addView(title); labels.addView(description); labels.addView(span);
         LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1);
         lp.setMarginStart(Math.round(12 * density)); card.addView(labels, lp);
         return new Holder(card, true);
@@ -230,7 +232,14 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         } else {
             spanText = res.getString(R.string.widget_picker_card_span, item.columnSpan, item.rowSpan);
         }
+        if (item.isBuiltin() && !item.sizes.isEmpty()) {
+            // One card per kind: its sizes grouped, and what it is for.
+            spanText = item.sizes;
+        }
         span.setText(spanText);
+        TextView description = holder.itemView.findViewWithTag("description");
+        description.setText(item.description);
+        description.setVisibility(item.description.isEmpty() ? View.GONE : View.VISIBLE);
         // Only a widget larger than the whole grid is shut: one that merely has no room on the
         // page on screen stays live, since a hold can still carry it to another page.
         boolean enabled = fit.canFit(item);
@@ -336,8 +345,9 @@ public final class WidgetPickerAdapter extends RecyclerView.Adapter<RecyclerView
         String countText = resources.getQuantityString(R.plurals.widget_picker_widget_count,
             section.count, section.count);
         count.setText(countText);
-        // nf-fa-angle_up / nf-fa-angle_down, the same family the page's own chrome wears.
-        chevron.setText(section.expanded ? "\uf106" : "\uf107");
+        chevron.setText(com.termux.app.launcher.widget.builtin.WidgetIcons.label(chevron.getContext(),
+            section.expanded ? com.termux.app.launcher.widget.builtin.WidgetIcons.CHEVRON_UP
+                : com.termux.app.launcher.widget.builtin.WidgetIcons.CHEVRON_DOWN));
         holder.itemView.setEnabled(true); holder.itemView.setAlpha(1f);
         holder.itemView.setClickable(true); makeKeyboardReachable(holder.itemView);
         holder.itemView.setContentDescription(resources.getString(

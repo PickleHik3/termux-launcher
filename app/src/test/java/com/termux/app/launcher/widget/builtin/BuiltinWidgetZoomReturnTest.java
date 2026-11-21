@@ -53,7 +53,7 @@ public class BuiltinWidgetZoomReturnTest {
 
         Labelled(@NonNull Context context, @NonNull BuiltinWidgetServices services,
                  @NonNull BuiltinWidgetStyle style) {
-            super(context, BuiltinWidgetKind.BATTERY, services, style);
+            super(context, BuiltinWidgetKind.DEVICE, services, style);
         }
 
         @Override protected void onBuild(@NonNull FrameLayout frame, @NonNull BuiltinWidgetSpan span,
@@ -79,7 +79,7 @@ public class BuiltinWidgetZoomReturnTest {
         metrics.scaledDensity = DENSITY;
         metrics.densityDpi = 320;
         services = new BuiltinWidgetServices(context, HOST);
-        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Direction.values()[0],
+        style = BuiltinWidgetStyle.resolve(context, BuiltinWidgetStyle.Numerals.values()[0],
             false, null);
     }
 
@@ -117,32 +117,13 @@ public class BuiltinWidgetZoomReturnTest {
         widget.bind(null);
         settle(widget, width, height);
         float before = widget.content().getScaleX();
-        assertTrue("zoomed, not to the most: " + before, before > 1.02f && before < 1.8f);
+        // Never zoomed (ADR 0020 §12): the card keeps its design at 1, and comes back at 1.
+        assertTrue("never zoomed: " + before, before <= 1f);
         assertTrue("the label fits at first", !cutShort(widget.label));
 
         walkAndReturn(widget, width, height);
 
         assertEquals("the zoom it had at this size", before, widget.content().getScaleX(), 0.001f);
         assertTrue("the label is not cut short on return", !cutShort(widget.label));
-    }
-
-    @Test public void theDigitalClockComesBackAtItsZoom() {
-        int width = 380, height = 298;
-        DigitalClockWidgetView clock = new DigitalClockWidgetView(context, services, style);
-        clock.setCells(2, 1);
-        clock.bind(null);
-        settle(clock, width, height);
-        assertEquals(BuiltinWidgetSpan.TWO_BY_ONE, clock.span());
-        float before = clock.content().getScaleX();
-
-        DigitalClockWidgetView fresh = new DigitalClockWidgetView(context, services, style);
-        fresh.setCells(2, 1);
-        fresh.bind(null);
-        settle(fresh, width, height);
-        assertEquals("a fresh clock agrees", before, fresh.content().getScaleX(), 0.001f);
-
-        walkAndReturn(clock, width, height);
-
-        assertEquals("the zoom it had at this size", before, clock.content().getScaleX(), 0.001f);
     }
 }

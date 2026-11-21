@@ -15,15 +15,20 @@ import android.renderscript.Element;
 import android.renderscript.RenderScript;
 import android.renderscript.ScriptIntrinsicBlur;
 
+/**
+ * RenderScript's intrinsic blur, which pre-blurs the stored wallpaper frame every Wallpaper-kind
+ * glass surface samples ({@code WallpaperBlurRenderer}). Its sigma is what the panels' and the
+ * live surfaces' GPU blur is calibrated against ({@code LivePicture}), so it stays on every
+ * Android version.
+ */
 @TargetApi(Build.VERSION_CODES.JELLY_BEAN_MR1)
-public class AndroidStockBlurImpl implements BlurImpl {
+public class AndroidStockBlurImpl {
 
     private RenderScript mRenderScript;
     private ScriptIntrinsicBlur mBlurScript;
     private Allocation mBlurInput;
     private Allocation mBlurOutput;
 
-    @Override
     public boolean prepare(Context context, Bitmap buffer, float radius) {
         if (mRenderScript == null) {
             try {
@@ -57,7 +62,6 @@ public class AndroidStockBlurImpl implements BlurImpl {
         return true;
     }
 
-    @Override
     public void release() {
         if (mBlurInput != null) {
             mBlurInput.destroy();
@@ -77,7 +81,6 @@ public class AndroidStockBlurImpl implements BlurImpl {
         }
     }
 
-    @Override
     public void blur(Bitmap input, Bitmap output) {
         mBlurInput.copyFrom(input);
         mBlurScript.setInput(mBlurInput);

@@ -16,13 +16,14 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.util.Arrays;
+import android.app.Application;
 
 /**
  * The keyboard font picker must offer the device's whole shared storage, not only Downloads: the
  * primary storage root is an advanced root that the system picker hides unless asked.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 28)
+@Config(sdk = 28, application = Application.class)
 public class OpenFontDocumentTest {
 
     private Intent pickerIntent() {

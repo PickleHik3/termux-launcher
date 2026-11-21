@@ -46,4 +46,13 @@ public class WidgetCornerPolicyTest {
         assertEquals(20f, WidgetCornerPolicy.decide(background, CELL, 28f, 20f).radius, 0f);
         assertEquals(12f, WidgetCornerPolicy.decide(background, CELL, 12f, 20f).radius, 0f);
     }
+
+    @Test public void lookCornerWiderThanTheSystemRadiusIsCappedAtTheSystemRadius() {
+        // Look default 24dp at 3x vs a 16dp system radius.
+        assertEquals(48f, WidgetCornerPolicy.decide(null, CELL, 72f, 48f).radius, 0f);
+    }
+
+    @Test public void lookCornerNarrowerThanTheSystemRadiusIsKept() {
+        assertEquals(6f, WidgetCornerPolicy.decide(null, CELL, 6f, 48f).radius, 0f);
+    }
 }

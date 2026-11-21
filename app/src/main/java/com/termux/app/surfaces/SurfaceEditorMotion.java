@@ -16,9 +16,9 @@ final class SurfaceEditorMotion {
     private SurfaceEditorMotion() {}
 
     /** The card's and the pill's rise, fade and settle. */
-    static final long CLASSIC_REVEAL_MS = 180L;
+    static final long CLASSIC_REVEAL_MS = EditorMotion.Use.REVEAL_IN.settleMs();
     /** The gesture overlay's fade. */
-    static final long CLASSIC_OVERLAY_FADE_MS = 200L;
+    static final long CLASSIC_OVERLAY_FADE_MS = EditorMotion.Use.OVERLAY_IN.settleMs();
 
     /** True when the card arrives and leaves through {@code GlassMotionPlayer} rather than a rise. */
     static boolean cardPlaysMotion(@NonNull GlassMotion motion) {
@@ -26,12 +26,14 @@ final class SurfaceEditorMotion {
     }
 
     static long revealMs(@NonNull GlassMotion motion, boolean showing) {
-        if (!motion.springy()) return CLASSIC_REVEAL_MS;
+        if (!motion.springy())
+            return (showing ? EditorMotion.Use.REVEAL_IN : EditorMotion.Use.REVEAL_OUT).settleMs();
         return showing ? motion.enterAlphaMs : motion.exitAlphaMs;
     }
 
     static long overlayFadeMs(@NonNull GlassMotion motion, boolean showing) {
-        if (!motion.springy()) return CLASSIC_OVERLAY_FADE_MS;
+        if (!motion.springy())
+            return (showing ? EditorMotion.Use.OVERLAY_IN : EditorMotion.Use.OVERLAY_OUT).settleMs();
         return showing ? motion.enterAlphaMs : motion.exitAlphaMs;
     }
 }
