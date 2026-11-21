@@ -62,6 +62,18 @@ public final class PageBarBand {
     }
 
     /**
+     * The keyboard {@link #shown} reads for Home's pill: what is up now (the launcher's keyboard
+     * or the phone's) while Home is in front, Home's own rest otherwise ({@code homeRestKeyboardUp}:
+     * its keyboard comes up on entry, always on or remembered). The pill rides Home's page, so
+     * while another page is in front, and from the first frame of a crossing toward Home, it wears
+     * the answer Home lands with, never the page in front's keyboard.
+     */
+    public static boolean homeKeyboardUp(boolean homeInFront, boolean keyboardUpNow,
+                                         boolean homeRestKeyboardUp) {
+        return homeInFront ? keyboardUpNow : homeRestKeyboardUp;
+    }
+
+    /**
      * The pill's left within its pane: centred on the window's centre, kept
      * {@link PageBarLayout#SIDE_INSET_DP} inside the pane on both sides. Pane-centred when the pane
      * is centred in the window, when the window's width is unknown or when the pane is too narrow

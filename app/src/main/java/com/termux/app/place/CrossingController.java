@@ -879,6 +879,10 @@ public final class CrossingController {
         ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
             com.termux.app.place.StackLayout.restGridDockReservePx(in, homeRest),
             com.termux.app.place.StackLayout.restGridEdgeGapPx(in, homeRest));
+        // The page bar's pill as Home's rest shows it, whatever keyboard the page leaving had up.
+        ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setKeyboardUp(
+            com.termux.app.wall.pageswitch.PageBarBand.homeKeyboardUp(false, false,
+                in.keyboardShown));
     }
 
     /**

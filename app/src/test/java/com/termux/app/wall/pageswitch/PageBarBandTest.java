@@ -83,6 +83,31 @@ public class PageBarBandTest {
         assertEquals(10f, PageBarBand.pillLeftPx(80f, 220f, 1080f, 200f, 1f), EPS);
     }
 
+    @Test public void pillCrossingTowardHomeShowsAsHomesRestDoes() {
+        // Parity: the pill a crossing toward Home slides in with (Home not in front yet, the
+        // Terminal's keyboard up or down) is the one Home's rest shows after the landing, with
+        // Home's keyboard on demand (lands down) and always on (lands up).
+        for (boolean terminalKeyboardUp : new boolean[] {false, true}) {
+            for (boolean homeAlwaysOn : new boolean[] {false, true}) {
+                boolean homeRestWants = homeAlwaysOn;
+                boolean crossing = PageBarBand.shown(true,
+                    PageBarBand.homeKeyboardUp(false, terminalKeyboardUp, homeRestWants));
+                boolean rest = PageBarBand.shown(true,
+                    PageBarBand.homeKeyboardUp(true, homeAlwaysOn, homeRestWants));
+                assertEquals("terminal " + terminalKeyboardUp + " alwaysOn " + homeAlwaysOn,
+                    rest, crossing);
+                assertEquals(!homeAlwaysOn, crossing);
+            }
+        }
+    }
+
+    @Test public void pillAtHomeHearsEitherKeyboardUpNow() {
+        assertFalse(PageBarBand.shown(true, PageBarBand.homeKeyboardUp(true, true, false)));
+        assertTrue(PageBarBand.shown(true, PageBarBand.homeKeyboardUp(true, false, false)));
+        // A keyboard raised on demand on Home and put away shows the pill again at once.
+        assertTrue(PageBarBand.shown(true, PageBarBand.homeKeyboardUp(true, false, true)));
+    }
+
     @Test public void layoutTakesThePolicysCentre() {
         PageBarLayout offset = new PageBarLayout(1f, 1000f, 3, 80f, 1080f);
         assertEquals(PageBarBand.pillLeftPx(80f, 1000f, 1080f, offset.pillWidthPx(), 1f),

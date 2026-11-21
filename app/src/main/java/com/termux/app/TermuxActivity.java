@@ -18393,9 +18393,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
                 stack.homeGridDockReservePx, stack.stackEdgeGapPx);
-            // The page bar's pill is put away while either keyboard is up; its band stays.
+            // The page bar's pill is put away while either keyboard is up on Home; its band stays.
+            // Away from Home it wears Home's own rest, which a crossing toward Home also hands it
+            // as it begins (applyArrivingHomeGridReserve), so it slides in as it lands.
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setKeyboardUp(
-                state.keyboardShown || isImeVisible());
+                com.termux.app.wall.pageswitch.PageBarBand.homeKeyboardUp(
+                    mLastWallPage == com.termux.app.page.PageKind.HOME,
+                    state.keyboardShown || isImeVisible(),
+                    mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+                        && restWantsKeyboard(com.termux.app.page.PageKind.HOME)));
         }
         // The content column fills the window to its bottom; what each page leaves of it is that
         // page's own rest (applyPageRooms). All it keeps of its old bottom margin is the system
