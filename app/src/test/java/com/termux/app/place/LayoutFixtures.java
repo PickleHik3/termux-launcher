@@ -259,10 +259,21 @@ public final class LayoutFixtures {
         @NonNull
         public RestCards.Rest cardsRest(@NonNull PageRef page, boolean keyboardUp,
                                         boolean dockFloating) {
+            return cardsRest(page, keyboardUp, keyboardUp, dockFloating);
+        }
+
+        /**
+         * {@link #cardsRest} with the other side's own rest keyboard {@code otherKeyboardUp}
+         * ({@link SideCards#restKeyboardUp}): what the activity hands the answer for the side
+         * not in front, whatever the front's keyboard is.
+         */
+        @NonNull
+        public RestCards.Rest cardsRest(@NonNull PageRef page, boolean keyboardUp,
+                                        boolean otherKeyboardUp, boolean dockFloating) {
             RestCards.Rest rest = cardsRestOf(page, keyboardUp, dockFloating);
-            // The other side's rest, in the same keyboard state; one level, as the answer reads it.
-            rest.other = cardsRestOf(page.isHome() ? PageRef.TERMINAL : PageRef.HOME, keyboardUp,
-                dockFloating);
+            // The other side's rest, one level, as the answer reads it.
+            rest.other = cardsRestOf(page.isHome() ? PageRef.TERMINAL : PageRef.HOME,
+                otherKeyboardUp, dockFloating);
             return rest;
         }
 

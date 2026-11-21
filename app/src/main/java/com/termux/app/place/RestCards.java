@@ -137,7 +137,8 @@ public final class RestCards {
         public float floatingKeyboardY = FloatingKeyboardGeometry.DEFAULT_Y_FRACTION;
         /**
          * The other side's rest (Home for the Terminal's, the Terminal for Home's), filled the
-         * same way and with the keyboard in the same state; its own {@code other} is ignored.
+         * same way with that side's own keyboard ({@link SideCards#restKeyboardUp}), never the
+         * front's; its own {@code other} is ignored.
          * Null answers as one side alone.
          */
         @Nullable public Rest other;

@@ -29,7 +29,7 @@ import com.termux.app.wall.PageRef;
  * numbers and views and calls {@link #update} from its geometry pass at rest; this class builds
  * the two rests, reads the answer, writes the keys card and the host's bounds (compare before
  * write), and hands the stack's container margin and the renderer's side numbers back. Nothing
- * here runs while a crossing is live.
+ * here runs while a crossing is live: the activity calls {@link #update} at rest only.
  */
 public final class SideCardsController {
 
@@ -37,8 +37,6 @@ public final class SideCardsController {
     public interface Host {
         /** The window's view of {@code id}; null while it has none. */
         @Nullable View view(int id);
-        /** A crossing is live: nothing is laid out. */
-        boolean crossing();
         /**
          * The page in front, {@link PageRef#HOME} or {@link PageRef#TERMINAL}; null while another
          * page or the Display window is (the cards then never stand apart).
@@ -55,6 +53,14 @@ public final class SideCardsController {
         int measuredExtraKeysRowPx();
         /** The keyboard as the stack lays it out while it is down, its foot included. */
         int measuredKeyboardPx();
+        /**
+         * {@code page}'s own rest keyboard while another page is in front, as
+         * {@link com.termux.app.place.SideCards#restKeyboardPx} has it: the keys' height while
+         * that rest has it up, else {@code KEYBOARD_DOWN}. Its rest's answer, the one a crossing
+         * toward it reads ({@link com.termux.app.place.SideCards#restKeyboardUp}), never the
+         * front page's keyboard.
+         */
+        int restKeyboardPx(@NonNull PageRef page);
         /** The band a status bar along the bottom claims on {@code layout}, 0 elsewhere. */
         int bottomStatusBandPx(@NonNull PlaceLayout layout);
         /** The navigation band the content keeps clear at the screen's bottom. */
@@ -187,12 +193,11 @@ public final class SideCardsController {
     /**
      * One rest: works the answer out from {@code frontPass} (the pass the activity just laid the
      * front side out with) and the other side's rest, lays out the keys card, and hands the
-     * renderer its numbers. A live crossing changes nothing.
+     * renderer its numbers. Called at rest only: a live crossing lays nothing out.
      *
      * @return whether the host's bounds, the container's margin or the apart state moved
      */
     public boolean update(@NonNull StackLayout.Input frontPass) {
-        if (mHost.crossing()) return false;
         RestCards answer = answerOf(frontPass);
         boolean apart = answer != null && answer.apart();
         boolean moved = !mAnswered || apart != mApart;
@@ -397,9 +402,11 @@ public final class SideCardsController {
         in.toolbarShown = PlaceChromePolicy.dockShown(layout);
         in.extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
         in.toolbarHeightPx = in.extraKeysRowEnabled ? mHost.measuredExtraKeysRowPx() : 0;
-        // The same keyboard state at both ends of a rest, as the answer reads it.
-        in.keyboardShown = front.keyboardShown;
-        in.keyboardHeightPx = front.keyboardHeightPx;
+        // The other side's own keyboard, not the front's: toggling the Terminal's keyboard leaves
+        // Home's parked rest where it was, and each side is laid out at the rest it lands at.
+        int keyboard = mHost.restKeyboardPx(page);
+        in.keyboardShown = com.termux.app.place.SideCards.restKeyboardShown(keyboard);
+        in.keyboardHeightPx = com.termux.app.place.SideCards.restKeyboardKeysPx(keyboard);
         in.statusBandPx = mHost.bottomStatusBandPx(layout);
         in.imeLiftPx = front.imeLiftPx;
         in.ceilingBeforeMarginPx = front.ceilingBeforeMarginPx;

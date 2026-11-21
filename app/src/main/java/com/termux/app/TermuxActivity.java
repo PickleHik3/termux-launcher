@@ -10944,7 +10944,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.dock.SideCardsController mSideCards =
         new com.termux.app.dock.SideCardsController(new com.termux.app.dock.SideCardsController.Host() {
             @Nullable @Override public View view(int id) { return hotView(id); }
-            @Override public boolean crossing() { return mCrossing.crossing(); }
             @Nullable @Override public com.termux.app.wall.PageRef frontPage() {
                 if (mLastWallPage == com.termux.app.page.PageKind.HOME) return com.termux.app.wall.PageRef.HOME;
                 return mLastWallPage == com.termux.app.page.PageKind.TERMINAL && !isDisplayWindowInFront()
@@ -10963,6 +10962,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 View keyboard = findViewById(R.id.inapp_keyboard_container);
                 return keyboardStaysLaidOut() && keyboard != null && keyboard.getVisibility() != View.GONE
                     ? mKeyboardGeometry.measureHeightPx() : 0;
+            }
+            @Override public int restKeyboardPx(@NonNull com.termux.app.wall.PageRef page) {
+                // The keys' height as the pass reads it while the keyboard shows (buildChromeSpec).
+                return com.termux.app.place.SideCards.restKeyboardPx(sideRestKeyboardUp(
+                    page.isHome() ? com.termux.app.page.PageKind.HOME
+                        : com.termux.app.page.PageKind.TERMINAL),
+                    mKeyboardGeometry == null ? 0
+                        : inAppKeyboardKeysPx(mKeyboardGeometry.measureHeightPx()));
             }
             @Override public int bottomStatusBandPx(@NonNull PlaceLayout layout) {
                 return com.termux.app.place.EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM)
@@ -18254,7 +18261,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Home's card and the Terminal's extra-keys card, from one answer at rest: the container
         // keeps the Terminal's margin at both rests while they stand apart.
-        if (mSideCards.update(stackIn)) applyAccessorySurfaceBounds(state);
+        // At rest only: a live crossing lays neither card out.
+        if (!mCrossing.crossing() && mSideCards.update(stackIn)) applyAccessorySurfaceBounds(state);
         if (mHostLookRevisionApplied != mSideCards.hostLookRevision()) {
             // The host's dress page moved (Home's rest took it over, or gave it back): its glass
             // is built once for the new dress, a rest-time step that no crossing runs.
@@ -24936,13 +24944,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
             @NonNull com.termux.app.page.PageKind place) {
-        boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
-            : restWantsKeyboard(place);
+        boolean keyboardUp = sideRestKeyboardUp(place);
         // A Home page wears the bar too (#90); only one whose layout puts it away has none, and
         // the window's then fades on the way there.
         if (place == com.termux.app.page.PageKind.HOME && !homeWearsBarAtRest())
             return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
+    }
+
+    /**
+     * Whether {@code place}'s own rest has its keyboard up ({@code SideCards#restKeyboardUp}):
+     * what a crossing's end toward it reads and what the two cards lay the parked side out with.
+     */
+    private boolean sideRestKeyboardUp(@NonNull com.termux.app.page.PageKind place) {
+        boolean front = place == mLastWallPage;
+        return com.termux.app.place.SideCards.restKeyboardUp(front,
+            front && committedKeyboardVisible(), !front && restWantsKeyboard(place));
     }
 
     /**

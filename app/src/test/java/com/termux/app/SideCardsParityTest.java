@@ -112,14 +112,27 @@ public class SideCardsParityTest {
     private static SideCardsController.Host hostOf(@NonNull Fixture f, @NonNull PageRef front,
                                                    boolean keyboardUp, boolean floating,
                                                    @NonNull StackRenderer renderer) {
+        return hostOf(f, front, keyboardUp, keyboardUp, floating, renderer, null);
+    }
+
+    /**
+     * @param otherUp  the other side's own rest keyboard ({@link SideCards#restKeyboardUp})
+     * @param keysCard the Terminal's extra-keys card view, null for none
+     */
+    private static SideCardsController.Host hostOf(@NonNull Fixture f, @NonNull PageRef front,
+                                                   boolean keyboardUp, boolean otherUp,
+                                                   boolean floating,
+                                                   @NonNull StackRenderer renderer,
+                                                   @Nullable View keysCard) {
         final int flush = f.settle(PageRef.TERMINAL, false, floating).flushPaddingPx;
         final StackLayout.Result own = f.settle(front, keyboardUp, floating);
         final int foot = BottomInsets.keyboardFootPx(f.keptBandPx, BottomInsets.keyboardWearsFoot(
             floating || f.floatingKeyboard(), f.floatingKeyboard(), false, own.bandsUnderKeyboard,
             f.keyboardLaidOutPx() > 0));
         return new SideCardsController.Host() {
-            @Nullable @Override public View view(int id) { return null; }
-            @Override public boolean crossing() { return false; }
+            @Nullable @Override public View view(int id) {
+                return id == R.id.extra_keys_card ? keysCard : null;
+            }
             @Nullable @Override public PageRef frontPage() { return front; }
             @Nullable @Override public PlaceLayout layoutOf(@NonNull PageRef page) {
                 return f.layoutOf(page);
@@ -132,6 +145,11 @@ public class SideCardsParityTest {
             @Override public int measuredExtraKeysRowPx() { return f.extraKeysRowPx; }
             @Override public int measuredKeyboardPx() {
                 return f.keyboardLaidOutPx() > 0 ? f.keyboardLaidOutPx() + foot : 0;
+            }
+            @Override public int restKeyboardPx(@NonNull PageRef page) {
+                return SideCards.restKeyboardPx(
+                    SideCards.restKeyboardUp(page.equals(front), keyboardUp, otherUp),
+                    f.pass(page, true, floating).keyboardHeightPx);
             }
             @Override public int bottomStatusBandPx(@NonNull PlaceLayout layout) {
                 return f.bottomStatusBandPx(layout);
@@ -252,13 +270,117 @@ public class SideCardsParityTest {
         assertTrue("some wear the tray", tray > 0);
     }
 
+    /** What the controller lays the glass host out at: its pin, height, gap and Home's dress. */
+    private static String hostLayoutOf(@NonNull SideCardsController controller) {
+        android.widget.RelativeLayout.LayoutParams params =
+            new android.widget.RelativeLayout.LayoutParams(0, 0);
+        controller.layOutHost(params, 0);
+        RestCards.HostLook look = controller.hostLook();
+        return "pinned=" + controller.hostPinned() + " height=" + controller.hostHeightPx()
+            + " margins=" + params.leftMargin + "," + params.rightMargin + "," + params.bottomMargin
+            + " rect=" + controller.hostRestRect() + " margin=" + controller.containerMarginPx(-1)
+            + (look == null ? " look=none" : " look=" + look.design + "/" + look.peek + "/"
+                + look.floats + "/" + look.foot + "/" + look.keyboardUp + "/" + look.peekCut
+                + "/" + look.drawn);
+    }
+
+    /**
+     * The two phases of Home's card have one owner: parked while the Terminal is in front, the
+     * host is laid out exactly as Home's own rest lays it out (its own keyboard, slack and gap),
+     * and the Terminal's keyboard, up or down, changes none of it. So the landing on Home finds
+     * the host already at the answer, and toggling the Terminal's keyboard re-lays nothing.
+     */
+    @Test public void homesParkedHostIsHomesOwnRestWhateverTheTerminalsKeyboard() {
+        int cases = 0;
+        for (Fixture f : LayoutFixtures.cardFixtures()) {
+            for (boolean homeUp : new boolean[] {false, true}) {
+                SideCardsController atHome = new SideCardsController(hostOf(f, PageRef.HOME,
+                    homeUp, false, true, rendererFor(true), null));
+                atHome.update(f.pass(PageRef.HOME, homeUp, true));
+                if (!atHome.apart()) continue;
+                String want = hostLayoutOf(atHome);
+                for (boolean terminalUp : new boolean[] {false, true}) {
+                    String label = f.name + " home kb=" + homeUp + " terminal kb=" + terminalUp;
+                    SideCardsController parked = new SideCardsController(hostOf(f,
+                        PageRef.TERMINAL, terminalUp, homeUp, true, rendererFor(false), null));
+                    parked.update(f.pass(PageRef.TERMINAL, terminalUp, true));
+                    assertTrue(label, parked.apart());
+                    assertEquals(label, want, hostLayoutOf(parked));
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some fixtures stand apart", cases > 0);
+    }
+
+    /** What the controller lays the Terminal's extra-keys card out at. */
+    private static String keysLayoutOf(@NonNull SideCardsController controller,
+                                       @NonNull com.termux.app.dock.KeysCardLayout card) {
+        android.view.ViewGroup.MarginLayoutParams p =
+            (android.view.ViewGroup.MarginLayoutParams) card.getLayoutParams();
+        return "on=" + controller.keysCardOn() + " vis=" + card.getVisibility() + " margins="
+            + p.leftMargin + "," + p.rightMargin + " height=" + p.height + " radius="
+            + card.cornerRadiusPx() + " rect=" + controller.keysCardRestRect();
+    }
+
+    private static com.termux.app.dock.KeysCardLayout keysCard() {
+        com.termux.app.dock.KeysCardLayout card =
+            new com.termux.app.dock.KeysCardLayout(RuntimeEnvironment.getApplication());
+        card.setLayoutParams(new FrameLayout.LayoutParams(0, 0));
+        return card;
+    }
+
+    /** Symmetrically, the keys card stands at the Terminal's own rest whatever Home's keyboard. */
+    @Test public void theKeysCardIsTheTerminalsOwnRestWhateverHomesKeyboard() {
+        int cases = 0;
+        for (Fixture f : LayoutFixtures.cardFixtures()) {
+            for (boolean terminalUp : new boolean[] {false, true}) {
+                com.termux.app.dock.KeysCardLayout own = keysCard();
+                SideCardsController atTerminal = new SideCardsController(hostOf(f,
+                    PageRef.TERMINAL, terminalUp, false, true, rendererFor(false), own));
+                atTerminal.update(f.pass(PageRef.TERMINAL, terminalUp, true));
+                if (!atTerminal.apart()) continue;
+                String want = keysLayoutOf(atTerminal, own);
+                for (boolean homeUp : new boolean[] {false, true}) {
+                    String label = f.name + " terminal kb=" + terminalUp + " home kb=" + homeUp;
+                    com.termux.app.dock.KeysCardLayout parkedCard = keysCard();
+                    SideCardsController parked = new SideCardsController(hostOf(f,
+                        PageRef.HOME, homeUp, terminalUp, true, rendererFor(true), parkedCard));
+                    parked.update(f.pass(PageRef.HOME, homeUp, true));
+                    assertEquals(label, want, keysLayoutOf(parked, parkedCard));
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some fixtures stand apart", cases > 0);
+    }
+
+    /** The rule both phases read: the front's live keyboard, the other side's own rest's. */
+    @Test public void aSidesRestKeyboardIsItsOwnNeverTheFrontsForTheOtherSide() {
+        for (boolean live : new boolean[] {false, true}) {
+            for (boolean rest : new boolean[] {false, true}) {
+                assertEquals(live, SideCards.restKeyboardUp(true, live, rest));
+                assertEquals(rest, SideCards.restKeyboardUp(false, live, rest));
+            }
+        }
+        int down = SideCards.restKeyboardPx(false, 700);
+        assertFalse(SideCards.restKeyboardShown(down));
+        assertEquals(0, SideCards.restKeyboardKeysPx(down));
+        int up = SideCards.restKeyboardPx(true, 700);
+        assertTrue(SideCards.restKeyboardShown(up));
+        assertEquals(700, SideCards.restKeyboardKeysPx(up));
+        // A floating-form keyboard is up with no keys in the stack.
+        int floatingForm = SideCards.restKeyboardPx(true, 0);
+        assertTrue(SideCards.restKeyboardShown(floatingForm));
+        assertEquals(0, SideCards.restKeyboardKeysPx(floatingForm));
+    }
+
     @Test public void withoutTheOtherSidesLayoutTheCardsNeverStandApart() {
         Fixture f = LayoutFixtures.PONG;
         StackRenderer renderer = rendererFor(true);
         final SideCardsController.Host base = hostOf(f, PageRef.HOME, false, true, renderer);
         SideCardsController controller = new SideCardsController(new SideCardsController.Host() {
             @Nullable @Override public View view(int id) { return null; }
-            @Override public boolean crossing() { return false; }
             @Nullable @Override public PageRef frontPage() { return PageRef.HOME; }
             @Nullable @Override public PlaceLayout layoutOf(@NonNull PageRef page) { return null; }
             @NonNull @Override public DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout layout,
@@ -268,6 +390,9 @@ public class SideCardsParityTest {
             @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
             @Override public int measuredExtraKeysRowPx() { return 0; }
             @Override public int measuredKeyboardPx() { return 0; }
+            @Override public int restKeyboardPx(@NonNull PageRef page) {
+                return SideCards.KEYBOARD_DOWN;
+            }
             @Override public int bottomStatusBandPx(@NonNull PlaceLayout layout) { return 0; }
             @Override public int keptBandPx() { return 0; }
             @Override public int terminalRestFlushPaddingPx() { return 0; }

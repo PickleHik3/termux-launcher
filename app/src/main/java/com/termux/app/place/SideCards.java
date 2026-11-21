@@ -77,6 +77,41 @@ public final class SideCards {
     }
 
     /**
+     * Whether a side's own rest has its keyboard up: the live keyboard while that side is in
+     * front, its own rest's answer otherwise (Home's is down unless its keyboard is always on or
+     * remembered). The one answer the rest pass lays the other side out with and a crossing's end
+     * toward that side reads, so the side parked off screen is laid out at the rest it lands at.
+     * Never the front page's keyboard for the other side: the Terminal's keyboard is not Home's.
+     */
+    public static boolean restKeyboardUp(boolean sideInFront, boolean liveKeyboardUp,
+                                         boolean sideRestKeyboardUp) {
+        return sideInFront ? liveKeyboardUp : sideRestKeyboardUp;
+    }
+
+    /** {@link #restKeyboardPx} while that side's rest has its keyboard down. */
+    public static final int KEYBOARD_DOWN = -1;
+
+    /**
+     * A side's rest keyboard as one number: the keys' height it lays out while its keyboard is
+     * up ({@code keysUpPx}; 0 for a floating-form keyboard, which its own frame lays out), or
+     * {@link #KEYBOARD_DOWN}. Read back with {@link #restKeyboardShown} and
+     * {@link #restKeyboardKeysPx}.
+     */
+    public static int restKeyboardPx(boolean restKeyboardUp, int keysUpPx) {
+        return restKeyboardUp ? Math.max(0, keysUpPx) : KEYBOARD_DOWN;
+    }
+
+    /** Whether {@link #restKeyboardPx}'s answer has the keyboard up. */
+    public static boolean restKeyboardShown(int restKeyboardPx) {
+        return restKeyboardPx != KEYBOARD_DOWN;
+    }
+
+    /** The keys' height {@link #restKeyboardPx}'s answer lays out: 0 while the keyboard is down. */
+    public static int restKeyboardKeysPx(int restKeyboardPx) {
+        return Math.max(0, restKeyboardPx);
+    }
+
+    /**
      * The page whose card the glass host is dressed as: Home's while the cards stand apart, at
      * every rest and across every crossing (the host is Home's card, parked a screen to the left
      * at the Terminal's rest), the page whose rows the stack stands otherwise.

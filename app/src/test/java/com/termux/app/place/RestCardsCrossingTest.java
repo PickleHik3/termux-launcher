@@ -138,12 +138,8 @@ public class RestCardsCrossingTest {
         "(b) HOST BOTTOM FLOATING PEEK_GLASS HOME->HOME",
         // Floating Peek on Home owns the foot with the keyboard down (DockPlacement.floats is false while the card stands, so DockSpec.footExists), and the host runs to the screen's edge; keyboard up it stops at its column. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (PEEK_GLASS) up=false/true [0.0,1518.0 - 1080.0,2400.0] -> [0.0,1518.0 - 1080.0,1667.0]
         "(b) HOST BOTTOM FLOATING PEEK_GLASS HOME->HOME SHARED-ROW",
-        // Peek card on Home stands on the screen's edge, the Floating card on the Terminal keeps its gap, so the host's bottom moves. Fixtures: pong, tl16. e.g. pong (PEEK_GLASS) up=false/false [0.0,1593.0 - 1080.0,1742.0] -> [32.0,1468.0 - 1048.0,1566.0]
-        "(b) HOST BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL",
         // Peek card on Home stands on the screen's edge, the Floating card on the Terminal keeps its gap, so the host's bottom moves. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1581.0 - 1080.0,1730.0] -> [32.0,1467.0 - 1048.0,1714.0]
         "(b) HOST BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL SHARED-ROW",
-        // Peek card on Home stands on the screen's edge, the Floating card on the Terminal keeps its gap, so the host's bottom moves. Fixtures: pong, tl16. e.g. pong (PEEK_GLASS) up=false/false [32.0,1468.0 - 1048.0,1566.0] -> [0.0,1593.0 - 1080.0,1742.0]
-        "(b) HOST BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME",
         // Peek card on Home stands on the screen's edge, the Floating card on the Terminal keeps its gap, so the host's bottom moves. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [32.0,1467.0 - 1048.0,1714.0] -> [0.0,1581.0 - 1080.0,1730.0]
         "(b) HOST BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME SHARED-ROW",
         // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (WALL_STRIP) up=false/false [32.0,1502.0 - 1048.0,1651.0] -> [32.0,1374.0 - 1048.0,1636.0]
@@ -239,6 +235,17 @@ public class RestCardsCrossingTest {
         return RestCards.of(f.cardsRest(page, up, floating));
     }
 
+    /**
+     * One end of a crossing: {@code page}'s rest with the other side at its own rest
+     * ({@link SideCards#restKeyboardUp}): the other end's keyboard when the other end is that
+     * side, else down (Home to Home leaves the Terminal's rest where it was).
+     */
+    private static RestCards end(LayoutFixtures.Fixture f, PageRef page, boolean up,
+                                 PageRef otherEnd, boolean otherEndUp, boolean floating) {
+        boolean otherUp = otherEnd.isHome() != page.isHome() && otherEndUp;
+        return RestCards.of(f.cardsRest(page, up, otherUp, floating));
+    }
+
     /** The dock's glass drawn on screen: the host's, or the extra-keys card while it stands apart. */
     @Nullable
     private static Card hostCard(RestCards cards) {
@@ -324,8 +331,8 @@ public class RestCardsCrossingTest {
                     for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
             String at = f.name + " " + style(floating) + " " + name(pair[0]) + "->"
                 + name(pair[1]) + " up=" + fromUp + "/" + toUp;
-            RestCards a = rest(f, pair[0], fromUp, floating);
-            RestCards b = rest(f, pair[1], toUp, floating);
+            RestCards a = end(f, pair[0], fromUp, pair[1], toUp, floating);
+            RestCards b = end(f, pair[1], toUp, pair[0], fromUp, floating);
             StackEnd from = endOf(f, pair[0], fromUp, floating, a);
             StackEnd to = endOf(f, pair[1], toUp, floating, b);
             StackScene.Motion motion = new StackScene.Motion();
@@ -366,8 +373,8 @@ public class RestCardsCrossingTest {
             for (boolean floating : BOOLS)
                 for (PageRef[] pair : PAIRS)
                     for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
-            RestCards a = rest(f, pair[0], fromUp, floating);
-            RestCards b = rest(f, pair[1], toUp, floating);
+            RestCards a = end(f, pair[0], fromUp, pair[1], toUp, floating);
+            RestCards b = end(f, pair[1], toUp, pair[0], fromUp, floating);
             for (StackView view : StackView.values()) {
                 Box was = a.laidOut(view);
                 Box now = b.laidOut(view);
