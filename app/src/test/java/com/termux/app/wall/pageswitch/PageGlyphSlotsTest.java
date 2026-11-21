@@ -74,7 +74,8 @@ public class PageGlyphSlotsTest {
     }
 
     @Test public void noStrokeReachesIntoTheNumberBox() {
-        float half = PageGlyphSlots.STROKE / 2f;
+        // The box keeps the number's air from every stroke's edge.
+        float half = PageGlyphSlots.STROKE / 2f + PageGlyphSlots.NUMBER_AIR;
         float[] pos = new float[2];
         for (PageKind kind : PageKind.values()) {
             float[] box = PageGlyphSlots.box(kind);

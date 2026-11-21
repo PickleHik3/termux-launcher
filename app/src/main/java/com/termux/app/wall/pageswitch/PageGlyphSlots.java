@@ -8,9 +8,9 @@ import com.termux.app.page.PageKind;
 /**
  * The page glyphs' geometry, in the Roundline family's 24-unit viewport: each kind's outline (one
  * {@link #STROKE}-unit stroke, round caps and joins), the Assistant's filled antenna dot, and the
- * stroke-free box the page number is drawn in. The one place these live: the strings are the
- * {@code ic_rl_pg_*.xml} drawables' path data (a test holds them equal), and every painter, the
- * glow included, parses them from here.
+ * box the page number is drawn in, {@link #NUMBER_AIR} clear of every stroke. The one place
+ * these live: the strings are the {@code ic_rl_pg_*.xml} drawables' path data (a test holds them
+ * equal), and every painter, the glow included, parses them from here.
  */
 public final class PageGlyphSlots {
 
@@ -31,9 +31,15 @@ public final class PageGlyphSlots {
         + " Q4 21 4 17.5 V10.5 Q4 7 7.5 7 Z M2 12 V16 M22 12 V16 M12 5 V7";
     static final String ASSISTANT_DOT = "M10.5 3 A1.5 1.5 0 1 0 13.5 3 A1.5 1.5 0 1 0 10.5 3 Z";
 
-    /** The number boxes: left, top, right, bottom. */
-    static final float[] HOME_BOX = {8f, 10f, 16f, 19f};
-    static final float[] TERMINAL_BOX = {11f, 8f, 20f, 16f};
+    /** Air between a number's ink and the nearest stroke's edge, in units. */
+    static final float NUMBER_AIR = 2f;
+    /**
+     * The number boxes (left, top, right, bottom): the room inside the outline where the number's
+     * ink stands at least {@link #NUMBER_AIR} from every stroke's edge. Home's top clears the roof
+     * slopes and its bottom the floor; Terminal's right the body's wall.
+     */
+    static final float[] HOME_BOX = {8f, 9.75f, 16f, 17.5f};
+    static final float[] TERMINAL_BOX = {11f, 8f, 19f, 16f};
     static final float[] DISPLAY_BOX = {6f, 6f, 18f, 14f};
     static final float[] ASSISTANT_BOX = {8f, 10f, 16f, 18f};
 
