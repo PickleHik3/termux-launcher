@@ -351,7 +351,6 @@ public final class SideCardsController {
         diagView(b, "keys", mHost.view(R.id.extra_keys_card),
             mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.KEYS_CARD), frameDy); // DIAG(two-cards)
         diagHomeRows(b, frameDy); // DIAG(two-cards)
-        diagReflection(b, mHost.view(R.id.accessory_surface_host)); // DIAG(two-cards)
         if (container != null) { // DIAG(two-cards)
             int[] at = new int[2]; // DIAG(two-cards)
             diagLaidOutOrigin(container, at); // DIAG(two-cards)
@@ -411,28 +410,6 @@ public final class SideCardsController {
         b.append(" rowsExpect=bottom:").append(expectBottom).append(" ty:").append(expectTy)
             .append(" rowsDrawnBottom=").append(bottom + ty)
             .append(" rowsMatch=").append(Math.abs(bottom - expectBottom) <= 1 && ty == expectTy); // DIAG(two-cards)
-    }
-
-    /**
-     * DIAG(two-cards): the Peek reflection on the host: shown, held, strength, fade, its view's
-     * visibility, alpha and y, the mirror line and the card's top it hangs from, and the host's
-     * published motion the view draws against.
-     */
-    private static void diagReflection(@NonNull StringBuilder b, @Nullable View host) {
-        PeekReflectionView view = null; // DIAG(two-cards)
-        if (host instanceof android.view.ViewGroup) { // DIAG(two-cards)
-            android.view.ViewGroup group = (android.view.ViewGroup) host; // DIAG(two-cards)
-            for (int i = 0; i < group.getChildCount() && view == null; i++) // DIAG(two-cards)
-                if (group.getChildAt(i) instanceof PeekReflectionView)
-                    view = (PeekReflectionView) group.getChildAt(i); // DIAG(two-cards)
-        }
-        if (view == null) {
-            b.append(" refl=none"); // DIAG(two-cards)
-            return; // DIAG(two-cards)
-        }
-        b.append(" refl[").append(view.source().diagState())
-            .append(" hostMotionY=").append(com.termux.app.chrome.GlassAnchor.motionY(host))
-            .append(']'); // DIAG(two-cards)
     }
 
     /** DIAG(two-cards): the view's laid-out origin in the window, translations left out. */
