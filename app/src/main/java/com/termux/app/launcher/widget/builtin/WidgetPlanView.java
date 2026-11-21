@@ -16,6 +16,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.launcher.widget.builtin.WidgetLayoutPlan.Part;
+import com.termux.app.statusbar.WeatherIconDrawable;
+import com.termux.app.statusbar.WeatherIcons;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -122,6 +124,8 @@ final class WidgetPlanView extends View {
             }
             case GLYPH: {
                 if (part.text.isEmpty() || width <= 0f) return null;
+                WeatherIcons.Icon sky = WeatherIcons.forKey(part.text);
+                if (sky != null) return skyOp(sky, part, left, top, width, height);
                 TextPaint paint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
                 if (style.nerd != null) paint.setTypeface(style.nerd);
                 paint.setTextSize(PROBE_PX);
@@ -184,6 +188,23 @@ final class WidgetPlanView extends View {
         paint.setTypeface(face);
         paint.setFontFeatureSettings(numeric && !mono ? WidgetTokens.TABULAR_FIGURES : null);
         paint.setTextSize(sizePx);
+    }
+
+    /**
+     * A weather picture in its box: the cloud in the part's ink (the sky's own tone only warms or
+     * cools the accent layer, so a sunny day's cloud is not painted gold) and the sun, moon or
+     * bolt in the tone's accent.
+     */
+    @NonNull private Op skyOp(@NonNull WeatherIcons.Icon sky, @NonNull Part part, float left,
+                              float top, float width, float height) {
+        boolean tone = part.ink == WidgetLayoutPlan.Ink.SUN || part.ink == WidgetLayoutPlan.Ink.MOON;
+        int ink = tone ? color(WidgetLayoutPlan.Ink.CLOUD) : color(part.ink);
+        int accent = part.ink == WidgetLayoutPlan.Ink.SUN ? style.warm : style.primary;
+        WeatherIconDrawable drawable = new WeatherIconDrawable(getContext());
+        drawable.set(sky, ink, accent);
+        drawable.setBounds(Math.round(left), Math.round(top), Math.round(left + width),
+            Math.round(top + height));
+        return drawable::draw;
     }
 
     @ColorInt private int color(@NonNull WidgetLayoutPlan.Ink ink) {
