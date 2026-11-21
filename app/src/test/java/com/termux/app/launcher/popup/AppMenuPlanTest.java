@@ -5,6 +5,7 @@ import static com.termux.app.launcher.popup.AppMenuPlan.Row.ADD_TO_HOME;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.APP_INFO;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.CHANGE_ICON;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.EDIT_DOCK;
+import static com.termux.app.launcher.popup.AppMenuPlan.Row.HIDE;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.MORE_SHORTCUTS;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.MOVE_TO_DOCK;
 import static com.termux.app.launcher.popup.AppMenuPlan.Row.NOTIFICATIONS;
@@ -122,6 +123,53 @@ public class AppMenuPlanTest {
         in.canAddToHome = false;
         assertEquals(Collections.singletonList(Arrays.asList(PIN, CHANGE_ICON)),
             AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void aLinuxAppInTheDrawer_endsWithHide() {
+        AppMenuPlan.Inputs in = linuxDrawerApp();
+        assertEquals(Collections.singletonList(Arrays.asList(PIN, CHANGE_ICON, HIDE)),
+            AppMenuPlan.groups(in));
+        in.source = AppMenuPlan.Source.PINNED;
+        assertEquals(Collections.singletonList(Arrays.asList(UNPIN, CHANGE_ICON, HIDE)),
+            AppMenuPlan.groups(in));
+        in.customIcon = true;
+        assertEquals(Collections.singletonList(Arrays.asList(UNPIN, CHANGE_ICON, RESET_ICON, HIDE)),
+            AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void hide_neverShowsOnTheDockHomeOrAFolderOrForAnAndroidApp() {
+        AppMenuPlan.Inputs onDock = linuxDrawerApp();
+        onDock.source = AppMenuPlan.Source.PINNED;
+        onDock.onDock = true;
+        assertFalse(AppMenuPlan.hidesFromDrawer(onDock));
+
+        AppMenuPlan.Inputs home = linuxDrawerApp();
+        home.source = AppMenuPlan.Source.HOME;
+        assertFalse(AppMenuPlan.hidesFromDrawer(home));
+
+        AppMenuPlan.Inputs folder = linuxDrawerApp();
+        folder.source = AppMenuPlan.Source.FOLDER_MEMBER;
+        assertFalse(AppMenuPlan.hidesFromDrawer(folder));
+
+        AppMenuPlan.Inputs android = dockApp();
+        android.source = AppMenuPlan.Source.UNPINNED;
+        android.canHide = true;
+        assertFalse(AppMenuPlan.hidesFromDrawer(android));
+
+        AppMenuPlan.Inputs unoffered = linuxDrawerApp();
+        unoffered.canHide = false;
+        assertFalse(AppMenuPlan.hidesFromDrawer(unoffered));
+    }
+
+    private static AppMenuPlan.Inputs linuxDrawerApp() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.source = AppMenuPlan.Source.UNPINNED;
+        in.androidPackage = false;
+        in.canAddToHome = false;
+        in.canHide = true;
+        return in;
     }
 
     @Test
