@@ -14,11 +14,12 @@ import com.termux.app.ScrubWave;
  * Its bottom stands {@link #GAP_DP} above the touch row's, so it hugs whatever stands below the
  * bar.</p>
  *
- * <p>While a finger slides, the glyph under the finger is picked out on a narrow envelope of
+ * <p>While a finger slides, the glyph under the finger is picked out on a plateau-and-crossfade envelope of
  * the bar's own ({@link #shape}; the enter easing is {@link ScrubWave#SETTLE_MS}): it grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
  * slab's geometry answers (on Home its bottom just clears the well's rim, {@link #LIFT_CLEAR_DP}
- * above the slab's top; on the key's raised bar it stays inside the strip), its immediate neighbours
- * rise a quarter as far and glyphs beyond them rest, all scaled by the enter share so nothing jumps as the finger crosses slots.
+ * above the slab's top; on the key's raised bar it stays inside the strip), a glyph resting under the finger
+ * has neighbours that stay put, and between two glyphs one sinks as the other rises (their
+ * envelopes sum to 1), all scaled by the enter share so nothing jumps as the finger crosses slots.
  * Every number is declared once, in dp.</p>
  */
 public final class PageBarLayout {
@@ -49,17 +50,17 @@ public final class PageBarLayout {
      */
     public static final float RAISED_PAD_DP = 8f;
     /**
-     * How far the lift reaches, in slots: a glyph this far or further from the finger does not
-     * move. The A-Z bar's wave spans several of its tightly packed letters; here the glyphs stand
-     * a whole slot apart, so only the one under the finger and a little of its two neighbours move.
+     * How far from the finger a glyph stays fully raised, in slots: a glyph this close is at the
+     * envelope's plateau. {@code HOLD_SLOTS + REACH_SLOTS == 1}, so the page bar hands the lift
+     * from one glyph to the next instead of raising several together.
      */
-    public static final float REACH_SLOTS = 1.5f;
+    public static final float HOLD_SLOTS = 0.25f;
     /**
-     * The lift and swell of a glyph exactly one slot from the finger, as a share of the focus
-     * glyph's: it stays inside the well. {@link #envelope} is the cosine of reach
-     * {@link #REACH_SLOTS}, which is this share at one slot.
+     * How far the lift reaches, in slots: a glyph this far or further from the finger does not
+     * move. With {@link #HOLD_SLOTS} it makes the envelopes of two adjacent glyphs sum to exactly 1
+     * for a finger anywhere between them.
      */
-    public static final float NEIGHBOUR_SHARE = 0.25f;
+    public static final float REACH_SLOTS = 0.75f;
     /** The finger leaving the touch row vertically by more than this cancels the slide. */
     public static final float CANCEL_DP = 32f;
 
@@ -295,14 +296,18 @@ public final class PageBarLayout {
     }
 
     /**
-     * The page bar's own envelope of a glyph {@code distanceInSlots} from the finger: 1 under it,
-     * {@link #NEIGHBOUR_SHARE} one slot away, 0 from {@link #REACH_SLOTS} on; a raised cosine,
-     * so it is continuous with no slope at either end and falls monotonically.
+     * The page bar's own envelope of a glyph {@code distanceInSlots} from the finger: 1 within
+     * {@link #HOLD_SLOTS}, 0 from {@link #REACH_SLOTS} on, and a raised cosine between, so it is
+     * continuous with no slope at either end and falls monotonically. Because
+     * {@code HOLD_SLOTS + REACH_SLOTS == 1}, the envelopes of two adjacent glyphs sum to exactly 1
+     * for a finger anywhere between them: a glyph resting under the finger has neighbours at 0,
+     * and at the midpoint each stands at 0.5.
      */
     public static float shape(float distanceInSlots) {
         float d = Math.abs(distanceInSlots);
+        if (d <= HOLD_SLOTS) return 1f;
         if (d >= REACH_SLOTS) return 0f;
-        return 0.5f * (1f + (float) Math.cos(Math.PI * d / REACH_SLOTS));
+        return 0.5f * (1f + (float) Math.cos(Math.PI * (d - HOLD_SLOTS) / (REACH_SLOTS - HOLD_SLOTS)));
     }
 
     /** {@link #shape} for {@code slot} with the finger at {@code focus}, times {@code enter}. */

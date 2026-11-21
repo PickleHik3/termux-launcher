@@ -215,7 +215,7 @@ public class PageBarLayoutTest {
         }
     }
 
-    @Test public void onlyTheFocusGlyphLeavesTheWellAndTheNeighboursStayInside() {
+    @Test public void onlyTheFocusGlyphLeavesTheWellAndTheNeighboursRest() {
         for (float d : new float[] {2f, 2.625f, 3f}) {
             PageBarLayout l = new PageBarLayout(d, 1080f, 6);
             float peak = l.liftPeakPx();
@@ -226,12 +226,6 @@ public class PageBarLayoutTest {
                 if (slotsAway == 0) {
                     assertEquals(peak, lift, EPS);
                     assertEquals(PageBarLayout.RAISED_SCALE, scale, EPS);
-                } else if (slotsAway == 1) {
-                    assertEquals(0.25f * peak, lift, EPS);
-                    assertTrue("scale " + scale, scale <= 1.07f && scale > 1f);
-                    float top = l.liftedCenterYPx(i, 3f, 1f) - l.glyphPx() * scale / 2f;
-                    assertTrue("pokes " + (l.slabTopPx() - top) / d,
-                        l.slabTopPx() - top <= 1f * d + EPS);
                 } else {
                     assertEquals(0f, lift, 0f);
                     assertEquals(1f, scale, 0f);
@@ -248,16 +242,26 @@ public class PageBarLayoutTest {
         assertEquals(0f, l.liftPx(4, 2.5f, 1f), 0f);
     }
 
-    @Test public void theEnvelopeFallsMonotonicallyWithDistance() {
-        float last = PageBarLayout.shape(0f);
-        assertEquals(1f, last, 0f);
-        for (int k = 1; k <= 300; k++) {
+    @Test public void theEnvelopeHoldsThenCrossfades() {
+        assertEquals(1f, PageBarLayout.HOLD_SLOTS + PageBarLayout.REACH_SLOTS, 0f);
+        assertEquals(1f, PageBarLayout.shape(0f), 0f);
+        assertEquals(1f, PageBarLayout.shape(PageBarLayout.HOLD_SLOTS), 0f);
+        assertEquals(0f, PageBarLayout.shape(PageBarLayout.REACH_SLOTS), 0f);
+        assertEquals(0f, PageBarLayout.shape(1f), 0f);
+        assertEquals(0f, PageBarLayout.shape(2f), 0f);
+        float last = 1f;
+        for (int k = 0; k <= 100; k++) {
             float e = PageBarLayout.shape(k / 100f);
             assertTrue(e <= last + 1e-6f);
             last = e;
         }
-        assertEquals(0f, last, 0f);
-        assertEquals(PageBarLayout.NEIGHBOUR_SHARE, PageBarLayout.shape(1f), 1e-5f);
+    }
+
+    @Test public void twoAdjacentEnvelopesSumToOne() {
+        for (int k = 0; k <= 10; k++) {
+            float d = k / 10f;
+            assertEquals(1f, PageBarLayout.shape(d) + PageBarLayout.shape(1f - d), 1e-5f);
+        }
     }
 
     @Test public void everythingRestsWhenTheFingerIsAway() {
