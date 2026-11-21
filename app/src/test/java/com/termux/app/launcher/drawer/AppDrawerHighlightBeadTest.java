@@ -55,8 +55,12 @@ public class AppDrawerHighlightBeadTest {
             .getDisplayMetrics().density;
         float fontScale = RuntimeEnvironment.getApplication().getResources()
             .getConfiguration().fontScale;
+        // The label height the controller feeds the metrics: the font's descent minus ascent.
+        android.graphics.Paint paint = new android.graphics.Paint();
+        paint.setTextSize(AppDrawerAppsAdapter.LABEL_TEXT_SP * density * fontScale);
+        android.graphics.Paint.FontMetricsInt fm = paint.getFontMetricsInt();
         AppDrawerGridMetrics metrics = AppDrawerGridMetrics.resolve(1080f, density,
-            14f * density * fontScale, columns);
+            fm.descent - fm.ascent, columns);
         int w = Math.round(metrics.cellWidthPx);
         int h = Math.round(metrics.rowHeightPx);
         AppDrawerAppCellView cell = new AppDrawerAppCellView(RuntimeEnvironment.getApplication());
@@ -112,18 +116,28 @@ public class AppDrawerHighlightBeadTest {
 
     @Test public void gridBeadHasTheSameGapOnAllFourSidesAtDefaultAndWideFontAndSixColumns() {
         ChromeShade.note(ChromeInk.Polarity.PALE_INK, 0xFF101418);
+        for (String qualifiers : new String[] {"+xxhdpi", "+440dpi"})
         for (float fontScale : new float[] {1f, 1.3f}) {
+            RuntimeEnvironment.setQualifiers(qualifiers);
             RuntimeEnvironment.setFontScale(fontScale);
-            for (int columns : new int[] {4, 6}) {
+            for (int columns : new int[] {4, 5, 6}) {
                 AppDrawerAppCellView cell = laidOutCell(columns, SHORT, true);
                 AppDrawerGlassBeadDrawable bead = (AppDrawerGlassBeadDrawable) cell.getBackground();
                 int[] text = textBounds(cell);
                 int top = Math.min(cell.icon.getTop(), text[1]) - bead.innerTop();
                 int side = Math.min(cell.icon.getLeft(), text[0]) - bead.innerLeft();
                 int bottom = bead.innerBottom() - Math.max(cell.icon.getBottom(), text[3]);
-                String where = "font " + fontScale + " columns " + columns;
+                String where = qualifiers + " font " + fontScale + " columns " + columns;
                 assertEquals(where + " top vs side", (float) side, (float) top, 1f);
                 assertEquals(where + " bottom vs side", (float) side, (float) bottom, 1f);
+                int spare = Math.max(1, Math.round(AppDrawerHighlightShape.SPARE_DP
+                    * cell.getResources().getDisplayMetrics().density));
+                assertEquals(where + " bottom vs top", (float) top, (float) bottom, 1f);
+                assertTrue(where + " clamp must not set the bottom (bottom " + bead.innerBottom()
+                    + " cell " + cell.getHeight() + " labelBottom " + cell.label.getBottom() + ")",
+                    bead.innerBottom() <= cell.getHeight() - spare
+                        && bead.innerBottom() == cell.label.getBottom() + Math.round(AppDrawerHighlightShape.PADDING_DP
+                            * cell.getResources().getDisplayMetrics().density));
                 assertEquals(where + " padding", (float) Math.round(6 * cell.getResources()
                     .getDisplayMetrics().density), (float) side, 1f);
             }
