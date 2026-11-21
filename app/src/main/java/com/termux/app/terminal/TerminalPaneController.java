@@ -6549,7 +6549,7 @@ public class TerminalPaneController {
      * pane that shares the wall wears {@code R.drawable.pane_active_border}, a 1dp stroke; a lone
      * plain pane paints no border at all and there is nothing to line up against.
      */
-    static float paneBorderStrokePx(boolean glass, boolean rounded, float density) {
+    public static float paneBorderStrokePx(boolean glass, boolean rounded, float density) {
         if (glass) return com.termux.app.GlassRimRenderer.strokePx(density);
         return rounded ? density * STOCK_PANE_BORDER_DP : 0f;
     }

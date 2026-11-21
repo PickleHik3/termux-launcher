@@ -138,6 +138,17 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return null;
         }
 
+        /** The style a terminal pane's corner tab is dressed with; null where the app has none. */
+        @Nullable
+        default com.termux.app.terminal.PaneSurfaceStyle drawerTabStyle() {
+            return null;
+        }
+
+        /** The border a terminal pane paints around its corner tab, in px. */
+        default float drawerTabBorderPx() {
+            return 0f;
+        }
+
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
 
@@ -1369,6 +1380,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.suggestionBar());
         content.setCallbacks(this);
         content.setSwitchGlassSource(mHost::drawerSwitchGlass);
+        content.setTabStyleSource(new AppDrawerContentView.TabStyleSource() {
+            @Nullable @Override public com.termux.app.terminal.PaneSurfaceStyle style() {
+                return mHost.drawerTabStyle();
+            }
+
+            @Override public float borderPx() {
+                return mHost.drawerTabBorderPx();
+            }
+        });
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
         content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);

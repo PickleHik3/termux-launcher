@@ -260,16 +260,20 @@ public final class AppDrawerContentView extends FrameLayout
             }
 
             @Nullable @Override
-            public com.termux.app.chrome.DrawerCardGlassStyle tabGlass(boolean wanted) {
-                return holdTabGlass(wanted);
+            public com.termux.app.terminal.PaneSurfaceStyle tabStyle() {
+                TabStyleSource source = mTabStyleSource;
+                return source == null ? null : source.style();
+            }
+
+            @Override public float tabBorderPx() {
+                TabStyleSource source = mTabStyleSource;
+                return source == null ? 0f : source.borderPx();
             }
         });
     @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
     /** Edit mode, owned here: one value for the whole drawer, never stored. */
     @NonNull private AppDrawerEditModel mEditModel = AppDrawerEditModel.OFF;
     private float mCardCornerRadiusPx;
-    /** The corner tab is holding the card's glass; the switch may not be. */
-    private boolean mTabGlassWanted;
     /** True only inside {@link #cancelContentTouch}: that cancel is the content's, not the corner tab's. */
     private boolean mCancellingContent;
     @Nullable private LauncherAppDataProvider mProvider;
@@ -3632,18 +3636,17 @@ public final class AppDrawerContentView extends FrameLayout
         mCardCornerRadiusPx = Math.max(0f, radiusPx);
     }
 
-    /**
-     * The card's glass for the corner tab, on any type: held while the tab is out, and kept while
-     * the switch wants it too.
-     */
-    @Nullable
-    private com.termux.app.chrome.DrawerCardGlassStyle holdTabGlass(boolean wanted) {
-        SwitchGlassSource source = mSwitchGlassSource;
-        mTabGlassWanted = wanted;
-        if (source == null) return null;
-        if (wanted) return source.style(true);
-        if (!mSwitchGlassWanted) source.style(false);
-        return null;
+    /** What dresses the corner tab: the terminal panes' own style and border, as the panes pass them. */
+    public interface TabStyleSource {
+        @Nullable com.termux.app.terminal.PaneSurfaceStyle style();
+
+        float borderPx();
+    }
+
+    @Nullable private TabStyleSource mTabStyleSource;
+
+    public void setTabStyleSource(@Nullable TabStyleSource source) {
+        mTabStyleSource = source;
     }
     /** The switch's refracting slab, built while the open drawer wants it and dropped after. */
     @Nullable private com.termux.app.terminal.PaneGlassBackdropView mSwitchGlass;
@@ -3677,7 +3680,7 @@ public final class AppDrawerContentView extends FrameLayout
         boolean wanted = source != null
             && AppDrawerSectionSwitchGlass.wanted(mViewType, mDrawerOpenForGlass);
         if (!wanted) {
-            if (mSwitchGlassWanted && source != null && !mTabGlassWanted) source.style(false);
+            if (mSwitchGlassWanted && source != null) source.style(false);
             mSwitchGlassWanted = false;
             releaseSwitchGlass();
             return;

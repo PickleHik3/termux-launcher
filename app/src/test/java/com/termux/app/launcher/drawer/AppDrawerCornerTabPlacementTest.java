@@ -61,6 +61,27 @@ public class AppDrawerCornerTabPlacementTest {
         content.layout(0, 0, WIDTH, HEIGHT);
     }
 
+    @Test public void theTabLinesUpInsideTheBorderTheTerminalPaneStyleAnswers() {
+        content.setTabStyleSource(new AppDrawerContentView.TabStyleSource() {
+            @Override public com.termux.app.terminal.PaneSurfaceStyle style() { return null; }
+            @Override public float borderPx() { return 4f; }
+        });
+        layout();
+        content.cornerTab().showForTest(CornerZones.TOP_LEFT);
+        layout();
+        PaneControlsView tab = null;
+        for (int i = 0; i < content.getChildCount(); i++) {
+            if (content.getChildAt(i) instanceof PaneControlsView) {
+                tab = (PaneControlsView) content.getChildAt(i);
+            }
+        }
+        assertNotNull(tab);
+        RectF rect = new RectF();
+        assertTrue(tab.restingTabBounds(rect));
+        assertEquals(4f, rect.top, EDGE_TOLERANCE_PX);
+        assertEquals(4f, rect.left, EDGE_TOLERANCE_PX);
+    }
+
     @Test public void theTabIsTheCardsCornerWithTheBarAtTheTopAndAtTheBottom() {
         int[] corners = {CornerZones.TOP_LEFT, CornerZones.TOP_RIGHT,
             CornerZones.BOTTOM_RIGHT, CornerZones.BOTTOM_LEFT};

@@ -12,6 +12,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneGlass;
@@ -68,10 +69,13 @@ final class AppDrawerCornerTab {
         float cardCornerRadiusPx();
 
         /**
-         * The card's own glass for the tab, held while the tab is out; null where there is none.
-         * Called again with {@code false} once the tab is away.
+         * The style a terminal pane's own tab is dressed with (the panes' wallpaper blur); null
+         * where the app has none, and the tab then wears its plain scrim.
          */
-        @Nullable com.termux.app.chrome.DrawerCardGlassStyle tabGlass(boolean wanted);
+        @Nullable com.termux.app.terminal.PaneSurfaceStyle tabStyle();
+
+        /** The border a terminal pane paints around its tab, in px: the line the tab sits inside. */
+        float tabBorderPx();
     }
 
     private final Host mHost;
@@ -82,8 +86,9 @@ final class AppDrawerCornerTab {
     @Nullable private PaneControlsView mTab;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
     private boolean mPressMoved;
-    /** The card's glass is asked for while the tab is out. */
-    private boolean mGlassHeld;
+    /** The tab was out, and at which corner, when the current down landed. */
+    private boolean mShownAtDown;
+    private int mShownCornerAtDown = CornerZones.NONE;
     private float mDownX, mDownY;
 
     AppDrawerCornerTab(@NonNull Host host) {
@@ -130,6 +135,8 @@ final class AppDrawerCornerTab {
         mDownX = ev.getX();
         mDownY = ev.getY();
         PaneControlsView tab = mTab;
+        mShownAtDown = tab != null && tab.isControlsShown();
+        mShownCornerAtDown = mShownAtDown ? tab.corner() : CornerZones.NONE;
         if (tab != null && tab.isControlsShown()) {
             int action = tab.actionAt(mDownX, mDownY);
             if (action != PaneControlsView.ACTION_NONE) {
@@ -192,6 +199,13 @@ final class AppDrawerCornerTab {
     }
 
     private void showAt(int corner) {
+        // The corner it is already out of puts it away again, as on the Widgets page and the
+        // display window; the down has dismissed it unless the edit pins it open.
+        if (mShownAtDown && mShownCornerAtDown == corner && !mHost.editModel().tabPinnedOpen()) {
+            mShownAtDown = false;
+            return;
+        }
+        mShownAtDown = false;
         PaneControlsView tab = ensureTab();
         applyButtons(tab);
         applyPlacement(tab);
@@ -240,30 +254,31 @@ final class AppDrawerCornerTab {
      * The tab is the card's own corner: the view is the card (the content is laid out at the
      * card's rectangle), the tab fills it with no margin and the card's corner arc is its own. It
      * is added after the search bar and the section switch, so it draws over them and takes the
-     * touches inside its bounds.
+     * touches inside its bounds. The frame is handed over as a terminal pane hands its own: bounds,
+     * radius and the border stroke, asked afresh each layout and draw.
      */
     private void applyPlacement(@NonNull PaneControlsView tab) {
-        tab.setPaneBorder(mHost.cardCornerRadiusPx(), 0f);
+        tab.setFrameSource(frame -> {
+            PaneControlsView t = mTab;
+            if (t == null) return false;
+            frame.bounds.set(0f, 0f, t.getWidth(), t.getHeight());
+            frame.radiusPx = mHost.cardCornerRadiusPx();
+            frame.borderPx = mHost.tabBorderPx();
+            return true;
+        });
     }
 
-    /** Dresses the tab in the card's own glass, as the section switch is. */
+    /** Dresses the tab as a terminal pane's tab is dressed: the panes' own style and grain. */
     private void dress() {
         PaneControlsView tab = mTab;
         if (tab == null) return;
-        com.termux.app.chrome.DrawerCardGlassStyle style = mHost.tabGlass(true);
-        mGlassHeld = true;
-        PaneGlass.dressTab(style, tab, TermuxAppSharedPreferences.PAGE_WALL);
+        PaneGlass.dressTab(mHost.tabStyle(), tab,
+            TermuxAppSharedPreferences.terminalPageId());
     }
 
     /** The look may have moved while the tab is out: dress it again. */
     void refreshGlass() {
         if (isShown()) dress();
-    }
-
-    private void releaseGlass() {
-        if (!mGlassHeld) return;
-        mGlassHeld = false;
-        mHost.tabGlass(false);
     }
 
     @NonNull
@@ -324,12 +339,17 @@ final class AppDrawerCornerTab {
 
     /**
      * A tab mark that draws a vector in the tab's own ink (the drawable's baked colour is ignored),
-     * in the 16dp square {@code MinimalModeGlyph} fills.
+     * fitted to the box a 14sp font glyph of the tab ({@link CornerTabGlyphs#SETTINGS}) draws in
+     * its 30dp cell: that glyph's measured height as the side, and its drawn centre as the centre.
      */
     @NonNull
     static PaneControlsView.Mark vectorMark(@NonNull android.content.Context context, int drawableRes) {
         return new PaneControlsView.Mark() {
             @androidx.annotation.Nullable private android.graphics.drawable.Drawable mIcon;
+            private final android.graphics.Paint mGlyph =
+                new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+            private final android.graphics.Rect mInk = new android.graphics.Rect();
+            private boolean mMeasured;
 
             @Override
             public void draw(@NonNull android.graphics.Canvas canvas,
@@ -342,10 +362,25 @@ final class AppDrawerCornerTab {
                     icon = icon.mutate();
                     mIcon = icon;
                 }
-                int half = Math.round(8f * density);
-                int cx = Math.round(button.centerX());
-                int cy = Math.round(button.centerY());
-                icon.setBounds(cx - half, cy - half, cx + half, cy + half);
+                if (!mMeasured) {
+                    mMeasured = true;
+                    mGlyph.setTypeface(com.termux.shared.termux.font.NerdFontSpans.typeface(context));
+                    mGlyph.setTextAlign(android.graphics.Paint.Align.CENTER);
+                    mGlyph.setTextSize(android.util.TypedValue.applyDimension(
+                        android.util.TypedValue.COMPLEX_UNIT_SP, 14f,
+                        context.getResources().getDisplayMetrics()));
+                    mGlyph.getTextBounds(CornerTabGlyphs.SETTINGS, 0,
+                        CornerTabGlyphs.SETTINGS.length(), mInk);
+                }
+                // The tab sets a glyph on the baseline that centres its ascent and descent.
+                float baseline = button.centerY() - (mGlyph.ascent() + mGlyph.descent()) / 2f;
+                float side = Math.max(1f, mInk.height());
+                float cx = button.centerX();
+                float cy = baseline + mInk.exactCenterY();
+                int half = Math.round(side / 2f);
+                int x = Math.round(cx);
+                int y = Math.round(cy);
+                icon.setBounds(x - half, y - half, x + half, y + half);
                 icon.setTint(paint.getColor());
                 icon.draw(canvas);
             }
@@ -365,15 +400,13 @@ final class AppDrawerCornerTab {
     }
 
     /**
-     * Gone at once and every press forgotten: the drawer closed, changed type or went away. The
-     * card's glass is held until here, not until a dismiss, so a tab still fading never draws a
-     * frame the cache has let go.
+     * Gone at once and every press forgotten: the drawer closed, changed type or went away.
      */
     void reset() {
         cancelHold();
         mPressedAction = PaneControlsView.ACTION_NONE;
+        mShownAtDown = false;
         if (mTab != null) mTab.dismissNow();
-        releaseGlass();
     }
 
     @androidx.annotation.VisibleForTesting

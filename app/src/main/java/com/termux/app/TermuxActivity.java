@@ -20586,6 +20586,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return wanted ? card : null;
         }
 
+        @Nullable @Override public com.termux.app.terminal.PaneSurfaceStyle drawerTabStyle() {
+            return paneSurfaceStyle();
+        }
+
+        @Override public float drawerTabBorderPx() {
+            // A terminal pane's own rule, the card being a rounded frame.
+            return com.termux.app.terminal.TerminalPaneController.paneBorderStrokePx(
+                isTerminalPaneGlassActive(), true, getResources().getDisplayMetrics().density);
+        }
+
         @Override public int sheetsBandPx() {
             return mSheets.bottomBandPx();
         }
