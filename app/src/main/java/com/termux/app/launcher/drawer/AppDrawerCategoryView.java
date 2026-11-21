@@ -873,8 +873,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         void onReordered(@NonNull AppDrawerCategory what, @Nullable AppDrawerCategory before);
     }
 
-    /** How far the carried tile lifts off the grid, in dp, and how large it grows. */
-    private static final float REORDER_LIFT_DP = 8f;
+    /** How large the carried tile grows. */
     private static final float REORDER_LIFT_SCALE = 1.04f;
     private static final long REORDER_SETTLE_MS = 160L;
     /** Edge auto-scroll: the zone at the overview's top and bottom, and the fastest step per frame. */
@@ -907,9 +906,36 @@ public final class AppDrawerCategoryView extends ViewGroup
     private float[] reorderToY = new float[0];
     private float reorderT = 1f;
     @Nullable private android.animation.ValueAnimator reorderSettle;
-    private final Runnable reorderEdgeScroll = new Runnable() {
-        @Override public void run() {
-            if (reorderSource < 0 || reorderDropping || reorderEdgeDirection == 0) return;
+    /** Drives the edge scroll only while the finger sits in the edge zone; cancelled otherwise. */
+    @Nullable private android.animation.ValueAnimator reorderEdgeTicker;
+    private int reorderLiftedChild = -1;
+    /** Draws the lifted tile after its neighbours, with no Z involved. */
+    private final RecyclerView.ChildDrawingOrderCallback reorderDrawOrder = this::reorderDrawIndex;
+
+    private int reorderDrawIndex(int childCount, int i) {
+        if (i == 0) {
+            reorderLiftedChild = -1;
+            if (reorderSource >= 0) {
+                for (int c = 0; c < childCount; c++) {
+                    if (overview.getChildAdapterPosition(overview.getChildAt(c)) == reorderSource) {
+                        reorderLiftedChild = c;
+                        break;
+                    }
+                }
+            }
+        }
+        int lifted = reorderLiftedChild;
+        if (lifted < 0) return i;
+        if (i == childCount - 1) return lifted;
+        return i >= lifted ? i + 1 : i;
+    }
+
+    private void stepReorderEdgeScroll() {
+        {
+            if (reorderSource < 0 || reorderDropping || reorderEdgeDirection == 0) {
+                stopReorderEdgeScroll();
+                return;
+            }
             float density = getResources().getDisplayMetrics().density;
             float zone = REORDER_EDGE_ZONE_DP * density;
             float depth = reorderEdgeDirection < 0
@@ -918,13 +944,31 @@ public final class AppDrawerCategoryView extends ViewGroup
                 * REORDER_EDGE_MAX_STEP_DP * density) * reorderEdgeDirection;
             if (step == 0 || !overview.canScrollVertically(reorderEdgeDirection)) {
                 reorderEdgeDirection = 0;
+                stopReorderEdgeScroll();
                 return;
             }
             overview.scrollBy(0, step);
             updateReorderCarry();
-            postOnAnimation(this);
         }
-    };
+    }
+
+    private void startReorderEdgeScroll() {
+        android.animation.ValueAnimator ticker = reorderEdgeTicker;
+        if (ticker == null) {
+            ticker = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            ticker.setDuration(1000L);
+            ticker.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            ticker.setInterpolator(new android.view.animation.LinearInterpolator());
+            ticker.addUpdateListener(animator -> stepReorderEdgeScroll());
+            reorderEdgeTicker = ticker;
+        }
+        if (!ticker.isRunning()) ticker.start();
+    }
+
+    private void stopReorderEdgeScroll() {
+        android.animation.ValueAnimator ticker = reorderEdgeTicker;
+        if (ticker != null && ticker.isRunning()) ticker.cancel();
+    }
 
     /** The tile under a point of this view while the overview shows, or null. */
     @Nullable public AppDrawerCategoryTileView tileViewAt(float x, float y) {
@@ -976,8 +1020,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         reorderT = 1f;
         reorderCarryDx = 0f;
         reorderCarryDy = 0f;
-        float density = getResources().getDisplayMetrics().density;
-        tile.setTranslationZ(REORDER_LIFT_DP * density);
+        overview.setChildDrawingOrderCallback(reorderDrawOrder);
         tile.setScaleX(REORDER_LIFT_SCALE);
         tile.setScaleY(REORDER_LIFT_SCALE);
         overview.addOnScrollListener(reorderScrollListener);
@@ -999,7 +1042,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         moveReorder(x, y);
         reorderDropping = true;
         reorderEdgeDirection = 0;
-        removeCallbacks(reorderEdgeScroll);
+        stopReorderEdgeScroll();
         final boolean commit = !reorderPolicy.isNoOp();
         final int source = reorderSource;
         final int before = reorderPolicy.before();
@@ -1012,7 +1055,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         // The carried tile glides to the slot it will own; the others are already there.
         float tx = commit ? slotX(slot) - slotX(source) : 0f;
         float ty = commit ? slotY(slot) - slotY(source) : 0f;
-        tile.animate().translationX(tx).translationY(ty).scaleX(1f).scaleY(1f).translationZ(0f)
+        tile.animate().translationX(tx).translationY(ty).scaleX(1f).scaleY(1f)
             .setDuration(REORDER_SETTLE_MS)
             .withEndAction(() -> finishReorder(commit, source, before)).start();
     }
@@ -1027,7 +1070,8 @@ public final class AppDrawerCategoryView extends ViewGroup
 
     private void finishReorder(boolean commit, int source, int before) {
         if (reorderSource < 0) return;
-        removeCallbacks(reorderEdgeScroll);
+        stopReorderEdgeScroll();
+        overview.setChildDrawingOrderCallback(null);
         overview.removeOnScrollListener(reorderScrollListener);
         if (reorderSettle != null) reorderSettle.cancel();
         AppDrawerCategory what = source < buckets.size() ? buckets.get(source).category : null;
@@ -1041,7 +1085,6 @@ public final class AppDrawerCategoryView extends ViewGroup
             child.animate().cancel();
             child.setTranslationX(0f);
             child.setTranslationY(0f);
-            child.setTranslationZ(0f);
             child.setScaleX(1f);
             child.setScaleY(1f);
         }
@@ -1136,8 +1179,8 @@ public final class AppDrawerCategoryView extends ViewGroup
             : reorderLastY > overview.getHeight() - zone ? 1 : 0;
         if (direction == reorderEdgeDirection) return;
         reorderEdgeDirection = direction;
-        removeCallbacks(reorderEdgeScroll);
-        if (direction != 0) postOnAnimation(reorderEdgeScroll);
+        if (direction != 0) startReorderEdgeScroll();
+        else stopReorderEdgeScroll();
     }
 
     public boolean isOverview() {
