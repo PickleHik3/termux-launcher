@@ -23,7 +23,7 @@ public final class PageBarLayout {
     public static final float PILL_HEIGHT_DP = 48f;
     public static final float GLYPH_DP = 16.5f;
     /** A slot's width on Home, and the least the fold counts with. */
-    public static final float MIN_SLOT_DP = 40f;
+    public static final float MIN_SLOT_DP = 30f;
     /** The pill is at most this far from the pane's edges. */
     public static final float SIDE_INSET_DP = 16f;
     /**
