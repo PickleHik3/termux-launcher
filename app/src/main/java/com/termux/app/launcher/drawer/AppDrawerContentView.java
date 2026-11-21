@@ -124,6 +124,10 @@ public final class AppDrawerContentView extends FrameLayout
         default void onPagesPresentationChanged() {
         }
 
+        /** The drawer's corner tab asked for the drawer's settings page. */
+        default void onCornerSettingsRequested() {
+        }
+
     }
 
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
@@ -183,6 +187,27 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private SuggestionBarView mDock;
     @Nullable private AppDrawerDragController mDragController;
     @Nullable private Callbacks mCallbacks;
+    /** The corner tab a still hold on a corner of the pane drops; see {@link AppDrawerCornerTab}. */
+    private final AppDrawerCornerTab mCornerTab = new AppDrawerCornerTab(
+        new AppDrawerCornerTab.Host() {
+            @NonNull @Override public ViewGroup view() {
+                return AppDrawerContentView.this;
+            }
+
+            @Override public int chromeRects(@NonNull float[] out) {
+                return fillChromeRects(out);
+            }
+
+            @Override public void cancelContent(float x, float y) {
+                cancelContentTouch(x, y);
+            }
+
+            @Override public void openSettings() {
+                if (mCallbacks != null) mCallbacks.onCornerSettingsRequested();
+            }
+        });
+    /** True only inside {@link #cancelContentTouch}: that cancel is the content's, not the corner tab's. */
+    private boolean mCancellingContent;
     @Nullable private LauncherAppDataProvider mProvider;
     @Nullable private AppDrawerSearchController mSearch;
     @Nullable private Runnable mRevealListener;
@@ -846,6 +871,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
+            mCornerTab.reset();
             // The drawer is closing, not torn down: what it shows stays until it is gone
             // (resetDrawerFx), or Back blanks the card to "Nothing here yet" for the whole close.
             stopPresentationMotion(true);
@@ -1158,6 +1184,7 @@ public final class AppDrawerContentView extends FrameLayout
                                   @NonNull AppDrawerSection section) {
         dismissContextPopups();
         cancelCellLongPresses();
+        mCornerTab.reset();
         stopPresentationMotion();
         // Default's Apps page keeps the Categories tiles bound beside it; leaving them bound under
         // another type would hold their previews for nothing.
@@ -1650,6 +1677,8 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** One internal hierarchy; one press performs at most one action. */
     public boolean handleBackInDrawer() {
+        // The corner tab is the top-most thing on the card, so the press goes to it first.
+        if (mCornerTab.dismiss()) return true;
         if (clearQueryIfPresent()) return true;
         return collapseCategoryIfNeeded();
     }
@@ -2264,9 +2293,40 @@ public final class AppDrawerContentView extends FrameLayout
         boolean terminal = terminalAction == MotionEvent.ACTION_UP
             || terminalAction == MotionEvent.ACTION_CANCEL;
         try {
+            if (!mCancellingContent && mCornerTab.filter(ev) == AppDrawerCornerTab.CONSUME) {
+                return true;
+            }
             return dispatchTouchEventObserved(ev);
         } finally {
             if (terminal) mSuppressCellClickDuringTerminalDispatch = false;
+        }
+    }
+
+    /** The chrome that answers its own taps, in this view's coordinates; the count of numbers written. */
+    private int fillChromeRects(@NonNull float[] out) {
+        int n = 0;
+        View[] chrome = {mPill, mInput, mSectionSwitch, mColumn};
+        for (View view : chrome) {
+            if (view == null || view.getVisibility() != VISIBLE || n + 4 > out.length) continue;
+            out[n++] = view.getX();
+            out[n++] = view.getY();
+            out[n++] = view.getX() + view.getWidth();
+            out[n++] = view.getY() + view.getHeight();
+        }
+        return n;
+    }
+
+    /** The corner's hold fired: the cells and the grid are told the touch is over. */
+    private void cancelContentTouch(float x, float y) {
+        long now = SystemClock.uptimeMillis();
+        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, x, y, 0);
+        mCancellingContent = true;
+        try {
+            dispatchTouchEvent(cancel);
+            cancelCellLongPresses();
+        } finally {
+            mCancellingContent = false;
+            cancel.recycle();
         }
     }
 
@@ -3079,6 +3139,7 @@ public final class AppDrawerContentView extends FrameLayout
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        mCornerTab.reset();
         stopOverpullSpring();
         endSectionStream();
         mSectionPager.cancel();
@@ -3089,6 +3150,11 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     /** @return the shipped vertical app grid */
+    @androidx.annotation.VisibleForTesting
+    AppDrawerCornerTab cornerTab() {
+        return mCornerTab;
+    }
+
     @NonNull
     public RecyclerView getGrid() {
         return mGrid;

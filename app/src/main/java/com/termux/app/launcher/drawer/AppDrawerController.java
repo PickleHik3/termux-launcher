@@ -761,6 +761,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     @Override
+    public void onCornerSettingsRequested() {
+        mHost.openAppDrawerSettings();
+    }
+
+    @Override
     public void onSearchDismissRequested() {
         // Esc and Back arrive here through the key channels, which the terminal's client runs
         // before the activity's onBackPressed can walk its hierarchy — so this is the only place
