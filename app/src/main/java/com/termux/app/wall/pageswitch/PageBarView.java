@@ -166,6 +166,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private float mRaisedRadius = -1f;
     /** The raised glass the key's pop-up wears ({@link com.termux.app.chrome.ElevatedGlass}); null for its solid card. */
     @Nullable private PaneSurfaceStyle mRaisedLook;
+    /**
+     * The raised glass wants a blur frame that was still baking when it was dressed: the blur
+     * cache's landing ({@link #redressIfFrameLate}) dresses it again. Set on a dress pass only.
+     */
+    private boolean mRaisedFrameLate;
     private final Rect mNoFrame = new Rect();
 
     public PageBarView(@NonNull Context context) {
@@ -247,6 +252,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
      */
     void dropRaisedGlass() {
         mRaisedLook = null;
+        mRaisedFrameLate = false;
         mGlassShown = false;
         mGlass.setGlass(null, mNoFrame, Color.TRANSPARENT, null, 0, slabRadiusPx(), null, false);
         if (mGlass.getVisibility() != GONE) mGlass.setVisibility(GONE);
@@ -529,6 +535,9 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         }
         if (!shown && mGlass.getVisibility() != GONE) mGlass.setVisibility(GONE);
         mGlassShown = shown;
+        mRaisedFrameLate = shown && look instanceof com.termux.app.chrome.LookGlassStyle
+            && ((com.termux.app.chrome.LookGlassStyle) look).spec().wantsBlurFrame()
+            && !holdsFrame(mGlass);
         mGlass.setEvenOut(null);
         if (shown) {
             int wallpaper = Color.TRANSPARENT;
@@ -551,6 +560,23 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         }
         liftInkIsSlabInk();
         invalidate();
+    }
+
+    private static boolean holdsFrame(@NonNull PaneGlassBackdropView glass) {
+        android.graphics.Bitmap frame = glass.heldFrame();
+        return frame != null && !frame.isRecycled();
+    }
+
+    /**
+     * The blur cache landed a frame (a glass pass): the key's pop-up, shown and dressed while its
+     * raised radius was still baking, is dressed again so it wears the frame instead of its tint
+     * alone. Two fields read otherwise; nothing per frame.
+     */
+    void redressIfFrameLate() {
+        if (!mKeyEntry || !mRaisedFrameLate || mRaisedLook == null || getVisibility() != VISIBLE) {
+            return;
+        }
+        redressRaised(mLayout);
     }
 
     /**
@@ -619,13 +645,16 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mRect.set(left, top, left + layout.slabWidthPx(), top + height);
         float radius = slabRadiusPx();
         if (mGlassShown && mKeyEntry) {
-            // The raised glass's rim: the over-glass rim made a touch stronger (ElevatedGlass).
-            mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(
-                com.termux.app.chrome.GlassTokens.HIGHLIGHT,
-                com.termux.app.chrome.ElevatedGlass.rimAlpha(
-                    Color.alpha(com.termux.app.chrome.GlassTokens.RIM_OVER_GLASS_START))));
-            mRect.inset(0.5f * mDensity, 0.5f * mDensity);
-            canvas.drawRoundRect(mRect, radius, radius, mStroke);
+            // The raised glass's rim, the over-glass rim made stronger (ElevatedGlass), only where
+            // the glass draws no Fancier Glass edge of its own: that edge is the cards' rim light.
+            if (!mGlass.drawsEdge()) {
+                mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(
+                    com.termux.app.chrome.GlassTokens.HIGHLIGHT,
+                    com.termux.app.chrome.ElevatedGlass.rimAlpha(
+                        Color.alpha(com.termux.app.chrome.GlassTokens.RIM_OVER_GLASS_START))));
+                mRect.inset(0.5f * mDensity, 0.5f * mDensity);
+                canvas.drawRoundRect(mRect, radius, radius, mStroke);
+            }
         } else if (mGlassShown) {
             if (Color.alpha(mInk.veil) != 0) {
                 mFill.setColor(mInk.veil);

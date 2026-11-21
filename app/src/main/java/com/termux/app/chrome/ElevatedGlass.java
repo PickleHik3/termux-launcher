@@ -9,9 +9,11 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 /**
  * The glass a surface raised over other glass wears: the sheets' glass ({@link SheetGlass}, which
  * is Global's with its opacity floor) made denser so it reads as a pane standing above the glass it
- * covers. More blur, more grain, more body and a stronger rim, with the lift shadow the anchored
- * menus draw (Material's menu container elevation); never less of
- * any of them than the sheet's, and never fully opaque unless the look already is. The page bar
+ * covers. More blur, more grain and a stronger rim, with the lift shadow the anchored menus draw
+ * (Material's menu container elevation) and the Fancier Glass edge the cards wear; never less of
+ * any of them than the sheet's, and never fully opaque unless the look already is. The glass cues
+ * carry the elevation, not the body: the body gains only a step, so what is behind still shows
+ * through the blur (a denser body read as a flat grey slab over the terminal). The page bar
  * the extra-keys key pops up wears it first; the next raised surface asks {@link #of} the same.
  *
  * <p>Pure: reads an {@link ElementGlass} and answers another, at dress time, never per frame.</p>
@@ -19,9 +21,9 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 public final class ElevatedGlass {
 
     /** The share of the remaining transparency the raised glass fills: o' = o + (100 - o) x gain. */
-    public static final float BODY_GAIN = 0.35f;
+    public static final float BODY_GAIN = 0.12f;
     /** The most opacity the body gain reaches; a look already above it keeps its own. */
-    public static final int OPACITY_CEILING_PERCENT = 88;
+    public static final int OPACITY_CEILING_PERCENT = 80;
     /** Blur grows by this factor, and by at least {@link #BLUR_STEP_DP}, up to the chrome's blur ceiling. */
     public static final float BLUR_GAIN = 1.5f;
     public static final int BLUR_STEP_DP = 8;
@@ -29,8 +31,8 @@ public final class ElevatedGlass {
     public static final float GRAIN_GAIN = 1.6f;
     public static final int GRAIN_STEP_PERCENT = 4;
     public static final int GRAIN_CEILING_PERCENT = 50;
-    /** The rim's alpha against the sheet's: a touch more edge. */
-    public static final float RIM_GAIN = 1.25f;
+    /** The rim's alpha against the sheet's: more edge, where no Fancier Glass edge is drawn. */
+    public static final float RIM_GAIN = 1.5f;
 
     private ElevatedGlass() {}
 
