@@ -126,7 +126,7 @@ public class AppDrawerCategoryGridMetricsTest {
             360f, 640f, 1f, tileHeadingHeight, appLabelHeight, 80f, BUDGET);
 
         assertEquals(tileHeadingHeight, m.headingHeightPx, EPS);
-        assertEquals(m.largeIconPx + AppDrawerGridMetrics.LABEL_GAP_DP + appLabelHeight
+        assertEquals(AppDrawerGridMetrics.ROW_TOP_DP + m.largeIconPx + AppDrawerGridMetrics.LABEL_GAP_DP + appLabelHeight
             + AppDrawerGridMetrics.ROW_BOTTOM_DP, m.expandedRowHeightPx, EPS);
     }
 

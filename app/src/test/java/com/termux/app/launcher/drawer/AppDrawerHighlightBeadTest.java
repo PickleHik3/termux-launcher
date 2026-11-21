@@ -53,8 +53,10 @@ public class AppDrawerHighlightBeadTest {
     private static AppDrawerAppCellView laidOutCell(int columns, String name, boolean highlight) {
         float density = RuntimeEnvironment.getApplication().getResources()
             .getDisplayMetrics().density;
+        float fontScale = RuntimeEnvironment.getApplication().getResources()
+            .getConfiguration().fontScale;
         AppDrawerGridMetrics metrics = AppDrawerGridMetrics.resolve(1080f, density,
-            14f * density, columns);
+            14f * density * fontScale, columns);
         int w = Math.round(metrics.cellWidthPx);
         int h = Math.round(metrics.rowHeightPx);
         AppDrawerAppCellView cell = new AppDrawerAppCellView(RuntimeEnvironment.getApplication());
@@ -108,6 +110,26 @@ public class AppDrawerHighlightBeadTest {
         assertTrue(cell.getBackground() instanceof AppDrawerGlassBeadDrawable);
     }
 
+    @Test public void gridBeadHasTheSameGapOnAllFourSidesAtDefaultAndWideFontAndSixColumns() {
+        ChromeShade.note(ChromeInk.Polarity.PALE_INK, 0xFF101418);
+        for (float fontScale : new float[] {1f, 1.3f}) {
+            RuntimeEnvironment.setFontScale(fontScale);
+            for (int columns : new int[] {4, 6}) {
+                AppDrawerAppCellView cell = laidOutCell(columns, SHORT, true);
+                AppDrawerGlassBeadDrawable bead = (AppDrawerGlassBeadDrawable) cell.getBackground();
+                int[] text = textBounds(cell);
+                int top = Math.min(cell.icon.getTop(), text[1]) - bead.innerTop();
+                int side = Math.min(cell.icon.getLeft(), text[0]) - bead.innerLeft();
+                int bottom = bead.innerBottom() - Math.max(cell.icon.getBottom(), text[3]);
+                String where = "font " + fontScale + " columns " + columns;
+                assertEquals(where + " top vs side", (float) side, (float) top, 1f);
+                assertEquals(where + " bottom vs side", (float) side, (float) bottom, 1f);
+                assertEquals(where + " padding", (float) Math.round(6 * cell.getResources()
+                    .getDisplayMetrics().density), (float) side, 1f);
+            }
+        }
+    }
+
     @Test public void renderComparisonPngs() throws Exception {
         org.junit.Assume.assumeTrue(OUT.isDirectory() || OUT.mkdirs());
         for (boolean dark : new boolean[] {true, false}) {
@@ -132,7 +154,22 @@ public class AppDrawerHighlightBeadTest {
                 }
                 layout(stack, 1080, rowHeight * 2);
                 Bitmap bitmap = Bitmap.createBitmap(1080, rowHeight * 2, Bitmap.Config.ARGB_8888);
-                stack.draw(new Canvas(bitmap));
+                Canvas canvas = new Canvas(bitmap);
+                stack.draw(canvas);
+                // The native test font draws no glyphs; a stand-in bar marks each name's text bounds.
+                android.graphics.Paint bar = new android.graphics.Paint();
+                bar.setColor(dark ? 0xCCFFFFFF : 0xCC000000);
+                for (int r = 0; r < stack.getChildCount(); r++) {
+                    LinearLayout row = (LinearLayout) stack.getChildAt(r);
+                    for (int c = 0; c < row.getChildCount(); c++) {
+                        AppDrawerAppCellView cell = (AppDrawerAppCellView) row.getChildAt(c);
+                        int[] t = textBounds(cell);
+                        float x = row.getLeft() + cell.getLeft();
+                        float y = row.getTop() + cell.getTop();
+                        canvas.drawRoundRect(x + t[0], y + t[1] + (t[3] - t[1]) * 0.15f,
+                            x + t[2], y + t[3] - (t[3] - t[1]) * 0.15f, 6f, 6f, bar);
+                    }
+                }
                 File png = new File(OUT, "bead-" + columns + "col-" + (dark ? "dark" : "light")
                     + ".png");
                 try (FileOutputStream out = new FileOutputStream(png)) {
@@ -150,6 +187,17 @@ public class AppDrawerHighlightBeadTest {
         ring.setColor(ChromeShade.stateFill(0x26FFFFFF, 0x08FFFFFF));
         ring.setStroke(Math.round(2 * density), ChromeShade.rim(0xE6FFFFFF));
         return ring;
+    }
+
+    /** The label's text box in cell pixels, as the cell computes it. */
+    private static int[] textBounds(AppDrawerAppCellView cell) {
+        Layout layout = cell.label.getLayout();
+        int areaLeft = cell.label.getLeft() + cell.label.getCompoundPaddingLeft();
+        int areaRight = cell.label.getRight() - cell.label.getCompoundPaddingRight();
+        int lineWidth = Math.min(areaRight - areaLeft, (int) Math.ceil(layout.getLineWidth(0)));
+        int left = areaLeft + (areaRight - areaLeft - lineWidth) / 2;
+        return new int[] {left, cell.label.getTop() + cell.label.getCompoundPaddingTop(),
+            left + lineWidth, cell.label.getBottom() - cell.label.getCompoundPaddingBottom()};
     }
 
     private static int[] expected(AppDrawerAppCellView cell) {

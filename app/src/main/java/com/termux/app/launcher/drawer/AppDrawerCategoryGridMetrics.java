@@ -196,7 +196,8 @@ public final class AppDrawerCategoryGridMetrics {
         int detailIcon = Math.min(icon, Math.max(0, Math.round(detailCell * 0.58f)));
         // One shared size is mandatory: preview-large and detail cache keys are identical.
         icon = Math.min(icon, detailIcon);
-        float detailRow = icon + AppDrawerGridMetrics.LABEL_GAP_DP * d
+        float detailRow = AppDrawerGridMetrics.ROW_TOP_DP * d + icon
+            + AppDrawerGridMetrics.LABEL_GAP_DP * d
             + finiteNonNegative(appLabelHeightPx)
             + AppDrawerGridMetrics.ROW_BOTTOM_DP * d;
         // The one spacing the whole card is built from: the width the two icons could not take is

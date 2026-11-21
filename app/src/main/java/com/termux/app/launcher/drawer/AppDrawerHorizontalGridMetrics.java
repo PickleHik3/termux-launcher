@@ -74,7 +74,8 @@ public final class AppDrawerHorizontalGridMetrics {
         return new AppDrawerHorizontalGridMetrics(cells.columns, rows, width, height,
             cells.cellWidthPx, Math.min(cells.iconPx,
                 Math.max(0f, rowHeight - Math.max(0f, labelHeightPx)
-                    - (AppDrawerGridMetrics.LABEL_GAP_DP + AppDrawerGridMetrics.ROW_BOTTOM_DP)
+                    - (AppDrawerGridMetrics.ROW_TOP_DP + AppDrawerGridMetrics.LABEL_GAP_DP
+                        + AppDrawerGridMetrics.ROW_BOTTOM_DP)
                     * (density > 0f ? density : 1f))), rowHeight);
     }
 

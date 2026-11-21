@@ -32,8 +32,17 @@ public final class AppDrawerGridMetrics {
     public static final float ICON_CELL_FRACTION = 0.58f;
     /** Gap between the icon and its label. */
     public static final float LABEL_GAP_DP = 6f;
-    /** Padding under the label, so two rows do not read as one block. */
-    public static final float ROW_BOTTOM_DP = 10f;
+    /**
+     * Air above the icon inside a row: the highlight bead's padding plus its spare, so the bead
+     * has the same room above the icon as beside it and under the label.
+     */
+    public static final float ROW_TOP_DP =
+        AppDrawerHighlightShape.PADDING_DP + AppDrawerHighlightShape.SPARE_DP;
+    /**
+     * Padding under the label, so two rows do not read as one block; the same figure as
+     * {@link #ROW_TOP_DP}, which takes it from what used to be a 10dp tail.
+     */
+    public static final float ROW_BOTTOM_DP = ROW_TOP_DP;
     /**
      * Air a label keeps inside its own cell on each side, so two long names never touch and the
      * outer columns stand off the card's edge. Every layout's cell label reads it.
@@ -107,7 +116,7 @@ public final class AppDrawerGridMetrics {
             || requestedIconDp == 44 || requestedIconDp == 48
             ? requestedIconDp * d : MAX_ICON_DP * d;
         float iconPx = Math.min(iconTargetPx, cellWidthPx * ICON_CELL_FRACTION);
-        float rowHeightPx = iconPx + (LABEL_GAP_DP * d)
+        float rowHeightPx = (ROW_TOP_DP * d) + iconPx + (LABEL_GAP_DP * d)
             + Math.max(0f, labelHeightPx) + (ROW_BOTTOM_DP * d);
         return new AppDrawerGridMetrics(columns, cellWidthPx, iconPx, rowHeightPx);
     }
