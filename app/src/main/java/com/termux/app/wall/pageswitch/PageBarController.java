@@ -69,7 +69,7 @@ public final class PageBarController implements PageBarView.Entry {
         mLayer = layer;
         mHaptics = new PageSwitchHaptics(context, host::hapticsEnabled);
         if (layer != null) {
-            // The bubble rises above the popup's pill, outside the bar's own bounds.
+            // The lifted glyphs rise above the popup's pill, outside the bar's own bounds.
             layer.setClipChildren(false);
             layer.setOnTouchListener((v, ev) -> onLayerTouch(ev));
         }
@@ -113,8 +113,9 @@ public final class PageBarController implements PageBarView.Entry {
     // ---- The key's popup, in raw screen coordinates -----------------------------------------------
 
     /**
-     * The key was touched: the bar appears with its pill's bottom {@link PageBarLayout#BOTTOM_AIR_DP}
-     * above {@code bandTopRaw}, the top of the extra-keys band the key stands on.
+     * The key was touched: the bar appears with its touch row's bottom on {@code bandTopRaw}, the
+     * top of the extra-keys band the key stands on, so its slab stands {@link PageBarLayout#GAP_DP}
+     * above the keys.
      *
      * @return whether the popup opened; false leaves the key to its plain behaviour
      */
@@ -198,7 +199,7 @@ public final class PageBarController implements PageBarView.Entry {
         return view;
     }
 
-    /** GONE, its bubble given back, and the layer no longer takes touches. */
+    /** GONE, its lift given back, and the layer no longer takes touches. */
     private void putAway() {
         mPopup.putAway();
         PageBarView view = mPopupView;
