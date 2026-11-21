@@ -90,6 +90,14 @@ public final class ExtraKeyIcons {
     public static final int PANE_FOCUS_DOWN = 0x10FF49;
     public static final int PANE_RESIZE = 0x10FF4A;
     public static final int PANE_MOVE_EDGE = 0x10FF4B;
+    public static final int PANE_RESIZE_LEFT = 0x10FF4C;
+    public static final int PANE_RESIZE_RIGHT = 0x10FF4D;
+    public static final int PANE_RESIZE_UP = 0x10FF4E;
+    public static final int PANE_RESIZE_DOWN = 0x10FF4F;
+    public static final int PANE_MOVE_EDGE_LEFT = 0x10FF50;
+    public static final int PANE_MOVE_EDGE_RIGHT = 0x10FF51;
+    public static final int PANE_MOVE_EDGE_UP = 0x10FF52;
+    public static final int PANE_MOVE_EDGE_DOWN = 0x10FF53;
     // Append only: stored rows carry these numbers.
 
     /** Every code point above; the app registers a drawable for each. */
@@ -104,6 +112,8 @@ public final class ExtraKeyIcons {
         FONT, SETTINGS, HELP, MINIMAL, KEY_INSPECTOR, GO_PAGE,
         PROMPT_PREVIOUS, PROMPT_NEXT, PANE_FOCUS, PANE_FOCUS_LEFT, PANE_FOCUS_RIGHT, PANE_FOCUS_UP,
         PANE_FOCUS_DOWN, PANE_RESIZE, PANE_MOVE_EDGE,
+        PANE_RESIZE_LEFT, PANE_RESIZE_RIGHT, PANE_RESIZE_UP, PANE_RESIZE_DOWN,
+        PANE_MOVE_EDGE_LEFT, PANE_MOVE_EDGE_RIGHT, PANE_MOVE_EDGE_UP, PANE_MOVE_EDGE_DOWN,
     };
 
     /** The one-character label that draws {@code codePoint}'s icon. */
@@ -141,6 +151,14 @@ public final class ExtraKeyIcons {
         {"tool:pane.focus_direction:direction=right", PANE_FOCUS_RIGHT, "Move pane focus · right"},
         {"tool:pane.focus_direction:direction=up", PANE_FOCUS_UP, "Move pane focus · up"},
         {"tool:pane.focus_direction:direction=down", PANE_FOCUS_DOWN, "Move pane focus · down"},
+        {"tool:pane.resize:direction=left", PANE_RESIZE_LEFT, "Resize pane · left"},
+        {"tool:pane.resize:direction=right", PANE_RESIZE_RIGHT, "Resize pane · right"},
+        {"tool:pane.resize:direction=up", PANE_RESIZE_UP, "Resize pane · up"},
+        {"tool:pane.resize:direction=down", PANE_RESIZE_DOWN, "Resize pane · down"},
+        {"tool:pane.move_to_edge:edge=left", PANE_MOVE_EDGE_LEFT, "Move pane to edge · left"},
+        {"tool:pane.move_to_edge:edge=right", PANE_MOVE_EDGE_RIGHT, "Move pane to edge · right"},
+        {"tool:pane.move_to_edge:edge=up", PANE_MOVE_EDGE_UP, "Move pane to edge · up"},
+        {"tool:pane.move_to_edge:edge=down", PANE_MOVE_EDGE_DOWN, "Move pane to edge · down"},
         {"tool:pane.resize", PANE_RESIZE, "Resize pane"},
         {"tool:pane.move_to_edge", PANE_MOVE_EDGE, "Move pane to edge"},
         {"KEYBOARD", KEYBOARD, "󰥻", "⌨"},

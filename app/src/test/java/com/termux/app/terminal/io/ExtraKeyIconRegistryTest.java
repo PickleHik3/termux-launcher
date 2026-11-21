@@ -78,11 +78,21 @@ public class ExtraKeyIconRegistryTest {
         }
     }
 
-    @Test public void resizeAndMoveToEdgeKeysKeepTheirValueSoTheyStayApart() {
-        for (String tool : new String[] {LauncherToolRegistry.TOOL_PANE_RESIZE,
-            LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE}) {
-            assertNull(ExtraKeyActionLabels.defaultCapGlyph(tool, "left"));
-            assertNull(ExtraKeyActionLabels.defaultCapGlyph(tool, "down"));
+    @Test public void resizeAndMoveToEdgeDirectionsEachWearTheirOwnIcon() {
+        String[] directions = {"left", "right", "up", "down"};
+        int[] resize = {ExtraKeyIcons.PANE_RESIZE_LEFT, ExtraKeyIcons.PANE_RESIZE_RIGHT,
+            ExtraKeyIcons.PANE_RESIZE_UP, ExtraKeyIcons.PANE_RESIZE_DOWN};
+        int[] edge = {ExtraKeyIcons.PANE_MOVE_EDGE_LEFT, ExtraKeyIcons.PANE_MOVE_EDGE_RIGHT,
+            ExtraKeyIcons.PANE_MOVE_EDGE_UP, ExtraKeyIcons.PANE_MOVE_EDGE_DOWN};
+        Set<String> caps = new HashSet<>();
+        for (int i = 0; i < 4; i++) {
+            String r = ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RESIZE, directions[i]);
+            String e = ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE, directions[i]);
+            assertEquals(ExtraKeyIcons.string(resize[i]), r);
+            assertEquals(ExtraKeyIcons.string(edge[i]), e);
+            assertTrue(caps.add(r));
+            assertTrue(caps.add(e));
         }
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RESIZE, "grow"));
     }
 }

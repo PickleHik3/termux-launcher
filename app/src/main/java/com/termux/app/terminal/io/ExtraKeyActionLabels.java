@@ -147,6 +147,14 @@ public final class ExtraKeyActionLabels {
         {ExtraKeyIcons.PANE_FOCUS_DOWN, R.drawable.ic_rl_pane_focus_down},
         {ExtraKeyIcons.PANE_RESIZE, R.drawable.ic_rl_pane_resize},
         {ExtraKeyIcons.PANE_MOVE_EDGE, R.drawable.ic_rl_pane_move_edge},
+        {ExtraKeyIcons.PANE_RESIZE_LEFT, R.drawable.ic_rl_pane_resize_left},
+        {ExtraKeyIcons.PANE_RESIZE_RIGHT, R.drawable.ic_rl_pane_resize_right},
+        {ExtraKeyIcons.PANE_RESIZE_UP, R.drawable.ic_rl_pane_resize_up},
+        {ExtraKeyIcons.PANE_RESIZE_DOWN, R.drawable.ic_rl_pane_resize_down},
+        {ExtraKeyIcons.PANE_MOVE_EDGE_LEFT, R.drawable.ic_rl_pane_move_edge_left},
+        {ExtraKeyIcons.PANE_MOVE_EDGE_RIGHT, R.drawable.ic_rl_pane_move_edge_right},
+        {ExtraKeyIcons.PANE_MOVE_EDGE_UP, R.drawable.ic_rl_pane_move_edge_up},
+        {ExtraKeyIcons.PANE_MOVE_EDGE_DOWN, R.drawable.ic_rl_pane_move_edge_down},
     };
 
     /** Registers the code points that draw as drawables. Called once from the Application. */
@@ -261,20 +269,27 @@ public final class ExtraKeyActionLabels {
 
     /**
      * The cap for a row that picks one value of a fixed set. The value is what tells these rows
-     * apart, so they keep their text (resize and move-to-edge: four identical icons would not tell the keys
-     * apart), except the wall's three places and the four focus directions, which wear their own icon.
+     * apart, so they keep their text, except the wall's three places and the directions of focus, resize
+     * and move-to-edge, which wear their own icon.
      *
      * @param choice the picked value, or null for a row that fixes no value
      */
     @Nullable
     public static String defaultCapGlyph(@NonNull String toolName, @Nullable String choice) {
         if (choice == null) return defaultCapGlyph(toolName);
-        if (LauncherToolRegistry.TOOL_PANE_FOCUS_DIRECTION.equals(toolName)) {
+        int kind = LauncherToolRegistry.TOOL_PANE_FOCUS_DIRECTION.equals(toolName) ? 0
+            : LauncherToolRegistry.TOOL_PANE_RESIZE.equals(toolName) ? 1
+            : LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE.equals(toolName) ? 2 : -1;
+        if (kind >= 0) {
+            int[] left = {ExtraKeyIcons.PANE_FOCUS_LEFT, ExtraKeyIcons.PANE_RESIZE_LEFT, ExtraKeyIcons.PANE_MOVE_EDGE_LEFT};
+            int[] right = {ExtraKeyIcons.PANE_FOCUS_RIGHT, ExtraKeyIcons.PANE_RESIZE_RIGHT, ExtraKeyIcons.PANE_MOVE_EDGE_RIGHT};
+            int[] up = {ExtraKeyIcons.PANE_FOCUS_UP, ExtraKeyIcons.PANE_RESIZE_UP, ExtraKeyIcons.PANE_MOVE_EDGE_UP};
+            int[] down = {ExtraKeyIcons.PANE_FOCUS_DOWN, ExtraKeyIcons.PANE_RESIZE_DOWN, ExtraKeyIcons.PANE_MOVE_EDGE_DOWN};
             switch (choice) {
-                case "left": return icon(ExtraKeyIcons.PANE_FOCUS_LEFT);
-                case "right": return icon(ExtraKeyIcons.PANE_FOCUS_RIGHT);
-                case "up": return icon(ExtraKeyIcons.PANE_FOCUS_UP);
-                case "down": return icon(ExtraKeyIcons.PANE_FOCUS_DOWN);
+                case "left": return icon(left[kind]);
+                case "right": return icon(right[kind]);
+                case "up": return icon(up[kind]);
+                case "down": return icon(down[kind]);
                 default: return null;
             }
         }

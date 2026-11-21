@@ -149,8 +149,11 @@ public class ExtraKeyIconsTest {
             "tool:pane.focus_direction:direction=left", "focus"));
         assertEquals("Move pane focus \u00b7 up", ExtraKeyIcons.effectiveDisplay(
             "tool:pane.focus_direction:direction=left", "Move pane focus \u00b7 up"));
-        // Resize and move-to-edge keys keep their per-value text, never one shared icon.
-        assertEquals("Resize pane \u00b7 left", ExtraKeyIcons.effectiveDisplay(
+        assertEquals(icon(ExtraKeyIcons.PANE_RESIZE_LEFT), ExtraKeyIcons.effectiveDisplay(
             "tool:pane.resize:direction=left", "Resize pane \u00b7 left"));
+        assertEquals(icon(ExtraKeyIcons.PANE_MOVE_EDGE_DOWN), ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.move_to_edge:edge=down", "Move pane to edge \u00b7 down"));
+        assertEquals("Resize pane \u00b7 up", ExtraKeyIcons.effectiveDisplay(
+            "tool:pane.resize:direction=left", "Resize pane \u00b7 up"));
     }
 }
