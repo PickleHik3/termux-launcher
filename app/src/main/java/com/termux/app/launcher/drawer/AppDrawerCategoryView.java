@@ -96,6 +96,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     private float downRawY;
     /** See {@link #setBottomInsetPx}; zero until the controller sets it. */
     private int bottomInset;
+    /** The band at the bottom a full search bar still hides; see {@link #setHiddenBottomPx}. */
+    private int hiddenBottom;
     private float collapseStartProgress = 1f;
     private float headerDownX;
     private float headerDownY;
@@ -340,6 +342,20 @@ public final class AppDrawerCategoryView extends ViewGroup
      * the card's usable bottom. Each tile and row already carries its own trailing gap, which the
      * padding gives back. Not per frame.
      */
+    public void setHiddenBottomPx(int hiddenPx) {
+        hiddenBottom = Math.max(0, hiddenPx);
+    }
+
+    /** Rows under the bottom band a full search bar still holds take no touch. */
+    @Override
+    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
+        if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && hiddenBottom > 0
+            && ev.getY() >= getHeight() - hiddenBottom) {
+            return false;
+        }
+        return super.dispatchTouchEvent(ev);
+    }
+
     public void setBottomInsetPx(int bottomInsetPx) {
         int inset = Math.max(0, bottomInsetPx);
         if (inset == bottomInset) return;
