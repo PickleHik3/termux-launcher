@@ -689,6 +689,12 @@ public final class Theme
         return p;
       }
 
+      /** The colour a label drawn in [color] ends up with, as {@link #label_paint} sets it. */
+      public int label_ink(int color)
+      {
+        return (color & 0x00FFFFFF) | _label_alpha_bits;
+      }
+
       private static Paint pick(LabelFace face, Paint key, Paint symbol, Paint text)
       {
         switch (face)
