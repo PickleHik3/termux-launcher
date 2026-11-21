@@ -22999,18 +22999,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isDisplayWindowInFront()) return false;
         if (mPaneController == null || mCurrentWSession == null
             || mCurrentWSession.windows.isEmpty()) return false;
-        com.termux.app.terminal.TerminalPaneController.Window renamedDiag =
-            mCurrentWSession.currentWindow();
-        mPaneController.setWindowName(renamedDiag, name);
-        com.termux.app.terminal.TerminalPaneController.Window floatDiag =
-            mPaneController.focusedHomeFloat();
-        com.termux.app.terminal.rename.RenameDiag.logWithCallers("store window=" + (renamedDiag == null ? "null"
-            : renamedDiag.id + " float=" + renamedDiag.isHomeFloat()) + " index="
-            + mCurrentWSession.current + " name=" + name + " readBack="
-            + mPaneController.windowName(renamedDiag) + " focusedFloat="
-            + (floatDiag == null ? "none" : floatDiag.id + "/" + mPaneController.windowName(floatDiag))
-            + " home=" + mPages.isCommitted(com.termux.app.page.PageKind.HOME)
-            + " batch=" + mWindowBarRefreshBatchDepth);
+        mPaneController.setWindowName(mCurrentWSession.currentWindow(), name);
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         return true;
@@ -28327,12 +28316,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
-        if (isTerminalRenameActive()) {
-            View focusDiag = getCurrentFocus();
-            com.termux.app.terminal.rename.RenameDiag.log("dispatch code=" + event.getKeyCode()
-                + " action=" + event.getAction() + " device=" + event.getDeviceId() + " focus="
-                + (focusDiag == null ? "none" : focusDiag.getClass().getSimpleName()));
-        }
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
             if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)
@@ -30743,8 +30726,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
     public void refreshTerminalWindowBar() {
-        if (com.termux.app.terminal.rename.RenameDiag.armed())
-            com.termux.app.terminal.rename.RenameDiag.log("refresh batch=" + mWindowBarRefreshBatchDepth);
         if (mWindowBarRefreshBatchDepth > 0) {
             mWindowBarRefreshPending = true;
             return;
@@ -30779,7 +30760,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             action.run();
         } finally {
             if (--mWindowBarRefreshBatchDepth == 0 && mWindowBarRefreshPending) {
-                if (com.termux.app.terminal.rename.RenameDiag.armed()) com.termux.app.terminal.rename.RenameDiag.log("refresh batch flushed");
                 mWindowBarRefreshPending = false;
                 refreshTerminalWindowBar();
             }
@@ -30801,11 +30781,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
             ? View.VISIBLE : View.GONE;
-        if (com.termux.app.terminal.rename.RenameDiag.armed())
-            com.termux.app.terminal.rename.RenameDiag.log("doRefresh visible=" + visible + " chips=" + (chips == View.VISIBLE)
-                + " wallPage=" + mLastWallPage + " home="
-                + mPages.isCommitted(com.termux.app.page.PageKind.HOME)
-                + " wallStrip=" + (wallStripFed() && wallStripOn(mLastWallPage)));
         if (bar.getVisibility() != chips) bar.setVisibility(chips);
         mStatusBar.syncBorderStatusSwipe(visible);
         if (!visible) {
@@ -31028,17 +31003,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
         bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
-        if (com.termux.app.terminal.rename.RenameDiag.armed()) {
-            StringBuilder labelsDiag = new StringBuilder();
-            for (com.termux.app.terminal.TerminalWindowBar.WindowItem item : items)
-                labelsDiag.append('[').append(item.label).append(']');
-            StringBuilder floatsDiag = new StringBuilder();
-            for (com.termux.app.terminal.TerminalWindowBar.WindowItem item : floatItems.values())
-                floatsDiag.append('[').append(item.label).append(']');
-            com.termux.app.terminal.rename.RenameDiag.log("sync bar=" + labelsDiag + " selected=" + selected + " floats="
-                + floatsDiag + " display=" + isDisplayWindowInFront()
-                + " barShown=" + bar.isShown());
-        }
         bar.setWindows(items, selected);
         refreshPageGlyphsIfWindowsMoved();
         if (mScene != null && selected >= 0 && selected < items.size())

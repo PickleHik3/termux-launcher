@@ -838,14 +838,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         // sameActivity has to be part of the guard: an activity-only flip changes neither the
         // labels nor the selection, so without it the new state would be silently dropped here.
         if (!typefaceChanged && selectedIndex == mSelectedIndex && sameItems(mItems, items)
-            && sameActivity(mItems, items)) {
-            if (com.termux.app.terminal.rename.RenameDiag.armed())
-                com.termux.app.terminal.rename.RenameDiag.log("bar.setWindows unchanged");
-            return;
-        }
-        if (com.termux.app.terminal.rename.RenameDiag.armed())
-            com.termux.app.terminal.rename.RenameDiag.log("bar.setWindows reuse="
-                + (!typefaceChanged && sameItems(mItems, items)) + " id=" + getId());
+            && sameActivity(mItems, items)) return;
         int previousSelected = mSelectedIndex;
         if (previousSelected >= 0 && selectedIndex != previousSelected) {
             // Diagnostic for the chip highlight jumping on its own (2026-10-22): who refreshed
