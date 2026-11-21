@@ -14314,6 +14314,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncLegibilityCrossing() {
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         if (store.crossing() == mCrossing.crossing()) return;
+        // DIAG(widgets): each crossing's begin and end, for the WidgetDress lines; revert before merge.
+        android.util.Log.i("WidgetDress", (mCrossing.crossing() ? "crossing-begin" : "crossing-end")
+            + " t=" + android.os.SystemClock.uptimeMillis() + " front=" + mLastWallPage
+            + " dress=" + stackDressPage());
         if (mCrossing.crossing()) store.beginCrossing();
         else store.endCrossing();
     }
