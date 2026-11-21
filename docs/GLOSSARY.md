@@ -144,6 +144,19 @@ layout turned it on and anchored it at the start, middle or end of the apps row;
 where the dock items put it. Once the Taskbar design's (until 2026-10-21).
 _Avoid_: Home tile (it does not go Home), Taskbar
 
+**Default drawer**, **section**:
+The app drawer type a new install opens on (2026-11-21): two pages side by side, **Apps** (the
+Vertical grid with its A–Z strip) and **Categories** (the Categories tiles), moved between by a
+horizontal swipe or a tap on the **section switch**. Each page is a **section**; the drawer
+remembers the one it was left on, and Back never changes it. Upgrading installs keep their type.
+Code: `AppDrawerViewType.DEFAULT`, `AppDrawerSection`, `AppDrawerSectionPager` (the one position).
+_Avoid_: tab, page (Horizontal's pages), section index (the A–Z index, `AppDrawerSectionIndex`)
+
+**Section switch**:
+The centred capsule at the top of the **Default drawer** with the two section names; a smaller
+capsule rides under the selected one, following the swipe. In code `AppDrawerSectionSwitchView`.
+_Avoid_: pill (the dictation pill), tabs, toggle
+
 **App menu**:
 The card a long press on an app icon opens, on the dock, on Home or in the drawer: grouped rows
 with a small arrow to the icon, in the system palette's shades (decided 2026-10-23). Rows, in
