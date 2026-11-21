@@ -65,7 +65,7 @@ public class DeviceControlRoutesTest {
         Map<?, ?> limiters = (Map<?, ?>) field.get(server);
         for (String key : new String[]{"POST:/v1/vibrate", "POST:/v1/torch", "GET:/v1/battery",
                 "GET:/v1/volume", "POST:/v1/volume", "POST:/v1/toast", "POST:/v1/wallpaper",
-                "GET:/v1/wallpaper"}) {
+                "GET:/v1/wallpaper", "GET:/v1/pagebar-glass", "POST:/v1/pagebar-glass"}) {
             assertTrue(key, limiters.containsKey(key));
         }
         assertFalse(limiters.containsKey("GET:/v1/wallpaper/builtins"));

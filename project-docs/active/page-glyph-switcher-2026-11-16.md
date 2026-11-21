@@ -164,3 +164,26 @@ the 1.25x spread and the band numbers of the sections above):
 - **Ink off the slab.** A lifted glyph's ink moves from the slab's to inks solved on the wallpaper
   above the slab (one sample per dress pass, `PageMarkInk` on that ground, the name's bare-text
   ink), so no slab-inked glyph stands on bare wallpaper. The key's pop-up keeps its own inks.
+- **Glass: sunk, not raised (2026-11-22, feat/concave-page-bar).** Every other glass here is
+  convex and stands toward the user; Home's slab goes away from them. Two looks, one switch
+  (`PageBarGlassStyle`, a hidden developer preference, `launcherctl pagebar-glass concave|well`,
+  the bar re-dresses at once):
+  - **Concave** (the default). With Fancier Glass on, the wallpaper is seen through a concave lens:
+    each pixel takes the blurred frame from further out along the rim's normal, so the picture is
+    drawn in toward the centre line and pressed together in a band 12dp deep at most and never past
+    0.4 of the slab's height (`GlassRefraction.concavePullPx`; the shared program's `uConcave`
+    switch, one sample and none of the convex rim's light, split or motion). Nothing at the
+    outline and nothing on the middle fifth. The pull rises at most 0.5 px per px, so the picture
+    is never folded back and every sample stays inside the outline. With Fancier Glass off it is
+    the plain blur. Over either, only the inverted rim: a dark hairline along the top fading down
+    the ends and a light one along the bottom arc (`InsetGlass.CONCAVE_RIM_*`, 25/15 % and
+    45/85 % on a dark/light ground). No floor shade, no contact shadow; the glyph inks are solved
+    on the bare glass.
+  - **Well** (the fallback). The shaded well as before: the floor shade, the contact shadow rings
+    and the rim of the hole at their halved strengths, no refraction.
+  - Where the bar wears no glass (no wallpaper the launcher set, battery saver, outline text, high
+    contrast) it keeps the well on its solid card whichever look is chosen.
+  - What streaked before: the cards' convex bend (20dp band, 9dp pull) on a 30dp slab held its
+    band at half the height, so the pull fell about 2.7px per px across it; the sample folded back
+    and, where it turned, one row of the frame was stretched down each column, the vertical
+    streaks. The concave pull's slope cap rules that out.

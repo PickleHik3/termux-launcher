@@ -420,10 +420,11 @@ public class GlassMotionLightTest {
         // liveK is set only inside the live gate, and is 0 otherwise.
         assertTrue(agsl.contains("float liveK = 0.0;"));
         assertTrue(agsl.indexOf("liveK = clamp(") > agsl.indexOf("if (live) {"));
-        // Before the samples, so it reuses them: no new eval of either picture.
-        assertTrue(agsl.indexOf(gate) < agsl.indexOf("content.eval("));
+        // Before the samples, so it reuses them: no new eval of either picture. (The concave
+        // lens's one tap comes earlier and returns; it never reaches this gate.)
+        assertTrue(agsl.indexOf(gate) < agsl.indexOf("half4 g = content.eval(fg);"));
         assertEquals(4, agsl.split("sharp\\.eval\\(", -1).length - 1);
-        assertEquals(4, agsl.split("content\\.eval\\(", -1).length - 1);
+        assertEquals(5, agsl.split("content\\.eval\\(", -1).length - 1);
         assertConst(agsl, "kLiveReach", GlassRefraction.LIVE_CLARITY_REACH);
     }
 
