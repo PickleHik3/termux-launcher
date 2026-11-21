@@ -107,8 +107,12 @@ public class AzStandaloneStripEmptyPinnedTest {
     private FrameLayout window;
     private ActivityController<Activity> activity;
 
+    /** The scale the JVM had before this test, put back after it: other tests share the JVM. */
+    private float durationScaleBefore;
+
     @Before
     public void setUp() {
+        durationScaleBefore = ReflectionHelpers.getStaticField(ValueAnimator.class, "sDurationScale");
         setDurationScale(1f);
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         assertEquals("the fixture must be the reviewed screen width",
@@ -120,7 +124,7 @@ public class AzStandaloneStripEmptyPinnedTest {
     @After
     public void tearDown() {
         if (activity != null) activity.pause().stop().destroy();
-        setDurationScale(0f);
+        setDurationScale(durationScaleBefore);
     }
 
     // ------------------------------------------------------------------ the reported arrangement

@@ -93,10 +93,14 @@ public class SuggestionBarPageCommitTest {
     private FrameLayout window;
     private ActivityController<Activity> activity;
 
+    /** The scale the JVM had before this test, put back after it: other tests share the JVM. */
+    private float durationScaleBefore;
+
     @Before
     public void setUp() {
         // Robolectric's default scale of zero would finish every settle inside the frame that
         // starts it, and an animation that cannot be interrupted cannot show this defect.
+        durationScaleBefore = ReflectionHelpers.getStaticField(ValueAnimator.class, "sDurationScale");
         setDurationScale(1f);
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         context.getResources().getConfiguration().orientation = Configuration.ORIENTATION_PORTRAIT;
@@ -130,7 +134,7 @@ public class SuggestionBarPageCommitTest {
     @After
     public void tearDown() {
         if (activity != null) activity.pause().stop().destroy();
-        setDurationScale(0f);
+        setDurationScale(durationScaleBefore);
     }
 
     @Test
