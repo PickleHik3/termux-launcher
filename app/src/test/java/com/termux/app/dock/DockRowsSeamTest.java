@@ -475,6 +475,36 @@ public class DockRowsSeamTest {
     }
 
     @Test
+    public void homesPageBandStandsAsAtHomesRestWhileTheBareTerminalIsInFront() {
+        FakeViews views = new FakeViews();
+        DockRows rows = new DockRows(views);
+        DockRows.Union homesApps = new DockRows.Union(true, false, false);
+        // Home's rest: the row's own ticks draw its band.
+        rows.apply(chrome(HOME, false), false, homesApps);
+        DockRows.PageBand homeRest = views.pageBand;
+        assertEquals(DockRows.PageBand.TICKS, homeRest);
+        // The Terminal in front (no apps row of its own), and every pass of a crossing back,
+        // keyboard down or up: the band is Home's rest's, so the landing swaps nothing.
+        for (boolean keyboard : new boolean[] {false, true}) {
+            views.log.clear();
+            rows.apply(chrome(WINDOW_BARE, keyboard), false, homesApps);
+            assertEquals("keyboard " + keyboard, homeRest, views.pageBand);
+            rows.apply(chrome(HOME, keyboard), false, homesApps);
+            assertEquals("keyboard " + keyboard, homeRest, views.pageBand);
+        }
+        // What the readers ask stays the front layout's.
+        rows.apply(chrome(WINDOW_BARE, false), false, homesApps);
+        assertFalse(rows.isRowOnScreen(Element.APPS));
+        // Before the row binds its ticks the kept band is held, never gone.
+        views.ticksAreTheDocks = false;
+        rows.apply(chrome(WINDOW_BARE, false), false, homesApps);
+        assertEquals(DockRows.PageBand.HELD, views.pageBand);
+        // Neither side shows the apps row: gone.
+        rows.apply(chrome(WINDOW_BARE, false), false, new DockRows.Union(false, false, false));
+        assertEquals(DockRows.PageBand.GONE, views.pageBand);
+    }
+
+    @Test
     public void aRowNeitherSideUsesStaysGoneWhateverIsInFront() {
         FakeViews views = new FakeViews();
         DockRows rows = new DockRows(views);

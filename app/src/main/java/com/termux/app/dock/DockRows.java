@@ -232,6 +232,21 @@ public final class DockRows {
     }
 
     /**
+     * The page band the views stand: the front layout's ({@link Shown#pageBand}), except that the
+     * apps row a lane keeps standing for the other side ({@link Union#apps}) keeps its band with
+     * it, as that side's rest shows it. So the dock's page capsules (or Home's grabber, where the
+     * dock has one page) are the same while another page is in front and through a crossing back
+     * as at Home's rest: the landing changes nothing in the band, and the ticks' count and page
+     * are the row's own, whichever page is in front.
+     */
+    @NonNull
+    public static PageBand standingBand(@NonNull PageBand front, boolean appsInUnion,
+                                        boolean ticksAreTheDocks) {
+        if (front != PageBand.GONE || !appsInUnion) return front;
+        return ticksAreTheDocks ? PageBand.TICKS : PageBand.HELD;
+    }
+
+    /**
      * Whether the accessory stack is on screen. Since the whole bottom edge stands in it, a status
      * bar the place put along the bottom keeps it up on its own — the dock's rows can all be
      * hidden or standing on other edges and the bar still has to be drawn.
@@ -259,8 +274,9 @@ public final class DockRows {
      */
     public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
                       @Nullable Union union) {
+        boolean ticksAreTheDocks = mViews.pageTicksAreTheDocks();
         Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge,
-            mShown.underKeyboard, mViews.pageTicksAreTheDocks(), surfaceOf(mLayout));
+            mShown.underKeyboard, ticksAreTheDocks, surfaceOf(mLayout));
         announce(shown);
         // The in-app keyboard stays laid out while down: the container it stands in stays
         // laid out with it, though no row or status bar keeps the stack "shown" for readers.
@@ -268,7 +284,8 @@ public final class DockRows {
         mViews.setDockGlassShown(shown.dockGlass);
         mViews.setSurfaceShown(shown.surfaceHost);
         mViews.setRowShown(Element.APPS, shown.apps || (union != null && union.apps));
-        mViews.setPageBand(shown.pageBand);
+        mViews.setPageBand(standingBand(shown.pageBand, union != null && union.apps,
+            ticksAreTheDocks));
         mViews.setRowShown(Element.EXTRA_KEYS,
             shown.extraKeys || (union != null && union.extraKeys));
         mViews.setRowShown(Element.AZ, shown.az || (union != null && union.az));
