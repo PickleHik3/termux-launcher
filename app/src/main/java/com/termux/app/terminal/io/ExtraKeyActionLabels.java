@@ -138,6 +138,15 @@ public final class ExtraKeyActionLabels {
         {ExtraKeyIcons.MINIMAL, R.drawable.ic_rl_minimal},
         {ExtraKeyIcons.KEY_INSPECTOR, R.drawable.ic_rl_key_inspector},
         {ExtraKeyIcons.GO_PAGE, R.drawable.ic_rl_go_page},
+        {ExtraKeyIcons.PROMPT_PREVIOUS, R.drawable.ic_rl_prompt_previous},
+        {ExtraKeyIcons.PROMPT_NEXT, R.drawable.ic_rl_prompt_next},
+        {ExtraKeyIcons.PANE_FOCUS, R.drawable.ic_rl_pane_focus},
+        {ExtraKeyIcons.PANE_FOCUS_LEFT, R.drawable.ic_rl_pane_focus_left},
+        {ExtraKeyIcons.PANE_FOCUS_RIGHT, R.drawable.ic_rl_pane_focus_right},
+        {ExtraKeyIcons.PANE_FOCUS_UP, R.drawable.ic_rl_pane_focus_up},
+        {ExtraKeyIcons.PANE_FOCUS_DOWN, R.drawable.ic_rl_pane_focus_down},
+        {ExtraKeyIcons.PANE_RESIZE, R.drawable.ic_rl_pane_resize},
+        {ExtraKeyIcons.PANE_MOVE_EDGE, R.drawable.ic_rl_pane_move_edge},
     };
 
     /** Registers the code points that draw as drawables. Called once from the Application. */
@@ -216,6 +225,11 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_MINIMAL_TOGGLE: return icon(ExtraKeyIcons.MINIMAL);
             case LauncherToolRegistry.TOOL_APP_KEY_INSPECTOR: return icon(ExtraKeyIcons.KEY_INSPECTOR);
             case LauncherToolRegistry.TOOL_WALL_GO: return icon(ExtraKeyIcons.GO_PAGE);
+            case LauncherToolRegistry.TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT: return icon(ExtraKeyIcons.PROMPT_PREVIOUS);
+            case LauncherToolRegistry.TOOL_TERMINAL_JUMP_NEXT_PROMPT: return icon(ExtraKeyIcons.PROMPT_NEXT);
+            case LauncherToolRegistry.TOOL_PANE_FOCUS_DIRECTION: return icon(ExtraKeyIcons.PANE_FOCUS);
+            case LauncherToolRegistry.TOOL_PANE_RESIZE: return icon(ExtraKeyIcons.PANE_RESIZE);
+            case LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE: return icon(ExtraKeyIcons.PANE_MOVE_EDGE);
             case LauncherToolRegistry.TOOL_APP_LAUNCH: return icon(ExtraKeyIcons.APPS);
             case LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER: return icon(ExtraKeyIcons.APPS);
             case LauncherToolRegistry.TOOL_APP_OPEN_DRAWER: return icon(ExtraKeyIcons.SESSIONS);
@@ -247,13 +261,23 @@ public final class ExtraKeyActionLabels {
 
     /**
      * The cap for a row that picks one value of a fixed set. The value is what tells these rows
-     * apart, so they keep their text, except the wall's three places, which wear their own icon.
+     * apart, so they keep their text (resize and move-to-edge: four identical icons would not tell the keys
+     * apart), except the wall's three places and the four focus directions, which wear their own icon.
      *
      * @param choice the picked value, or null for a row that fixes no value
      */
     @Nullable
     public static String defaultCapGlyph(@NonNull String toolName, @Nullable String choice) {
         if (choice == null) return defaultCapGlyph(toolName);
+        if (LauncherToolRegistry.TOOL_PANE_FOCUS_DIRECTION.equals(toolName)) {
+            switch (choice) {
+                case "left": return icon(ExtraKeyIcons.PANE_FOCUS_LEFT);
+                case "right": return icon(ExtraKeyIcons.PANE_FOCUS_RIGHT);
+                case "up": return icon(ExtraKeyIcons.PANE_FOCUS_UP);
+                case "down": return icon(ExtraKeyIcons.PANE_FOCUS_DOWN);
+                default: return null;
+            }
+        }
         if (!LauncherToolRegistry.TOOL_WALL_GO.equals(toolName)) return null;
         switch (choice) {
             case "widgets": return icon(ExtraKeyIcons.HOME);

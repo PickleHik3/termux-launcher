@@ -81,6 +81,15 @@ public final class ExtraKeyIcons {
     public static final int MINIMAL = 0x10FF40;
     public static final int KEY_INSPECTOR = 0x10FF41;
     public static final int GO_PAGE = 0x10FF42;
+    public static final int PROMPT_PREVIOUS = 0x10FF43;
+    public static final int PROMPT_NEXT = 0x10FF44;
+    public static final int PANE_FOCUS = 0x10FF45;
+    public static final int PANE_FOCUS_LEFT = 0x10FF46;
+    public static final int PANE_FOCUS_RIGHT = 0x10FF47;
+    public static final int PANE_FOCUS_UP = 0x10FF48;
+    public static final int PANE_FOCUS_DOWN = 0x10FF49;
+    public static final int PANE_RESIZE = 0x10FF4A;
+    public static final int PANE_MOVE_EDGE = 0x10FF4B;
     // Append only: stored rows carry these numbers.
 
     /** Every code point above; the app registers a drawable for each. */
@@ -93,6 +102,8 @@ public final class ExtraKeyIcons {
         FLOAT_WINDOW, ADD, CLONE, NEXT, PREVIOUS, CLOSE, SWITCH_INDEX, LOAD, SAVE, LAYOUT, ROTATE,
         EQUALIZE, CONSUME, EXPEL, MOVE_WINDOW, CLIPBOARD, COPY, WALLPAPER, CURSOR_TRAIL, APPEARANCE,
         FONT, SETTINGS, HELP, MINIMAL, KEY_INSPECTOR, GO_PAGE,
+        PROMPT_PREVIOUS, PROMPT_NEXT, PANE_FOCUS, PANE_FOCUS_LEFT, PANE_FOCUS_RIGHT, PANE_FOCUS_UP,
+        PANE_FOCUS_DOWN, PANE_RESIZE, PANE_MOVE_EDGE,
     };
 
     /** The one-character label that draws {@code codePoint}'s icon. */
@@ -122,6 +133,16 @@ public final class ExtraKeyIcons {
         {"tool:session.new", ADD, "\uDB81\uDF5C"},
         {"tool:pane.split_vertical", SPLIT, "\uDB82\uDFCC"},
         {"tool:app.open_settings", SETTINGS, "\uf013"},
+        {"tool:terminal.jump_previous_prompt", PROMPT_PREVIOUS, "Jump to previous prompt"},
+        {"tool:terminal.jump_next_prompt", PROMPT_NEXT, "Jump to next prompt"},
+        {"tool:pane.focus_direction", PANE_FOCUS, "Move pane focus"},
+        // A choice key's spec carries its argument and is matched whole, ahead of the bare tool.
+        {"tool:pane.focus_direction:direction=left", PANE_FOCUS_LEFT, "Move pane focus · left"},
+        {"tool:pane.focus_direction:direction=right", PANE_FOCUS_RIGHT, "Move pane focus · right"},
+        {"tool:pane.focus_direction:direction=up", PANE_FOCUS_UP, "Move pane focus · up"},
+        {"tool:pane.focus_direction:direction=down", PANE_FOCUS_DOWN, "Move pane focus · down"},
+        {"tool:pane.resize", PANE_RESIZE, "Resize pane"},
+        {"tool:pane.move_to_edge", PANE_MOVE_EDGE, "Move pane to edge"},
         {"KEYBOARD", KEYBOARD, "󰥻", "⌨"},
         {"LEFT", ARROW_LEFT, "←"},
         {"RIGHT", ARROW_RIGHT, "→"},
@@ -161,6 +182,8 @@ public final class ExtraKeyIcons {
                                           @androidx.annotation.Nullable String display) {
         if (keySpec == null || display == null || display.isEmpty() || keySpec.indexOf(' ') >= 0)
             return display;
+        Integer exact = sOldDefaults.get(keySpec + "\u0000" + display);
+        if (exact != null) return string(exact);
         String spec = keySpec;
         if (spec.startsWith("tool:")) {
             int arguments = spec.indexOf(':', 5);

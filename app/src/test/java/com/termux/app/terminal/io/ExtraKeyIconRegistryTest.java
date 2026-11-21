@@ -36,7 +36,8 @@ public class ExtraKeyIconRegistryTest {
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.COMMAND),
             ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE));
         assertNotNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_VOICE_DICTATE));
-        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_MOVE_EDGE),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE));
     }
 
     @Test public void launcherActionsWearTheirIconAndArgumentRowsKeepText() {
@@ -46,10 +47,6 @@ public class ExtraKeyIconRegistryTest {
             ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RENAME_PROMPT));
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD),
             ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_KEYBOARD_SHOW));
-        // The prompt jumps would duplicate the arrow keys; they stay text.
-        assertNull(ExtraKeyActionLabels.defaultCapGlyph(
-            LauncherToolRegistry.TOOL_TERMINAL_JUMP_NEXT_PROMPT));
-        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RESIZE));
         // A row that picks one value is told apart by it, except the wall's places.
         assertNull(ExtraKeyActionLabels.defaultCapGlyph(
             LauncherToolRegistry.TOOL_PANE_LAYOUT, "grid"));
@@ -58,5 +55,34 @@ public class ExtraKeyIconRegistryTest {
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.DISPLAY),
             ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_GO, "display"));
         assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_GO, "left"));
+    }
+
+    @Test public void theFiveActionsAndEachFocusDirectionWearTheirIcon() {
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PROMPT_PREVIOUS),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_TERMINAL_JUMP_PREVIOUS_PROMPT));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PROMPT_NEXT),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_TERMINAL_JUMP_NEXT_PROMPT));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_FOCUS),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_FOCUS_DIRECTION));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_RESIZE),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RESIZE));
+        String focus = LauncherToolRegistry.TOOL_PANE_FOCUS_DIRECTION;
+        String[] directions = {"left", "right", "up", "down"};
+        int[] icons = {ExtraKeyIcons.PANE_FOCUS_LEFT, ExtraKeyIcons.PANE_FOCUS_RIGHT,
+            ExtraKeyIcons.PANE_FOCUS_UP, ExtraKeyIcons.PANE_FOCUS_DOWN};
+        Set<String> caps = new HashSet<>();
+        for (int i = 0; i < 4; i++) {
+            String cap = ExtraKeyActionLabels.defaultCapGlyph(focus, directions[i]);
+            assertEquals(ExtraKeyIcons.string(icons[i]), cap);
+            assertTrue(caps.add(cap));
+        }
+    }
+
+    @Test public void resizeAndMoveToEdgeKeysKeepTheirValueSoTheyStayApart() {
+        for (String tool : new String[] {LauncherToolRegistry.TOOL_PANE_RESIZE,
+            LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE}) {
+            assertNull(ExtraKeyActionLabels.defaultCapGlyph(tool, "left"));
+            assertNull(ExtraKeyActionLabels.defaultCapGlyph(tool, "down"));
+        }
     }
 }

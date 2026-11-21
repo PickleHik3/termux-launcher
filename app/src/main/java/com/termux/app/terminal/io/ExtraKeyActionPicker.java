@@ -460,7 +460,10 @@ public final class ExtraKeyActionPicker {
                             new Choice("tool:" + tool.name + ":" + choice, choiceLabel, key),
                             // The row wears its action's own icon even where the key's cap
                             // is the value's text, so a list of choices stays in one column.
-                            ownIcon != null ? ownIcon : key.display));
+                            // A value with an icon of its own (a focus direction) wears that.
+                            ExtraKeyActionLabels.defaultCapGlyph(tool.name, choice) != null
+                                ? ExtraKeyActionLabels.defaultCapGlyph(tool.name, choice)
+                                : ownIcon != null ? ownIcon : key.display));
                     }
                 } else if (required == null) {
                     ExtraKeysLayoutModel.Key key = toolKey(tool.name, null, null, label, false);
