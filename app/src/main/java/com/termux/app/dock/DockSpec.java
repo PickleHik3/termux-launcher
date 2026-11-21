@@ -177,15 +177,15 @@ public final class DockSpec {
 
     /**
      * Whether the Peek card stands: the design is Peek, the dock is shown and its row stands alone.
-     * On a Home page the keyboard no longer refuses it (D11): the card stands on the keyboard,
-     * flush under Floating too. Elsewhere the keyboard still does, and the design draws as the
-     * tray's slab over it, as before.
+     * On a Home page neither the in-app keyboard nor the system keyboard refuses it (D11, changed
+     * by #309): the card stands at its rest and the keyboard covers it, flush under Floating too.
+     * Elsewhere both still do, and the design draws as the tray's slab over it, as before.
      */
     public static boolean peekCardStands(@Nullable DockStyle design, boolean dockShown,
                                          boolean peekRowAlone, boolean imeVisible,
                                          boolean keyboardShown, @NonNull PageKind kind) {
         return DockStyle.effectiveStyle(design) == DockStyle.PEEK_GLASS && dockShown
-            && peekRowAlone && !imeVisible && (!keyboardShown || kind == PageKind.HOME);
+            && peekRowAlone && (kind == PageKind.HOME || (!imeVisible && !keyboardShown));
     }
 
     /** The dock's surface for {@code in}. */
