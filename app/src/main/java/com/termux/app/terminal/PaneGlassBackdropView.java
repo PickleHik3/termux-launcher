@@ -339,11 +339,11 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // The slab's light and tilt follow it as on the stored frame; at rest neither moves and
         // the effect stands as it was.
         GlassAnchor.place(this, mPlacement);
-        if (driveMotionLight(width, height)) {
+        if (movesWithLight() && driveMotionLight(width, height)) {
             PANEGLASS_MOTION.tick();
             postInvalidateOnAnimation();
         }
-        if (readTilt()) {
+        if (movesWithLight() && readTilt()) {
             PANEGLASS_TILT.tick();
             postInvalidateOnAnimation();
         }
@@ -737,6 +737,16 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         program.setClarityInput(clearShader,
             clear.getWidth() / (float) Math.max(1, frame.getWidth()),
             clear.getHeight() / (float) Math.max(1, frame.getHeight()));
+    }
+
+    /**
+     * Whether the bend and the light follow the slab's motion (Living glass): every convex look.
+     * The concave lens draws neither, so a slab wearing it asks for no frames to follow a spring
+     * it would draw the same through.
+     */
+    private boolean movesWithLight() {
+        GlassRefraction.Look look = mLook;
+        return look == null || !look.concave;
     }
 
     /** True while the frame is drawn through the refraction program rather than plain. */
@@ -1187,7 +1197,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             }
             float parallax = mParallax == null || liveFrame != null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;
-            if (program != null) {
+            if (program != null && movesWithLight()) {
                 // Where the slab stands now against where it stood last draw: its bend follows on
                 // a spring and asks for the frames it needs to settle. At rest it asks for none
                 // and the program draws the resting look.
