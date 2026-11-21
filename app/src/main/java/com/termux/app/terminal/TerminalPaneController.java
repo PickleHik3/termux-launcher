@@ -3747,10 +3747,10 @@ public class TerminalPaneController {
     /**
      * The shape a float born on Home page {@code page} takes: a window inside the room
      * ({@link HomeFloatPolicy#birthFrac(Rect, int, int, int, int, int, int)}) on a page that shows
-     * no float, else stepped off the topmost one shown there by its titlebar's band, so a second
-     * float never hides the first one's titlebar, and back at the first position once the step
-     * leaves that window's room ({@link HomeFloatPolicy#cascadeFrac}). Read before the new float
-     * joins the floats.
+     * no float, else stepped off the topmost one shown there (wherever the user left it) by its
+     * titlebar's band, so a second float never hides the first one's titlebar, and back at the
+     * first position once the step would pass the room's bottom
+     * ({@link HomeFloatPolicy#cascadeFrac}). Read before the new float joins the floats.
      */
     @NonNull
     private RectF homeFloatBirthFrac(int pageIndex) {
@@ -3766,8 +3766,7 @@ public class TerminalPaneController {
             raisedKeyboardTopInLayerPx(), keyboardGapPx(),
             dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), titlebarBandPx());
         return HomeFloatPolicy.cascadeFrac(under, birth, room.width(), room.height(),
-            dp(HomeFloatPolicy.CASCADE_STEP_RIGHT_DP), titlebarBandPx(), dp(FLOAT_MIN_WIDTH_DP),
-            dp(FLOAT_MIN_HEIGHT_DP));
+            dp(HomeFloatPolicy.CASCADE_STEP_RIGHT_DP), titlebarBandPx());
     }
 
     /** How many Home floats there are, open or minimised, across every page. */

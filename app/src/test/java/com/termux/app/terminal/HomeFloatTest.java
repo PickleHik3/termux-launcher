@@ -226,28 +226,81 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void nextFloatIsStepOffThePreviousAsToday() {
+    public void steppedFloatsKeepTheBirthSizeStepDownAndClampRightThenWrapAtTheBottom() {
         Rect room = PORTRAIT_ROOM;
+        int w = room.width();
+        int h = room.height();
         RectF birth = HomeFloatPolicy.birthFrac(room, 246, 1300, GAP, 360, 270, 105);
         assertEquals("nothing under it: the first position", birth,
-            HomeFloatPolicy.cascadeFrac(null, birth, room.width(), room.height(), 48, 105, 360, 270));
+            HomeFloatPolicy.cascadeFrac(null, birth, w, h, 48, 105));
         assertEquals("a room not measured yet", HomeFloatPolicy.birthFrac(),
-            HomeFloatPolicy.cascadeFrac(birth, birth, 0, 0, 48, 105, 360, 270));
+            HomeFloatPolicy.cascadeFrac(birth, birth, 0, 0, 48, 105));
 
-        RectF small = new RectF(.1f, .1f, .5f, .3f);
-        RectF stepped = HomeFloatPolicy.cascadeFrac(small, birth, room.width(), room.height(),
-            48, 105, 360, 270);
-        assertEquals("a step right", small.left + 48f / room.width(), stepped.left, 1e-4f);
-        assertEquals("a band down", small.top + 105f / room.height(), stepped.top, 1e-4f);
-        assertEquals("the size is kept", small.width(), stepped.width(), 1e-4f);
-        assertEquals(small.height(), stepped.height(), 1e-4f);
+        RectF second = HomeFloatPolicy.cascadeFrac(birth, birth, w, h, 48, 105);
+        assertEquals("a step right", birth.left + 48f / w, second.left, 1e-4f);
+        assertEquals("a band down", birth.top + 105f / h, second.top, 1e-4f);
+        assertEquals("the full birth size", birth.width(), second.width(), 1e-4f);
+        assertEquals(birth.height(), second.height(), 1e-4f);
 
-        RectF corner = HomeFloatPolicy.cascadeFrac(new RectF(.9f, .95f, 1f, 1f), birth,
-            room.width(), room.height(), 48, 105, 360, 270);
-        assertEquals("slides back to keep its least size", 1f, corner.right, 1e-4f);
-        assertEquals(1f, corner.bottom, 1e-4f);
-        assertEquals(360f / room.width(), corner.width(), 1e-4f);
-        assertEquals(270f / room.height(), corner.height(), 1e-4f);
+        // The side gap is used up after two steps: the float stays at the right limit.
+        RectF third = HomeFloatPolicy.cascadeFrac(second, birth, w, h, 48, 105);
+        RectF fourth = HomeFloatPolicy.cascadeFrac(third, birth, w, h, 48, 105);
+        assertEquals("stops at the room's right limit", 1f, fourth.right, 1e-4f);
+        assertEquals("does not shrink", birth.width(), fourth.width(), 1e-4f);
+        assertEquals("still a band lower each step", third.top + 105f / h, fourth.top, 1e-4f);
+        assertEquals("clamped, not wrapped", 1f, HomeFloatPolicy.cascadeFrac(fourth, birth, w, h,
+            48, 105).right, 1e-4f);
+
+        // A float whose full-size bottom would pass the room's bottom wraps to the birth rect.
+        RectF low = new RectF(.1f, 1f - birth.height() - 50f / h, .1f + birth.width(),
+            1f - 50f / h);
+        assertEquals("wraps to the first position at full size", birth,
+            HomeFloatPolicy.cascadeFrac(low, birth, w, h, 48, 105));
+        assertEquals("and steps from there", second,
+            HomeFloatPolicy.cascadeFrac(HomeFloatPolicy.cascadeFrac(low, birth, w, h, 48, 105),
+                birth, w, h, 48, 105));
+    }
+
+    @Test
+    public void steppingInLandscapeAndInARoomAtTheLeastSize() {
+        Rect room = LANDSCAPE_ROOM;
+        int w = room.width();
+        int h = room.height();
+        RectF birth = HomeFloatPolicy.birthFrac(room, 60, 600, GAP, 360, 270, 105);
+        RectF second = HomeFloatPolicy.cascadeFrac(birth, birth, w, h, 48, 105);
+        assertEquals(birth.top + 105f / h, second.top, 1e-4f);
+        assertEquals(birth.height(), second.height(), 1e-4f);
+        assertEquals("landscape's room is short: the second float wraps once it cannot fit",
+            birth, HomeFloatPolicy.cascadeFrac(
+                HomeFloatPolicy.cascadeFrac(second, birth, w, h, 48, 105), birth, w, h, 48, 105));
+        // A room the size of the least window: nothing to step into.
+        Rect tiny = new Rect(0, 0, 360, 270);
+        RectF whole = HomeFloatPolicy.birthFrac(tiny, 0, -1, GAP, 360, 270, 105);
+        assertEquals(whole, HomeFloatPolicy.cascadeFrac(whole, whole, 360, 270, 48, 105));
+    }
+
+    @Test
+    public void howManyFloatsFitBeforeTheWrapOnA1080x2412RoomAt420dpi() {
+        float d = 420f / 160f;
+        // Status bar about 28 dp, Margin 8 dp, dock about 96 dp, keyboard about 300 dp.
+        int layerW = 1080;
+        int layerH = 2412;
+        int edgeTop = Math.round(28 * d);
+        Rect room = HomeFloatPolicy.room(layerW, layerH, edgeTop, Math.round(96 * d),
+            Math.round(8 * d));
+        int keyboardTop = layerH - Math.round(300 * d);
+        RectF birth = HomeFloatPolicy.birthFrac(room, edgeTop, keyboardTop, Math.round(4 * d),
+            Math.round(120 * d), Math.round(90 * d), Math.round(36 * d));
+        int fits = 1;
+        RectF at = birth;
+        while (true) {
+            RectF next = HomeFloatPolicy.cascadeFrac(at, birth, room.width(), room.height(),
+                Math.round(16 * d), Math.round(36 * d));
+            if (next.equals(birth)) break;
+            at = next;
+            fits++;
+        }
+        assertEquals("floats before the first wraps", 6, fits);
     }
 
     private int keyboardGap() {

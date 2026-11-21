@@ -89,38 +89,29 @@ public final class HomeFloatPolicy {
     public static final int CASCADE_STEP_RIGHT_DP = 16;
 
     /**
-     * The rect a new Home float opens at, as fractions of a room {@code roomWidthPx} by
-     * {@code roomHeightPx}: {@code birth}, the first position
+     * The rect a new Home float opens at, as fractions of its whole room ({@code roomWidthPx} by
+     * {@code roomHeightPx}, the room {@link #clampInRoom} holds floats in, which an unfocused float
+     * may use below the keyboard's line): {@code birth}, the first position
      * ({@link #birthFrac(Rect, int, int, int, int, int, int)}), on a page that shows no float, else
-     * cascaded off {@code under}, the topmost float shown there. The cascade keeps {@code under}'s
-     * size and steps {@code stepDownPx} down (the titlebar's band, so the titlebar under it stays in
-     * sight) and {@code stepRightPx} right, clamped to the room: a float that runs past the room's
-     * right or bottom edge ends there, and one that would then be smaller than
-     * {@code minWidthPx} by {@code minHeightPx} slides back toward the room's top-left at that size.
-     * A room not measured yet (zero size) gives {@link #birthFrac()}.
+     * stepped off {@code under}, the topmost float shown there, wherever the user left it. Every
+     * stepped float keeps {@code birth}'s full size and steps {@code stepDownPx} down (the
+     * titlebar's band, so the bar under it stays in sight) and {@code stepRightPx} right. Right,
+     * it stops at the room's right limit and stays there. Down, a float whose bottom would pass
+     * the room's bottom is not stepped: the float opens at {@code birth}, and stepping starts
+     * again from it. A room not measured yet gives {@link #birthFrac()}.
      */
     @NonNull
     public static RectF cascadeFrac(@Nullable RectF under, @NonNull RectF birth, int roomWidthPx,
-                                    int roomHeightPx, int stepRightPx, int stepDownPx,
-                                    int minWidthPx, int minHeightPx) {
+                                    int roomHeightPx, int stepRightPx, int stepDownPx) {
         if (roomWidthPx <= 0 || roomHeightPx <= 0) return birthFrac();
         if (under == null) return new RectF(birth);
-        float[] x = cascadeSpan(under.left * roomWidthPx, under.right * roomWidthPx, roomWidthPx,
-            stepRightPx, minWidthPx);
-        float[] y = cascadeSpan(under.top * roomHeightPx, under.bottom * roomHeightPx, roomHeightPx,
-            stepDownPx, minHeightPx);
-        return new RectF(x[0] / roomWidthPx, y[0] / roomHeightPx, x[1] / roomWidthPx,
-            y[1] / roomHeightPx);
-    }
-
-    /** One axis of {@link #cascadeFrac}, in pixels: the span {@code [start, end)} stepped on and clamped. */
-    @NonNull
-    private static float[] cascadeSpan(float start, float end, int roomPx, int stepPx, int minPx) {
-        float min = Math.max(1, Math.min(minPx, roomPx));
-        float size = Math.max(min, Math.min(roomPx, end - start));
-        float from = Math.max(0f, Math.min(start + Math.max(0, stepPx), roomPx - min));
-        float to = Math.max(from + min, Math.min(roomPx, from + size));
-        return new float[]{from, to};
+        float width = birth.width();
+        float height = birth.height();
+        float top = under.top + Math.max(0, stepDownPx) / (float) roomHeightPx;
+        if (top + height > 1f + 1e-4f) return new RectF(birth);
+        float left = Math.max(0f, Math.min(
+            under.left + Math.max(0, stepRightPx) / (float) roomWidthPx, 1f - width));
+        return new RectF(left, top, left + width, top + height);
     }
 
     /**
