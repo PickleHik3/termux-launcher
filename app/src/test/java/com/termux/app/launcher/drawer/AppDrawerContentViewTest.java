@@ -288,6 +288,10 @@ public class AppDrawerContentViewTest {
         Rect visibleItem = new Rect(0, 0, topmost.getWidth(), topmost.getHeight());
         grid.offsetDescendantRectToMyCoords(topmost, visibleItem);
         assertTrue(visibleItem.intersect(0, 0, grid.getWidth(), grid.getHeight()));
+        // With the bar on top the grid is laid out up under the pill and its draw-time clip holds
+        // the hard edge below it until the bar folds.
+        android.graphics.Rect fold = grid.getClipBounds();
+        if (fold != null && !visibleItem.intersect(fold)) visibleItem.setEmpty();
         content.offsetDescendantRectToMyCoords(grid, visibleItem);
         Rect pill = new Rect(content.getSearchPill().getLeft(),
             content.getSearchPill().getTop(), content.getSearchPill().getRight(),

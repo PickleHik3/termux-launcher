@@ -219,6 +219,31 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(0, fold(false, 40, true, true).foldBandPx);
     }
 
+    @Test public void aBarOnTopHoldsABandTheFoldedListReclaimsToTheCardsEdge() {
+        float d = 2f;
+        AppDrawerChromeLayout.Result r = fold(false, 40, true, false);
+        // Without the switch the rows reach the card's top: the whole band above them.
+        assertEquals(r.contentTopPx, r.topFoldBandPx);
+        assertEquals(Math.round(12f * d) + Math.round(46f * d) + Math.round(10f * d),
+            r.topFoldBandPx);
+        // Unfolded rect unchanged: the rows still start at contentTopPx (margin - band + padding).
+        assertEquals(r.contentTopPx, (r.contentTopPx - r.topFoldBandPx) + r.topFoldBandPx);
+        // The fold state does not change the answer: nothing is re-laid by it.
+        assertEquals(r.topFoldBandPx, fold(false, 40, true, true).topFoldBandPx);
+        assertEquals(0, fold(true, 40, true, false).topFoldBandPx);
+    }
+
+    @Test public void withTheSwitchTheReclaimStopsUnderIt() {
+        float d = 2f;
+        int switchHeight = Math.round(40f * d);
+        AppDrawerChromeLayout.Result r = AppDrawerChromeLayout.resolve(
+            new AppDrawerChromeLayout.Input(d, 1080, true, switchHeight, false, 40, 2000, true,
+                false));
+        // The band is the bar and its gap only; the switch keeps its place above.
+        assertEquals(r.searchHeightPx + Math.round(10f * d), r.topFoldBandPx);
+        assertEquals(r.contentTopPx - r.topFoldBandPx, r.searchTopPx);
+    }
+
     @Test public void aFoldedTopBarLeavesTheListRoomForTheButton() {
         AppDrawerChromeLayout.Result open = fold(false, 40, true, false);
         AppDrawerChromeLayout.Result folded = fold(false, 40, true, true);

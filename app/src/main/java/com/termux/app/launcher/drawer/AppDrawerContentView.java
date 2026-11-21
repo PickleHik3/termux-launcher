@@ -181,12 +181,17 @@ public final class AppDrawerContentView extends FrameLayout
     private final android.graphics.RectF mPillRect = new android.graphics.RectF();
     /** The band of the lists' bottom the full bar still hides, and the reused clip that shows it. */
     private int mListHiddenPx;
+    /** The band above the grid's first row (laid out, padded) and how much of it the bar still hides. */
+    private int mGridReclaimPx;
+    private int mListHiddenTopPx;
     private final android.graphics.Rect mListClip = new android.graphics.Rect();
     private final java.util.ArrayList<View> mListClipped = new java.util.ArrayList<>(2);
     /** Re-clips a list whose size changed (the card's height moves with the keyboard). */
     private final View.OnLayoutChangeListener mListClipOnLayout =
         (v, l, t, r, b, ol, ot, or, ob) -> {
-            if (b - t != ob - ot || r - l != or - ol) applyListClip(v);
+            if (b - t != ob - ot || r - l != or - ol) {
+                applyListClip(v, hiddenTopFor(v));
+            }
         };
     private final TextView mResultsLabel;
     private final TextView mNoResults;
@@ -541,8 +546,9 @@ public final class AppDrawerContentView extends FrameLayout
             @Override
             public boolean dispatchTouchEvent(MotionEvent ev) {
                 // Rows hidden under a full bar's band take no touch (see applyListFold).
-                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN && mListHiddenPx > 0
-                    && ev.getY() >= getHeight() - mListHiddenPx) {
+                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN
+                    && ((mListHiddenPx > 0 && ev.getY() >= getHeight() - mListHiddenPx)
+                    || ev.getY() < mListHiddenTopPx)) {
                     return false;
                 }
                 return super.dispatchTouchEvent(ev);
@@ -1128,7 +1134,9 @@ public final class AppDrawerContentView extends FrameLayout
         // above the full bar; only the drawn and touchable edge follows the fold (applyListFold).
         int listPadding = r.foldBandPx > 0 ? r.foldBandPx
             : AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
-        if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
+        if (mGrid.getPaddingBottom() != listPadding) {
+            mGrid.setPadding(0, mGrid.getPaddingTop(), 0, listPadding);
+        }
         int listBottom = r.foldBandPx > 0 ? 0 : r.contentBottomPx;
         setBottomMargin(mGrid, listBottom);
         setBottomMargin(mColumn, r.contentBottomPx);
@@ -1142,10 +1150,46 @@ public final class AppDrawerContentView extends FrameLayout
         applySearchBarParams(mPill, r, gravity);
         applySearchBarParams(mInput, r, gravity);
         mChromeResult = r;
+        applyGridTop();
         applySearchMorph();
     }
 
     // ------------------------------------------------------------------ search bar fold
+
+    /**
+     * The band the list reclaims above its first row when the bar on top folds. Zero with the bar
+     * at the bottom, in the search presentation (its own label band sits there), while the list is
+     * lowered by Start in the lower half (the space above it is the setting's), and for every
+     * presentation that is not the plain grid.
+     */
+    private int gridReclaimPx() {
+        AppDrawerChromeLayout.Result r = mChromeResult;
+        if (r == null || mSearchAtBottom || mCategorySearchPresentation || mLowerStartPx > 0
+            || presentedType() != AppDrawerViewType.VERTICAL) {
+            return 0;
+        }
+        return r.topFoldBandPx;
+    }
+
+    /**
+     * Lays the grid out as today plus the reclaim band: its top margin that much higher and the
+     * same amount as start padding, so every row stands where it did and only the drawn top edge
+     * (applyListFold) says how much of the band shows. Compared before it is set; runs where the
+     * top margin changes, never per frame.
+     */
+    private void applyGridTop() {
+        int reclaim = gridReclaimPx();
+        LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
+        int top = gridTopMargin() - reclaim;
+        if (gridParams.topMargin != top) {
+            gridParams.topMargin = top;
+            mGrid.setLayoutParams(gridParams);
+        }
+        if (mGrid.getPaddingTop() != reclaim) {
+            mGrid.setPadding(0, reclaim, 0, mGrid.getPaddingBottom());
+        }
+        mGridReclaimPx = reclaim;
+    }
 
     /** Moves and redraws the pill for the current fold; no layout, no allocation. */
     private void applySearchMorph() {
@@ -1170,14 +1214,20 @@ public final class AppDrawerContentView extends FrameLayout
      */
     private void applyListFold() {
         mListHiddenPx = hiddenBandPx();
+        mListHiddenTopPx = Math.round(mGridReclaimPx
+            * (1f - Math.max(0f, Math.min(1f, mSearchFold))));
         mCategoryView.setHiddenBottomPx(mListHiddenPx);
-        applyListClip(mGrid);
-        applyListClip(mCategoryView);
+        applyListClip(mGrid, mListHiddenTopPx);
+        applyListClip(mCategoryView, 0);
     }
 
-    private void applyListClip(@NonNull View list) {
+    private int hiddenTopFor(@NonNull View list) {
+        return list == mGrid ? mListHiddenTopPx : 0;
+    }
+
+    private void applyListClip(@NonNull View list, int hiddenTopPx) {
         int h = list.getHeight();
-        if (mListHiddenPx <= 0 || h <= 0) {
+        if ((mListHiddenPx <= 0 && hiddenTopPx <= 0) || h <= 0) {
             if (mListClipped.contains(list)) {
                 list.setClipBounds(null);
                 mListClipped.remove(list);
@@ -1185,7 +1235,7 @@ public final class AppDrawerContentView extends FrameLayout
             return;
         }
         android.graphics.Rect clip = mListClip;
-        clip.set(0, 0, list.getWidth(), Math.max(0, h - mListHiddenPx));
+        clip.set(0, hiddenTopPx, list.getWidth(), Math.max(hiddenTopPx, h - mListHiddenPx));
         list.setClipBounds(clip);
         if (!mListClipped.contains(list)) mListClipped.add(list);
     }
@@ -1644,11 +1694,8 @@ public final class AppDrawerContentView extends FrameLayout
             : AppDrawerLowerStartPolicy.offsetPx(mLowerStart, portrait, searching, getHeight(),
                 mGridBaseTopMarginPx);
         int top = gridTopMargin();
-        LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
-        if (gridParams.topMargin != top) {
-            gridParams.topMargin = top;
-            mGrid.setLayoutParams(gridParams);
-        }
+        // The letter strip keeps its own extent; only the grid reaches up into the bar's band.
+        applyGridTop();
         LayoutParams columnParams = (LayoutParams) mColumn.getLayoutParams();
         if (columnParams.topMargin != top) {
             columnParams.topMargin = top;
@@ -1736,9 +1783,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (mCategorySearchPresentation != active) {
             mCategorySearchPresentation = active;
             mAdapter.setSearchRowPresentation(active, active ? this::categoryLabelFor : null);
-            LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
-            gridParams.topMargin = gridTopMargin();
-            mGrid.setLayoutParams(gridParams);
+            applyGridTop();
         }
         mLayoutManager.setSpanCount(active ? 1 : mVerticalColumns);
         boolean empty = mVisibleResults.isEmpty();
@@ -2675,14 +2720,14 @@ public final class AppDrawerContentView extends FrameLayout
     private AppDrawerTouchRegions.Region regionAt(float localX, float localY) {
         switch (presentedType()) {
             case VERTICAL:
-                return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid),
+                return AppDrawerTouchRegions.resolve(localX, localY, gridBounds(),
                     boundsOf(mColumn), mInteractive, isColumnActive());
             case HORIZONTAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mHorizontalPager),
                     null, mInteractive, false);
             case CATEGORIES:
                 if (hasQuery())
-                    return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid), null,
+                    return AppDrawerTouchRegions.resolve(localX, localY, gridBounds(), null,
                         mInteractive, false);
                 float x = localX - mCategoryView.getLeft();
                 float y = localY - mCategoryView.getTop();
@@ -2691,6 +2736,13 @@ public final class AppDrawerContentView extends FrameLayout
             default:
                 return AppDrawerTouchRegions.Region.CHROME;
         }
+    }
+
+    /** The grid's visible rectangle: its bounds less the bands a full search bar still hides. */
+    @NonNull
+    private Frame gridBounds() {
+        return new Frame(mGrid.getLeft(), mGrid.getTop() + mListHiddenTopPx, mGrid.getRight(),
+            mGrid.getBottom() - mListHiddenPx);
     }
 
     @NonNull
@@ -3381,7 +3433,8 @@ public final class AppDrawerContentView extends FrameLayout
         AppDrawerCategoryTouchRegions.Part part = AppDrawerCategoryTouchRegions.Part.OUTSIDE;
         if (settling) {
             // Mid-motion the pages are off their layout: any point over them is the pages'.
-            target = y >= mGrid.getTop() ? AppDrawerSectionGesturePolicy.Target.APPS_GRID
+            target = y >= mGrid.getTop() + mListHiddenTopPx
+                ? AppDrawerSectionGesturePolicy.Target.APPS_GRID
                 : AppDrawerSectionGesturePolicy.Target.CHROME;
         } else if (mSection == AppDrawerSection.APPS) {
             AppDrawerTouchRegions.Region region = regionAt(x, y);
