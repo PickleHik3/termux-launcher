@@ -6072,7 +6072,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Aimed as the card was cut: the row where it stood over the host then, and the whole
         // reflection moved by as much as the rows have moved over the host since, the same as
         // the card's top (peekCardCut), so the mirror stays under the icons and on the card.
-        float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
+        // Apart it is aimed by Home's rest whichever page is in front (PeekGlassReflection#aimCard):
+        // the same aim compares equal, so the Terminal's rest re-aims nothing.
+        boolean apart = mSideCards.hostLook() != null;
+        float cutAt = com.termux.app.dock.PeekGlassReflection.aimRowDy(apart, mHomeRestCard,
+            mHomeRestCardRowsPx, card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx);
+        card = com.termux.app.dock.PeekGlassReflection.aimCard(apart, mHomeRestCard, card);
         reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], cutAt,
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
@@ -14309,6 +14314,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncLegibilityCrossing() {
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         if (store.crossing() == mCrossing.crossing()) return;
+        // DIAG(widgets): each crossing's begin and end, for the WidgetDress lines; revert before merge.
+        android.util.Log.i("WidgetDress", (mCrossing.crossing() ? "crossing-begin" : "crossing-end")
+            + " t=" + android.os.SystemClock.uptimeMillis() + " front=" + mLastWallPage
+            + " dress=" + stackDressPage());
         if (mCrossing.crossing()) store.beginCrossing();
         else store.endCrossing();
     }
@@ -18393,9 +18402,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
                 stack.homeGridDockReservePx, stack.stackEdgeGapPx);
-            // The page bar's pill is put away while either keyboard is up; its band stays.
+            // The page bar's pill is put away while either keyboard is up on Home; its band stays.
+            // Away from Home it wears Home's own rest, which a crossing toward Home also hands it
+            // as it begins (applyArrivingHomeGridReserve), so it slides in as it lands.
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setKeyboardUp(
-                state.keyboardShown || isImeVisible());
+                com.termux.app.wall.pageswitch.PageBarBand.homeKeyboardUp(
+                    mLastWallPage == com.termux.app.page.PageKind.HOME,
+                    state.keyboardShown || isImeVisible(),
+                    mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+                        && restWantsKeyboard(com.termux.app.page.PageKind.HOME)));
         }
         // The content column fills the window to its bottom; what each page leaves of it is that
         // page's own rest (applyPageRooms). All it keeps of its old bottom margin is the system
