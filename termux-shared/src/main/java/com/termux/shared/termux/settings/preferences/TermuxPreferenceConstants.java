@@ -2089,6 +2089,14 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_VALUE_MOTION_LOG_ENABLED = false;
 
+        /**
+         * How Home's page bar draws its glass, a developer switch on no settings page
+         * ({@code launcherctl pagebar-glass concave|well}): "concave" or "well".
+         */
+        public static final String KEY_PAGE_BAR_GLASS_STYLE = "page_bar_glass_style";
+
+        public static final String DEFAULT_VALUE_PAGE_BAR_GLASS_STYLE = "concave";
+
         /*
          * There is no key for the launcher chrome's colour source any more. It was a second name
          * for a decision the wallpaper-colours switch already makes, and the two could disagree —

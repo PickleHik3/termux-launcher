@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.InsetGlass;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.chrome.PageMarkInk;
@@ -124,6 +125,17 @@ public final class PageBarGlass {
     public static boolean dress(@NonNull Context context, @Nullable PaneSurfaceStyle look,
                          @NonNull View frame, @NonNull PaneGlassBackdropView glass,
                          float radiusPx) {
+        return dress(context, look, frame, glass, radiusPx, PageBarGlassStyle.WELL);
+    }
+
+    /**
+     * {@link #dress(Context, PaneSurfaceStyle, View, PaneGlassBackdropView, float)} in
+     * {@code style}: the well wears no refraction; the concave glass wears the concave lens where
+     * the Look's Fancier Glass is on ({@link #refractionFor}), and the plain blur where it is off.
+     */
+    public static boolean dress(@NonNull Context context, @Nullable PaneSurfaceStyle look,
+                         @NonNull View frame, @NonNull PaneGlassBackdropView glass,
+                         float radiusPx, @NonNull PageBarGlassStyle style) {
         boolean onWallpaper = PaneGlass.isActive(look);
         WidgetInkSource ink = look instanceof WidgetInkSource ? (WidgetInkSource) look : null;
         boolean worn = false;
@@ -138,13 +150,29 @@ public final class PageBarGlass {
             return false;
         }
         PaneGlass.applyAtRadius(look, frame, glass, radiusPx);
-        // A well pressed into the page wears no convex cue ({@link InsetGlass}): no raised rim,
-        // and no refraction, whose bend and gathered edge light are a lens's. On a slab this thin
-        // the bend also smeared the picture into vertical streaks.
+        // Glass pressed into the page wears no convex cue ({@link InsetGlass}): no raised rim,
+        // and never the convex refraction, whose bend and gathered edge light are a lens's
+        // standing out. On a slab this thin that bend also folded the picture back on itself
+        // and smeared it into vertical streaks. The concave glass bends the other way, within a
+        // slope that cannot fold.
         glass.setRim(-1f, look);
-        glass.setRefraction(null);
+        glass.setRefraction(refractionFor(style, look.paneGlassRefraction(), look.paneGlassTintColor()));
         glass.invalidateOutline();
         return true;
+    }
+
+    /**
+     * The refraction the bar's glass wears: the concave lens over the Look's Fancier Glass
+     * ({@code refraction}, null while it is off) for the concave glass, raised by the tint's cover
+     * as every slab's is; nothing for the well, nor with Fancier Glass off, which is the plain
+     * blur. Pure.
+     */
+    @Nullable
+    static GlassRefraction.Look refractionFor(@NonNull PageBarGlassStyle style,
+                                              @Nullable GlassRefraction.Look refraction,
+                                              @ColorInt int tint) {
+        if (style != PageBarGlassStyle.CONCAVE || refraction == null) return null;
+        return refraction.withCover((tint >>> 24) / 255f).withConcave(true);
     }
 
     /**
@@ -153,11 +181,13 @@ public final class PageBarGlass {
      * through the even-out the ink was solved on. {@code glyphTopShare} and
      * {@code glyphBottomShare} are where the glyphs' tops and bottoms stand down the well. With no
      * Look to ask, {@code out} keeps its pale ink and the raw accent, and the slab no correction.
+     * {@code floor}: whether the well's floor shade is drawn over the slab (the concave glass
+     * draws none, and its glyphs are solved on the bare glass).
      */
     static void measure(@NonNull View view, @NonNull Rect rect, @Nullable PaneSurfaceStyle look,
                         @ColorInt int accent, boolean glassWorn, @NonNull Ink out,
                         @NonNull WidgetBody.Answer body, @Nullable PaneGlassBackdropView glass,
-                        float glyphTopShare, float glyphBottomShare,
+                        float glyphTopShare, float glyphBottomShare, boolean floor,
                         @NonNull int[] origin, @NonNull int[] rootScratch, @NonNull Rect scratch) {
         out.accent = accent;
         if (!(look instanceof WidgetInkSource) || rect.isEmpty()) {
@@ -169,7 +199,7 @@ public final class PageBarGlass {
         scratch.set(rect);
         scratch.offset(origin[0], origin[1]);
         solveWell(view.getContext(), source, scratch, glassWorn, look.paneGlassTintColor(), accent,
-            glyphTopShare, glyphBottomShare, body, out);
+            glyphTopShare, glyphBottomShare, floor, body, out);
         if (glass != null) glass.setEvenOut(glassWorn ? body.evenOut : null);
     }
 
@@ -188,6 +218,20 @@ public final class PageBarGlass {
                                  @ColorInt int accent, float glyphTopShare,
                                  float glyphBottomShare, @NonNull WidgetBody.Answer body,
                                  @NonNull Ink out) {
+        solveWell(context, source, rootRect, glassWorn, tint, accent, glyphTopShare,
+            glyphBottomShare, true, body, out);
+    }
+
+    /**
+     * {@link #solveWell(Context, WidgetInkSource, Rect, boolean, int, int, float, float,
+     * WidgetBody.Answer, Ink)} with the floor shade drawn ({@code floor}, the well) or not (the
+     * concave glass, whose inks are checked and solved on the bare glass).
+     */
+    public static void solveWell(@NonNull Context context, @NonNull WidgetInkSource source,
+                                 @NonNull Rect rootRect, boolean glassWorn, @ColorInt int tint,
+                                 @ColorInt int accent, float glyphTopShare,
+                                 float glyphBottomShare, boolean floor,
+                                 @NonNull WidgetBody.Answer body, @NonNull Ink out) {
         boolean dark = BuiltinWidgetGlass.darkCard(false, source.widgetPolarity());
         int textInk = BuiltinWidgetStyle.textInkOn(context, dark);
         int card = BuiltinWidgetStyle.cardOn(context, dark);
@@ -202,22 +246,22 @@ public final class PageBarGlass {
             body.evenOut = source.widgetEvenOut(rootRect);
             boolean pale = GlassInk.isPaleSide(textInk, answer.surface);
             int worst = InsetGlass.groundAt(answer.surface, pale,
-                pale ? glyphBottomShare : glyphTopShare);
+                pale ? glyphBottomShare : glyphTopShare, floor);
             if (OnGlass.ratio(textInk, worst) >= OnGlass.TARGET_LARGE_TEXT) {
-                finishWell(answer.surface, answer.veil, textInk, accent, out);
+                finishWell(answer.surface, answer.veil, textInk, accent, floor, out);
                 return;
             }
             out.bodyKept = true;
         }
         solve(context, source, rootRect, glassWorn, tint, accent, body, out);
-        finishWell(out.ground, out.veil, textInk, accent, out);
+        finishWell(out.ground, out.veil, textInk, accent, floor, out);
     }
 
     /** The well's inks on {@code surface} under the floor at its middle, and the side its cues take. */
     private static void finishWell(@ColorInt int surface, @ColorInt int veil, @ColorInt int ink,
-                                   @ColorInt int accent, @NonNull Ink out) {
+                                   @ColorInt int accent, boolean floor, @NonNull Ink out) {
         boolean pale = GlassInk.isPaleSide(ink, surface);
-        int ground = InsetGlass.groundAt(surface, pale, 0.5f);
+        int ground = InsetGlass.groundAt(surface, pale, 0.5f, floor);
         out.wellDark = pale;
         out.veil = veil;
         out.ink = ink;

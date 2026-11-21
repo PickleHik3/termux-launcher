@@ -6,13 +6,11 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
-import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -42,7 +40,7 @@ import com.termux.app.terminal.PaneSurfaceStyle;
 import java.util.List;
 
 /**
- * The page bar on Home: a glass well pressed into the page ({@link com.termux.app.chrome.InsetGlass})
+ * The page bar on Home: glass sunk into the page ({@link PageBarGlassStyle}: the concave glass or the well)
  * holding one glyph per page in the wall's own order, the current page's in the accent. A tap on a glyph goes to its page; a slide lifts the glyph under the
  * finger out of the pill on the A–Z bar's wave, its neighbours by less, with the page's name
  * riding above it, and goes to the page on release only ({@link PageBarSlide},
@@ -91,26 +89,14 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     /**
-     * Home's well ({@link com.termux.app.chrome.InsetGlass}): the shade over it, the inner shadow
-     * drawn as rings inside its outline, and the rim hairlines outside it (dark across the top,
-     * light across the bottom arc); shaders and ring alphas made by {@link #syncWell} on a size
-     * or ground change only.
+     * Home's glass cues over the slab, by {@link PageBarGlassStyle}: the well's shade, contact
+     * shadow and rim, or the concave glass's inverted rim alone ({@link PageBarGlassPainter}).
      */
-    private final Paint mWellFloor = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mWellShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mWellRim = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mWellRimLight = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final int[] mWellFloorColors = new int[com.termux.app.chrome.InsetGlass.FLOOR_POSITIONS.length];
-    private final android.graphics.Matrix mWellRimMatrix = new android.graphics.Matrix();
-    private float mWellLeft;
-    private float mWellWidth;
-    @NonNull private int[] mWellRingAlpha = new int[0];
-    private int mWellRings;
-    private float mWellRingStep;
-    private boolean mWellBuilt;
-    private float mWellTop;
-    private float mWellHeight;
-    private boolean mWellDark;
+    private final PageBarGlassPainter mCues = new PageBarGlassPainter();
+    /** The style the bar was last dressed in: the stored one where glass is worn, else the well. */
+    @NonNull private PageBarGlassStyle mStyle = PageBarGlassStyle.WELL;
+    /** A launcherctl flip of the style dresses the bar again at once ({@link PageBarGlassStyle#watch}). */
+    private final Runnable mStyleChanged = this::onGlassStyleChanged;
     private final RectF mRect = new RectF();
     private final Rect mInkRect = new Rect();
     private final Rect mInkScratch = new Rect();
@@ -190,9 +176,6 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(mDensity);
-        mWellShadow.setStyle(Paint.Style.STROKE);
-        mWellRim.setStyle(Paint.Style.STROKE);
-        mWellRimLight.setStyle(Paint.Style.STROKE);
         mGlass = new PaneGlassBackdropView(context);
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
@@ -394,74 +377,16 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     }
 
     /**
-     * Home's well cues for the slab where it stands now and the ground it was measured on
-     * ({@link PageBarGlass.Ink#wellDark}): the shade, the inner shadow fading down from the top
-     * edge and the lip fading in toward the bottom. Builds only when one of those changed: on a
-     * layout or a dress pass, never per frame.
+     * Home's glass cues for the slab where it stands now, the ground it was measured on
+     * ({@link PageBarGlass.Ink#wellDark}) and the style it was dressed in ({@link #mStyle}).
+     * Builds only when one of those changed: on a layout or a dress pass, never per frame.
      */
     private void syncWell(@Nullable PageBarLayout layout) {
         if (layout == null || mKeyEntry) return;
-        float top = layout.slabTopPx();
-        float height = layout.slabHeightPx();
-        boolean dark = mInk.wellDark;
-        float left = layout.slabLeftPx();
-        float width = layout.slabWidthPx();
-        if (mWellBuilt && top == mWellTop && height == mWellHeight && dark == mWellDark
-                && left == mWellLeft && width == mWellWidth) {
-            return;
+        if (mCues.sync(mDensity, layout.slabLeftPx(), layout.slabTopPx(), layout.slabWidthPx(),
+                layout.slabHeightPx(), mInk.wellDark, mStyle)) {
+            invalidate();
         }
-        mWellBuilt = true;
-        mWellLeft = left;
-        mWellWidth = width;
-        mWellTop = top;
-        mWellHeight = height;
-        mWellDark = dark;
-        // The floor: darkest under the top lip, clear in the lower part, a faint light at the bottom.
-        mWellFloor.setShader(new LinearGradient(0f, top, 0f, top + height,
-            com.termux.app.chrome.InsetGlass.floorColors(dark, mWellFloorColors),
-            com.termux.app.chrome.InsetGlass.FLOOR_POSITIONS, Shader.TileMode.CLAMP));
-        // The contact shadow: rings inside the outline, their colour by height (strongest under
-        // the top, the sides' share at mid height, clear at the bottom), their alpha by depth.
-        int rings = com.termux.app.chrome.InsetGlass.ringCount(mDensity, height);
-        if (mWellRingAlpha.length < rings) mWellRingAlpha = new int[rings];
-        for (int i = 0; i < rings; i++) {
-            mWellRingAlpha[i] = com.termux.app.chrome.InsetGlass.ringAlpha(i, rings);
-        }
-        mWellRings = rings;
-        mWellRingStep = com.termux.app.chrome.InsetGlass.ringStepPx(mDensity);
-        // Each ring is twice the step wide, so neighbours overlap and no seam shows between them.
-        mWellShadow.setStrokeWidth(2f * mWellRingStep);
-        int shadowTop = com.termux.app.chrome.InsetGlass.innerShadow(dark);
-        int shadowSide = com.termux.app.chrome.InsetGlass.innerShadowSide(dark);
-        mWellShadow.setShader(rings <= 0 ? null : new LinearGradient(0f, top, 0f, top + height,
-            new int[] {shadowTop, shadowSide, shadowSide & 0x00FFFFFF}, new float[] {0f, 0.5f, 1f},
-            Shader.TileMode.CLAMP));
-        // The rim of the hole, outside the outline: a subtle dark hairline across the top, and
-        // the bottom arc's light, an ellipse round the centre bottom as wide as the well and
-        // RIM_LIGHT_REACH_SHARE of its height tall, so it is strongest there and fades up the ends.
-        float rim = com.termux.app.chrome.InsetGlass.rimWidthPx(mDensity, height);
-        int rimShadow = com.termux.app.chrome.InsetGlass.rimShadow(dark);
-        int rimLight = com.termux.app.chrome.InsetGlass.rimLight(dark);
-        mWellRim.setStrokeWidth(rim);
-        mWellRim.setShader(rim <= 0f ? null : new LinearGradient(0f, top - rim, 0f,
-            top + height * com.termux.app.chrome.InsetGlass.RIM_SHADOW_TO_SHARE,
-            rimShadow, rimShadow & 0x00FFFFFF, Shader.TileMode.CLAMP));
-        mWellRimLight.setStrokeWidth(rim);
-        float reach = Math.max(1f, height * com.termux.app.chrome.InsetGlass.RIM_LIGHT_REACH_SHARE);
-        float cx = left + width / 2f;
-        float bottom = top + height + rim;
-        android.graphics.RadialGradient light = rim <= 0f ? null : new android.graphics.RadialGradient(
-            cx, bottom, reach, new int[] {rimLight,
-                com.termux.app.chrome.OnGlass.withAlpha(rimLight, Math.round((rimLight >>> 24)
-                    * com.termux.app.chrome.InsetGlass.RIM_LIGHT_MID)),
-                rimLight & 0x00FFFFFF},
-            new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
-        if (light != null) {
-            mWellRimMatrix.setScale(Math.max(1f, (width / 2f + rim) / reach), 1f, cx, bottom);
-            light.setLocalMatrix(mWellRimMatrix);
-        }
-        mWellRimLight.setShader(light);
-        invalidate();
     }
 
     /**
@@ -496,12 +421,14 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         if (mEntry != null) mEntry.addHitArea(this);
+        PageBarGlassStyle.watch(mStyleChanged);
         redress();
     }
 
     @Override
     protected void onDetachedFromWindow() {
         if (mEntry != null) mEntry.removeHitArea(this);
+        PageBarGlassStyle.unwatch(mStyleChanged);
         removeCallbacks(mRedress);
         cancelStream();
         mEnterAnim.cancel();
@@ -510,6 +437,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (mSource != null) mSource.setBarGlassWanted(false);
         mSource = null;
         super.onDetachedFromWindow();
+    }
+
+    /** The stored style was flipped: Home's bar dresses again; the key's pop-up has no well. */
+    private void onGlassStyleChanged() {
+        if (!mKeyEntry) redress();
     }
 
     private void scheduleRedress() {
@@ -530,9 +462,13 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mLook = mSource == null ? null : mSource.widgetGlassStyle();
         PageBarLayout layout = mLayout;
         if (mSource != null) mSource.setBarGlassWanted(layout != null && PageBarGlass.wants(getContext(), mLook));
+        PageBarGlassStyle chosen = PageBarGlassStyle.current(getContext());
         boolean shown = layout != null && PageBarGlass.dress(getContext(), mLook, this, mGlass,
-            layout.slabHeightPx() / 2f);
+            layout.slabHeightPx() / 2f, chosen);
         mGlassShown = shown;
+        // Without glass (no wallpaper the launcher set, battery saver, outline text, high
+        // contrast) the bar keeps the well on its solid card whichever style is chosen.
+        mStyle = shown ? chosen : PageBarGlassStyle.WELL;
         if (shown) mGlass.invalidateOutline();
         if (mFixedInk) {
             mInk.veil = Color.TRANSPARENT;
@@ -556,7 +492,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             // Where the glyphs' tops and bottoms stand down the well, for the floor's ink check.
             float glyphShare = layout.glyphPx() / Math.max(1f, layout.slabHeightPx());
             PageBarGlass.measure(this, mInkRect, mLook, accent, shown, mInk, mBody, mGlass,
-                (1f - glyphShare) / 2f, (1f + glyphShare) / 2f, mOrigin, mRoot, mInkScratch);
+                (1f - glyphShare) / 2f, (1f + glyphShare) / 2f,
+                mStyle == PageBarGlassStyle.WELL, mOrigin, mRoot, mInkScratch);
         } else {
             mInk.accent = accent;
             mGlass.setEvenOut(null);
@@ -741,37 +678,24 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     }
 
     /**
-     * Home's well over its glass (or its solid card): the shade, the inner shadow's rings inside
-     * the outline and the rim hairlines just outside it ({@link #syncWell}). The rim stands in
-     * the touch row's air around the slab, inside this view, so nothing is laid out for it.
-     * Allocates nothing.
+     * Home's glass cues over its glass (or its solid card), as {@link #syncWell} built them for
+     * the bar's style. Allocates nothing.
      */
     private void drawWell(@NonNull Canvas canvas, @NonNull PageBarLayout layout, float radius) {
         float left = layout.slabLeftPx();
         float top = layout.slabTopPx();
-        float right = left + layout.slabWidthPx();
-        float bottom = top + layout.slabHeightPx();
-        mRect.set(left, top, right, bottom);
-        canvas.drawRoundRect(mRect, radius, radius, mWellFloor);
-        if (mWellShadow.getShader() != null) {
-            // Ring i stands i steps in; its stroke reaches from the outline (ring 0) inward.
-            for (int i = 0; i < mWellRings; i++) {
-                float inset = mWellRingStep * (i + 1);
-                if (2f * inset >= bottom - top) break;
-                mRect.set(left + inset, top + inset, right - inset, bottom - inset);
-                float r = Math.max(0f, radius - inset);
-                mWellShadow.setAlpha(mWellRingAlpha[i]);
-                canvas.drawRoundRect(mRect, r, r, mWellShadow);
-            }
-        }
-        float rim = mWellRim.getStrokeWidth();
-        if (rim > 0f && mWellRim.getShader() != null) {
-            // Outset by half the stroke so the hairline lies just outside the outline.
-            mRect.set(left - rim / 2f, top - rim / 2f, right + rim / 2f, bottom + rim / 2f);
-            float r = radius + rim / 2f;
-            canvas.drawRoundRect(mRect, r, r, mWellRim);
-            if (mWellRimLight.getShader() != null) canvas.drawRoundRect(mRect, r, r, mWellRimLight);
-        }
+        mCues.draw(canvas, left, top, left + layout.slabWidthPx(), top + layout.slabHeightPx(), radius);
+    }
+
+    /** The style the bar is drawn in now, for tests. */
+    @NonNull
+    PageBarGlassStyle glassStyle() {
+        return mStyle;
+    }
+
+    /** Whether the well's floor shade or contact shadow is drawn, for tests. */
+    boolean drawsWellShade() {
+        return mCues.drawsShade();
     }
 
     /**
