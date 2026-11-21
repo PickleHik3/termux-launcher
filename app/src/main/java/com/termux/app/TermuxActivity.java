@@ -17012,14 +17012,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             dockIndicator.setVerticalForm(false);
             // The dock's own pair follows the same rule as the portable host's: the ticks stand
             // on the row's outer side unless the row is the band next to the canvas. A row in a
-            // side's lane is ordered by that side's layout, whichever page is in front.
+            // side's lane is ordered by that side's layout, whichever page is in front: the
+            // answer applyEdgeStacks remembered, the same one the row's padding reads, so the
+            // ticks and the padding never take opposite sides.
             orderAppsBarBands(findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
                     com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)),
                 findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
                     com.termux.app.dock.SideRowViews.Part.ROW)), dockIndicator,
-                !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM,
-                    com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout,
-                        homePlaceLayout(), terminalPlaceLayout())));
+                !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM, mAppsRowNextToCanvas));
         }
         if (wantHost) {
             DockLayout dockLayout = mDock.dockLayoutIn(layout);
