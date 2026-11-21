@@ -133,7 +133,6 @@ public final class BuiltinWidgetStyle {
         error = M3.error(context);
         done = ContextCompat.getColor(context, R.color.termux_chip_done);
         warm = ContextCompat.getColor(context, R.color.termux_place_display);
-        int surfaceContainer = M3.surfaceContainer(context);
         container = M3.surfaceContainerHigh(context);
         containerHigh = M3.color(context, com.google.android.material.R.attr.colorSurfaceContainerHighest,
             R.color.termux_surface_panel_highest);
@@ -141,7 +140,7 @@ public final class BuiltinWidgetStyle {
         dark = night;
         // One card, glass or not: on glass the slab under it is the card's material and the
         // card's colour is the body's lift and veil over it, so every fill inside stays opaque.
-        card = ColorUtils.setAlphaComponent(surfaceContainer, 255);
+        card = themeCard(context);
         ringInner = card;
         face = container;
 
@@ -170,13 +169,12 @@ public final class BuiltinWidgetStyle {
         cornerRadiusPx = src.cornerRadiusPx;
         barRadiusPx = src.barRadiusPx;
         boolean shift = toDark && !src.dark;
-        card = shift ? atTone(src.card, DarkTones.CARD) : src.card;
+        card = onSide(src.card, DarkTones.CARD, shift);
         container = shift ? atTone(src.container, DarkTones.CONTAINER) : src.container;
         containerHigh = shift ? atTone(src.containerHigh, DarkTones.CONTAINER_HIGH)
             : src.containerHigh;
         onSurface = shift ? atTone(src.onSurface, DarkTones.ON_SURFACE) : src.onSurface;
-        onSurfaceVariant = shift ? atTone(src.onSurfaceVariant, DarkTones.ON_SURFACE_VARIANT)
-            : src.onSurfaceVariant;
+        onSurfaceVariant = onSide(src.onSurfaceVariant, DarkTones.ON_SURFACE_VARIANT, shift);
         outlineVariant = shift ? atTone(src.outlineVariant, DarkTones.OUTLINE_VARIANT)
             : src.outlineVariant;
         outline = shift ? atTone(src.outline, DarkTones.OUTLINE) : src.outline;
@@ -280,6 +278,35 @@ public final class BuiltinWidgetStyle {
 
     private static boolean isDark(@ColorInt int onSurface) {
         return ColorUtils.calculateLuminance(onSurface) > 0.5;
+    }
+
+    /** Whether {@code context}'s theme is night, which forces the dark card ({@link #night}). */
+    private static boolean isNight(@NonNull Context context) {
+        return isDark(M3.onSurface(context));
+    }
+
+    /**
+     * The card's colour on the side {@code dark} asks for, as {@link #onInk} draws it, glass or
+     * not: for a surface that dresses like a widget (the page bar's pill) without a style.
+     */
+    @ColorInt public static int cardOn(@NonNull Context context, boolean dark) {
+        return onSide(themeCard(context), DarkTones.CARD, dark && !isNight(context));
+    }
+
+    /** The card's weakest text ink (on-surface-variant) on {@link #cardOn}'s side. */
+    @ColorInt public static int textInkOn(@NonNull Context context, boolean dark) {
+        return onSide(M3.onSurfaceVariant(context), DarkTones.ON_SURFACE_VARIANT,
+            dark && !isNight(context));
+    }
+
+    /** The theme's own card, opaque. */
+    @ColorInt private static int themeCard(@NonNull Context context) {
+        return ColorUtils.setAlphaComponent(M3.surfaceContainer(context), 255);
+    }
+
+    /** {@code color} moved to the dark card's {@code tone} when {@code shift}, else itself. */
+    @ColorInt private static int onSide(@ColorInt int color, double tone, boolean shift) {
+        return shift ? atTone(color, tone) : color;
     }
 
     /**

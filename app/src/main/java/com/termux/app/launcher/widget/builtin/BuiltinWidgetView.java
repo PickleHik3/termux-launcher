@@ -247,6 +247,9 @@ public abstract class BuiltinWidgetView extends FrameLayout
     /** The opaque colour the content stands on, as last measured; the card itself before that. */
     private int groundSurface;
     private final android.graphics.Rect inkRect = new android.graphics.Rect();
+    /** The body and ink {@link #measureInk} last solved, reused. */
+    private final com.termux.app.chrome.WidgetBody.Answer bodyAnswer =
+        new com.termux.app.chrome.WidgetBody.Answer();
     private final int[] inkLocation = new int[2];
     private final int[] inkRootLocation = new int[2];
     /** The laid-out origin and size the ink was last asked at; see {@link #remeasureIfMoved}. */
@@ -875,11 +878,10 @@ public abstract class BuiltinWidgetView extends FrameLayout
     private boolean measureInk() {
         if (bareWorn) return measureBare();
         com.termux.app.chrome.WidgetInkSource ink = preview ? null : inkSource(fedLook);
-        int lift = glassWorn && wornLook != null
-            ? com.termux.app.chrome.OnGlass.withAlpha(style.card,
-                com.termux.app.chrome.OnGlass.widgetLiftAlpha255(wornTintAlpha))
+        boolean onGlass = glassWorn && wornLook != null;
+        int tint = onGlass ? wornLook.paneGlassTintColor() : android.graphics.Color.TRANSPARENT;
+        int fill = onGlass ? com.termux.app.chrome.WidgetBody.lift(style.card, tint)
             : android.graphics.Color.TRANSPARENT;
-        int fill = lift;
         boolean rim = false;
         int ground = style.card;
         if (slab != null && (ink == null || !glassWorn)) slab.setEvenOut(null);
@@ -889,14 +891,13 @@ public abstract class BuiltinWidgetView extends FrameLayout
             inkRect.set(inkLocation[0], inkLocation[1], inkLocation[0] + getWidth(),
                 inkLocation[1] + getHeight());
             noteInkAsked();
-            int body = glassWorn && wornLook != null
-                ? com.termux.app.chrome.OnGlass.composite(lift, wornLook.paneGlassTintColor())
-                : style.card;
-            com.termux.app.chrome.OnGlass.Resolution answer = ink.widgetInk(inkRect, body,
-                style.card, style.onSurfaceVariant, style.primary);
+            // The recipe the page bar's pill shares (WidgetBody): lift, body, veil, even-out.
+            com.termux.app.chrome.WidgetBody.solve(ink, inkRect, onGlass, style.card, tint,
+                style.onSurfaceVariant, style.primary, bodyAnswer);
+            com.termux.app.chrome.OnGlass.Resolution answer = bodyAnswer.resolution;
             ground = answer.surface;
-            if (slab != null) slab.setEvenOut(glassWorn ? ink.widgetEvenOut(inkRect) : null);
-            if (glassWorn) fill = com.termux.app.chrome.OnGlass.stackAlpha(lift, answer.veil);
+            if (slab != null) slab.setEvenOut(glassWorn ? bodyAnswer.evenOut : null);
+            if (glassWorn) fill = bodyAnswer.fill;
             else rim = BuiltinWidgetGlass.edgeRimWanted(style.card, ink.widgetWallpaper(inkRect));
         }
         boolean moved = fill != cardFill || rim != edgeRim;

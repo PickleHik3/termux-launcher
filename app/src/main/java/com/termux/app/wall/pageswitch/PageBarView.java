@@ -86,6 +86,9 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final int[] mRoot = new int[2];
     private final int[] mAt = new int[2];
     private final PageBarGlass.Ink mInk = new PageBarGlass.Ink();
+    /** The widget body the pill was last dressed in ({@link PageBarGlass#measure}), reused. */
+    private final com.termux.app.chrome.WidgetBody.Answer mBody =
+        new com.termux.app.chrome.WidgetBody.Answer();
     private final ValueAnimator mEnterAnim = ValueAnimator.ofFloat(0f, 1f);
     private final Runnable mRedress = this::redress;
     private final Access mAccess;
@@ -353,6 +356,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mInk.veil = Color.TRANSPARENT;
             mInk.ink = mFixedInkColor;
             mInk.accent = mFixedAccent;
+            mGlass.setEvenOut(null);
             PageBarBubbleView popBubble = mBubble;
             if (popBubble != null) popBubble.dress(mLook);
             invalidate();
@@ -366,10 +370,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mInkRect.set(Math.round(layout.pillLeftPx()), Math.round(layout.pillTopPx()),
                 Math.round(layout.pillLeftPx() + layout.pillWidthPx()),
                 Math.round(layout.pillBottomPx()));
-            PageBarGlass.measure(this, mInkRect, mLook, accent, shown, mInk, mOrigin, mRoot,
-                mInkScratch);
+            PageBarGlass.measure(this, mInkRect, mLook, accent, shown, mInk, mBody, mGlass,
+                mOrigin, mRoot, mInkScratch);
         } else {
             mInk.accent = accent;
+            mGlass.setEvenOut(null);
         }
         PageBarBubbleView bubble = mBubble;
         if (bubble != null) bubble.dress(mLook);

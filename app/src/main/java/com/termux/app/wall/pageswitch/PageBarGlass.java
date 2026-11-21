@@ -10,13 +10,13 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.chrome.ChromeInk;
 import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.chrome.WidgetBody;
 import com.termux.app.chrome.WidgetInkSource;
-import com.termux.app.launcher.widget.HomeLabelInk;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass;
+import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetView;
 import com.termux.app.terminal.PaneGlass;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -25,10 +25,12 @@ import com.termux.app.terminal.PaneSurfaceStyle;
 /**
  * What the page bar's pill and bubble share with a Home widget's slab: the page's glass source
  * found by walking parents, the Look's glass worn or put down on the same terms as a widget's
- * ({@link BuiltinWidgetGlass}), and the ink and accent measured on the ground the pill stands on.
+ * ({@link BuiltinWidgetGlass}), and the pill dressed as a widget's card is ({@link WidgetBody}):
+ * the widget's card on the widget's side (night or the page's pale ink), its lift over the slab,
+ * the slab drawn through the same even-out, and the ink and accent measured on that body.
  * Dress passes only, never per frame.
  */
-final class PageBarGlass {
+public final class PageBarGlass {
 
     /** The ground and the inks measured for one rect, from {@link #measure}. */
     static final class Ink {
@@ -42,7 +44,10 @@ final class PageBarGlass {
         @ColorInt int accent = Color.WHITE;
     }
 
-    /** The card a page of pale ink wears is the dark one, and the other way round. */
+    /**
+     * The card the key's pop-up lays under its fixed ink ({@link #cardFor}): dark under a pale
+     * ink, pale under a dark one. A Home pill wears the widget's card instead ({@link #solve}).
+     */
     private static final int PALE_INK_CARD = 0xFF1F1F1F;
     private static final int DARK_INK_CARD = 0xFFF2F2F2;
 
@@ -104,29 +109,51 @@ final class PageBarGlass {
 
     /**
      * Measures the ground under {@code rect} (in {@code view}'s own coordinates) on the widget
-     * band, the memoised answer a widget at that rect would get, and the inks for it: the neutral
-     * ink, and {@code accent} toned until it reads, as the tick strip does. With no Look to ask,
-     * {@code out} keeps its pale ink and the raw accent.
+     * band, as a widget's card at that rect is measured ({@link #solve}), and the inks for it:
+     * the neutral ink, and {@code accent} toned until it reads, as the tick strip does. The
+     * {@code glass} slab is drawn through the even-out the ink was solved on. With no Look to ask,
+     * {@code out} keeps its pale ink and the raw accent, and the slab no correction.
      */
     static void measure(@NonNull View view, @NonNull Rect rect, @Nullable PaneSurfaceStyle look,
                         @ColorInt int accent, boolean glassWorn, @NonNull Ink out,
+                        @NonNull WidgetBody.Answer body, @Nullable PaneGlassBackdropView glass,
                         @NonNull int[] origin, @NonNull int[] rootScratch, @NonNull Rect scratch) {
         out.accent = accent;
-        if (!(look instanceof WidgetInkSource) || rect.isEmpty()) return;
+        if (!(look instanceof WidgetInkSource) || rect.isEmpty()) {
+            if (glass != null) glass.setEvenOut(null);
+            return;
+        }
         WidgetInkSource source = (WidgetInkSource) look;
         GlassAnchor.layoutOriginOnScreen(view, origin, rootScratch);
         scratch.set(rect);
         scratch.offset(origin[0], origin[1]);
-        boolean pale = source.widgetPolarity() == ChromeInk.Polarity.PALE_INK;
-        int textInk = pale ? HomeLabelInk.PALE_INK : HomeLabelInk.DARK_INK;
-        int card = pale ? PALE_INK_CARD : DARK_INK_CARD;
-        int body = glassWorn ? OnGlass.composite(Color.TRANSPARENT, look.paneGlassTintColor()) : card;
-        OnGlass.Resolution answer = source.widgetInk(scratch, body, card, textInk, accent);
+        solve(view.getContext(), source, scratch, glassWorn, look.paneGlassTintColor(), accent,
+            body);
+        OnGlass.Resolution answer = body.resolution;
+        if (glass != null) glass.setEvenOut(glassWorn ? body.evenOut : null);
         out.ground = answer.surface;
-        out.veil = glassWorn ? answer.veil : card;
+        // On glass the fill over the slab is the lift and the veil, as a widget's card draws it;
+        // without glass the opaque card the ink was measured for.
+        out.veil = glassWorn ? body.fill : body.body;
         out.ink = answer.ink;
         boolean paleSide = GlassInk.isPaleSide(answer.ink, answer.surface);
         out.accent = GlassInk.legibleOn(answer.surface, accent, paleSide,
             OnGlass.TARGET_LARGE_TEXT, 0xFF);
+    }
+
+    /**
+     * The pill's body and ink at {@code rootRect}: a widget's card on the widget's side (the dark
+     * card at night or on the page's pale ink, {@link BuiltinWidgetGlass#darkCard},
+     * {@link BuiltinWidgetStyle#cardOn}), with its
+     * weakest text ink, on the Look's glass tinted {@code tint} or solid, solved by the widgets'
+     * own recipe ({@link WidgetBody#solve}) with the pill's {@code accent} as the graphic ink.
+     */
+    public static void solve(@NonNull Context context, @NonNull WidgetInkSource source,
+                             @NonNull Rect rootRect, boolean glassWorn, @ColorInt int tint,
+                             @ColorInt int accent, @NonNull WidgetBody.Answer out) {
+        // Night is the card's own, as a widget's style keeps it (cardOn keeps a night card dark).
+        boolean dark = BuiltinWidgetGlass.darkCard(false, source.widgetPolarity());
+        WidgetBody.solve(source, rootRect, glassWorn, BuiltinWidgetStyle.cardOn(context, dark),
+            tint, BuiltinWidgetStyle.textInkOn(context, dark), accent, out);
     }
 }
