@@ -136,7 +136,8 @@ The apps row in the dock holds the apps you pin.
   icon**, **Unpin** and **Add to Home** (see [App icons on Home](#app-icons-on-home)).
 - **Drag** a pinned app along the row to reorder it.
 - **Drag one app onto another** to make a folder. Tap a folder to open it; its popup can rename the
-  folder.
+  folder. A folder on the dock is separate from the app drawer, and its apps stay
+  listed there.
 
 The full list is also under **Settings → Apps → Pinned apps** ("Choose and reorder dock
 apps."). **Settings → Apps → Most-used apps page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
@@ -177,6 +178,9 @@ You can also put an **App drawer** key on the extra-keys row; see
 
 Hold an app in the drawer for its menu; **Add to Home** puts it on a Home page (see
 [App icons on Home](#app-icons-on-home)).
+
+The drawer shows only folders made in the drawer; a folder on the dock is separate, and its apps are
+listed in the drawer like any other.
 
 Beside your Android apps, the drawer lists the **Terminal** entry and, under **Linux apps**, the
 Linux apps installed in Termux or in a distro, with a **Display** entry that opens the bare Linux

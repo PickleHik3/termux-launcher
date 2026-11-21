@@ -60,9 +60,9 @@ final class GlanceLayoutPlanner {
     static final int BATTERY_LOW_PERCENT = 20;
 
     /** The item glyphs, Nerd Font: a calendar, the Clock's bell, a battery a quarter full. */
-    static final String GLYPH_EVENT = "";
+    static final String GLYPH_EVENT = WidgetIcons.CALENDAR;
     static final String GLYPH_ALARM = ClockLayoutPlanner.GLYPH_ALARM;
-    static final String GLYPH_BATTERY_LOW = "";
+    static final String GLYPH_BATTERY_LOW = WidgetIcons.BATTERY_LOW;
 
     /** The separator between the date and the weather at 2×1. */
     static final String SEPARATOR = "·";

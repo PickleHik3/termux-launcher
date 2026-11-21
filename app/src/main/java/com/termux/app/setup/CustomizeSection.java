@@ -37,9 +37,9 @@ final class CustomizeSection implements SetupSection {
         R.string.termux_surface_preset_frost, R.string.termux_surface_preset_stock,
         R.string.termux_surface_preset_solid};
     /** The appearance card's dock glyphs and words (surfaces/cards/DockCard), in DockStyle.CHOICES order. */
-    private static final int[] DOCK_GLYPHS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
-        R.drawable.ic_symbol_dock_peek_glass};
+    private static final int[] DOCK_GLYPHS = {R.drawable.ic_rl_dock_tray,
+        R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip,
+        R.drawable.ic_rl_dock_peek};
     private static final int[] DOCK_WORDS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
         R.string.layout_editor_dock_style_peek_glass};

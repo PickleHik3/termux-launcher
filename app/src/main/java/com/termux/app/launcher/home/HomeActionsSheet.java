@@ -569,10 +569,10 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @DrawableRes
     static int iconFor(@NonNull Item item) {
         switch (item) {
-            case TERMINAL: return R.drawable.ic_symbol_terminal;
+            case TERMINAL: return R.drawable.ic_rl_terminal;
             case ADD_WIDGET: return R.drawable.ic_symbol_grid_view;
-            case ADD_APP: return R.drawable.ic_symbol_apps;
-            case ADD_PAGE: return R.drawable.ic_symbol_add;
+            case ADD_APP: return R.drawable.ic_rl_apps;
+            case ADD_PAGE: return R.drawable.ic_rl_add;
             case EDIT_WIDGETS: return R.drawable.ic_symbol_edit;
             case EDIT_PAGES: return R.drawable.ic_layout_home;
             case REMOVE_PAGE: return R.drawable.ic_symbol_delete;

@@ -198,6 +198,15 @@ public final class PreviewTilesRow {
         names.get(index).setTextColor(RowKit.color(context, on
             ? com.google.android.material.R.attr.colorOnPrimary
             : com.google.android.material.R.attr.colorOnSurface));
+        // A glyph preview wears its name's ink, taken from the name itself, so the two agree in
+        // every state the tile is in.
+        View holder = tile.getChildAt(0);
+        if (holder instanceof FrameLayout && ((FrameLayout) holder).getChildCount() > 0) {
+            View glyph = ((FrameLayout) holder).getChildAt(0);
+            if (glyph instanceof android.widget.ImageView)
+                ((android.widget.ImageView) glyph).setImageTintList(
+                    names.get(index).getTextColors());
+        }
     }
 
     /**

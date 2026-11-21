@@ -564,7 +564,7 @@ public final class PinnedAppsEditor {
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
             ImageView handle = new ImageView(context);
-            handle.setImageResource(R.drawable.ic_drag_indicator_24);
+            handle.setImageResource(R.drawable.ic_rl_drag_grip);
             handle.setColorFilter(colorSubtle);
             row.addView(handle, new LinearLayout.LayoutParams(dp(24), dp(24)));
 
