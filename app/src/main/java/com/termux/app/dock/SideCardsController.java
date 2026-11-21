@@ -49,9 +49,8 @@ public final class SideCardsController {
         /** The dock's snapshot for {@code layout} with {@code rowsPage}'s rows standing. */
         @NonNull DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout layout,
                                                     @NonNull PageKind rowsPage);
-        int screenWidthPx();
-        int screenHeightPx();
-        float density();
+        /** The screen's width, height and density; the window is edge to edge. */
+        @NonNull android.util.DisplayMetrics displayMetrics();
         /** The extra-keys row's measured height. */
         int measuredExtraKeysRowPx();
         /** The keyboard as the stack lays it out while it is down, its foot included. */
@@ -66,7 +65,6 @@ public final class SideCardsController {
         boolean terminalFlushAllowed();
         boolean statusOnDockPlank();
         boolean keyboardGlassShared();
-        int keyboardChinPx();
         /** The renderer's side numbers: whether the cards stand apart and Home's drop. */
         void sidesApart(boolean apart, int homeDropPx);
     }
@@ -179,9 +177,9 @@ public final class SideCardsController {
         if (host != null) {
             pinned = true;
             left = Math.round(host.left);
-            right = Math.round(mHost.screenWidthPx() - host.right);
+            right = Math.round(mHost.displayMetrics().widthPixels - host.right);
             height = Math.round(host.height());
-            above = Math.round(mHost.screenHeightPx() - margin - host.bottom);
+            above = Math.round(mHost.displayMetrics().heightPixels - margin - host.bottom);
         }
         moved |= pinned != mHostPinned || left != mHostLeftPx || right != mHostRightPx
             || height != mHostHeightPx || above != mHostAboveContainerBottomPx;
@@ -212,7 +210,7 @@ public final class SideCardsController {
         }
         mKeysCardOn = true;
         mKeysCardLeftPx = Math.round(box.left);
-        mKeysCardRightPx = Math.round(mHost.screenWidthPx() - box.right);
+        mKeysCardRightPx = Math.round(mHost.displayMetrics().widthPixels - box.right);
         mKeysCardHeightPx = Math.round(box.height());
         mKeysCardRadiusPx = cardAnswer.corners.topLeft;
         card.setBounds(mKeysCardLeftPx, mKeysCardRightPx, mKeysCardHeightPx);
@@ -267,9 +265,10 @@ public final class SideCardsController {
 
     @NonNull
     private RestCards.Rest restOf(@NonNull StackLayout.Input pass, @NonNull PageRef page) {
-        float density = mHost.density();
-        RestCards.Rest rest = new RestCards.Rest(pass, page, mHost.screenWidthPx(),
-            mHost.screenHeightPx(), density, mHost.measuredExtraKeysRowPx(),
+        android.util.DisplayMetrics metrics = mHost.displayMetrics();
+        float density = metrics.density;
+        RestCards.Rest rest = new RestCards.Rest(pass, page, metrics.widthPixels,
+            metrics.heightPixels, density, mHost.measuredExtraKeysRowPx(),
             mHost.measuredKeyboardPx(),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, density),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, density));
@@ -277,7 +276,6 @@ public final class SideCardsController {
         rest.restFlushPaddingPx = mHost.terminalRestFlushPaddingPx();
         rest.statusOnDockPlank = mHost.statusOnDockPlank();
         rest.keyboardGlassShared = mHost.keyboardGlassShared();
-        rest.keyboardChinPx = mHost.keyboardChinPx();
         return rest;
     }
 }

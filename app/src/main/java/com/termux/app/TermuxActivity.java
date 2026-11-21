@@ -10876,9 +10876,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @NonNull PlaceLayout layout, @NonNull com.termux.app.page.PageKind rowsPage) {
                 return mDock.dockSnapshot(layout, rowsPage);
             }
-            @Override public int screenWidthPx() { return getResources().getDisplayMetrics().widthPixels; }
-            @Override public int screenHeightPx() { return getResources().getDisplayMetrics().heightPixels; }
-            @Override public float density() { return getResources().getDisplayMetrics().density; }
+            @NonNull @Override public android.util.DisplayMetrics displayMetrics() { return getResources().getDisplayMetrics(); }
             @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
             @Override public int measuredKeyboardPx() {
                 View keyboard = findViewById(R.id.inapp_keyboard_container);
@@ -10897,7 +10895,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public boolean statusOnDockPlank() { return mStatusBarOnDockPlank; }
             @Override public boolean keyboardGlassShared() { return isInAppKeyboardGlassSurface(); }
-            @Override public int keyboardChinPx() { return resolveInAppKeyboardBottomPaddingPx(); }
             @Override public void sidesApart(boolean apart, int homeDropPx) { mStackRenderer.setSidesApart(apart, homeDropPx); }
         });
 

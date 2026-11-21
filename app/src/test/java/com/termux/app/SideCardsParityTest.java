@@ -7,6 +7,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.content.Context;
 import android.os.Build;
+import android.util.DisplayMetrics;
 import android.util.SparseArray;
 import android.view.View;
 import android.widget.FrameLayout;
@@ -91,6 +92,14 @@ public class SideCardsParityTest {
         });
     }
 
+    private static DisplayMetrics metrics(@NonNull Fixture f) {
+        DisplayMetrics metrics = new DisplayMetrics();
+        metrics.widthPixels = f.widthPx;
+        metrics.heightPixels = f.heightPx;
+        metrics.density = f.density;
+        return metrics;
+    }
+
     private static SideCardsController.Host hostOf(@NonNull Fixture f, @NonNull PageRef front,
                                                    boolean keyboardUp, boolean floating,
                                                    @NonNull StackRenderer renderer) {
@@ -110,9 +119,7 @@ public class SideCardsParityTest {
                                                                          @NonNull PageKind rows) {
                 return f.snapshot(rows == PageKind.HOME ? PageRef.HOME : PageRef.TERMINAL, floating);
             }
-            @Override public int screenWidthPx() { return f.widthPx; }
-            @Override public int screenHeightPx() { return f.heightPx; }
-            @Override public float density() { return f.density; }
+            @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
             @Override public int measuredExtraKeysRowPx() { return f.extraKeysRowPx; }
             @Override public int measuredKeyboardPx() {
                 return f.keyboardLaidOutPx() > 0 ? f.keyboardLaidOutPx() + foot : 0;
@@ -125,7 +132,6 @@ public class SideCardsParityTest {
             @Override public boolean terminalFlushAllowed() { return f.paneCount <= 1; }
             @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
-            @Override public int keyboardChinPx() { return 0; }
             @Override public void sidesApart(boolean apart, int homeDropPx) {
                 renderer.setSidesApart(apart, homeDropPx);
             }
@@ -189,9 +195,7 @@ public class SideCardsParityTest {
                                                                          @NonNull PageKind rows) {
                 return base.dockSnapshot(layout, rows);
             }
-            @Override public int screenWidthPx() { return f.widthPx; }
-            @Override public int screenHeightPx() { return f.heightPx; }
-            @Override public float density() { return f.density; }
+            @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
             @Override public int measuredExtraKeysRowPx() { return 0; }
             @Override public int measuredKeyboardPx() { return 0; }
             @Override public int bottomStatusBandPx(@NonNull PlaceLayout layout) { return 0; }
@@ -200,7 +204,6 @@ public class SideCardsParityTest {
             @Override public boolean terminalFlushAllowed() { return false; }
             @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
-            @Override public int keyboardChinPx() { return 0; }
             @Override public void sidesApart(boolean apart, int homeDropPx) { }
         });
         controller.update(f.pass(PageRef.HOME, false, true));
