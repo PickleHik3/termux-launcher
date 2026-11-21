@@ -5790,6 +5790,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return peekCardStandsWith(mDockRows.surfaceShown(), isInAppKeyboardShown());
     }
 
+    /** {@link #peekCardWanted} as the glass host reads it: Home's rest while the cards stand apart. */
+    private boolean hostPeekCardWanted() {
+        com.termux.app.place.RestCards.HostLook look = mSideCards.hostLook();
+        return look != null ? look.peek : peekCardWanted();
+    }
+
     /**
      * {@link #peekCardWanted} for the dock shown or not and the keyboard up or down as given, the
      * rest as they are now: for a margin worked out ahead of the keyboard's settle. The joined
@@ -5814,6 +5820,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private com.termux.app.dock.PeekGlassGeometry.Card resolvePeekCard() {
+        // Apart: Home's card, cut from Home's rest answer at every rest, whichever page is in
+        // front and whether or not Home's row is laid out under it (SideCards#hostDressPage).
+        com.termux.app.place.RestCards.HostLook look = mSideCards.hostLook();
+        if (look != null) return look.peekCut;
         if (!peekCardWanted()) return null;
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
@@ -5863,7 +5873,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A card cut before the keyboard came up must not shape the glass program a moment longer;
         // across a crossing the program blends it with the slab's instead (GlassEffects#programRect).
         if (card == null || (!peekChromeTravelling() && drawnPeekShare() >= 1f
-            && !peekCardWanted())) return null;
+            && !hostPeekCardWanted())) return null;
         float[] cut = new float[com.termux.app.chrome.RoundCut.SIZE];
         peekCardCut(card, cut);
         float radius = cut[com.termux.app.chrome.RoundCut.RADIUS];
@@ -5904,7 +5914,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * them otherwise, so every other design carries no listener of this.
      */
     private void syncPeekListeners() {
-        boolean peek = mPreferences != null && mDock.shownDockSurfaceSpec().peek;
+        boolean peek = mPreferences != null && mDock.hostDressSpec().peek;
         if (!peek && isHomeAtRest()) mHomeRestCard = null;
         View host = peek ? findViewById(R.id.accessory_surface_host) : null;
         View row = peek ? mSuggestionBarView : null;
@@ -5967,7 +5977,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Cuts the card afresh, re-aims the glass program and the reflection, or puts the
             // slab back, in the shape the dock is placed in now: a card that gave way under
             // Floating hands the host back its capsule (dockFloats).
-            mDock.applyDockSurfaceShape(host, mDock.dockFloats(), mDock.dockShapeHeightPx(), true, true);
+            mDock.applyDockSurfaceShape(host, mDock.hostFloats(), mDock.dockShapeHeightPx(), true, true);
             if (recutOnly) {
                 return;
             }
@@ -6008,9 +6018,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         SuggestionBarView row = mSuggestionBarView;
         View host = findViewById(R.id.accessory_surface_host);
         View container = findViewById(R.id.accessory_stack_container);
-        if (card == null || strength <= 0 || row == null || !(host instanceof ViewGroup)
-            || container == null) {
+        // Apart, the reflection is part of Home's card: while Home's row does not stand (the
+        // Terminal's rows up) it is kept as Home's rest drew it, parked with the card, so it is
+        // there for the whole slide back and the landing finds it right (PeekGlassReflection#syncFor).
+        com.termux.app.dock.PeekGlassReflection.Sync sync =
+            com.termux.app.dock.PeekGlassReflection.syncFor(card != null, strength > 0,
+                row != null && host instanceof ViewGroup && container != null,
+                mSideCards.hostLook() != null, peekHomeRowStands());
+        if (sync == com.termux.app.dock.PeekGlassReflection.Sync.CLEAR) {
             if (mPeekReflection != null) mPeekReflection.clear();
+            return;
+        }
+        if (sync == com.termux.app.dock.PeekGlassReflection.Sync.KEEP) {
+            if (mPeekReflection != null) {
+                mPeekReflection.setHeld(true);
+                mPeekReflection.setFade(drawnPeekShare());
+                mPeekReflection.setDrawnOffsetY(peekCardRowsDrift(card));
+            }
             return;
         }
         float[] rowAt = com.termux.app.dock.DockController.layoutOffsetIn(row, container);
@@ -6048,7 +6072,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], cutAt,
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
-        reflection.setDrawnOffsetY(peekRowsOverHost() - cutAt);
+        reflection.setDrawnOffsetY(peekCardRowsDrift(card));
+        reflection.setHeld(false);
+    }
+
+    /** Whether Home's apps row stands (shown), which the reflection is drawn from. */
+    private boolean peekHomeRowStands() {
+        SuggestionBarView row = mSuggestionBarView;
+        return row != null && row.isShown();
     }
 
     /** The reflection and its views let go, and the knob no longer heard; for the activity's end. */
@@ -6319,7 +6350,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int targetHeight = ViewGroup.LayoutParams.MATCH_PARENT;
         int targetLeftMargin = 0;
         int targetRightMargin = 0;
-        boolean capsuleSurface = viewId == R.id.accessory_surface_host && mDock.dockFloats();
+        boolean capsuleSurface = viewId == R.id.accessory_surface_host && mDock.hostFloats();
         ViewParent parent = view.getParent();
         if (parent instanceof View) {
             View parentView = (View) parent;
@@ -6343,6 +6374,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
         }
+        if (viewId == R.id.accessory_surface_host && mSideCards.hostPinned()) {
+            // Home's card while it stands apart from the Terminal's: laid out at Home's rest from
+            // the answer, whatever page is in front.
+            mDock.applyDockSurfaceShape(view, capsuleSurface, mSideCards.hostHeightPx(), true, true);
+            View container = findViewById(R.id.accessory_stack_container);
+            if (mSideCards.layOutHost(params, container == null ? 0 : container.getPaddingBottom()))
+                view.setLayoutParams(params);
+            return;
+        }
         mDock.applyDockSurfaceShape(view, capsuleSurface, targetHeight,
             viewId == R.id.accessory_surface_host, viewId == R.id.accessory_surface_host);
         if (params.leftMargin != targetLeftMargin || params.topMargin != targetTop ||
@@ -6358,6 +6398,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Takes the bottom pin the host wore while the cards stood apart off; whether there was one. */
+    private static boolean dropHostBottomPin(@NonNull RelativeLayout.LayoutParams params) {
+        if (params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) == 0) return false;
+        params.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        return true;
+    }
+
     /** Positions the dock glass behind either the dock rows alone or the unified default stack. */
     private void applyAccessorySurfaceBounds(@NonNull ChromeSpec state) {
         View surface = findViewById(R.id.accessory_surface_host);
@@ -6368,11 +6415,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) layoutParams;
             boolean unified = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
             boolean rulesChanged = false;
-            if (unified) {
+            if (mSideCards.hostPinned()) {
+                // The pin is applied with the bounds below.
+            } else if (unified) {
                 rulesChanged = params.getRule(RelativeLayout.ABOVE) != 0
                     || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
                 params.removeRule(RelativeLayout.ABOVE);
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+                rulesChanged |= dropHostBottomPin(params);
             } else {
                 // The dock's sheet alone is pinned at both ends, the stack's top and the top of the
                 // keyboard's column, exactly where the rows stand. Anchoring only the bottom and
@@ -6385,6 +6435,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
                 params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
                 params.alignWithParent = true;
+                rulesChanged |= dropHostBottomPin(params);
             }
             if (rulesChanged)
                 surface.setLayoutParams(params);
@@ -7160,7 +7211,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (MotionLog.enabled) MotionLog.log("peek-card", "card=" + (card != null)
             + " homeRest=" + isHomeAtRest() + " share=" + mPeekShare + " travel="
             + peekChromeTravelling() + " dress=" + stackDressPage());
-        mPeekCardRowsPx = peekLayoutRowsOverHost();
+        // Apart with Home's row not standing, the reflection is kept as Home's rest aimed it, and
+        // so is where the row stood over the host then (syncPeekReflection reads it at the landing).
+        if (mSideCards.hostLook() == null || peekHomeRowStands())
+            mPeekCardRowsPx = peekLayoutRowsOverHost();
         if (!isHomeAtRest()) return;
         View host = findViewById(R.id.accessory_surface_host);
         mHomeRestCard = card;
@@ -7194,8 +7248,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void peekCardCut(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card,
                              @NonNull float[] out) {
-        float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
-        com.termux.app.dock.PeekGlassGeometry.cut(card, peekRowsOverHost() - cutAt, out);
+        com.termux.app.dock.PeekGlassGeometry.cut(card, peekCardRowsDrift(card), out);
+    }
+
+    /**
+     * How far the rows have moved over the host since {@code card} was cut. Zero while the cards
+     * stand apart: Home's card is cut from Home's rest and the host carries it as one piece
+     * (the renderer shifts it by nothing), whichever rows the stack stands.
+     */
+    private float peekCardRowsDrift(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card) {
+        if (mSideCards.hostLook() != null) return 0f;
+        return peekRowsOverHost() - (card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx);
     }
 
     /**
@@ -7302,7 +7365,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 + " wasShown=" + (wasShown != null));
         if (host == null || !mDock.dockShapeCut() || (wasShown == null && shown == null)) return;
         if (shown == null || wasShown == null) {
-            mDock.applyDockSurfaceShape(host, mDock.dockFloats(), mDock.dockShapeHeightPx(), true,
+            mDock.applyDockSurfaceShape(host, mDock.hostFloats(), mDock.dockShapeHeightPx(), true,
                 true);
             return;
         }
@@ -7312,8 +7375,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 host.getHeight()));
         if (mPeekReflection != null) {
             mPeekReflection.setFade(drawnPeekShare());
-            float cutAt = shown == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
-            mPeekReflection.setDrawnOffsetY(rows - cutAt);
+            mPeekReflection.setDrawnOffsetY(peekCardRowsDrift(shown));
         }
         rebuildBackdropGlassEffectForLens();
     }
@@ -7356,22 +7418,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (edgeFx == null) {
             return;
         }
-        if (!visible) {
-            edgeFx.setVisibility(View.GONE);
-            edgeFx.setBackground(null);
-            return;
-        }
-
-        // No white top highlight band — it read as a plastic sheen. The crisp glass top edge is now
-        // produced by the AGSL refraction shader on the backdrop. Keep only a faint shadow seam.
-        int highlight = Color.TRANSPARENT;
-        int shadow = withAlphaComponent(resolveAccessoryOutlineColor(), Math.round(18f * Math.max(0f, barAlpha)));
-        GradientDrawable edge = new GradientDrawable(
-            GradientDrawable.Orientation.TOP_BOTTOM,
-            new int[] { highlight, shadow, Color.TRANSPARENT }
-        );
-        edgeFx.setBackground(edge);
-        edgeFx.setVisibility(View.VISIBLE);
+        com.termux.app.dock.CapsuleGlass.dressTopEdge(edgeFx, visible, barAlpha,
+            resolveAccessoryOutlineColor());
     }
 
     @NonNull
@@ -8334,7 +8382,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The frost under the bed is up only while this pass dresses the host as the Display
         // page's glass; every other pass (keyboard down, another page, floating, mid-blend) takes
         // it away, so it can never outlive the material it belongs to.
-        if (!dressInAppKeyboardHost(state)) releaseKeyboardFrost();
+        com.termux.app.wall.PageRef arriving = keyboardArrivalOf(state.keyboardShown);
+        boolean frosts = arriving != null ? dressArrivingKeyboardHost(arriving)
+            : dressInAppKeyboardHost(state);
+        if (!frosts) releaseKeyboardFrost();
+    }
+
+    /**
+     * The page a crossing arrives at when, under Floating, the keyboard host is dressed as that
+     * page's rest shows it (KeyboardMaterialPolicy#dressedShown), so the keyboard rises in the
+     * arriving rest's own card rather than bare until the landing makes it visible. Null on every
+     * other pass, which dresses the host from its own state.
+     */
+    @Nullable
+    private com.termux.app.wall.PageRef keyboardArrivalOf(boolean liveShown) {
+        if (liveShown || !mCrossing.crossing()) return null;
+        com.termux.app.page.PageKind other = mCrossing.seam().other();
+        if (other == null) return null;
+        boolean arrives = chromeRestOf(other).keyboardReveal() > 0f;
+        if (!KeyboardMaterialPolicy.dressedShown(false, arrives,
+            arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating())) return null;
+        return endpointPageOf(other);
+    }
+
+    /**
+     * The keyboard host dressed as {@code arriving}'s rest shows it: the one dress ladder
+     * ({@link #dressInAppKeyboardHost}) run with the keyboard shown under that page's look
+     * ({@link #mLookIdOverride}), so it builds what the rest's own pass builds, held under the
+     * same key, and that pass finds it and changes nothing. Built once as the crossing begins
+     * ({@link #beginKeyboardLookBlend}); a pass on the way finds the same held glass, and the look
+     * blend crossing to it is put back up. True when the bed frosts the display.
+     */
+    private boolean dressArrivingKeyboardHost(@NonNull com.termux.app.wall.PageRef arriving) {
+        boolean frosts;
+        mLookIdOverride = lookIdOf(arriving);
+        try {
+            ChromeSpec state = buildChromeSpec();
+            frosts = dressInAppKeyboardHost(new ChromeSpec(state.toolbarShown, true,
+                mKeyboardGeometry.measureHeightPx(), state.blurEnabled, state.appsRowEnabled,
+                state.azRowEnabled, state.extraKeysRowEnabled, state.barAlpha,
+                state.blurRadiusDp));
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+        com.termux.app.chrome.CrossfadeDrawable blend = mKeyboardLookBlend;
+        View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+        if (blend != null && mKeyboardLookBlendArrives && surfaceHost != null
+            && mKeyboardHostInner != null && mKeyboardHostInner == blend.there())
+            setKeyboardHostBackground(surfaceHost, blend);
+        return frosts;
     }
 
     /** {@link #applyInAppKeyboardHostMaterial}'s dressing; true when the bed frosts the display. */
@@ -8760,8 +8856,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // Everything GlassStack.build reads that is not the spec: the backdrop instance,
                 // the band's baked veil and even-out, and the colours and look the factory
                 // resolves for the glass layers.
+                // The band's even-out as the build bakes it: measured first, and keyed by the
+                // band's own token, so another band measured again (the dock, at a landing)
+                // does not read as a new keyboard glass.
+                if (spec.band != null) mChrome.ink().bandEvenOutMatrix(spec.band, null);
                 key = com.termux.app.chrome.HeldBackground.key("glass", spec, backdrop, density,
-                    mChrome.glass().bandVeil(spec.band), mChrome.ink().evenOutGeneration(),
+                    mChrome.glass().bandVeil(spec.band), spec.band == null ? -1
+                        : mChrome.ink().bandEvenOutChanges(spec.band),
                     resolveAccessoryGlassBaseColor(), resolveDockAccentColor(),
                     mChrome.glass().look(spec.tintStrengthPercent));
                 Drawable held = mKeyboardHostBackground.reuse(key);
@@ -8809,10 +8910,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             MotionLog.log("kb-host", "now=" + (d == null ? "null" : d.getClass().getSimpleName())
                 + " crossing=" + mCrossing.crossing() + " look=" + stackLookPage() + " by=" + by);
         }
-        if (!mKeyboardHostBackground.holds(background)) mKeyboardHostBackground.release();
+        if (!mKeyboardHostBackground.holds(background) && !keyboardBlendHoldsArrival(background))
+            mKeyboardHostBackground.release();
         mKeyboardHostInner = background;
         // Under an open drawer the host wears the sheet's glass over this (KeyboardSheetSkin).
         surfaceHost.setBackground(mKeyboardSheet.dress(background));
+    }
+
+    /**
+     * Whether {@code background} is the Floating look blend whose arriving end is the held glass:
+     * that end stays held while the blend shows it, so the landing puts it up and the rest's own
+     * pass reuses it rather than building the same glass again.
+     */
+    private boolean keyboardBlendHoldsArrival(@Nullable Drawable background) {
+        com.termux.app.chrome.CrossfadeDrawable blend = mKeyboardLookBlend;
+        return mKeyboardLookBlendDressed && blend != null && background == blend
+            && mKeyboardHostBackground.holds(blend.there());
     }
 
     /**
@@ -9025,8 +9138,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return false;
         }
         int horizontalOverscanPx = computeAccessoryBackdropHorizontalOverscanPx(state.blurRadiusDp);
-        int seamOverscanPx = mDockFootPx > 0
-            ? horizontalOverscanPx : 0;
+        int seamOverscanPx = com.termux.app.dock.CapsuleGlass.seamOverscanPx(hostFootPx(),
+            horizontalOverscanPx);
         Rect currentTarget = buildAccessoryBackdropTargetRect(
             surfaceHost, horizontalOverscanPx, seamOverscanPx);
         // setLayoutParams() during pre-draw does not resize the ImageView until another layout.
@@ -9138,45 +9251,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int computeAccessoryBackdropHorizontalOverscanPx(int blurRadiusDp) {
         float blurRadiusPx = ViewUtils.dpToPx(this, Math.max(0, blurRadiusDp));
         float density = getResources().getDisplayMetrics().density;
-        return Math.max(0, Math.round((blurRadiusPx * 2f) + (density * 2f)));
+        return com.termux.app.dock.CapsuleGlass.horizontalOverscanPx(blurRadiusPx, density);
     }
 
     private void applyAccessoryBackdropOverscan(@NonNull ImageView backdrop, @NonNull View surfaceHost,
                                                 int horizontalOverscanPx, int bottomOverscanPx) {
-        ViewGroup.LayoutParams layoutParams = backdrop.getLayoutParams();
-        if (!(layoutParams instanceof FrameLayout.LayoutParams)) {
-            return;
-        }
-        FrameLayout.LayoutParams params = (FrameLayout.LayoutParams) layoutParams;
-        int targetWidth = Math.max(1, surfaceHost.getWidth() + (horizontalOverscanPx * 2));
-        // Grow the bitmap DOWN past the surface (clipped by the host) so the refraction's bottom edge
-        // band falls below the visible seam with the under-pill strip, not on it.
-        int targetHeight = Math.max(1, surfaceHost.getHeight() + bottomOverscanPx);
-        int targetLeftMargin = -horizontalOverscanPx;
-        int targetTopMargin = 0;
-        if (params.width != targetWidth || params.height != targetHeight ||
-            params.leftMargin != targetLeftMargin || params.topMargin != targetTopMargin) {
-            params.width = targetWidth;
-            params.height = targetHeight;
-            params.leftMargin = targetLeftMargin;
-            params.topMargin = targetTopMargin;
-            params.rightMargin = 0;
-            params.bottomMargin = 0;
-            params.gravity = Gravity.TOP | Gravity.START;
-            backdrop.setLayoutParams(params);
-        }
+        com.termux.app.dock.CapsuleGlass.applyOverscan(backdrop, surfaceHost.getWidth(),
+            surfaceHost.getHeight(), horizontalOverscanPx, bottomOverscanPx);
     }
 
     @NonNull
     private Rect buildAccessoryBackdropTargetRect(@NonNull View surfaceHost, int horizontalOverscanPx,
                                                   int bottomOverscanPx) {
         surfaceHost.getLocationOnScreen(mTmpViewLocation);
-        return new Rect(
-            mTmpViewLocation[0] - horizontalOverscanPx,
-            mTmpViewLocation[1],
-            mTmpViewLocation[0] + Math.max(1, surfaceHost.getWidth()) + horizontalOverscanPx,
-            mTmpViewLocation[1] + Math.max(1, surfaceHost.getHeight()) + bottomOverscanPx
-        );
+        return com.termux.app.dock.CapsuleGlass.targetRect(mTmpViewLocation, surfaceHost.getWidth(),
+            surfaceHost.getHeight(), horizontalOverscanPx, bottomOverscanPx);
     }
 
     /**
@@ -9596,8 +9685,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // When the under-pill decor strip abuts the dock/keyboard bottom (default dock only), overscan
         // the view downward past that seam so the refraction edge band lands below it — the strip
         // overscans upward by the same amount, so the two surfaces' blurred wallpaper meets seamlessly.
-        int seamOverscanPx = mDockFootPx > 0
-            ? horizontalOverscanPx : 0;
+        int seamOverscanPx = com.termux.app.dock.CapsuleGlass.seamOverscanPx(hostFootPx(),
+            horizontalOverscanPx);
         applyAccessoryBackdropOverscan(backdrop, surfaceHost, horizontalOverscanPx, seamOverscanPx);
         // The dock's own overscan is what the ImageView is sized to. The drawable inside samples
         // the shared frame at the view's live position, so the rect only says where the shader's
@@ -9620,7 +9709,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The frost filter follows Opacity live, and the even-out the wallpaper under the dock
             // now asks for (mid-drag the one last measured, re-measured on the release's pass);
             // the same filter instance when neither moved, which re-dresses nothing.
-            backdrop.setColorFilter(dockFrostFilter(mGlassDragPreview ? null : surfaceHost));
+            backdrop.setColorFilter(hostFrostFilter(surfaceHost, true));
             // DIAG(dock-filter): the frost a pass at rest puts up, on change; revert before merge.
             if (MotionLog.enabled && !mCrossing.crossing()) {
                 String d = matrixDiag(com.termux.app.chrome.GlassFilters.matrixOf(
@@ -9665,11 +9754,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // inset by the overscan, top/bottom span the full height. Hand that rect to the shader so
             // refraction happens at the real dock edge.
             float capLeft = horizontalOverscanPx;
-            float capRight = horizontalOverscanPx + Math.max(1, surfaceHost.getWidth());
-            // Put the shader's bottom edge at the overscanned bitmap bottom (below the visible seam)
-            // so the visible dock bottom reads as interior glass, not a refracting edge.
-            float capBottom = Math.max(1, surfaceHost.getHeight()) + seamOverscanPx;
-            boolean capsuleDock = mDock.dockFloats();
+            boolean capsuleDock = mDock.hostFloats();
             float radiusPx = capsuleDock
                 ? mDock.resolveDockCapsuleCornerRadiusPx(surfaceHost.getHeight())
                 : 0f;
@@ -9679,7 +9764,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int dockSeams = capsuleDock ? 0 : com.termux.app.chrome.LiveChromeShape.seamEdges(
                 chromeShape(), dockPieceIds(shouldUseUnifiedDefaultKeyboardGlassSurface(state)));
             float[] capRect = new float[4];
-            com.termux.app.chrome.GlassRefraction.rimRect(capRect, capLeft, 0f, capRight, capBottom,
+            com.termux.app.dock.CapsuleGlass.capRect(capRect, horizontalOverscanPx,
+                surfaceHost.getWidth(), surfaceHost.getHeight(), seamOverscanPx,
                 com.termux.app.chrome.GlassRefraction.seamReachPx(
                     com.termux.app.chrome.GlassStack.lookFor(mFancierGlassLook),
                     getResources().getDisplayMetrics().density, radiusPx),
@@ -9695,7 +9781,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Content-aware light scatter — the frost that makes the blur read as glass, not plastic —
         // with the dock band's even-out ahead of it (ADR 0014).
-        backdrop.setColorFilter(dockFrostFilter(surfaceHost));
+        backdrop.setColorFilter(hostFrostFilter(surfaceHost, false));
         backdrop.setVisibility(View.VISIBLE);
         // Below Android 13 there is no effect to install, and the dock keeps its rim.
         mDock.setDockProgramEdge(mGlassEffects.paramsValid());
@@ -9733,6 +9819,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not carry the strip's dim: on pong (round 2) the dock and the keyboard rows it holds
         // kept Home's luma over a Terminal dimmed 50 while their ground was left to it.
         syncDockGround(backdrop, false);
+        installBackdropPicture(backdrop, installed, frame, frameRect, blurRadiusDp, live);
+    }
+
+    /**
+     * Points a capsule's {@code backdrop} at its live picture, or at the stored frame when it has
+     * none; the dock's and the extra-keys card's backdrops both are installed here.
+     */
+    private void installBackdropPicture(@NonNull ImageView backdrop,
+                                        @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                                        @NonNull Bitmap frame, @NonNull Rect frameRect,
+                                        int blurRadiusDp,
+                                        @Nullable android.graphics.drawable.Drawable live) {
         if (live != null) {
             // Live blur: the picture records what is beneath the dock; it is aimed by the recording.
             if (backdrop.getDrawable() != live) backdrop.setImageDrawable(live);
@@ -9751,6 +9849,83 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         backdrop.invalidate();
     }
 
+    /**
+     * The host's frost for this pass. Apart, the host is Home's card at every rest and across
+     * every crossing, so its even-out is Home's rest's own, measured under Home's rest rect over
+     * Home's ground ({@link #restFrostFilter}), whether the host is parked left of the screen or
+     * not; the dock band's one live memo follows the card in front (the host while Home is in
+     * front, so the row's inks read it; the Terminal's card otherwise). A Frost drag keeps the
+     * live path. Together, not apart: the host measures under itself as it always has.
+     */
+    @Nullable
+    private android.graphics.ColorFilter hostFrostFilter(@NonNull View surfaceHost,
+                                                         boolean dragAware) {
+        com.termux.app.place.RestCards.HostLook look = mSideCards.hostLook();
+        boolean liveFront = !mStackRenderer.keysCardStands() && !mCrossing.crossing();
+        boolean drag = dragAware && mGlassDragPreview;
+        if (look == null || drag) {
+            return dockFrostFilter(drag || mStackRenderer.keysCardStands() ? null : surfaceHost);
+        }
+        // Home in front at rest: the live memo is measured (the row's inks stand on it); the
+        // frost put up is Home's rest's, the same one the parked host wore.
+        android.graphics.ColorFilter live = liveFront ? dockFrostFilter(surfaceHost) : null;
+        android.graphics.ColorFilter rest = restFrostFilter(mHostRestFrost,
+            com.termux.app.wall.PageRef.HOME, mSideCards.hostRestRect());
+        if (rest != null) return rest;
+        return liveFront ? live : dockFrostFilter(null);
+    }
+
+    /** One card's frost at its own rest, with what it was measured from. */
+    private static final class RestFrost {
+        @Nullable android.graphics.ColorFilter filter;
+        final Rect rect = new Rect();
+        int look = com.termux.app.place.TopBandFadePlan.NONE;
+        int ground;
+        int frames;
+        int dress;
+    }
+
+    @NonNull private final RestFrost mHostRestFrost = new RestFrost();
+    @NonNull private final RestFrost mCardRestFrost = new RestFrost();
+
+    /**
+     * The dock band's frost as {@code page}'s card wears it at its own rest ({@code rest}, screen
+     * px, from the rest answer): the even-out measured under that rect over {@code page}'s
+     * ground, never under a view's position on screen, so a card parked off screen is measured
+     * where it will stand. Kept per card by its inputs, so a pass that moved none of them
+     * measures nothing; it touches no memo the live band keeps. Null when nothing can be read.
+     */
+    @Nullable
+    private android.graphics.ColorFilter restFrostFilter(@NonNull RestFrost slot,
+            @NonNull com.termux.app.wall.PageRef page,
+            @Nullable com.termux.app.place.ChromeShape.Box rest) {
+        if (mChrome == null || rest == null) return null;
+        int lookId = lookIdOf(page);
+        updateEvenOutPolicy();
+        int ground = groundOfWallPage(page.kind);
+        int frames = mChrome.ink().framesGeneration();
+        int dress = dockFilterDress(lookId);
+        mDockEvenOutRect.set(Math.round(rest.left), Math.round(rest.top), Math.round(rest.right),
+            Math.round(rest.bottom));
+        if (slot.filter != null && slot.look == lookId && slot.ground == ground
+            && slot.frames == frames && slot.dress == dress && slot.rect.equals(mDockEvenOutRect))
+            return slot.filter;
+        android.graphics.ColorFilter frost = com.termux.app.chrome.GlassFilters.frost(
+            mPreferences != null ? mPreferences.getAppBarOpacity(lookId) : 100);
+        android.graphics.ColorMatrix evenOut = mChrome.ink().bandEvenOutMatrixOver(
+            com.termux.app.chrome.GlassBackdropCache.Band.DOCK, mDockEvenOutRect, ground);
+        // A band that evens out and read nothing: the frost alone would be a wrong one.
+        if (evenOut == null && mChrome.ink().hasBandEvenOut(
+                com.termux.app.chrome.GlassBackdropCache.Band.DOCK)) return null;
+        slot.filter = com.termux.app.chrome.GlassFilters.withEvenOut(evenOut, frost);
+        slot.rect.set(mDockEvenOutRect);
+        slot.look = lookId;
+        slot.ground = ground;
+        slot.frames = frames;
+        slot.dress = dress;
+        return slot.filter;
+    }
+
     /** Prototype #283: the ground drawn in the dock backdrop's overlay; null until first needed. */
     @Nullable private com.termux.app.chrome.GroundUnderGlass mDockGround;
 
@@ -9761,18 +9936,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * and holds the strip already.
      */
     private void syncDockGround(@NonNull ImageView backdrop, boolean carried) {
-        if (!com.termux.app.chrome.GlassGround.ON) return;
-        if (mDockGround == null) {
+        mDockGround = syncGround(mDockGround, backdrop, "dock-keyboard", carried);
+    }
+
+    /** {@link #syncDockGround} for any capsule backdrop: its overlay made once, held by the caller. */
+    @Nullable
+    private com.termux.app.chrome.GroundUnderGlass syncGround(
+            @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop,
+            @NonNull String name, boolean carried) {
+        if (!com.termux.app.chrome.GlassGround.ON) return held;
+        if (held == null) {
             com.termux.app.chrome.GroundUnderGlass ground =
-                new com.termux.app.chrome.GroundUnderGlass(backdrop, "dock-keyboard");
-            mDockGround = ground;
+                new com.termux.app.chrome.GroundUnderGlass(backdrop, name);
+            held = ground;
             backdrop.getOverlay().add(ground);
             ground.setBounds(0, 0, backdrop.getWidth(), backdrop.getHeight());
             backdrop.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) ->
                 ground.setBounds(0, 0, r - l, b - t));
             ground.attach();
         }
-        mDockGround.setCarried(carried);
+        held.setCarried(carried);
+        return held;
     }
 
     @Nullable
@@ -9871,6 +10055,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             applyInAppKeyboardSurfaceState(state);
             Trace.endSection();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
+            mKeysCardDress.release();
             resetAzOverflowAffordanceState();
             if (mDock.dockPlankController() != null) {
                 mDock.dockPlankController().setEnabled(false);
@@ -9914,6 +10099,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // redraws the whole window, terminal text included, on the UI thread.
         Trace.beginSection("Chrome.renderEffectBackdrop");
         updateAccessoryRenderEffectBackdrop(state);
+        mKeysCardDress.update(state);
         Trace.endSection();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         updateAzOverflowAffordance();
@@ -10773,6 +10959,119 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.TopStackScene.End();
     private final com.termux.app.statusbar.TopStackScene.End mTopEndRest =
         new com.termux.app.statusbar.TopStackScene.End();
+
+    /** Home's and the Terminal's Floating cards at rest, from one answer (ADR 0032, #302). */
+    private final com.termux.app.dock.SideCardsController mSideCards =
+        new com.termux.app.dock.SideCardsController(new com.termux.app.dock.SideCardsController.Host() {
+            @Nullable @Override public View view(int id) { return hotView(id); }
+            @Nullable @Override public com.termux.app.wall.PageRef frontPage() {
+                if (mLastWallPage == com.termux.app.page.PageKind.HOME) return com.termux.app.wall.PageRef.HOME;
+                return mLastWallPage == com.termux.app.page.PageKind.TERMINAL && !isDisplayWindowInFront()
+                    ? com.termux.app.wall.PageRef.TERMINAL : null;
+            }
+            @Nullable @Override public PlaceLayout layoutOf(@NonNull com.termux.app.wall.PageRef page) {
+                return page.isHome() ? homePlaceLayout() : terminalPlaceLayout();
+            }
+            @NonNull @Override public com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(
+                    @NonNull PlaceLayout layout, @NonNull com.termux.app.page.PageKind rowsPage) {
+                return mDock.dockSnapshot(layout, rowsPage);
+            }
+            @NonNull @Override public android.util.DisplayMetrics displayMetrics() { return getResources().getDisplayMetrics(); }
+            @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
+            @Override public int measuredKeyboardPx() {
+                View keyboard = findViewById(R.id.inapp_keyboard_container);
+                return keyboardStaysLaidOut() && keyboard != null && keyboard.getVisibility() != View.GONE
+                    ? mKeyboardGeometry.measureHeightPx() : 0;
+            }
+            @Override public int restKeyboardPx(@NonNull com.termux.app.wall.PageRef page) {
+                // The keys' height as the pass reads it while the keyboard shows (buildChromeSpec).
+                return com.termux.app.place.SideCards.restKeyboardPx(sideRestKeyboardUp(
+                    page.isHome() ? com.termux.app.page.PageKind.HOME
+                        : com.termux.app.page.PageKind.TERMINAL),
+                    mKeyboardGeometry == null ? 0
+                        : inAppKeyboardKeysPx(mKeyboardGeometry.measureHeightPx()));
+            }
+            @Override public int bottomStatusBandPx(@NonNull PlaceLayout layout) {
+                return com.termux.app.place.EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM)
+                    .contains(com.termux.app.place.Element.STATUS) ? mStatusBar.bottomStatusBandPx() : 0;
+            }
+            @Override public int keptBandPx() { return mBottomKeptPx; }
+            @Override public int terminalRestFlushPaddingPx() { return terminalRestFlushPx(mLastWallPage == com.termux.app.page.PageKind.HOME); }
+            @Override public boolean terminalFlushAllowed() {
+                return visiblePaneCount() <= 1 && !(mPaneController != null && mPaneController.isActivePaneFloating())
+                    && !isImeVisible();
+            }
+            @Override public boolean statusOnDockPlank() { return mStatusBarOnDockPlank; }
+            @Override public boolean keyboardGlassShared() { return isInAppKeyboardGlassSurface(); }
+            @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
+                mStackRenderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
+            }
+        });
+
+    /** The glass element of the Terminal's extra-keys card, one more Live entry while it is on screen. */
+    private static final String KEYS_CARD_GLASS = "keys_card";
+
+    /** The Terminal's extra-keys card wearing the dock capsule's glass (ADR 0032, #302). */
+    private final com.termux.app.dock.KeysCardDress mKeysCardDress =
+        new com.termux.app.dock.KeysCardDress(mDock, new com.termux.app.dock.KeysCardDress.Source() {
+            @Override public boolean crossing() { return mCrossing.crossing(); }
+            @Override public boolean blurWanted(@NonNull ChromeSpec state) {
+                return shouldUseAccessoryRenderEffectBlur(state);
+            }
+            @Override public boolean pictureUp(@NonNull ImageView backdrop) {
+                return accessoryPictureUp(backdrop);
+            }
+            @Nullable @Override public android.graphics.drawable.Drawable attachLive(
+                    @NonNull ImageView backdrop, int radiusDp) {
+                com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, radiusDp,
+                    com.termux.app.chrome.LiveBackdrop.RANK_CHROME, KEYS_CARD_GLASS,
+                    mDockGlassRedress);
+                return picture == null ? null : picture.drawable();
+            }
+            @Override public void releaseLive(@NonNull ImageView backdrop) {
+                if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+                mGlass.unregister(KEYS_CARD_GLASS);
+            }
+            @Nullable @Override public Bitmap blurFrame(int radiusDp, @NonNull Rect outRect) {
+                Bitmap frame = mChrome.blurCache().obtain(radiusDp,
+                    findViewById(R.id.activity_termux_root_view));
+                outRect.set(mChrome.blurCache().frameRectRef());
+                return frame;
+            }
+            @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
+                // The card's dress as a crossing toward it begins measures no view (it is parked):
+                // its frost is the Terminal's rest's own, under the card's rest rect.
+                if (surface == null && !mGlassDragPreview && mSideCards.hostLook() != null) {
+                    android.graphics.ColorFilter rest = restFrostFilter(mCardRestFrost,
+                        com.termux.app.wall.PageRef.TERMINAL, mSideCards.keysCardRestRect());
+                    if (rest != null) return rest;
+                }
+                return dockFrostFilter(surface);
+            }
+            @Override public boolean managedSource() { return shouldUseManagedWallpaperBlurSource(); }
+            @Override public boolean glassDragPreview() { return mGlassDragPreview; }
+            @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
+                return mFancierGlassLook;
+            }
+            // The Terminal's card stands in from the screen's edge, so it owns no foot: apart, the
+            // page in front (Home's Peek card owns one) does not say whether it has one.
+            @Override public int footPx() { return mSideCards.apart() ? 0 : mDockFootPx; }
+            @Nullable @Override public Drawable plate(float barAlpha) {
+                return dockSheetStandsDownOnFrame() ? null
+                    : deckSlabOr(mChrome.glass().dockSurface(barAlpha, 0f, 1f, false));
+            }
+            @Override public int outlineColor() { return resolveAccessoryOutlineColor(); }
+            @Nullable @Override public com.termux.app.chrome.GroundUnderGlass ground(
+                    @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop) {
+                return syncGround(held, backdrop, "keys-card", false);
+            }
+            @Override public void installPicture(@NonNull ImageView backdrop,
+                    @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                    @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
+                    @Nullable android.graphics.drawable.Drawable live) {
+                installBackdropPicture(backdrop, installed, frame, frameRect, radiusDp, live);
+            }
+        });
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
         @Override public void laneMoved(@NonNull View host) {
@@ -14008,8 +14307,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                   @NonNull com.termux.app.wall.PageRef there) {
         endLegendBlend();
         if (mChrome == null) return;
-        beginKeyboardLookBlend(there);
+        // The plan's begin first: it works out the arriving keyboard's even-out the keyboard's
+        // arriving card is then built on.
         beginDockGroundBlend(here, there);
+        // The Terminal's extra-keys card is dressed as it first shows (its glass entry registers
+        // here, once), not at the landing.
+        if (there.kind == com.termux.app.page.PageKind.TERMINAL && mSideCards.apart())
+            mKeysCardDress.onCrossingBegin(buildChromeSpec());
+        beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
         long thereKey = legibilityKey(there);
@@ -14080,11 +14385,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A pass on the way dressed the host again: what it put up is the blend's end on the
             // side it was dressed for, so the material keeps crossing instead of standing whole.
             View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+            // Under Floating a pass that took the keyboard's card off (its state with no keyboard
+            // shown) dressed the end with no keyboard, which the blend already crosses from or to,
+            // so the blend goes back up as it was. Docked keeps the host as the pass left it.
             Drawable now = surfaceHost == null ? null : surfaceHost.getBackground();
-            if (now != null && now != keyboardBlend) {
-                keyboardBlend = mKeyboardLookBlendArrives
-                    ? new com.termux.app.chrome.CrossfadeDrawable(keyboardBlend.here(), now, share)
-                    : new com.termux.app.chrome.CrossfadeDrawable(now, keyboardBlend.there(), share);
+            com.termux.app.chrome.CrossfadeDrawable next = surfaceHost == null ? null
+                : com.termux.app.chrome.CrossfadeDrawable.afterPass(keyboardBlend, now,
+                    mKeyboardLookBlendArrives,
+                    !arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating(), share);
+            if (next != null && next != now) {
+                keyboardBlend = next;
                 mKeyboardLookBlend = keyboardBlend;
                 setKeyboardHostBackground(surfaceHost, keyboardBlend);
             }
@@ -14103,6 +14413,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void beginDockGroundBlend(@NonNull com.termux.app.wall.PageRef here,
                                       @NonNull com.termux.app.wall.PageRef there) {
+        if (mSideCards.hostLook() != null) {
+            // Apart, the host is Home's card throughout and its frost stands (hostFrostFilter):
+            // nothing blends, and the Terminal's card wears its own at its rest.
+            mDockFilterPlan.begin(lookIdOf(here), lookIdOf(there), false);
+            standKeyboardEvenOutAt(there);
+            java.util.Arrays.fill(mDockFilterSteps, null);
+            mDockFilterHere = null;
+            mDockFilterThere = null;
+            mDockFilterHereUp = null;
+            mDockFilterThereUp = null;
+            mDockFilterNow = null;
+            return;
+        }
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         android.graphics.ColorFilter up = backdrop == null ? null : backdrop.getColorFilter();
         android.graphics.ColorMatrix filterHere = dockFilterMatrixUp(up);
@@ -14116,6 +14439,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 + " kept=" + mDiagDockFilterKept);
         boolean ends = filterHere != null && filterThere != null;
         mDockFilterPlan.begin(lookIdOf(here), lookIdOf(there), ends);
+        standKeyboardEvenOutAt(there);
         java.util.Arrays.fill(mDockFilterSteps, null);
         if (!ends) {
             mDockFilterHere = null;
@@ -14174,6 +14498,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mDockFilterAtMatrix = com.termux.app.chrome.GlassFilters.matrixOf(filter);
         return mDockFilterAtMatrix == null ? null : filter;
     }
+
+    /**
+     * Floating's keyboard card toward a rest that shows it, under the same plan as the dock's
+     * frost: its band's even-out is worked out once as the crossing begins, past the crossing's
+     * freeze, over the arriving page's ground where the card is laid out and under that page's
+     * look ({@link com.termux.app.chrome.ChromeInk#standBandEvenOutOver}). The card is built on
+     * it next ({@link #beginKeyboardLookBlend}); the travel's hold keeps it through the landing,
+     * and the landing's settle measures the band where it rests. Docked's keyboard has no card.
+     */
+    private void standKeyboardEvenOutAt(@NonNull com.termux.app.wall.PageRef there) {
+        if (mChrome == null || !KeyboardMaterialPolicy.dressedShown(false,
+                chromeRestOf(there.kind).keyboardReveal() > 0f,
+                arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating())) return;
+        View host = findViewById(R.id.inapp_keyboard_view_host);
+        if (host == null || host.getWidth() <= 0 || host.getHeight() <= 0) return;
+        com.termux.app.chrome.GlassAnchor.layoutRectOnScreen(host, mKeyboardArrivalRect,
+            mKeyboardArrivalAt, mKeyboardArrivalParentAt);
+        mLookIdOverride = lookIdOf(there);
+        try {
+            updateEvenOutPolicy();
+            mChrome.ink().standBandEvenOutOver(com.termux.app.chrome.GlassBackdropCache.Band.KEYBOARD,
+                mKeyboardArrivalRect, groundOfWallPage(there.kind));
+        } finally {
+            mLookIdOverride = com.termux.app.place.TopBandFadePlan.NONE;
+        }
+    }
+
+    /** {@link #standKeyboardEvenOutAt}'s scratch; main thread only. */
+    @NonNull private final Rect mKeyboardArrivalRect = new Rect();
+    @NonNull private final int[] mKeyboardArrivalAt = new int[2];
+    @NonNull private final int[] mKeyboardArrivalParentAt = new int[2];
 
     /** {@link #dockFrostFilterAt}'s matrix; read at once by the crossing's begin. */
     @Nullable private android.graphics.ColorMatrix mDockFilterAtMatrix;
@@ -14269,6 +14624,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Whether the keyboard look blend arrives at a keyboard (else the keyboard's material goes). */
     private boolean mKeyboardLookBlendArrives;
+    /** Whether its arriving end is Floating's own card, dressed by the ladder and held. */
+    private boolean mKeyboardLookBlendDressed;
 
     /**
      * The keyboard host's material across a look-apart crossing toward a page whose rest shows the
@@ -14281,6 +14638,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void beginKeyboardLookBlend(@NonNull com.termux.app.wall.PageRef there) {
         mKeyboardLookBlend = null;
+        mKeyboardLookBlendDressed = false;
         View surfaceHost = findViewById(R.id.inapp_keyboard_view_host);
         if (surfaceHost == null || mPreferences == null) return;
         mKeyboardLookBlendArrives = chromeRestOf(there.kind).keyboardReveal() > 0f;
@@ -14291,6 +14649,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (here == null) return;
             mKeyboardLookBlend = new com.termux.app.chrome.CrossfadeDrawable(here,
                 new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT), 0f);
+            setKeyboardHostBackground(surfaceHost, mKeyboardLookBlend);
+            return;
+        }
+        if (KeyboardMaterialPolicy.dressedShown(false, true,
+                arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating())) {
+            // Floating: the arriving end is the keyboard's own card as the arriving rest dresses
+            // it, through the one dress ladder (its Style, corners and material), built once here.
+            Drawable here = surfaceHost.getBackground();
+            if (!dressArrivingKeyboardHost(there)) releaseKeyboardFrost();
+            Drawable arrival = mKeyboardHostInner;
+            if (arrival == null) return;
+            mKeyboardLookBlendDressed = true;
+            mKeyboardLookBlend = new com.termux.app.chrome.CrossfadeDrawable(
+                here != null ? here : new android.graphics.drawable.ColorDrawable(Color.TRANSPARENT),
+                arrival, 0f);
             setKeyboardHostBackground(surfaceHost, mKeyboardLookBlend);
             return;
         }
@@ -17865,6 +18238,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             0, mBottomKeptPx, dockFoot, stack.bottomMarginPx, stack.flushBottomInsetPx,
             inAppKeyboardFootApplies(isInAppKeyboardCapsule()));
         mDockFootPx = bottomInsets.dockFootPx;
+        // Home's card and the Terminal's extra-keys card, from one answer at rest (a live crossing
+        // lays neither out), before the container's padding: while they stand apart the container
+        // pads nothing and the renderer draws the Terminal's side its lift higher (SideCards).
+        boolean sideCardsMoved = !mCrossing.crossing() && mSideCards.update(stackIn);
         applyDockFootLayout(accessoryStackContainer, bottomInsets);
         int accessoryBottomMarginPx = bottomInsets.stackMarginPx;
         // The in-app keyboard stays laid out while it is down: the container is as tall as
@@ -17896,7 +18273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             stack.stackHeightPx + bottomInsets.containerExtraPx(), keyboardDownPx, laneSlackPx);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
         // taller glass instead of hugging its bottom edge.
-        int flushBottomInsetPx = bottomInsets.stackPaddingPx;
+        int flushBottomInsetPx = mSideCards.containerPaddingPx(bottomInsets.stackPaddingPx);
         boolean flushInsetChanged = accessoryStackContainer.getPaddingBottom() != flushBottomInsetPx;
         if (flushInsetChanged) {
             accessoryStackContainer.setPadding(
@@ -17905,12 +18282,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 accessoryStackContainer.getPaddingRight(),
                 flushBottomInsetPx);
         }
+        // The container keeps the Terminal's margin at both rests while the cards stand apart.
+        if (sideCardsMoved) applyAccessorySurfaceBounds(state);
+        if (mHostLookRevisionApplied != mSideCards.hostLookRevision()) {
+            // The host's dress page moved (Home's rest took it over, or gave it back): its glass
+            // is built once for the new dress, a rest-time step that no crossing runs.
+            mHostLookRevisionApplied = mSideCards.hostLookRevision();
+            if (mChrome != null) mChrome.ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+            rebuildBackdropGlassEffectForLens();
+        }
         boolean accessoryHeightChanged = updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
         // What the container's layout listener holds the laid-out keyboard to.
         mKeyboardGeometry.noteReservedHeightPx(state.keyboardHeight);
         boolean accessoryMarginChanged = updateAccessoryStackContainerBottomMargin(
             accessoryStackContainer,
-            accessoryBottomMarginPx
+            mSideCards.containerMarginPx(accessoryBottomMarginPx)
         );
         // A pass that moves the stack's bottom (the foot coming or going, its height, its padding)
         // while the travel holds it below its layout re-cuts the travel's clips for that bottom.
@@ -18345,10 +18731,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Terminal stands its flush padding only at a rest with the keyboard down. Until it
         // has rested with it down (as after a restart on Home) it is worked out the way its own
         // pass would, from its rest's room and the laid-out terminal.
-        int flush = mTerminalRestFlushKnown || !frontHome ? mTerminalRestFlushPaddingPx
-            : Math.max(0, resolveTerminalFlushDockPaddingPx(
-                mCrossingController == null ? 0 : mCrossingController.travelRestReservationPx(
-                    com.termux.app.page.PageKind.TERMINAL, false), 0));
+        int flush = terminalRestFlushPx(frontHome);
         slack += com.termux.app.place.StackLanes.flushSlackPx(flush,
             otherStandsFlush ? flush : 0);
         // DIAG(host-shift): the flush worked out before the Terminal rested; revert before merge.
@@ -18359,6 +18742,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int slabInset = com.termux.app.dock.DockGeometry.compute(snapshot.restOf(otherPage))
             .slabTopInsetPx;
         return (mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx()) + slabInset + slack;
+    }
+
+    /**
+     * The Terminal's flush padding at its own rest: the one it last rested with, or, before it has
+     * rested with its keyboard down (a start on Home), worked out the way its own pass would.
+     */
+    private int terminalRestFlushPx(boolean frontHome) {
+        return mTerminalRestFlushKnown || !frontHome ? mTerminalRestFlushPaddingPx
+            : Math.max(0, resolveTerminalFlushDockPaddingPx(
+                mCrossingController == null ? 0 : mCrossingController.travelRestReservationPx(
+                    com.termux.app.page.PageKind.TERMINAL, false), 0));
     }
 
     /** Whether {@link #mTerminalRestFlushPaddingPx} was taken from a Terminal rest yet. */
@@ -18418,6 +18812,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** How far the dock's surface runs below its rows to the screen's edge; 0 without a foot. */
     private int mDockFootPx;
+    /** {@code SideCardsController#hostLookRevision} the host's glass was last built for. */
+    private int mHostLookRevisionApplied;
+
+    /**
+     * The foot under the pill as the glass host's dress reads it: Home's rest while the cards
+     * stand apart (the host is Home's card at every rest), the stack's own otherwise.
+     */
+    private int hostFootPx() {
+        com.termux.app.place.RestCards.HostLook look = mSideCards.hostLook();
+        return look == null ? mDockFootPx : look.foot ? Math.max(1, mBottomKeptPx) : 0;
+    }
 
     /**
      * The keyboard column stands above the foot by its margin, so the rows above it stay put, and
@@ -18430,8 +18835,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View column = container.findViewById(R.id.accessory_keyboard_column);
         if (column != null && column.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
             ViewGroup.MarginLayoutParams params = (ViewGroup.MarginLayoutParams) column.getLayoutParams();
-            if (params.bottomMargin != insets.keyboardColumnMarginPx) {
-                params.bottomMargin = insets.keyboardColumnMarginPx;
+            // Never the Terminal's lift: Home's rows stand on this column (SideCards#columnLiftPx).
+            int margin = insets.keyboardColumnMarginPx;
+            if (params.bottomMargin != margin) {
+                params.bottomMargin = margin;
                 column.setLayoutParams(params);
             }
         }
@@ -23760,7 +24167,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Keeps {@code filter} as the stack look's frost at rest; nothing new when it already is. */
     private void keepDockFilterAtRest(@Nullable android.graphics.ColorFilter filter) {
-        if (filter == null || mChrome == null) return;
+        // Apart, two cards share the band; each keeps its own (restFrostFilter), none a rest here.
+        if (filter == null || mChrome == null || mSideCards.apart()) return;
         int look = stackLookPage();
         int ground = groundOfWallPage(stackDressPage());
         int frames = mChrome.ink().framesGeneration();
@@ -24559,13 +24967,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @NonNull
     private com.termux.app.place.PlaceChromeTravel.Rest chromeRestOf(
             @NonNull com.termux.app.page.PageKind place) {
-        boolean keyboardUp = place == mLastWallPage ? committedKeyboardVisible()
-            : restWantsKeyboard(place);
+        boolean keyboardUp = sideRestKeyboardUp(place);
         // A Home page wears the bar too (#90); only one whose layout puts it away has none, and
         // the window's then fades on the way there.
         if (place == com.termux.app.page.PageKind.HOME && !homeWearsBarAtRest())
             return keyboardUp ? REST_HOME_KEYBOARD_UP : REST_HOME_KEYBOARD_DOWN;
         return keyboardUp ? REST_KEYBOARD_UP : REST_KEYBOARD_DOWN;
+    }
+
+    /**
+     * Whether {@code place}'s own rest has its keyboard up ({@code SideCards#restKeyboardUp}):
+     * what a crossing's end toward it reads and what the two cards lay the parked side out with.
+     */
+    private boolean sideRestKeyboardUp(@NonNull com.termux.app.page.PageKind place) {
+        boolean front = place == mLastWallPage;
+        return com.termux.app.place.SideCards.restKeyboardUp(front,
+            front && committedKeyboardVisible(), !front && restWantsKeyboard(place));
     }
 
     /**
@@ -24911,6 +25328,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public com.termux.app.dock.PeekGlassGeometry.Card peekCard() {
             return mPeekCard;
+        }
+
+        @Nullable
+        @Override
+        public com.termux.app.place.RestCards.HostLook hostLook() {
+            return mSideCards.hostLook();
         }
 
         @Override

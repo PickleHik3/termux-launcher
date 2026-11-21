@@ -60,6 +60,14 @@ import java.util.List;
  *       over the pass's ({@link Rest#restFlushPaddingPx}, {@code StackLanes#flushSlackPx}).</li>
  * </ul>
  *
+ * <p>Two cards under Floating (ADR 0032, #302): while {@link SideCards#apart} holds, Home's card
+ * stays on the glass host and the Terminal's extra-keys card is {@link StackView#KEYS_CARD}, each
+ * laid out at its own rest at both rests. The caller fills {@link Rest#other} (the other side's
+ * rest, one level) and the answer then holds the container's one margin, draws Home's side
+ * {@link SideCards#homeSideDropPx} below its layout, and lists the other side's cards, which a
+ * view stands laid out for but draws off screen with its side, in {@link #parked()}. A rest with
+ * no {@code other} answers as it did before.
+ *
  * <p>The foot under the gesture pill ({@link CardId#FOOT}) is the kept navigation band
  * ({@link Rest#keptBandPx}) wherever a card reaches through it: the dock's host while it owns
  * the foot ({@code DockSpec#footExists}), or the Docked keyboard while it wears the band as its
@@ -80,7 +88,11 @@ public final class RestCards {
     public enum CardId { STATUS, DOCK, PEEK, UNDER, KEYBOARD, FOOT }
 
     /** The views that carry cards or are laid out around them. */
-    public enum StackView { CONTAINER, HOST, KEYBOARD_COLUMN, UNDER, STATUS_BAR, FLOATING_KEYBOARD }
+    public enum StackView {
+        CONTAINER, HOST, KEYBOARD_COLUMN, UNDER, STATUS_BAR, FLOATING_KEYBOARD,
+        /** The Terminal's extra-keys card while it stands apart from Home's (SideCards). */
+        KEYS_CARD
+    }
 
     /** Where the layout stands the A–Z bar (ResolvedArrangement's azRowOnDock, azBarEdge, azTab). */
     public enum AzPlacement {
@@ -123,6 +135,13 @@ public final class RestCards {
         public int floatingKeyboardMinWidthPx = 0;
         public float floatingKeyboardX = FloatingKeyboardGeometry.DEFAULT_X_FRACTION;
         public float floatingKeyboardY = FloatingKeyboardGeometry.DEFAULT_Y_FRACTION;
+        /**
+         * The other side's rest (Home for the Terminal's, the Terminal for Home's), filled the
+         * same way with that side's own keyboard ({@link SideCards#restKeyboardUp}), never the
+         * front's; its own {@code other} is ignored.
+         * Null answers as one side alone.
+         */
+        @Nullable public Rest other;
 
         /**
          * @param measuredKeyboardPx the keyboard as the stack lays it out while it is down, its
@@ -146,6 +165,41 @@ public final class RestCards {
 
         int statusThicknessPx(boolean floating) {
             return floating ? statusThicknessFloatingPx : statusThicknessDockedPx;
+        }
+    }
+
+    /**
+     * What the glass host wears at Home's rest, worked out from the rest's own numbers: the
+     * values its dress reads from the page in front while the cards stand together, and from
+     * here while they stand apart ({@link SideCards}), so the host is dressed as Home's rest at
+     * every rest and the landing on Home re-dresses nothing.
+     */
+    public static final class HostLook {
+        /** Home's Dock design as its slab wears it (none where Home shows no apps row). */
+        @NonNull public final com.termux.app.dock.DockStyle design;
+        /** The Peek card stands: flush with the screen's edge, cut at the icons' centre line. */
+        public final boolean peek;
+        /** The dock is placed as the Floating card ({@link DockPlacement#floats}). */
+        public final boolean floats;
+        /** The dock's glass owns the foot under the gesture pill ({@link DockSpec#footExists}). */
+        public final boolean foot;
+        /** The keyboard state the rest was answered with. */
+        public final boolean keyboardUp;
+        /** The Peek card cut in the host's coordinates, as the pass cuts it; null off Peek. */
+        @Nullable public final PeekGlassGeometry.Card peekCut;
+        /** Where the host view is drawn at this rest, screen px (its card is cut from it). */
+        @Nullable public final Box drawn;
+
+        HostLook(@NonNull com.termux.app.dock.DockStyle design, boolean peek, boolean floats,
+                 boolean foot, boolean keyboardUp, @Nullable PeekGlassGeometry.Card peekCut,
+                 @Nullable Box drawn) {
+            this.drawn = drawn;
+            this.design = design;
+            this.peek = peek && peekCut != null;
+            this.floats = floats;
+            this.foot = foot;
+            this.keyboardUp = keyboardUp;
+            this.peekCut = this.peek ? peekCut : null;
         }
     }
 
@@ -188,12 +242,111 @@ public final class RestCards {
     @NonNull private final PageRef mPage;
     @NonNull private final AzPlacement mAz;
     @NonNull private final List<Card> mCards = new ArrayList<>(6);
+    @NonNull private final List<Card> mParked = new ArrayList<>(2);
     @NonNull private final Box[] mLaidOut = new Box[StackView.values().length];
+    private boolean mApart;
+    private int mContainerMarginPx;
+    private int mHomeDropPx;
+    private int mTerminalLiftPx;
+    /** How the host dresses its card at this rest (the Home half's, once adopted); null for the Terminal's. */
+    @Nullable private HostLook mHostLook;
 
     /** The rest's answer. */
     @NonNull
     public static RestCards of(@NonNull Rest rest) {
-        return new RestCards(rest);
+        Rest other = rest.other;
+        if (other == null || other.page.isHome() == rest.page.isHome()) {
+            return new RestCards(rest, 0, false);
+        }
+        final boolean frontHome = rest.page.isHome();
+        final DockGeometry.Half half = rest.pass.dock.rowsHalf();
+        final Rest terminal = frontHome ? other : rest;
+        if (!SideCards.apart(rest.pass.dock.half(PageRef.HOME).layout,
+                rest.pass.dock.half(PageRef.TERMINAL).layout, half.floating,
+                terminal.statusOnDockPlank)) {
+            return new RestCards(rest, 0, false);
+        }
+        // Each side's own rest margin, worked out by the one helper; the container keeps the
+        // Terminal's at both rests and Home's side is drawn the difference lower.
+        final int mine = restMarginPx(rest);
+        final int theirs = restMarginPx(other);
+        final int homeMargin = frontHome ? mine : theirs;
+        final int terminalMargin = frontHome ? theirs : mine;
+        final int drop = SideCards.homeSideDropPx(homeMargin, terminalMargin, true);
+        RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome);
+        RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome);
+        answer.adopt(otherCards, frontHome);
+        if (!frontHome) answer.mHostLook = otherCards.mHostLook;
+        answer.mApart = true;
+        answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
+            frontHome);
+        answer.mHomeDropPx = drop;
+        // The Terminal's own rest's lift, whichever page is in front.
+        answer.mTerminalLiftPx = (frontHome ? otherCards : answer).mTerminalLiftPx;
+        return answer;
+    }
+
+    /**
+     * How far above its layout the Terminal's side is drawn ({@link SideCards#terminalSideLiftPx}),
+     * the Terminal's own rest's at both rests; 0 unless apart.
+     */
+    public int terminalSideLiftPx() {
+        return mTerminalLiftPx;
+    }
+
+    /**
+     * How the glass host is dressed at Home's rest: Home's own answer, whichever page is in
+     * front. Null unless the cards stand apart, when the host is dressed from the page in front.
+     */
+    @Nullable
+    public HostLook homeHostLook() {
+        return mApart ? mHostLook : null;
+    }
+
+    /** Where the host is drawn at Home's rest ({@link #homeHostLook}); null when it is not laid out. */
+    @Nullable
+    public Box homeHostRect() {
+        HostLook look = homeHostLook();
+        return look == null ? null : look.drawn;
+    }
+
+    /** Whether Home's card and the Terminal's extra-keys card stand apart ({@link SideCards}). */
+    public boolean apart() {
+        return mApart;
+    }
+
+    /**
+     * The container's bottom margin at this rest: the Terminal's own at both rests while the
+     * cards stand apart, else the margin this rest's stack has.
+     */
+    public int containerMarginPx() {
+        return mContainerMarginPx;
+    }
+
+    /** How far below the container's layout Home's side is drawn; 0 unless apart. */
+    public int homeSideDropPx() {
+        return mHomeDropPx;
+    }
+
+    /**
+     * The card {@code view} carries at its own rest while the cards stand apart: this rest's, or
+     * the parked other side's. Null when none stands there.
+     */
+    @Nullable
+    public Card cardOn(@NonNull StackView view) {
+        for (Card card : mCards) if (card.view == view) return card;
+        for (Card card : mParked) if (card.view == view) return card;
+        return null;
+    }
+
+    /**
+     * The cards a view stands laid out for but draws off screen with its side: the other side's
+     * glass while the two cards stand apart, empty otherwise. Their boxes are where that side
+     * draws them at its own rest.
+     */
+    @NonNull
+    public List<Card> parked() {
+        return Collections.unmodifiableList(mParked);
     }
 
     /** The cards in a stable order: STATUS, DOCK or PEEK, a foot it wears, UNDER, KEYBOARD, its foot. */
@@ -243,8 +396,14 @@ public final class RestCards {
 
     // ---- The answer ------------------------------------------------------------------------
 
-    private RestCards(@NonNull Rest rest) {
+    /**
+     * @param homeDropPx how far below its layout Home's side is drawn (container-borne views
+     *                   only); the laid-out boxes stand that much higher than the cards are drawn
+     * @param keysCard   the dock's card is the Terminal's extra-keys card ({@link StackView#KEYS_CARD})
+     */
+    private RestCards(@NonNull Rest rest, int homeDropPx, boolean keysCard) {
         final StackLayout.Input pass = rest.pass;
+        final StackView hostView = keysCard ? StackView.KEYS_CARD : StackView.HOST;
         mPage = rest.page;
         final DockGeometry.Half half = pass.dock.rowsHalf();
         // The layout the stack stands, as StackLayout reads it for the half whose rows stand.
@@ -257,6 +416,7 @@ public final class RestCards {
         final StackLayout.Result r = StackLayout.layout(pass, new DockGeometry());
         final DockLayout dock = r.dock;
         final float cornersPx = cornersPx(half, density);
+        mContainerMarginPx = marginPx(r);
 
         mAz = azPlacementOf(layout);
         final KeyboardForm form = layout.keyboardForm;
@@ -287,7 +447,7 @@ public final class RestCards {
             r.flushPaddingPx);
         final int containerH = StackScene.containerHeightPx(
             r.stackHeightPx + insets.containerExtraPx(), kbDown, slack);
-        final float containerBottom = h - insets.stackMarginPx;
+        final float containerBottom = h - marginPx(r);
         final float containerTop = containerBottom - containerH;
         final boolean containerLaidOut = r.stackShown || kbDown > 0;
         if (containerLaidOut)
@@ -312,15 +472,27 @@ public final class RestCards {
         // The glass host: pinned to the container's top and above the keyboard's column, or to
         // the container's bottom while it is one surface with the Docked keyboard or owns the foot.
         final int sideMargin = DockHostBounds.sideMarginPx(floats, dock.horizontalInsetPx);
-        final float hostTop = containerTop + DockHostBounds.topInsetPx(
-            rest.statusOnDockPlank ? 0 : r.statusBandPx, dock.slabTopInsetPx, slack);
+        // The extra-keys card stands on its row, which stands on the keyboard's column under the
+        // bands nearer the edge: the keys stand where they stood under the one card, below the
+        // flush padding's air the stack keeps above its rows.
+        final float hostTop = keysCard
+            ? keysRowTopPx(layout, dock, pass, columnTop)
+            : containerTop + DockHostBounds.topInsetPx(
+                rest.statusOnDockPlank ? 0 : r.statusBandPx, dock.slabTopInsetPx, slack);
         final boolean unified = !r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
                 floating, rest.keyboardGlassShared);
-        final float hostBottom = unified || insets.dockFootPx > 0 ? containerBottom : columnTop;
+        final float hostBottomOfStack = unified || insets.dockFootPx > 0 ? containerBottom
+            : columnTop;
+        // The extra-keys card is the keys band only, in both keyboard states (ADR 0032): the
+        // flush padding the lone Terminal wears around its keys stays air, so the card never
+        // re-sizes when the keyboard comes or goes.
+        final float hostBottom = keysCard
+            ? Math.min(hostBottomOfStack, hostTop + bandPx(Element.EXTRA_KEYS, dock, pass))
+            : hostBottomOfStack;
         final boolean hostLaidOut = containerLaidOut && pass.toolbarShown && hostBottom > hostTop;
         if (hostLaidOut)
-            mLaidOut[StackView.HOST.ordinal()] =
+            mLaidOut[hostView.ordinal()] =
                 new Box(sideMargin, hostTop, w - sideMargin, hostBottom);
 
         // The bands under the keyboard stand on the column's bottom, above their own air.
@@ -347,22 +519,30 @@ public final class RestCards {
         // STATUS: the bar along the top edge.
         if (statusOnTop) addStatus(rest, shape, floating, w, h, density);
         // DOCK or PEEK: the host's glass.
+        PeekGlassGeometry.Card peekCut = null;
+        Box hostDrawn = null;
         if (hostLaidOut) {
+            hostDrawn = new Box(sideMargin, hostTop + shift, w - sideMargin,
+                Math.min(hostBottom + shift, containerBottom));
             float drawnBottom = Math.min(hostBottom + shift, containerBottom);
             boolean hostFoot = kept > 0 && drawnBottom >= h && !peekStands
                 && (insets.dockFootPx > 0 || unified && keyboardFootPx > 0);
             float cardBottom = hostFoot ? footTop : drawnBottom;
             if (peekStands) {
-                addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift, density);
+                peekCut = addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift,
+                    density);
             } else if (floats) {
-                addFloatingDock(layout, pass, rest, dock, hostTop, cardBottom, sideMargin, w,
-                    shift, cornersPx, unified);
+                addFloatingDock(hostView, layout, pass, rest, dock, hostTop, cardBottom,
+                    sideMargin, w, shift, cornersPx, unified);
             } else {
                 addDockedDock(layout, pass, rest, shape, hostTop, cardBottom, w, shift, unified,
                     hostFoot);
             }
-            if (hostFoot) addFoot(StackView.HOST, sideMargin, footTop, w - sideMargin, h);
+            if (hostFoot) addFoot(hostView, sideMargin, footTop, w - sideMargin, h);
         }
+        if (!keysCard)
+            mHostLook = new HostLook(half.design, peekStands, floats, dockFoot, up, peekCut,
+                hostDrawn);
         // UNDER: the bands under the keyboard wear the dock's sheet unless the Peek card does.
         if (underLaidOut && UnderKeyboardBand.wearsSheet(r.bandsUnderKeyboard, pass.toolbarShown,
                 peekStands)) {
@@ -378,6 +558,56 @@ public final class RestCards {
         }
         // KEYBOARD: the floating-form keyboard, its own frame parked in its room.
         if (up && form == KeyboardForm.FLOATING) addFloatingKeyboard(rest, cornersPx);
+
+        // Home's side while the cards stand apart: the container stands at the Terminal's margin,
+        // so what it carries is laid out that much higher than it is drawn above.
+        if (homeDropPx != 0) {
+            liftLaidOut(StackView.CONTAINER, homeDropPx);
+            liftLaidOut(StackView.KEYBOARD_COLUMN, homeDropPx);
+            liftLaidOut(StackView.HOST, homeDropPx);
+            liftLaidOut(StackView.UNDER, homeDropPx);
+        }
+        // The Terminal's side while the cards stand apart: the container pads nothing, so its
+        // column and its card are laid out the lift lower than they are drawn above.
+        if (keysCard) {
+            mTerminalLiftPx = SideCards.terminalSideLiftPx(insets.stackPaddingPx, true);
+            if (mTerminalLiftPx != 0) {
+                liftLaidOut(StackView.KEYS_CARD, -mTerminalLiftPx);
+                liftLaidOut(StackView.KEYBOARD_COLUMN, -mTerminalLiftPx);
+                liftLaidOut(StackView.UNDER, -mTerminalLiftPx);
+            }
+        }
+    }
+
+    /**
+     * The extra-keys row's top: on the column's top, above the bands over the keyboard that stand
+     * nearer the edge (outermost first, as {@link EdgeStackPolicy#overKeyboard} lists them).
+     */
+    private static float keysRowTopPx(@NonNull PlaceLayout layout, @NonNull DockLayout dock,
+                                      @NonNull StackLayout.Input pass, float columnTop) {
+        float below = 0f;
+        for (Element e : EdgeStackPolicy.overKeyboard(layout)) {
+            if (e == Element.EXTRA_KEYS) break;
+            below += bandPx(e, dock, pass);
+        }
+        return columnTop - below - bandPx(Element.EXTRA_KEYS, dock, pass);
+    }
+
+    private void liftLaidOut(@NonNull StackView view, int px) {
+        Box box = mLaidOut[view.ordinal()];
+        if (box != null) mLaidOut[view.ordinal()] = new Box(box.left, box.top - px, box.right,
+            box.bottom - px);
+    }
+
+    /**
+     * Takes the other side's laid-out view and parks its cards: each stands laid out for a view
+     * of its own and is drawn off screen with its side. Home's host view is the Terminal's to
+     * read while the Terminal is in front, the Terminal's card view Home's.
+     */
+    private void adopt(@NonNull RestCards other, boolean frontHome) {
+        StackView theirs = frontHome ? StackView.KEYS_CARD : StackView.HOST;
+        mLaidOut[theirs.ordinal()] = other.mLaidOut[theirs.ordinal()];
+        for (Card card : other.mCards) if (card.view == theirs) mParked.add(card);
     }
 
     // ---- Cards -----------------------------------------------------------------------------
@@ -395,13 +625,13 @@ public final class RestCards {
             piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.STATUS)));
     }
 
-    private void addFloatingDock(@NonNull PlaceLayout layout, @NonNull StackLayout.Input pass,
+    private void addFloatingDock(@NonNull StackView view, @NonNull PlaceLayout layout, @NonNull StackLayout.Input pass,
                                  @NonNull Rest rest, @NonNull DockLayout dock, float hostTop,
                                  float drawnBottom, int sideMargin, int w, float shift,
                                  float cornersPx, boolean unified) {
         Box box = new Box(sideMargin, hostTop + shift, w - sideMargin, drawnBottom);
         float radius = Math.min(cornersPx, box.height() / 2f);
-        mCards.add(new Card(CardId.DOCK, StackView.HOST, box,
+        mCards.add(new Card(CardId.DOCK, view, box,
             new Corners(radius, radius, radius, radius), EdgeKind.RIM, EdgeKind.RIM,
             EdgeKind.RIM, EdgeKind.RIM, dockPieces(layout, rest, unified)));
     }
@@ -426,7 +656,8 @@ public final class RestCards {
      * past the screen's bottom (this box ends at it). {@code rowsBottom} is where the rows stand:
      * the keyboard column's top, even while the host runs on over the keyboard.
      */
-    private void addPeek(@NonNull Rest rest, @NonNull PlaceLayout layout, @NonNull DockLayout dock,
+    @Nullable
+    private PeekGlassGeometry.Card addPeek(@NonNull Rest rest, @NonNull PlaceLayout layout, @NonNull DockLayout dock,
                          float hostTop, float hostBottom, float rowsBottom, int w, int h,
                          float shift, float density) {
         // The apps band's top: bands at and below the apps row, up from where the rows stand.
@@ -461,8 +692,13 @@ public final class RestCards {
         float appsTop = rowsBottom - below - appsBand;
         int slots = Math.max(1, rest.pass.dock.pinnedSlotCount);
         float[] boxes = new float[slots * 4];
-        float iconTop = appsTop - hostTop + dock.appsTopPaddingPx;
+        // Centred where the dock's dress centres them in the band: under the ticks' strip and the
+        // row's padding when the ticks lead the row, as the shipped Home arrangement has them.
         float iconSide = Math.max(1, dock.slotIconPx);
+        float iconTop = appsTop - hostTop + dock.appsIconCentreInBandPx(
+            com.termux.app.launcher.paging.PageTickStrip.ticksLeadRow(Edge.BOTTOM,
+                com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout)))
+            - iconSide / 2f;
         for (int i = 0; i < slots; i++) {
             boxes[i * 4] = i * iconSide;
             boxes[i * 4 + 1] = iconTop;
@@ -473,7 +709,7 @@ public final class RestCards {
         PeekGlassGeometry.Card card = PeekGlassGeometry.compute(boxes, slots, 0f, w,
             Math.round(hostBottom - hostTop), w, PeekGlassGeometry.screenBottomInHost(h,
                 hostTop, shift), density);
-        if (card == null) return;
+        if (card == null) return null;
         Box box = new Box(card.left, hostTopDrawn + card.top, card.right, h);
         List<PieceId> pieces = new ArrayList<>(2);
         pieces.add(PieceId.APPS);
@@ -481,6 +717,7 @@ public final class RestCards {
         mCards.add(new Card(CardId.PEEK, StackView.HOST, box,
             new Corners(card.radiusPx, card.radiusPx, 0f, 0f), EdgeKind.RIM, EdgeKind.SCREEN,
             EdgeKind.RIM, EdgeKind.RIM, pieces));
+        return card;
     }
 
     private void addUnder(@NonNull List<Element> under, @NonNull DockLayout dock, float top,
@@ -649,6 +886,18 @@ public final class RestCards {
             default:
                 return 0;
         }
+    }
+
+    /**
+     * A rest's own container bottom margin: what {@code BottomInsets#stackMarginPx} holds for the
+     * pass's margin. The one code both sides' margins are worked out by.
+     */
+    static int marginPx(@NonNull StackLayout.Result r) {
+        return Math.max(0, r.bottomMarginPx);
+    }
+
+    private static int restMarginPx(@NonNull Rest rest) {
+        return marginPx(StackLayout.layout(rest.pass, new DockGeometry()));
     }
 
     /** Corners in px, as the activity's {@code layoutCornersPx} reads it (not rounded). */

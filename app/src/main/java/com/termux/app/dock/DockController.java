@@ -100,6 +100,11 @@ public final class DockController {
         boolean peekCardWanted();
         /** The Peek glass card as last cut, in the host's coordinates; null while none stands. */
         @Nullable PeekGlassGeometry.Card peekCard();
+        /**
+         * What the glass host wears at Home's rest while the two Floating cards stand apart
+         * ({@link com.termux.app.place.SideCards}); null while it is dressed from the page in front.
+         */
+        @Nullable com.termux.app.place.RestCards.HostLook hostLook();
         /** Corners, the one Floating radius, px. */
         float layoutCornersPx();
         /** The page id whose look the stack's surfaces wear. */
@@ -296,6 +301,60 @@ public final class DockController {
     /** {@link #dockFloats} for the dock measured in {@code floatingStyle}. */
     public boolean dockFloatsIn(boolean floatingStyle) {
         return mSurface.dockFloatsIn(floatingStyle);
+    }
+
+    // ------------------------------------------------------------------ The host's dress page
+    //
+    // While Home's card and the Terminal's extra-keys card stand apart, the glass host is Home's
+    // card at every rest and across every crossing: its dress reads Home's rest, worked out from
+    // the rest answer (RestCards.HostLook), and nothing the page in front says. Every reader of
+    // the host's dress asks here; the extra-keys card and the rest of the dock keep asking
+    // dockFloats and shownDockSurfaceSpec.
+
+    /** What the host wears at Home's rest while the cards stand apart; null otherwise. */
+    @Nullable
+    public com.termux.app.place.RestCards.HostLook hostLook() {
+        return mHost.hostLook();
+    }
+
+    /** {@link #dockFloats} for the glass host: Home's while the cards stand apart. */
+    public boolean hostFloats() {
+        com.termux.app.place.RestCards.HostLook look = hostLook();
+        return look != null ? look.floats : dockFloats();
+    }
+
+    /** The slab spec the host wears: Home's design while the cards stand apart, else the dock's shown. */
+    @NonNull
+    public DockSurfaceSpec hostDressSpec() {
+        com.termux.app.place.RestCards.HostLook look = hostLook();
+        return look != null ? DockSurfaceSpec.forStyle(look.design) : shownDockSurfaceSpec();
+    }
+
+    /** Whether the keyboard is up as the host's dress reads it: Home's rest while apart, else {@code front}. */
+    public boolean hostKeyboardUp(boolean front) {
+        com.termux.app.place.RestCards.HostLook look = hostLook();
+        return look != null ? look.keyboardUp : front;
+    }
+
+    /** The host the controller reads the activity through, for the card's dress beside it. */
+    @NonNull
+    Host host() {
+        return mHost;
+    }
+
+    /** The slab's glass, shape and shelf rules, which the extra-keys card is dressed by too. */
+    @NonNull
+    DockSurface surface() {
+        return mSurface;
+    }
+
+    /**
+     * The slab the Terminal's extra-keys card wears: the Terminal's own design (none, where its
+     * layout shows no apps row), as the dock's capsule wears it at the Terminal's rest.
+     */
+    @NonNull
+    DockSurfaceSpec keysCardSlabSpec() {
+        return mDress.terminalSlabSpec();
     }
 
     /** The Floating card's radius for a surface this tall, Corners capped at half of it. */
@@ -683,7 +742,7 @@ public final class DockController {
         if (mDockBeads == null || Float.isNaN(share) || share >= 1f) return Float.NaN;
         View host = mHost.hotView(R.id.accessory_surface_host);
         if (host == null) return Float.NaN;
-        return dockFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
+        return hostFloats() ? resolveDockCapsuleCornerRadiusPx(host.getHeight()) : 0f;
     }
 
 
@@ -1306,8 +1365,13 @@ public final class DockController {
         // renderer, which tilts the container (keyboard down) or the glass host (keyboard up),
         // hands the rows standing on it the same slab, and composes it with the crossing's
         // translation. One controller for both, so its springs survive the keyboard's toggle.
-        View specular = mHost.findViewById(R.id.accessory_specular_fx);
-        View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
+        // The reactive layers of the slab that stands: the Terminal's card while it is the dock's
+        // slab (the plank tilts it), the host otherwise.
+        boolean onCard = mHost.stackRenderer().keysCardStands();
+        View specular = mHost.findViewById(onCard ? R.id.extra_keys_card_specular_fx
+            : R.id.accessory_specular_fx);
+        View glow = mHost.findViewById(onCard ? R.id.extra_keys_card_edge_glow_fx
+            : R.id.accessory_edge_glow_fx);
         if (mDockPlankController == null || mDockPlankSpecular != specular
             || mDockPlankGlow != glow) {
             if (mDockPlankController != null)
@@ -1326,22 +1390,41 @@ public final class DockController {
             return;
         }
         int accent = mHost.resolveDockAccentColor();
-        View specular = mHost.findViewById(R.id.accessory_specular_fx);
+        boolean onCard = mHost.stackRenderer().keysCardStands();
+        View specular = mHost.findViewById(onCard ? R.id.extra_keys_card_specular_fx
+            : R.id.accessory_specular_fx);
+        View glow = mHost.findViewById(onCard ? R.id.extra_keys_card_edge_glow_fx
+            : R.id.accessory_edge_glow_fx);
+        View surfaceHost = mHost.findViewById(onCard ? R.id.extra_keys_card
+            : R.id.accessory_surface_host);
+        int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
+        boolean capsuleDock = onCard ? dockFloats() : hostFloats();
+        dressPlankLayers(specular, glow, capsuleDock
+            ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx) : 0f, accent, materialAlpha);
+        // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
+        // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
+        mDockPlankController.setMotionEnabled(true);
+        mDockPlankController.setHingeMode(!capsuleDock);
+        mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
+        mDockPlankController.setEnabled(true);
+    }
+
+    /**
+     * Dresses a slab's reactive layers: the specular that rides the touch point and the accent
+     * rim glow, at {@code materialAlpha}, the glow cut to {@code radiusPx}. The host's layers and
+     * the extra-keys card's ({@link KeysCardDress}) are dressed here.
+     */
+    void dressPlankLayers(@Nullable View specular, @Nullable View glow, float radiusPx, int accent,
+                          float materialAlpha) {
         if (specular != null) {
             specular.setBackground(buildDockSpecularDrawable(accent));
             specular.setAlpha(materialAlpha);
         }
-        View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
         if (glow instanceof DockEdgeGlowView) {
-            View surfaceHost = mHost.findViewById(R.id.accessory_surface_host);
-            int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
-            float radius = dockFloats()
-                ? resolveDockCapsuleCornerRadiusPx(surfaceHeightPx)
-                : 0f;
             DockEdgeGlowView glowView = (DockEdgeGlowView) glow;
             glowView.setAlpha(materialAlpha);
             glowView.setAccentColor(accent);
-            glowView.setCornerRadiusPx(radius);
+            glowView.setCornerRadiusPx(radiusPx);
             // Feather the rim into a soft glow instead of a hard outline (API 31+). The view draws
             // its rim inset from the edge so this blur stays inside the rounded clip at the corners.
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
@@ -1349,13 +1432,6 @@ public final class DockController {
                 glow.setRenderEffect(RenderEffect.createBlurEffect(blur, blur, Shader.TileMode.CLAMP));
             }
         }
-        // Both styles tilt now: the capsule free-floating with a press dip, the edge-to-edge bar
-        // hinged at the screen edge and overscanned so its slide cannot open a strip at the sides.
-        boolean capsuleDock = dockFloats();
-        mDockPlankController.setMotionEnabled(true);
-        mDockPlankController.setHingeMode(!capsuleDock);
-        mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
-        mDockPlankController.setEnabled(true);
     }
 
     /** Soft accent-tinted radial specular that rides the touch point across the glass. */

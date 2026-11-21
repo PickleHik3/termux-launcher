@@ -86,6 +86,27 @@ public final class PeekGlassGeometry {
     }
 
     /**
+     * The x a reflection view draws the row from, its origin in the host plus the host's published
+     * motion beyond its layout ({@code GlassAnchor}): the row's lane offset is drawn in across
+     * ({@link #rowDrawX}) and carries the host's slide while the cards stand apart, so the
+     * host's share of it is taken off once.
+     */
+    public static float drawOriginX(float originX, float hostMotionX) {
+        return originX + hostMotionX;
+    }
+
+    /**
+     * The y a reflection view draws the row from: its origin alone. Nothing of the row's lane is
+     * drawn in down the host, and Home's lane is drawn Home's drop lower as the host is
+     * ({@code SideCards#laneTyPx}), so the row stands over the host as laid out and the host's
+     * drop is not taken off; taking it off drew the mirror the drop higher over its fade band,
+     * sharper and stronger than Home's rest drew it before the cards stood apart.
+     */
+    public static float drawOriginY(float originY, float hostMotionY) {
+        return originY;
+    }
+
+    /**
      * How strongly the reflection shows at its top edge for the Reflection knob's {@code value}:
      * 0 is off, {@link #REFLECTION_MAX} is {@link #REFLECTION_MAX_ALPHA}.
      */
