@@ -92,6 +92,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
          */
         default void homeShare(float share) {
         }
+        /** DIAG(two-cards): the side-cards controller's fields for the TwoCards line. */
+        @NonNull
+        default String twoCardsDiag() { // DIAG(two-cards)
+            return ""; // DIAG(two-cards)
+        } // DIAG(two-cards)
     }
 
     /** The sinking layers by {@link StackGeometry} index, in {@code CrossingViews}' order. */
@@ -344,10 +349,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                     + " down=" + mTerminalTopKeyboardDown + " up=" + mTerminalTopKeyboardUp
                     + " home=" + mPredictedHostTop[0]); // DIAG(host-shift)
         }
+        boolean diagBegins = !mHasEnds; // DIAG(two-cards)
         mHasEnds = true;
         mFromHome = fromHome;
         mToHome = toHome;
         mEndsProgress = progress;
+        if (diagBegins) diagTwoCards("begin"); // DIAG(two-cards)
         requestApply();
     }
 
@@ -366,6 +373,23 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mHomeDropPx = drop;
         requestApply();
     }
+
+    /** DIAG(two-cards): front/from/to, the renderer's drop and offsets, then the controller's view fields. */
+    private void diagTwoCards(@NonNull String phase) {
+        if (!com.termux.app.chrome.MotionLog.enabled) return; // DIAG(two-cards)
+        StringBuilder b = new StringBuilder(560); // DIAG(two-cards)
+        b.append(phase).append(" front=").append(mViews.frontIsHome() ? "home" : "terminal")
+            .append(" from=").append(mFromHome ? "home" : "terminal")
+            .append(" to=").append(mToHome ? "home" : "terminal")
+            .append(" p=").append(mEndsProgress).append(" kbUp=").append(mViews.keyboardShown())
+            .append(" rendApart=").append(mApart).append(" homeDrop=").append(mHomeDropPx)
+            .append(" homeOffset=").append(mFrame.sideTy[Side.HOME.ordinal()])
+            .append(" terminalOffset=").append(mFrame.sideTy[Side.TERMINAL.ordinal()])
+            .append(" homeTx=").append(mFrame.sideTx[Side.HOME.ordinal()])
+            .append(" terminalTx=").append(mFrame.sideTx[Side.TERMINAL.ordinal()])
+            .append(mViews.twoCardsDiag()); // DIAG(two-cards)
+        com.termux.app.chrome.MotionLog.log("TwoCards", b.toString()); // DIAG(two-cards)
+    } // DIAG(two-cards)
 
     /** Each side's host top at its own rest, written by the pass at rest ({@link #mPredictedHostTop}). */
     public void setRestHostTops(int homePx, int terminalKeyboardDownPx,
@@ -598,6 +622,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 + mFrame.ty[StackScene.V_CONTAINER] + " kbVis=" + (kb == null ? -1 : kb.getVisibility())
                 + " kbTop=" + mGeometry.keyboardTopPx + " containerH=" + mGeometry.containerHeightPx);
         }
+        if (landing) diagTwoCards("landing"); // DIAG(two-cards)
         if (guard != null) {
             // On a landing frame every change is counted: the scene at progress 1 is the rest.
             FrameGuards guards = mFrames.guards();

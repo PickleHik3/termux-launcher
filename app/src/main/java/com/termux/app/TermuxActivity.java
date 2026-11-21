@@ -11066,6 +11066,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int keyboardDownLaidOutPx() {
             return isInAppKeyboardShown() ? 0 : mKeyboardDownLaidOutPx;
         }
+        @NonNull @Override public String twoCardsDiag() { // DIAG(two-cards)
+            return mSideCards.diagLine(); // DIAG(two-cards)
+        } // DIAG(two-cards)
         @Override public boolean frontIsHome() {
             // The wall's commit, the one owner of the front side: set as the slide settles, so it
             // already names the arrival on the landing's frame (mLastWallPage follows later).

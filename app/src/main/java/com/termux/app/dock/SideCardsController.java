@@ -198,6 +198,7 @@ public final class SideCardsController {
         boolean moved = !mAnswered || apart != mApart;
         mAnswered = true;
         mApart = apart;
+        diagAtRest(frontPass, answer, apart); // DIAG(two-cards)
         int margin = apart ? answer.containerMarginPx() : 0;
         int drop = apart ? answer.homeSideDropPx() : 0;
         moved |= margin != mContainerMarginPx || drop != mHomeDropPx;
@@ -276,6 +277,98 @@ public final class SideCardsController {
     /** Whether the keys card stands now (the last rest). */
     public boolean keysCardOn() {
         return mKeysCardOn;
+    }
+
+    // DIAG(two-cards): everything below logs through MotionLog tag TwoCards and is reverted before merge.
+    @Nullable private RestCards mDiagAnswer; // DIAG(two-cards)
+    private String mDiagRefusal = "unset"; // DIAG(two-cards)
+    private int mDiagApart = -1; // DIAG(two-cards)
+
+    /** DIAG(two-cards): remembers the answer and logs once when apart or the refusal changes at rest. */
+    private void diagAtRest(@NonNull StackLayout.Input frontPass, @Nullable RestCards answer,
+                            boolean apart) {
+        if (!com.termux.app.chrome.MotionLog.enabled) return; // DIAG(two-cards)
+        mDiagAnswer = answer; // DIAG(two-cards)
+        String refusal; // DIAG(two-cards)
+        PlaceLayout home = mHost.layoutOf(PageRef.HOME); // DIAG(two-cards)
+        PlaceLayout terminal = mHost.layoutOf(PageRef.TERMINAL); // DIAG(two-cards)
+        if (home == null || terminal == null) refusal = "no-layout"; // DIAG(two-cards)
+        else { // DIAG(two-cards)
+            com.termux.app.place.SideCards.Refusal r = com.termux.app.place.SideCards.refusal(home,
+                terminal, frontPass.dock.rowsHalf().floating, mHost.statusOnDockPlank()); // DIAG(two-cards)
+            refusal = r == null ? "ok" : r.name(); // DIAG(two-cards)
+        } // DIAG(two-cards)
+        int a = apart ? 1 : 0; // DIAG(two-cards)
+        if (a == mDiagApart && refusal.equals(mDiagRefusal)) return; // DIAG(two-cards)
+        mDiagApart = a; // DIAG(two-cards)
+        mDiagRefusal = refusal; // DIAG(two-cards)
+        PageRef front = mHost.frontPage(); // DIAG(two-cards)
+        com.termux.app.chrome.MotionLog.log("TwoCards", "flag apart=" + apart + " refusal=" + refusal
+            + " front=" + (front == null ? "none" : front.isHome() ? "home" : "terminal")); // DIAG(two-cards)
+    }
+
+    /**
+     * DIAG(two-cards): the controller's apart and refusal, then the host's, the keys card's and
+     * the container's laid-out rects, translations, alpha and visibility, each with the answer's
+     * expected rect (screen px) so a mismatch reads off the line.
+     */
+    @NonNull
+    public String diagLine() {
+        StringBuilder b = new StringBuilder(480); // DIAG(two-cards)
+        b.append(" apart=").append(mApart).append(" refusal=").append(mDiagRefusal); // DIAG(two-cards)
+        diagView(b, "host", mHost.view(R.id.accessory_surface_host),
+            mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.HOST)); // DIAG(two-cards)
+        diagView(b, "keys", mHost.view(R.id.extra_keys_card),
+            mDiagAnswer == null ? null : mDiagAnswer.laidOut(RestCards.StackView.KEYS_CARD)); // DIAG(two-cards)
+        View container = mHost.view(R.id.accessory_stack_container); // DIAG(two-cards)
+        if (container != null) { // DIAG(two-cards)
+            int[] at = new int[2]; // DIAG(two-cards)
+            diagLaidOutOrigin(container, at); // DIAG(two-cards)
+            android.view.ViewGroup.LayoutParams lp = container.getLayoutParams(); // DIAG(two-cards)
+            b.append(" container=").append(at[0]).append(',').append(at[1]).append(',')
+                .append(at[0] + container.getWidth()).append(',').append(at[1] + container.getHeight())
+                .append(" bottomMargin=").append(lp instanceof android.view.ViewGroup.MarginLayoutParams
+                    ? ((android.view.ViewGroup.MarginLayoutParams) lp).bottomMargin : -1)
+                .append(" cty=").append(container.getTranslationY()); // DIAG(two-cards)
+        } else b.append(" container=null"); // DIAG(two-cards)
+        View kb = mHost.view(R.id.inapp_keyboard_view_host); // DIAG(two-cards)
+        b.append(" kbHostBg=").append(kb == null ? "null" : kb.getBackground() == null ? "none"
+            : kb.getBackground().getClass().getSimpleName()); // DIAG(two-cards)
+        return b.toString(); // DIAG(two-cards)
+    }
+
+    /** DIAG(two-cards): the view's laid-out origin in the window, translations left out. */
+    private static void diagLaidOutOrigin(@NonNull View view, @NonNull int[] out) {
+        int x = view.getLeft(); // DIAG(two-cards)
+        int y = view.getTop(); // DIAG(two-cards)
+        android.view.ViewParent p = view.getParent(); // DIAG(two-cards)
+        while (p instanceof View) { // DIAG(two-cards)
+            View v = (View) p; // DIAG(two-cards)
+            x += v.getLeft() - v.getScrollX(); // DIAG(two-cards)
+            y += v.getTop() - v.getScrollY(); // DIAG(two-cards)
+            p = v.getParent(); // DIAG(two-cards)
+        } // DIAG(two-cards)
+        out[0] = x; // DIAG(two-cards)
+        out[1] = y; // DIAG(two-cards)
+    }
+
+    private static void diagView(@NonNull StringBuilder b, @NonNull String name, @Nullable View v,
+                                 @Nullable Box expected) {
+        b.append(' ').append(name).append('='); // DIAG(two-cards)
+        if (v == null) { // DIAG(two-cards)
+            b.append("null"); // DIAG(two-cards)
+            return; // DIAG(two-cards)
+        } // DIAG(two-cards)
+        int[] at = new int[2]; // DIAG(two-cards)
+        diagLaidOutOrigin(v, at); // DIAG(two-cards)
+        b.append(at[0]).append(',').append(at[1]).append(',').append(at[0] + v.getWidth()).append(',')
+            .append(at[1] + v.getHeight()).append(" tx=").append(v.getTranslationX())
+            .append(" ty=").append(v.getTranslationY()).append(" a=").append(v.getAlpha())
+            .append(" vis=").append(v.getVisibility()).append(' ').append(name).append("Expect="); // DIAG(two-cards)
+        if (expected == null) b.append("none"); // DIAG(two-cards)
+        else b.append(Math.round(expected.left)).append(',').append(Math.round(expected.top)) // DIAG(two-cards)
+            .append(',').append(Math.round(expected.right)).append(',') // DIAG(two-cards)
+            .append(Math.round(expected.bottom)); // DIAG(two-cards)
     }
 
     // ---- The rests ---------------------------------------------------------------------------
