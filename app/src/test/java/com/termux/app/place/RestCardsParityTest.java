@@ -660,7 +660,19 @@ public class RestCardsParityTest {
             }
             below += bandOf(e, v.dock, pass);
         }
-        float iconTop = rowsBottom - below - appsBand + v.dock.appsTopPaddingPx - v.hostTop;
+        // The icons as the dock's dress pads the row (DockDress): with the ticks leading the row
+        // (the row next to the canvas), the strip, then the air it leaves beside the ticks; else
+        // the air. The icon is centred in what the two paddings leave of the row's view.
+        boolean ticksLead = com.termux.app.launcher.paging.PageTickStrip.ticksLeadRow(Edge.BOTTOM,
+            com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout));
+        int strip = v.dock.appsRowStripBandPx;
+        int beside = Math.max(0, v.dock.appsRowTickSideAirPx - strip);
+        int padTop = ticksLead ? beside : v.dock.appsTopPaddingPx;
+        int padBottom = ticksLead ? v.dock.appsBottomPaddingPx : beside;
+        float rowView = Math.max(0, v.dock.appsRowBandPx - strip);
+        float iconCentre = rowsBottom - below - appsBand + (ticksLead ? strip : 0) + padTop
+            + Math.max(0f, rowView - padTop - padBottom) / 2f - v.hostTop;
+        float iconTop = iconCentre - v.dock.slotIconPx / 2f;
         int slots = Math.max(1, pass.dock.pinnedSlotCount);
         float[] icons = new float[slots * 4];
         for (int i = 0; i < slots; i++) {
@@ -674,6 +686,12 @@ public class RestCardsParityTest {
             PeekGlassGeometry.screenBottomInHost(f.heightPx, v.containerTop + v.hostTop,
                 v.frame.ty[StackScene.V_CONTAINER] + v.frame.ty[StackScene.V_HOST]), f.density);
         assertNotNull(at, card);
+        // The card's top line is the icons' centre line as the row draws them, and the
+        // reflection hangs from their lower edge: mirrored there, each icon's reflection is
+        // centred one icon below its centre.
+        assertEquals(at + " peek top is the icons' centre", host.top + iconCentre, peek.box.top, EPS);
+        assertEquals(at + " reflection centred an icon below", iconCentre + v.dock.slotIconPx,
+            2f * card.mirrorAxisY - iconCentre, EPS);
         assertBox(at + " peek", new Box(card.left, host.top + card.top, card.right, f.heightPx),
             peek.box);
         assertEquals(at, PeekGlassGeometry.sideInsetPx(f.widthPx), peek.box.left, EPS);

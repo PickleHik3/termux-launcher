@@ -692,8 +692,13 @@ public final class RestCards {
         float appsTop = rowsBottom - below - appsBand;
         int slots = Math.max(1, rest.pass.dock.pinnedSlotCount);
         float[] boxes = new float[slots * 4];
-        float iconTop = appsTop - hostTop + dock.appsTopPaddingPx;
+        // Centred where the dock's dress centres them in the band: under the ticks' strip and the
+        // row's padding when the ticks lead the row, as the shipped Home arrangement has them.
         float iconSide = Math.max(1, dock.slotIconPx);
+        float iconTop = appsTop - hostTop + dock.appsIconCentreInBandPx(
+            com.termux.app.launcher.paging.PageTickStrip.ticksLeadRow(Edge.BOTTOM,
+                com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout)))
+            - iconSide / 2f;
         for (int i = 0; i < slots; i++) {
             boxes[i * 4] = i * iconSide;
             boxes[i * 4 + 1] = iconTop;
