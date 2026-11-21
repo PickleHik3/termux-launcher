@@ -8,6 +8,8 @@ committed prebuilt under `app/src/main/jniLibs/<abi>/`, produced by
 arm64-v8a, x86_64, armeabi-v7a and x86. The two 32-bit builds were added on 2026-10-27 (built
 locally with the workflow's exact steps and NDK r29, as Actions were unavailable; a local arm64
 build from the same steps exports the same symbols as the CI one), so 32-bit phones get a display.
+The current four were rebuilt locally on 2026-11-21 with the workflow's exact steps and NDK r29
+(29.0.14206865) for the chunked clipboard-picture change to 0004, with the pin unchanged.
 
 - upstream: <https://github.com/termux/termux-x11> (GPLv3, the licence this app already ships under)
 - upstream commit: `9df8b767645aa0d0a2f2576767449df55b41962f` (2026-09-04)
@@ -160,16 +162,31 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   there too; a clip with text and no picture still goes through upstream's `sendClipboardAnnounce`,
   so text paste is unchanged. The server lists the text targets in TARGETS only when the clip has
   text. When an X client asks for an image target the server calls the new `@Keep
-  requestClipboardImage(String)` (resolved with `FindMethodOrDie`), which reads the picture off
-  the main thread — copied when its own type was asked, decoded and re-encoded otherwise — and
-  answers through the new `sendClipboardImage`, an empty array being a refusal. The bytes are
-  never kept on either side after the answer, and are capped at 32 MiB
-  (`ClipboardImageTargets.MAX_BYTES`, `LORIE_CLIPBOARD_IMAGE_MAX`); a picture over 64 MiB decoded
-  is not converted. `sendClipboardImage` is a plain native, not `@FastNative`: it writes the whole
-  picture on the main thread (the socket is one stream every other event is written to) and may
-  block. A nightly merge must carry `requestClipboardImage`, `sendClipboardAnnounceTargets` and
-  `sendClipboardImage` forward with the patch, or the first view dies in `nativeInit` or
+  requestClipboardImage(String, int)` (resolved with `FindMethodOrDie`) with the target and the
+  clipboard serial, which moves on every announce. The view reads the picture off the main thread
+  — copied when its own type was asked, decoded and re-encoded otherwise — and answers through the
+  new `sendClipboardImageChunk`: 64 KiB per frame (`ClipboardImageTargets.CHUNK_BYTES`,
+  `LORIE_CLIPBOARD_IMAGE_CHUNK`), one frame per main-thread message, each carrying the serial
+  back and a last-chunk flag; a last chunk with no bytes is a refusal. One picture's chunks are
+  all sent before the next picture is read, refusals included, so answers never interleave. The
+  server assembles one picture at a time on its X thread, drops chunks for a stale serial, and
+  frees a half-built picture (refusing its requesters) on a new announce, a chunk for another
+  target or a disconnect. The bytes are never kept on either side after the answer, and are
+  capped at 32 MiB (`ClipboardImageTargets.MAX_BYTES`, `LORIE_CLIPBOARD_IMAGE_MAX`; the PNG
+  encoder writes into a stream that stops at the cap); a picture over 64 MiB decoded is not
+  converted. `sendClipboardImageChunk` and `sendClipboardAnnounceTargets` are plain natives, not
+  `@FastNative`: they may wait on a full socket, and a frame that cannot be written whole drops
+  the connection through `xcallback`'s hangup path. A nightly merge must carry
+  `requestClipboardImage(String, int)`, `sendClipboardAnnounceTargets` and
+  `sendClipboardImageChunk` forward with the patch, or the first view dies in `nativeInit` or
   `RegisterNatives`.
+- **`lorie/clipboard.c` registers a `ClientStateCallback`** (in 0004, beside upstream's
+  `SelectionCallback`). A waiting clipboard request holds its `ClientPtr` until it is answered;
+  the callback drops a client's requests when it goes or is retained, before the dispatcher frees
+  it. Upstream's own text requests (`lorieDataTargetHead`) had the same dangling pointer — a
+  client that asked for the Android clip's text and quit before it arrived was written to after
+  being freed — and the callback forgets those too. Take this forward on a nightly merge unless
+  upstream has fixed it its own way.
 
 ## `loader/`
 

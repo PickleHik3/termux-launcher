@@ -25,6 +25,18 @@ public final class TerminalReplyGuard {
     }
 
     /**
+     * The final check on the main thread, just before typing: the worker's reading must still hold
+     * and the pane's foreground group, read again on main, must be the one the worker saw. A
+     * non-positive {@code mainPgid} (no session, not running) refuses.
+     */
+    public static boolean shouldSendNow(int capturedPgid, @Nullable String capturedName,
+                                        int workerPgid, @Nullable String workerName, int mainPgid) {
+        return mainPgid > 0
+            && mainPgid == workerPgid
+            && shouldSend(capturedPgid, capturedName, workerPgid, workerName);
+    }
+
+    /**
      * What to write for the typed text: line breaks become spaces so it stays one line, other
      * control characters are dropped, and a Return ends it. Empty when nothing is left, in which
      * case nothing is sent.

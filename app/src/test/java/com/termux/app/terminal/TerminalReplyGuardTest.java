@@ -9,6 +9,28 @@ import static org.junit.Assert.assertTrue;
 public class TerminalReplyGuardTest {
 
     @Test
+    public void shouldSendNowPassesWhenGroupUnchanged() {
+        assertTrue(TerminalReplyGuard.shouldSendNow(10, "vim", 10, "vim", 10));
+    }
+
+    @Test
+    public void shouldSendNowRefusesWhenGroupChangedOnMain() {
+        assertFalse(TerminalReplyGuard.shouldSendNow(10, "vim", 10, "vim", 11));
+    }
+
+    @Test
+    public void shouldSendNowRefusesWithoutMainGroup() {
+        assertFalse(TerminalReplyGuard.shouldSendNow(10, "vim", 10, "vim", -1));
+        assertFalse(TerminalReplyGuard.shouldSendNow(10, "vim", 10, "vim", 0));
+    }
+
+    @Test
+    public void shouldSendNowRefusesWhenWorkerCheckFails() {
+        assertFalse(TerminalReplyGuard.shouldSendNow(10, "vim", 10, "sh", 10));
+        assertFalse(TerminalReplyGuard.shouldSendNow(10, "vim", 12, "vim", 12));
+    }
+
+    @Test
     public void sendsWhenTheAskerIsStillInFront() {
         assertTrue(TerminalReplyGuard.shouldSend(42, "claude", 42, "claude"));
     }

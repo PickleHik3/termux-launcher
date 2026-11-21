@@ -47,6 +47,7 @@ import com.termux.x11.utils.SamsungDexUtils;
 
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
@@ -701,30 +702,70 @@ public class LorieView extends SurfaceView implements InputStub {
 
     /**
      * An X client asked for the clipboard picture as {@code target} (called from native, on the
-     * main thread). The picture is read, and converted to PNG when that is what was asked and it
-     * is something else, off the main thread; the bytes are sent and dropped, never kept. The
-     * requester blocks on the answer, so every path answers, with no bytes when there is no
-     * picture to give.
+     * main thread); {@code serial} names the clip the server was holding, and goes back with every
+     * chunk so the server can drop an answer for a clip that has since changed. The picture is
+     * read, and converted to PNG when that is what was asked and it is something else, off the
+     * main thread; the bytes are sent and dropped, never kept. The requester blocks on the answer,
+     * so every path answers, with no bytes when there is no picture to give.
      */
-    @Keep void requestClipboardImage(String target) {
+    @Keep void requestClipboardImage(String target, int serial) {
         if (!connected() || target == null)
             return;
         ClipData clip = clipboardSyncEnabled ? clipboard.getPrimaryClip() : null;
         String imageType = ClipboardImageTargets.imageType(mimeTypesOf(clip == null ? null : clip.getDescription()));
         Uri uri = ClipboardImageTargets.offers(imageType, target) ? firstUriOf(clip) : null;
-        if (uri == null) {
-            sendClipboardImage(mNativeContext, target, new byte[0]);
-            return;
-        }
         ContentResolver resolver = getContext().getContentResolver();
+        // A refusal goes through the executor too: answers must reach the server one after
+        // another, and one for another target in the middle of a picture would abandon it.
         CLIPBOARD_IMAGE_EXECUTOR.execute(() -> {
-            byte[] bytes = ClipboardImageTargets.bytesFor(resolver, uri, imageType, target);
-            // Written on the main thread, as every other event is: the socket is one stream.
-            MAIN_HANDLER.post(() -> {
-                if (connected())
-                    sendClipboardImage(mNativeContext, target, bytes);
-            });
+            byte[] bytes = uri == null ? new byte[0]
+                    : ClipboardImageTargets.bytesFor(resolver, uri, imageType, target);
+            sendClipboardImageInChunks(target, serial, bytes);
         });
+    }
+
+    /**
+     * Sends {@code bytes} as chunks, one per main-thread message, so the main thread never writes
+     * more than one chunk at a time and its other events go between them in order. Runs on
+     * {@link #CLIPBOARD_IMAGE_EXECUTOR} and waits for the last chunk, so the next picture's chunks
+     * never interleave with these and the next picture is not read while these are held. Every
+     * step either posts the next one or ends the wait, so the wait always ends.
+     */
+    private void sendClipboardImageInChunks(String target, int serial, byte[] bytes) {
+        CountDownLatch done = new CountDownLatch(1);
+        MAIN_HANDLER.post(new Runnable() {
+            private int offset = 0;
+
+            @Override
+            public void run() {
+                boolean more = false;
+                try {
+                    if (!connected())
+                        return;
+                    int length = ClipboardImageTargets.chunkLength(bytes.length, offset);
+                    boolean last = offset + length >= bytes.length;
+                    // False: the chunk was cut short and the connection dropped; send no more.
+                    if (sendClipboardImageChunk(mNativeContext, target, serial, bytes, offset, length, last) && !last) {
+                        offset += length;
+                        more = MAIN_HANDLER.post(this);
+                    }
+                } finally {
+                    if (!more)
+                        done.countDown();
+                }
+            }
+        });
+        boolean interrupted = false;
+        while (true) {
+            try {
+                done.await();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted)
+            Thread.currentThread().interrupt();
     }
 
     @Nullable
@@ -872,9 +913,9 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative private native void setClipboardSyncEnabled(long ptr, boolean enabled, boolean ignored);
     @FastNative private native void sendClipboardAnnounce(long ptr);
     @FastNative private native void sendClipboardEvent(long ptr, byte[] text);
-    @FastNative private native void sendClipboardAnnounceTargets(long ptr, boolean hasText, String imageTargets);
-    // Plain native: it writes a whole picture and may block on the socket (see UPSTREAM.md).
-    private native void sendClipboardImage(long ptr, String target, byte[] data);
+    // Plain natives: they may wait on a full socket and drop the connection (see UPSTREAM.md).
+    private native void sendClipboardAnnounceTargets(long ptr, boolean hasText, String imageTargets);
+    private native boolean sendClipboardImageChunk(long ptr, String target, int serial, byte[] data, int offset, int length, boolean last);
     @FastNative private native void sendWindowChange(long ptr, int width, int height, int framerate, String name);
     @FastNative private native void setViewport(long ptr, int x, int y, int width, int height, int expectedWidth, int expectedHeight, int hiddenBottom);
     @FastNative private native void setRendererZoom(long ptr, int percent);

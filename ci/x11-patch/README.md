@@ -19,7 +19,8 @@ do it instead. Four things are here:
   whether or not a theme is installed.
 - `0004-offer-clipboard-pictures-to-x-clients.patch` — offers a picture on the Android clipboard
   to X clients as its own type and `image/png`. The server is the selection owner, so only it can
-  list those targets and answer them; the host sends the bytes only when a client asks.
+  list those targets and answer them; the host sends the bytes only when a client asks, in
+  64 KiB chunks stamped with the clip's serial.
 
 A patch belongs in lorie's own sources. The sixteen freedesktop trees under
 `lorie/src/main/cpp/` are submodules that termux-x11's CMake patches itself at configure time, so
