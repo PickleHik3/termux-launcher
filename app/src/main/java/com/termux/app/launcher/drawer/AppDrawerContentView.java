@@ -1,10 +1,12 @@
 package com.termux.app.launcher.drawer;
 
+import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.style.ForegroundColorSpan;
@@ -16,6 +18,8 @@ import android.view.Choreographer;
 import android.view.DragEvent;
 import android.view.Gravity;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
+import android.view.ViewConfiguration;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
@@ -33,6 +37,7 @@ import androidx.recyclerview.widget.GridLayoutManager;
 import androidx.recyclerview.widget.RecyclerView;
 
 import com.termux.BuildConfig;
+import com.termux.app.AnimationSpeed;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -110,6 +115,13 @@ public final class AppDrawerContentView extends FrameLayout
 
         /** The section changed through {@link #setSection}; not called for a restore. */
         default void onSectionChanged(@NonNull AppDrawerSection section) {
+        }
+
+        /**
+         * Default's two pages gave way to one section's own presentation (a search began), or
+         * came back; the grid's metrics differ between the two.
+         */
+        default void onPagesPresentationChanged() {
         }
 
     }
@@ -198,6 +210,23 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull private AppDrawerViewType mViewType = AppDrawerViewType.VERTICAL;
     /** The remembered section; only the Default type shows it. */
     @NonNull private AppDrawerSection mSection = AppDrawerSection.APPS;
+    /**
+     * The one owner of Default's page position; the pages read it, nothing else stores one.
+     * Its settled section and {@link #mSection} agree whenever the pages are shown.
+     */
+    private final AppDrawerSectionPager mSectionPager =
+        new AppDrawerSectionPager(new SectionSettleClock());
+    private final AppDrawerSectionGesturePolicy mSectionGesture =
+        new AppDrawerSectionGesturePolicy();
+    /** True while Default shows its two pages side by side (not a search, not another type). */
+    private boolean mPagesActive;
+    /** True from a section claim until its UP or CANCEL: this view drives the pager. */
+    private boolean mSectionStream;
+    private float mSectionLastX;
+    private float mSectionDownX;
+    private float mSectionDownY;
+    private int mTouchSlopPx;
+    @Nullable private VelocityTracker mSectionVelocity;
     @NonNull private AppDrawerViewType mGestureViewType = AppDrawerViewType.VERTICAL;
 
     /** Re-registered on every catalogue change: {@code invalidate()} drops pending callbacks. */
@@ -297,6 +326,22 @@ public final class AppDrawerContentView extends FrameLayout
             dock.setCategoryChoiceHandler(this::showCategoryOverrideDialog);
         }
         mDensity = context.getResources().getDisplayMetrics().density;
+        mTouchSlopPx = ViewConfiguration.get(context).getScaledTouchSlop();
+        mSectionPager.addListener(new AppDrawerSectionPager.Listener() {
+            @Override public void onPositionChanged(float position) {
+                // Per move: draw-time transforms only, no layout, no visibility, no binding.
+                Trace.beginSection("Drawer.sectionDrag");
+                try {
+                    applyPageTransforms();
+                } finally {
+                    Trace.endSection();
+                }
+            }
+
+            @Override public void onSettled(@NonNull AppDrawerSection section, boolean changed) {
+                onPagerSettled(section, changed);
+            }
+        });
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
         mCategoryOverrides = new LauncherCategoryOverrideStore(context);
         mCategoryAssignments = new LauncherCategoryAssignmentSource(mCategoryOverrides);
@@ -572,8 +617,7 @@ public final class AppDrawerContentView extends FrameLayout
         // An external edit or a finished sort run rewrites app-categories.conf behind our back.
         mCategoryAssignments.invalidate();
         classifyCatalogue(mVisibleResults, true);
-        if (presentedType() == AppDrawerViewType.CATEGORIES)
-            mCategoryView.submitBuckets(mCategoryBuckets);
+        if (categoryBucketsLive()) mCategoryView.submitBuckets(mCategoryBuckets);
     }
 
     /**
@@ -914,6 +958,11 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** The user moved to {@code section}: swaps the presentation and tells the callbacks. */
     public void setSection(@NonNull AppDrawerSection section) {
+        if (mPagesActive) {
+            // The pages slide there; the landing persists and reports it.
+            mSectionPager.settleTo(section);
+            return;
+        }
         applySection(section, true);
     }
 
@@ -922,7 +971,95 @@ public final class AppDrawerContentView extends FrameLayout
      * writes the preference it was just read from.
      */
     public void restoreSection(@NonNull AppDrawerSection section) {
+        if (mPagesActive) {
+            mSectionPager.jumpTo(section);
+            return;
+        }
         applySection(section, false);
+    }
+
+    /**
+     * True while Default shows Apps and Categories side by side: the Default type with no query
+     * typed and no search asked for. A search shows the settled section's own presentation.
+     */
+    public boolean isDefaultPagesActive() {
+        return defaultPagesActive();
+    }
+
+    private boolean defaultPagesActive() {
+        return mViewType == AppDrawerViewType.DEFAULT && !hasQuery() && !mSearchRevealRequested;
+    }
+
+    /** Re-lays the type out when the pages gave way to a search, or came back, since last applied. */
+    private void syncDefaultPages() {
+        if (defaultPagesActive() == mPagesActive) return;
+        applyViewType();
+        if (mCallbacks != null) mCallbacks.onPagesPresentationChanged();
+    }
+
+    /** The pager landed (or was jumped): settle what the pages show and, for a turn, report it. */
+    private void onPagerSettled(@NonNull AppDrawerSection section, boolean changed) {
+        if (!mPagesActive) return;
+        boolean differs = section != mSection;
+        mSection = section;
+        if (differs) {
+            // The presented type changed: lower start, the strip and the grid's pickup follow it.
+            applyViewType();
+            applyPickupEnabled();
+        } else {
+            applyPageVisibility();
+        }
+        applyPageTransforms();
+        if (changed && mCallbacks != null) mCallbacks.onSectionChanged(section);
+    }
+
+    /**
+     * Draw-time position of the pages, from the pager's one number: Apps (grid and strip) slide
+     * out as Categories slides in, mirrored in RTL. Only translationX is written.
+     */
+    private void applyPageTransforms() {
+        float appsX = 0f;
+        float categoriesX = 0f;
+        if (mPagesActive) {
+            float position = mSectionPager.position();
+            float width = getWidth();
+            float dir = getLayoutDirection() == LAYOUT_DIRECTION_RTL ? -1f : 1f;
+            appsX = -position * width * dir;
+            categoriesX = (1f - position) * width * dir;
+        }
+        mGrid.setTranslationX(appsX);
+        mColumn.setTranslationX(appsX);
+        mCategoryView.setTranslationX(categoriesX);
+    }
+
+    /**
+     * Both pages are drawn while the pager moves, and only the settled one at rest: the other goes
+     * INVISIBLE, never GONE, so it stays laid out and bound and the next drag needs no layout.
+     */
+    private void applyPageVisibility() {
+        if (!mPagesActive) return;
+        boolean rest = mSectionPager.isAtRest();
+        boolean apps = !rest || mSectionPager.settledSection() == AppDrawerSection.APPS;
+        boolean categories = !rest || mSectionPager.settledSection() == AppDrawerSection.CATEGORIES;
+        setVisibilityIfChanged(mGrid, apps ? VISIBLE : INVISIBLE);
+        if (mAzSide.shown()) setVisibilityIfChanged(mColumn, apps ? VISIBLE : INVISIBLE);
+        setVisibilityIfChanged(mCategoryView, categories ? VISIBLE : INVISIBLE);
+        // The content view does not clip, so the page sliding in would draw into the card's side
+        // padding; it clips only while a page is in motion.
+        if (getClipChildren() != !rest) setClipChildren(!rest);
+    }
+
+    private static void setVisibilityIfChanged(@NonNull View view, int visibility) {
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
+    }
+
+    /** The grid's pickup follows the settled page: only the Apps page may pick an icon up. */
+    private void applyPickupEnabled() {
+        boolean enabled = !hasQuery()
+            && (presentedType() == AppDrawerViewType.VERTICAL
+                || presentedType() == AppDrawerViewType.HORIZONTAL);
+        mAdapter.setPickupEnabled(enabled);
+        mHorizontalAdapter.setPickupEnabled(enabled);
     }
 
     private void applySection(@NonNull AppDrawerSection section, boolean notify) {
@@ -957,6 +1094,9 @@ public final class AppDrawerContentView extends FrameLayout
         dismissContextPopups();
         cancelCellLongPresses();
         stopPresentationMotion();
+        // Default's Apps page keeps the Categories tiles bound beside it; leaving them bound under
+        // another type would hold their previews for nothing.
+        if (mPagesActive) mCategoryView.reset();
         switch (presentedType()) {
             case VERTICAL:
                 clearScrub();
@@ -992,6 +1132,10 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** @param keepContent a closing drawer: the categories keep their tiles until it is gone */
     private void stopPresentationMotion(boolean keepContent) {
+        // A drag or settle is dropped back to the settled section with no animation, on close as on
+        // a swap: nothing keeps moving under a closed drawer, and a close writes no section.
+        endSectionStream();
+        mSectionPager.cancel();
         switch (presentedType()) {
             case HORIZONTAL:
                 cancelNestedClose();
@@ -1089,6 +1233,15 @@ public final class AppDrawerContentView extends FrameLayout
 
     private void applyViewTypeLayout() {
         LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
+        mPagesActive = defaultPagesActive();
+        if (mPagesActive) {
+            applyDefaultPagesLayout(gridParams);
+            return;
+        }
+        // A search (or another type) freezes the pager at its settled section.
+        mSectionPager.cancel();
+        applyPageTransforms();
+        if (getClipChildren()) setClipChildren(false);
         switch (presentedType()) {
             case VERTICAL:
                 applyCategorySearchPresentation(false);
@@ -1123,6 +1276,31 @@ public final class AppDrawerContentView extends FrameLayout
                 mPageIndicator.setVisibility(GONE);
                 break;
         }
+    }
+
+    /**
+     * Default with no search: the Apps grid with the strip and the Categories view side by side,
+     * the grid keeping the vertical layout's strip margin. Nothing here runs per frame; the pager
+     * moves the pages with transforms.
+     */
+    private void applyDefaultPagesLayout(@NonNull LayoutParams gridParams) {
+        applyCategorySearchPresentation(false);
+        int left = mAzSide.leftInsetPx(Math.round(mColumnWidthPx));
+        int right = mAzSide.rightInsetPx(Math.round(mColumnWidthPx));
+        if (gridParams.leftMargin != left || gridParams.rightMargin != right) {
+            gridParams.leftMargin = left;
+            gridParams.rightMargin = right;
+            mGrid.setLayoutParams(gridParams);
+        }
+        mHorizontalPager.setVisibility(GONE);
+        mPageIndicator.setVisibility(GONE);
+        applyAzColumn();
+        applyColumnLetters();
+        // The pager follows the section the type was built for, unless it is mid-motion.
+        if (mSectionPager.isAtRest() && mSectionPager.settledSection() != mSection)
+            mSectionPager.jumpTo(mSection);
+        applyPageVisibility();
+        applyPageTransforms();
     }
 
     /**
@@ -1254,7 +1432,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (!loaded) return;
         List<LauncherAppEntry> catalogue = AppDrawerSectionIndex.sortByLabel(provider.getAllApps());
         search.setCatalogue(catalogue);
-        if (categoryTilesShown()) mCategoryView.submitBuckets(mCategoryBuckets);
+        if (categoryBucketsLive()) mCategoryView.submitBuckets(mCategoryBuckets);
     }
 
     /** Settings › Remember position; read once per open. */
@@ -1319,6 +1497,7 @@ public final class AppDrawerContentView extends FrameLayout
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
         mKeyboardDismissedByScroll = false;
+        syncDefaultPages();
         removeCallbacks(mAutoOpenOnlyMatch);
         if (search != null) {
             search.reset();
@@ -1336,6 +1515,12 @@ public final class AppDrawerContentView extends FrameLayout
     public boolean hasQuery() {
         AppDrawerSearchController search = mSearch;
         return search != null && search.hasQuery();
+    }
+
+    /** The Categories view is fed: it is the presentation, or Default's page beside the grid. */
+    private boolean categoryBucketsLive() {
+        return !hasQuery()
+            && (presentedType() == AppDrawerViewType.CATEGORIES || defaultPagesActive());
     }
 
     /** True while the category tiles are the presentation: categories view type, no query typed. */
@@ -1463,9 +1648,13 @@ public final class AppDrawerContentView extends FrameLayout
         // can ask it for one.
         mSectionIndex = AppDrawerSectionIndex.build(results);
         mVisibleResults = new ArrayList<>(results);
+        boolean wasSearchRows = mCategorySearchPresentation;
+        // A search taking Default's pages away, or giving them back, re-lays the type out first.
+        syncDefaultPages();
         if (presentedType() == AppDrawerViewType.CATEGORIES) {
             if (hasQuery()) mCategoryView.cancelForSearch();
-            else if (mGrid.getVisibility() == VISIBLE) recycleSearchGridHolders();
+            else if (mGrid.getVisibility() == VISIBLE && (wasSearchRows || !mPagesActive))
+                recycleSearchGridHolders();
             applyViewType();
         }
         submitVisibleResults(queryChanged);
@@ -1483,7 +1672,10 @@ public final class AppDrawerContentView extends FrameLayout
         // Only a query that was just emptied lets the keyboard go. A catalogue push with nothing
         // typed arrives here too — the provider's warm-up callback lands a beat after every open —
         // and a keyboard asked for on the open, or by a pill tap, must survive it.
-        if (queryChanged && !hasQuery()) mSearchRevealRequested = false;
+        if (queryChanged && !hasQuery()) {
+            mSearchRevealRequested = false;
+            syncDefaultPages();
+        }
         scheduleOnlyMatchOpen(results.size());
         applyLowerStart();
         notifyRevealTarget();
@@ -1516,19 +1708,18 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     private void submitVisibleResults(boolean resetPosition) {
-        boolean pickupEnabled = !hasQuery()
-            && (presentedType() == AppDrawerViewType.VERTICAL
-                || presentedType() == AppDrawerViewType.HORIZONTAL);
-        mAdapter.setPickupEnabled(pickupEnabled);
-        mHorizontalAdapter.setPickupEnabled(pickupEnabled);
+        applyPickupEnabled();
+        // Default's pages keep both renderers bound, whichever section is settled.
+        boolean pages = defaultPagesActive();
         List<AppDrawerItem> mixed = mixedItems();
-        switch (presentedType()) {
+        switch (pages ? AppDrawerViewType.VERTICAL : presentedType()) {
             case VERTICAL:
                 AppDrawerSectionIndex mixedIndex = AppDrawerSectionIndex.build(indexEntries(mixed));
                 mSectionIndex = mixedIndex;
                 mAdapter.submitItems(mixed, mixedIndex);
                 applyColumnLetters();
                 if (resetPosition) mGrid.scrollToPosition(0);
+                if (pages) mCategoryView.submitBuckets(mCategoryBuckets);
                 return;
             case HORIZONTAL:
                 int page = resetPosition ? 0 : mHorizontalPager.getSelectedPage();
@@ -1553,10 +1744,12 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull
     private List<AppDrawerItem> mixedItems() {
         SuggestionBarView dock = mDock;
-        if (dock == null || hasQuery() || presentedType() == AppDrawerViewType.CATEGORIES)
+        boolean pages = defaultPagesActive();
+        if (dock == null || hasQuery()
+            || (!pages && presentedType() == AppDrawerViewType.CATEGORIES))
             return AppDrawerItemComposer.appsOnly(mVisibleResults);
         return AppDrawerItemComposer.compose(mVisibleResults, dock.getLauncherConfigSnapshot(),
-            true, presentedType());
+            true, pages ? AppDrawerViewType.VERTICAL : presentedType());
     }
 
     @NonNull
@@ -1675,8 +1868,10 @@ public final class AppDrawerContentView extends FrameLayout
             letters[i] = mSectionIndex.letterAt(i);
         }
         mColumn.setLetters(letters);
-        mColumn.setActive(presentedType() == AppDrawerViewType.VERTICAL && mAzSide.shown()
-            && !hasQuery() && letterCount >= 2);
+        // On Default's pages the strip belongs to the Apps page whichever page is settled: it is
+        // active (and drawn) while it slides in.
+        boolean stripPage = presentedType() == AppDrawerViewType.VERTICAL || defaultPagesActive();
+        mColumn.setActive(stripPage && mAzSide.shown() && !hasQuery() && letterCount >= 2);
     }
 
     /** True while a finger is on the column. Not true during the release fade. */
@@ -1864,6 +2059,7 @@ public final class AppDrawerContentView extends FrameLayout
     public void requestSearchKeyboard() {
         mSearchRevealRequested = true;
         mKeyboardDismissedByScroll = false;
+        syncDefaultPages();
         applyLowerStart();
         notifyRevealTarget();
         Runnable request = mKeyboardRequestListener;
@@ -2011,8 +2207,9 @@ public final class AppDrawerContentView extends FrameLayout
             mDragPolicy = new AppDrawerDragPolicy(new AppDrawerDragPolicy.FrozenDown(
                 mGestureViewType, mInteractive, !hasQuery(), mGestureDragEligible,
                 mGestureDragStableId));
-            if (region == AppDrawerTouchRegions.Region.COLUMN) {
-                // The column owns this stream from here to its UP. onNestedPreScroll is already
+            if (region == AppDrawerTouchRegions.Region.COLUMN || mSectionStream) {
+                // A stream the section pager caught is this view's own, like the column's: no child
+                // saw the down, so no nested scroll will ever stop it. The column owns this stream from here to its UP. onNestedPreScroll is already
                 // gated on mDownOverGrid, so a scrub can never report a close with no change to it.
                 mDownOverGrid = false;
                 // mGestureActive is deliberately left false. The recycler never sees this stream, so
@@ -2302,13 +2499,205 @@ public final class AppDrawerContentView extends FrameLayout
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
         // A drawer that is not open is not a surface: swallow rather than let the grid answer.
-        return !mInteractive;
+        if (!mInteractive) return true;
+        if (!mPagesActive) return false;
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                beginSectionTracking(ev);
+                // A down on a settling pager catches it, before any child sees it.
+                return mSectionGesture.claim() == AppDrawerSectionGesturePolicy.Claim.SECTION;
+            case MotionEvent.ACTION_MOVE:
+                return trackSectionMove(ev);
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (!mSectionStream) endSectionTracking();
+                return false;
+            default:
+                return false;
+        }
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         if (!mInteractive) return true;
+        if (mSectionStream
+            || mSectionGesture.claim() == AppDrawerSectionGesturePolicy.Claim.SECTION)
+            return handleSectionTouch(event);
         return super.onTouchEvent(event);
+    }
+
+    // ------------------------------------------------------------------ section drag
+
+    /** Freezes what the down landed on and hands it to the policy. */
+    private void beginSectionTracking(@NonNull MotionEvent ev) {
+        endSectionTracking();
+        float x = ev.getX();
+        float y = ev.getY();
+        boolean settling = !mSectionPager.isAtRest();
+        AppDrawerSectionGesturePolicy.Target target;
+        AppDrawerCategoryTouchRegions.Part part = AppDrawerCategoryTouchRegions.Part.OUTSIDE;
+        if (settling) {
+            // Mid-motion the pages are off their layout: any point over them is the pages'.
+            target = y >= mGrid.getTop() ? AppDrawerSectionGesturePolicy.Target.APPS_GRID
+                : AppDrawerSectionGesturePolicy.Target.CHROME;
+        } else if (mSection == AppDrawerSection.APPS) {
+            AppDrawerTouchRegions.Region region = regionAt(x, y);
+            target = region == AppDrawerTouchRegions.Region.COLUMN
+                ? AppDrawerSectionGesturePolicy.Target.AZ_COLUMN
+                : region == AppDrawerTouchRegions.Region.GRID
+                    ? AppDrawerSectionGesturePolicy.Target.APPS_GRID
+                    : AppDrawerSectionGesturePolicy.Target.CHROME;
+        } else {
+            part = mCategoryView.touchPart(x - mCategoryView.getLeft(),
+                y - mCategoryView.getTop());
+            target = part == AppDrawerCategoryTouchRegions.Part.OUTSIDE
+                ? AppDrawerSectionGesturePolicy.Target.CHROME
+                : AppDrawerSectionGesturePolicy.Target.CATEGORIES;
+        }
+        AppDrawerSectionGesturePolicy.Claim claim = mSectionGesture.begin(
+            new AppDrawerSectionGesturePolicy.Down(mSection, target, part,
+                mCategoryView.isOverview(), hasQuery() || mSearchRevealRequested, mInteractive,
+                settling, getLayoutDirection() == LAYOUT_DIRECTION_RTL));
+        if (claim == AppDrawerSectionGesturePolicy.Claim.CHILD) return;
+        mSectionDownX = x;
+        mSectionDownY = y;
+        mSectionVelocity = VelocityTracker.obtain();
+        mSectionVelocity.addMovement(ev);
+    }
+
+    private boolean trackSectionMove(@NonNull MotionEvent ev) {
+        if (mSectionStream) return true;
+        if (mSectionGesture.claim() != AppDrawerSectionGesturePolicy.Claim.PENDING) return false;
+        VelocityTracker tracker = mSectionVelocity;
+        if (tracker != null) tracker.addMovement(ev);
+        AppDrawerSectionGesturePolicy.Claim claim = mSectionGesture.evaluate(
+            ev.getX() - mSectionDownX, ev.getY() - mSectionDownY, mTouchSlopPx,
+            isPickupArmed());
+        if (claim != AppDrawerSectionGesturePolicy.Claim.SECTION) return false;
+        startSectionStream(ev);
+        return true;
+    }
+
+    /** A long press or pickup has armed on the cell under the finger. */
+    private boolean isPickupArmed() {
+        AppDrawerDragPolicy policy = mDragPolicy;
+        return mDragActive || (policy != null
+            && (policy.claim() == AppDrawerDragPolicy.Claim.CONTEXT
+                || policy.claim() == AppDrawerDragPolicy.Claim.DRAG));
+    }
+
+    /**
+     * This view takes the stream: the children are cancelled by the platform, and the close drag's
+     * and nested scroll's bookkeeping is put away so nothing of it fires for this stream.
+     */
+    private void startSectionStream(@NonNull MotionEvent ev) {
+        mSectionStream = true;
+        mSectionLastX = ev.getX();
+        dismissContextPopups();
+        cancelCellLongPresses();
+        // Disarms the close policy and the categories' own touch stream.
+        disarm();
+        mGestureActive = false;
+        mDownOverGrid = false;
+        mFlingVelocityY = 0f;
+        mGrid.stopScroll();
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+        mSectionPager.beginDrag();
+        applyPageVisibility();
+    }
+
+    private boolean handleSectionTouch(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN && !mSectionStream) startSectionStream(event);
+        if (!mSectionStream) return false;
+        if (!mPagesActive) {
+            // A search arrived under the finger: the pages are frozen, the stream ends.
+            endSectionStream();
+            return true;
+        }
+        VelocityTracker tracker = mSectionVelocity;
+        if (tracker != null) tracker.addMovement(event);
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        switch (action) {
+            case MotionEvent.ACTION_MOVE: {
+                float x = event.getX();
+                float dx = x - mSectionLastX;
+                mSectionLastX = x;
+                // Towards Categories is the finger moving to the start side.
+                mSectionPager.dragBy(rtl ? dx : -dx, getWidth());
+                break;
+            }
+            case MotionEvent.ACTION_UP: {
+                float velocity = 0f;
+                if (tracker != null) {
+                    tracker.computeCurrentVelocity(1000);
+                    velocity = tracker.getXVelocity();
+                }
+                mSectionPager.release(rtl ? velocity : -velocity, getWidth(), mDensity);
+                endSectionStream();
+                break;
+            }
+            case MotionEvent.ACTION_CANCEL:
+                mSectionPager.release(0f, getWidth(), mDensity);
+                endSectionStream();
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    /** The stream is over (or the drawer is going away): the velocity tracker and latch go. */
+    private void endSectionStream() {
+        mSectionStream = false;
+        endSectionTracking();
+    }
+
+    private void endSectionTracking() {
+        VelocityTracker tracker = mSectionVelocity;
+        mSectionVelocity = null;
+        if (tracker != null) tracker.recycle();
+        mSectionGesture.reset();
+    }
+
+    @Override
+    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
+        super.onSizeChanged(w, h, oldw, oldh);
+        mSectionPager.setPageWidthPx(w);
+        // The pages stand at position times the width: a new width moves them with the same draw.
+        applyPageTransforms();
+    }
+
+    /**
+     * The pager's settle clock: a ValueAnimator used only as the clock, as the Home pages' content
+     * settle does; the spring says where the number stands.
+     */
+    private final class SectionSettleClock implements AppDrawerSectionPager.Clock {
+        @Nullable private ValueAnimator mAnimator;
+
+        @Override
+        public void start(long durationMs, @NonNull AppDrawerSectionPager.Tick tick) {
+            cancel();
+            ValueAnimator settle = ValueAnimator.ofFloat(0f, 1f);
+            settle.setDuration(durationMs);
+            settle.setInterpolator(null);
+            settle.addUpdateListener(animation -> tick.onFraction(animation.getAnimatedFraction()));
+            mAnimator = settle;
+            settle.start();
+        }
+
+        @Override
+        public void cancel() {
+            ValueAnimator settle = mAnimator;
+            mAnimator = null;
+            if (settle != null) settle.cancel();
+        }
+
+        @Override
+        public float springTime() {
+            return AnimationSpeed.springTime(getContext());
+        }
     }
 
     // ------------------------------------------------------------------ nested scrolling
@@ -2580,6 +2969,8 @@ public final class AppDrawerContentView extends FrameLayout
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         stopOverpullSpring();
+        endSectionStream();
+        mSectionPager.cancel();
     }
 
     private int dp(float value) {

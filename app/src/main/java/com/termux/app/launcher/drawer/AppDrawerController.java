@@ -1921,6 +1921,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         TermuxAppSharedPreferences preferences = mHost.preferences();
         if (preferences != null) preferences.setAppLauncherDrawerSection(section.preferenceValue);
         AppDrawerContentView content = mContent;
+        // Default's pages are sized for both sections at once; a turn changes no metric.
+        if (content != null && content.isDefaultPagesActive()) return;
+        reapplyMetrics();
+    }
+
+    /** Default's pages gave way to a search or came back: the grid's metrics differ between them. */
+    @Override
+    public void onPagesPresentationChanged() {
+        reapplyMetrics();
+    }
+
+    private void reapplyMetrics() {
+        AppDrawerContentView content = mContent;
         Frame rect = mContentRect != null ? mContentRect : resolveContentBaseRect(mOpenRect);
         if (content == null || rect == null) return;
         applyContentMetrics(content, rect, false);
@@ -1979,12 +1992,19 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         float labelHeightPx = resolveCellLabelHeightPx();
         AppDrawerLayoutConfig config = mLayoutConfig;
         // Default is whichever of the two its section shows, sized exactly as that type is.
+        // Default's pages size both renderers at once: the grid as the Vertical type with the strip
+        // subtracted, the categories as their own type. Only a search in Categories takes the grid
+        // at full width.
+        boolean pages = content.isDefaultPagesActive();
         switch (content.presentedType()) {
             case VERTICAL:
-                if (heightOnly) return;
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
-                    - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity, labelHeightPx,
-                    config.verticalColumns, config.iconSizeDp));
+                if (heightOnly && !pages) return;
+                if (!heightOnly) {
+                    content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
+                        - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity,
+                        labelHeightPx, config.verticalColumns, config.iconSizeDp));
+                }
+                if (pages) applyCategoryMetrics(content, rect, labelHeightPx, config, heightOnly);
                 break;
             case HORIZONTAL:
                 content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(rect.width(),
@@ -1993,21 +2013,36 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 if (heightOnly) content.rebindCurrentResults();
                 break;
             case CATEGORIES:
-                SuggestionBarView dock = mHost.suggestionBar();
-                int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
-                // Category search temporarily reuses the shipped vertical grid at full width. It
-                // gets AUTO geometry here and deliberately reads no vertical grid preference.
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
-                    labelHeightPx, 0, config.iconSizeDp));
-                // Sized for the keyboard-down card, never for the space the keyboard leaves: the
-                // category cards keep their shape and size and scroll inside the shortened card.
-                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
-                    content.horizontalPagerUsableHeight(categoryMetricsHeightPx(rect)), mDensity,
-                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
-                    config.categoryColumns, config.iconSizeDp));
-                if (heightOnly) content.rebindCurrentResults();
+                if (pages) {
+                    // Categories settled on Default's pages: the grid beside it is still Apps'.
+                    if (!heightOnly) {
+                        content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
+                            - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity,
+                            labelHeightPx, config.verticalColumns, config.iconSizeDp));
+                    }
+                } else {
+                    // Category search temporarily reuses the shipped vertical grid at full width.
+                    // It gets AUTO geometry here and deliberately reads no vertical grid preference.
+                    content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
+                        labelHeightPx, 0, config.iconSizeDp));
+                }
+                applyCategoryMetrics(content, rect, labelHeightPx, config, heightOnly);
                 break;
         }
+    }
+
+    private void applyCategoryMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
+                                      float labelHeightPx, @NonNull AppDrawerLayoutConfig config,
+                                      boolean heightOnly) {
+        SuggestionBarView dock = mHost.suggestionBar();
+        int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
+        // Sized for the keyboard-down card, never for the space the keyboard leaves: the
+        // category cards keep their shape and size and scroll inside the shortened card.
+        content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
+            content.horizontalPagerUsableHeight(categoryMetricsHeightPx(rect)), mDensity,
+            resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
+            config.categoryColumns, config.iconSizeDp));
+        if (heightOnly) content.rebindCurrentResults();
     }
 
     /**
