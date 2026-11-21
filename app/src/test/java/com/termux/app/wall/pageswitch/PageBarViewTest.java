@@ -78,7 +78,19 @@ public class PageBarViewTest {
         WidgetPaneView pane = new WidgetPaneView(activity);
         float density = activity.getResources().getDisplayMetrics().density;
         View dots = pane.findViewById(R.id.widget_page_dots);
-        assertEquals(Math.round(PageBarLayout.bandHeightDp() * density),
-            dots.getLayoutParams().height);
+        // No dock reserve yet: the pill takes the dock's place, no air under it.
+        assertEquals(PageBarBand.bandHeightPx(true, false, density), dots.getLayoutParams().height);
+        pane.setDockReservePx(100);
+        assertEquals(PageBarBand.bandHeightPx(true, true, density), dots.getLayoutParams().height);
+        assertEquals(100, ((android.widget.FrameLayout.LayoutParams) dots.getLayoutParams())
+            .bottomMargin);
+        pane.setKeyboardUp(true);
+        assertEquals("a keyboard hides the pill, not the band", View.INVISIBLE,
+            dots.getVisibility());
+        assertEquals(PageBarBand.bandHeightPx(true, true, density), dots.getLayoutParams().height);
+        pane.setKeyboardUp(false);
+        assertEquals(View.VISIBLE, dots.getVisibility());
+        pane.setPageIndicator(com.termux.app.launcher.home.HomePageIndicator.OFF);
+        assertEquals("off gives the band back", 0, dots.getLayoutParams().height);
     }
 }

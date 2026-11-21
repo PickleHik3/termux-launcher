@@ -16,6 +16,7 @@ import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
+import android.view.ViewParent;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
@@ -39,8 +40,8 @@ import java.util.List;
  * never changes: the slide is draw-time transforms of the glyphs, no layout. Nothing animates or
  * invalidates at rest; while a finger is down only this view and the bubble draw.
  *
- * <p>The view is the whole band under Home's grid ({@link PageBarLayout#bandHeightDp}); the pill
- * stands in it. Its glass is a {@link PaneGlassBackdropView} child, dressed as a widget's slab is.
+ * <p>The view is the whole band under Home's grid ({@link PageBarBand}); the pill stands in it,
+ * centred on the window. Its glass is a {@link PaneGlassBackdropView} child, dressed as a widget's slab is.
  * Fed a {@link PageBarModel} by the activity; the model, fold and layout are rebuilt only when
  * it or the width changes.</p>
  */
@@ -111,6 +112,9 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     /** 0 at rest, 1 fully sliding; the tween between. */
     private float mEnter;
     private float mFocusFloat;
+    /** The pane's left in the window and the window's width, as of the last layout (0: not read yet). */
+    private float mPaneLeft;
+    private float mWindowWidth;
     private float mPillLeft = -1f;
     private float mPillWidth = -1f;
 
@@ -207,7 +211,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
                 .append(" maxSlots=").append(PageBarLayout.maxSlots(mDensity, width)).append(" slots=");
             for (PageBarFold.Slot s : mFold.slots) diag.append(s.kind).append(':').append(s.count).append('/').append(s.number).append(' ');
             android.util.Log.d("TL-PageBarDiag", diag.toString());
-            mLayout = new PageBarLayout(mDensity, width, slots, mKeyEntry);
+            mLayout = mKeyEntry ? new PageBarLayout(mDensity, width, slots, true)
+                : new PageBarLayout(mDensity, width, slots, mPaneLeft, mWindowWidth);
             mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, mKeyEntry);
             if (mCenters.length != slots) {
                 mCenters = new float[slots];
@@ -269,6 +274,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
 
     @Override
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        if (changed && !mKeyEntry && notePaneInWindow()) rebuild();
         PageBarLayout layout = mLayout;
         if (layout == null) return;
         int left = Math.round(layout.pillLeftPx());
@@ -278,6 +284,28 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mGlass.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
         mGlass.layout(left, top, left + w, top + h);
+    }
+
+    /**
+     * Reads where the pane stands in its window, which the hugged pill centres on: this view's
+     * left through its parents' layout lefts (the wall's slide is a translation and is not in
+     * them), and the window's width. Runs when this view is laid out with a new frame, never per
+     * frame, so rotation, split screen and a side rail changing the pane all reach it.
+     *
+     * @return whether either changed
+     */
+    private boolean notePaneInWindow() {
+        float left = 0f;
+        View root = this;
+        for (ViewParent parent = getParent(); parent instanceof View; parent = parent.getParent()) {
+            left += root.getLeft() - ((View) parent).getScrollX();
+            root = (View) parent;
+        }
+        float window = root == this ? 0f : root.getWidth();
+        if (left == mPaneLeft && window == mWindowWidth) return false;
+        mPaneLeft = left;
+        mWindowWidth = window;
+        return true;
     }
 
     @Override
@@ -484,7 +512,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     }
 
     /** Puts the bar away: the touch, the slide and the bubble, all given back. */
-    void release() {
+    public void release() {
         cancelStream();
         mEnterAnim.cancel();
         mEnter = 0f;

@@ -28,7 +28,7 @@ import com.termux.R;
 import com.termux.app.AnimationSpeed;
 import com.termux.app.launcher.home.HomeGestures;
 import com.termux.app.launcher.home.HomePageIndicator;
-import com.termux.app.wall.pageswitch.PageBarLayout;
+import com.termux.app.wall.pageswitch.PageBarBand;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarView;
 import com.termux.app.launcher.home.HomePageTransition;
@@ -195,7 +195,7 @@ public final class WidgetPaneView extends FrameLayout
     private final TextView emptyMessage;
     private final TextView notice;
     private final WidgetPickerSheetView picker;
-    /** The page bar: the band under the grid ({@link PageBarLayout#bandHeightDp}), the pill in it. */
+    /** The page bar: the band under the grid ({@link PageBarBand}), the pill in it. */
     private final PageBarView dots;
     /** The empty page's hint stands on the wallpaper: its ink follows it. */
     private final HomeLabelInk hintInk = new HomeLabelInk();
@@ -306,10 +306,12 @@ public final class WidgetPaneView extends FrameLayout
         grid = new WidgetGridView(context); grid.setId(R.id.widget_grid);
         float cameraDistance = CAMERA_DISTANCE_DP * getResources().getDisplayMetrics().density;
         grid.setCameraDistance(cameraDistance);
-        // The page dots sit in a band below the grid, never over its last row. The band is kept
-        // whether or not the dots show, so adding a page does not shrink every cell.
+        // The page bar sits in a band below the grid, never over its last row. The band is kept
+        // while the indicator is on (a keyboard hides the pill, not the band, and adding a page
+        // does not shrink every cell); with the indicator off the grid takes the band's height.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = gridBottomInsetPx(0, getResources().getDisplayMetrics().density);
+        gridParams.bottomMargin = gridBottomInsetPx(0, indicator.glyphsShown(),
+            getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
         empty = new LinearLayout(context); empty.setOrientation(LinearLayout.VERTICAL);
@@ -322,7 +324,8 @@ public final class WidgetPaneView extends FrameLayout
         addView(empty, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
 
         dots = new PageBarView(context); dots.setId(R.id.widget_page_dots);
-        LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT, bandHeightPx(density()),
+        LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
+            PageBarBand.bandHeightPx(indicator.glyphsShown(), false, density()),
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         dotsParams.bottomMargin = 0;
         addView(dots, dotsParams);
@@ -452,13 +455,57 @@ public final class WidgetPaneView extends FrameLayout
     public void setReducedMotion(boolean value) { reducedMotion = value; }
 
     /**
-     * Settings › Home › Page indicator: the dots, or none. The band they stand in stays either
-     * way, so the grid keeps its height.
+     * Settings › Home › Page indicator: the dots, or none. With none the band they stood in goes
+     * to the grid, which resizes once.
      */
     public void setPageIndicator(@NonNull HomePageIndicator value) {
         if (indicator == value) return;
         indicator = value;
+        applyBand();
         setPageState(pageCount, currentPage);
+    }
+
+    /**
+     * Whether a keyboard, the in-app one or the system's, is up on Home. The pill is put away
+     * while it is and comes back with the keyboard down; the band keeps its height, so no keyboard
+     * toggle resizes the grid.
+     */
+    public void setKeyboardUp(boolean up) {
+        if (keyboardUp == up) return;
+        keyboardUp = up;
+        applyBand();
+    }
+
+    /**
+     * The band, from the indicator, the dock's reserve and the keyboard ({@link PageBarBand}): its
+     * height and bottom margin, the grid's bottom margin and the pill's visibility, each compared
+     * before it is set. INVISIBLE, never GONE: the band is the grid's inset whether or not the
+     * pill shows.
+     */
+    private void applyBand() {
+        float density = density();
+        boolean on = indicator.glyphsShown();
+        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
+        int gridBottom = gridBottomInsetPx(dockReservePx, on, density);
+        if (gridParams.bottomMargin != gridBottom) {
+            gridParams.bottomMargin = gridBottom;
+            grid.setLayoutParams(gridParams);
+        }
+        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
+        int band = PageBarBand.bandHeightPx(on, PageBarBand.dockRowsBelow(dockReservePx), density);
+        int bottom = PageBarBand.bottomMarginPx(dockReservePx);
+        if (dotsParams.height != band || dotsParams.bottomMargin != bottom) {
+            dotsParams.height = band;
+            dotsParams.bottomMargin = bottom;
+            dots.setLayoutParams(dotsParams);
+        }
+        boolean shown = PageBarBand.shown(on, keyboardUp);
+        int visibility = shown ? VISIBLE : INVISIBLE;
+        if (dots.getVisibility() != visibility) {
+            // A touch already down on the pill is given back before it goes.
+            if (!shown) dots.release();
+            dots.setVisibility(visibility);
+        }
     }
 
     /** What swipe up on the free area is set to; the drawer follows the finger. */
@@ -535,23 +582,21 @@ public final class WidgetPaneView extends FrameLayout
 
     /**
      * The band at the pane's bottom the dock stands over at rest
-     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page dots and the grid stand
+     * ({@code KeyboardOverlayPolicy#homeGridDockReservePx}, #104): the page bar and the grid stand
      * above it, so the grid's last row is never behind the dock. The grid's rows are cut from what
-     * is left.
+     * is left. Zero when no dock rows stand at the bottom: the pill then takes the dock's place
+     * at the pane's bottom, with no air under it.
      */
     public void setDockReservePx(int px) {
         int wanted = Math.max(0, px);
         if (dockReservePx == wanted) return;
         dockReservePx = wanted;
-        float density = getResources().getDisplayMetrics().density;
-        LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
-        gridParams.bottomMargin = gridBottomInsetPx(wanted, density);
-        grid.setLayoutParams(gridParams);
-        LayoutParams dotsParams = (LayoutParams) dots.getLayoutParams();
-        dotsParams.bottomMargin = wanted;
-        dots.setLayoutParams(dotsParams);
+        applyBand();
         picker.setDockReservePx(wanted);
     }
+
+    /** Whether a keyboard is up on Home; see {@link #setKeyboardUp}. */
+    private boolean keyboardUp;
 
     public int dockReservePx() {
         return dockReservePx;
@@ -559,10 +604,11 @@ public final class WidgetPaneView extends FrameLayout
 
     /**
      * How far above the pane's bottom the grid ends: the dock's band, then the page bar's band
-     * (kept whether or not the bar shows, so adding a page does not shrink every cell).
+     * (none with the indicator off; kept while a keyboard hides the pill).
      */
-    static int gridBottomInsetPx(int dockReservePx, float density) {
-        return Math.max(0, dockReservePx) + bandHeightPx(density);
+    static int gridBottomInsetPx(int dockReservePx, boolean indicatorOn, float density) {
+        return PageBarBand.bottomMarginPx(dockReservePx) + PageBarBand.bandHeightPx(indicatorOn,
+            PageBarBand.dockRowsBelow(dockReservePx), density);
     }
 
     /**
@@ -964,19 +1010,12 @@ public final class WidgetPaneView extends FrameLayout
 
     private float density() { return getResources().getDisplayMetrics().density; }
 
-    /** The page bar's height: the whole band under the grid, less the dock's reserve. */
-    static int bandHeightPx(float density) {
-        return Math.round(PageBarLayout.bandHeightDp() * density);
-    }
-
     /** Updates the indicator and, after a committed swipe, slides the new page's content in. */
     public void setPageState(int count, int current) {
         int previousPage = currentPage;
         pageCount = Math.max(1, count);
         currentPage = Math.max(0, Math.min(pageCount - 1, current));
-        // INVISIBLE, never GONE: the band is the grid's inset either way (gridBottomInsetPx).
-        int dotsVisibility = indicator.glyphsShown() ? VISIBLE : INVISIBLE;
-        if (dots.getVisibility() != dotsVisibility) dots.setVisibility(dotsVisibility);
+        applyBand();
         if (pinnedLayer instanceof PagePinnedLayer)
             ((PagePinnedLayer) pinnedLayer).onHomePageShown(currentPage);
         if (pageCommitPending && currentPage != previousPage) {

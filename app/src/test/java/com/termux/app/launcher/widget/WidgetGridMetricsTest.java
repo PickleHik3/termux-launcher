@@ -3,6 +3,7 @@ package com.termux.app.launcher.widget;
 import android.graphics.Rect;
 
 import com.termux.app.chrome.ChromePolicy;
+import com.termux.app.wall.pageswitch.PageBarBand;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.dock.DockSurfaceSpec;
@@ -169,7 +170,7 @@ public class WidgetGridMetricsTest {
                     int homeReserve = KeyboardOverlayPolicy.homeGridDockReservePx(true, dockPx,
                         edgeGap);
                     Rect homeBody = new Rect(0, 0, width,
-                        height - WidgetPaneView.gridBottomInsetPx(homeReserve, density));
+                        height - WidgetPaneView.gridBottomInsetPx(homeReserve, true, density));
                     Rect home = new WidgetGridMetrics(homeBody, 0, rim, gap, grid, false)
                         .boundsFor(lastRow);
                     assertTrue(what + ": Home's last row ends at " + home.bottom
@@ -178,8 +179,10 @@ public class WidgetGridMetricsTest {
                     int terminalReserve = KeyboardOverlayPolicy.homeGridDockReservePx(false,
                         dockPx, edgeGap);
                     assertEquals(what, 0, terminalReserve);
-                    Rect terminalBody = new Rect(0, 0, width,
-                        dockTop - WidgetPaneView.gridBottomInsetPx(terminalReserve, density));
+                    // The terminal half has no reserve but the dock stands below the pane's band
+                    // all the same: the band with its bottom air, as Home's has over its reserve.
+                    Rect terminalBody = new Rect(0, 0, width, dockTop
+                        - PageBarBand.bandHeightPx(true, true, density));
                     Rect terminal = new WidgetGridMetrics(terminalBody, 0, rim, gap, grid,
                         false).boundsFor(lastRow);
                     assertTrue(what, terminal.bottom <= dockTop);

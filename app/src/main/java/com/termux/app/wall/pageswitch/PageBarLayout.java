@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 
 /**
  * The page bar's geometry in px, for one pane width, density and slot count. The pill is centred
- * in the pane, its slots fill it end to end and the first glyph centre sits half a slot in. While
+ * on the window (in the pane when the pane is centred), its slots fill it end to end and the first glyph centre sits half a slot in. While
  * a finger slides, {@link #slidePositions} spreads the glyphs around the focus slot (whose glyph
  * is drawn in the bubble above the pill) so the row follows the finger without an animator.
  * Every number is declared once, in dp.
@@ -26,12 +26,12 @@ public final class PageBarLayout {
     public static final float LABEL_GAP_DP = 8f;
     /** Pill top to the grid above. */
     public static final float TOP_AIR_DP = 4f;
-    /** Pill bottom to the dock's reserve. */
+    /** Pill bottom to the dock's reserve, where dock rows stand below the pill. */
     public static final float BOTTOM_AIR_DP = 12f;
     /** The finger leaving the pill vertically by more than this cancels the slide. */
     public static final float CANCEL_DP = 32f;
 
-    /** The band the bar occupies in its pane. */
+    /** The key's pop-up band, air on both sides; Home's band is {@link PageBarBand}'s. */
     public static float bandHeightDp() {
         return TOP_AIR_DP + PILL_HEIGHT_DP + BOTTOM_AIR_DP;
     }
@@ -60,12 +60,32 @@ public final class PageBarLayout {
      *             and uncapped: the bar the page switcher key pops up on a workspace page
      */
     public PageBarLayout(float density, float paneWidthPx, int slotCount, boolean fill) {
+        this(density, paneWidthPx, slotCount, fill, 0f, paneWidthPx);
+    }
+
+    /**
+     * Home's bar in a pane that may stand off the window's centre: the hugged pill is centred on
+     * the window ({@link PageBarBand#pillLeftPx}), clamped inside the pane. With the pane centred
+     * in the window it is the pane-centred bar.
+     *
+     * @param paneLeftPx    the pane's left in the window
+     * @param windowWidthPx the window's width; 0 or less centres the pill in the pane
+     */
+    public PageBarLayout(float density, float paneWidthPx, int slotCount, float paneLeftPx,
+                         float windowWidthPx) {
+        this(density, paneWidthPx, slotCount, false, paneLeftPx, windowWidthPx);
+    }
+
+    private PageBarLayout(float density, float paneWidthPx, int slotCount, boolean fill,
+                          float paneLeftPx, float windowWidthPx) {
         mDensity = density;
         mPaneWidth = paneWidthPx;
         mSlotCount = Math.max(1, slotCount);
         float area = Math.max(0f, paneWidthPx - 2f * SIDE_INSET_DP * density);
         mSlotWidth = fill ? area / mSlotCount : Math.min(MAX_SLOT_DP * density, area / mSlotCount);
-        mPillLeft = (paneWidthPx - mSlotWidth * mSlotCount) / 2f;
+        float pillWidth = mSlotWidth * mSlotCount;
+        mPillLeft = fill ? (paneWidthPx - pillWidth) / 2f
+            : PageBarBand.pillLeftPx(paneLeftPx, paneWidthPx, windowWidthPx, pillWidth, density);
         mScratchCenters = new float[mSlotCount];
         mScratchScales = new float[mSlotCount];
     }
