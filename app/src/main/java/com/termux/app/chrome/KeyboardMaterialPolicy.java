@@ -148,4 +148,15 @@ public final class KeyboardMaterialPolicy {
         float b = toward == Material.SOLID ? 1f : 0f;
         return a + (b - a) * clamped;
     }
+
+    /**
+     * Whether the keyboard host is dressed as a shown keyboard: the live keyboard, or, under
+     * Floating, a crossing toward a rest that shows it ({@code arrivesAtKeyboard}), so the host
+     * wears the arriving rest's own card through the travel and the landing finds it in place.
+     * Docked keeps the live answer: its keyboard stands on the frame or the unified glass.
+     */
+    public static boolean dressedShown(boolean liveShown, boolean arrivesAtKeyboard,
+                                       boolean floating) {
+        return liveShown || (floating && arrivesAtKeyboard);
+    }
 }
