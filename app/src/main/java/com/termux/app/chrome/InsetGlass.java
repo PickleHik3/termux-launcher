@@ -39,8 +39,8 @@ public final class InsetGlass {
     @ColorInt public static final int LIGHT_RGB = 0xFFFFFF;
 
     /** The floor's shade under the top lip: about 40 % on a dark ground, 18 % on a light one. */
-    public static final int FLOOR_ALPHA_DARK = 0x66;
-    public static final int FLOOR_ALPHA_LIGHT = 0x2E;
+    public static final int FLOOR_ALPHA_DARK = 0x3D;
+    public static final int FLOOR_ALPHA_LIGHT = 0x1F;
     /** The faint light at the floor's bottom: about 5 % dark, 8 % light. */
     public static final int FLOOR_LIGHT_ALPHA_DARK = 0x0D;
     public static final int FLOOR_LIGHT_ALPHA_LIGHT = 0x14;
@@ -54,8 +54,8 @@ public final class InsetGlass {
     static final float[] FLOOR_SHADE = {1f, 0.45f, 0.12f, 0f, 0f};
 
     /** The contact shadow's alpha under the top edge: about 35 % dark, 20 % light. */
-    public static final int INNER_SHADOW_ALPHA_DARK = 0x59;
-    public static final int INNER_SHADOW_ALPHA_LIGHT = 0x33;
+    public static final int INNER_SHADOW_ALPHA_DARK = 0x33;
+    public static final int INNER_SHADOW_ALPHA_LIGHT = 0x21;
     /** How far in the contact shadow reaches, at most {@link #INNER_SHADOW_MAX_SHARE} of the well's height. */
     public static final float INNER_SHADOW_REACH_DP = 4f;
     public static final float INNER_SHADOW_MAX_SHARE = 0.2f;
@@ -68,8 +68,8 @@ public final class InsetGlass {
     public static final float RIM_WIDTH_DP = 1f;
     public static final float RIM_MAX_SHARE = 0.1f;
     /** The subtle dark hairline across the top: about 25 % dark, 15 % light; clear below {@link #RIM_SHADOW_TO_SHARE}. */
-    public static final int RIM_SHADOW_ALPHA_DARK = 0x40;
-    public static final int RIM_SHADOW_ALPHA_LIGHT = 0x26;
+    public static final int RIM_SHADOW_ALPHA_DARK = 0x26;
+    public static final int RIM_SHADOW_ALPHA_LIGHT = 0x1A;
     public static final float RIM_SHADOW_TO_SHARE = 0.35f;
     /** The light hairline's alpha at the centre bottom: about 45 % dark, 85 % light. */
     public static final int RIM_LIGHT_ALPHA_DARK = 0x73;
