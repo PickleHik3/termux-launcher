@@ -385,6 +385,15 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mGestureDragEligible;
     @Nullable private String mGestureDragStableId;
     @Nullable private AppDrawerDragPolicy mDragPolicy;
+    /** What a finger does while the drawer is edited; decided at the down, read by the pager. */
+    private final AppDrawerEditGesturePolicy mEditGesture = new AppDrawerEditGesturePolicy();
+    /** The folder cell a still-undecided edit gesture started on: a tap opens it, a move lifts it. */
+    @Nullable private View mEditFolderCell;
+    @Nullable private PinnedFolderItem mEditFolder;
+    private float mEditDownX;
+    private float mEditDownY;
+    private long mEditDownTime;
+    private final Runnable mEditFolderHold = this::onEditFolderHold;
     private int mDragEdgeDirection;
     private boolean mDragEdgeConsumed;
     private float mDragAutoscrollVelocity;
@@ -1794,7 +1803,12 @@ public final class AppDrawerContentView extends FrameLayout
         AppDrawerEditModel previous = mEditModel;
         if (previous == next) return;
         mEditModel = next;
-        if (!next.isEditing()) dismissGridSizePopup();
+        if (!next.isEditing()) {
+            dismissGridSizePopup();
+            removeCallbacks(mEditFolderHold);
+            mEditFolderCell = null;
+            mEditFolder = null;
+        }
         AppDrawerSearchController search = mSearch;
         if (search != null) search.setInputEnabled(next.searchEnabled());
         mPill.setAlpha(next.searchDimmed() ? SEARCH_DIMMED_ALPHA : 1f);
@@ -2547,6 +2561,7 @@ public final class AppDrawerContentView extends FrameLayout
         // scroll from inside this dispatch, and that end has to know it is a cancellation rather
         // than a release, or a stream taken away by another window would report as a decision.
         if (action == MotionEvent.ACTION_CANCEL) mStreamCancelled = true;
+        if (mEditFolderCell != null) trackEditFolder(ev, action);
         // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
         // the one place a finger lands while typing).
         if (action == MotionEvent.ACTION_DOWN && mSearch != null
@@ -2624,8 +2639,144 @@ public final class AppDrawerContentView extends FrameLayout
                         break;
                 }
             }
+            beginEditGesture(ev, region, downItem);
         }
         return handled;
+    }
+
+    // ------------------------------------------------------------------ edit-mode lift
+
+    private static boolean hits(@Nullable View view, float x, float y) {
+        return view != null && view.getVisibility() == VISIBLE
+            && x >= view.getX() && x < view.getX() + view.getWidth()
+            && y >= view.getY() && y < view.getY() + view.getHeight();
+    }
+
+    /**
+     * Hands the down to the edit gesture policy and acts on its first answer: an app lifts at once
+     * through the same pickup a long press starts; a folder waits for a tap, a move or a hold; a
+     * tile lifts for reordering. Runs after the down's snapshot, which the pickup is gated on.
+     */
+    private void beginEditGesture(@NonNull MotionEvent ev,
+                                  @NonNull AppDrawerTouchRegions.Region region,
+                                  @Nullable AppDrawerItem downItem) {
+        removeCallbacks(mEditFolderHold);
+        mEditFolderCell = null;
+        mEditFolder = null;
+        boolean editing = mEditModel.isEditing();
+        float x = ev.getX();
+        float y = ev.getY();
+        AppDrawerEditGesturePolicy.Touched touched = AppDrawerEditGesturePolicy.Touched.GAP;
+        View cell = null;
+        if (editing) {
+            if (region == AppDrawerTouchRegions.Region.COLUMN) {
+                touched = AppDrawerEditGesturePolicy.Touched.AZ_INDEX;
+            } else if (hits(mPill, x, y) || hits(mInput, x, y)) {
+                touched = AppDrawerEditGesturePolicy.Touched.SEARCH_BAR;
+            } else if (hits(mSectionSwitch, x, y)) {
+                touched = AppDrawerEditGesturePolicy.Touched.SECTION_SWITCH;
+            } else if (downItem != null) {
+                cell = cellViewAt(x, y);
+                if (cell != null) {
+                    touched = downItem.folder != null
+                        ? AppDrawerEditGesturePolicy.Touched.FOLDER_CELL
+                        : AppDrawerEditGesturePolicy.Touched.APP_CELL;
+                }
+            }
+        }
+        AppDrawerEditGesturePolicy.Action action = mEditGesture.begin(editing, mViewType, mSection,
+            touched, getLayoutDirection() == LAYOUT_DIRECTION_RTL, mCategoryView.isOverview());
+        switch (action) {
+            case LIFT_APP:
+                if (cell != null && downItem != null && downItem.app != null)
+                    liftApp(cell, downItem.app);
+                break;
+            case PENDING:
+                if (cell != null && downItem != null && downItem.folder != null) {
+                    mEditFolderCell = cell;
+                    mEditFolder = downItem.folder;
+                    mEditDownX = x;
+                    mEditDownY = y;
+                    mEditDownTime = ev.getEventTime();
+                    postDelayed(mEditFolderHold, AppDrawerEditGesturePolicy.HOLD_LIFT_MS);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** The cell view under a point of the vertical grid or the pages grid, or null. */
+    @Nullable
+    private View cellViewAt(float x, float y) {
+        AppDrawerViewType type = presentedType();
+        if (type == AppDrawerViewType.VERTICAL) {
+            return mGrid.findChildViewUnder(x - mGrid.getLeft(), y - mGrid.getTop());
+        }
+        if (type != AppDrawerViewType.HORIZONTAL) return null;
+        View pageView = mHorizontalPager.findChildViewUnder(x - mHorizontalPager.getLeft(),
+            y - mHorizontalPager.getTop());
+        if (pageView == null) return null;
+        RecyclerView.ViewHolder raw = mHorizontalPager.getChildViewHolder(pageView);
+        if (!(raw instanceof AppDrawerHorizontalPageAdapter.PageHolder)) return null;
+        AppDrawerHorizontalPageAdapter.PageHolder page =
+            (AppDrawerHorizontalPageAdapter.PageHolder) raw;
+        float localX = x - mHorizontalPager.getLeft() - pageView.getLeft();
+        float localY = y - mHorizontalPager.getTop() - pageView.getTop();
+        for (int i = 0; i < page.cells.size(); i++) {
+            View cell = page.cells.get(i);
+            if (cell.getVisibility() == VISIBLE
+                && localX >= cell.getLeft() && localX < cell.getRight()
+                && localY >= cell.getTop() && localY < cell.getBottom()) return cell;
+        }
+        return null;
+    }
+
+    private void liftApp(@NonNull View cell, @NonNull LauncherAppEntry entry) {
+        AppDrawerDragController controller = mDragController;
+        if (controller == null) return;
+        // The long press's own steps: the press is spent, then the same pickup runs.
+        cancelCellLongPresses();
+        controller.startPickup(cell, entry);
+    }
+
+    private void liftFolder() {
+        View cell = mEditFolderCell;
+        PinnedFolderItem folder = mEditFolder;
+        removeCallbacks(mEditFolderHold);
+        mEditFolderCell = null;
+        mEditFolder = null;
+        AppDrawerDragController controller = mDragController;
+        if (cell == null || folder == null || controller == null) return;
+        cancelCellLongPresses();
+        controller.startFolderPickup(cell, folder);
+    }
+
+    private void onEditFolderHold() {
+        if (mEditFolderCell == null) return;
+        if (mEditGesture.evaluate(0f, 0f, AppDrawerEditGesturePolicy.HOLD_LIFT_MS, mTouchSlopPx,
+            false) == AppDrawerEditGesturePolicy.Action.LIFT_FOLDER) liftFolder();
+    }
+
+    /** A move past the slop lifts the folder; a release inside it is a tap the cell handles. */
+    private void trackEditFolder(@NonNull MotionEvent ev, int action) {
+        if (action == MotionEvent.ACTION_CANCEL) {
+            removeCallbacks(mEditFolderHold);
+            mEditFolderCell = null;
+            mEditFolder = null;
+            return;
+        }
+        if (action != MotionEvent.ACTION_MOVE && action != MotionEvent.ACTION_UP) return;
+        boolean released = action == MotionEvent.ACTION_UP;
+        AppDrawerEditGesturePolicy.Action answer = mEditGesture.evaluate(ev.getX() - mEditDownX,
+            ev.getY() - mEditDownY, ev.getEventTime() - mEditDownTime, mTouchSlopPx, released);
+        if (answer == AppDrawerEditGesturePolicy.Action.LIFT_FOLDER && !released) {
+            liftFolder();
+        } else if (answer != AppDrawerEditGesturePolicy.Action.PENDING || released) {
+            removeCallbacks(mEditFolderHold);
+            mEditFolderCell = null;
+            mEditFolder = null;
+        }
     }
 
     @Nullable
@@ -2953,7 +3104,7 @@ public final class AppDrawerContentView extends FrameLayout
     /** A long press or pickup has armed on the cell under the finger. */
     private boolean isPickupArmed() {
         AppDrawerDragPolicy policy = mDragPolicy;
-        return mDragActive || (policy != null
+        return mDragActive || mEditGesture.blocksPageSwipe() || (policy != null
             && (policy.claim() == AppDrawerDragPolicy.Claim.CONTEXT
                 || policy.claim() == AppDrawerDragPolicy.Claim.DRAG));
     }
