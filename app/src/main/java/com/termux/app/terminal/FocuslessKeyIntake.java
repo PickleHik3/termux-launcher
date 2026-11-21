@@ -41,13 +41,21 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
         mFieldEditor = new FieldEditor(clipboardSource);
     }
 
+    /** An editor that does not show its text to the edit keys: only paste acts, as typing. */
+    private final FieldEditor.Field mPasteOnly = new FieldEditor.Field() {
+        @Nullable @Override public String fieldText() { return null; }
+        @Override public void replaceFieldText(@NonNull String text) {}
+        @Override public void insertFieldText(@NonNull String text) { onText(text, false, false); }
+    };
+
     /**
      * The text the in-app keyboard's editing keys act on now (copy, cut, paste, select all, undo,
-     * redo and their Ctrl chords), or null when there is none and they do nothing.
+     * redo and their Ctrl chords), or null when there is none and they do nothing. By default only
+     * paste acts, typed through {@link #onText}.
      */
     @Nullable
     protected FieldEditor.Field editableField() {
-        return null;
+        return mPasteOnly;
     }
 
     /** A Ctrl or Alt chord this editor gives a meaning of its own; it goes to {@link #onText}. */

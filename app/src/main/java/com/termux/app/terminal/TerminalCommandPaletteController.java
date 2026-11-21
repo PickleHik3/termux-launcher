@@ -215,7 +215,6 @@ public final class TerminalCommandPaletteController
     private final LauncherUsageStatsStore mAppUsageStats;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final float mDensity;
-    private final ClipboardText mClipboardSource;
     /** The in-app keyboard's editing keys on the query (FieldKeys' rule). */
     private final com.termux.app.terminal.inappkeyboard.FieldEditor mFieldEditor;
     private final com.termux.app.terminal.inappkeyboard.FieldEditor.Field mQueryField =
@@ -391,7 +390,6 @@ public final class TerminalCommandPaletteController
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
         mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
-        mClipboardSource = clipboardSource;
         mFieldEditor = new com.termux.app.terminal.inappkeyboard.FieldEditor(clipboardSource);
     }
 
@@ -1600,11 +1598,6 @@ public final class TerminalCommandPaletteController
         }
     }
 
-    /** Inserts the clipboard text, sanitized for the single-line query, at the cursor. */
-    private void pasteClipboard() {
-        String text = mClipboardSource.read();
-        if (text != null && !text.isEmpty()) appendText(PasteText.sanitizeSingleLine(text));
-    }
 
     private void appendText(@NonNull String text) {
         if (text.isEmpty()) return;
