@@ -8,9 +8,9 @@ import com.termux.app.ScrubWave;
  * <p>Two shapes. The <b>pill</b> is the touch row: {@link #PILL_HEIGHT_DP} tall, its slots
  * ({@link #MIN_SLOT_DP} on Home) end to end, centred on the window (in the pane when the pane is
  * centred); taps, slides and screen-reader buttons read it. The <b>slab</b> is what is drawn: the
- * glyphs with {@link #GAP_DP} around them, its bottom {@link #GAP_DP} above the touch row's, so it
- * hugs whatever stands below the bar. On Home it is the touch row less the slot's spare width at
- * each end; the bar the page switcher key pops up keeps its slab as wide as its touch row.</p>
+ * glyphs with {@link #GAP_DP} above and below them, its bottom {@link #GAP_DP} above the touch row's,
+ * so it hugs whatever stands below the bar. It is as wide as the touch row, so the end glyphs stand
+ * half a slot from its ends: the same rhythm end to end as between glyphs.</p>
  *
  * <p>While a finger slides, each glyph lifts out of the slab on the A–Z bar's wave
  * ({@link ScrubWave}): the glyph under the finger rises to {@link #liftPeakPx} and grows to
@@ -57,8 +57,6 @@ public final class PageBarLayout {
     private final int mSlotCount;
     private final float mSlotWidth;
     private final float mPillLeft;
-    /** The slab's inset from the touch row at each end. */
-    private final float mSlabInset;
 
     /** Home's bar: the pill hugs its glyphs, each slot {@link #MIN_SLOT_DP}. */
     public PageBarLayout(float density, float paneWidthPx, int slotCount) {
@@ -96,7 +94,6 @@ public final class PageBarLayout {
         float pillWidth = mSlotWidth * mSlotCount;
         mPillLeft = fill ? (paneWidthPx - pillWidth) / 2f
             : PageBarBand.pillLeftPx(paneLeftPx, paneWidthPx, windowWidthPx, pillWidth, density);
-        mSlabInset = fill ? 0f : Math.max(0f, (mSlotWidth - slabHeightDp() * density) / 2f);
     }
 
     public int slotCount() {
@@ -144,12 +141,13 @@ public final class PageBarLayout {
 
     // ---- The slab ---------------------------------------------------------------------------
 
+    /** The slab's left: the touch row's, so the end glyph stands half a slot inside it. */
     public float slabLeftPx() {
-        return mPillLeft + mSlabInset;
+        return mPillLeft;
     }
 
     public float slabWidthPx() {
-        return pillWidthPx() - 2f * mSlabInset;
+        return pillWidthPx();
     }
 
     public float slabHeightPx() {
