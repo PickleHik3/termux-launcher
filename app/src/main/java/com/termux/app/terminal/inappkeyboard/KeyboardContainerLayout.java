@@ -19,6 +19,7 @@ import androidx.annotation.Nullable;
 public class KeyboardContainerLayout extends LinearLayout {
 
     private boolean mTouchRefused;
+    private boolean mCoversBelow;
 
     public KeyboardContainerLayout(@NonNull Context context) {
         super(context);
@@ -41,12 +42,30 @@ public class KeyboardContainerLayout extends LinearLayout {
             : IMPORTANT_FOR_ACCESSIBILITY_AUTO);
     }
 
+    /**
+     * Whether the keyboard draws over the dock (Home, #309): a touch inside its bounds is its own
+     * even where no key takes it (a split keyboard's gap), so it never reaches the covered dock.
+     * A write only on a change.
+     */
+    public void setCoversBelow(boolean covers) {
+        mCoversBelow = covers;
+    }
+
+    public boolean isCoversBelow() {
+        return mCoversBelow;
+    }
+
     public boolean isTouchRefused() {
         return mTouchRefused;
     }
 
     @Override public boolean dispatchTouchEvent(MotionEvent event) {
-        return !mTouchRefused && super.dispatchTouchEvent(event);
+        if (mTouchRefused) return false;
+        boolean taken = super.dispatchTouchEvent(event);
+        if (taken || !mCoversBelow) return taken;
+        float x = event.getX();
+        float y = event.getY();
+        return x >= 0f && y >= 0f && x < getWidth() && y < getHeight();
     }
 
     @Override public boolean dispatchGenericMotionEvent(MotionEvent event) {

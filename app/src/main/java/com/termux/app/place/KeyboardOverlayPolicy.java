@@ -174,11 +174,29 @@ public final class KeyboardOverlayPolicy {
 
     /**
      * The top of what covers Home from below while a keyboard is up, on screen, or -1 while none
-     * is: the top of the accessory stack, the dock riding on the keyboard. Up for the in-app
-     * keyboard ({@code inAppKeyboardShown}, the stack holding it) and for a system keyboard that
-     * pushes the stack up ({@code imePushPx}, the stack standing on it). Floats and terminal
-     * widgets on Home meet this edge, whichever keyboard it is.
+     * is: the keyboard's true top, since the dock no longer rides it on Home
+     * ({@link HomeKeyboardCover}). For the in-app keyboard ({@code inAppKeyboardShown}) it is the
+     * top of its column: the keyboard and the bands under it, {@code keyboardColumnPx} high
+     * counting its bottom margin above the stack's bottom ({@code stackBottomPx}). For a system
+     * keyboard that pushes the stack up ({@code imePushPx}) it is the keyboard's own top
+     * ({@code systemImeTopPx}). Floats and terminal widgets on Home meet this edge, whichever
+     * keyboard it is.
      */
+    public static int homeKeyboardTopPx(boolean inAppKeyboardShown, int imePushPx,
+                                        int stackBottomPx, int keyboardColumnPx,
+                                        int systemImeTopPx) {
+        if (inAppKeyboardShown) return Math.max(0, stackBottomPx - Math.max(0, keyboardColumnPx));
+        if (imePushPx > 0) return systemImeTopPx;
+        return -1;
+    }
+
+    /**
+     * The top of the stack while a keyboard is up, the dock riding on it.
+     *
+     * @deprecated The dock no longer rides the keyboard on Home (#309): slice 4 moves the caller
+     * to the five-argument form, which gives the keyboard's true top.
+     */
+    @Deprecated
     public static int homeKeyboardTopPx(boolean inAppKeyboardShown, int imePushPx,
                                         int stackBottomPx, int stackPx) {
         if (!inAppKeyboardShown && imePushPx <= 0) return -1;

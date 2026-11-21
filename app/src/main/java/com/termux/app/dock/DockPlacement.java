@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
+import com.termux.app.place.HomeKeyboardCover;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
@@ -35,7 +36,7 @@ public final class DockPlacement {
     /**
      * Whether the Peek glass card can stand: the dock wears Peek glass ({@code peekWorn}) and is
      * shown, with the apps row on its glass along the bottom ({@link #peekRowStands}: no other
-     * band but the A–Z row under the icons, no joined Docked frame it stands down on), no keyboard up under it, not lifted over the system keyboard, and no Search field
+     * band but the A–Z row under the icons, no joined Docked frame it stands down on), no keyboard up under it, not lifted over the system keyboard (on Home neither refuses it, see the overload), and no Search field
      * under the row. {@code sheetStandsDownOnFrame} refuses the card on its own, whatever else
      * holds, so a caller for whom it is dear to ask may ask it last.
      */
@@ -48,24 +49,43 @@ public final class DockPlacement {
     }
 
     /**
-     * {@link #peekCardStands} on a Home page or not ({@code homePage}): on Home the in-app
-     * keyboard no longer refuses the card, which then stands on the keyboard instead of the
-     * screen's edge (ADR 0018 §4, D11: Home's dock over Home's keyboard). Everywhere else it does.
+     * {@link #peekCardStands} on a Home page or not ({@code homePage}): on Home neither the
+     * in-app keyboard nor the system keyboard's lift refuses the card, which stands at its rest
+     * and the keyboard covers it (ADR 0018 D11, changed by #309: Home's dock no longer rides the
+     * keyboard). Everywhere else both do. A Home whose keyboard is always on keeps the dock
+     * riding it: use the overload with {@code rowsCovered}.
      */
     public static boolean peekCardStands(boolean peekWorn, boolean dockShown,
                                          @NonNull PlaceLayout layout,
                                          boolean sheetStandsDownOnFrame, boolean keyboardShown,
                                          boolean imeLifted, boolean searchFieldShown,
                                          boolean homePage) {
-        if (!peekWorn || !dockShown) return false;
-        if ((keyboardShown && !homePage) || imeLifted || searchFieldShown) return false;
+        return peekCardStands(peekWorn, dockShown, layout, sheetStandsDownOnFrame, keyboardShown,
+            imeLifted, searchFieldShown, homePage, homePage);
+    }
+
+    /**
+     * {@link #peekCardStands} on a Home page or not, with the cover's answer apart
+     * ({@code rowsCovered}: the keyboard covers this page's rows, {@code !HomeKeyboardCover
+     * .liftsRows}). On Home the in-app keyboard never refuses the card (unchanged since D11); the
+     * system keyboard's lift refuses it unless the rows are covered, so a Home whose keyboard is
+     * always on (rows ride it) is refused by the lift as before #309.
+     */
+    public static boolean peekCardStands(boolean peekWorn, boolean dockShown,
+                                         @NonNull PlaceLayout layout,
+                                         boolean sheetStandsDownOnFrame, boolean keyboardShown,
+                                         boolean imeLifted, boolean searchFieldShown,
+                                         boolean homePage, boolean rowsCovered) {
+        if (!peekWorn || !dockShown || searchFieldShown) return false;
+        if (keyboardShown && !homePage) return false;
+        if (imeLifted && !rowsCovered) return false;
         return peekRowStands(layout, sheetStandsDownOnFrame);
     }
 
     /**
      * {@link #peekCardStands} for the dock's rows as they stand on {@code rowsPage}: the page whose
      * rows the stack stands, which is the committed page at rest and, mid-crossing, the other
-     * half's from the frame the stack stands its rows (SeamDress#stackPage). Home's keyboard does
+     * half's from the frame the stack stands its rows (SeamDress#stackPage). Home's keyboard and IME lift do
      * not refuse the card, so it is read off this page, never off the committed one: the frame a
      * crossing stands Home's rows (out of sight, at a dip's swap or a pictured dip's first frame)
      * wears the answer the settle on Home commits, and the dock does not change look as it lands.
@@ -75,8 +95,23 @@ public final class DockPlacement {
                                            boolean dockShown, @NonNull PlaceLayout layout,
                                            boolean sheetStandsDownOnFrame, boolean keyboardShown,
                                            boolean imeLifted, boolean searchFieldShown) {
+        return peekCardStandsOn(rowsPage, false, peekWorn, dockShown, layout,
+            sheetStandsDownOnFrame, keyboardShown, imeLifted, searchFieldShown);
+    }
+
+    /**
+     * {@link #peekCardStandsOn} for a Home whose keyboard is always on or not
+     * ({@code homeKeyboardAlwaysOn}): the always-on Home's rows ride the keyboard, so its IME lift
+     * refuses the card as before #309.
+     */
+    public static boolean peekCardStandsOn(@NonNull PageKind rowsPage,
+                                           boolean homeKeyboardAlwaysOn, boolean peekWorn,
+                                           boolean dockShown, @NonNull PlaceLayout layout,
+                                           boolean sheetStandsDownOnFrame, boolean keyboardShown,
+                                           boolean imeLifted, boolean searchFieldShown) {
         return peekCardStands(peekWorn, dockShown, layout, sheetStandsDownOnFrame, keyboardShown,
-            imeLifted, searchFieldShown, PaneWallPolicy.isHomePlace(rowsPage));
+            imeLifted, searchFieldShown, PaneWallPolicy.isHomePlace(rowsPage),
+            !HomeKeyboardCover.liftsRows(rowsPage, homeKeyboardAlwaysOn));
     }
 
     /**

@@ -100,6 +100,26 @@ public class StackRendererTest {
         assertEquals(310f, mContainer.getTranslationY(), 0f);
     }
 
+    /**
+     * Home (#309): the system keyboard does not raise Home's stack, so a lifting ride (300) is
+     * stood back down and the container stays at its travel. The Terminal's case is the test
+     * above (homeCover off, or the Terminal in front): the ride keeps lifting it.
+     */
+    @Test public void aLiftingImeRideDoesNotRaiseHomesCoveredStack() {
+        FramePipeline frames = attached();
+        mFrontHome = true;
+        mRenderer.setHomeCover(true, 0);
+        mRenderer.setTravel(10f, 0f, 300f);
+        frames.flush("test");
+        assertEquals(10f, mContainer.getTranslationY(), 0f);
+        mFrontHome = false;
+        mRenderer.setHomeCover(true, 0);
+        mRenderer.setTravel(10f, 0f, 301f);
+        frames.flush("test");
+        assertEquals("the Terminal's stack still rides the keyboard", -291f,
+            mContainer.getTranslationY(), 0f);
+    }
+
     /** The renderer on a pipeline with no window: its step runs when the table is flushed. */
     private FramePipeline attached() {
         FramePipeline frames = new FramePipeline();

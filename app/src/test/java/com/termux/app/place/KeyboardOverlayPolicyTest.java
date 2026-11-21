@@ -352,4 +352,17 @@ public class KeyboardOverlayPolicyTest {
         assertEquals(600, KeyboardOverlayPolicy.overlapPx(false, stack, margin, 600));
         assertEquals(0, KeyboardOverlayPolicy.overlapPx(false, stack, margin, 0));
     }
+
+    /** On Home the dock stays down, so floats meet the keyboard's own top (#309). */
+    @Test
+    public void homeFloatsMeetTheKeyboardsTrueTop() {
+        assertEquals("the in-app column's top", 1000 - 700,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(true, 0, 1000, 700, 123));
+        assertEquals("a system keyboard is its own top", 800,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(false, 300, 1000, 0, 800));
+        assertEquals("nothing up", -1,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(false, 0, 1000, 700, 800));
+        assertEquals("a column taller than the screen stops at the top", 0,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(true, 0, 500, 700, 0));
+    }
 }

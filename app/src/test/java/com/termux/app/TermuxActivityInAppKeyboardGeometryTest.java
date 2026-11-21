@@ -156,6 +156,14 @@ public class TermuxActivityInAppKeyboardGeometryTest {
     }
 
     @Test
+    public void onHomeTheKeyboardIsNeverOneSurfaceWithTheDock() {
+        assertFalse(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, false, true, false));
+        assertTrue(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
+            true, true, false, true, true));
+    }
+
+    @Test
     public void unifiedKeyboardGlassIsExclusiveToDefaultDock() {
         assertTrue(ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(
             true, true, false, true));

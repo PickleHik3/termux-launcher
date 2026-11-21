@@ -287,12 +287,17 @@ public class SideCardsParityTest {
                     PlaceLayout home = f.layoutOf(PageRef.HOME);
                     DockStyle worn = WornDockDesign.of(f.homeDesign, home);
                     assertSame(label, worn, look.design);
-                    assertEquals(label, up, look.keyboardUp);
+                    // Under Home's keyboard cover the host is dressed as its keyboard-down rest
+                    // (#309); a Home whose keyboard is always on is dressed for the one it has.
+                    boolean dressedUp = up && com.termux.app.place.HomeKeyboardCover.liftsRows(
+                        com.termux.app.page.PageKind.HOME,
+                        f.pass(PageRef.HOME, up, true).homeKeyboardAlwaysOn);
+                    assertEquals(label, dressedUp, look.keyboardUp);
                     // Apart is Floating: the dock is placed as the card unless the Peek card stands.
                     assertEquals(label, !look.peek, look.floats);
                     assertEquals(label, look.peek, look.peekCut != null);
                     assertEquals(label, DockSpec.footExists(PlaceChromePolicy.dockShown(home),
-                        look.floats, up, false, f.keptBandPx), look.foot);
+                        look.floats, dressedUp, false, f.keptBandPx), look.foot);
                     if (look.peek) {
                         peeks++;
                         assertTrue(label, DockSurfaceSpec.forStyle(look.design).peek);
@@ -305,6 +310,31 @@ public class SideCardsParityTest {
         assertTrue("some Home rests wear a look", looks > 0);
         assertTrue("some wear the Peek card", peeks > 0);
         assertTrue("some wear the tray", tray > 0);
+    }
+
+    /**
+     * Home's keyboard raised on demand draws over the dock (#309): while the cards stand apart the
+     * host is pinned from the answer, and Home's keyboard showing or hiding changes none of it (its
+     * pin, height, gap, rest rect and dress), in every fixture and Dock design.
+     */
+    @Test public void homesKeyboardShowingReLaysNothingOfHomesPinnedHost() {
+        int pinned = 0;
+        for (Fixture base : LayoutFixtures.cardFixtures()) {
+            for (DockStyle design : DockStyle.CHOICES) {
+                Fixture f = base.withHomeDesign(design);
+                String[] layouts = new String[2];
+                for (boolean up : new boolean[] {false, true}) {
+                    StackRenderer renderer = rendererFor(true);
+                    SideCardsController controller = new SideCardsController(
+                        hostOf(f, PageRef.HOME, up, true, renderer));
+                    controller.update(f.pass(PageRef.HOME, up, true));
+                    layouts[up ? 1 : 0] = hostLayoutOf(controller);
+                    if (up && controller.hostPinned()) pinned++;
+                }
+                assertEquals(f.name + " " + design, layouts[0], layouts[1]);
+            }
+        }
+        assertTrue("some fixtures pin the host", pinned > 0);
     }
 
     /** What the controller lays the glass host out at: its pin, height, gap and Home's dress. */
@@ -348,6 +378,19 @@ public class SideCardsParityTest {
             }
         }
         assertTrue("some fixtures stand apart", cases > 0);
+    }
+
+    /**
+     * The keyboard's cover on Home (#309) joins the lanes: Home's lane its whole cover drop on
+     * top of its own, the stack's lane Home's share of it, the Terminal's lane none; not apart,
+     * the layers carry the cover and every lane stays 0.
+     */
+    @Test public void theCoverDropsHomesLaneAndTheStacksShareAndNotTheTerminals() {
+        assertEquals(7f + 40f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        assertEquals(-5f, SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        assertEquals(-2.5f + 20f, SideCards.laneTyPx(StackLanes.STACK, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})
+            assertEquals(0f, SideCards.laneTyPx(lane, false, 7f, 5, 0.5f, 40f, 20f), 0f);
     }
 
     /**

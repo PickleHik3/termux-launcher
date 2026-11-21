@@ -71,6 +71,9 @@ public class RestCardsParityTest {
      *   <li>Docked top: the shape model's card starts at the apps band's top, the host's sheet
      *       starts the design's slab inset lower (the band of page dashes): Home 2244 vs 2261,
      *       the Terminal's likewise (tl16 2134 vs 2151).</li>
+     *   <li>Docked Home bottom, keyboard up, with a foot: Home's keyboard covers the dock (#309),
+     *       which stands at its keyboard-down rect and stops at the foot's top, while the shape
+     *       model's one card runs on to the screen's edge: pong with a foot 2412 vs 2349.</li>
      *   <li>Docked Terminal bottom: the model's one card runs down through the keyboard and the
      *       bands under it, the host stops where its column starts: kbDown 2412 vs 2261, kbUp
      *       2412 vs 1591.</li>
@@ -84,6 +87,7 @@ public class RestCardsParityTest {
      */
     static final Set<String> PARITY_EXCEPTIONS = new TreeSet<>(Arrays.asList(
         "DOCK shape≠layout: DOCKED HOME kbDown top",
+        "DOCK shape≠layout: DOCKED HOME kbUp bottom",
         "DOCK shape≠layout: DOCKED HOME kbUp top",
         "DOCK shape≠layout: DOCKED TERMINAL kbDown bottom",
         "DOCK shape≠layout: DOCKED TERMINAL kbDown top",
@@ -174,6 +178,8 @@ public class RestCardsParityTest {
         int columnTop, columnH, columnBottom;
         int hostTop, hostBottom, sideMargin;
         int underTop, underBottom;
+        /** How far below the container Home's rows are drawn while its keyboard covers them. */
+        float rowsDrop;
         StackGeometry g;
         StackScene.Frame frame = new StackScene.Frame();
     }
@@ -217,7 +223,7 @@ public class RestCardsParityTest {
         PlaceLayout layout = f.layoutOf(page);
         v.r = StackLayout.layout(pass, new DockGeometry());
         v.dock = v.r.dock;
-        v.peekStands = DockPlacement.peekCardStandsOn(page.kind,
+        v.peekStands = DockPlacement.peekCardStandsOn(page.kind, pass.homeKeyboardAlwaysOn,
             DockSurfaceSpec.forStyle(design(page)).peek, pass.toolbarShown, layout, false,
             up, pass.imeLiftPx > 0, v.dock.promptFieldBandPx > 0);
         v.floats = DockPlacement.floats(floating, floating && v.peekStands);
@@ -250,7 +256,10 @@ public class RestCardsParityTest {
         int statusAbove = statusOnPlank(layout) ? 0 : v.r.statusBandPx;
         v.unified = !v.r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
-                floating, true);
+                floating, true, HomeKeyboardCover.liftsRows(page.kind, pass.homeKeyboardAlwaysOn));
+        v.rowsDrop = HomeKeyboardCover.rowsDropPx(
+            HomeKeyboardCover.liftsRows(page.kind, pass.homeKeyboardAlwaysOn), v.kbLaid,
+            StackScene.keyboardTranslationPx(0f, v.kbDown));
         v.hostTop = statusAbove + v.dock.slabTopInsetPx + v.slack;
         v.hostBottom = v.unified || v.dockFoot ? v.containerH : v.columnTop;
         v.hostLaidOut = v.containerLaidOut && pass.toolbarShown && v.hostBottom > v.hostTop;
@@ -304,7 +313,7 @@ public class RestCardsParityTest {
     /** The host as drawn on the screen: laid out, moved by the transforms, cut by the clips. */
     private static Box drawnHost(Views v, int widthPx) {
         float shift = v.containerTop + v.frame.ty[StackScene.V_CONTAINER];
-        float top = shift + v.hostTop + v.frame.ty[StackScene.V_HOST];
+        float top = shift + v.hostTop + v.frame.ty[StackScene.V_HOST] + v.rowsDrop;
         float bottom = top + (v.hostBottom - v.hostTop);
         if (v.frame.clipped[StackScene.V_HOST])
             bottom = Math.min(bottom, top + v.frame.clipBottom[StackScene.V_HOST]);
@@ -684,7 +693,8 @@ public class RestCardsParityTest {
         PeekGlassGeometry.Card card = PeekGlassGeometry.compute(icons, slots, 0f, f.widthPx,
             Math.round(v.hostBottom - v.hostTop), f.widthPx,
             PeekGlassGeometry.screenBottomInHost(f.heightPx, v.containerTop + v.hostTop,
-                v.frame.ty[StackScene.V_CONTAINER] + v.frame.ty[StackScene.V_HOST]), f.density);
+                v.frame.ty[StackScene.V_CONTAINER] + v.frame.ty[StackScene.V_HOST]
+                    + v.rowsDrop), f.density);
         assertNotNull(at, card);
         // The card's top line is the icons' centre line as the row draws them, and the
         // reflection hangs from their lower edge: mirrored there, each icon's reflection is
@@ -807,8 +817,10 @@ public class RestCardsParityTest {
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.LEFT));
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.RIGHT));
             assertEquals(at, EdgeKind.JOIN, kb.edge(Edge.TOP));
-            assertEquals(at, v.r.bandsUnderKeyboard ? EdgeKind.JOIN : EdgeKind.SCREEN,
-                kb.edge(Edge.BOTTOM));
+            // Under the keyboard stand the bands, or the foot the keyboard's card joins (Home's
+            // Docked keyboard has a card of its own since #309, and a foot with the kept band).
+            assertEquals(at, v.r.bandsUnderKeyboard || !Float.isNaN(footTop)
+                ? EdgeKind.JOIN : EdgeKind.SCREEN, kb.edge(Edge.BOTTOM));
         }
     }
 

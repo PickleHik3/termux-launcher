@@ -186,4 +186,12 @@ public class CommandPaletteHomeOverlayTest {
         float bottom = CommandPaletteHomeOverlay.glassBottomPx(500f, 300f, 150f, 1429.25f);
         assertEquals(650f, bottom, 0.01f);
     }
+
+    @Test
+    public void aCoveredHomeKeepsTheGlassClearOfTheKeyboardNotTheStandingDock() {
+        // #309: the dock stands under the keyboard, so the band above the keyboard is empty.
+        assertEquals(1700f, CommandPaletteHomeOverlay.lowerBoundTopPx(1550f, 1700f, true), 0f);
+        assertEquals(1550f, CommandPaletteHomeOverlay.lowerBoundTopPx(1550f, 1700f, false), 0f);
+        assertEquals(1550f, CommandPaletteHomeOverlay.lowerBoundTopPx(1550f, Float.NaN, true), 0f);
+    }
 }

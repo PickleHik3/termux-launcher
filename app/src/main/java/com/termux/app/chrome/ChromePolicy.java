@@ -47,7 +47,23 @@ public final class ChromePolicy {
                                                                       boolean keyboardShown,
                                                                       boolean roundedDockStyle,
                                                                       boolean keyboardGlassSurface) {
-        return toolbarShown && keyboardShown && !roundedDockStyle && keyboardGlassSurface;
+        return shouldUseUnifiedDefaultKeyboardGlassSurface(toolbarShown, keyboardShown,
+            roundedDockStyle, keyboardGlassSurface, true);
+    }
+
+    /**
+     * The same on the page the rows stand ({@code pageLiftsRows}, see {@code HomeKeyboardCover}):
+     * on a page no keyboard lifts (Home) the keyboard draws over the dock and wears its own coat
+     * of glass, so the two are never one surface and the dock's host stays above the keyboard's
+     * column at both keyboard states.
+     */
+    public static boolean shouldUseUnifiedDefaultKeyboardGlassSurface(boolean toolbarShown,
+                                                                      boolean keyboardShown,
+                                                                      boolean roundedDockStyle,
+                                                                      boolean keyboardGlassSurface,
+                                                                      boolean pageLiftsRows) {
+        return pageLiftsRows && toolbarShown && keyboardShown && !roundedDockStyle
+            && keyboardGlassSurface;
     }
 
     /**

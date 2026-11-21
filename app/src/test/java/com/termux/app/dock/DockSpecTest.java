@@ -148,6 +148,29 @@ public class DockSpecTest {
         }
     }
 
+    /** #309: the system keyboard does not refuse Home's card either; off Home it does. */
+    @Test
+    public void homePeekStandsOverTheSystemKeyboardToo() {
+        DockSpec.Input in = pong(DockStyle.PEEK_GLASS, false, false);
+        in.imeVisible = true;
+        assertTrue(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            in.imeVisible, in.keyboardShown, PageKind.HOME));
+        assertFalse(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            in.imeVisible, in.keyboardShown, PageKind.TERMINAL));
+    }
+
+    /** An always-on Home's rows ride the keyboard: the system keyboard refuses its card. */
+    @Test
+    public void anAlwaysOnHomePeekIsRefusedBySystemKeyboardOnly() {
+        DockSpec.Input in = pong(DockStyle.PEEK_GLASS, false, false);
+        assertFalse(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            true, false, PageKind.HOME, true));
+        assertTrue(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            false, true, PageKind.HOME, true));
+        assertTrue(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            true, false, PageKind.HOME, false));
+    }
+
     @Test
     public void terminalKindWearsItsOwnDesignWhateverTheKeyboard() {
         for (boolean keyboard : new boolean[] {false, true}) {

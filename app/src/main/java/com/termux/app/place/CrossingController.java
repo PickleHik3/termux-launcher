@@ -214,6 +214,11 @@ public final class CrossingController {
         /** The IME's lift, px. */
         int imeLiftPx();
 
+        /** Home's keyboard is always on: the cover does not apply to its rows (#309). */
+        default boolean homeKeyboardAlwaysOn() {
+            return false;
+        }
+
         /** The toolbar's height as applied. */
         int appliedToolbarHeightPx();
 
@@ -868,6 +873,7 @@ public final class CrossingController {
         in.toolbarHeightPx = mHost.appliedToolbarHeightPx();
         in.statusBand = mHost::bottomStatusBandAtRestPx;
         in.imeLiftPx = mHost.imeLiftPx();
+        in.homeKeyboardAlwaysOn = mHost.homeKeyboardAlwaysOn();
         in.keyboardShown = mHost.inAppKeyboard() != null && mHost.inAppKeyboard().isEnabled()
             && mHost.wantsKeyboardOnEnter(com.termux.app.page.PageKind.HOME);
         ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
@@ -1007,6 +1013,7 @@ public final class CrossingController {
                 .ownRows(mHost.measuredExtraKeysRowPx());
         in.statusBand = mHost::bottomStatusBandAtRestPx;
         in.imeLiftPx = mHost.imeLiftPx();
+        in.homeKeyboardAlwaysOn = mHost.homeKeyboardAlwaysOn();
         in.keyboardShown = keyboardShown;
         // The keyboard's height as the pass measures it while one shows (ChromeSpec), else the
         // last one measured.
