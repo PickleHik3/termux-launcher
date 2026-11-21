@@ -149,6 +149,32 @@ public class AppDrawerAppCellViewTest {
         }
     }
 
+    /**
+     * The hardware renderer skips a group's own foreground when the view is flagged will-not-draw
+     * and has no background, which is what a cell is at rest: the outline must keep it drawing.
+     */
+    @Test public void aCellDrawsItsEditOutlineEvenWithoutABackground() {
+        AppDrawerAppCellView cell = cell();
+        cell.bind(null, entry("Gamma"), AppDrawerGridMetrics.resolve(400f, 1f, 11f),
+            AppDrawerAppCellView.ALLOW_CLICKS);
+        cell.measure(android.view.View.MeasureSpec.makeMeasureSpec(100,
+            android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(
+            100, android.view.View.MeasureSpec.EXACTLY));
+        cell.layout(0, 0, 100, 100);
+        cell.setEditOutline(true);
+        assertFalse(cell.willNotDraw());
+        // The bead comes and goes with the search highlight; the outline outlives it.
+        cell.setKeyboardHighlight(true);
+        cell.setKeyboardHighlight(false);
+        assertFalse(cell.willNotDraw());
+        assertTrue(cell.hasEditOutline());
+    }
+
+    @Test public void aFolderCellDrawsItsEditOutlineToo() {
+        assertFalse(new AppDrawerFolderCellView(RuntimeEnvironment.getApplication())
+            .willNotDraw());
+    }
+
     private static AppDrawerAppCellView cell() {
         AppDrawerAppCellView cell = new AppDrawerAppCellView(RuntimeEnvironment.getApplication());
         cell.setLayoutParams(new ViewGroup.LayoutParams(100, 100));

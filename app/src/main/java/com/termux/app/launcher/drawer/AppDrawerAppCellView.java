@@ -72,6 +72,9 @@ public class AppDrawerAppCellView extends LinearLayout
         setClickable(true);
         setClipChildren(false);
         setClipToPadding(false);
+        // A group with no background is flagged will-not-draw, and the renderer then never calls
+        // onDrawForeground: the edit outline would not show. Set once, so toggling never lays out.
+        setWillNotDraw(false);
 
         icon = new ImageView(context);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
