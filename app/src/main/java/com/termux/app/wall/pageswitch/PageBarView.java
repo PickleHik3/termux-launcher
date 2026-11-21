@@ -96,9 +96,14 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
      * light across the bottom arc); shaders and ring alphas made by {@link #syncWell} on a size
      * or ground change only.
      */
-    private final Paint mWellShade = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellFloor = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mWellShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mWellRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellRimLight = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final int[] mWellFloorColors = new int[com.termux.app.chrome.InsetGlass.FLOOR_POSITIONS.length];
+    private final android.graphics.Matrix mWellRimMatrix = new android.graphics.Matrix();
+    private float mWellLeft;
+    private float mWellWidth;
     @NonNull private int[] mWellRingAlpha = new int[0];
     private int mWellRings;
     private float mWellRingStep;
@@ -187,6 +192,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mStroke.setStrokeWidth(mDensity);
         mWellShadow.setStyle(Paint.Style.STROKE);
         mWellRim.setStyle(Paint.Style.STROKE);
+        mWellRimLight.setStyle(Paint.Style.STROKE);
         mGlass = new PaneGlassBackdropView(context);
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
@@ -398,13 +404,23 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         float top = layout.slabTopPx();
         float height = layout.slabHeightPx();
         boolean dark = mInk.wellDark;
-        if (mWellBuilt && top == mWellTop && height == mWellHeight && dark == mWellDark) return;
+        float left = layout.slabLeftPx();
+        float width = layout.slabWidthPx();
+        if (mWellBuilt && top == mWellTop && height == mWellHeight && dark == mWellDark
+                && left == mWellLeft && width == mWellWidth) {
+            return;
+        }
         mWellBuilt = true;
+        mWellLeft = left;
+        mWellWidth = width;
         mWellTop = top;
         mWellHeight = height;
         mWellDark = dark;
-        mWellShade.setColor(com.termux.app.chrome.InsetGlass.wellShade(dark));
-        // The inner shadow: rings inside the outline, their colour by height (strongest under
+        // The floor: darkest under the top lip, clear in the lower part, a faint light at the bottom.
+        mWellFloor.setShader(new LinearGradient(0f, top, 0f, top + height,
+            com.termux.app.chrome.InsetGlass.floorColors(dark, mWellFloorColors),
+            com.termux.app.chrome.InsetGlass.FLOOR_POSITIONS, Shader.TileMode.CLAMP));
+        // The contact shadow: rings inside the outline, their colour by height (strongest under
         // the top, the sides' share at mid height, clear at the bottom), their alpha by depth.
         int rings = com.termux.app.chrome.InsetGlass.ringCount(mDensity, height);
         if (mWellRingAlpha.length < rings) mWellRingAlpha = new int[rings];
@@ -420,17 +436,31 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mWellShadow.setShader(rings <= 0 ? null : new LinearGradient(0f, top, 0f, top + height,
             new int[] {shadowTop, shadowSide, shadowSide & 0x00FFFFFF}, new float[] {0f, 0.5f, 1f},
             Shader.TileMode.CLAMP));
-        // The rim of the hole, outside the outline: dark across the top, light across the bottom.
+        // The rim of the hole, outside the outline: a subtle dark hairline across the top, and
+        // the bottom arc's light, an ellipse round the centre bottom as wide as the well and
+        // RIM_LIGHT_REACH_SHARE of its height tall, so it is strongest there and fades up the ends.
         float rim = com.termux.app.chrome.InsetGlass.rimWidthPx(mDensity, height);
         int rimShadow = com.termux.app.chrome.InsetGlass.rimShadow(dark);
         int rimLight = com.termux.app.chrome.InsetGlass.rimLight(dark);
         mWellRim.setStrokeWidth(rim);
         mWellRim.setShader(rim <= 0f ? null : new LinearGradient(0f, top - rim, 0f,
-            top + height + rim,
-            new int[] {rimShadow, rimShadow & 0x00FFFFFF, rimLight & 0x00FFFFFF, rimLight},
-            new float[] {0f, com.termux.app.chrome.InsetGlass.RIM_SHADOW_TO_SHARE,
-                com.termux.app.chrome.InsetGlass.RIM_LIGHT_FROM_SHARE, 1f},
-            Shader.TileMode.CLAMP));
+            top + height * com.termux.app.chrome.InsetGlass.RIM_SHADOW_TO_SHARE,
+            rimShadow, rimShadow & 0x00FFFFFF, Shader.TileMode.CLAMP));
+        mWellRimLight.setStrokeWidth(rim);
+        float reach = Math.max(1f, height * com.termux.app.chrome.InsetGlass.RIM_LIGHT_REACH_SHARE);
+        float cx = left + width / 2f;
+        float bottom = top + height + rim;
+        android.graphics.RadialGradient light = rim <= 0f ? null : new android.graphics.RadialGradient(
+            cx, bottom, reach, new int[] {rimLight,
+                com.termux.app.chrome.OnGlass.withAlpha(rimLight, Math.round((rimLight >>> 24)
+                    * com.termux.app.chrome.InsetGlass.RIM_LIGHT_MID)),
+                rimLight & 0x00FFFFFF},
+            new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
+        if (light != null) {
+            mWellRimMatrix.setScale(Math.max(1f, (width / 2f + rim) / reach), 1f, cx, bottom);
+            light.setLocalMatrix(mWellRimMatrix);
+        }
+        mWellRimLight.setShader(light);
         invalidate();
     }
 
@@ -523,8 +553,10 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mInkRect.set(Math.round(layout.slabLeftPx()), Math.round(layout.slabTopPx()),
                 Math.round(layout.slabLeftPx() + layout.slabWidthPx()),
                 Math.round(layout.slabBottomPx()));
+            // Where the glyphs' tops and bottoms stand down the well, for the floor's ink check.
+            float glyphShare = layout.glyphPx() / Math.max(1f, layout.slabHeightPx());
             PageBarGlass.measure(this, mInkRect, mLook, accent, shown, mInk, mBody, mGlass,
-                mOrigin, mRoot, mInkScratch);
+                (1f - glyphShare) / 2f, (1f + glyphShare) / 2f, mOrigin, mRoot, mInkScratch);
         } else {
             mInk.accent = accent;
             mGlass.setEvenOut(null);
@@ -720,7 +752,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         float right = left + layout.slabWidthPx();
         float bottom = top + layout.slabHeightPx();
         mRect.set(left, top, right, bottom);
-        canvas.drawRoundRect(mRect, radius, radius, mWellShade);
+        canvas.drawRoundRect(mRect, radius, radius, mWellFloor);
         if (mWellShadow.getShader() != null) {
             // Ring i stands i steps in; its stroke reaches from the outline (ring 0) inward.
             for (int i = 0; i < mWellRings; i++) {
@@ -738,6 +770,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mRect.set(left - rim / 2f, top - rim / 2f, right + rim / 2f, bottom + rim / 2f);
             float r = radius + rim / 2f;
             canvas.drawRoundRect(mRect, r, r, mWellRim);
+            if (mWellRimLight.getShader() != null) canvas.drawRoundRect(mRect, r, r, mWellRimLight);
         }
     }
 

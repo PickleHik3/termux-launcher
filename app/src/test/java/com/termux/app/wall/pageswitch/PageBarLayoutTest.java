@@ -180,18 +180,39 @@ public class PageBarLayoutTest {
         PageBarLayout l = seven();
         assertEquals(l.liftPeakPx(), l.liftPx(3, 3f, 1f), EPS);
         assertEquals(PageBarLayout.RAISED_SCALE, l.scaleAt(3, 3f, 1f), EPS);
-        // Its bottom clears the slab's top by the A–Z bar's lift for the letter under the finger.
+        // Its bottom clears the well's top by LIFT_CLEAR_DP: past the rim, no further.
         float bottom = l.liftedCenterYPx(3, 3f, 1f) + l.raisedGlyphPx() / 2f;
-        assertEquals(ScrubWave.LIFT_DP * ScrubWave.FOCUS_LIFT_GAIN, l.slabTopPx() - bottom, EPS);
+        assertEquals(PageBarLayout.LIFT_CLEAR_DP, l.slabTopPx() - bottom, EPS);
+        assertEquals(2f, PageBarLayout.LIFT_CLEAR_DP, 0f);
         assertEquals(1f, l.outOfSlab(3, 3f, 1f), EPS);
     }
 
     @Test public void theRaisedGlyphIsClearlyLargerThanTheRestGlyph() {
         PageBarLayout l = new PageBarLayout(2.625f, 1080f, 4);
-        // 0.4 of the old 44dp bubble glyph (17.6dp) would not be; the raised glyph is 1.5x rest.
-        assertTrue(0.4f * 44f <= 1.25f * PageBarLayout.GLYPH_DP);
-        assertEquals(24.75f * 2.625f, l.raisedGlyphPx(), EPS);
-        assertTrue(l.raisedGlyphPx() > 1.25f * l.glyphPx());
+        // A gentle swell: the raised glyph is 1.25x rest (20.625 dp), not the jump of 1.5x.
+        assertEquals(20.625f * 2.625f, l.raisedGlyphPx(), EPS);
+        assertTrue(l.raisedGlyphPx() > l.glyphPx());
+    }
+
+    /** The key's raised bar is a glass strip: the lifted glyph stays inside it, top and bottom. */
+    @Test public void theRaisedBarsGlyphSwellsInsideItsStrip() {
+        for (float d : new float[] {2.625f, 3f}) {
+            PageBarLayout l = PageBarLayout.raised(d, 1080f, 5, 40f, 1000f);
+            float peak = l.liftPeakPx();
+            assertTrue(peak >= 0f);
+            for (int k = 0; k <= 400; k++) {
+                float focus = k / 100f;
+                for (int i = 0; i < 5; i++) {
+                    float half = l.glyphPx() * l.scaleAt(i, focus, 1f) / 2f;
+                    float cy = l.liftedCenterYPx(i, focus, 1f);
+                    assertTrue("top d=" + d, cy - half >= l.slabTopPx() - EPS);
+                    assertTrue("bottom d=" + d, cy + half <= l.slabBottomPx() + EPS);
+                }
+            }
+            // Fully up, its top LIFT_CLEAR_DP inside the strip's.
+            float top = l.liftedCenterYPx(2, 2f, 1f) - l.raisedGlyphPx() / 2f;
+            assertEquals(PageBarLayout.LIFT_CLEAR_DP * d, top - l.slabTopPx(), EPS);
+        }
     }
 
     @Test public void neighboursFallOffOnTheAzWave() {
@@ -200,7 +221,8 @@ public class PageBarLayoutTest {
         for (int i = 0; i < 7; i++) {
             float env = ScrubWave.envelope(Math.abs(i - 3f));
             assertEquals("lift " + i, ScrubWave.lift(env) * peak, l.liftPx(i, 3f, 1f), EPS);
-            assertEquals("scale " + i, 1f + 0.5f * env, l.scaleAt(i, 3f, 1f), EPS);
+            assertEquals("scale " + i, 1f + (PageBarLayout.RAISED_SCALE - 1f) * env,
+                l.scaleAt(i, 3f, 1f), EPS);
         }
         assertTrue(l.liftPx(2, 3f, 1f) < peak);
         assertTrue(l.liftPx(1, 3f, 1f) < l.liftPx(2, 3f, 1f));
@@ -220,7 +242,7 @@ public class PageBarLayoutTest {
     @Test public void enterScalesTheWholeLift() {
         PageBarLayout l = seven();
         assertEquals(l.liftPeakPx() / 2f, l.liftPx(3, 3f, 0.5f), EPS);
-        assertEquals(1.25f, l.scaleAt(3, 3f, 0.5f), EPS);
+        assertEquals(1f + (PageBarLayout.RAISED_SCALE - 1f) / 2f, l.scaleAt(3, 3f, 0.5f), EPS);
     }
 
     @Test public void theLiftIsContinuousAsTheFingerMoves() {
@@ -259,7 +281,7 @@ public class PageBarLayoutTest {
         assertEquals(33f, l.glyphPx(), EPS);
         assertEquals(2f * S, l.slotWidthPx(), EPS);
         assertEquals(2f * S, l.slabHeightPx(), EPS);
-        assertEquals(2f * (S / 2f + ScrubWave.LIFT_DP * ScrubWave.FOCUS_LIFT_GAIN + 24.75f / 2f),
+        assertEquals(2f * (S / 2f + PageBarLayout.LIFT_CLEAR_DP + 20.625f / 2f),
             l.liftPeakPx(), EPS);
     }
 }

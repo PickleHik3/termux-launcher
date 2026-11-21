@@ -233,4 +233,43 @@ public class PageBarLegibilityParityTest {
             }
         }
     }
+
+    /**
+     * Home's well, lit from above: in the four states every page mark reads on the floor at the
+     * well's middle, the current page strongest; the card's text ink reads where the floor is
+     * worst for it; on glass the well lays no lift, only the band's veil, unless its ink needed the
+     * card's whole body.
+     */
+    @Test
+    public void everyPageMarkReadsInTheWellInTheFourStates() {
+        float top = (1f - 16.5f / 30f) / 2f;
+        float bottom = 1f - top;
+        for (boolean night : new boolean[] {false, true}) {
+            Context context = themed(night);
+            int accent = com.termux.app.material.M3.primary(context);
+            for (int wallpaper : new int[] {LIGHT, MID, DARK}) {
+                ChromeInk.Polarity polarity = wallpaper == DARK ? ChromeInk.Polarity.PALE_INK
+                    : ChromeInk.Polarity.DARK_INK;
+                for (boolean adaptive : new boolean[] {false, true}) {
+                    String where = (night ? "night" : "light") + " over "
+                        + Integer.toHexString(wallpaper) + (adaptive ? " adaptive" : " shared");
+                    ChromeInk ink = newInk(adaptive, wallpaper, false, polarity);
+                    PageBarGlass.Ink well = new PageBarGlass.Ink();
+                    WidgetBody.Answer body = new WidgetBody.Answer();
+                    PageBarGlass.solveWell(context, new Source(ink, polarity), PILL, true,
+                        PALE_TINT, accent, top, bottom, body, well);
+                    double current = drawn(well.accent, well.ground);
+                    double other = drawn(well.other, well.ground);
+                    assertTrue(where + " current glyph " + current,
+                        current >= PageMarkInk.CURRENT);
+                    assertTrue(where + " other glyph " + other, other >= PageMarkInk.OTHER_FLOOR);
+                    assertTrue(where + " current over other", current > other);
+                    if (!well.bodyKept) {
+                        assertEquals(where + " no lift", Color.TRANSPARENT, body.lift);
+                        assertEquals(where + " the veil alone", body.resolution.veil, well.veil);
+                    }
+                }
+            }
+        }
+    }
 }

@@ -14,10 +14,12 @@ import com.termux.app.ScrubWave;
  * Its bottom stands {@link #GAP_DP} above the touch row's, so it hugs whatever stands below the
  * bar.</p>
  *
- * <p>While a finger slides, each glyph lifts out of the slab on the A–Z bar's wave
- * ({@link ScrubWave}): the glyph under the finger rises to {@link #liftPeakPx} and grows to
- * {@link #RAISED_SCALE}, its neighbours by the wave's envelope, all scaled by the enter share so
- * nothing jumps as the finger crosses slots. Every number is declared once, in dp.</p>
+ * <p>While a finger slides, each glyph swells on the A–Z bar's wave ({@link ScrubWave}): the
+ * glyph under the finger grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
+ * slab's geometry answers (on Home its bottom just clears the well's rim, {@link #LIFT_CLEAR_DP}
+ * above the slab's top; on the key's raised bar it stays inside the strip), its neighbours by the
+ * wave's envelope, all scaled by the enter share so nothing jumps as the finger crosses slots.
+ * Every number is declared once, in dp.</p>
  */
 public final class PageBarLayout {
 
@@ -34,7 +36,13 @@ public final class PageBarLayout {
      */
     public static final float GAP_DP = 4f;
     /** The glyph under the finger, lifted, against its rest size. */
-    public static final float RAISED_SCALE = 1.5f;
+    public static final float RAISED_SCALE = 1.25f;
+    /**
+     * At the peak, the air between the lifted glyph and the slab's edge: on Home its bottom this
+     * far above the well's top (it clears the rim, no more); on the key's raised bar its top this
+     * far inside the strip's.
+     */
+    public static final float LIFT_CLEAR_DP = 2f;
     /**
      * The raised bar's padding above and below its glyphs: the bar the page switcher key pops up
      * over other glass stands as a comfortable bar, not a strip ({@link #raised}).
@@ -81,6 +89,8 @@ public final class PageBarLayout {
     private final float mSlabHeightDp;
     /** The slab's bottom within the touch row, in dp. */
     private final float mSlabBottomDp;
+    /** The key's raised bar: the lift stays inside its glass strip ({@link #liftPeakPx}). */
+    private final boolean mLiftInside;
 
     /** Home's bar: the pill hugs its glyphs, each slot {@link #MIN_SLOT_DP}. */
     public PageBarLayout(float density, float paneWidthPx, int slotCount) {
@@ -120,6 +130,7 @@ public final class PageBarLayout {
             : PageBarBand.pillLeftPx(paneLeftPx, paneWidthPx, windowWidthPx, pillWidth, density);
         mSlabHeightDp = homeSlabHeightDp(mSlotWidth / density);
         mSlabBottomDp = PILL_HEIGHT_DP - GAP_DP;
+        mLiftInside = false;
     }
 
     /**
@@ -143,6 +154,7 @@ public final class PageBarLayout {
         mPillLeft = slabLeftPx;
         mSlabHeightDp = slabHeightDp;
         mSlabBottomDp = slabBottomDp;
+        mLiftInside = true;
     }
 
     public int slotCount() {
@@ -251,17 +263,23 @@ public final class PageBarLayout {
 
     // ---- The lift ---------------------------------------------------------------------------
 
-    /**
-     * How far the lifted glyph's bottom stands above the slab's top: the A–Z bar's lift for the
-     * letter under the finger, so the glyph clears the fingertip as the letter does.
-     */
+    /** {@link #LIFT_CLEAR_DP} in px. */
     public float liftClearPx() {
-        return ScrubWave.LIFT_DP * ScrubWave.FOCUS_LIFT_GAIN * mDensity;
+        return LIFT_CLEAR_DP * mDensity;
     }
 
-    /** The glyph under the finger, fully lifted: how far its centre rises from its rest centre. */
+    /**
+     * The glyph under the finger, fully lifted: how far its centre rises from its rest centre. On
+     * Home its bottom stands {@link #LIFT_CLEAR_DP} above the slab's top, clearing the well's rim
+     * and no more. On the key's raised bar, a glass strip round its glyphs, it rises only so far
+     * that its top stays {@link #LIFT_CLEAR_DP} inside the strip's (0 where it cannot rise at all),
+     * so no glyph pokes half out of the strip.
+     */
     public float liftPeakPx() {
-        return slabHeightPx() / 2f + liftClearPx() + raisedGlyphPx() / 2f;
+        float half = slabHeightPx() / 2f;
+        float raisedHalf = raisedGlyphPx() / 2f;
+        if (mLiftInside) return Math.max(0f, half - raisedHalf - liftClearPx());
+        return half + liftClearPx() + raisedHalf;
     }
 
     /** The A–Z wave's envelope for {@code slot} with the finger at {@code focus}, times {@code enter}. */

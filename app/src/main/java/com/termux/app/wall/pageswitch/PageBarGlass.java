@@ -50,6 +50,8 @@ public final class PageBarGlass {
         @ColorInt public int accent = Color.WHITE;
         /** Whether the Home pill's well stands on a dark ground ({@link InsetGlass}); true until measured. */
         public boolean wellDark = true;
+        /** The well kept the widget card's whole body because its ink failed on the bare veil. */
+        public boolean bodyKept;
     }
 
     /**
@@ -136,21 +138,26 @@ public final class PageBarGlass {
             return false;
         }
         PaneGlass.applyAtRadius(look, frame, glass, radiusPx);
-        // A well pressed into the page has no raised rim ({@link InsetGlass}).
+        // A well pressed into the page wears no convex cue ({@link InsetGlass}): no raised rim,
+        // and no refraction, whose bend and gathered edge light are a lens's. On a slab this thin
+        // the bend also smeared the picture into vertical streaks.
         glass.setRim(-1f, look);
+        glass.setRefraction(null);
         glass.invalidateOutline();
         return true;
     }
 
     /**
      * Measures the ground under {@code rect} (in {@code view}'s own coordinates) on the widget
-     * band, as a widget's card at that rect is measured, and the glyph inks on it ({@link #solve}).
-     * The {@code glass} slab is drawn through the even-out the ink was solved on. With no Look to
-     * ask, {@code out} keeps its pale ink and the raw accent, and the slab no correction.
+     * band and solves Home's well on it ({@link #solveWell}); the {@code glass} slab is drawn
+     * through the even-out the ink was solved on. {@code glyphTopShare} and
+     * {@code glyphBottomShare} are where the glyphs' tops and bottoms stand down the well. With no
+     * Look to ask, {@code out} keeps its pale ink and the raw accent, and the slab no correction.
      */
     static void measure(@NonNull View view, @NonNull Rect rect, @Nullable PaneSurfaceStyle look,
                         @ColorInt int accent, boolean glassWorn, @NonNull Ink out,
                         @NonNull WidgetBody.Answer body, @Nullable PaneGlassBackdropView glass,
+                        float glyphTopShare, float glyphBottomShare,
                         @NonNull int[] origin, @NonNull int[] rootScratch, @NonNull Rect scratch) {
         out.accent = accent;
         if (!(look instanceof WidgetInkSource) || rect.isEmpty()) {
@@ -161,10 +168,62 @@ public final class PageBarGlass {
         GlassAnchor.layoutOriginOnScreen(view, origin, rootScratch);
         scratch.set(rect);
         scratch.offset(origin[0], origin[1]);
-        solve(view.getContext(), source, scratch, glassWorn, look.paneGlassTintColor(), accent,
-            body, out);
-        sink(out, accent);
+        solveWell(view.getContext(), source, scratch, glassWorn, look.paneGlassTintColor(), accent,
+            glyphTopShare, glyphBottomShare, body, out);
         if (glass != null) glass.setEvenOut(glassWorn ? body.evenOut : null);
+    }
+
+    /**
+     * Home's well at {@code rootRect} ({@link InsetGlass}). On glass it lays no lift over the
+     * slab (the widget card's lift is a raised cue): only the veil the band asks for the card's
+     * text ink on the bare tinted glass, at the smallest alpha that does the job. The well's floor
+     * then shades it from the top; the ink is checked where the floor is worst for it (the
+     * glyphs' tops for a dark ink, their bottoms for a pale one), and if it falls under the large
+     * text floor there the widget card's whole body is laid as before ({@link #solve}) and
+     * {@link Ink#bodyKept} says so. The glyphs are solved on the floor at the well's middle, by the
+     * page marks' rule. Without glass, the opaque card as a widget's.
+     */
+    public static void solveWell(@NonNull Context context, @NonNull WidgetInkSource source,
+                                 @NonNull Rect rootRect, boolean glassWorn, @ColorInt int tint,
+                                 @ColorInt int accent, float glyphTopShare,
+                                 float glyphBottomShare, @NonNull WidgetBody.Answer body,
+                                 @NonNull Ink out) {
+        boolean dark = BuiltinWidgetGlass.darkCard(false, source.widgetPolarity());
+        int textInk = BuiltinWidgetStyle.textInkOn(context, dark);
+        int card = BuiltinWidgetStyle.cardOn(context, dark);
+        out.bodyKept = false;
+        if (glassWorn) {
+            OnGlass.Resolution answer = source.widgetInk(rootRect, tint, card, textInk,
+                BuiltinWidgetStyle.primaryOn(context, dark));
+            body.lift = Color.TRANSPARENT;
+            body.body = tint;
+            body.resolution = answer;
+            body.fill = answer.veil;
+            body.evenOut = source.widgetEvenOut(rootRect);
+            boolean pale = GlassInk.isPaleSide(textInk, answer.surface);
+            int worst = InsetGlass.groundAt(answer.surface, pale,
+                pale ? glyphBottomShare : glyphTopShare);
+            if (OnGlass.ratio(textInk, worst) >= OnGlass.TARGET_LARGE_TEXT) {
+                finishWell(answer.surface, answer.veil, textInk, accent, out);
+                return;
+            }
+            out.bodyKept = true;
+        }
+        solve(context, source, rootRect, glassWorn, tint, accent, body, out);
+        finishWell(out.ground, out.veil, textInk, accent, out);
+    }
+
+    /** The well's inks on {@code surface} under the floor at its middle, and the side its cues take. */
+    private static void finishWell(@ColorInt int surface, @ColorInt int veil, @ColorInt int ink,
+                                   @ColorInt int accent, @NonNull Ink out) {
+        boolean pale = GlassInk.isPaleSide(ink, surface);
+        int ground = InsetGlass.groundAt(surface, pale, 0.5f);
+        out.wellDark = pale;
+        out.veil = veil;
+        out.ink = ink;
+        out.ground = ground;
+        out.accent = PageMarkInk.current(ground, accent, GlassInk.isPaleSide(ink, ground));
+        out.other = PageMarkInk.other(ground, ink, out.accent);
     }
 
     /**
@@ -195,20 +254,6 @@ public final class PageBarGlass {
         out.accent = PageMarkInk.current(answer.surface, accent,
             GlassInk.isPaleSide(textInk, answer.surface));
         out.other = PageMarkInk.other(answer.surface, textInk, out.accent);
-    }
-
-    /**
-     * The Home pill pressed into the page ({@link InsetGlass}): the ground {@link #solve} measured
-     * under the well's shade, and the glyph inks solved again on that ground by the page marks'
-     * rule, with the card's text ink kept. {@link Ink#wellDark} says which side the cues take.
-     */
-    static void sink(@NonNull Ink out, @ColorInt int accent) {
-        if (Color.alpha(out.ground) == 0) return;
-        boolean dark = GlassInk.isPaleSide(out.ink, out.ground);
-        out.wellDark = dark;
-        out.ground = InsetGlass.groundIn(out.ground, dark);
-        out.accent = PageMarkInk.current(out.ground, accent, GlassInk.isPaleSide(out.ink, out.ground));
-        out.other = PageMarkInk.other(out.ground, out.ink, out.accent);
     }
 
     /**
