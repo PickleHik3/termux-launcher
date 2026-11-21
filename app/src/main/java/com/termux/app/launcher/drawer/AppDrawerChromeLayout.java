@@ -104,12 +104,22 @@ public final class AppDrawerChromeLayout {
         public final int buttonLeftPx;
         public final int buttonTopPx;
         public final int buttonSizePx;
+        /** The inset under the content whatever the fold: the pages' dots keep to it. */
+        public final int restInsetPx;
+        /**
+         * How far the pages' bottom stands above the card's bottom at least, so a folded bar's
+         * button never covers a page's last row. Fixed (not tied to the fold) so a page is never
+         * re-laid mid-gesture; zero with the bar at the bottom.
+         */
+        public final int pagerFloorPx;
 
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
                int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
                int barLeftPx, int barTopPx, int buttonLeftPx, int buttonTopPx,
-               int buttonSizePx) {
+               int buttonSizePx, int restInsetPx, int pagerFloorPx) {
+            this.restInsetPx = restInsetPx;
+            this.pagerFloorPx = pagerFloorPx;
             this.barLeftPx = barLeftPx;
             this.barTopPx = barTopPx;
             this.buttonLeftPx = buttonLeftPx;
@@ -154,15 +164,15 @@ public final class AppDrawerChromeLayout {
             int barTop = in.heightPx > 0 ? in.heightPx - in.bottomInsetPx - searchHeight : 0;
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, in.bottomInsetPx + searchHeight + gap,
-                0, barLeft, barTop, buttonLeft, buttonTop, searchHeight);
+                0, barLeft, barTop, buttonLeft, buttonTop, searchHeight, 0, 0);
         }
         // The bar on top: the round button floats over the list's last rows, so a folded bar has
         // the list keep that much under its last row. The top band is kept as it is.
-        int inner = in.collapsed
-            ? Math.max(in.bottomInsetPx, buttonBottom + searchHeight + gap) : in.bottomInsetPx;
+        int clearance = buttonBottom + searchHeight + gap;
+        int inner = in.collapsed ? Math.max(in.bottomInsetPx, clearance) : in.bottomInsetPx;
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
             searchWidth, 0, topChrome + searchHeight + gap, 0, inner, barLeft, topChrome,
-            buttonLeft, buttonTop, searchHeight);
+            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, clearance);
     }
 
     /**

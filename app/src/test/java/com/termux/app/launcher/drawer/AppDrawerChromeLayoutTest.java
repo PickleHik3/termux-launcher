@@ -191,6 +191,18 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(b.drawnRight, a.drawnRight, 0f);
     }
 
+    @Test public void pagesReserveTheButtonsBandAtRestSoAFoldNeverRelaysThem() {
+        AppDrawerChromeLayout.Result open = fold(false, 40, true, false);
+        AppDrawerChromeLayout.Result folded = fold(false, 40, true, true);
+        assertEquals(open.pagerFloorPx, folded.pagerFloorPx);
+        assertEquals(open.restInsetPx, folded.restInsetPx);
+        assertEquals(40, folded.restInsetPx);
+        // The floor stands above the button's top by the content gap.
+        assertEquals(2000 - folded.buttonTopPx + Math.round(10f * 2f), folded.pagerFloorPx);
+        // A bar at the bottom needs none.
+        assertEquals(0, fold(true, 40, true, true).pagerFloorPx);
+    }
+
     @Test public void aFoldedTopBarLeavesTheListRoomForTheButton() {
         AppDrawerChromeLayout.Result open = fold(false, 40, true, false);
         AppDrawerChromeLayout.Result folded = fold(false, 40, true, true);

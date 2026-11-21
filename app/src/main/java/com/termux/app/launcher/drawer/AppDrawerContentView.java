@@ -1101,8 +1101,11 @@ public final class AppDrawerContentView extends FrameLayout
         setBottomMargin(mGrid, r.contentBottomPx);
         setBottomMargin(mColumn, r.contentBottomPx);
         setBottomMargin(mCategoryView, r.contentBottomPx);
-        setBottomMargin(mHorizontalPager, r.contentBottomPx + Math.round(pagerBottomBandPx(inset)));
-        setBottomMargin(mPageIndicator, r.contentBottomPx + inset);
+        // The pages never follow the fold: their band is fixed, with the floor that keeps the
+        // button off the last row, so a swipe never re-lays a page.
+        setBottomMargin(mHorizontalPager, r.contentBottomPx
+            + Math.max(Math.round(pagerBottomBandPx(r.restInsetPx)), r.pagerFloorPx));
+        setBottomMargin(mPageIndicator, r.contentBottomPx + r.restInsetPx);
         mCategoryView.setBottomInsetPx(inset);
         int gravity = (mSearchAtBottom ? Gravity.BOTTOM : Gravity.TOP) | Gravity.CENTER_HORIZONTAL;
         applySearchBarParams(mPill, r, gravity);
