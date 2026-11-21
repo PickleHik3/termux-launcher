@@ -86,6 +86,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final int[] mRoot = new int[2];
     private final int[] mAt = new int[2];
     private final PageBarGlass.Ink mInk = new PageBarGlass.Ink();
+    /** DIAG(TL-PageBarDiag): the fold line last logged; revert before merge. */
+    @Nullable private String mDiagFold;
     /** The widget body the pill was last dressed in ({@link PageBarGlass#measure}), reused. */
     private final com.termux.app.chrome.WidgetBody.Answer mBody =
         new com.termux.app.chrome.WidgetBody.Answer();
@@ -222,6 +224,19 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             for (int i = 0; i < slots; i++) mFolded[i] = mFold.slots.get(i).folded();
             mSlotLabels = new String[slots];
             for (int i = 0; i < slots; i++) mSlotLabels[i] = labelOf(mFold.slots.get(i), entries);
+            // DIAG(TL-PageBarDiag): the fold, when it changes; revert before merge.
+            StringBuilder diag = new StringBuilder(mKeyEntry ? "fold key" : "fold home")
+                .append(" entries=").append(entries.size()).append(" maxSlots=")
+                .append(PageBarLayout.maxSlots(mDensity, width)).append(" slots=");
+            for (PageBarFold.Slot s : mFold.slots)
+                diag.append(s.kind).append(':').append(s.count).append('/').append(s.number)
+                    .append(' ');
+            String line = diag.toString();
+            if (!line.equals(mDiagFold)) {
+                mDiagFold = line;
+                android.util.Log.d("TL-PageBarDiag", line + "up="
+                    + android.os.SystemClock.uptimeMillis());
+            }
         }
         float left = mLayout == null ? -1f : mLayout.pillLeftPx();
         float pill = mLayout == null ? -1f : mLayout.pillWidthPx();

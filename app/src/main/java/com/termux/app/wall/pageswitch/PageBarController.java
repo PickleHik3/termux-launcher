@@ -120,9 +120,12 @@ public final class PageBarController implements PageBarView.Entry {
      */
     public boolean keyDown(float rawX, float rawY, int bandTopRaw) {
         FrameLayout layer = mLayer;
-        if (layer == null || mHost.isSuppressed() || layer.getWidth() <= 0) return false;
+        // DIAG(TL-PageBarDiag): which gate refused the key's pop-up; revert before merge.
+        if (layer == null) return diagKeyDown(false, "layer-null");
+        if (mHost.isSuppressed()) return diagKeyDown(false, "suppressed");
+        if (layer.getWidth() <= 0) return diagKeyDown(false, "zero-width");
         PageBarModel model = mHost.pageBarModel();
-        if (model.entries().isEmpty()) return false;
+        if (model.entries().isEmpty()) return diagKeyDown(false, "empty-model");
         if (mPopup.shown()) putAway();
         PageBarView view = ensurePopupView(layer);
         view.setFixedInk(mHost.ink(), mHost.accent());
@@ -148,7 +151,14 @@ public final class PageBarController implements PageBarView.Entry {
         view.setVisibility(View.VISIBLE);
         mPopup.keyDown();
         view.feed(MotionEvent.ACTION_DOWN, rawX - mOriginX, rawY - mOriginY);
-        return true;
+        return diagKeyDown(true, "opened entries=" + model.entries().size());
+    }
+
+    /** DIAG(TL-PageBarDiag): logs one key press's answer; revert before merge. */
+    private static boolean diagKeyDown(boolean opened, String why) {
+        android.util.Log.d("TL-PageBarDiag", "keyDown=" + opened + " " + why + " up="
+            + android.os.SystemClock.uptimeMillis());
+        return opened;
     }
 
     public void keyMove(float rawX, float rawY) {
