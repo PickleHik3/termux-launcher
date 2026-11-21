@@ -9,7 +9,7 @@ import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
-import com.termux.app.terminal.PasteText;
+import com.termux.app.terminal.inappkeyboard.FieldEditor;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import java.util.ArrayList;
@@ -90,7 +90,6 @@ public final class AppDrawerSearchController
 
     private final AppDrawerSearchModel mModel = new AppDrawerSearchModel();
     private final AppDrawerSearchSelection mSelection = new AppDrawerSearchSelection();
-    private final ClipboardText mClipboardSource;
 
     @NonNull private List<LauncherAppEntry> mCatalogue = Collections.emptyList();
     @NonNull private List<LauncherAppEntry> mResults = Collections.emptyList();
@@ -105,8 +104,17 @@ public final class AppDrawerSearchController
     }
 
     public AppDrawerSearchController(@NonNull ClipboardText clipboardSource) {
-        mClipboardSource = clipboardSource;
+        mFieldEditor = new FieldEditor(clipboardSource);
     }
+
+    private final FieldEditor mFieldEditor;
+
+    /** The query, as the in-app keyboard's editing keys see it. */
+    private final FieldEditor.Field mField = new FieldEditor.Field() {
+        @NonNull @Override public String fieldText() { return mModel.query(); }
+        @Override public void replaceFieldText(@NonNull String text) { replaceQuery(text, text.length()); }
+        @Override public void insertFieldText(@NonNull String text) { insert(text); }
+    };
 
     public void setHost(@Nullable Host host) {
         mHost = host;
@@ -266,6 +274,7 @@ public final class AppDrawerSearchController
      */
     public void reset() {
         mModel.clear();
+        mFieldEditor.reset();
         rank(true);
     }
 
@@ -298,6 +307,9 @@ public final class AppDrawerSearchController
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (!isActive()) return false;
+        // Edits, chords and tool keys follow the one field rule (FieldKeys); the keyboard's own
+        // keys never get here. What is left is the query's.
+        if (mFieldEditor.handle(mField, value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) insert(String.valueOf(value.getChar()));
@@ -309,8 +321,6 @@ public final class AppDrawerSearchController
                 switch (value.getEditing()) {
                     case SPACE_BAR: insert(" "); break;
                     case BACKSPACE: backspace(); break;
-                    case PASTE:
-                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 return true;
@@ -437,11 +447,6 @@ public final class AppDrawerSearchController
             default:
                 return false;
         }
-    }
-
-    private void pasteClipboard() {
-        String text = mClipboardSource.read();
-        if (text != null && !text.isEmpty()) insert(PasteText.sanitizeSingleLine(text));
     }
 
     private void insert(@NonNull String text) {

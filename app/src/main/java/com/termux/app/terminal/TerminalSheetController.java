@@ -458,7 +458,21 @@ public final class TerminalSheetController
     public TerminalSheetController(@NonNull Host host) {
         mHost = host;
         mDensity = host.context().getResources().getDisplayMetrics().density;
+        mFieldEditor = new com.termux.app.terminal.inappkeyboard.FieldEditor(
+            ClipboardText.forContext(host.context()));
     }
+
+    /**
+     * The in-app keyboard's editing keys on the top sheet (FieldKeys' rule). A sheet's text lives
+     * in its own view, out of reach, so only paste acts; the other edits do nothing.
+     */
+    private final com.termux.app.terminal.inappkeyboard.FieldEditor mFieldEditor;
+    private final com.termux.app.terminal.inappkeyboard.FieldEditor.Field mSheetField =
+        new com.termux.app.terminal.inappkeyboard.FieldEditor.Field() {
+            @Nullable @Override public String fieldText() { return null; }
+            @Override public void replaceFieldText(@NonNull String text) {}
+            @Override public void insertFieldText(@NonNull String text) { text(text); }
+        };
 
     public boolean isOpen() {
         return !mStack.isEmpty();
@@ -1333,6 +1347,7 @@ public final class TerminalSheetController
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (mStack.isEmpty()) return false;
+        if (mFieldEditor.handle(mSheetField, value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) text(String.valueOf(value.getChar()));
