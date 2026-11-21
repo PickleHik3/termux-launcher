@@ -173,6 +173,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private int mSystemImeTakePx;
     private float mCoverHomeDropPx;
     private float mCoverSharedDropPx;
+    private float mDiagImeStandPx; // DIAG(home-kb)
     /** The keyboard's drawn top in the container's pixels while it shows height, else NaN. */
     private float mCoverKeyboardTopPx = Float.NaN;
     /** The cut last written to each lane host's clip, and to which view; 0 for none. */
@@ -309,7 +310,41 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     public void onLanding() {
         mHasEnds = false;
         mLandingPending = true;
+        diagHomeKb("landing", ""); // DIAG(home-kb)
         requestApply();
+    }
+
+    // DIAG(home-kb): one line of the cover's numbers and where the dock's views stand; the
+    // lines are per event, never per frame. Revert before merge.
+    public void diagHomeKb(String event, String detail) {
+        boolean motion = com.termux.app.chrome.MotionLog.enabled;
+        StringBuilder b = new StringBuilder(512);
+        b.append(event).append(' ').append(detail).append(" covered=").append(mHomeCovered)
+            .append(" homeDrop=").append(mCoverHomeDropPx).append(" sharedDrop=")
+            .append(mCoverSharedDropPx).append(" imeStand=").append(mDiagImeStandPx)
+            .append(" take=").append(mSystemImeTakePx).append(" apart=").append(mApart)
+            .append(" ends=").append(mHasEnds ? (mFromHome ? "H" : "T") + ">" + (mToHome ? "H" : "T")
+                + "@" + mEndsProgress : "none");
+        diagView(b, "container", R.id.accessory_stack_container);
+        diagView(b, "card", R.id.accessory_surface_host);
+        diagView(b, "rows", R.id.accessory_row_stack);
+        for (int i = 0; i < LANE_HOST_IDS.length; i++) diagView(b, "lane" + i, LANE_HOST_IDS[i]);
+        String line = b.toString();
+        android.util.Log.d("HomeKb", line);
+        if (motion) com.termux.app.chrome.MotionLog.log("home-kb", line);
+    }
+
+    private void diagView(StringBuilder b, String name, int id) { // DIAG(home-kb)
+        View v = mViews.view(id);
+        b.append(" | ").append(name).append('=');
+        if (v == null) {
+            b.append("null");
+            return;
+        }
+        android.graphics.Rect clip = v.getClipBounds();
+        b.append(v.getTop()).append('-').append(v.getBottom()).append(" ty=")
+            .append(v.getTranslationY()).append(" clip=")
+            .append(clip == null ? "none" : clip.toShortString());
     }
 
     // ---- The shares handed in ---------------------------------------------------------------
@@ -358,6 +393,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                     + " down=" + mTerminalTopKeyboardDown + " up=" + mTerminalTopKeyboardUp
                     + " home=" + mPredictedHostTop[0]); // DIAG(host-shift)
         }
+        if (!mHasEnds) diagHomeKb("begin", "from=" + fromHome + " to=" + toHome); // DIAG(home-kb)
         mHasEnds = true;
         mFromHome = fromHome;
         mToHome = toHome;
@@ -583,6 +619,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             ? mGeometry.keyboardTopPx : Float.NaN;
         final float imeStand = homeShare * HomeKeyboardCover.imeStandPx(!covered,
             mSystemImeTakePx, 0, mEffective.imeLiftPx);
+        mDiagImeStandPx = imeStand; // DIAG(home-kb)
         boolean containerMoved = writeTy(StackScene.V_CONTAINER, container,
             mFrame.ty[StackScene.V_CONTAINER] + imeStand + plankTy(PLANK_CONTAINER));
         writePlank(StackScene.V_CONTAINER, container, PLANK_CONTAINER, 0f);
