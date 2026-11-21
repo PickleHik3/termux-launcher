@@ -78,12 +78,17 @@ public final class SettingsRowIcons {
 
         // Drawer
         key(R.drawable.ic_ms_grid_view, "app_launcher_drawer_view_type");
+        key(R.drawable.ic_drawer_icon_size, "app_launcher_drawer_icon_size");
+        key(R.drawable.ic_drawer_columns, "app_launcher_drawer_columns");
+        key(R.drawable.ic_drawer_rows, "app_launcher_drawer_rows");
         key(R.drawable.ic_ms_sort_by_alpha, "app_launcher_drawer_az_side");
         key(R.drawable.ic_ms_keyboard_alt, "app_launcher_drawer_search_android_keyboard");
+        key(R.drawable.ic_drawer_search_position, "app_launcher_drawer_search_bottom");
         key(R.drawable.ic_ms_bookmark, "app_launcher_drawer_remember_position");
         key(R.drawable.ic_ms_vertical_align_bottom, "app_launcher_drawer_lower_start");
         key(R.drawable.ic_ms_category, "app_launcher_category_sort");
         key(R.drawable.ic_ms_refresh, "app_launcher_category_refresh");
+        key(R.drawable.ic_ms_restart_alt, "app_launcher_category_order_reset");
 
         // Backup
         key(R.drawable.ic_ms_upload, "settings_backup_export");

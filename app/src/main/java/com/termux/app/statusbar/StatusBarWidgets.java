@@ -415,8 +415,8 @@ final class StatusBarWidgets {
             weather.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
             if (weather.getTag() == null) {
                 weather.setTag("wired");
-                weather.setIconAnimation(
-                    com.termux.app.statusbar.WeatherController.animationAssetFor(0, true));
+                weather.setWeatherIcon(
+                    com.termux.app.statusbar.WeatherIcons.NOT_AVAILABLE);
                 weather.setValue("--");
                 weather.setOnClickListener(v -> mHost.toggleWeatherCard(v));
             }

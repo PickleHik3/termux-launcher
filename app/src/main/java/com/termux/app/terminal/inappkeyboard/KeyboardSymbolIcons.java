@@ -44,13 +44,34 @@ public final class KeyboardSymbolIcons implements SymbolIcons {
         {0xE036, R.drawable.ic_rl_undo},
         {0xE015, R.drawable.ic_rl_mic},
         {0xE038, R.drawable.ic_rl_assistant},
+        {0xE004, R.drawable.ic_rl_settings},
+        {0xE009, R.drawable.ic_rl_keyboard},
+        {0xE013, R.drawable.ic_rl_switch_layout},
+        {0xE014, R.drawable.ic_rl_switch_layout},
+        {0xE001, R.drawable.ic_rl_emoji},
+        {0xE012, R.drawable.ic_rl_caps_lock},
+        {0xE016, R.drawable.ic_rl_compose},
+        {0xE01A, R.drawable.ic_rl_compose},
+        {0xE017, R.drawable.ic_rl_clipboard},
+        {0xE01B, R.drawable.ic_rl_delete_word_back},
+        {0xE01C, R.drawable.ic_rl_delete_word_forward},
+        {0xE030, R.drawable.ic_rl_copy},
+        {0xE031, R.drawable.ic_rl_cut},
+        {0xE033, R.drawable.ic_rl_select_all},
+        {0xE037, R.drawable.ic_rl_redo},
     };
 
     /**
-     * Other code points. Empty: the paste picture glyph (U+F02E9) stays a Nerd glyph so the
-     * picture state differs from plain paste; it takes ic_rl_image once that drawable is here.
+     * Other code points: the paste picture (distinct from plain paste) and the launcher's window
+     * and session marks the layouts ship as Nerd glyphs.
      */
-    static final int[][] OTHER_ICONS = {};
+    static final int[][] OTHER_ICONS = {
+        {0xF02E9, R.drawable.ic_rl_image},
+        {0xF0733, R.drawable.ic_rl_window_previous},
+        {0xF0736, R.drawable.ic_rl_window_next},
+        {0xF0739, R.drawable.ic_rl_session_previous},
+        {0xF0730, R.drawable.ic_rl_session_next},
+    };
 
     /**
      * Tool keys the keyboard's own layouts ship with a Nerd glyph the bar's {@code ExtraKeyIcons}

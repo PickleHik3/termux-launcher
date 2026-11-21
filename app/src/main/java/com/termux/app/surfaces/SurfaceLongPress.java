@@ -368,7 +368,7 @@ public final class SurfaceLongPress {
         List<List<AppMenuCard.Item>> groups = new ArrayList<>(2);
         groups.add(Arrays.asList(AppMenuCard.Item.header(title),
             new AppMenuCard.Item(context.getString(R.string.surface_popup_edit),
-                R.drawable.ic_ms_edit, () -> {
+                R.drawable.ic_rl_edit, () -> {
                     dismiss();
                     mHost.openCard(target.door, bar);
                 })));

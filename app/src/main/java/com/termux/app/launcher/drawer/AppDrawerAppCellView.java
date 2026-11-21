@@ -1,7 +1,10 @@
 package com.termux.app.launcher.drawer;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -36,9 +39,18 @@ public class AppDrawerAppCellView extends LinearLayout
 
     public static final ClickGate ALLOW_CLICKS = () -> false;
 
+    /** Edit mode's outline: thin, static and in the cell's own ink at this alpha. */
+    static final int EDIT_OUTLINE_ALPHA = 0x59;
+    private static final float EDIT_OUTLINE_STROKE_DP = 1f;
+    private static final float EDIT_OUTLINE_INSET_DP = 2f;
+    private static final float EDIT_OUTLINE_RADIUS_DP = 16f;
+
     @NonNull public final ImageView icon;
     @NonNull public final TextView label;
     private boolean mKeyboardHighlighted;
+    private boolean mEditOutline;
+    @Nullable private Paint mOutlinePaint;
+    private final RectF mOutlineRect = new RectF();
     /** The glass bead behind the highlighted result; one per cell, made on first highlight. */
     @Nullable private AppDrawerGlassBeadDrawable mBead;
     private final int[] mContentBox = new int[4];
@@ -157,7 +169,9 @@ public class AppDrawerAppCellView extends LinearLayout
         label.setTextColor(dock != null ? dock.getLauncherTextColor() : Color.WHITE);
         setContentDescription(entry.label);
         setOnClickListener(view -> {
-            if (!clickGate.suppressCellClick() && dock != null)
+            // Editing: an app does not launch on a tap (it is picked up instead).
+            if (!clickGate.suppressCellClick() && dock != null
+                && !AppDrawerContentView.isEditingAround(this))
                 dock.launchEntryFromDrawer(icon, entry);
         });
         if (dock != null) {
@@ -228,6 +242,44 @@ public class AppDrawerAppCellView extends LinearLayout
 
     public final boolean isKeyboardHighlighted() {
         return mKeyboardHighlighted;
+    }
+
+    /** Edit mode's outline on or off; one invalidate when it changes, nothing at rest. */
+    public final void setEditOutline(boolean on) {
+        if (mEditOutline == on) return;
+        mEditOutline = on;
+        invalidate();
+    }
+
+    public final boolean hasEditOutline() {
+        return mEditOutline;
+    }
+
+    /** A cell that scrolls in while the drawer is edited comes in outlined. */
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setEditOutline(AppDrawerContentView.isEditingAround(this));
+    }
+
+    @Override
+    public void onDrawForeground(@NonNull Canvas canvas) {
+        super.onDrawForeground(canvas);
+        if (!mEditOutline) return;
+        Paint paint = mOutlinePaint;
+        float density = getResources().getDisplayMetrics().density;
+        if (paint == null) {
+            paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setStyle(Paint.Style.STROKE);
+            mOutlinePaint = paint;
+        }
+        paint.setStrokeWidth(Math.max(1f, EDIT_OUTLINE_STROKE_DP * density));
+        paint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+            label.getCurrentTextColor(), EDIT_OUTLINE_ALPHA));
+        float inset = EDIT_OUTLINE_INSET_DP * density;
+        mOutlineRect.set(inset, inset, getWidth() - inset, getHeight() - inset);
+        float radius = EDIT_OUTLINE_RADIUS_DP * density;
+        canvas.drawRoundRect(mOutlineRect, radius, radius, paint);
     }
 
     /** The grid cell has no background at rest; a presentation with one overrides this. */

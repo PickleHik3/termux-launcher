@@ -12,14 +12,15 @@ import com.termux.app.page.PageKind;
 /**
  * Every door into the Appearance editor, and the card each one opens (editor-redesign §5, the
  * Door · Today · After table). The rule: a screen's door opens that screen's card, and Global (the
- * palette's card, {@link EditorCard#APPEARANCE}) is always one tap further.
+ * palette's card, {@link EditorCard#APPEARANCE}) is always one tap further; the exception is the
+ * Home sheet's Appearance, which names Global itself.
  *
  * <p>Every door logs one line under {@link #LOG_TAG} naming itself and the card, so a stray open
  * on a phone names its door:</p>
  *
  * <pre>
  *   EditorCard card = EditorDoor.HOME_SHEET_APPEARANCE.route(null, null);
- *   // logs "home-sheet-appearance -> HOME"
+ *   // logs "home-sheet-appearance -> APPEARANCE"
  * </pre>
  *
  * <p>Doors that cross from Settings carry their name in the editor's intent
@@ -27,7 +28,7 @@ import com.termux.app.page.PageKind;
  * No views and no {@code Context}: the table is held by JVM tests.</p>
  */
 public enum EditorDoor {
-    /** Long-press Home, then the Home sheet's Appearance. */
+    /** Long-press Home, then the Home sheet's Appearance: the Global card. */
     HOME_SHEET_APPEARANCE("home-sheet-appearance"),
     /** Long-press Home, then the Home sheet's Wallpaper: the picker. */
     HOME_SHEET_WALLPAPER("home-sheet-wallpaper"),
@@ -115,9 +116,9 @@ public enum EditorDoor {
     @Nullable
     public EditorCard cardFor(@Nullable PageKind onScreen, @Nullable EditorCard named) {
         switch (this) {
-            case HOME_SHEET_APPEARANCE:
             case SETTINGS_HOME:
                 return EditorCard.HOME;
+            case HOME_SHEET_APPEARANCE:
             case HOME_SHEET_WALLPAPER:
             case TERMINAL_SHEET_WALLPAPER:
             case LAUNCHERCTL_WALLPAPER:

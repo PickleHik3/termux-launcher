@@ -313,6 +313,18 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setAppLauncherDrawerViewType(value);
                 scheduleAppDrawerSync();
                 break;
+            case "app_launcher_drawer_icon_size":
+                mPreferences.setAppLauncherDrawerIconSize(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_columns":
+                mPreferences.setAppLauncherDrawerColumns(value);
+                scheduleAppDrawerSync();
+                break;
+            case "app_launcher_drawer_rows":
+                mPreferences.setAppLauncherDrawerRows(value);
+                scheduleAppDrawerSync();
+                break;
             case "app_launcher_builtin_widget_style":
                 mPreferences.setAppLauncherBuiltinWidgetStyle(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -373,6 +385,12 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getHomePaletteGesture();
             case "app_launcher_drawer_view_type":
                 return mPreferences.getAppLauncherDrawerViewType();
+            case "app_launcher_drawer_icon_size":
+                return mPreferences.getAppLauncherDrawerIconSize();
+            case "app_launcher_drawer_columns":
+                return mPreferences.getAppLauncherDrawerColumns();
+            case "app_launcher_drawer_rows":
+                return mPreferences.getAppLauncherDrawerRows();
             case "app_launcher_builtin_widget_style":
                 return mPreferences.getAppLauncherBuiltinWidgetStyle();
             case "app_launcher_default_buttons":

@@ -50,7 +50,7 @@
             android:layout_height="48dp"
             android:maxLines="1"
             android:text="@string/appearance_editor_done"
-            app:icon="@drawable/ic_symbol_check" />
+            app:icon="@drawable/ic_rl_check" />
     </LinearLayout>
 
     <FrameLayout

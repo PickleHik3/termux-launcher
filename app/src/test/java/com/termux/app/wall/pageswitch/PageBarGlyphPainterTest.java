@@ -1,87 +1,87 @@
 package com.termux.app.wall.pageswitch;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import android.app.Application;
+import android.graphics.Matrix;
 import android.graphics.Path;
 import android.graphics.RectF;
-
-import androidx.core.graphics.PathParser;
+import android.os.Build;
 
 import com.termux.app.page.PageKind;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
+import org.robolectric.annotation.GraphicsMode;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
+@GraphicsMode(GraphicsMode.Mode.NATIVE)
 public class PageBarGlyphPainterTest {
 
-    @Test public void thePathStringsParse() {
-        assertNotNull(PathParser.createPathFromPathData(PageBarGlyphPainter.HOME_PATH));
-        assertNotNull(PathParser.createPathFromPathData(PageBarGlyphPainter.CHEVRON_PATH));
-        assertNotNull(PathParser.createPathFromPathData(PageBarGlyphPainter.SPARK_PATH));
-    }
+    private static final float V = PageGlyphSlots.VIEWPORT;
 
-    @Test public void aCutPathIsBuiltOnceAndReused() {
-        PageBarGlyphPainter painter = new PageBarGlyphPainter();
-        for (PageKind kind : PageKind.values()) {
-            assertSame(painter.cut(kind, 12), painter.cut(kind, 12));
-            assertSame(painter.silhouette(kind), painter.silhouette(kind));
-        }
-    }
-
-    @Test public void numbersAboveNinetyNineShareOnePath() {
-        PageBarGlyphPainter painter = new PageBarGlyphPainter();
-        assertSame(painter.cut(PageKind.HOME, 100), painter.cut(PageKind.HOME, 250));
-        assertFalse(painter.cut(PageKind.HOME, 100) == painter.cut(PageKind.HOME, 99));
-    }
-
-    private static final float BOX = PageBarGlyphPainter.GLYPH_UNITS / 2f;
-
-    private static RectF bounds(Path path) {
+    /** {@code path}'s ink bounds with its stroke, moved by {@code matrix}. */
+    private static RectF ink(Path path, Matrix matrix) {
         RectF r = new RectF();
         path.computeBounds(r, true);
+        float half = PageGlyphSlots.STROKE / 2f;
+        r.inset(-half, -half);
+        matrix.mapRect(r);
         return r;
     }
 
-    @Test public void everyGlyphLiesInsideTheCommonBox() {
-        PageBarGlyphPainter painter = new PageBarGlyphPainter();
+    private static boolean inside(RectF r) {
+        return r.left >= 0f && r.top >= 0f && r.right <= V && r.bottom <= V;
+    }
+
+    @Test public void everyGlyphLiesInsideTheViewport() {
+        PageGlyphPainter glyphs = new PageBarGlyphPainter().glyphs();
+        Matrix identity = new Matrix();
         for (PageKind kind : PageKind.values()) {
-            RectF r = bounds(painter.silhouette(kind));
-            assertTrue(kind + " " + r, r.left >= -BOX && r.top >= -BOX && r.right <= BOX && r.bottom <= BOX);
+            RectF r = ink(glyphs.outline(kind), identity);
+            assertTrue(kind + " " + r, inside(r));
         }
     }
 
-    @Test public void homeAndTerminalNumbersShareOneSizeAndBaseline() {
-        // One font size and baseline in both slots, so the count reads the same beside either glyph.
-        assertTrue(PageBarGlyphPainter.HOME_BASELINE == PageBarGlyphPainter.TERMINAL_BASELINE);
-        assertTrue(PageBarGlyphPainter.NUMBER_SIZE == 9.5f);
-    }
-
-    @Test public void twoDigitsFitBothSlotsWithoutCondensingBelowTheFloor() {
-        PageBarGlyphPainter painter = new PageBarGlyphPainter();
-        for (int n = 10; n <= 99; n++) {
-            String text = Integer.toString(n);
-            assertTrue(text, painter.numberScale(text, PageBarGlyphPainter.HOME_SLOT_W) >= PageGlyphSlots.MIN_CONDENSE);
-            assertTrue(text, painter.numberScale(text, PageBarGlyphPainter.TERMINAL_SLOT_W) >= PageGlyphSlots.MIN_CONDENSE);
-        }
-    }
-
-    @Test public void theFoldedStackLiesInsideTheBox() {
-        PageBarGlyphPainter painter = new PageBarGlyphPainter();
+    @Test public void theFoldedStackLiesInsideTheViewport() {
+        // Nothing reaches past the glyph's box, so a folded last slot needs no extra end padding.
+        PageGlyphPainter glyphs = new PageBarGlyphPainter().glyphs();
+        Matrix front = new Matrix();
+        PageBarGlyphPainter.frontMatrix(front);
+        Matrix back = new Matrix(front);
+        back.postTranslate(PageBarGlyphPainter.BACK_DX, PageBarGlyphPainter.BACK_DY);
         for (PageKind kind : PageKind.values()) {
-            RectF r = bounds(painter.folded(kind));
-            assertTrue(kind + " " + r, r.left >= -BOX && r.top >= -BOX && r.right <= BOX && r.bottom <= BOX);
+            RectF f = ink(glyphs.outline(kind), front);
+            RectF b = ink(glyphs.outline(kind), back);
+            assertTrue(kind + " front " + f, inside(f));
+            assertTrue(kind + " back " + b, inside(b));
         }
-        for (float[] plate : PageBarGlyphPainter.PLATES) {
-            assertTrue(plate[0] >= -BOX && plate[1] >= -BOX
-                && plate[0] + plate[2] <= BOX && plate[1] + plate[3] <= BOX);
+    }
+
+    @Test public void theBackOutlineShowsPastTheClearGround() {
+        // Moved far enough that a whole stroke of it stands past the front's stroke and the clear
+        // ground beside it, so the stack reads as two outlines.
+        float reach = Math.min(Math.abs(PageBarGlyphPainter.BACK_DX),
+            Math.abs(PageBarGlyphPainter.BACK_DY));
+        assertTrue(reach >= PageGlyphSlots.STROKE + PageBarGlyphPainter.CLEAR);
+    }
+
+    @Test public void theClearRegionIsBuiltOnceAndCoversTheFront() {
+        PageBarGlyphPainter painter = new PageBarGlyphPainter();
+        Matrix front = new Matrix();
+        PageBarGlyphPainter.frontMatrix(front);
+        for (PageKind kind : PageKind.values()) {
+            Path clear = painter.clear(kind);
+            assertSame(clear, painter.clear(kind));
+            RectF c = new RectF();
+            clear.computeBounds(c, true);
+            RectF f = ink(painter.glyphs().outline(kind), front);
+            f.inset(-PageBarGlyphPainter.CLEAR + 0.01f, -PageBarGlyphPainter.CLEAR + 0.01f);
+            assertTrue(kind + " " + c + " " + f, c.contains(f));
         }
-        // Nothing reaches past the box, so a folded last slot needs no extra end padding.
-        assertTrue(PageBarGlyphPainter.STACK_OVERHANG_RIGHT == 0f);
-        assertTrue(PageBarGlyphPainter.STACK_OVERHANG_LEFT == 0f);
     }
 }

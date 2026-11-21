@@ -108,7 +108,7 @@ public final class PageBarGlass {
     }
 
     /** Whether the Look's glass could be worn here (a widget's slab test, without its switch). */
-    static boolean wants(@NonNull Context context, @Nullable PaneSurfaceStyle look) {
+    public static boolean wants(@NonNull Context context, @Nullable PaneSurfaceStyle look) {
         if (!PaneGlass.isActive(look)) return false;
         BuiltinWidgetGlass.SystemAsks asks = BuiltinWidgetGlass.SystemAsks.current(context);
         return BuiltinWidgetGlass.holdsFrame(true, false, asks.batterySaver, asks.outlineText,
@@ -121,7 +121,7 @@ public final class PageBarGlass {
      *
      * @return whether the glass shows
      */
-    static boolean dress(@NonNull Context context, @Nullable PaneSurfaceStyle look,
+    public static boolean dress(@NonNull Context context, @Nullable PaneSurfaceStyle look,
                          @NonNull View frame, @NonNull PaneGlassBackdropView glass,
                          float radiusPx) {
         boolean onWallpaper = PaneGlass.isActive(look);

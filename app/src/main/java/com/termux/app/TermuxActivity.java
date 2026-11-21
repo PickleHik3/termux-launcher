@@ -2187,6 +2187,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
                     || frame == mFrameGutterBackdropBitmap
                     || (mLookGlass != null && mLookGlass.holds(frame))
+                    || (mDrawerCardGlass != null && mDrawerCardGlass.holds(frame))
                     || (mRaisedGlass != null && mRaisedGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
@@ -2196,6 +2197,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneGlassClearFrame = null;
             mWallBehindFrame = null;
             if (mLookGlass != null) mLookGlass.onCacheCleared();
+            if (mDrawerCardGlass != null) mDrawerCardGlass.onCacheCleared();
             if (mRaisedGlass != null) mRaisedGlass.onCacheCleared();
         }
 
@@ -2710,8 +2712,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             mGeometry.request(GeometryScheduler.Reason.HOME, GeometryScheduler.ResizePolicy.NONE);
             mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-            // HOME while already home never stops the activity, so onStart does not fire for it.
-            playWeatherArrivalAnimation();
         }
     }
 
@@ -2720,10 +2720,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         super.onStart();
         com.termux.app.terminal.TouchDownHint.attach(this);
         if (mScene != null) mScene.attach();
-        // Both arrivals the launcher has: unlocking the phone, and switching back from another
-        // app. Each ends in onStart, because the keyguard stops this activity too.
-        View arrivalHost = findViewById(android.R.id.content);
-        if (arrivalHost != null) arrivalHost.post(this::playWeatherArrivalAnimation);
         Logger.logDebug(LOG_TAG, "onStart");
     
         if (mIsInvalidState) return;
@@ -4628,6 +4624,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mLookGlass;
     }
 
+    /** The open drawer card's own glass the section switch wears; see {@link #drawerCardGlassStyle}. */
+    @Nullable private com.termux.app.chrome.DrawerCardGlassStyle mDrawerCardGlass;
+
+    /**
+     * The drawer card's surface as a pane style: the dock's blur radius (the card's frost holds
+     * that entry), the sheets' refraction and the sheets' tint, none of Global's Look.
+     */
+    @NonNull
+    private com.termux.app.chrome.DrawerCardGlassStyle drawerCardGlassStyle() {
+        if (mDrawerCardGlass == null) {
+            mDrawerCardGlass = new com.termux.app.chrome.DrawerCardGlassStyle(this, mChrome,
+                new com.termux.app.chrome.DrawerCardGlassStyle.Host() {
+                    @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
+                    @Override public View wallpaperFrame() {
+                        return findViewById(R.id.activity_termux_root_view);
+                    }
+                    @Override public boolean wallpaperPassthrough() {
+                        return shouldUseWallpaperPassthroughMode();
+                    }
+                    @Override public int cardBlurDp() { return getEffectiveExtraKeysBlurRadius(); }
+                    @Override public int glassBaseColor() {
+                        return com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+                            .resolveDockGlassBaseColor(TermuxActivity.this);
+                    }
+                    // The sheets element, as WallpaperFrostPainter.sheets() answers it.
+                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
+                        return com.termux.app.chrome.ElementGlass.refraction(mPreferences, null,
+                            stackLookPage(), mFancierGlassLook);
+                    }
+                    @Override public com.termux.app.chrome.WallpaperParallax parallax() {
+                        return mWallpaperParallax;
+                    }
+                });
+        }
+        return mDrawerCardGlass;
+    }
+
     /**
      * The shared pre-blurred wallpaper frame the panes draw, remembered so the blur cache never
      * recycles a bitmap a pane is still painting from (the panes hold it in a custom view rather
@@ -4707,6 +4740,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
         Trace.endSection();
+        // The open drawer's section switch wears the card's own glass and frame.
+        if (mSheets.appDrawerControllerIfBuilt() != null)
+            mSheets.appDrawerControllerIfBuilt().onGlassChanged();
         // The key's page bar, opened while its raised blur was baking, wears the frame that landed.
         if (mPageBar != null) mPageBar.onGlassFramesMoved();
         if (mPaneController == null) return;
@@ -20544,6 +20580,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.restingPage();
         }
 
+        @Nullable @Override public com.termux.app.chrome.DrawerCardGlassStyle drawerSwitchGlass(boolean wanted) {
+            com.termux.app.chrome.DrawerCardGlassStyle card = drawerCardGlassStyle();
+            card.setWanted(wanted);
+            return wanted ? card : null;
+        }
+
         @Override public int sheetsBandPx() {
             return mSheets.bottomBandPx();
         }
@@ -31692,41 +31734,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mWeatherController;
     }
 
-    /** How long the status-bar weather icon moves for on arrival. */
-    private static final long WEATHER_GREETING_ANIMATION_MS = 3_000L;
-    /** Two arrival signals can land together (restart plus a HOME intent); one replay is enough. */
-    private static final long WEATHER_GREETING_MIN_GAP_MS = 2_000L;
-    private long mLastWeatherGreetingAt;
     /**
      * The Widgets place's weather, longest first: temperature · sky · place, temperature · sky,
      * temperature. Null everywhere else, where the weather is the temperature alone.
      */
     @Nullable private String[] mWeatherForms;
 
-    /**
-     * Runs the weather icon for a few seconds when the user arrives — unlocking the phone, or
-     * coming back to the home screen from another app.
-     *
-     * <p>The icon is otherwise still: looping it costs about 14% of a core for as long as the
-     * status bar is up, which is not a price worth paying for something nobody is looking at. The
-     * moment the user does look is exactly when they have just arrived, so that is where the
-     * movement goes.
-     */
-    private void playWeatherArrivalAnimation() {
-        com.termux.app.statusbar.StatusBarWidgetView widget =
-            findViewById(R.id.terminal_status_widget_weather);
-        if (widget == null || widget.getVisibility() != View.VISIBLE) return;
-        long now = android.os.SystemClock.uptimeMillis();
-        if (now - mLastWeatherGreetingAt < WEATHER_GREETING_MIN_GAP_MS) return;
-        mLastWeatherGreetingAt = now;
-        widget.replayIconAnimation(WEATHER_GREETING_ANIMATION_MS);
-    }
-
     private void onWeatherUpdated(@NonNull com.termux.app.statusbar.WeatherController.Weather weather) {
         com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(R.id.terminal_status_widget_weather);
         if (widget != null && widget.getVisibility() == View.VISIBLE) {
             if (weather.valid) {
-                widget.setIconAnimation(com.termux.app.statusbar.WeatherController.animationAssetFor(
+                widget.setWeatherIcon(com.termux.app.statusbar.WeatherIcons.forCode(
                     weather.currentCode, weather.currentIsDay));
                 boolean fahrenheit = mPreferences != null
                     && mPreferences.isStatusWidgetWeatherFahrenheit();

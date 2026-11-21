@@ -129,6 +129,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         default void onDrawerOpenSettled(boolean open, boolean userDriven) {}
 
+        /**
+         * The card's own glass for the section switch's refracting slab, held (its blur frame
+         * asked for) while {@code wanted}; null where there is none. Released with {@code false}.
+         */
+        @Nullable
+        default com.termux.app.chrome.DrawerCardGlassStyle drawerSwitchGlass(boolean wanted) {
+            return null;
+        }
+
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
 
@@ -761,6 +770,45 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     @Override
+    public void onCornerSettingsRequested() {
+        mHost.openAppDrawerSettings();
+    }
+
+    @Override
+    public int gridColumnIndex() {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences == null ? 0 : AppDrawerGridChoices.indexOf(
+            AppDrawerGridChoices.COLUMN_VALUES, preferences.getAppLauncherDrawerColumns());
+    }
+
+    @Override
+    public int gridRowIndex() {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences == null ? 0 : AppDrawerGridChoices.indexOf(
+            AppDrawerGridChoices.ROW_VALUES, preferences.getAppLauncherDrawerRows());
+    }
+
+    /**
+     * The corner tab's grid-size wheels write the preferences the Drawer layout page writes, then
+     * the open drawer takes the new grid in place (a reload would close it, and with it edit mode).
+     */
+    @Override
+    public void onGridSizeChosen(int columnIndex, int rowIndex) {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (preferences == null) return;
+        preferences.setAppLauncherDrawerColumns(
+            AppDrawerGridChoices.valueAt(AppDrawerGridChoices.COLUMN_VALUES, columnIndex));
+        if (rowIndex >= 0) {
+            preferences.setAppLauncherDrawerRows(
+                AppDrawerGridChoices.valueAt(AppDrawerGridChoices.ROW_VALUES, rowIndex));
+        }
+        AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences);
+        if (config.equals(mLayoutConfig)) return;
+        mLayoutConfig = config;
+        applyLayoutConfig();
+    }
+
+    @Override
     public void onSearchDismissRequested() {
         // Esc and Back arrive here through the key channels, which the terminal's client runs
         // before the activity's onBackPressed can walk its hierarchy — so this is the only place
@@ -780,6 +828,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     public void onAppCatalogChanged() {
         AppDrawerContentView content = mContent;
         if (content != null) content.onAppCatalogChanged();
+    }
+
+    /** The Look, the wallpaper frame or the scheme may have moved; the switch's glass re-dresses if so. */
+    public void onGlassChanged() {
+        AppDrawerContentView content = mContent;
+        if (content != null) content.refreshSwitchGlass();
     }
 
     /** Applies a launcher preference reload without rebuilding the activity or drawer tree. */
@@ -982,6 +1036,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
+    /** Whether the drawer shows Categories: the type itself, or Default on its Categories section. */
+    private boolean presentsCategories() {
+        AppDrawerContentView content = mContent;
+        return content != null ? content.presentedType() == AppDrawerViewType.CATEGORIES
+            : mLayoutConfig.viewType == AppDrawerViewType.CATEGORIES;
+    }
+
     /**
      * The categories layout's nudge: apps installed since the last categorization run land in
      * "Other" until it is run again, and past a handful of them the drawer says so once, on the
@@ -990,7 +1051,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * or left the categories layout is dropped and asked again on the next open.
      */
     private void nudgeCategorizationIfPending() {
-        if (mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
+        if (!presentsCategories()) return;
         Context context = mHost.context();
         LauncherCategoryPendingApps.countWaitingAsync(context,
             LauncherAppDataProvider.getInstance(context).getAllApps(), waiting -> {
@@ -998,7 +1059,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     mCategoryNudge.reset();
                     return;
                 }
-                if (!mOpen || mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
+                if (!mOpen || !presentsCategories()) return;
                 if (!mCategoryNudge.onDrawerOpened(waiting)) return;
                 AppNotice.shell(context,
                     context.getResources().getQuantityString(R.plurals.app_drawer_category_pending_notice,
@@ -1307,6 +1368,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = new AppDrawerContentView(mHost.context(),
             mHost.suggestionBar());
         content.setCallbacks(this);
+        content.setSwitchGlassSource(mHost::drawerSwitchGlass);
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
         content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);
@@ -1819,6 +1881,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean keyboardOnOpen = preferences != null
             && preferences.isAppLauncherDrawerSearchOnOpenEnabled();
         content.setLowerStart(DrawerSettings.lowerStart(mHost.context()) && !keyboardOnOpen);
+        content.setSearchAtBottom(DrawerSettings.searchBottom(mHost.context()));
     }
 
     /** Raises the overlay and picks its backdrop material for this open. */
@@ -1866,7 +1929,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setDock(mHost.suggestionBar());
         plane.setContentInsets(contentRect);
         mContentRect = contentRect;
-        content.setSurfaceRadiusPx(mOpenRadiusPx);
         // Which keyboard the search will ask for is decided here, once per open, so a switch flipped
         // in Settings takes effect on the next pull and never mid-search.
         TermuxAppSharedPreferences preferences = mHost.preferences();
@@ -1874,7 +1936,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             && preferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
         mSearch.setTextFieldOwnsInput(mTextFieldSearch);
         content.setTextFieldSearch(mTextFieldSearch);
+        // The remembered section goes in first and silently, so the type swap below builds the
+        // right presentation once and nothing writes back the value just read.
+        content.restoreSection(storedSection(preferences));
         content.setViewType(mLayoutConfig.viewType);
+        content.setDrawerOpenForGlass(true);
         applyContentMetrics(content, contentRect, false);
         content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
@@ -1897,6 +1963,37 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (start == mReveal.value) return;
         mReveal.value = start;
         mReveal.vel = 0f;
+    }
+
+    @NonNull
+    private static AppDrawerSection storedSection(@Nullable TermuxAppSharedPreferences preferences) {
+        return preferences == null ? AppDrawerSection.APPS
+            : AppDrawerSection.fromPreference(preferences.getAppLauncherDrawerSection());
+    }
+
+    /** The user moved between Default's sections: remember it, and size the section now shown. */
+    @Override
+    public void onSectionChanged(@NonNull AppDrawerSection section) {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (preferences != null) preferences.setAppLauncherDrawerSection(section.preferenceValue);
+        AppDrawerContentView content = mContent;
+        // Default's pages are sized for both sections at once; a turn changes no metric.
+        if (content != null && content.isDefaultPagesActive()) return;
+        reapplyMetrics();
+    }
+
+    /** Default's pages gave way to a search or came back: the grid's metrics differ between them. */
+    @Override
+    public void onPagesPresentationChanged() {
+        reapplyMetrics();
+    }
+
+    private void reapplyMetrics() {
+        AppDrawerContentView content = mContent;
+        Frame rect = mContentRect != null ? mContentRect : resolveContentBaseRect(mOpenRect);
+        if (content == null || rect == null) return;
+        applyContentMetrics(content, rect, false);
+        content.rebindCurrentResults();
     }
 
     /** Reconfigures the existing content tree; never enters styling/accessory/activity paths. */
@@ -1948,14 +2045,23 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                                      boolean heightOnly) {
         // First: the page rows are sized from the pager's usable height, which this inset decides.
         content.setBottomInsetPx(resolveContentBottomInsetPx(content, rect));
+        content.setCardCornerRadiusPx(mOpenRadiusPx);
         float labelHeightPx = resolveCellLabelHeightPx();
         AppDrawerLayoutConfig config = mLayoutConfig;
-        switch (config.viewType) {
+        // Default is whichever of the two its section shows, sized exactly as that type is.
+        // Default's pages size both renderers at once: the grid as the Vertical type with the strip
+        // subtracted, the categories as their own type. Only a search in Categories takes the grid
+        // at full width.
+        boolean pages = content.isDefaultPagesActive();
+        switch (content.presentedType()) {
             case VERTICAL:
-                if (heightOnly) return;
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
-                    - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity, labelHeightPx,
-                    config.verticalColumns, config.iconSizeDp));
+                if (heightOnly && !pages) return;
+                if (!heightOnly) {
+                    content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
+                        - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity,
+                        labelHeightPx, config.verticalColumns, config.iconSizeDp));
+                }
+                if (pages) applyCategoryMetrics(content, rect, labelHeightPx, config, heightOnly);
                 break;
             case HORIZONTAL:
                 content.setHorizontalMetrics(AppDrawerHorizontalGridMetrics.resolve(rect.width(),
@@ -1964,21 +2070,36 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 if (heightOnly) content.rebindCurrentResults();
                 break;
             case CATEGORIES:
-                SuggestionBarView dock = mHost.suggestionBar();
-                int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
-                // Category search temporarily reuses the shipped vertical grid at full width. It
-                // gets AUTO geometry here and deliberately reads no vertical grid preference.
-                content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
-                    labelHeightPx, 0, config.iconSizeDp));
-                // Sized for the keyboard-down card, never for the space the keyboard leaves: the
-                // category cards keep their shape and size and scroll inside the shortened card.
-                content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
-                    content.horizontalPagerUsableHeight(categoryMetricsHeightPx(rect)), mDensity,
-                    resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
-                    config.categoryColumns, config.iconSizeDp));
-                if (heightOnly) content.rebindCurrentResults();
+                if (pages) {
+                    // Categories settled on Default's pages: the grid beside it is still Apps'.
+                    if (!heightOnly) {
+                        content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()
+                            - AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity), mDensity,
+                            labelHeightPx, config.verticalColumns, config.iconSizeDp));
+                    }
+                } else {
+                    // Category search temporarily reuses the shipped vertical grid at full width.
+                    // It gets AUTO geometry here and deliberately reads no vertical grid preference.
+                    content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width(), mDensity,
+                        labelHeightPx, 0, config.iconSizeDp));
+                }
+                applyCategoryMetrics(content, rect, labelHeightPx, config, heightOnly);
                 break;
         }
+    }
+
+    private void applyCategoryMetrics(@NonNull AppDrawerContentView content, @NonNull Frame rect,
+                                      float labelHeightPx, @NonNull AppDrawerLayoutConfig config,
+                                      boolean heightOnly) {
+        SuggestionBarView dock = mHost.suggestionBar();
+        int budget = dock == null ? 6 * 1024 * 1024 : dock.getRenderedIconCacheBudgetBytes();
+        // Sized for the keyboard-down card, never for the space the keyboard leaves: the
+        // category cards keep their shape and size and scroll inside the shortened card.
+        content.setCategoryMetrics(AppDrawerCategoryGridMetrics.resolve(rect.width(),
+            content.horizontalPagerUsableHeight(categoryMetricsHeightPx(rect)), mDensity,
+            resolveCategoryTileHeadingHeightPx(), labelHeightPx, mOpenRadiusPx, budget,
+            config.categoryColumns, config.iconSizeDp));
+        if (heightOnly) content.rebindCurrentResults();
     }
 
     /**
@@ -2508,6 +2629,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 // A re-open must never start from a stale chain or a dim cell: the rope goes back to
                 // the straight rest line and the highlight releases every attached child to 1/1.
                 content.resetDrawerFx();
+                content.setDrawerOpenForGlass(false);
                 content.setVisibility(View.INVISIBLE);
             } else {
                 // The query lives on the controller and outlives any view: a drawer closed before

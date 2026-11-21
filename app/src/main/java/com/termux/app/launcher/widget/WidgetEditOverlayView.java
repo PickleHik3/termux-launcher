@@ -83,7 +83,8 @@ public final class WidgetEditOverlayView extends View {
     private final Paint blockedFillPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint chipCrossPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint chipGlyphPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /** The settings chip's gear: the Roundline icon, sized as the text glyph it replaced. */
+    @Nullable private android.graphics.drawable.Drawable settingsIcon;
 
     private final Rect frame = new Rect();
     @NonNull private List<Outline> outlines = Collections.emptyList();
@@ -149,10 +150,8 @@ public final class WidgetEditOverlayView extends View {
         chipCrossPaint.setStrokeWidth(dp(1.8f));
         chipCrossPaint.setStrokeCap(Paint.Cap.ROUND);
         chipCrossPaint.setColor(onSurface);
-        chipGlyphPaint.setTypeface(NerdFontSpans.typeface(context));
-        chipGlyphPaint.setTextAlign(Paint.Align.CENTER);
-        chipGlyphPaint.setTextSize(dp(13f));
-        chipGlyphPaint.setColor(onSurface);
+        settingsIcon = com.termux.app.launcher.widget.builtin.WidgetIcons.drawable(context,
+            com.termux.app.launcher.widget.builtin.WidgetIcons.SETTINGS, onSurface);
     }
 
     public void setListener(@Nullable Listener value) { listener = value; }
@@ -337,9 +336,11 @@ public final class WidgetEditOverlayView extends View {
         float settingsX = settingsCenterX(), settingsY = settingsCenterY();
         canvas.drawCircle(settingsX, settingsY, chipRadius, chipPaint);
         canvas.drawCircle(settingsX, settingsY, chipRadius, handleRingPaint);
-        Paint.FontMetrics metrics = chipGlyphPaint.getFontMetrics();
-        canvas.drawText(SETTINGS_GLYPH, settingsX,
-            settingsY - (metrics.ascent + metrics.descent) / 2f, chipGlyphPaint);
+        if (settingsIcon == null) return;
+        int half = Math.round(dp(13f) * NerdFontSpans.DRAWABLE_SYMBOL_EM / 2f);
+        settingsIcon.setBounds(Math.round(settingsX) - half, Math.round(settingsY) - half,
+            Math.round(settingsX) + half, Math.round(settingsY) + half);
+        settingsIcon.draw(canvas);
     }
 
     private void drawRefusal(@NonNull Canvas canvas) {
@@ -370,9 +371,6 @@ public final class WidgetEditOverlayView extends View {
     }
 
     float chipRadius() { return dp(13f); }
-
-    /** nf-fa-cog. */
-    private static final String SETTINGS_GLYPH = "\uf013";
 
     /**
      * Whether this frame is in the page's top row, where the chip cannot straddle the frame's top

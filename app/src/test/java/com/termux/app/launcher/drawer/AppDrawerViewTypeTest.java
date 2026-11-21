@@ -7,6 +7,7 @@ import org.junit.Test;
 public class AppDrawerViewTypeTest {
 
     @Test public void persistedValuesAreExact() {
+        assertEquals("default", AppDrawerViewType.DEFAULT.preferenceValue);
         assertEquals("vertical", AppDrawerViewType.VERTICAL.preferenceValue);
         assertEquals("horizontal", AppDrawerViewType.HORIZONTAL.preferenceValue);
         assertEquals("categories", AppDrawerViewType.CATEGORIES.preferenceValue);
@@ -16,6 +17,11 @@ public class AppDrawerViewTypeTest {
         assertEquals(AppDrawerViewType.VERTICAL, AppDrawerViewType.fromPreference(null));
         assertEquals(AppDrawerViewType.VERTICAL, AppDrawerViewType.fromPreference(""));
         assertEquals(AppDrawerViewType.VERTICAL, AppDrawerViewType.fromPreference("future"));
+    }
+
+    @Test public void defaultRoundTrips() {
+        assertEquals(AppDrawerViewType.DEFAULT,
+            AppDrawerViewType.fromPreference(AppDrawerViewType.DEFAULT.preferenceValue));
     }
 
     @Test public void horizontalRoundTrips() {

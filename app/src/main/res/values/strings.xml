@@ -774,6 +774,7 @@
     <string name="settings_quick_reply_swipe_title">Swipe up on app icons for quick reply</string>
     <string name="settings_quick_reply_swipe_summary">Swipe up on an app icon with a notification dot to reply from the dock</string>
     <string name="settings_app_drawer_view_type_title">Drawer layout</string>
+    <string name="settings_app_drawer_view_type_default">Default</string>
     <string name="settings_app_drawer_view_type_vertical">Vertical</string>
     <string name="settings_app_drawer_view_type_horizontal">Pages</string>
     <string name="settings_app_drawer_view_type_categories">Categories</string>
@@ -783,6 +784,15 @@
     <string name="settings_drawer_remember_position_summary">Reopen the drawer where you left it.</string>
     <string name="settings_drawer_lower_start_title">Start in the lower half</string>
     <string name="settings_drawer_lower_start_summary">Apps begin lower on the screen, closer to your thumb.</string>
+    <string name="settings_drawer_search_bottom_title">Search bar at the bottom</string>
+    <string name="settings_drawer_search_bottom_summary">Search sits at the bottom of the drawer, within thumb reach.</string>
+    <string name="settings_drawer_icon_size_title">Icon size</string>
+    <string name="settings_drawer_columns_title">Columns</string>
+    <string name="settings_drawer_rows_title">Rows</string>
+    <string name="settings_drawer_grid_auto">Auto</string>
+    <string name="settings_drawer_icon_size_small">Small</string>
+    <string name="settings_drawer_icon_size_medium">Medium</string>
+    <string name="settings_drawer_icon_size_large">Large</string>
     <string name="settings_drawer_az_side_title">A–Z strip</string>
     <string name="settings_drawer_az_side_left">Left</string>
     <string name="settings_drawer_az_side_right">Right</string>
@@ -810,6 +820,9 @@
     <string name="settings_app_drawer_category_sort_unavailable_memory">Not available — needs %1$s of RAM</string>
     <string name="settings_app_drawer_category_sort_load_failed">Couldn\'t start sorting. %1$s</string>
     <string name="settings_app_drawer_category_refresh_title">Re-sort apps</string>
+    <string name="settings_app_drawer_category_order_reset_title">Reset category order</string>
+    <string name="settings_app_drawer_category_order_reset_summary">Put the category tiles back in their original order.</string>
+    <string name="settings_app_drawer_category_order_reset_done">Category order reset</string>
     <string name="settings_app_drawer_category_refresh_never">Never run</string>
     <string name="settings_app_drawer_category_refresh_last_run">Last run · %1$s · %2$d apps</string>
     <plurals name="settings_app_drawer_category_refresh_pending">
@@ -896,6 +909,7 @@
         <item quantity="other">%1$d APPS</item>
     </plurals>
     <string name="app_drawer_search_hint">Search apps</string>
+    <string name="app_drawer_section_switch_selected">%1$s, selected</string>
     <plurals name="app_drawer_search_result_count">
         <item quantity="one">%1$d RESULT</item>
         <item quantity="other">%1$d RESULTS</item>

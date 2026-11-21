@@ -371,4 +371,94 @@ public class LauncherIconStoreTest {
         assertNotNull(holder[0].artwork(ref("a")));
         assertEquals(0, holder[0].sizeBytes());
     }
+
+    /**
+     * The drawer's largest icon-size step (Home's Large, 60dp) is drawn at 180px on a 3.0 display,
+     * which the retained artwork must still cover so it is not upscaled. Denser displays are not
+     * covered (3.5 draws 210px, 4.0 draws 240px); that is a budget decision, not this test's.
+     */
+    @Test
+    public void theLargestDrawerIconStepAtThreeTimesDensityStaysWithinTheRetainedSize() {
+        int largest = 0;
+        for (int dp : com.termux.app.launcher.drawer.AppDrawerGridMetrics.ICON_STEPS_DP)
+            largest = Math.max(largest, dp);
+        assertEquals(60, largest);
+        assertTrue(Math.round(largest * 3.0f) <= LauncherIconStore.MAX_RETAINED_PX);
+    }
+
+    // ------------------------------------------------------------------ cap follows the screen
+
+    private LauncherIconStore storeAtDensity(float density, int memoryClassMb, Drawable loaded) {
+        float before = resources.getDisplayMetrics().density;
+        resources.getDisplayMetrics().density = density;
+        try {
+            return store(memoryClassMb, loaded);
+        } finally {
+            resources.getDisplayMetrics().density = before;
+        }
+    }
+
+    @Test
+    public void onANormalDensityEverySizeKeepsTodaysCapAndBudget() {
+        for (float density : new float[] {2.0f, 3.0f}) {
+            LauncherIconStore store = storeAtDensity(density, 512, artwork(284));
+            for (float dp : new float[] {48f, 54f, 60f}) {
+                assertFalse(store.setLargestIconDp(dp));
+                assertEquals(192, store.capPx());
+                assertEquals(16 * 1024 * 1024, store.budgetBytes());
+            }
+        }
+    }
+
+    @Test
+    public void aDenseScreenOnLargeRaisesTheCapAndTheBudget() {
+        LauncherIconStore at35 = storeAtDensity(3.5f, 128, artwork(284));
+        assertTrue(at35.setLargestIconDp(60f));
+        assertEquals(210, at35.capPx());
+        assertEquals(IconArtworkPolicy.budgetBytes(128, 210), at35.budgetBytes());
+
+        LauncherIconStore at40 = storeAtDensity(4.0f, 512, artwork(284));
+        assertTrue(at40.setLargestIconDp(60f));
+        assertEquals(240, at40.capPx());
+        assertEquals(24 * 1024 * 1024, at40.budgetBytes());
+    }
+
+    @Test
+    public void raisingTheCapDropsArtworkShrunkToTheOldOneAndLoadsAtTheNew() {
+        LauncherIconStore store = storeAtDensity(4.0f, 512, artwork(284));
+        assertEquals(192, store.capPx());
+        Drawable soft = store.artwork(entry("a", null));
+        assertEquals(192, soft.getIntrinsicWidth());
+        assertTrue(store.sizeBytes() > 0);
+
+        assertTrue(store.setLargestIconDp(60f));
+        assertEquals("stale artwork is evicted", 0, store.sizeBytes());
+        assertEquals(240, store.artwork(entry("a", null)).getIntrinsicWidth());
+        assertEquals(240 * 240 * 4, store.sizeBytes());
+    }
+
+    @Test
+    public void loweringTheCapKeepsHeldArtworkCountedByItsRealPixelsAndShrinksTheBudget() {
+        LauncherIconStore store = storeAtDensity(4.0f, 512, artwork(284));
+        store.setLargestIconDp(60f);
+        store.artwork(entry("a", null));
+        int held = store.sizeBytes();
+        assertEquals(240 * 240 * 4, held);
+
+        assertFalse(store.setLargestIconDp(48f));
+        assertEquals(192, store.capPx());
+        assertEquals(16 * 1024 * 1024, store.budgetBytes());
+        assertEquals("still the 240px artwork, counted as such", held, store.sizeBytes());
+        // New loads are shrunk to the lower cap.
+        store.artwork(entry("b", null));
+        assertEquals(held + 192 * 192 * 4, store.sizeBytes());
+    }
+
+    @Test
+    public void scaledPackArtworkFollowsTheCapItIsGiven() {
+        Drawable big = artwork(284);
+        assertEquals(192, DrawablePixels.scaleAboutCentre(resources, big, 1.2f).getIntrinsicWidth());
+        assertEquals(240,
+            DrawablePixels.scaleAboutCentre(resources, big, 1.2f, 240).getIntrinsicWidth());
+    }
 }

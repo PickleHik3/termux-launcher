@@ -435,7 +435,7 @@ public final class PageOverviewView extends FrameLayout {
             com.google.android.material.R.attr.colorOnPrimary, 0xFF381E72);
         surfaceColor = MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHigh, 0xFF2B2930);
-        deleteIcon = icon(context, R.drawable.ic_symbol_close);
+        deleteIcon = icon(context, R.drawable.ic_rl_close);
         homeIcon = icon(context, R.drawable.ic_symbol_home);
 
         outlinePaint.setStyle(Paint.Style.STROKE);
@@ -449,10 +449,10 @@ public final class PageOverviewView extends FrameLayout {
         pills = new LinearLayout(context);
         pills.setOrientation(LinearLayout.HORIZONTAL);
         pills.setGravity(Gravity.CENTER);
-        addPage = pill(context, R.string.page_overview_add_page, R.drawable.ic_symbol_add,
+        addPage = pill(context, R.string.page_overview_add_page, R.drawable.ic_rl_add,
             v -> onAddPage());
         addTerminal = pill(context, R.string.page_overview_add_terminal,
-            R.drawable.ic_symbol_terminal, v -> onAddTerminalPage());
+            R.drawable.ic_rl_terminal, v -> onAddTerminalPage());
         addAssistant = pill(context, R.string.page_overview_add_assistant,
             R.drawable.ic_symbol_smart_toy, v -> onAddAssistantPage());
         addDisplay = pill(context, R.string.page_overview_add_display,
@@ -1042,7 +1042,7 @@ public final class PageOverviewView extends FrameLayout {
                         R.drawable.ic_symbol_home, key, this::onMakeHome));
                     break;
                 case RENAME:
-                    items.add(menuItem(R.string.page_overview_menu_rename, R.drawable.ic_ms_edit,
+                    items.add(menuItem(R.string.page_overview_menu_rename, R.drawable.ic_rl_edit,
                         key, this::onRename));
                     break;
                 case BIND_APP:
@@ -1051,11 +1051,11 @@ public final class PageOverviewView extends FrameLayout {
                     break;
                 case REMOVE_TERMINAL:
                     items.add(menuItem(R.string.page_overview_menu_remove_terminal,
-                        R.drawable.ic_ms_delete_sweep, key, c -> onRemoveTerminalPage()));
+                        R.drawable.ic_rl_delete_sweep, key, c -> onRemoveTerminalPage()));
                     break;
                 case REMOVE:
                 default:
-                    items.add(menuItem(R.string.page_overview_menu_remove, R.drawable.ic_ms_delete,
+                    items.add(menuItem(R.string.page_overview_menu_remove, R.drawable.ic_rl_delete,
                         key, this::onDelete));
                     break;
             }

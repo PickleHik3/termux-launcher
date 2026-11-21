@@ -62,7 +62,7 @@ public final class AppDrawerCategoryDetailAdapter
         AppDrawerCategoryGridMetrics current = metrics;
         if (current == null) { holder.cell.unbind(); return; }
         LauncherAppEntry entry = entries.get(position);
-        holder.cell.bind(dock, entry, current.largeIconPx,
+        holder.cell.bind(dock, entry, current.detailIconPx,
             Math.max(1, Math.round(current.expandedRowHeightPx)), clickGate, pickupDelegate, categoryChoiceListener);
     }
     @Override public void onViewRecycled(@NonNull Holder holder) {

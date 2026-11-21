@@ -50,11 +50,11 @@ public class AppDrawerControllerHorizontalTest {
     }
 
     @Test public void verticalSubtractsRopeButHorizontalUsesFullWidthAndOwnMetrics() {
-        // Geometry is pinned through the config rather than through preferences: the icon-size and
-        // column/row settings are gone, so from(preferences) reports auto for all of them (see
-        // storedGeometryPreferencesAreIgnored below). Each view still reads only its own fields.
+        // Geometry is pinned through the config rather than through preferences (the preferences
+        // share one column count; the config's per-view fields let this test tell the views apart).
+        // Each view still reads only its own fields.
         AppDrawerLayoutConfig pinned = new AppDrawerLayoutConfig(AppDrawerViewType.VERTICAL, 0,
-            5, 6, 2, 0);
+            5, 6, 3, 0);
         ReflectionHelpers.setField(controller, "mLayoutConfig", pinned);
         invokePrepare();
         assertEquals(AppDrawerViewType.VERTICAL, content.getViewType());
@@ -62,16 +62,16 @@ public class AppDrawerControllerHorizontalTest {
             .getMetrics().columns);
 
         ReflectionHelpers.setField(controller, "mLayoutConfig",
-            new AppDrawerLayoutConfig(AppDrawerViewType.HORIZONTAL, 0, 5, 6, 2, 0));
+            new AppDrawerLayoutConfig(AppDrawerViewType.HORIZONTAL, 0, 5, 6, 3, 0));
         invokePrepare();
         AppDrawerHorizontalGridMetrics metrics = content.getHorizontalAdapter().getMetrics();
         assertEquals(AppDrawerViewType.HORIZONTAL, content.getViewType());
         assertEquals(720f, metrics.usablePageWidthPx, 0f);
         assertEquals(6, metrics.columns);
-        assertEquals(2, metrics.rows);
+        assertEquals(3, metrics.rows);
     }
 
-    @Test public void storedGeometryPreferencesAreIgnoredNowThatTheSettingsAreGone() {
+    @Test public void oldGeometryKeysAreIgnoredAndTheNewOnesAreRead() {
         preferences.setAppLauncherDrawerViewType("horizontal");
         // Written raw: the geometry keys have no setters any more, but an older install may still
         // carry values under them.
@@ -85,14 +85,24 @@ public class AppDrawerControllerHorizontalTest {
 
         AppDrawerLayoutConfig config = AppDrawerLayoutConfig.from(preferences);
 
-        // The view type is the one surviving preference; a value left behind by an older install
-        // must not pin geometry the drawer now resolves itself.
+        // A value left behind under the old keys must not pin geometry: those keys are not read.
         assertEquals(AppDrawerViewType.HORIZONTAL, config.viewType);
         assertEquals(0, config.iconSizeDp);
         assertEquals(0, config.verticalColumns);
         assertEquals(0, config.horizontalColumns);
         assertEquals(0, config.horizontalRows);
         assertEquals(0, config.categoryColumns);
+
+        // The settings' own keys are: one column count for both grids, none for Categories.
+        preferences.setAppLauncherDrawerIconSize("54");
+        preferences.setAppLauncherDrawerColumns("5");
+        preferences.setAppLauncherDrawerRows("4");
+        AppDrawerLayoutConfig chosen = AppDrawerLayoutConfig.from(preferences);
+        assertEquals(54, chosen.iconSizeDp);
+        assertEquals(5, chosen.verticalColumns);
+        assertEquals(5, chosen.horizontalColumns);
+        assertEquals(4, chosen.horizontalRows);
+        assertEquals(0, chosen.categoryColumns);
     }
 
     @Test public void preferenceReloadClosesAndReconfiguresTheExistingSingleTree() {

@@ -107,6 +107,9 @@ public class TermuxApplication extends Application {
             // Decided once, before any migration below writes a bookkeeping key: a first run holds
             // only the log level, and every later check would otherwise see it as an upgrade.
             final boolean freshInstall = surfacePreferences.isFreshInstall();
+            // An upgrade keeps the drawer type it had; decided on the real freshness, which the
+            // appearance reset below would otherwise turn into "fresh".
+            surfacePreferences.pinDrawerViewType(freshInstall);
             // An install from before the wall rework takes Start in from its usage mode, once.
             android.content.SharedPreferences nudgeStore = surfacePreferences.getSharedPreferences();
             wallMigrationStoredBefore = nudgeStore != null && nudgeStore.contains(

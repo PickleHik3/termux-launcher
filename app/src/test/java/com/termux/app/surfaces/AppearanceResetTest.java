@@ -84,6 +84,8 @@ public class AppearanceResetTest {
         SURVIVORS.put("page_look_upgrade_version", 1);
         SURVIVORS.put("status_bar_cutout_migrated", true);
         SURVIVORS.put("extra_keys_default_offered_1", true);
+        // Not appearance: an upgrade keeps the drawer type it had (pinned to Vertical if never set).
+        SURVIVORS.put(TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE, "vertical");
     }
 
     @Before

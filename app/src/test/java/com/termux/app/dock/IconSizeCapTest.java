@@ -104,4 +104,17 @@ public class IconSizeCapTest {
                 com.termux.app.place.layout.IconSize.XL, large + 1, 412, GRID_EDGE_DP,
                 GRID_COLUMNS, false));
     }
+
+    @Test
+    public void publishingTellsTheListener() {
+        int[] told = {0};
+        try {
+            IconSizeCap.setPublishListener(() -> told[0]++);
+            IconSizeCap.publish(IconSize.M, 3);
+            assertEquals(1, told[0]);
+        } finally {
+            IconSizeCap.setPublishListener(null);
+            IconSizeCap.publish(IconSize.XL, 0);
+        }
+    }
 }

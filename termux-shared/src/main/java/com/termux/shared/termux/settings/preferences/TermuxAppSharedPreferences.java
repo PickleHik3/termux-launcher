@@ -442,7 +442,71 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             normalizeAppLauncherDrawerViewType(value), false);
     }
 
+    /** The drawer's icon size in dp as text: "auto", "48", "54" or "60". */
+    public String getAppLauncherDrawerIconSize() {
+        return normalizeDrawerGridValue(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE, true), "48", "54", "60");
+    }
+
+    public void setAppLauncherDrawerIconSize(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE,
+            normalizeDrawerGridValue(value, "48", "54", "60"), false);
+    }
+
+    /** The drawer's column count as text: "auto", "4", "5" or "6". */
+    public String getAppLauncherDrawerColumns() {
+        return normalizeDrawerGridValue(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_COLUMNS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_COLUMNS, true), "4", "5", "6");
+    }
+
+    public void setAppLauncherDrawerColumns(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_COLUMNS,
+            normalizeDrawerGridValue(value, "4", "5", "6"), false);
+    }
+
+    /** The horizontal drawer's row count as text: "auto", "3", "4", "5" or "6". */
+    public String getAppLauncherDrawerRows() {
+        return normalizeDrawerGridValue(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ROWS,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_ROWS, true), "3", "4", "5", "6");
+    }
+
+    public void setAppLauncherDrawerRows(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ROWS,
+            normalizeDrawerGridValue(value, "3", "4", "5", "6"), false);
+    }
+
+    /** One of {@code allowed}, else auto: a stored value this build does not know reads as auto. */
+    private static String normalizeDrawerGridValue(String value, String... allowed) {
+        if (value != null) {
+            for (String candidate : allowed)
+                if (candidate.equals(value)) return candidate;
+        }
+        return TERMUX_APP.APP_LAUNCHER_DRAWER_GRID_AUTO;
+    }
+
+    public String getAppLauncherDrawerSection() {
+        return normalizeAppLauncherDrawerSection(SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SECTION,
+            TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_SECTION, true));
+    }
+
+    public void setAppLauncherDrawerSection(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_SECTION,
+            normalizeAppLauncherDrawerSection(value), false);
+    }
+
+    private static String normalizeAppLauncherDrawerSection(String value) {
+        return TERMUX_APP.APP_LAUNCHER_DRAWER_SECTION_CATEGORIES.equals(value)
+            ? TERMUX_APP.APP_LAUNCHER_DRAWER_SECTION_CATEGORIES
+            : TERMUX_APP.APP_LAUNCHER_DRAWER_SECTION_APPS;
+    }
+
     private static String normalizeAppLauncherDrawerViewType(String value) {
+        if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT.equals(value))
+            return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT;
         if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value))
             return TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL;
         if (TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES.equals(value))
@@ -3217,10 +3281,35 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public synchronized void migrateLookGrid(@NonNull java.util.Collection<Integer> pageIds,
                                              boolean freshInstall) {
         adoptShippedSurfaceDefaults(freshInstall);
+        pinDrawerViewType(freshInstall);
         if (mSharedPreferences != null)
             LookGridMigration.run(new LookGrid.PrefsStore(mSharedPreferences), pageIds, freshInstall);
         migrateLayoutStyle();
     }
+
+    /**
+     * One-time: an existing install keeps the drawer type it had before Default shipped. A type it
+     * stored is already kept; one it never stored (so it read Vertical) is written as Vertical.
+     * A new install gets the Default. Carries its own marker because the shipped-defaults step
+     * above has long since fired on every existing install. Start-up calls this with the real
+     * freshness before the appearance reset, which would otherwise make an upgrade look fresh;
+     * {@link #migrateLookGrid(java.util.Collection, boolean)} calls it too, and the marker makes
+     * the second call a no-op.
+     */
+    public synchronized void pinDrawerViewType(boolean freshInstall) {
+        if (mSharedPreferences == null) return;
+        if (SharedPreferenceUtils.getBoolean(mSharedPreferences,
+                TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE_PINNED, false))
+            return;
+        if (!freshInstall)
+            pinPreShippedDefaults(PRE_SHIPPED_DRAWER_DEFAULTS);
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE_PINNED, true, false);
+    }
+
+    private static final Object[][] PRE_SHIPPED_DRAWER_DEFAULTS = {
+        {TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE, TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL},
+    };
 
     /**
      * One-time, idempotent migration of the Style rework: the stored style values become

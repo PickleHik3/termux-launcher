@@ -78,7 +78,7 @@ public final class EditorRows {
         HEIGHT(Kind.SLIDER, R.string.appearance_row_height, R.drawable.ic_editor_height),
         VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
-        DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_symbol_dock_glass_tray),
+        DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_rl_dock_tray),
         /**
          * Frost: blur and grain together along {@link GlassControls}' curve, the one glass slider
          * the cards have (BLUR and GRAIN are still the stored properties underneath).
@@ -96,7 +96,7 @@ public final class EditorRows {
          * the Dock card shows it only while Peek glass is the design.
          */
         REFLECTION(Kind.SLIDER, R.string.appearance_row_reflection,
-            R.drawable.ic_symbol_dock_peek_glass),
+            R.drawable.ic_rl_dock_peek),
         TEXT_SIZE(Kind.SLIDER, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
         /** One switch on the Global and Terminal cards: each item corrects itself to the wallpaper behind it. */
@@ -174,7 +174,7 @@ public final class EditorRows {
         VIBRANCY(Kind.SLIDER, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
         GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
-        TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
+        TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_rl_terminal),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */
         LINK_GLASS_REFRACTION(Kind.LINK, R.string.settings_performance_glass_refraction_title,
@@ -209,9 +209,9 @@ public final class EditorRows {
         /** The dock's Style, Docked or Floating, as glyph segments. */
         DOCK_STYLE(Kind.MENU, R.string.editor_dock_row_style, R.drawable.ic_style_floating),
         /** The Bars list: the dock's bars in order, each shown or not, each opening its settings. */
-        DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_drag_indicator_24),
+        DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_rl_drag_grip),
         /** The Dock type tiles, one chosen at a time. */
-        DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_symbol_dock_glass_tray),
+        DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_rl_dock_tray),
         /** The dock's Show/hide tiles. */
         DOCK_OPTIONS(Kind.SWITCH, R.string.editor_dock_row_options, R.drawable.ic_symbol_tune),
         /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
