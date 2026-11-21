@@ -33,7 +33,7 @@ public final class AppDrawerItemComposer {
             positions.put(sortedApps.get(i).appRef.stableId(), i);
         Set<String> suppressed = new HashSet<>();
         List<FolderAt> insertions = new ArrayList<>();
-        for (PinnedFolderItem folder : snapshot.folders.values()) {
+        for (PinnedFolderItem folder : snapshot.drawerFolders()) {
             int earliest = Integer.MAX_VALUE;
             for (PinnedAppItem member : folder.apps) {
                 Integer position = positions.get(member.appRef.stableId());
