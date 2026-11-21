@@ -208,6 +208,9 @@ public final class RestCards {
     @NonNull private final List<Card> mCards = new ArrayList<>(6);
     @NonNull private final List<Card> mParked = new ArrayList<>(2);
     @NonNull private final Box[] mLaidOut = new Box[StackView.values().length];
+    private boolean mApart;
+    private int mContainerMarginPx;
+    private int mHomeDropPx;
 
     /** The rest's answer. */
     @NonNull
@@ -233,7 +236,40 @@ public final class RestCards {
         final int drop = SideCards.homeSideDropPx(homeMargin, terminalMargin, true);
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome);
         answer.adopt(new RestCards(other, frontHome ? 0 : drop, frontHome), frontHome);
+        answer.mApart = true;
+        answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
+            frontHome);
+        answer.mHomeDropPx = drop;
         return answer;
+    }
+
+    /** Whether Home's card and the Terminal's extra-keys card stand apart ({@link SideCards}). */
+    public boolean apart() {
+        return mApart;
+    }
+
+    /**
+     * The container's bottom margin at this rest: the Terminal's own at both rests while the
+     * cards stand apart, else the margin this rest's stack has.
+     */
+    public int containerMarginPx() {
+        return mContainerMarginPx;
+    }
+
+    /** How far below the container's layout Home's side is drawn; 0 unless apart. */
+    public int homeSideDropPx() {
+        return mHomeDropPx;
+    }
+
+    /**
+     * The card {@code view} carries at its own rest while the cards stand apart: this rest's, or
+     * the parked other side's. Null when none stands there.
+     */
+    @Nullable
+    public Card cardOn(@NonNull StackView view) {
+        for (Card card : mCards) if (card.view == view) return card;
+        for (Card card : mParked) if (card.view == view) return card;
+        return null;
     }
 
     /**
@@ -313,6 +349,7 @@ public final class RestCards {
         final StackLayout.Result r = StackLayout.layout(pass, new DockGeometry());
         final DockLayout dock = r.dock;
         final float cornersPx = cornersPx(half, density);
+        mContainerMarginPx = marginPx(r);
 
         mAz = azPlacementOf(layout);
         final KeyboardForm form = layout.keyboardForm;
