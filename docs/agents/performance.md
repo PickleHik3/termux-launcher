@@ -27,7 +27,7 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
    | Store | Budget | Test |
    |---|---|---|
    | `KittyImageStore` | 32 MB / 256 images stored; frames total RAM ÷ 48, between 64 and 256 MB | `KittyImageStoreTest` |
-   | `LauncherIconStore` | heap ÷ 16, between 4 and 16 MB; artwork kept at 192 px | `LauncherIconStoreTest` |
+   | `LauncherIconStore` | heap ÷ 16, between 4 and 16 MB, artwork kept at 192 px; where the largest icon the device draws (drawer Icon size, Home size, times density) needs more, the cap rises to that, at most 288 px, and the budget grows with the pixel area, at most 24 MB (`IconArtworkPolicy`) | `LauncherIconStoreTest`, `IconArtworkPolicyTest` |
    | `DockIconCache` | heap ÷ 8, between 8 and 32 MB | `DockIconCacheTest` |
    | `WallpaperBlurCache` (the shared frame) | 72 MB, at most 6 radii, about 1 MB per radius at quarter resolution | `WallpaperBlurCacheTest` |
    | `GlassPagePool` (frozen pages of every glass surface, one pool) | 6 MiB at a quarter scale above 4 GiB RAM, 2 MiB at an eighth otherwise or on a low-RAM device | `GlassPagePoolTest`, `LiveBackdropBudgetTest` |

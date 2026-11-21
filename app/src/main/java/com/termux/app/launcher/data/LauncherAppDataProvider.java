@@ -98,6 +98,51 @@ public final class LauncherAppDataProvider {
             });
         // A pack the main thread drew stand-ins for has been parsed: every surface draws again.
         this.iconPackRepository.setPackLandedListener(this::onIconPackLanded);
+        watchIconSizes();
+    }
+
+    /** Held so the preferences' weak reference to it lives as long as the provider. */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener iconSizeListener =
+        (prefs, key) -> {
+            if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_APP_LAUNCHER_DRAWER_ICON_SIZE.equals(key)
+                || com.termux.app.launcher.home.HomeSettings.KEY_ICON_SCALE.equals(key)) {
+                // A raised cap dropped the store; the renders and catalogue made from the old
+                // artwork are stale with it.
+                if (applyIconSizes(prefs)) invalidateIconArtwork(true);
+            }
+        };
+
+    /**
+     * Keeps the store's artwork cap on the largest icon any surface will draw: the drawer's Icon
+     * size step (Auto is 48dp) and Home's size preset, never less than the dock's 48dp. A larger
+     * icon on a dense screen needs more pixels than the base cap keeps.
+     */
+    private void watchIconSizes() {
+        android.content.SharedPreferences prefs = context.getSharedPreferences(
+            com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE);
+        applyIconSizes(prefs);
+        prefs.registerOnSharedPreferenceChangeListener(iconSizeListener);
+    }
+
+    /** @return true when the store's cap rose and it was dropped. */
+    private boolean applyIconSizes(@NonNull android.content.SharedPreferences prefs) {
+        float largest = com.termux.app.launcher.widget.HomeIconSize.DOCK_ICON_DP;
+        try {
+            String drawer = prefs.getString(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE, null);
+            if (drawer != null) largest = Math.max(largest, Integer.parseInt(drawer.trim()));
+        } catch (RuntimeException ignored) {
+            // "auto" and garbage read as Auto's 48dp.
+        }
+        try {
+            largest = Math.max(largest, com.termux.app.launcher.widget.HomeIconSize.fromStored(
+                prefs.getString(com.termux.app.launcher.home.HomeSettings.KEY_ICON_SCALE, null)).dp);
+        } catch (RuntimeException ignored) {
+            // An unreadable Home size draws at the dock's.
+        }
+        return iconStore.setLargestIconDp(largest);
     }
 
     /**
