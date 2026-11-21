@@ -307,6 +307,23 @@ fails when the catalogue has gone stale.
   as a crossing moves (ADR 0029 section 8), so they drift pale to dark with no flip and no layout.
   Upstream has no such state.
 
+- Symbol icons (deliberate deviation, 2026-11-21): a key's symbol can be drawn from a drawable
+  instead of a font glyph, so the keyboard matches the extra-keys bar's Roundline icons. Upstream
+  draws every symbol as text from `special_font.ttf`. The hook is `SymbolIcons` (new file,
+  `Config.symbolIcons` / `Config.Builder.symbolIcons`, null by default): `iconFor(label, keyFont)`
+  answers a drawable or null, `toolLabel(toolId, symbol)` lets a launcher tool key's glyph resolve
+  to an icon label. Null hook or null answer draws exactly as upstream. The module never sees the
+  host's resources. Touched upstream-derived files: `Keyboard2View.java` (the icon cache and
+  `symbolIcon`, `drawSymbolIcon`, `iconTextSize`; branches at the top of `drawLabel`,
+  `drawSubLabel`, `subLabelBounds`; `drawnString` asks `toolLabel` for tool keys;
+  `SYMBOL_ICON_EM`, the icon box in text sizes; the cache is cleared in `applyTheme`) and
+  `Theme.java` (`Computed.Key.label_ink`, the colour a label paint would take). `KeyValue.java` and
+  `LabelFace.java` are untouched; the app's table is `KeyboardSymbolIcons` and the key pop-up
+  reads the same cache through `Keyboard2View.symbolIcon`. On a refresh, re-add the three
+  branches and the `drawnString` hook after taking upstream's new label drawing, and keep
+  `label_ink` beside `label_paint` so both colours stay one rule. Test:
+  `Keyboard2ViewSymbolIconsTest`.
+
 ## Refresh procedure
 
 1. Record the new upstream commit and copy the selected sources, all layout

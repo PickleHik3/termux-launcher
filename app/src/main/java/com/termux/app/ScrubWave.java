@@ -1,12 +1,18 @@
 package com.termux.app;
 
 /**
- * The A-Z scrub bar's wave, shared with the page switch panel: how strongly a slot is pulled up
- * by a finger some slots away. Pure.
+ * The A-Z scrub bar's wave, shared with the page bar: how strongly a slot is pulled up by a
+ * finger some slots away, how far the lift carries and how long it takes to settle. Pure.
  */
 public final class ScrubWave {
 
     public static final float FALLOFF = 0.85f;
+    /** The wave's lift at full strength, in dp. */
+    public static final int LIFT_DP = 15;
+    /** The letter under the finger rises this much further than the wave carries it. */
+    public static final float FOCUS_LIFT_GAIN = 1.2f;
+    /** The wave settling back to rest once the finger leaves. */
+    public static final long SETTLE_MS = 165L;
 
     private ScrubWave() {}
 

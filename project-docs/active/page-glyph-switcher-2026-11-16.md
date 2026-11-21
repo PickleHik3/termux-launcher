@@ -141,3 +141,26 @@ Round two (decided 2026-11-21, built on feat/page-bar):
 - **Setting.** The page bar's switch is a row of the Home card's Layout list (between Status bar
   and Apps row), writing the same stored value as before (`app_launcher_home_page_indicator`,
   `dots` or `off`); the switch under More options is gone.
+
+Round three (asked 2026-11-22, built on feat/page-bar-compact; replaces the bubble, the 2x lift,
+the 1.25x spread and the band numbers of the sections above):
+
+- **Compact.** The glyphs are 16.5dp (were 22). The drawn pill (the slab) is one glyph tall plus
+  the bar's one small gap, 4dp, above and below (24.5dp, was 48); its ends are 4dp past the end
+  glyphs. Home's slots are the fold's 40dp (were up to 53), so glyph centres are 40dp apart.
+- **Touch stays 48dp.** The touch row is still 48dp tall and one 40dp slot per glyph; the band is
+  that row, so it is 48dp over dock rows (was 64) and the slab stands 4dp above the dock rows. With
+  no dock rows the slab's bottom stays on the dock's bottom line. The key's pop-up keeps its
+  full-width slab and its touch row's bottom sits on the keys.
+- **No bubble.** A slide lifts the resting glyphs themselves on the A–Z bar's wave (`ScrubWave`):
+  the glyph under the finger rises until its bottom is the A–Z lift for the letter under the
+  finger (18dp) above the slab's top and grows to 1.5x (24.75dp; 0.4 of the old 44dp bubble glyph
+  would have been smaller than the rest glyph), its neighbours by the wave's envelope. Nothing
+  shifts sideways. It rises and settles over the A–Z settle time (165ms) and follows the finger
+  with no step between slots. While lifted the glyphs draw on the parent's overlay, so they can
+  rise out of the bar; the bar draws none of them then.
+- **Name.** The page's name rides 4dp above the lifted glyph, 13sp, one line, ellipsized to the
+  pane less its insets, fading with the lift.
+- **Ink off the slab.** A lifted glyph's ink moves from the slab's to inks solved on the wallpaper
+  above the slab (one sample per dress pass, `PageMarkInk` on that ground, the name's bare-text
+  ink), so no slab-inked glyph stands on bare wallpaper. The key's pop-up keeps its own inks.

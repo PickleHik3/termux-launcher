@@ -851,7 +851,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         AppNotice.shell(mContext,
             mContext.getString(R.string.notice_shell_wants_attention, title),
-            null, "\uf0f3" /* nf-fa-bell */, true, () -> setCurrentSession(session));
+            null, R.drawable.ic_rl_bell, true, () -> setCurrentSession(session));
     }
 
     @Override

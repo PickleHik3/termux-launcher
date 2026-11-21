@@ -220,7 +220,7 @@ public class StatusRowLayoutTest {
 
     private StatusBarWidgetView reading(LinearLayout parent, int marginStart) {
         StatusBarWidgetView widget = new StatusBarWidgetView(mActivity);
-        widget.setIconGlyph("");
+        widget.setIconResource(com.termux.R.drawable.ic_rl_cpu);
         LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT);
         params.setMarginStart(marginStart);

@@ -64,7 +64,13 @@ public final class TermuxInAppKeyboard {
         /** A person asked, through {@code keyboard.show} on a key, a chord or the palette. */
         TOOL,
         /** Something on screen took text focus and the keyboard was opened for it. */
-        FOCUS
+        FOCUS,
+        /**
+         * A field that needs typing opened (a rename, the find strip, a sheet's field, a Home
+         * float): the person asked for the field, not for this keyboard, so a hardware keyboard
+         * serves it just as well and the setting keeps this one down.
+         */
+        TEXT_ENTRY
     }
 
     public enum HideReason {
@@ -282,10 +288,13 @@ public final class TermuxInAppKeyboard {
             && mHardwareKeyboardConnected.getAsBoolean();
     }
 
-    /** Taps, focus and first enable are the app's doing; the rest are a person asking. */
+    /**
+     * Taps, focus, first enable and a field opening are the app's doing; the rest are a person
+     * asking for the keyboard itself.
+     */
     private static boolean isAutomaticShow(@Nullable ShowReason reason) {
         return reason == ShowReason.FIRST_ENABLE || reason == ShowReason.TERMINAL_TAP
-            || reason == ShowReason.FOCUS;
+            || reason == ShowReason.FOCUS || reason == ShowReason.TEXT_ENTRY;
     }
 
     /** Puts down a keyboard that an automatic show raised once the setting and hardware say so. */
@@ -1078,7 +1087,7 @@ public final class TermuxInAppKeyboard {
         if (!mEnabled || mDestroyed)
             return false;
         if (mLayoutRing.size() < 2) {
-            AppNotice.show(requireContainer().getContext(),
+            AppNotice.show(requireContainer().getContext(), R.drawable.ic_rl_keyboard,
                 requireContainer().getContext().getString(R.string.keyboard_layout_ring_single),
                 false);
             return false;
@@ -1108,7 +1117,7 @@ public final class TermuxInAppKeyboard {
         mPreferences.setInAppKeyboardActiveLayout(layoutId);
         selectLayout(layoutId);
         if (announce && moved) {
-            AppNotice.show(requireContainer().getContext(),
+            AppNotice.show(requireContainer().getContext(), R.drawable.ic_rl_keyboard,
                 LauncherKeyboardLayouts.labelFor(
                     requireContainer().getResources(), layoutId), false);
         }
@@ -1572,6 +1581,7 @@ public final class TermuxInAppKeyboard {
         // Nerd Font icons (the space bar's swipe glyphs, tool keys) stay in the bundled symbols
         // font whatever face the user picked for labels; a picked font rarely has them.
         configBuilder.symbolFont = bundledSymbolsLabelFont();
+        configBuilder.symbolIcons = new KeyboardSymbolIcons(requireContainer().getContext());
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), recordedPalette());

@@ -2137,7 +2137,7 @@ public class TerminalPaneController {
                 : DragResizePause.splitReadout(res, firstColumns, firstRows,
                     secondColumns, secondRows);
             com.termux.app.notice.AppNotice.readout(host.getContext(), label,
-                DragResizePause.READOUT_CEILING_MS);
+                DragResizePause.READOUT_CEILING_MS, com.termux.R.drawable.ic_rl_layout);
             mReadoutShown = true;
         }
 
@@ -5220,6 +5220,12 @@ public class TerminalPaneController {
         mHostView.addView(mMotionOverlay, new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         updateActiveBorders();
+        // A window's panes hear the wall's off-screen state only while they are in front, so a
+        // window shown now may carry a stale one from when it last was: they take the current one
+        // before asking for the keys, which they refuse while their page is off screen.
+        if (mWallPoseTold) {
+            for (TerminalView view : getVisiblePaneViews()) view.setWallPageOffScreen(mTerminalOffScreen);
+        }
         focusActiveView();
         animateMoveFromOrigins();
         // The windows beside the one in front follow every render: a switch, a re-tile or a
@@ -6398,6 +6404,8 @@ public class TerminalPaneController {
 
     /** Whether the terminal's page is parked off screen; see {@link #setTerminalOffScreen}. */
     private boolean mTerminalOffScreen;
+    /** Whether the wall has told {@link #onWallPose} where the page is; until then nobody knows. */
+    private boolean mWallPoseTold;
 
     /**
      * The wall parked the terminal's page off screen, or brought it back. The page stays VISIBLE at
@@ -6422,6 +6430,7 @@ public class TerminalPaneController {
         }
         if ((changed & com.termux.app.wall.WallPose.OFF_SCREEN) != 0) {
             boolean offScreen = pose.terminalOffScreen();
+            mWallPoseTold = true;
             // The attention glow's endless pulse is held while away.
             setTerminalOffScreen(offScreen);
             for (TerminalView view : getVisiblePaneViews()) {
@@ -6477,8 +6486,9 @@ public class TerminalPaneController {
 
     private void focusActiveView() {
         if (!mHost.shouldTerminalTakeFocus()) return;
-        TerminalView v = getActivePaneView();
-        if (v != null && !v.isFocused()) v.requestFocus();
+        // The same rule as the activity's hand-back: a stale claim on the pane does not count as
+        // holding the keys. Not quiet, as before: the pane's own focus listener still hears it.
+        PaneKeys.handTo(getActivePaneView(), false);
     }
 
     static float clampFirstWeight(float total, float candidate) {

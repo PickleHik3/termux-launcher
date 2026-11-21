@@ -19,6 +19,9 @@ public final class TerminalPage implements Page {
 
     @Nullable private final TerminalGlass mGlass;
 
+    /** Between this window's on-front and its off-front. */
+    private boolean mFront;
+
     TerminalPage(@NonNull TerminalPageHost host) {
         this(host, null);
     }
@@ -44,18 +47,38 @@ public final class TerminalPage implements Page {
         return TerminalRest.of(in);
     }
 
-    /** The active pane takes the keys, once, unless a terminal already holds them. */
+    /**
+     * The active pane takes the keys, once, unless it already holds them. A window step lands
+     * here as well as a slide onto the Terminal: the pane of the window just shown is the one
+     * typed into, whatever had the focus before (the window that left, a chip).
+     */
     @Override
     public void onFront() {
-        if (!mHost.keysWithTerminal()) mHost.handKeysToTerminal();
+        mFront = true;
+        handKeysToActivePane();
     }
 
     /**
-     * Nothing yet: the panes' repaint stop stays on the wall's off-screen callback until the wall
-     * host goes.
+     * Nothing else yet: the panes' repaint stop stays on the wall's off-screen callback until the
+     * wall host goes.
      */
     @Override
-    public void offFront() { }
+    public void offFront() {
+        mFront = false;
+    }
+
+    /**
+     * The panes came back on screen. Off screen they dropped the focus and refused it (a window
+     * step pans the page in from the side), so the front hand-back may not have landed. The keys
+     * go to the active pane now, if this window is still in front.
+     */
+    void onPanesBackOnScreen() {
+        if (mFront) handKeysToActivePane();
+    }
+
+    private void handKeysToActivePane() {
+        if (!mHost.activePaneHoldsKeys()) mHost.handKeysToTerminal();
+    }
 
     /**
      * Back with nothing raised over the terminal: the keyboard goes down if it is up, else the

@@ -1,0 +1,62 @@
+package com.termux.app.terminal.io;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertTrue;
+
+import com.termux.launcherctl.LauncherToolRegistry;
+import com.termux.shared.termux.extrakeys.ExtraKeyIcons;
+
+import org.junit.Test;
+
+import java.util.HashSet;
+import java.util.Set;
+
+public class ExtraKeyIconRegistryTest {
+
+    @Test public void everyIconCodePointHasExactlyOneDrawable() {
+        Set<Integer> registered = new HashSet<>();
+        for (int[] row : ExtraKeyActionLabels.ICON_DRAWABLES) {
+            assertTrue("registered twice: U+" + Integer.toHexString(row[0]), registered.add(row[0]));
+            assertTrue(row[1] != 0);
+        }
+        for (int codePoint : ExtraKeyIcons.ALL) {
+            assertTrue("no drawable for U+" + Integer.toHexString(codePoint),
+                registered.contains(codePoint));
+        }
+        assertEquals(ExtraKeyIcons.ALL.length, registered.size());
+    }
+
+    @Test public void toolsWithAnIconWearItAndOthersKeepTheirTitle() {
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.HOME),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_WIDGETS));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.SPLIT),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_SPLIT));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.COMMAND),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE));
+        assertNotNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_VOICE_DICTATE));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE));
+    }
+
+    @Test public void launcherActionsWearTheirIconAndArgumentRowsKeepText() {
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.DOCK),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.EDIT),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RENAME_PROMPT));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_KEYBOARD_SHOW));
+        // The prompt jumps would duplicate the arrow keys; they stay text.
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(
+            LauncherToolRegistry.TOOL_TERMINAL_JUMP_NEXT_PROMPT));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RESIZE));
+        // A row that picks one value is told apart by it, except the wall's places.
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(
+            LauncherToolRegistry.TOOL_PANE_LAYOUT, "grid"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.LAYOUT),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_LAYOUT, null));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.DISPLAY),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_GO, "display"));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_GO, "left"));
+    }
+}

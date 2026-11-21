@@ -51,7 +51,7 @@ public class StatusBarWidgetViewGaugeTest {
     private static View robot(float fraction) {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         StatusBarWidgetView widget = new StatusBarWidgetView(activity);
-        widget.setIconResource(R.drawable.ic_symbol_smart_toy);
+        widget.setIconResource(R.drawable.ic_rl_assistant);
         widget.setInk(Color.RED, Color.RED, Color.BLUE);
         widget.setValue("");
         activity.setContentView(widget);

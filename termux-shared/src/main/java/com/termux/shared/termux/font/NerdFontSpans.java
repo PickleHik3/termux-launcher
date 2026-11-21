@@ -72,7 +72,7 @@ public final class NerdFontSpans {
 
     /** {@code spanned} with a tinted-drawable span over every registered code point of the label. */
     private static void spanDrawables(@NonNull Context context, @NonNull CharSequence label,
-                                      @NonNull SpannableString spanned) {
+                                      @NonNull android.text.Spannable spanned) {
         int length = label.length();
         int index = 0;
         while (index < length) {
@@ -99,6 +99,21 @@ public final class NerdFontSpans {
             index += Character.charCount(codePoint);
         }
         return false;
+    }
+
+    /**
+     * A one-character label that draws {@code drawableRes} like a registered symbol would: the
+     * same size, baseline and text-colour tint, for a view that shows one icon as its mark.
+     */
+    @NonNull
+    public static CharSequence iconSpan(@NonNull Context context, @DrawableRes int drawableRes) {
+        SpannableString spanned = new SpannableString("\uFFFC");
+        Drawable drawable = context.getDrawable(drawableRes);
+        if (drawable != null) {
+            spanned.setSpan(new TintedDrawableSpan(drawable.mutate()), 0, 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return spanned;
     }
 
     /** The bundled symbols face, or null when the asset is missing (e.g. bare-module tests). */
@@ -186,16 +201,22 @@ public final class NerdFontSpans {
 
     /**
      * Re-spans an editable in place: every span this class owns is dropped and the Nerd Font runs
-     * of the current text are marked again. Editing a key label is the one place the text changes
-     * under the spans, and rewriting the text to re-span it would fight the input connection.
+     * and registered drawable symbols of the current text are marked again. Editing a key label
+     * is the one place the text changes under the spans, and rewriting the text to re-span it
+     * would fight the input connection.
      */
     public static void applyTo(@NonNull Context context, @NonNull android.text.Editable editable) {
         for (SymbolTypefaceSpan span : editable.getSpans(0, editable.length(),
                 SymbolTypefaceSpan.class)) {
             editable.removeSpan(span);
         }
+        for (TintedDrawableSpan span : editable.getSpans(0, editable.length(),
+                TintedDrawableSpan.class)) {
+            editable.removeSpan(span);
+        }
         int length = editable.length();
         if (length == 0) return;
+        spanDrawables(context, editable, editable);
         Typeface typeface = typeface(context);
         if (typeface == null) return;
         int runStart = -1;
@@ -234,6 +255,10 @@ public final class NerdFontSpans {
 
         @Override public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
                                      @Nullable Paint.FontMetricsInt fm) {
+            // A line that is only this span (a notice pill's mark) takes its height from the
+            // metrics the span reports; left at zero the mark gets a 0px-high line and paints
+            // nothing, while mixed with text the neighbouring glyphs hide the omission.
+            if (fm != null) paint.getFontMetricsInt(fm);
             return Math.round(paint.getTextSize() * DRAWABLE_SCALE);
         }
 

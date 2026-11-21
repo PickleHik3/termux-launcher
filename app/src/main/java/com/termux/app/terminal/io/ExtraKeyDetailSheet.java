@@ -302,7 +302,12 @@ public final class ExtraKeyDetailSheet {
         field.setContentDescription(label);
         fieldLayout.addView(field, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        if (target.display != null) field.setText(NerdFontSpans.span(context, target.display));
+        // The stored value as the bar draws it: an old shipped glyph shows as its icon. The store
+        // keeps what it holds until the user types.
+        if (target.display != null) field.setText(NerdFontSpans.span(context,
+            target.macro ? target.display
+                : com.termux.shared.termux.extrakeys.ExtraKeyIcons.effectiveDisplay(
+                    target.key, target.display)));
         field.addTextChangedListener(new TextWatcher() {
             @Override public void beforeTextChanged(CharSequence s, int start, int count, int after) {}
             @Override public void onTextChanged(CharSequence s, int start, int before, int count) {}

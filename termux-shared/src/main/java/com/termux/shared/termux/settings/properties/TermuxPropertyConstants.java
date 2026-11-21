@@ -1,5 +1,6 @@
 package com.termux.shared.termux.settings.properties;
 
+import com.termux.shared.termux.extrakeys.ExtraKeyIcons;
 import com.google.common.collect.ImmutableBiMap;
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.theme.NightMode;
@@ -430,7 +431,7 @@ public final class TermuxPropertyConstants {
      * ({@code tool:wall.widgets}, {@code tool:wall.terminal}, {@code tool:wall.display}) left it for
      * the navigation dot; they stay in the key picker.
      */
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:mouse.toggle', display: '󰍽'}, {key: 'tool:pane.split', display: '󱇚', popup: {key: 'tool:window.new', display: '󱂬'}}, {key: 'tool:session.browser', display: '󰉹', popup: {key: 'tool:session.new', display: '󰝜'}}]]";
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "', popup: {key: 'tool:keyboard.cycle_form', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "'}}, {key: 'tool:mouse.toggle', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.MOUSE) + "'}, {key: 'tool:pane.split', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.SPLIT) + "', popup: {key: 'tool:window.new', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.WINDOW_ADD) + "'}}, {key: 'tool:session.browser', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.SESSIONS) + "', popup: {key: 'tool:session.new', display: '󰝜'}}]]";
 
     /**
      * The second page ships empty: one row is what the launcher needs, and the in-app keyboard's
@@ -443,7 +444,7 @@ public final class TermuxPropertyConstants {
      * The Assistant page's own row: the keyboard key as Global has it, dictate and paste. Written to
      * {@link #KEY_EXTRA_KEYS_ASSISTANT} once, by the upgrade that made every page follow Global.
      */
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:voice.dictate', display: '󰍬'}, {key: 'tool:clipboard.paste', display: '󰆒'}]]";
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT = "[[{key: KEYBOARD, display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "', popup: {key: 'tool:keyboard.cycle_form', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "'}}, {key: 'tool:voice.dictate', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.MIC) + "'}, {key: 'tool:clipboard.paste', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.PASTE) + "'}]]";
 
     /**
      * The keys the Home pill starts with when it is switched on and Home has no key set of its own
@@ -451,7 +452,7 @@ public final class TermuxPropertyConstants {
      * settings. The caps are the ones the key picker gives those tools (the palette, which has none
      * of its own, wears a magnifier).
      */
-    public static final String HOME_PILL_STARTER_EXTRA_KEYS = "[[{key: 'tool:app.command_palette', display: '\uf002'}, {key: 'tool:app.open_app_drawer', display: '\uDB80\uDC3B'}, {key: 'tool:app.open_settings', display: '\uf013'}]]";
+    public static final String HOME_PILL_STARTER_EXTRA_KEYS = "[[{key: 'tool:app.command_palette', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.COMMAND) + "'}, {key: 'tool:app.open_app_drawer', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.APPS) + "'}, {key: 'tool:app.open_settings', display: '\uf013'}]]";
 
     /**
      * Defines the key for extra keys style

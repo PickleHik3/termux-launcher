@@ -34,6 +34,7 @@ import com.termux.shared.R;
 import com.termux.shared.termux.extrakeys.DeckButtonDrawable;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeyColorRole;
+import com.termux.shared.termux.extrakeys.ExtraKeyIcons;
 import com.termux.shared.termux.extrakeys.ExtraKeysClient;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.PlaceSwitchGlyph;
@@ -288,6 +289,12 @@ public final class ExtraKeysPageView extends ViewGroup {
                 getContext().getString(com.termux.R.string.tool_app_page_switcher));
             // Asked for as the cap is built or bound: no refresh has to have run first.
             cap.bindPageGlyph();
+        } else {
+            // An icon cap has no readable text: a screen reader says the action's name instead.
+            cap.setContentDescription(!ExtraKeyIcons.containsIcon(key.getDisplay()) ? null
+                : com.termux.app.terminal.io.ExtraKeyActionLabels.title(getContext(),
+                    new com.termux.app.terminal.io.ExtraKeysLayoutModel.Key(
+                        key.getKey() == null ? "" : key.getKey(), key.isMacro(), null, null)));
         }
         mCaps.add(cap);
         mKeys.add(key);

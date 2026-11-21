@@ -49,6 +49,12 @@ public final class TerminalPages implements Pages.Stops {
         return null;
     }
 
+    /** The Terminal page came back on screen: the window in front takes the keys it is owed. */
+    public void onPanesBackOnScreen() {
+        TerminalPaneController.Window window = mHost.activeWindow();
+        if (window != null) pageOf(window).onPanesBackOnScreen();
+    }
+
     /** The one page of {@code window}. */
     @NonNull
     public TerminalPage pageOf(@NonNull TerminalPaneController.Window window) {

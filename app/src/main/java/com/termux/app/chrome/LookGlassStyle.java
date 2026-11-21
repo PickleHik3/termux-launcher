@@ -45,6 +45,11 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
          */
         default int pageId() { return TermuxAppSharedPreferences.PAGE_WALL; }
         @Nullable WallpaperParallax parallax();
+        /**
+         * The glass this style wears in place of the Widgets element's, or null for that: a raised
+         * surface answers {@link ElevatedGlass#lookSpec} here.
+         */
+        @Nullable default LookGlassSpec spec() { return null; }
     }
 
     @NonNull private final Context mContext;
@@ -64,6 +69,8 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     /** The Look as stored this instant. */
     @NonNull
     public LookGlassSpec spec() {
+        LookGlassSpec own = mHost.spec();
+        if (own != null) return own;
         // The Card-form widgets wear the Widgets element (ADR 0017) on the page being drawn.
         return LookGlassSpec.read(mHost.preferences(),
             TermuxAppSharedPreferences.SurfaceSlot.WIDGETS, mHost.pageId());

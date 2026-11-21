@@ -538,7 +538,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? getString(R.string.notice_reply_not_sent_unknown)
             : getString(R.string.notice_reply_not_sent, program);
         com.termux.app.notice.AppNotice.shell(this, title, getString(R.string.notice_reply_copy),
-            "" /* nf-fa-bell */, true,
+            R.drawable.ic_rl_bell, true,
             () -> com.termux.shared.interact.ShareUtils.copyTextToClipboard(this, text));
     }
 
@@ -2007,7 +2007,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPaneController == null ? null : mPaneController.activeWindow();
             }
             @NonNull @Override public View paneHost() { return findViewById(R.id.terminal_pane_host); }
-            @Override public boolean keysWithTerminal() { return getCurrentFocus() instanceof TerminalView; }
+            @Override public boolean activePaneHoldsKeys() {
+                return com.termux.app.terminal.PaneKeys.holds(getTerminalView());
+            }
             @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
             @Override public boolean backIsEscape() {
                 return mProperties != null && mProperties.isBackKeyTheEscapeKey();
@@ -2186,6 +2188,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     || frame == mFrameGutterBackdropBitmap
                     || (mLookGlass != null && mLookGlass.holds(frame))
                     || (mDrawerCardGlass != null && mDrawerCardGlass.holds(frame))
+                    || (mRaisedGlass != null && mRaisedGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -2195,6 +2198,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWallBehindFrame = null;
             if (mLookGlass != null) mLookGlass.onCacheCleared();
             if (mDrawerCardGlass != null) mDrawerCardGlass.onCacheCleared();
+            if (mRaisedGlass != null) mRaisedGlass.onCacheCleared();
         }
 
         @Override public boolean isActivityVisible() {
@@ -4745,6 +4749,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The open drawer's section switch wears the card's own glass and frame.
         if (mSheets.appDrawerControllerIfBuilt() != null)
             mSheets.appDrawerControllerIfBuilt().onGlassChanged();
+        // The key's page bar, opened while its raised blur was baking, wears the frame that landed.
+        if (mPageBar != null) mPageBar.onGlassFramesMoved();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -5532,8 +5538,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A toggle's name says nothing about where it left things; the hint runs after the
         // action, so the state it reads is the one the tap produced.
         if (LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName)) {
-            com.termux.app.notice.AppNotice.readout(this, getString(isMouseMode()
-                ? R.string.extra_key_readout_mouse_mode_on : R.string.extra_key_readout_mouse_mode_off));
+            com.termux.app.notice.AppNotice.readout(this, R.drawable.ic_rl_mouse,
+                getString(isMouseMode()
+                    ? R.string.extra_key_readout_mouse_mode_on
+                    : R.string.extra_key_readout_mouse_mode_off));
             return;
         }
         // A place change names its destination for as long as the page is on its way there: the
@@ -5544,10 +5552,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mPaneWallController.wall().isMoving()) {
             mWallReadoutShowing = true;
             com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes),
-                WALL_READOUT_CEILING_MS);
+                WALL_READOUT_CEILING_MS, com.termux.app.terminal.io.ExtraKeyActionLabels.iconDrawable(toolName));
             return;
         }
-        com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes));
+        com.termux.app.notice.AppNotice.readout(this,
+            com.termux.app.terminal.io.ExtraKeyActionLabels.iconDrawable(toolName),
+            getString(tool.titleRes));
     }
 
     /** A wall tool's read-out is up, naming the place the slide is heading for, until the settle. */
@@ -6114,7 +6124,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Aimed as the card was cut: the row where it stood over the host then, and the whole
         // reflection moved by as much as the rows have moved over the host since, the same as
         // the card's top (peekCardCut), so the mirror stays under the icons and on the card.
-        float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
+        // Apart it is aimed by Home's rest whichever page is in front (PeekGlassReflection#aimCard):
+        // the same aim compares equal, so the Terminal's rest re-aims nothing.
+        boolean apart = mSideCards.hostLook() != null;
+        float cutAt = com.termux.app.dock.PeekGlassReflection.aimRowDy(apart, mHomeRestCard,
+            mHomeRestCardRowsPx, card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx);
+        card = com.termux.app.dock.PeekGlassReflection.aimCard(apart, mHomeRestCard, card);
         reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], cutAt,
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
         reflection.setFade(drawnPeekShare());
@@ -17038,13 +17053,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!wantHost && dockIndicator != null) {
             dockIndicator.setVerticalForm(false);
             // The dock's own pair follows the same rule as the portable host's: the ticks stand
-            // on the row's outer side unless the row is the band next to the canvas.
+            // on the row's outer side unless the row is the band next to the canvas. A row in a
+            // side's lane is ordered by that side's layout, whichever page is in front: the
+            // answer applyEdgeStacks remembered, the same one the row's padding reads, so the
+            // ticks and the padding never take opposite sides.
             orderAppsBarBands(findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
                     com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST)),
                 findViewById(com.termux.app.dock.SideRowViews.id(Element.APPS,
                     com.termux.app.dock.SideRowViews.Part.ROW)), dockIndicator,
-                !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM,
-                    isAppsRowNextToCanvas(layout)));
+                !PageTickStrip.ticksLeadRow(PlaceLayout.Edge.BOTTOM, mAppsRowNextToCanvas));
         }
         if (wantHost) {
             DockLayout dockLayout = mDock.dockLayoutIn(layout);
@@ -17498,8 +17515,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean moved = false;
         // Which side of the row its page ticks take is a property of the arrangement, and the pass
         // that pads the dock's own row is handed the dock's numbers rather than the place's.
-        // Remembered here, where the arrangement arrives.
-        mAppsRowNextToCanvas = isAppsRowNextToCanvas(layout);
+        // Remembered here, where the arrangement arrives: a row in a side's lane by that side's
+        // own layout, so the Home row a crossing slides in is padded as at Home's rest.
+        boolean frontHome = frontSide == com.termux.app.page.Side.HOME;
+        mAppsRowNextToCanvas = com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout,
+            frontHome ? laneFront : other, frontHome ? other : laneFront);
         PlaceLayout.Edge plankEdge = mDock.offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
@@ -18435,9 +18455,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (widgetPane instanceof com.termux.app.launcher.widget.WidgetPaneView) {
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setDockReservePx(
                 stack.homeGridDockReservePx, stack.stackEdgeGapPx);
-            // The page bar's pill is put away while either keyboard is up; its band stays.
+            // The page bar's pill is put away while either keyboard is up on Home; its band stays.
+            // Away from Home it wears Home's own rest, which a crossing toward Home also hands it
+            // as it begins (applyArrivingHomeGridReserve), so it slides in as it lands.
             ((com.termux.app.launcher.widget.WidgetPaneView) widgetPane).setKeyboardUp(
-                state.keyboardShown || isImeVisible());
+                com.termux.app.wall.pageswitch.PageBarBand.homeKeyboardUp(
+                    mLastWallPage == com.termux.app.page.PageKind.HOME,
+                    state.keyboardShown || isImeVisible(),
+                    mInAppKeyboard != null && mInAppKeyboard.isEnabled()
+                        && restWantsKeyboard(com.termux.app.page.PageKind.HOME)));
         }
         // The content column fills the window to its bottom; what each page leaves of it is that
         // page's own rest (applyPageRooms). All it keeps of its old bottom margin is the system
@@ -20503,15 +20529,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Makes a keyboard available for typing into a focusless surface, and reports whether one is.
      *
      * <p>False means there is nothing on screen to aim the key channel at — the caller either does
-     * without typing or falls back to a focused editor.
+     * without typing or falls back to a focused editor. A field opening is not a person asking for
+     * the keyboard: with a hardware keyboard attached and the setting on, the in-app keyboard stays
+     * down and this is still true, since the hardware keys reach the surface through the overlay
+     * key channel.
      */
     private boolean ensureInAppTypingKeyboard() {
         if (!isInAppKeyboardEnabled() || mInAppKeyboard == null) return false;
         if (!mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
+    }
+
+    /**
+     * Raises the in-app keyboard by hand for a field the Home palette opens; true when it raised.
+     * Nothing is raised while a hardware keyboard is the one typing (the setting asks the in-app
+     * keyboard to stand aside), so the palette opens alone and takes the hardware keys.
+     */
+    private boolean raiseKeyboardForField() {
+        if (mInAppKeyboard != null && mInAppKeyboard.yieldsToHardwareKeyboard()) return false;
+        return terminalHost().showInAppKeyboard(false);
     }
 
     /**
@@ -21650,7 +21689,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (currentWallPage() != com.termux.app.page.PageKind.TERMINAL) {
                         String text = VoiceTextSanitizer.clean(result);
                         if (!text.isEmpty() && !typeVoiceText(text) && copyVoiceText(text))
-                            AppNotice.show(this, R.string.voice_input_no_target_copied, false);
+                            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_no_target_copied), false);
                     } else if (!offerToInAppKeyboardInterceptor(
                             juloo.keyboard2.KeyValue.makeStringKey(result), false, false, false)) {
                         target.write(result);
@@ -21669,7 +21708,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         if (getPackageManager().resolveActivity(recognition,
                 android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) == null) {
-            AppNotice.show(this, R.string.voice_typing_unavailable, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_typing_unavailable), false);
             return;
         }
         Intent launch = createVoiceTypingIntent(this, chooser);
@@ -21678,7 +21717,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startActivityForResult(launch, REQUEST_CODE_VOICE_TYPING);
         } catch (android.content.ActivityNotFoundException e) {
             mVoiceTypingTargetSession = null;
-            AppNotice.show(this, R.string.voice_typing_unavailable, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_typing_unavailable), false);
         }
     }
 
@@ -21701,7 +21740,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The settings' choice, or another installed speech model when that one's files are gone.
         com.termux.ai.TaiModelSpec model = com.termux.ai.TaiSpeechModels.resolveActive(this);
         if (model == null) {
-            AppNotice.show(this, R.string.voice_input_no_model, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_no_model), false);
             launchVoiceTyping(false);
             return;
         }
@@ -21728,7 +21767,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceSpeechWarming = true;
         if (!session.start()) {
             mVoiceSpeechWarming = false;
-            AppNotice.show(this, getString(R.string.voice_input_fallback,
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_fallback,
                 getString(R.string.voice_input_mic_unavailable)), false);
             launchVoiceTyping(false);
             return;
@@ -21816,7 +21855,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!VoiceLanguage.AUTO.equals(setting) && !VoiceLanguage.FALLBACK.equals(setting)
                 && !mVoiceEnglishOnlyNoticed) {
                 mVoiceEnglishOnlyNoticed = true;
-                AppNotice.show(this, getString(R.string.voice_input_english_only_model,
+                AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_english_only_model,
                     new java.util.Locale(setting).getDisplayLanguage()), true);
             }
             return VoiceLanguage.Choice.NONE;
@@ -21826,7 +21865,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Auto listens, so an unknown layout only means an English hint, not English forced.
         if (resolution.fallback && resolution.explicit && !mVoiceLanguageFallbackNoticed) {
             mVoiceLanguageFallbackNoticed = true;
-            AppNotice.show(this, R.string.voice_input_language_fallback, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_language_fallback), false);
         }
         return VoiceLanguage.Choice.forWhisper(resolution);
     }
@@ -22074,7 +22113,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 closeVoicePill();
                 return;
             }
-            if (use == VoiceDictation.Use.INSERT) AppNotice.show(this, R.string.voice_input_no_target_copied, false);
+            if (use == VoiceDictation.Use.INSERT) AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_no_target_copied), false);
             said = R.string.voice_input_cleanup_copied;
         }
         if (mVoiceIndicator != null) mVoiceIndicator.onActionDone(said);
@@ -22502,10 +22541,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
                 // Text already came through, or nothing to fall back for (the recognizer types
                 // where the keyboard does, which the Dictate key may not have): just say why.
-                AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_stopped, detail), true);
+                AppNotice.show(TermuxActivity.this, R.drawable.ic_rl_mic, getString(R.string.voice_input_stopped, detail), true);
                 return;
             }
-            AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_fallback, detail), true);
+            AppNotice.show(TermuxActivity.this, R.drawable.ic_rl_mic, getString(R.string.voice_input_fallback, detail), true);
             launchVoiceTyping(false);
         }
 
@@ -22572,7 +22611,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 startOnDeviceVoiceInput(mVoiceMicrophoneAskedFromKeyboard);
             } else {
                 // Refused: the system recognizer asks for the microphone itself.
-                AppNotice.show(this, getString(R.string.voice_input_fallback,
+                AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_fallback,
                     getString(R.string.voice_input_permission_denied)), false);
                 launchVoiceTyping(false);
             }
@@ -25328,7 +25367,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void setHomeActionsAnchor(float rawX, float rawY) { mHomeActionsRawX = rawX; mHomeActionsRawY = rawY; }
         // -------------------------------------------------------------- the Home palette
         @Override public boolean isOnHome() { return mPages.isCommitted(com.termux.app.page.PageKind.HOME); }
-        @Override public boolean raiseInAppKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        // The palette is a field: a hardware keyboard the in-app one yields to types into it.
+        @Override public boolean raiseInAppKeyboard() { return raiseKeyboardForField(); }
         @Override public boolean isHomeKeyboardAlwaysOn() { return TermuxActivity.this.isHomeKeyboardAlwaysOn(); }
         @Override public @NonNull PlaceLayout.Edge appsEdge() { return arrangement().appsEdge(); }
         @Override public @Nullable TermuxAppSharedPreferences preferences() { return mPreferences; }
@@ -27041,6 +27081,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if ((changed & (com.termux.app.wall.WallPose.RIMS
                 | com.termux.app.wall.WallPose.OFF_SCREEN)) != 0 && mPaneController != null) {
                 mPaneController.onWallPose(pose, changed);
+                // Back on screen the panes take focus again: a window whose step panned it in
+                // gets the keys its front could not hand it while it was off screen.
+                if ((changed & com.termux.app.wall.WallPose.OFF_SCREEN) != 0
+                    && !pose.terminalOffScreen()) mTerminalPages.onPanesBackOnScreen();
             }
         });
         // The chips rest a wall's width off on Home: a wall laid out at another width stands the
@@ -28298,19 +28342,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** One quiet focus request on the active pane; true when the pane really holds the keys. */
     private boolean handKeysToActivePane() {
-        TerminalView pane = getTerminalView();
-        return com.termux.app.x11.DisplayViewFocus.handBackTo(pane, () -> {
-            View.OnFocusChangeListener listener = pane.getOnFocusChangeListener();
-            pane.setOnFocusChangeListener(null);
-            try {
-                // A pane focused while it was out of the window says it is focused and refuses
-                // the request: its stale claim goes first.
-                if (pane.isFocused()) pane.clearFocus();
-                pane.requestFocus();
-            } finally {
-                pane.setOnFocusChangeListener(listener);
-            }
-        });
+        return com.termux.app.terminal.PaneKeys.handTo(getTerminalView(), true);
     }
 
     /** The display's view holds the keys on its own window at rest, where they are X's. */
@@ -28540,7 +28572,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSheets.runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
     }
@@ -29944,6 +29976,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The page bar's owner, Home's and the key's popup: answers the bar's questions and claims its touch. */
     @Nullable private com.termux.app.wall.pageswitch.PageBarController mPageBar;
 
+    /**
+     * The raised glass the key's page bar wears (ElevatedGlass over the sheets' glass), worn only
+     * while that bar is shown: it reads the shared blur cache's frame at the raised radius, holds
+     * no pixels of its own and takes no Live glass slot.
+     */
+    @Nullable private com.termux.app.chrome.LookGlassStyle mRaisedGlass;
+
+    @NonNull
+    private com.termux.app.chrome.LookGlassStyle raisedGlassStyle() {
+        if (mRaisedGlass == null) {
+            mRaisedGlass = new com.termux.app.chrome.LookGlassStyle(this, mChrome,
+                new com.termux.app.chrome.LookGlassStyle.Host() {
+                    @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
+                    @Override public View wallpaperFrame() {
+                        return findViewById(R.id.activity_termux_root_view);
+                    }
+                    @Override public boolean wallpaperBlurs() { return wallpaperSampleable(); }
+                    @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
+                    // The Fancier Glass look the extra-keys card under it wears, so the pop-up is
+                    // the same material with the cards' lit edge; null (plain frost) when it is off.
+                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
+                        return mFancierGlassLook;
+                    }
+                    @Override public com.termux.app.chrome.WallpaperParallax parallax() {
+                        return mWallpaperParallax;
+                    }
+                    @Override public com.termux.app.chrome.LookGlassSpec spec() {
+                        return com.termux.app.chrome.ElevatedGlass.lookSpec(
+                            mPreferences != null && mPreferences.isUseSystemWallpaperEnabled(),
+                            com.termux.app.chrome.ElevatedGlass.of(mPreferences));
+                    }
+                });
+        }
+        return mRaisedGlass;
+    }
+
     private void attachPageBar() {
         if (mPageBar != null) return;
         final com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator nav = pageSwitchNavigator();
@@ -29977,6 +30045,33 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public int ink() {
                     return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
                         R.color.termux_on_surface);
+                }
+
+                @Override public com.termux.app.chrome.LookGlassStyle raisedGlass() {
+                    return raisedGlassStyle();
+                }
+
+                @Override public boolean keysCardOnScreen(@NonNull android.graphics.Rect out) {
+                    View card = findViewById(R.id.extra_keys_card);
+                    if (card == null || !card.isShown() || card.getWidth() <= 0) return false;
+                    int[] at = new int[2];
+                    card.getLocationOnScreen(at);
+                    out.set(at[0], at[1], at[0] + card.getWidth(), at[1] + card.getHeight());
+                    return true;
+                }
+
+                // The gap the stack keeps between the extra-keys card and the keyboard's card:
+                // Floating's air, Docked's none (ChromePolicy, UnderKeyboardBand).
+                @Override public int stackRowGapPx() {
+                    return com.termux.app.chrome.ChromePolicy.keyboardHostTopMarginPx(
+                        isRoundedStyle(com.termux.app.place.SeamDress.Surface.STACK), false,
+                        getResources().getDisplayMetrics().density);
+                }
+
+                // The card's own rule (KeysCardDress dresses it with exactly this call, whatever
+                // the style): the resolved Corners, "follow the style" included, capped at half.
+                @Override public float keysCardRadiusPx(int heightPx) {
+                    return mDock.resolveDockCapsuleCornerRadiusPx(heightPx);
                 }
             }, (FrameLayout) findViewById(R.id.page_switch_layer));
         // The dock's capsules dim while the bar slides (the dock strip's slice listens here).
@@ -30172,7 +30267,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mFrameContent.isMouseMode() && mark.getTag() == null) {
             mark.setTag("wired");
             mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
-            mark.setIconGlyph("\uDB80\uDF7D"); // nf-md-mouse, the extra key's glyph
+            mark.setIconResource(R.drawable.ic_rl_mouse);
             mark.setValue("");
             mark.setOnClickListener(v -> toggleMouseMode());
         }
@@ -33038,7 +33133,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController.focusedHomeFloat() == window && mInAppKeyboard != null
             && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
     }
 
@@ -33251,7 +33346,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
     }
@@ -33304,7 +33399,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // by hand as the swipe up raises it (openHomePalette).
         @Override public boolean isKeyboardUp() { return committedKeyboardVisible(); }
 
-        @Override public boolean raiseKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        @Override public boolean raiseKeyboard() { return raiseKeyboardForField(); }
     }
 
     @Nullable
@@ -33467,7 +33562,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getPreferences().setDwindleDefaultLayoutEnabled(enabled);
             getPreferences().setFocusedPaneGrowsEnabled(enabled);
             // The corner button only flips its icon; the notice says what the switch means.
-            AppNotice.show(TermuxActivity.this, AppNoticeItem.Kind.INFO, "\uDB81\uDD70",
+            AppNotice.show(TermuxActivity.this, AppNoticeItem.Kind.INFO, R.drawable.ic_rl_layout,
                 getString(enabled ? R.string.pane_controls_auto_tiling_on_title
                     : R.string.pane_controls_auto_tiling_off_title),
                 getString(enabled ? R.string.pane_controls_auto_tiling_on_sub

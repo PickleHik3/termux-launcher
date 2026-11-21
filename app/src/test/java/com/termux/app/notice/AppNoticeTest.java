@@ -27,6 +27,7 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import android.app.Application;
+import com.termux.R;
 
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
@@ -34,18 +35,29 @@ import android.app.Application;
 public class AppNoticeTest {
 
     @Test
-    public void kindPicksTheGlyphWhenTheCallerHasNoOpinion() {
-        assertEquals("›", item(AppNoticeItem.Kind.INFO, null).resolvedGlyph());
-        assertEquals("✓", item(AppNoticeItem.Kind.SUCCESS, null).resolvedGlyph());
-        assertEquals("⚠", item(AppNoticeItem.Kind.WARNING, null).resolvedGlyph());
-        assertEquals("✕", item(AppNoticeItem.Kind.ERROR, null).resolvedGlyph());
+    public void kindPicksTheIconWhenTheCallerHasNoOpinion() {
+        // Plain information is just the sentence: no mark.
+        assertEquals(0, item(AppNoticeItem.Kind.INFO, null).resolvedIcon());
+        assertFalse(item(AppNoticeItem.Kind.INFO, null).hasMark());
+        assertEquals(R.drawable.ic_rl_success, item(AppNoticeItem.Kind.SUCCESS, null).resolvedIcon());
+        assertEquals(R.drawable.ic_rl_warning, item(AppNoticeItem.Kind.WARNING, null).resolvedIcon());
+        assertEquals(R.drawable.ic_rl_error, item(AppNoticeItem.Kind.ERROR, null).resolvedIcon());
     }
 
     @Test
-    public void callerGlyphOutranksTheKind() {
-        assertEquals("⧉", item(AppNoticeItem.Kind.SUCCESS, "⧉").resolvedGlyph());
-        // An empty override is not an override: it would draw a hole where the glyph belongs.
-        assertEquals("✓", item(AppNoticeItem.Kind.SUCCESS, "").resolvedGlyph());
+    public void callerGlyphAndIconOutrankTheKind() {
+        AppNoticeItem text = item(AppNoticeItem.Kind.SUCCESS, "⧉");
+        assertEquals(0, text.resolvedIcon());
+        assertEquals("⧉", text.resolvedGlyph());
+        // An empty override is not an override: it would draw a hole where the mark belongs.
+        assertEquals(R.drawable.ic_rl_success, item(AppNoticeItem.Kind.SUCCESS, "").resolvedIcon());
+        AppNoticeItem icon = new AppNoticeItem(AppNoticeItem.Kind.SUCCESS, "title", null, "⧉",
+            R.drawable.ic_rl_copy, AppNoticeHostView.HOLD_SHORT_MS, null, false, null, false);
+        assertEquals(R.drawable.ic_rl_copy, icon.resolvedIcon());
+        assertEquals("", icon.resolvedGlyph());
+        // An icon marks even a plain information notice.
+        assertTrue(new AppNoticeItem(AppNoticeItem.Kind.INFO, "title", null, null,
+            R.drawable.ic_rl_mouse, 1000L, null, false, null, true).hasMark());
     }
 
     @Test
@@ -101,6 +113,7 @@ public class AppNoticeTest {
         AppNoticeItem attention = new AppNoticeItem(AppNoticeItem.Kind.INFO, "title", null, null,
             AppNoticeHostView.HOLD_SHORT_MS, null, true);
         assertEquals("!", attention.resolvedGlyph());
+        assertEquals(0, attention.resolvedIcon());
     }
 
     @Test
@@ -327,5 +340,21 @@ public class AppNoticeTest {
 
     private static AppNoticeItem item(AppNoticeItem.Kind kind, String glyph) {
         return new AppNoticeItem(kind, "title", null, glyph, AppNoticeHostView.HOLD_SHORT_MS);
+    }
+
+    /** The bell notice for a window somewhere else carries the bell mark, and the pill binds it. */
+    @Test
+    public void theAttentionNoticeCarriesTheBellMark() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AppNotice.shell(activity, "[1] wants attention", null, R.drawable.ic_rl_bell, true, () -> {});
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        AppNoticeItem shown = host.activeItem();
+        assertNotNull(shown);
+        assertEquals(R.drawable.ic_rl_bell, shown.resolvedIcon());
+        assertTrue(shown.hasMark());
+        android.widget.TextView mark = (android.widget.TextView) ((LinearLayout) host).getChildAt(0);
+        assertEquals(View.VISIBLE, mark.getVisibility());
+        assertEquals(1, mark.getText().length());
     }
 }

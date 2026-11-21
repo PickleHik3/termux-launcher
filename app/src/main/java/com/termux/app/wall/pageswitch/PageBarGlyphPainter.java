@@ -30,46 +30,57 @@ public final class PageBarGlyphPainter {
 
     // ---- Geometry (units centred on the glyph) ----------------------------------------------
 
-    static final String HOME_PATH = "M-1.4 -9.6 Q0 -10.8 1.4 -9.6 L9.6 -2.6 Q10.5 -1.8 10.5 -0.6"
-        + " V8 Q10.5 10.5 8 10.5 H-8 Q-10.5 10.5 -10.5 8 V-0.6 Q-10.5 -1.8 -9.6 -2.6 Z";
-    /** The Terminal body, and the shape of a folded stack's plates: x, y, w, h, radius. */
-    static final float[] TERMINAL_BODY = {-11f, -9.5f, 22f, 19f, 5f};
-    static final String CHEVRON_PATH = "M-6.5 -3.5 L-3 0 L-6.5 3.5";
-    static final float CHEVRON_STROKE = 2f;
+    static final String HOME_PATH = "M-1.6 -9.8 Q0 -11.1 1.6 -9.8 L9.1 -3.8 Q10.5 -2.7 10.5 -0.9"
+        + " V6 A4.5 4.5 0 0 1 6 10.5 H-6 A4.5 4.5 0 0 1 -10.5 6 V-0.9 Q-10.5 -2.7 -9.1 -3.8 Z";
+    /** The Terminal body: x, y, w, h, radius. */
+    static final float[] TERMINAL_BODY = {-10.5f, -9.5f, 21f, 19f, 4.5f};
+    static final String CHEVRON_PATH = "M-7.3 -2.6 L-4.7 0 L-7.3 2.6";
+    static final float CHEVRON_STROKE = 1.8f;
     /** The Display's three rects: x, y, w, h, radius. */
     static final float[][] DISPLAY_RECTS = {
-        {-12f, -10f, 24f, 15.5f, 4f}, {-1.25f, 5f, 2.5f, 4f, 0f}, {-6f, 8f, 12f, 2.5f, 1.25f}};
-    static final String SPARK_PATH = "M0 -10 C1.2 -3.5 3.5 -1.2 10 0 C3.5 1.2 1.2 3.5 0 10"
-        + " C-1.2 3.5 -3.5 1.2 -10 0 C-3.5 -1.2 -1.2 -3.5 0 -10 Z";
-    /** The Assistant's two sparks: translate x, translate y, scale. */
-    static final float[][] SPARKS = {{-2f, 2f, 0.85f}, {7.5f, -7.5f, 0.36f}};
+        {-10.5f, -9.5f, 21f, 15f, 4.5f}, {-1.5f, 4.5f, 3f, 4f, 1.5f}, {-6f, 7.5f, 12f, 3f, 1.5f}};
+    static final String SPARK_PATH = "M-0.95 -9.45 A1.0 1.0 0 0 1 0.95 -9.45"
+        + " C1.7 -4.3 4.3 -1.7 9.45 -0.95 A1.0 1.0 0 0 1 9.45 0.95"
+        + " C4.3 1.7 1.7 4.3 0.95 9.45 A1.0 1.0 0 0 1 -0.95 9.45"
+        + " C-1.7 4.3 -4.3 1.7 -9.45 0.95 A1.0 1.0 0 0 1 -9.45 -0.95"
+        + " C-4.3 -1.7 -1.7 -4.3 -0.95 -9.45 Z";
+    /** The Assistant's spark: translate x, translate y, scale. */
+    static final float[][] SPARKS = {{0f, 0f, 1f}};
 
-    /** The back and front plate of a folded stack: the plate's x and y, and its alpha. */
-    static final float[][] PLATES = {{-5f, -13.5f, 0.5f}, {-8f, -11.5f, 0.8f}};
+    /** A folded stack's front glyph is scaled by this, then moved by the translation. */
+    static final float STACK_SCALE = 0.85f;
+    static final float STACK_TX = -1.5f;
+    static final float STACK_TY = 1.5f;
+    /** The back and front plate of a folded stack: x, y, w, h, radius, alpha. */
+    static final float[][] PLATES = {
+        {-6.925f, -10.925f, 17.85f, 16.15f, 3.825f, 0.5f},
+        {-8.425f, -9.425f, 17.85f, 16.15f, 3.825f, 0.8f}};
 
     /** Ground left showing between neighbouring cards of a stack, in units. */
     static final float CARD_GAP = 1.5f;
 
     /** How far a folded stack's plates reach past the glyph box's right edge, in units. */
-    static final float STACK_OVERHANG_RIGHT = overhangRight();
-    /** The same past the left edge; the plates sit inside it, so 0. */
-    static final float STACK_OVERHANG_LEFT = 0f;
+    static final float STACK_OVERHANG_RIGHT = overhang(true);
+    /** The same past the left edge. */
+    static final float STACK_OVERHANG_LEFT = overhang(false);
 
-    private static float overhangRight() {
-        float right = 0f;
-        for (float[] plate : PLATES) right = Math.max(right, plate[0] + TERMINAL_BODY[2]);
-        return Math.max(0f, right - GLYPH_UNITS / 2f);
+    private static float overhang(boolean right) {
+        float edge = right ? -GLYPH_UNITS : GLYPH_UNITS;
+        for (float[] plate : PLATES) {
+            edge = right ? Math.max(edge, plate[0] + plate[2]) : Math.min(edge, plate[0]);
+        }
+        return Math.max(0f, right ? edge - GLYPH_UNITS / 2f : -GLYPH_UNITS / 2f - edge);
     }
 
     /** The number's font size in units and its weight; per kind its slot centre x, width, baseline. */
-    static final float NUMBER_SIZE = 10.5f;
+    static final float NUMBER_SIZE = 9.5f;
     static final int NUMBER_WEIGHT = 600;
     static final float HOME_SLOT_CX = 0f;
     static final float HOME_SLOT_W = 15f;
-    static final float HOME_BASELINE = 7.3f;
-    static final float TERMINAL_SLOT_CX = 4.5f;
-    static final float TERMINAL_SLOT_W = 10f;
-    static final float TERMINAL_BASELINE = 3.9f;
+    static final float HOME_BASELINE = 4.2f;
+    static final float TERMINAL_SLOT_CX = 3.15f;
+    static final float TERMINAL_SLOT_W = 10.8f;
+    static final float TERMINAL_BASELINE = 4.2f;
 
     // ---- State ------------------------------------------------------------------------------
 
@@ -84,6 +95,7 @@ public final class PageBarGlyphPainter {
     private final Path[] mSilhouette = new Path[PageKind.values().length];
     private final Path mPlate = new Path();
     private final Path mPlateGrown;
+    private final Path[] mFolded = new Path[PageKind.values().length];
     private final Path[] mGrown = new Path[PageKind.values().length];
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -98,8 +110,8 @@ public final class PageBarGlyphPainter {
         mText.setTextAlign(Paint.Align.LEFT);
         mText.setFontFeatureSettings("tnum");
         mText.setTextSize(NUMBER_SIZE * REFERENCE_SCALE);
-        mPlate.addRoundRect(0f, 0f, TERMINAL_BODY[2], TERMINAL_BODY[3], TERMINAL_BODY[4],
-            TERMINAL_BODY[4], Path.Direction.CW);
+        float[] plate = PLATES[0];
+        mPlate.addRoundRect(0f, 0f, plate[2], plate[3], plate[4], plate[4], Path.Direction.CW);
         mPlateGrown = grow(mPlate);
     }
 
@@ -123,12 +135,13 @@ public final class PageBarGlyphPainter {
                           float cy, float size, int fill, int plateInk) {
         int save = canvas.save();
         place(canvas, cx, cy, size);
+        // The plates stay out of the folded front's silhouette, so its cut-outs show the ground.
         canvas.clipOutPath(grown(kind));
         int rgb = plateInk & 0x00FFFFFF;
         float gain = Color.alpha(plateInk);
         for (int i = 0; i < PLATES.length; i++) {
             float[] plate = PLATES[i];
-            mFill.setColor(rgb | (Math.round(plate[2] * gain) << 24));
+            mFill.setColor(rgb | (Math.round(plate[5] * gain) << 24));
             int inner = canvas.save();
             if (i + 1 < PLATES.length) {
                 // The plate in front of this one cuts it out, a gap wider than itself.
@@ -143,7 +156,13 @@ public final class PageBarGlyphPainter {
             canvas.restoreToCount(inner);
         }
         canvas.restoreToCount(save);
-        draw(canvas, kind, count, cx, cy, size, fill);
+        save = canvas.save();
+        place(canvas, cx, cy, size);
+        canvas.translate(STACK_TX, STACK_TY);
+        canvas.scale(STACK_SCALE, STACK_SCALE);
+        mFill.setColor(fill);
+        canvas.drawPath(cut(kind, count), mFill);
+        canvas.restoreToCount(save);
     }
 
     private static void place(Canvas canvas, float cx, float cy, float size) {
@@ -173,11 +192,24 @@ public final class PageBarGlyphPainter {
         return path;
     }
 
-    /** {@code kind}'s silhouette grown by {@link #CARD_GAP}; the same instance every time. */
+    /** {@code kind}'s silhouette as the folded stack's front draws it, in box units. */
+    @NonNull Path folded(@NonNull PageKind kind) {
+        Path path = mFolded[kind.ordinal()];
+        if (path == null) {
+            path = new Path();
+            mMatrix.setScale(STACK_SCALE, STACK_SCALE);
+            mMatrix.postTranslate(STACK_TX, STACK_TY);
+            silhouette(kind).transform(mMatrix, path);
+            mFolded[kind.ordinal()] = path;
+        }
+        return path;
+    }
+
+    /** The folded silhouette grown by {@link #CARD_GAP}; the same instance every time. */
     @NonNull private Path grown(@NonNull PageKind kind) {
         Path path = mGrown[kind.ordinal()];
         if (path == null) {
-            path = grow(silhouette(kind));
+            path = grow(folded(kind));
             mGrown[kind.ordinal()] = path;
         }
         return path;
@@ -263,17 +295,23 @@ public final class PageBarGlyphPainter {
         return out;
     }
 
-    /** The number's outline in units, its ink centred on {@code cx} and fitted to {@code slotW}. */
+    /** The number's outline in units, its advance centred on {@code cx} and fitted to {@code slotW}. */
     private Path numberPath(String text, boolean overflow, float cx, float slotW, float baseline) {
         Path path = new Path();
         mText.getTextPath(text, 0, text.length(), 0f, 0f, path);
-        path.computeBounds(mBounds, true);
-        PageGlyphPainter.fit(mBounds.width() / REFERENCE_SCALE, slotW, overflow, mFit);
+        float advance = mText.measureText(text) / REFERENCE_SCALE;
+        PageGlyphPainter.fit(advance, slotW, overflow, mFit);
         float sy = mFit[0] / REFERENCE_SCALE;
-        mMatrix.setTranslate(-mBounds.centerX(), 0f);
+        mMatrix.setTranslate(-advance * REFERENCE_SCALE / 2f, 0f);
         mMatrix.postScale(sy * mFit[1], sy);
         mMatrix.postTranslate(cx, baseline);
         path.transform(mMatrix);
         return path;
+    }
+
+    /** The horizontal scale the number {@code text} gets in a slot {@code slotW} wide. */
+    float numberScale(String text, float slotW) {
+        PageGlyphPainter.fit(mText.measureText(text) / REFERENCE_SCALE, slotW, text.length() > 2, mFit);
+        return mFit[1];
     }
 }

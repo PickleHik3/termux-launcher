@@ -1,40 +1,91 @@
 package com.termux.app.wall.pageswitch;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
+import com.termux.app.ScrubWave;
 
 /**
- * The page bar's geometry in px, for one pane width, density and slot count. The pill is centred
- * on the window (in the pane when the pane is centred), its slots fill it end to end and the first glyph centre sits half a slot in. While
- * a finger slides, {@link #slidePositions} spreads the glyphs around the focus slot (whose glyph
- * is drawn in the bubble above the pill) so the row follows the finger without an animator.
- * Every number is declared once, in dp.
+ * The page bar's geometry in px, for one pane width, density and slot count.
+ *
+ * <p>Two shapes. The <b>pill</b> is the touch row: {@link #PILL_HEIGHT_DP} tall, its slots
+ * ({@link #MIN_SLOT_DP} on Home) end to end, centred on the window (in the pane when the pane is
+ * centred); taps, slides and screen-reader buttons read it. The <b>slab</b> is what is drawn, by
+ * one rule: each glyph is centred in a square cell one slot wide, and the slab is the row of cells
+ * ({@link #homeSlabHeightDp}). So the air at its ends and above and below the glyphs is the same,
+ * half the air between two glyphs, and an end glyph is concentric with the capsule's round end.
+ * Its bottom stands {@link #GAP_DP} above the touch row's, so it hugs whatever stands below the
+ * bar.</p>
+ *
+ * <p>While a finger slides, the glyph under the finger is picked out on a plateau-and-crossfade envelope of
+ * the bar's own ({@link #shape}; the enter easing is {@link ScrubWave#SETTLE_MS}): it grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
+ * slab's geometry answers (on Home its bottom just clears the well's rim, {@link #LIFT_CLEAR_DP}
+ * above the slab's top; on the key's raised bar it stays inside the strip), a glyph resting under the finger
+ * has neighbours that stay put, and between two glyphs one sinks as the other rises (their
+ * envelopes sum to 1), all scaled by the enter share so nothing jumps as the finger crosses slots.
+ * Every number is declared once, in dp.</p>
  */
 public final class PageBarLayout {
 
+    /** The touch row's height: the band's height while dock rows stand below the bar. */
     public static final float PILL_HEIGHT_DP = 48f;
-    public static final float GLYPH_DP = 22f;
-    public static final float MIN_SLOT_DP = 40f;
-    public static final float MAX_SLOT_DP = 53f;
+    public static final float GLYPH_DP = 16.5f;
+    /** A slot's width on Home, and the least the fold counts with. */
+    public static final float MIN_SLOT_DP = 30f;
     /** The pill is at most this far from the pane's edges. */
     public static final float SIDE_INSET_DP = 16f;
-    public static final float NEIGHBOUR_SCALE = 1.25f;
-    public static final float FOCUS_SCALE = 2f;
-    public static final float BUBBLE_DIAMETER_DP = 68f;
-    /** Bubble bottom to pill top. */
-    public static final float BUBBLE_GAP_DP = 12f;
-    /** Label baseline to bubble top. */
-    public static final float LABEL_GAP_DP = 8f;
-    /** Pill top to the grid above. */
-    public static final float TOP_AIR_DP = 4f;
-    /** Pill bottom to the dock's reserve, where dock rows stand below the pill. */
-    public static final float BOTTOM_AIR_DP = 12f;
-    /** The finger leaving the pill vertically by more than this cancels the slide. */
+    /**
+     * The bar's one small gap: the air under the slab and the gap between a lifted glyph and the
+     * page's name above it; with a glyph, the least Home's slab is tall ({@link #homeSlabHeightDp}).
+     */
+    public static final float GAP_DP = 4f;
+    /** The glyph under the finger, lifted, against its rest size. */
+    public static final float RAISED_SCALE = 1.25f;
+    /**
+     * At the peak, the air between the lifted glyph and the slab's edge: on Home its bottom this
+     * far above the well's top (it clears the rim, no more); on the key's raised bar its top this
+     * far inside the strip's.
+     */
+    public static final float LIFT_CLEAR_DP = 2f;
+    /**
+     * The raised bar's padding above and below its glyphs: the bar the page switcher key pops up
+     * over other glass stands as a comfortable bar, not a strip ({@link #raised}).
+     */
+    public static final float RAISED_PAD_DP = 8f;
+    /**
+     * How far from the finger a glyph stays fully raised, in slots: a glyph this close is at the
+     * envelope's plateau. {@code HOLD_SLOTS + REACH_SLOTS == 1}, so the page bar hands the lift
+     * from one glyph to the next instead of raising several together.
+     */
+    public static final float HOLD_SLOTS = 0.25f;
+    /**
+     * How far the lift reaches, in slots: a glyph this far or further from the finger does not
+     * move. With {@link #HOLD_SLOTS} it makes the envelopes of two adjacent glyphs sum to exactly 1
+     * for a finger anywhere between them.
+     */
+    public static final float REACH_SLOTS = 0.75f;
+    /** The finger leaving the touch row vertically by more than this cancels the slide. */
     public static final float CANCEL_DP = 32f;
 
-    /** The key's pop-up band, air on both sides; Home's band is {@link PageBarBand}'s. */
+    /**
+     * Home's slab height for slots {@code slotDp} wide: the slot itself, so every glyph sits in a
+     * square cell with half the inter-glyph air on each side of it, top and bottom included; never
+     * less than one glyph and {@link #GAP_DP} above and below it.
+     */
+    public static float homeSlabHeightDp(float slotDp) {
+        return Math.max(GLYPH_DP + 2f * GAP_DP, slotDp);
+    }
+
+    /** The raised bar's height: one glyph and {@link #RAISED_PAD_DP} above and below it. */
+    public static float raisedSlabHeightDp() {
+        return GLYPH_DP + 2f * RAISED_PAD_DP;
+    }
+
+    /** The raised bar's bottom within its touch row: the bar centred in the row. */
+    public static float raisedSlabBottomDp() {
+        return (PILL_HEIGHT_DP + raisedSlabHeightDp()) / 2f;
+    }
+
+    /** The key's pop-up band, the touch row alone; Home's band is {@link PageBarBand}'s. */
     public static float bandHeightDp() {
-        return TOP_AIR_DP + PILL_HEIGHT_DP + BOTTOM_AIR_DP;
+        return PILL_HEIGHT_DP;
     }
 
     /** How many slots fit a pane of this width before runs must fold; at least 1. */
@@ -48,11 +99,13 @@ public final class PageBarLayout {
     private final int mSlotCount;
     private final float mSlotWidth;
     private final float mPillLeft;
-    private final float[] mScratchCenters;
-    private final float[] mScratchScales;
-    private boolean[] mFolded;
+    private final float mSlabHeightDp;
+    /** The slab's bottom within the touch row, in dp. */
+    private final float mSlabBottomDp;
+    /** The key's raised bar: the lift stays inside its glass strip ({@link #liftPeakPx}). */
+    private final boolean mLiftInside;
 
-    /** Home's bar: the pill hugs its glyphs, each slot at most {@link #MAX_SLOT_DP}. */
+    /** Home's bar: the pill hugs its glyphs, each slot {@link #MIN_SLOT_DP}. */
     public PageBarLayout(float density, float paneWidthPx, int slotCount) {
         this(density, paneWidthPx, slotCount, false);
     }
@@ -84,12 +137,37 @@ public final class PageBarLayout {
         mPaneWidth = paneWidthPx;
         mSlotCount = Math.max(1, slotCount);
         float area = Math.max(0f, paneWidthPx - 2f * SIDE_INSET_DP * density);
-        mSlotWidth = fill ? area / mSlotCount : Math.min(MAX_SLOT_DP * density, area / mSlotCount);
+        mSlotWidth = fill ? area / mSlotCount : Math.min(MIN_SLOT_DP * density, area / mSlotCount);
         float pillWidth = mSlotWidth * mSlotCount;
         mPillLeft = fill ? (paneWidthPx - pillWidth) / 2f
             : PageBarBand.pillLeftPx(paneLeftPx, paneWidthPx, windowWidthPx, pillWidth, density);
-        mScratchCenters = new float[mSlotCount];
-        mScratchScales = new float[mSlotCount];
+        mSlabHeightDp = homeSlabHeightDp(mSlotWidth / density);
+        mSlabBottomDp = PILL_HEIGHT_DP - GAP_DP;
+        mLiftInside = false;
+    }
+
+    /**
+     * The bar the page switcher key pops up over the extra-keys card: the raised bar, from
+     * {@code slabLeftPx} for {@code slabWidthPx} (the card's sides, {@link PageBarPopupFrame}),
+     * its slots equal and end to end so the end glyphs stand half a slot from its ends, the bar
+     * {@link #raisedSlabHeightDp} tall and centred in the touch row.
+     */
+    public static PageBarLayout raised(float density, float paneWidthPx, int slotCount,
+                                       float slabLeftPx, float slabWidthPx) {
+        return new PageBarLayout(density, paneWidthPx, slotCount, slabLeftPx,
+            Math.max(0f, slabWidthPx), raisedSlabHeightDp(), raisedSlabBottomDp());
+    }
+
+    private PageBarLayout(float density, float paneWidthPx, int slotCount, float slabLeftPx,
+                          float slabWidthPx, float slabHeightDp, float slabBottomDp) {
+        mDensity = density;
+        mPaneWidth = paneWidthPx;
+        mSlotCount = Math.max(1, slotCount);
+        mSlotWidth = slabWidthPx / mSlotCount;
+        mPillLeft = slabLeftPx;
+        mSlabHeightDp = slabHeightDp;
+        mSlabBottomDp = slabBottomDp;
+        mLiftInside = true;
     }
 
     public int slotCount() {
@@ -99,6 +177,12 @@ public final class PageBarLayout {
     public float slotWidthPx() {
         return mSlotWidth;
     }
+
+    public float paneWidthPx() {
+        return mPaneWidth;
+    }
+
+    // ---- The touch row ----------------------------------------------------------------------
 
     public float pillLeftPx() {
         return mPillLeft;
@@ -112,17 +196,13 @@ public final class PageBarLayout {
         return PILL_HEIGHT_DP * mDensity;
     }
 
-    public float glyphPx() {
-        return GLYPH_DP * mDensity;
-    }
-
     public float bandHeightPx() {
         return bandHeightDp() * mDensity;
     }
 
-    /** Pill top within the band. */
+    /** The touch row's top within the band: the band's top. */
     public float pillTopPx() {
-        return TOP_AIR_DP * mDensity;
+        return 0f;
     }
 
     public float pillBottomPx() {
@@ -132,6 +212,44 @@ public final class PageBarLayout {
     public float cancelPx() {
         return CANCEL_DP * mDensity;
     }
+
+    // ---- The slab ---------------------------------------------------------------------------
+
+    /** The slab's left: the touch row's, so the end glyph stands half a slot inside it. */
+    public float slabLeftPx() {
+        return mPillLeft;
+    }
+
+    public float slabWidthPx() {
+        return pillWidthPx();
+    }
+
+    public float slabHeightPx() {
+        return mSlabHeightDp * mDensity;
+    }
+
+    public float slabTopPx() {
+        return slabBottomPx() - slabHeightPx();
+    }
+
+    public float slabBottomPx() {
+        return pillTopPx() + mSlabBottomDp * mDensity;
+    }
+
+    /** Where every glyph's centre stands at rest. */
+    public float slabCenterYPx() {
+        return slabBottomPx() - slabHeightPx() / 2f;
+    }
+
+    public float glyphPx() {
+        return GLYPH_DP * mDensity;
+    }
+
+    public float raisedGlyphPx() {
+        return glyphPx() * RAISED_SCALE;
+    }
+
+    // ---- Slots ------------------------------------------------------------------------------
 
     public float restCenterX(int slot) {
         return mPillLeft + mSlotWidth * (slot + 0.5f);
@@ -150,111 +268,103 @@ public final class PageBarLayout {
         return Math.max(0, Math.min(members - 1, (int) Math.floor(within * members)));
     }
 
-    /** The finger as a fractional slot, 0..slotCount-1, for {@link #slidePositions}. */
+    /** The finger as a fractional slot, 0..slotCount-1, for the lift. */
     public float focusAt(float x) {
         float f = (x - mPillLeft) / mSlotWidth - 0.5f;
         return Math.max(0f, Math.min(mSlotCount - 1, f));
     }
 
-    /**
-     * Glyph centres and scales while sliding. The focus glyph is not drawn (scale 0); its two
-     * neighbours stand NEIGHBOUR_SCALE slots either side at that scale; the end glyphs stay at
-     * their rest centres; glyphs between an end and a neighbour are spaced evenly between them.
-     * A fractional {@code focusFloat} interpolates between the floor and ceiling layouts, and
-     * {@code enter} (0..1) blends rest into that. Writes {@link #slotCount} values; allocates
-     * nothing but is not reentrant.
-     */
-    public void slidePositions(float focusFloat, float enter, @NonNull float[] centers,
-                               @NonNull float[] scales) {
-        slidePositions(focusFloat, enter, centers, scales, null);
+    // ---- The lift ---------------------------------------------------------------------------
+
+    /** {@link #LIFT_CLEAR_DP} in px. */
+    public float liftClearPx() {
+        return LIFT_CLEAR_DP * mDensity;
     }
 
     /**
-     * As above; {@code folded[i]} (null: none) marks a folded slot, whose plates reach past its
-     * glyph, so a neighbour clamped at the pill's end keeps them inside the pill too.
+     * The glyph under the finger, fully lifted: how far its centre rises from its rest centre. On
+     * Home its bottom stands {@link #LIFT_CLEAR_DP} above the slab's top, clearing the well's rim
+     * and no more. On the key's raised bar, a glass strip round its glyphs, it rises only so far
+     * that its top stays {@link #LIFT_CLEAR_DP} inside the strip's (0 where it cannot rise at all),
+     * so no glyph pokes half out of the strip.
      */
-    public void slidePositions(float focusFloat, float enter, @NonNull float[] centers,
-                               @NonNull float[] scales, @Nullable boolean[] folded) {
-        mFolded = folded;
-        float f = Math.max(0f, Math.min(mSlotCount - 1, focusFloat));
-        int lo = (int) Math.floor(f);
-        int hi = Math.min(mSlotCount - 1, lo + 1);
-        float t = f - lo;
-        layoutFor(lo, centers, scales);
-        if (t > 0f && hi != lo) {
-            layoutFor(hi, mScratchCenters, mScratchScales);
-            // Between two focus slots both glyphs are neighbours: each blends at the neighbour's
-            // size, and only the one nearer the finger leaves the row for the bubble, so no glyph
-            // passes through a shrunken size on its way.
-            scales[lo] = NEIGHBOUR_SCALE;
-            mScratchScales[hi] = NEIGHBOUR_SCALE;
-            for (int i = 0; i < mSlotCount; i++) {
-                centers[i] += (mScratchCenters[i] - centers[i]) * t;
-                scales[i] += (mScratchScales[i] - scales[i]) * t;
-            }
-            scales[Math.round(f)] = 0f;
-        }
-        for (int i = 0; i < mSlotCount; i++) {
-            float rest = restCenterX(i);
-            centers[i] = rest + (centers[i] - rest) * enter;
-            scales[i] = 1f + (scales[i] - 1f) * enter;
-        }
-    }
-
-    private void layoutFor(int focus, float[] centers, float[] scales) {
-        int n = mSlotCount;
-        for (int i = 0; i < n; i++) {
-            centers[i] = restCenterX(i);
-            scales[i] = 1f;
-        }
-        scales[focus] = 0f;
-        float focusX = restCenterX(focus);
-        if (focus > 0) spread(centers, scales, 0, focus - 1, focusX - NEIGHBOUR_SCALE * mSlotWidth);
-        if (focus < n - 1) {
-            spread(centers, scales, n - 1, focus + 1, focusX + NEIGHBOUR_SCALE * mSlotWidth);
-        }
+    public float liftPeakPx() {
+        float half = slabHeightPx() / 2f;
+        float raisedHalf = raisedGlyphPx() / 2f;
+        if (mLiftInside) return Math.max(0f, half - raisedHalf - liftClearPx());
+        return half + liftClearPx() + raisedHalf;
     }
 
     /**
-     * Places neighbour {@code nb} at {@code nbX} and the glyphs between it and the end glyph
-     * {@code end}, which keeps its rest centre unless it is the neighbour itself.
+     * The page bar's own envelope of a glyph {@code distanceInSlots} from the finger: 1 within
+     * {@link #HOLD_SLOTS}, 0 from {@link #REACH_SLOTS} on, and a raised cosine between, so it is
+     * continuous with no slope at either end and falls monotonically. Because
+     * {@code HOLD_SLOTS + REACH_SLOTS == 1}, the envelopes of two adjacent glyphs sum to exactly 1
+     * for a finger anywhere between them: a glyph resting under the finger has neighbours at 0,
+     * and at the midpoint each stands at 0.5.
      */
-    private void spread(float[] centers, float[] scales, int end, int nb, float nbX) {
-        float unit = glyphPx() * NEIGHBOUR_SCALE / PageBarGlyphPainter.GLYPH_UNITS;
-        // The pill's ends are round: a glyph centred less than the cap's radius from an end
-        // crosses the outline at its corners, so the cap's radius is the least room it keeps.
-        float half = Math.max(PageBarGlyphPainter.GLYPH_UNITS * unit / 2f, pillHeightPx() / 2f);
-        boolean stack = mFolded != null && nb < mFolded.length && mFolded[nb];
-        float pillRight = mPillLeft + pillWidthPx();
-        float minX = mPillLeft + half
-            + (stack ? PageBarGlyphPainter.STACK_OVERHANG_LEFT * unit : 0f);
-        float maxX = pillRight - half
-            - (stack ? PageBarGlyphPainter.STACK_OVERHANG_RIGHT * unit : 0f);
-        float x = Math.max(minX, Math.min(maxX, nbX));
-        centers[nb] = x;
-        scales[nb] = NEIGHBOUR_SCALE;
-        if (end == nb) return;
-        float endX = restCenterX(end);
-        int steps = Math.abs(nb - end);
-        int dir = nb > end ? 1 : -1;
-        for (int k = 1; k < steps; k++) {
-            centers[end + dir * k] = endX + (x - endX) * k / steps;
-        }
+    public static float shape(float distanceInSlots) {
+        float d = Math.abs(distanceInSlots);
+        if (d <= HOLD_SLOTS) return 1f;
+        if (d >= REACH_SLOTS) return 0f;
+        return 0.5f * (1f + (float) Math.cos(Math.PI * (d - HOLD_SLOTS) / (REACH_SLOTS - HOLD_SLOTS)));
     }
 
-    /** The bubble's centre x: the focus slot's rest centre, kept inside the pane. */
-    public float bubbleCenterX(int slot) {
-        float r = BUBBLE_DIAMETER_DP * mDensity / 2f;
-        return Math.max(r, Math.min(mPaneWidth - r, restCenterX(slot)));
+    /** {@link #shape} for {@code slot} with the finger at {@code focus}, times {@code enter}. */
+    public static float envelope(int slot, float focus, float enter) {
+        if (enter <= 0f) return 0f;
+        return shape(slot - focus) * Math.min(1f, enter);
     }
 
-    /** The bubble's centre y, relative to the pill top (negative is above it). */
-    public float bubbleCenterYFromPillTopPx() {
-        return -(BUBBLE_GAP_DP + BUBBLE_DIAMETER_DP / 2f) * mDensity;
+    /** How far {@code slot}'s glyph rises above its rest centre; 0 at rest. */
+    public float liftPx(int slot, float focus, float enter) {
+        if (enter <= 0f) return 0f;
+        return envelope(slot, focus, enter) * liftPeakPx();
     }
 
-    /** The label's baseline y, relative to the pill top. */
-    public float labelBaselineFromPillTopPx() {
-        return -(BUBBLE_GAP_DP + BUBBLE_DIAMETER_DP + LABEL_GAP_DP) * mDensity;
+    /** {@code slot}'s glyph scale against its rest size; 1 at rest. */
+    public float scaleAt(int slot, float focus, float enter) {
+        return 1f + (RAISED_SCALE - 1f) * envelope(slot, focus, enter);
+    }
+
+    /** {@code slot}'s glyph centre y while lifted. */
+    public float liftedCenterYPx(int slot, float focus, float enter) {
+        return slabCenterYPx() - liftPx(slot, focus, enter);
+    }
+
+    /**
+     * How much of a lifted glyph has left the slab, 0 (inside it) to 1 (wholly above its top):
+     * the share of the wallpaper's ink it takes over the slab's.
+     */
+    public float outOfSlab(int slot, float focus, float enter) {
+        float reach = (slabHeightPx() + glyphPx() * scaleAt(slot, focus, enter)) / 2f;
+        return Math.max(0f, Math.min(1f, liftPx(slot, focus, enter) / reach));
+    }
+
+    /**
+     * The page's name's baseline over {@code slot}'s lifted glyph: {@link #GAP_DP} between the
+     * glyph's top and the text's descent.
+     */
+    public float labelBaselinePx(int slot, float focus, float enter, float descentPx) {
+        float half = glyphPx() * scaleAt(slot, focus, enter) / 2f;
+        return liftedCenterYPx(slot, focus, enter) - half - GAP_DP * mDensity - descentPx;
+    }
+
+    /** The baseline the name stands on at the top of its rise, for measuring its ink. */
+    public float labelBaselinePeakPx(float descentPx) {
+        return slabCenterYPx() - liftPeakPx() - raisedGlyphPx() / 2f - GAP_DP * mDensity
+            - descentPx;
+    }
+
+    /** The name's left: centred over {@code slot}, kept {@link #SIDE_INSET_DP} inside the pane. */
+    public float labelLeftPx(int slot, float textWidthPx) {
+        float inset = SIDE_INSET_DP * mDensity;
+        float left = restCenterX(slot) - textWidthPx / 2f;
+        return Math.max(inset, Math.min(mPaneWidth - inset - textWidthPx, left));
+    }
+
+    /** The room the name has: the pane less the side insets. */
+    public float labelRoomPx() {
+        return Math.max(0f, mPaneWidth - 2f * SIDE_INSET_DP * mDensity);
     }
 }

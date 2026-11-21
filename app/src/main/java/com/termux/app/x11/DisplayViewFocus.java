@@ -6,6 +6,8 @@ import android.view.View;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.PaneKeys;
+
 import java.util.function.Predicate;
 
 /**
@@ -57,7 +59,7 @@ public final class DisplayViewFocus {
      * was out of the window says so too, and no key ever reaches it.
      */
     public static boolean holdsKeys(@Nullable View view) {
-        return view != null && view.isAttachedToWindow() && view.getRootView().findFocus() == view;
+        return PaneKeys.holds(view);
     }
 
     /**
@@ -66,10 +68,7 @@ public final class DisplayViewFocus {
      * out of the window, or its page about to change under it.
      */
     public static boolean handBackTo(@Nullable View terminal, @NonNull Runnable request) {
-        if (terminal == null) return false;
-        if (holdsKeys(terminal)) return true;
-        request.run();
-        return holdsKeys(terminal);
+        return PaneKeys.handBack(terminal, request);
     }
 
     /** Who holds the window's focus when a key arrives. */
