@@ -14,11 +14,11 @@ import com.termux.app.ScrubWave;
  * Its bottom stands {@link #GAP_DP} above the touch row's, so it hugs whatever stands below the
  * bar.</p>
  *
- * <p>While a finger slides, each glyph swells on the A–Z bar's wave ({@link ScrubWave}): the
- * glyph under the finger grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
+ * <p>While a finger slides, the glyph under the finger is picked out on a narrow envelope of
+ * the bar's own ({@link #shape}; the enter easing is {@link ScrubWave#SETTLE_MS}): it grows to {@link #RAISED_SCALE} and rises to {@link #liftPeakPx}, which the
  * slab's geometry answers (on Home its bottom just clears the well's rim, {@link #LIFT_CLEAR_DP}
- * above the slab's top; on the key's raised bar it stays inside the strip), its neighbours by the
- * wave's envelope, all scaled by the enter share so nothing jumps as the finger crosses slots.
+ * above the slab's top; on the key's raised bar it stays inside the strip), its immediate neighbours
+ * rise a quarter as far and glyphs beyond them rest, all scaled by the enter share so nothing jumps as the finger crosses slots.
  * Every number is declared once, in dp.</p>
  */
 public final class PageBarLayout {
@@ -48,6 +48,18 @@ public final class PageBarLayout {
      * over other glass stands as a comfortable bar, not a strip ({@link #raised}).
      */
     public static final float RAISED_PAD_DP = 8f;
+    /**
+     * How far the lift reaches, in slots: a glyph this far or further from the finger does not
+     * move. The A-Z bar's wave spans several of its tightly packed letters; here the glyphs stand
+     * a whole slot apart, so only the one under the finger and a little of its two neighbours move.
+     */
+    public static final float REACH_SLOTS = 1.5f;
+    /**
+     * The lift and swell of a glyph exactly one slot from the finger, as a share of the focus
+     * glyph's: it stays inside the well. {@link #envelope} is the cosine of reach
+     * {@link #REACH_SLOTS}, which is this share at one slot.
+     */
+    public static final float NEIGHBOUR_SHARE = 0.25f;
     /** The finger leaving the touch row vertically by more than this cancels the slide. */
     public static final float CANCEL_DP = 32f;
 
@@ -282,17 +294,27 @@ public final class PageBarLayout {
         return half + liftClearPx() + raisedHalf;
     }
 
-    /** The A–Z wave's envelope for {@code slot} with the finger at {@code focus}, times {@code enter}. */
+    /**
+     * The page bar's own envelope of a glyph {@code distanceInSlots} from the finger: 1 under it,
+     * {@link #NEIGHBOUR_SHARE} one slot away, 0 from {@link #REACH_SLOTS} on; a raised cosine,
+     * so it is continuous with no slope at either end and falls monotonically.
+     */
+    public static float shape(float distanceInSlots) {
+        float d = Math.abs(distanceInSlots);
+        if (d >= REACH_SLOTS) return 0f;
+        return 0.5f * (1f + (float) Math.cos(Math.PI * d / REACH_SLOTS));
+    }
+
+    /** {@link #shape} for {@code slot} with the finger at {@code focus}, times {@code enter}. */
     public static float envelope(int slot, float focus, float enter) {
         if (enter <= 0f) return 0f;
-        return ScrubWave.envelope(Math.abs(slot - focus)) * Math.min(1f, enter);
+        return shape(slot - focus) * Math.min(1f, enter);
     }
 
     /** How far {@code slot}'s glyph rises above its rest centre; 0 at rest. */
     public float liftPx(int slot, float focus, float enter) {
         if (enter <= 0f) return 0f;
-        return ScrubWave.lift(ScrubWave.envelope(Math.abs(slot - focus))) * liftPeakPx()
-            * Math.min(1f, enter);
+        return envelope(slot, focus, enter) * liftPeakPx();
     }
 
     /** {@code slot}'s glyph scale against its rest size; 1 at rest. */

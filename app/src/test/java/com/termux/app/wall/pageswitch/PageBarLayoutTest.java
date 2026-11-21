@@ -215,18 +215,49 @@ public class PageBarLayoutTest {
         }
     }
 
-    @Test public void neighboursFallOffOnTheAzWave() {
-        PageBarLayout l = seven();
-        float peak = l.liftPeakPx();
-        for (int i = 0; i < 7; i++) {
-            float env = ScrubWave.envelope(Math.abs(i - 3f));
-            assertEquals("lift " + i, ScrubWave.lift(env) * peak, l.liftPx(i, 3f, 1f), EPS);
-            assertEquals("scale " + i, 1f + (PageBarLayout.RAISED_SCALE - 1f) * env,
-                l.scaleAt(i, 3f, 1f), EPS);
+    @Test public void onlyTheFocusGlyphLeavesTheWellAndTheNeighboursStayInside() {
+        for (float d : new float[] {2f, 2.625f, 3f}) {
+            PageBarLayout l = new PageBarLayout(d, 1080f, 6);
+            float peak = l.liftPeakPx();
+            for (int i = 0; i < 6; i++) {
+                int slotsAway = Math.abs(i - 3);
+                float lift = l.liftPx(i, 3f, 1f);
+                float scale = l.scaleAt(i, 3f, 1f);
+                if (slotsAway == 0) {
+                    assertEquals(peak, lift, EPS);
+                    assertEquals(PageBarLayout.RAISED_SCALE, scale, EPS);
+                } else if (slotsAway == 1) {
+                    assertEquals(0.25f * peak, lift, EPS);
+                    assertTrue("scale " + scale, scale <= 1.07f && scale > 1f);
+                    float top = l.liftedCenterYPx(i, 3f, 1f) - l.glyphPx() * scale / 2f;
+                    assertTrue("pokes " + (l.slabTopPx() - top) / d,
+                        l.slabTopPx() - top <= 1f * d + EPS);
+                } else {
+                    assertEquals(0f, lift, 0f);
+                    assertEquals(1f, scale, 0f);
+                }
+            }
         }
-        assertTrue(l.liftPx(2, 3f, 1f) < peak);
-        assertTrue(l.liftPx(1, 3f, 1f) < l.liftPx(2, 3f, 1f));
-        assertEquals(l.liftPx(2, 3f, 1f), l.liftPx(4, 3f, 1f), EPS);
+    }
+
+    @Test public void halfwayBetweenTwoSlotsTheyShareTheLiftEvenly() {
+        PageBarLayout l = seven();
+        assertEquals(l.liftPx(2, 2.5f, 1f), l.liftPx(3, 2.5f, 1f), EPS);
+        assertTrue(l.liftPx(3, 2.5f, 1f) < l.liftPeakPx());
+        assertEquals(0f, l.liftPx(1, 2.5f, 1f), 0f);
+        assertEquals(0f, l.liftPx(4, 2.5f, 1f), 0f);
+    }
+
+    @Test public void theEnvelopeFallsMonotonicallyWithDistance() {
+        float last = PageBarLayout.shape(0f);
+        assertEquals(1f, last, 0f);
+        for (int k = 1; k <= 300; k++) {
+            float e = PageBarLayout.shape(k / 100f);
+            assertTrue(e <= last + 1e-6f);
+            last = e;
+        }
+        assertEquals(0f, last, 0f);
+        assertEquals(PageBarLayout.NEIGHBOUR_SHARE, PageBarLayout.shape(1f), 1e-5f);
     }
 
     @Test public void everythingRestsWhenTheFingerIsAway() {
