@@ -59,6 +59,72 @@ public final class ExtraKeyIcons {
         return new String(Character.toChars(codePoint));
     }
 
+    /**
+     * The displays this app once shipped for a key, each with the icon that replaced it:
+     * {key spec, icon, old display...}. A tool spec is {@code tool:<name>}; a plain key is its
+     * name. Nerd code points are written as escapes (U+Fxxxx as surrogate pairs).
+     */
+    private static final Object[][] OLD_DEFAULTS = {
+        {"tool:wall.widgets", HOME, "", ""},
+        {"tool:wall.terminal", TERMINAL, ""},
+        {"tool:wall.display", DISPLAY, ""},
+        {"tool:mouse.toggle", MOUSE, "󰍽", ""},
+        {"tool:keyboard.cycle_form", KEYBOARD, ""},
+        {"tool:app.open_app_drawer", APPS, "󰀻"},
+        {"tool:voice.dictate", MIC, "", "󰍬"},
+        {"tool:pane.split", SPLIT, "󱇚"},
+        {"tool:window.new", WINDOW_ADD, "󱂬"},
+        {"tool:session.browser", SESSIONS, "󰉹"},
+        {"tool:clipboard.paste", PASTE, "󰆒"},
+        {"tool:app.command_palette", COMMAND, ""},
+        {"KEYBOARD", KEYBOARD, "󰥻", "⌨"},
+        {"LEFT", ARROW_LEFT, "←"},
+        {"RIGHT", ARROW_RIGHT, "→"},
+        {"UP", ARROW_UP, "↑"},
+        {"DOWN", ARROW_DOWN, "↓"},
+        {"ENTER", ENTER, "↲"},
+        {"TAB", TAB, "↹"},
+        {"BKSP", BACKSPACE, "⌫"},
+        {"DEL", DELETE_FORWARD, "⌦"},
+        {"DRAWER", MENU, "☰"},
+        {"PASTE", PASTE, "⎘"},
+        {"SCROLL", SCROLL, "⇳"},
+        {"HOME", KEY_HOME, "⇱"},
+        {"END", KEY_END, "⇲"},
+        {"PGUP", PAGE_UP, "⇑"},
+        {"PGDN", PAGE_DOWN, "⇓"},
+    };
+
+    private static final java.util.HashMap<String, Integer> sOldDefaults = new java.util.HashMap<>();
+
+    static {
+        for (Object[] row : OLD_DEFAULTS)
+            for (int i = 2; i < row.length; i++)
+                sOldDefaults.put(row[0] + "\u0000" + row[i], (Integer) row[1]);
+    }
+
+    /**
+     * A stored {@code display} as it draws now. When it is exactly what this app once shipped for
+     * this same key, the key's icon; anything else, including the same glyph on another key, is
+     * the user's own and comes back unchanged. Nothing stored is rewritten: this is read-time.
+     *
+     * @param keySpec the key's name or {@code tool:...} spec; null or a macro (several tokens, or
+     *                an argument-less lookup that finds nothing) never matches.
+     */
+    @androidx.annotation.Nullable
+    public static String effectiveDisplay(@androidx.annotation.Nullable String keySpec,
+                                          @androidx.annotation.Nullable String display) {
+        if (keySpec == null || display == null || display.isEmpty() || keySpec.indexOf(' ') >= 0)
+            return display;
+        String spec = keySpec;
+        if (spec.startsWith("tool:")) {
+            int arguments = spec.indexOf(':', 5);
+            if (arguments > 0) spec = spec.substring(0, arguments);
+        }
+        Integer icon = sOldDefaults.get(spec + "\u0000" + display);
+        return icon == null ? display : string(icon);
+    }
+
     /** Whether {@code label} holds any of this table's icons, which a screen reader cannot say. */
     public static boolean containsIcon(@androidx.annotation.Nullable CharSequence label) {
         if (label == null) return false;
