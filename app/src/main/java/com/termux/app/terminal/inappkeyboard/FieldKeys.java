@@ -1,5 +1,7 @@
 package com.termux.app.terminal.inappkeyboard;
 
+import android.view.KeyEvent;
+
 import androidx.annotation.NonNull;
 
 import juloo.keyboard2.KeyValue;
@@ -17,7 +19,10 @@ import juloo.keyboard2.KeyValue;
  *   <li>{@link Kind#EDITING}: copy, cut, paste, select all, undo and redo, which act on the field's
  *       own text ({@link FieldEditor}).
  *   <li>{@link Kind#CHORD}: a Ctrl or Alt chord on a character. Ctrl+A/C/X/V/Z/Y and Ctrl+Shift+Z
- *       are the editing actions ({@link #chordEdit}); every other chord does nothing.
+ *       are the editing actions ({@link #chordEdit}); every other chord does nothing. The keyboard
+ *       turns a character struck under Ctrl or Alt into its key's key event
+ *       ({@code KeyModifier.turn_into_keyevent}), so a chord on a letter arrives as that key event
+ *       ({@link #chordChar}), not as the character.
  *   <li>{@link Kind#TOOL}: a {@code tool:} key (palette, window switching, places). Ignored while a
  *       field has the keyboard.
  *   <li>{@link Kind#CONTENT}: everything else (characters, space, backspace, named keys, the
@@ -96,6 +101,8 @@ public final class FieldKeys {
             case Char:
             case String:
                 return ctrl || alt ? Kind.CHORD : Kind.CONTENT;
+            case Keyevent:
+                return (ctrl || alt) && chordChar(value) != 0 ? Kind.CHORD : Kind.CONTENT;
             default:
                 return Kind.CONTENT;
         }
@@ -113,8 +120,61 @@ public final class FieldKeys {
                 String text = value.getString();
                 return text.length() == 1 ? chordEdit(text.charAt(0), ctrl, alt, shift) : Edit.NONE;
             }
+            case Keyevent: {
+                char c = chordChar(value);
+                return c != 0 ? chordEdit(c, ctrl, alt, shift) : Edit.NONE;
+            }
             default:
                 return Edit.NONE;
+        }
+    }
+
+    /** The text of the key a chord was struck on, whichever form the chord arrived in. */
+    @NonNull
+    public static String chordText(@NonNull KeyValue value) {
+        switch (value.getKind()) {
+            case Char:
+                return String.valueOf(value.getChar());
+            case Keyevent: {
+                char c = chordChar(value);
+                return c != 0 ? String.valueOf(c) : value.getString();
+            }
+            default:
+                return value.getString();
+        }
+    }
+
+    /**
+     * The character whose key a key event is, when the keyboard made it from a character under
+     * Ctrl or Alt: the inverse of {@code KeyModifier.turn_into_keyevent}, less the space bar,
+     * which a field types as content. 0 for any other value (arrows, Tab, Enter, Delete, …).
+     */
+    public static char chordChar(@NonNull KeyValue value) {
+        if (value.getKind() != KeyValue.Kind.Keyevent) return 0;
+        int code = value.getKeyevent();
+        if (code >= KeyEvent.KEYCODE_A && code <= KeyEvent.KEYCODE_Z)
+            return (char) ('a' + (code - KeyEvent.KEYCODE_A));
+        if (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9)
+            return (char) ('0' + (code - KeyEvent.KEYCODE_0));
+        switch (code) {
+            case KeyEvent.KEYCODE_GRAVE: return '`';
+            case KeyEvent.KEYCODE_MINUS: return '-';
+            case KeyEvent.KEYCODE_EQUALS: return '=';
+            case KeyEvent.KEYCODE_LEFT_BRACKET: return '[';
+            case KeyEvent.KEYCODE_RIGHT_BRACKET: return ']';
+            case KeyEvent.KEYCODE_BACKSLASH: return '\\';
+            case KeyEvent.KEYCODE_SEMICOLON: return ';';
+            case KeyEvent.KEYCODE_APOSTROPHE: return '\'';
+            case KeyEvent.KEYCODE_SLASH: return '/';
+            case KeyEvent.KEYCODE_AT: return '@';
+            case KeyEvent.KEYCODE_PLUS: return '+';
+            case KeyEvent.KEYCODE_COMMA: return ',';
+            case KeyEvent.KEYCODE_PERIOD: return '.';
+            case KeyEvent.KEYCODE_STAR: return '*';
+            case KeyEvent.KEYCODE_POUND: return '#';
+            case KeyEvent.KEYCODE_NUMPAD_LEFT_PAREN: return '(';
+            case KeyEvent.KEYCODE_NUMPAD_RIGHT_PAREN: return ')';
+            default: return 0;
         }
     }
 

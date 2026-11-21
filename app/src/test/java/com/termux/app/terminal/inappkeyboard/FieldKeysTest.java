@@ -35,6 +35,34 @@ public class FieldKeysTest {
         }
     }
 
+    /**
+     * Ctrl or Alt on a character key reaches a field as that key's key event (KeyModifier), so
+     * every character the keyboard turns into a key event must read back as the same chord.
+     */
+    @Test public void aChordTheKeyboardMadeIntoAKeyEventIsStillTheChord() {
+        juloo.keyboard2.Pointers.Modifiers ctrl = juloo.keyboard2.Pointers.Modifiers.EMPTY
+            .with_extra_mod(KeyValue.makeInternalModifier(KeyValue.Modifier.CTRL));
+        for (char c : "abcdefghijklmnopqrstuvwxyz0123456789`-=[]\\;'/@+,.*#()".toCharArray()) {
+            KeyValue struck = juloo.keyboard2.KeyModifier.modify(KeyValue.makeCharKey(c), ctrl, null);
+            assertEquals(c + " is a key event", KeyValue.Kind.Keyevent, struck.getKind());
+            assertEquals(c, FieldKeys.chordChar(struck));
+            assertEquals(String.valueOf(c), FieldKeys.chordText(struck));
+            assertEquals(FieldKeys.Kind.CHORD, FieldKeys.classify(struck, true, false));
+            assertEquals(FieldKeys.chordEdit(c, true, false, false),
+                FieldKeys.editFor(struck, true, false, false));
+        }
+        KeyValue a = KeyValue.keyeventKey("a", KeyEvent.KEYCODE_A, 0);
+        assertEquals(FieldKeys.Edit.SELECT_ALL, FieldKeys.editFor(a, true, false, false));
+        assertEquals(FieldKeys.Edit.NONE, FieldKeys.editFor(a, true, true, false));
+        assertEquals(FieldKeys.Kind.CONTENT, FieldKeys.classify(a, false, false));
+        // Named keys under Ctrl stay the field's own: Ctrl+Backspace still deletes.
+        for (String name : new String[]{"backspace", "delete", "left", "enter", "tab", "esc"}) {
+            KeyValue named = KeyValue.getKeyByName(name);
+            assertEquals(name, FieldKeys.Kind.CONTENT, FieldKeys.classify(named, true, false));
+            assertEquals(name, FieldKeys.Edit.NONE, FieldKeys.editFor(named, true, false, false));
+        }
+    }
+
     @Test public void keyboardOwnedMatchesWhatTheDisplayPassesOnLessTheToolKeys() {
         assertTrue(FieldKeys.isKeyboardOwned(KeyValue.getKeyByName("config")));
         assertTrue(FieldKeys.isKeyboardOwned(KeyValue.getKeyByName("switch_clipboard")));
