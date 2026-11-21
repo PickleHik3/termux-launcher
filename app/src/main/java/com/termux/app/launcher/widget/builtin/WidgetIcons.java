@@ -31,7 +31,7 @@ public final class WidgetIcons {
         R.drawable.ic_rl_note, R.drawable.ic_rl_bell, R.drawable.ic_rl_reply, R.drawable.ic_rl_close,
         R.drawable.ic_rl_message, R.drawable.ic_rl_cpu, R.drawable.ic_rl_memory,
         R.drawable.ic_rl_temperature, R.drawable.ic_rl_battery, R.drawable.ic_rl_disk,
-        R.drawable.ic_rl_power, R.drawable.ic_rl_add, R.drawable.ic_rl_checkbox_empty,
+        R.drawable.ic_rl_phone_charging, R.drawable.ic_rl_add, R.drawable.ic_rl_checkbox_empty,
         R.drawable.ic_rl_checkbox_checked, R.drawable.ic_rl_settings, R.drawable.ic_rl_chevron_up,
         R.drawable.ic_rl_chevron_down,
     };

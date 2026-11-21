@@ -21,7 +21,7 @@ public final class StatGlyphs {
     public static final String BATTERY = WidgetIcons.BATTERY;
     /** A drive. */
     public static final String DISK = WidgetIcons.DISK;
-    /** A bolt; also the charging mark. */
+    /** The charging mark: a phone with its cable plugged in. */
     public static final String POWER = WidgetIcons.POWER;
 
     /** A reading inside running text: "{glyph} 31.4°C". */
