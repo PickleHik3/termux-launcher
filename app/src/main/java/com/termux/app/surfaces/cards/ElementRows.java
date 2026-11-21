@@ -54,9 +54,9 @@ public final class ElementRows {
     public enum Item {
         STATUS_BAR(R.string.editor_elements_status_bar, R.drawable.ic_editor_status_bar,
             EditorCard.STATUS, Element.STATUS, null, Visibility.ELEMENT),
-        PAGE_BAR(R.string.editor_elements_page_bar, R.drawable.ic_ms_more_horiz,
+        PAGE_BAR(R.string.editor_elements_page_bar, R.drawable.ic_rl_more_horiz,
             EditorCard.HOME, null, null, Visibility.PAGE_BAR),
-        APPS_ROW(R.string.editor_elements_apps_row, R.drawable.ic_symbol_apps,
+        APPS_ROW(R.string.editor_elements_apps_row, R.drawable.ic_rl_apps,
             EditorCard.DOCK, Element.APPS, null, Visibility.ELEMENT),
         AZ(R.string.editor_elements_az, R.drawable.ic_ms_sort_by_alpha,
             EditorCard.DOCK, Element.AZ, null, Visibility.ELEMENT),
@@ -66,11 +66,11 @@ public final class ElementRows {
             EditorCard.KEYBOARD, null, null, Visibility.KEYBOARD),
         SEARCH_FIELD(R.string.editor_elements_search_field, R.drawable.ic_symbol_search,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.SEARCH_FIELD),
-        DRAWER_ICON(R.string.editor_elements_drawer_icon, R.drawable.ic_symbol_apps,
+        DRAWER_ICON(R.string.editor_elements_drawer_icon, R.drawable.ic_rl_apps,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.DRAWER_TILE),
-        COMMAND_PALETTE(R.string.editor_elements_command_palette, R.drawable.ic_symbol_terminal,
+        COMMAND_PALETTE(R.string.editor_elements_command_palette, R.drawable.ic_rl_terminal,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.COMMAND_PALETTE_BUTTON),
-        FLOAT_TERMINAL(R.string.editor_elements_float_terminal, R.drawable.ic_status_bar_add_window,
+        FLOAT_TERMINAL(R.string.editor_elements_float_terminal, R.drawable.ic_rl_window_add,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.FLOAT_TERMINAL_BUTTON);
 
         @StringRes public final int nameRes;

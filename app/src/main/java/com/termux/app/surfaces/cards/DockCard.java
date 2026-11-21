@@ -74,10 +74,10 @@ public final class DockCard {
     /** The Options tiles, in the order the grid shows them. */
     public enum Option {
         SEARCH_FIELD(R.drawable.ic_symbol_search, R.string.editor_dock_option_search_field, 0),
-        DRAWER_ICON(R.drawable.ic_symbol_apps, R.string.editor_dock_option_drawer_icon, 0),
-        COMMAND_PALETTE(R.drawable.ic_symbol_terminal, R.string.editor_dock_option_command_palette,
+        DRAWER_ICON(R.drawable.ic_rl_apps, R.string.editor_dock_option_drawer_icon, 0),
+        COMMAND_PALETTE(R.drawable.ic_rl_terminal, R.string.editor_dock_option_command_palette,
             0),
-        FLOAT_TERMINAL(R.drawable.ic_status_bar_add_window,
+        FLOAT_TERMINAL(R.drawable.ic_rl_window_add,
             R.string.editor_dock_option_float_terminal, 0),
         NOTIFICATION_DOTS(R.drawable.ic_ms_circle_notifications,
             R.string.editor_dock_option_notification_dots, 0),
@@ -169,9 +169,9 @@ public final class DockCard {
     }
 
     /** The dock types' glyphs and words, today's, in the order the tiles show them. */
-    private static final int[] TYPE_GLYPHS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
-        R.drawable.ic_symbol_dock_peek_glass};
+    private static final int[] TYPE_GLYPHS = {R.drawable.ic_rl_dock_tray,
+        R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip,
+        R.drawable.ic_rl_dock_peek};
     private static final int[] TYPE_WORDS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
         R.string.layout_editor_dock_style_peek_glass};

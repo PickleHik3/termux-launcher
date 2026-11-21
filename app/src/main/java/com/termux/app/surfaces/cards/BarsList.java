@@ -159,7 +159,7 @@ public final class BarsList {
             case AZ: return R.drawable.ic_ms_sort_by_alpha;
             case EXTRA_KEYS: return R.drawable.ic_ms_keyboard_command_key;
             case APPS:
-            default: return R.drawable.ic_symbol_apps;
+            default: return R.drawable.ic_rl_apps;
         }
     }
 

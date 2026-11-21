@@ -1027,7 +1027,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
-                                    app:icon="@drawable/ic_symbol_close" />
+                                    app:icon="@drawable/ic_rl_close" />
 
                                 <FrameLayout
                                     android:id="@+id/inapp_keyboard_height_adjust_handle"
@@ -1050,7 +1050,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
-                                    app:icon="@drawable/ic_symbol_check" />
+                                    app:icon="@drawable/ic_rl_check" />
                             </LinearLayout>
                         </FrameLayout>
 

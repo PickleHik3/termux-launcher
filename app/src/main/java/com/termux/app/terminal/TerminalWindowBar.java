@@ -1403,7 +1403,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         AppCompatImageButton close = mCloseButton;
         if (close == null) {
             close = new AppCompatImageButton(getContext());
-            close.setImageResource(R.drawable.ic_status_bar_close_window);
+            close.setImageResource(R.drawable.ic_rl_window_close);
             close.setScaleType(ImageView.ScaleType.CENTER);
             close.setPadding(0, 0, 0, 0);
             // Clickable and focusable on purpose: the status bar's gesture treats a clickable
@@ -2030,7 +2030,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(context, R.color.termux_primary));
         AppCompatImageButton add = new AppCompatImageButton(context);
-        add.setImageResource(R.drawable.ic_status_bar_add_window);
+        add.setImageResource(R.drawable.ic_rl_window_add);
         ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(plusTint(accent)));
         add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);

@@ -469,7 +469,7 @@ final class EditorCardSheet {
         });
         line.addView(mOwnReset, new LinearLayout.LayoutParams(dp(HEADER_BUTTON_DP),
             dp(HEADER_BUTTON_DP)));
-        mReset = headerButton(R.drawable.ic_editor_more_vert, R.string.appearance_header_more);
+        mReset = headerButton(R.drawable.ic_rl_more_vert, R.string.appearance_header_more);
         androidx.appcompat.widget.TooltipCompat.setTooltipText(mReset,
             context.getString(R.string.appearance_header_more));
         mReset.setOnClickListener(this::openHeaderMenu);

@@ -209,12 +209,15 @@ public class FloatTitlebarTest {
     @Test
     public void metrics_aThinStripWhoseButtonsStillReachAThumb() {
         // The strip is the glyph and a little air; the target is the reach, not the strip.
-        android.graphics.drawable.Drawable glyph = context().getDrawable(R.drawable.ic_titlebar_close);
+        android.graphics.drawable.Drawable glyph = context().getDrawable(R.drawable.ic_rl_close);
         float density = context().getResources().getDisplayMetrics().density;
         assertNotNull(glyph);
-        assertTrue("the glyph fits the strip with air above and below",
-            glyph.getIntrinsicHeight() + 2 * Math.round(2 * density)
-                <= Math.round(FloatTitlebarPolicy.HEIGHT_DP * density));
+        // The 24dp glyph is scaled down into the strip, with air above and below it.
+        assertTrue("the glyph keeps a readable size inside the strip",
+            FloatTitlebarPolicy.HEIGHT_DP - 2 * FloatTitlebarPolicy.GLYPH_AIR_DP >= 16);
+        assertEquals(Math.round(FloatTitlebarPolicy.GLYPH_AIR_DP * density),
+            laidOut(strip(false, new ArrayList<>()), 1000).buttonFor(
+                FloatTitlebarPolicy.ACTION_CLOSE).getPaddingTop());
         assertTrue("a thumb-sized target", FloatTitlebarPolicy.BUTTON_REACH_DP >= 40);
         assertTrue("the reach covers the gap under the strip", FloatTitlebarPolicy.BUTTON_REACH_DP
             > FloatTitlebarPolicy.HEIGHT_DP + FloatTitlebarPolicy.GAP_DP);

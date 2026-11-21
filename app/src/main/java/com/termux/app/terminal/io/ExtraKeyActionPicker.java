@@ -195,7 +195,7 @@ public final class ExtraKeyActionPicker {
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         MaterialButton close = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
-        close.setIconResource(R.drawable.ic_symbol_close);
+        close.setIconResource(R.drawable.ic_rl_close);
         close.setContentDescription(context.getString(R.string.settings_extra_keys_action_back));
         close.setOnClickListener(v -> dialog.dismiss());
         headerRow.addView(close, new LinearLayout.LayoutParams(pad(48), pad(48)));
