@@ -199,7 +199,7 @@ public class AppDrawerAppCellView extends LinearLayout
             icon.setLayoutParams(iconParams);
         }
         float density = getResources().getDisplayMetrics().density;
-        int top = Math.round(AppDrawerGridMetrics.ROW_TOP_DP * density);
+        int top = Math.round(AppDrawerGridMetrics.rowTopPx(density));
         if (getPaddingTop() != top) {
             setPadding(getPaddingLeft(), top, getPaddingRight(), getPaddingBottom());
         }

@@ -43,6 +43,22 @@ public final class AppDrawerGridMetrics {
      * {@link #ROW_TOP_DP}, which takes it from what used to be a 10dp tail.
      */
     public static final float ROW_BOTTOM_DP = ROW_TOP_DP;
+
+    /**
+     * {@link #ROW_TOP_DP} in whole pixels: the bead's padding and its spare, each rounded the way
+     * the cell rounds them, so the air above the icon never comes up short of what the bead asks
+     * for (at density 2.75 the dp figure is 19.25 while the bead needs 17 + 3).
+     */
+    public static float rowTopPx(float density) {
+        float d = density > 0f ? density : 1f;
+        return Math.round(AppDrawerHighlightShape.PADDING_DP * d)
+            + Math.max(1, Math.round(AppDrawerHighlightShape.SPARE_DP * d));
+    }
+
+    /** {@link #ROW_BOTTOM_DP} in whole pixels; the same figure as {@link #rowTopPx}. */
+    public static float rowBottomPx(float density) {
+        return rowTopPx(density);
+    }
     /**
      * Air a label keeps inside its own cell on each side, so two long names never touch and the
      * outer columns stand off the card's edge. Every layout's cell label reads it.
@@ -141,8 +157,8 @@ public final class AppDrawerGridMetrics {
         }
         float cellWidthPx = width / columns;
         float iconPx = Math.min(iconTargetPx, cellWidthPx * ICON_CELL_FRACTION);
-        float rowHeightPx = (ROW_TOP_DP * d) + iconPx + (LABEL_GAP_DP * d)
-            + Math.max(0f, labelHeightPx) + (ROW_BOTTOM_DP * d);
+        float rowHeightPx = rowTopPx(d) + iconPx + (LABEL_GAP_DP * d)
+            + Math.max(0f, labelHeightPx) + rowBottomPx(d);
         return new AppDrawerGridMetrics(columns, cellWidthPx, iconPx, rowHeightPx);
     }
 

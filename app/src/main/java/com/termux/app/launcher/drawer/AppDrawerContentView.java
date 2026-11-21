@@ -1101,7 +1101,7 @@ public final class AppDrawerContentView extends FrameLayout
      */
     private void applyBottomChrome(@NonNull AppDrawerChromeLayout.Result r) {
         int inset = r.innerBottomInsetPx;
-        float rowTrailing = AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity;
+        float rowTrailing = AppDrawerGridMetrics.rowBottomPx(mDensity);
         int listPadding = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
         if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
         setBottomMargin(mGrid, r.contentBottomPx);
@@ -1244,7 +1244,7 @@ public final class AppDrawerContentView extends FrameLayout
     private float pagerBottomBandPx(int insetPx) {
         return AppDrawerContentInsetPolicy.pagerBottomBandPx(insetPx,
             AppDrawerPageIndicatorView.dotsHeightPx(mDensity),
-            AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity);
+            AppDrawerGridMetrics.rowBottomPx(mDensity));
     }
 
     /**

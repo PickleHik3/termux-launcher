@@ -208,10 +208,10 @@ public final class AppDrawerCategoryGridMetrics {
             // Automatic keeps one shared size: preview-large and detail cache keys are identical.
             icon = Math.min(icon, detailIcon);
         }
-        float detailRow = AppDrawerGridMetrics.ROW_TOP_DP * d + detailIcon
+        float detailRow = AppDrawerGridMetrics.rowTopPx(d) + detailIcon
             + AppDrawerGridMetrics.LABEL_GAP_DP * d
             + finiteNonNegative(appLabelHeightPx)
-            + AppDrawerGridMetrics.ROW_BOTTOM_DP * d;
+            + AppDrawerGridMetrics.rowBottomPx(d);
         // The one spacing the whole card is built from: the width the two icons could not take is
         // split three ways, so the left pad, the gap between them and the right pad are the same
         // number. The tile view reuses it above the heading, under it, between the rows and below

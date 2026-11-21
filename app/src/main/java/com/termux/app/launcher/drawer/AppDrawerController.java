@@ -2134,7 +2134,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         Paint paint = new Paint();
         paint.setTextSize(AppDrawerAppsAdapter.LABEL_TEXT_SP
             * mHost.context().getResources().getDisplayMetrics().scaledDensity);
-        Paint.FontMetrics metrics = paint.getFontMetrics();
+        // The whole-pixel metrics a TextView lays its line out with (ascent floored, descent
+        // ceiled): the float ones come up to two pixels short, and the bead's bottom then clamps.
+        Paint.FontMetricsInt metrics = paint.getFontMetricsInt();
         return metrics.descent - metrics.ascent;
     }
 

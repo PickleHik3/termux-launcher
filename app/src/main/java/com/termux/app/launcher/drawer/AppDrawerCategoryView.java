@@ -345,7 +345,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         if (inset == bottomInset) return;
         bottomInset = inset;
         int detail = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset,
-            AppDrawerGridMetrics.ROW_BOTTOM_DP * getResources().getDisplayMetrics().density);
+            AppDrawerGridMetrics.rowBottomPx(getResources().getDisplayMetrics().density));
         if (detailList.getPaddingBottom() != detail) {
             detailList.setPadding(0, 0, 0, detail);
             detailList.setClipToPadding(false);
