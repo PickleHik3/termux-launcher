@@ -92,12 +92,16 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
     /**
      * Home's well ({@link com.termux.app.chrome.InsetGlass}): the shade over it, the inner shadow
-     * under its top edge and the lip along its bottom; shaders made by {@link #syncWell} on a
-     * size or ground change only.
+     * drawn as rings inside its outline, and the rim hairlines outside it (dark across the top,
+     * light across the bottom arc); shaders and ring alphas made by {@link #syncWell} on a size
+     * or ground change only.
      */
     private final Paint mWellShade = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mWellShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
-    private final Paint mWellLip = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    @NonNull private int[] mWellRingAlpha = new int[0];
+    private int mWellRings;
+    private float mWellRingStep;
     private boolean mWellBuilt;
     private float mWellTop;
     private float mWellHeight;
@@ -181,7 +185,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(mDensity);
-        mWellLip.setStyle(Paint.Style.STROKE);
+        mWellShadow.setStyle(Paint.Style.STROKE);
+        mWellRim.setStyle(Paint.Style.STROKE);
         mGlass = new PaneGlassBackdropView(context);
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
@@ -399,16 +404,33 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mWellHeight = height;
         mWellDark = dark;
         mWellShade.setColor(com.termux.app.chrome.InsetGlass.wellShade(dark));
-        float depth = com.termux.app.chrome.InsetGlass.shadowDepthPx(mDensity, height);
-        int shadow = com.termux.app.chrome.InsetGlass.innerShadow(dark);
-        mWellShadow.setShader(depth <= 0f ? null : new LinearGradient(0f, top, 0f, top + depth,
-            shadow, shadow & 0x00FFFFFF, Shader.TileMode.CLAMP));
-        float lip = com.termux.app.chrome.InsetGlass.lipWidthPx(mDensity, height);
-        int lipColor = com.termux.app.chrome.InsetGlass.lip(dark);
-        mWellLip.setStrokeWidth(lip);
-        mWellLip.setShader(lip <= 0f ? null : new LinearGradient(0f,
-            top + height * com.termux.app.chrome.InsetGlass.LIP_FROM_SHARE, 0f, top + height,
-            lipColor & 0x00FFFFFF, lipColor, Shader.TileMode.CLAMP));
+        // The inner shadow: rings inside the outline, their colour by height (strongest under
+        // the top, the sides' share at mid height, clear at the bottom), their alpha by depth.
+        int rings = com.termux.app.chrome.InsetGlass.ringCount(mDensity, height);
+        if (mWellRingAlpha.length < rings) mWellRingAlpha = new int[rings];
+        for (int i = 0; i < rings; i++) {
+            mWellRingAlpha[i] = com.termux.app.chrome.InsetGlass.ringAlpha(i, rings);
+        }
+        mWellRings = rings;
+        mWellRingStep = com.termux.app.chrome.InsetGlass.ringStepPx(mDensity);
+        // Each ring is twice the step wide, so neighbours overlap and no seam shows between them.
+        mWellShadow.setStrokeWidth(2f * mWellRingStep);
+        int shadowTop = com.termux.app.chrome.InsetGlass.innerShadow(dark);
+        int shadowSide = com.termux.app.chrome.InsetGlass.innerShadowSide(dark);
+        mWellShadow.setShader(rings <= 0 ? null : new LinearGradient(0f, top, 0f, top + height,
+            new int[] {shadowTop, shadowSide, shadowSide & 0x00FFFFFF}, new float[] {0f, 0.5f, 1f},
+            Shader.TileMode.CLAMP));
+        // The rim of the hole, outside the outline: dark across the top, light across the bottom.
+        float rim = com.termux.app.chrome.InsetGlass.rimWidthPx(mDensity, height);
+        int rimShadow = com.termux.app.chrome.InsetGlass.rimShadow(dark);
+        int rimLight = com.termux.app.chrome.InsetGlass.rimLight(dark);
+        mWellRim.setStrokeWidth(rim);
+        mWellRim.setShader(rim <= 0f ? null : new LinearGradient(0f, top - rim, 0f,
+            top + height + rim,
+            new int[] {rimShadow, rimShadow & 0x00FFFFFF, rimLight & 0x00FFFFFF, rimLight},
+            new float[] {0f, com.termux.app.chrome.InsetGlass.RIM_SHADOW_TO_SHARE,
+                com.termux.app.chrome.InsetGlass.RIM_LIGHT_FROM_SHARE, 1f},
+            Shader.TileMode.CLAMP));
         invalidate();
     }
 
@@ -672,9 +694,12 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             }
             mFill.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_FILL_ALPHA));
             canvas.drawRoundRect(mRect, radius, radius, mFill);
-            mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_STROKE_ALPHA));
-            mRect.inset(0.5f * mDensity, 0.5f * mDensity);
-            canvas.drawRoundRect(mRect, radius, radius, mStroke);
+            // The ink outline is the key's card's; Home's well has no light inside it.
+            if (mKeyEntry) {
+                mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_STROKE_ALPHA));
+                mRect.inset(0.5f * mDensity, 0.5f * mDensity);
+                canvas.drawRoundRect(mRect, radius, radius, mStroke);
+            }
         }
         if (!mKeyEntry) drawWell(canvas, layout, radius);
         // While the overlay holds the lift, the glyphs draw there only, never twice; without a
@@ -684,24 +709,35 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     }
 
     /**
-     * Home's well over its glass (or its solid card): the shade, the inner shadow under the top
-     * edge and the lip inside the bottom edge, all cut to the slab's outline
-     * ({@link #syncWell}). Allocates nothing.
+     * Home's well over its glass (or its solid card): the shade, the inner shadow's rings inside
+     * the outline and the rim hairlines just outside it ({@link #syncWell}). The rim stands in
+     * the touch row's air around the slab, inside this view, so nothing is laid out for it.
+     * Allocates nothing.
      */
     private void drawWell(@NonNull Canvas canvas, @NonNull PageBarLayout layout, float radius) {
         float left = layout.slabLeftPx();
         float top = layout.slabTopPx();
-        mRect.set(left, top, left + layout.slabWidthPx(), top + layout.slabHeightPx());
+        float right = left + layout.slabWidthPx();
+        float bottom = top + layout.slabHeightPx();
+        mRect.set(left, top, right, bottom);
         canvas.drawRoundRect(mRect, radius, radius, mWellShade);
         if (mWellShadow.getShader() != null) {
-            canvas.drawRoundRect(mRect, radius, radius, mWellShadow);
+            // Ring i stands i steps in; its stroke reaches from the outline (ring 0) inward.
+            for (int i = 0; i < mWellRings; i++) {
+                float inset = mWellRingStep * (i + 1);
+                if (2f * inset >= bottom - top) break;
+                mRect.set(left + inset, top + inset, right - inset, bottom - inset);
+                float r = Math.max(0f, radius - inset);
+                mWellShadow.setAlpha(mWellRingAlpha[i]);
+                canvas.drawRoundRect(mRect, r, r, mWellShadow);
+            }
         }
-        float lip = mWellLip.getStrokeWidth();
-        if (lip > 0f && mWellLip.getShader() != null) {
-            // Inset by half the stroke so the lip lies inside the outline and follows its curve.
-            mRect.inset(lip / 2f, lip / 2f);
-            float r = Math.max(0f, radius - lip / 2f);
-            canvas.drawRoundRect(mRect, r, r, mWellLip);
+        float rim = mWellRim.getStrokeWidth();
+        if (rim > 0f && mWellRim.getShader() != null) {
+            // Outset by half the stroke so the hairline lies just outside the outline.
+            mRect.set(left - rim / 2f, top - rim / 2f, right + rim / 2f, bottom + rim / 2f);
+            float r = radius + rim / 2f;
+            canvas.drawRoundRect(mRect, r, r, mWellRim);
         }
     }
 
