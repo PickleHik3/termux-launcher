@@ -216,6 +216,9 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         };
         heading.setOnClickListener(expand);
         expandTarget.setOnClickListener(expand);
+        // Outside edit mode a long press on the heading starts editing with this tile in hand;
+        // in edit mode a touch already lifts, so there is nothing for the press to do.
+        heading.setOnLongClickListener(view -> AppDrawerContentView.enterEditFromTile(this));
         List<LauncherAppEntry> previews = bucket.previews();
         for (int i = 0; i < icons.length; i++) {
             ImageView icon = icons[i];
@@ -294,6 +297,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         heading.setText(null);
         heading.setContentDescription(null);
         heading.setOnClickListener(null);
+        heading.setOnLongClickListener(null);
         heading.setClickable(false);
         expandTarget.setContentDescription(null);
         expandTarget.setOnClickListener(null);

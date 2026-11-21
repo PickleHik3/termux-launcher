@@ -42,6 +42,7 @@ import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryAssignmentSource;
+import com.termux.app.launcher.data.LauncherCategoryOrderStore;
 import com.termux.app.launcher.data.LauncherCategoryOverrideStore;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -394,6 +395,11 @@ public final class AppDrawerContentView extends FrameLayout
     private float mEditDownY;
     private long mEditDownTime;
     private final Runnable mEditFolderHold = this::onEditFolderHold;
+    /** A Categories tile is lifted and this view owns the rest of the stream. */
+    private boolean mTileLiftActive;
+    private float mLastTouchX;
+    private float mLastTouchY;
+    @NonNull private final LauncherCategoryOrderStore mCategoryOrderStore;
     private int mDragEdgeDirection;
     private boolean mDragEdgeConsumed;
     private float mDragAutoscrollVelocity;
@@ -454,6 +460,7 @@ public final class AppDrawerContentView extends FrameLayout
         });
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
         mCategoryOverrides = new LauncherCategoryOverrideStore(context);
+        mCategoryOrderStore = new LauncherCategoryOrderStore(context);
         mCategoryAssignments = new LauncherCategoryAssignmentSource(mCategoryOverrides);
         mCategoryClassifier = new AppDrawerCategoryClassifier(loadCuratedMap(context.getResources()),
             mCategoryAssignments);
@@ -1566,9 +1573,29 @@ public final class AppDrawerContentView extends FrameLayout
         return labelRes == null ? null : getResources().getString(labelRes);
     }
 
+    /** The buckets in the user's tile order; nothing stored leaves them as they came. */
+    @NonNull
+    private List<AppDrawerCategoryBucket> orderedByUser(@NonNull List<AppDrawerCategoryBucket> in) {
+        List<String> stored = mCategoryOrderStore.read();
+        if (stored.isEmpty() || in.size() < 2) return in;
+        List<AppDrawerCategory> present = new ArrayList<>(in.size());
+        for (AppDrawerCategoryBucket bucket : in) present.add(bucket.category);
+        List<AppDrawerCategory> ordered = new AppDrawerCategoryOrder(stored).apply(present);
+        List<AppDrawerCategoryBucket> out = new ArrayList<>(in.size());
+        for (AppDrawerCategory category : ordered) {
+            for (AppDrawerCategoryBucket bucket : in) {
+                if (bucket.category == category) {
+                    out.add(bucket);
+                    break;
+                }
+            }
+        }
+        return Collections.unmodifiableList(out);
+    }
+
     /** One write path for the buckets, so the search rows' category index can never go stale. */
     private void setCategoryBuckets(@NonNull List<AppDrawerCategoryBucket> buckets) {
-        mCategoryBuckets = buckets;
+        mCategoryBuckets = orderedByUser(buckets);
         mCategoryLabelIds.clear();
         for (AppDrawerCategoryBucket bucket : buckets) {
             // Synthetic buckets (Suggestions, Recently Added) duplicate apps that also live in a
@@ -1805,9 +1832,14 @@ public final class AppDrawerContentView extends FrameLayout
         mEditModel = next;
         if (!next.isEditing()) {
             dismissGridSizePopup();
+            mTileLiftActive = false;
+            mCategoryView.cancelReorder();
             removeCallbacks(mEditFolderHold);
             mEditFolderCell = null;
             mEditFolder = null;
+        } else {
+            // Tiles reorder only on the overview: an open category closes as editing starts.
+            mCategoryView.collapseIfNeeded();
         }
         AppDrawerSearchController search = mSearch;
         if (search != null) search.setInputEnabled(next.searchEnabled());
@@ -2504,6 +2536,7 @@ public final class AppDrawerContentView extends FrameLayout
         boolean terminal = terminalAction == MotionEvent.ACTION_UP
             || terminalAction == MotionEvent.ACTION_CANCEL;
         try {
+            if (mTileLiftActive && !mCancellingContent) return handleTileLiftTouch(ev);
             if (!mCancellingContent && mCornerTab.filter(ev) == AppDrawerCornerTab.CONSUME) {
                 return true;
             }
@@ -2561,6 +2594,8 @@ public final class AppDrawerContentView extends FrameLayout
         // scroll from inside this dispatch, and that end has to know it is a cancellation rather
         // than a release, or a stream taken away by another window would report as a decision.
         if (action == MotionEvent.ACTION_CANCEL) mStreamCancelled = true;
+        mLastTouchX = ev.getX();
+        mLastTouchY = ev.getY();
         if (mEditFolderCell != null) trackEditFolder(ev, action);
         // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
         // the one place a finger lands while typing).
@@ -2668,6 +2703,7 @@ public final class AppDrawerContentView extends FrameLayout
         float y = ev.getY();
         AppDrawerEditGesturePolicy.Touched touched = AppDrawerEditGesturePolicy.Touched.GAP;
         View cell = null;
+        View tile = null;
         if (editing) {
             if (region == AppDrawerTouchRegions.Region.COLUMN) {
                 touched = AppDrawerEditGesturePolicy.Touched.AZ_INDEX;
@@ -2675,6 +2711,12 @@ public final class AppDrawerContentView extends FrameLayout
                 touched = AppDrawerEditGesturePolicy.Touched.SEARCH_BAR;
             } else if (hits(mSectionSwitch, x, y)) {
                 touched = AppDrawerEditGesturePolicy.Touched.SECTION_SWITCH;
+            } else if (presentedType() == AppDrawerViewType.CATEGORIES) {
+                if (!mGestureCategorySearch) {
+                    tile = mCategoryView.tileViewAt(x - mCategoryView.getLeft(),
+                        y - mCategoryView.getTop());
+                }
+                if (tile != null) touched = AppDrawerEditGesturePolicy.Touched.TILE_BODY;
             } else if (downItem != null) {
                 cell = cellViewAt(x, y);
                 if (cell != null) {
@@ -2690,6 +2732,10 @@ public final class AppDrawerContentView extends FrameLayout
             case LIFT_APP:
                 if (cell != null && downItem != null && downItem.app != null)
                     liftApp(cell, downItem.app);
+                break;
+            case LIFT_TILE:
+                if (tile instanceof AppDrawerCategoryTileView)
+                    liftTile((AppDrawerCategoryTileView) tile, x, y);
                 break;
             case PENDING:
                 if (cell != null && downItem != null && downItem.folder != null) {
@@ -2777,6 +2823,74 @@ public final class AppDrawerContentView extends FrameLayout
             mEditFolderCell = null;
             mEditFolder = null;
         }
+    }
+
+    // ------------------------------------------------------------------ tile reorder
+
+    /** The tile takes the finger: the children are cancelled and this view owns the stream. */
+    private void liftTile(@NonNull AppDrawerCategoryTileView tile, float x, float y) {
+        if (mTileLiftActive) return;
+        cancelContentTouch(x, y);
+        if (!mCategoryView.beginReorder(tile, x - mCategoryView.getLeft(),
+            y - mCategoryView.getTop(), this::onCategoryReordered)) return;
+        mTileLiftActive = true;
+        mGestureActive = false;
+        mDownOverGrid = false;
+        disarm();
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+    }
+
+    private boolean handleTileLiftTouch(@NonNull MotionEvent ev) {
+        float x = ev.getX() - mCategoryView.getLeft();
+        float y = ev.getY() - mCategoryView.getTop();
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                mCategoryView.moveReorder(x, y);
+                break;
+            case MotionEvent.ACTION_UP:
+                mTileLiftActive = false;
+                mCategoryView.dropReorder(x, y);
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                mTileLiftActive = false;
+                mCategoryView.cancelReorder();
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    /** The drop's answer: the new order is stored, and the tiles are bound once in it. */
+    private void onCategoryReordered(@NonNull AppDrawerCategory what,
+                                     @Nullable AppDrawerCategory before) {
+        mCategoryOrderStore.write(new AppDrawerCategoryOrder(mCategoryOrderStore.read())
+            .moved(what, before));
+        setCategoryBuckets(mCategoryBuckets);
+        if (categoryBucketsLive()) mCategoryView.submitBuckets(mCategoryBuckets);
+    }
+
+    /**
+     * A long press on a Categories tile's heading outside edit mode: edit mode starts and the tile
+     * lifts in the same gesture. Called by the heading; false when it is not the drawer's to do.
+     */
+    static boolean enterEditFromTile(@NonNull AppDrawerCategoryTileView tile) {
+        for (ViewParent parent = tile.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof AppDrawerContentView) {
+                return ((AppDrawerContentView) parent).enterEditLiftingTile(tile);
+            }
+        }
+        return false;
+    }
+
+    private boolean enterEditLiftingTile(@NonNull AppDrawerCategoryTileView tile) {
+        if (mEditModel.isEditing() || !mInteractive || hasQuery()
+            || presentedType() != AppDrawerViewType.CATEGORIES || !mCategoryView.isOverview())
+            return false;
+        enterEdit(AppDrawerEditModel.Entry.TILE_LONG_PRESS);
+        if (mEditModel.liftsTileOnEntry()) liftTile(tile, mLastTouchX, mLastTouchY);
+        return true;
     }
 
     @Nullable

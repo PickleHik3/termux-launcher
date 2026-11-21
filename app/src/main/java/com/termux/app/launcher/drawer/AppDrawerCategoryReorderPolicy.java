@@ -92,6 +92,23 @@ public final class AppDrawerCategoryReorderPolicy {
         return mSource >= 0 && (mPoint == mSource || mPoint == mSource + 1);
     }
 
+    /**
+     * Where {@code tile} sits while {@code source} is carried to the target {@code before} names:
+     * the others close ranks over the source's old place and open a gap at the target. For the
+     * source itself it is the slot it would land in. Views move each tile by the difference between
+     * its slot and its own place.
+     *
+     * @param before a shown index, or {@link #END}
+     * @param count  how many tiles are shown
+     */
+    public static int slotOf(int tile, int source, int before, int count) {
+        int insert = before == END || before >= count ? count : Math.max(0, before);
+        int gap = source < insert ? insert - 1 : insert;
+        if (tile == source) return gap;
+        int rank = tile > source ? tile - 1 : tile;
+        return rank >= gap ? rank + 1 : rank;
+    }
+
     private static int clamp(int v, int lo, int hi) {
         return Math.max(lo, Math.min(hi, v));
     }
