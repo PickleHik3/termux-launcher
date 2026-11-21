@@ -18317,6 +18317,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mHomeFloatStackPx = stack.stackHeightPx;
         mHomeFloatKeyboardShown = state.keyboardShown;
         mHomeFloatImePushPx = stack.homeFloatImePushPx;
+        // The renderer stands Home's rows at their keyboard-down rect under a keyboard raised on
+        // demand; it writes only on a change.
+        mStackRenderer.setHomeCover(homeRowsCovered(), systemImeTakePx());
         syncHomeFloatObstructions();
         mCrossing.heldOverlap(stack.contentOverlapPx);
         // The kept band this pass stood the stack on, so the next inset dispatch answers a band
@@ -29168,6 +29171,59 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private int mHomeFloatImePushPx;
 
     /**
+     * Whether Home's rows stand at their keyboard-down rect under a raised keyboard: a Home whose
+     * keyboard is raised on demand (#309). A property of Home's rest, whatever page is in front.
+     */
+    private boolean homeRowsCovered() {
+        return !com.termux.app.place.HomeKeyboardCover.liftsRows(
+            com.termux.app.page.PageKind.HOME, isHomeKeyboardAlwaysOn());
+    }
+
+    /**
+     * The top of what covers Home from below, on screen, or -1 with no keyboard up; floats and the
+     * pill both meet it. While covered ({@link #homeRowsCovered}) it is the keyboard's true top: for
+     * the in-app keyboard the stack's bottom less the keyboard column's laid-out height and its
+     * bottom margin ({@code accessory_keyboard_column}, 0 while it is not laid out); for the system
+     * keyboard {@link #systemImeTopOnScreenPx}. Always-on Home keeps the dock riding the keyboard,
+     * so it is the stack's top, as before.
+     */
+    private int homeKeyboardTopOnScreenPx(int stackBottomPx) {
+        if (!homeRowsCovered()) {
+            return KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
+                mHomeFloatImePushPx, stackBottomPx, mHomeFloatStackPx,
+                Math.max(0, stackBottomPx - mHomeFloatStackPx));
+        }
+        int columnPx = 0;
+        View column = findViewById(R.id.accessory_keyboard_column);
+        if (column != null) {
+            columnPx = column.getHeight();
+            if (column.getLayoutParams() instanceof ViewGroup.MarginLayoutParams) {
+                columnPx += ((ViewGroup.MarginLayoutParams) column.getLayoutParams()).bottomMargin;
+            }
+        }
+        return KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
+            mHomeFloatImePushPx, stackBottomPx, columnPx, systemImeTopOnScreenPx());
+    }
+
+    /**
+     * The system keyboard's top on screen. The root fits the system windows: a keyboard the
+     * window resizes for is the root's bottom padding ({@code mRootFitBottomPx}, which stands in
+     * for the bars' with the keyboard down), so its top is the root's bottom less that padding;
+     * a keyboard the insets miss is the root's own bottom margin, which already put the root's
+     * bottom on the keyboard's top.
+     */
+    private int systemImeTopOnScreenPx() {
+        View root = mTermuxActivityRootView;
+        if (root == null) return 0;
+        int[] at = mHomeImeTopScratch;
+        root.getLocationOnScreen(at);
+        int bottom = at[1] + root.getHeight();
+        return mRootFitBottomPx > mRootRestFitBottomPx ? bottom - mRootFitBottomPx : bottom;
+    }
+
+    private final int[] mHomeImeTopScratch = new int[2];
+
+    /**
      * Tells the float layer what covers it, in screen pixels: the status bar (or the system bar)
      * above, the dock below, and the keyboard with the dock riding on it while it is up. The
      * stack's bottom edge is where it stands on screen; its rows are this pass's heights.
@@ -29204,8 +29260,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // the same with either keyboard up, and they meet the keyboard's top instead.
         int dockTop = KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom, mHomeFloatDockPx,
             mHomeFloatImePushPx);
-        int keyboardTop = KeyboardOverlayPolicy.homeKeyboardTopPx(mHomeFloatKeyboardShown,
-            mHomeFloatImePushPx, stackBottom, mHomeFloatStackPx);
+        int keyboardTop = homeKeyboardTopOnScreenPx(stackBottom);
         root.getLocationOnScreen(at);
         int roomTop = at[1];
         androidx.core.view.WindowInsetsCompat insets =
@@ -35659,6 +35714,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 int stackBottom = Math.round(stackAt[1] - stack.getTranslationY()) + stack.getHeight();
                 stackTop = com.termux.app.place.KeyboardOverlayPolicy.homeDockRestTopPx(stackBottom,
                     mHomeFloatDockPx, mHomeFloatImePushPx) - at[1];
+                // A covered Home's dock stands under the keyboard: the pill docks on the
+                // keyboard's true top while one is up (#309).
+                int keyboardTop = homeKeyboardTopOnScreenPx(stackBottom);
+                if (keyboardTop >= 0 && homeRowsCovered()) stackTop = keyboardTop - at[1];
             }
             out[com.termux.app.terminal.io.HomePillController.GEO_STACK_TOP] = stackTop;
 
