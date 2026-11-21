@@ -263,6 +263,16 @@ public final class ExtraKeyActionLabels {
         }
     }
 
+    /** The drawable of {@code toolName}'s bar icon, or 0 when the tool has none. */
+    @androidx.annotation.DrawableRes
+    public static int iconDrawable(@NonNull String toolName) {
+        String glyph = defaultCapGlyph(toolName);
+        if (glyph == null) return 0;
+        int codePoint = glyph.codePointAt(0);
+        for (int[] row : ICON_DRAWABLES) if (row[0] == codePoint) return row[1];
+        return 0;
+    }
+
     private static String icon(int codePoint) {
         return ExtraKeyIcons.string(codePoint);
     }

@@ -8754,7 +8754,7 @@ public final class SuggestionBarView extends GridLayout
         Context context = getContext();
         AppNotice.undoable(context, context.getString(R.string.dock_item_removed),
             context.getString(R.string.home_item_removed_undo_hint), () -> restorePin(pin, index),
-            com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS);
+            com.termux.app.launcher.widget.HomeItemUndo.HOLD_MS, R.drawable.ic_rl_delete);
     }
 
     /**

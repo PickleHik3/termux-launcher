@@ -101,6 +101,21 @@ public final class NerdFontSpans {
         return false;
     }
 
+    /**
+     * A one-character label that draws {@code drawableRes} like a registered symbol would: the
+     * same size, baseline and text-colour tint, for a view that shows one icon as its mark.
+     */
+    @NonNull
+    public static CharSequence iconSpan(@NonNull Context context, @DrawableRes int drawableRes) {
+        SpannableString spanned = new SpannableString("\uFFFC");
+        Drawable drawable = context.getDrawable(drawableRes);
+        if (drawable != null) {
+            spanned.setSpan(new TintedDrawableSpan(drawable.mutate()), 0, 1,
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+        }
+        return spanned;
+    }
+
     /** The bundled symbols face, or null when the asset is missing (e.g. bare-module tests). */
     @Nullable
     public static Typeface typeface(@NonNull Context context) {

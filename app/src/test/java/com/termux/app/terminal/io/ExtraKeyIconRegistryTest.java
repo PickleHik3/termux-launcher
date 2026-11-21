@@ -36,7 +36,7 @@ public class ExtraKeyIconRegistryTest {
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.COMMAND),
             ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE));
         assertNotNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_VOICE_DICTATE));
-        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_TERMINAL_RESET));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE));
     }
 
     @Test public void launcherActionsWearTheirIconAndArgumentRowsKeepText() {

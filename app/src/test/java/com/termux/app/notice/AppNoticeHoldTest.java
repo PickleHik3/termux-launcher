@@ -74,9 +74,9 @@ public class AppNoticeHoldTest {
         assertTrue(host.activeItem().fleeting);
 
         host.clear();
-        AppNotice.confirm(activity, "⧉", "Copied");
+        AppNotice.confirm(activity, com.termux.R.drawable.ic_rl_copy, "Copied");
         assertEquals(AppNoticeItem.Hold.CONFIRM.ms, host.activeItem().durationMs);
-        assertEquals("⧉", host.activeItem().resolvedGlyph());
+        assertEquals(com.termux.R.drawable.ic_rl_copy, host.activeItem().resolvedIcon());
 
         host.clear();
         AppNotice.refusal(activity, "No session to split");

@@ -538,7 +538,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ? getString(R.string.notice_reply_not_sent_unknown)
             : getString(R.string.notice_reply_not_sent, program);
         com.termux.app.notice.AppNotice.shell(this, title, getString(R.string.notice_reply_copy),
-            "" /* nf-fa-bell */, true,
+            R.drawable.ic_rl_bell, true,
             () -> com.termux.shared.interact.ShareUtils.copyTextToClipboard(this, text));
     }
 
@@ -5490,8 +5490,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // A toggle's name says nothing about where it left things; the hint runs after the
         // action, so the state it reads is the one the tap produced.
         if (LauncherToolRegistry.TOOL_MOUSE_TOGGLE.equals(toolName)) {
-            com.termux.app.notice.AppNotice.readout(this, getString(isMouseMode()
-                ? R.string.extra_key_readout_mouse_mode_on : R.string.extra_key_readout_mouse_mode_off));
+            com.termux.app.notice.AppNotice.readout(this, R.drawable.ic_rl_mouse,
+                getString(isMouseMode()
+                    ? R.string.extra_key_readout_mouse_mode_on
+                    : R.string.extra_key_readout_mouse_mode_off));
             return;
         }
         // A place change names its destination for as long as the page is on its way there: the
@@ -5502,10 +5504,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mPaneWallController.wall().isMoving()) {
             mWallReadoutShowing = true;
             com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes),
-                WALL_READOUT_CEILING_MS);
+                WALL_READOUT_CEILING_MS, com.termux.app.terminal.io.ExtraKeyActionLabels.iconDrawable(toolName));
             return;
         }
-        com.termux.app.notice.AppNotice.readout(this, getString(tool.titleRes));
+        com.termux.app.notice.AppNotice.readout(this,
+            com.termux.app.terminal.io.ExtraKeyActionLabels.iconDrawable(toolName),
+            getString(tool.titleRes));
     }
 
     /** A wall tool's read-out is up, naming the place the slide is heading for, until the settle. */
@@ -21602,7 +21606,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     if (currentWallPage() != com.termux.app.page.PageKind.TERMINAL) {
                         String text = VoiceTextSanitizer.clean(result);
                         if (!text.isEmpty() && !typeVoiceText(text) && copyVoiceText(text))
-                            AppNotice.show(this, R.string.voice_input_no_target_copied, false);
+                            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_no_target_copied), false);
                     } else if (!offerToInAppKeyboardInterceptor(
                             juloo.keyboard2.KeyValue.makeStringKey(result), false, false, false)) {
                         target.write(result);
@@ -21621,7 +21625,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             android.speech.RecognizerIntent.LANGUAGE_MODEL_FREE_FORM);
         if (getPackageManager().resolveActivity(recognition,
                 android.content.pm.PackageManager.MATCH_DEFAULT_ONLY) == null) {
-            AppNotice.show(this, R.string.voice_typing_unavailable, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_typing_unavailable), false);
             return;
         }
         Intent launch = createVoiceTypingIntent(this, chooser);
@@ -21630,7 +21634,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             startActivityForResult(launch, REQUEST_CODE_VOICE_TYPING);
         } catch (android.content.ActivityNotFoundException e) {
             mVoiceTypingTargetSession = null;
-            AppNotice.show(this, R.string.voice_typing_unavailable, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_typing_unavailable), false);
         }
     }
 
@@ -21653,7 +21657,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The settings' choice, or another installed speech model when that one's files are gone.
         com.termux.ai.TaiModelSpec model = com.termux.ai.TaiSpeechModels.resolveActive(this);
         if (model == null) {
-            AppNotice.show(this, R.string.voice_input_no_model, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_no_model), false);
             launchVoiceTyping(false);
             return;
         }
@@ -21680,7 +21684,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mVoiceSpeechWarming = true;
         if (!session.start()) {
             mVoiceSpeechWarming = false;
-            AppNotice.show(this, getString(R.string.voice_input_fallback,
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_fallback,
                 getString(R.string.voice_input_mic_unavailable)), false);
             launchVoiceTyping(false);
             return;
@@ -21768,7 +21772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (!VoiceLanguage.AUTO.equals(setting) && !VoiceLanguage.FALLBACK.equals(setting)
                 && !mVoiceEnglishOnlyNoticed) {
                 mVoiceEnglishOnlyNoticed = true;
-                AppNotice.show(this, getString(R.string.voice_input_english_only_model,
+                AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_english_only_model,
                     new java.util.Locale(setting).getDisplayLanguage()), true);
             }
             return VoiceLanguage.Choice.NONE;
@@ -21778,7 +21782,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Auto listens, so an unknown layout only means an English hint, not English forced.
         if (resolution.fallback && resolution.explicit && !mVoiceLanguageFallbackNoticed) {
             mVoiceLanguageFallbackNoticed = true;
-            AppNotice.show(this, R.string.voice_input_language_fallback, false);
+            AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_language_fallback), false);
         }
         return VoiceLanguage.Choice.forWhisper(resolution);
     }
@@ -22026,7 +22030,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 closeVoicePill();
                 return;
             }
-            if (use == VoiceDictation.Use.INSERT) AppNotice.show(this, R.string.voice_input_no_target_copied, false);
+            if (use == VoiceDictation.Use.INSERT) AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_no_target_copied), false);
             said = R.string.voice_input_cleanup_copied;
         }
         if (mVoiceIndicator != null) mVoiceIndicator.onActionDone(said);
@@ -22454,10 +22458,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 || mInAppKeyboard == null || !mInAppKeyboard.isVisible()) {
                 // Text already came through, or nothing to fall back for (the recognizer types
                 // where the keyboard does, which the Dictate key may not have): just say why.
-                AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_stopped, detail), true);
+                AppNotice.show(TermuxActivity.this, R.drawable.ic_rl_mic, getString(R.string.voice_input_stopped, detail), true);
                 return;
             }
-            AppNotice.show(TermuxActivity.this, getString(R.string.voice_input_fallback, detail), true);
+            AppNotice.show(TermuxActivity.this, R.drawable.ic_rl_mic, getString(R.string.voice_input_fallback, detail), true);
             launchVoiceTyping(false);
         }
 
@@ -22524,7 +22528,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 startOnDeviceVoiceInput(mVoiceMicrophoneAskedFromKeyboard);
             } else {
                 // Refused: the system recognizer asks for the microphone itself.
-                AppNotice.show(this, getString(R.string.voice_input_fallback,
+                AppNotice.show(this, R.drawable.ic_rl_mic, getString(R.string.voice_input_fallback,
                     getString(R.string.voice_input_permission_denied)), false);
                 launchVoiceTyping(false);
             }
@@ -33419,7 +33423,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             getPreferences().setDwindleDefaultLayoutEnabled(enabled);
             getPreferences().setFocusedPaneGrowsEnabled(enabled);
             // The corner button only flips its icon; the notice says what the switch means.
-            AppNotice.show(TermuxActivity.this, AppNoticeItem.Kind.INFO, "\uDB81\uDD70",
+            AppNotice.show(TermuxActivity.this, AppNoticeItem.Kind.INFO, R.drawable.ic_rl_layout,
                 getString(enabled ? R.string.pane_controls_auto_tiling_on_title
                     : R.string.pane_controls_auto_tiling_off_title),
                 getString(enabled ? R.string.pane_controls_auto_tiling_on_sub
