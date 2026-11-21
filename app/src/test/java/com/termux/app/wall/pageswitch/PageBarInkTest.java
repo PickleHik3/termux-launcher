@@ -24,4 +24,9 @@ public class PageBarInkTest {
     @Test public void whiteAgainstBlackStaysFull() {
         assertEquals(1f, PageBarInk.neutralAlpha(0xFFFFFFFF, 0xFF000000), 0f);
     }
+
+    @Test public void theKeysPopUpLaysADarkCardUnderPaleInkAndAPaleOneUnderDarkInk() {
+        assertEquals(0xFF1F1F1F, PageBarGlass.cardFor(0xFFF2F0E4));
+        assertEquals(0xFFF2F2F2, PageBarGlass.cardFor(0xFF1F2A2D));
+    }
 }

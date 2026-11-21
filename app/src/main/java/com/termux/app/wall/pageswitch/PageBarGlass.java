@@ -42,7 +42,18 @@ final class PageBarGlass {
         @ColorInt int accent = Color.WHITE;
     }
 
+    /** The card a page of pale ink wears is the dark one, and the other way round. */
+    private static final int PALE_INK_CARD = 0xFF1F1F1F;
+    private static final int DARK_INK_CARD = 0xFFF2F2F2;
+
     private PageBarGlass() {
+    }
+
+    /** The opaque card {@code ink} is read on: dark under a pale ink, pale under a dark one. */
+    @ColorInt
+    static int cardFor(@ColorInt int ink) {
+        double luminance = androidx.core.graphics.ColorUtils.calculateLuminance(ink);
+        return luminance > 0.5 ? PALE_INK_CARD : DARK_INK_CARD;
     }
 
     @Nullable
@@ -108,8 +119,7 @@ final class PageBarGlass {
         scratch.offset(origin[0], origin[1]);
         boolean pale = source.widgetPolarity() == ChromeInk.Polarity.PALE_INK;
         int textInk = pale ? HomeLabelInk.PALE_INK : HomeLabelInk.DARK_INK;
-        // The card a page of pale ink wears is the dark one, and the other way round.
-        int card = pale ? 0xFF1F1F1F : 0xFFF2F2F2;
+        int card = pale ? PALE_INK_CARD : DARK_INK_CARD;
         int body = glassWorn ? OnGlass.composite(Color.TRANSPARENT, look.paneGlassTintColor()) : card;
         OnGlass.Resolution answer = source.widgetInk(scratch, body, card, textInk, accent);
         out.ground = answer.surface;
