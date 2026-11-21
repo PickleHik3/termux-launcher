@@ -141,6 +141,17 @@ always the Workspace's and the status bar stays the stack's. Nothing re-parents 
 or the settle. A row under the keyboard on one side may appear there once the keyboard has moved,
 rather than slide.
 
+## Amendment, 2026-11-21 (the developer, on [#309](https://github.com/PickleHik3/termux-launcher/issues/309); changes §4 and §5 for Home)
+
+On Home the keyboard does not lift the rows. §4's "vertically glued to the keyboard's top" holds for
+the Terminal's side only: Home's rows and Home's dock card keep the rect they have with the keyboard
+down whatever the keyboard does, and the keyboard (in-app or system) draws over them. §5's scene
+still owns every keyboard number; the dock's lift it answers is zero on Home
+(`place/HomeKeyboardCover.liftsRows`), and the parity test pins a Home row's drawn place to its
+keyboard-down rect at every reveal. Rows both sides share blend from Home's place to the Terminal's
+by Home's share of the scene, so a crossing still lays out nothing. Floats and terminal widgets on
+Home meet the keyboard's own top, not the dock's.
+
 ## Considered options
 
 - **A hidden second row host promoted at the landing.** Rejected, as in 0023: a second copy dressed
