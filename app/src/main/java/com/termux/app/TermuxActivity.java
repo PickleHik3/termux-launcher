@@ -4705,6 +4705,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
         Trace.endSection();
+        // The key's page bar, opened while its raised blur was baking, wears the frame that landed.
+        if (mPageBar != null) mPageBar.onGlassFramesMoved();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -29931,8 +29933,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     }
                     @Override public boolean wallpaperBlurs() { return wallpaperSampleable(); }
                     @Override public int glassBaseColor() { return resolveAccessoryGlassBaseColor(); }
-                    // The plain frost: a transient bar draws no refraction.
-                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() { return null; }
+                    // The Fancier Glass look the extra-keys card under it wears, so the pop-up is
+                    // the same material with the cards' lit edge; null (plain frost) when it is off.
+                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
+                        return mFancierGlassLook;
+                    }
                     @Override public com.termux.app.chrome.WallpaperParallax parallax() {
                         return mWallpaperParallax;
                     }

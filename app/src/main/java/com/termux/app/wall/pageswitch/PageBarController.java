@@ -278,6 +278,16 @@ public final class PageBarController implements PageBarView.Entry {
         if (mLayer != null) mLayer.setClickable(false);
     }
 
+    /**
+     * The glass pass ran (the blur cache landed a frame, or the chrome was applied): the key's
+     * pop-up, if it is up and was dressed while its raised blur was still baking, wears the frame
+     * now. A few field reads otherwise.
+     */
+    public void onGlassFramesMoved() {
+        PageBarView view = mPopupView;
+        if (view != null && mPopup.shown()) view.redressIfFrameLate();
+    }
+
     /** GONE, and the raised glass's frame given back: nothing held while the popup is away. */
     private void hidePopupView() {
         if (mPopup.shown()) return;

@@ -54,8 +54,17 @@ public class ElevatedGlassTest {
     public void theDefaultLookRaised() {
         // Fresh install: blur 8, opacity 34, grain 18; the sheet floor lifts opacity to 60.
         assertEquals(16, ElevatedGlass.blurDp(8));
-        assertEquals(74, ElevatedGlass.opacityPercent(60));
+        assertEquals(65, ElevatedGlass.opacityPercent(60));
         assertEquals(29, ElevatedGlass.grainPercent(18));
+    }
+
+    /** The glass cues carry the elevation: over the sheet floor the body gains only a step. */
+    @Test
+    public void theBodyGainsOnlyAStep_soWhatIsBehindShowsThroughTheBlur() {
+        for (int o = SheetGlass.OPACITY_FLOOR_PERCENT; o <= 100; o++) {
+            assertTrue("o=" + o, ElevatedGlass.opacityPercent(o) - o <= 5);
+        }
+        assertTrue(ElevatedGlass.opacityPercent(SheetGlass.OPACITY_FLOOR_PERCENT) < 70);
     }
 
     @Test
@@ -100,7 +109,7 @@ public class ElevatedGlassTest {
 
     @Test
     public void theRimIsAQuarterStrongerAndClamped() {
-        assertEquals(Math.round(0x1A * 1.25f), ElevatedGlass.rimAlpha(0x1A));
+        assertEquals(Math.round(0x1A * ElevatedGlass.RIM_GAIN), ElevatedGlass.rimAlpha(0x1A));
         assertEquals(255, ElevatedGlass.rimAlpha(250));
         assertEquals(0, ElevatedGlass.rimAlpha(0));
     }
