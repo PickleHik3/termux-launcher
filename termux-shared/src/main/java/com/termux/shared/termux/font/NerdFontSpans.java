@@ -255,6 +255,10 @@ public final class NerdFontSpans {
 
         @Override public int getSize(@NonNull Paint paint, CharSequence text, int start, int end,
                                      @Nullable Paint.FontMetricsInt fm) {
+            // A line that is only this span (a notice pill's mark) takes its height from the
+            // metrics the span reports; left at zero the mark gets a 0px-high line and paints
+            // nothing, while mixed with text the neighbouring glyphs hide the omission.
+            if (fm != null) paint.getFontMetricsInt(fm);
             return Math.round(paint.getTextSize() * DRAWABLE_SCALE);
         }
 
