@@ -47,14 +47,28 @@ public final class PageBarGlyphPainter {
     /** The back and front plate of a folded stack: the plate's x and y, and its alpha. */
     static final float[][] PLATES = {{-5f, -13.5f, 0.5f}, {-8f, -11.5f, 0.8f}};
 
+    /** Ground left showing between neighbouring cards of a stack, in units. */
+    static final float CARD_GAP = 1.5f;
+
+    /** How far a folded stack's plates reach past the glyph box's right edge, in units. */
+    static final float STACK_OVERHANG_RIGHT = overhangRight();
+    /** The same past the left edge; the plates sit inside it, so 0. */
+    static final float STACK_OVERHANG_LEFT = 0f;
+
+    private static float overhangRight() {
+        float right = 0f;
+        for (float[] plate : PLATES) right = Math.max(right, plate[0] + TERMINAL_BODY[2]);
+        return Math.max(0f, right - GLYPH_UNITS / 2f);
+    }
+
     /** The number's font size in units and its weight; per kind its slot centre x, width, baseline. */
     static final float NUMBER_SIZE = 10.5f;
     static final int NUMBER_WEIGHT = 600;
     static final float HOME_SLOT_CX = 0f;
     static final float HOME_SLOT_W = 15f;
     static final float HOME_BASELINE = 7.3f;
-    static final float TERMINAL_SLOT_CX = 4f;
-    static final float TERMINAL_SLOT_W = 11f;
+    static final float TERMINAL_SLOT_CX = 4.5f;
+    static final float TERMINAL_SLOT_W = 10f;
     static final float TERMINAL_BASELINE = 3.9f;
 
     // ---- State ------------------------------------------------------------------------------
@@ -69,6 +83,8 @@ public final class PageBarGlyphPainter {
     private final Path[][] mCut = new Path[PageKind.values().length][MAX_NUMBER + 2];
     private final Path[] mSilhouette = new Path[PageKind.values().length];
     private final Path mPlate = new Path();
+    private final Path mPlateGrown;
+    private final Path[] mGrown = new Path[PageKind.values().length];
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Matrix mMatrix = new Matrix();
@@ -84,6 +100,7 @@ public final class PageBarGlyphPainter {
         mText.setTextSize(NUMBER_SIZE * REFERENCE_SCALE);
         mPlate.addRoundRect(0f, 0f, TERMINAL_BODY[2], TERMINAL_BODY[3], TERMINAL_BODY[4],
             TERMINAL_BODY[4], Path.Direction.CW);
+        mPlateGrown = grow(mPlate);
     }
 
     /** {@code kind}'s glyph, filled in {@code fill} with its number cut out, centred on ({@code cx}, {@code cy}). */
@@ -106,13 +123,22 @@ public final class PageBarGlyphPainter {
                           float cy, float size, int fill, int plateInk) {
         int save = canvas.save();
         place(canvas, cx, cy, size);
-        canvas.clipOutPath(silhouette(kind));
+        canvas.clipOutPath(grown(kind));
         int rgb = plateInk & 0x00FFFFFF;
         float gain = Color.alpha(plateInk);
-        for (float[] plate : PLATES) {
+        for (int i = 0; i < PLATES.length; i++) {
+            float[] plate = PLATES[i];
             mFill.setColor(rgb | (Math.round(plate[2] * gain) << 24));
             int inner = canvas.save();
-            canvas.translate(plate[0], plate[1]);
+            if (i + 1 < PLATES.length) {
+                // The plate in front of this one cuts it out, a gap wider than itself.
+                float[] front = PLATES[i + 1];
+                canvas.translate(front[0], front[1]);
+                canvas.clipOutPath(mPlateGrown);
+                canvas.translate(plate[0] - front[0], plate[1] - front[1]);
+            } else {
+                canvas.translate(plate[0], plate[1]);
+            }
             canvas.drawPath(mPlate, mFill);
             canvas.restoreToCount(inner);
         }
@@ -145,6 +171,26 @@ public final class PageBarGlyphPainter {
             mSilhouette[kind.ordinal()] = path;
         }
         return path;
+    }
+
+    /** {@code kind}'s silhouette grown by {@link #CARD_GAP}; the same instance every time. */
+    @NonNull private Path grown(@NonNull PageKind kind) {
+        Path path = mGrown[kind.ordinal()];
+        if (path == null) {
+            path = grow(silhouette(kind));
+            mGrown[kind.ordinal()] = path;
+        }
+        return path;
+    }
+
+    private static Path grow(Path shape) {
+        Path band = new Path();
+        Paint outline = new Paint(Paint.ANTI_ALIAS_FLAG);
+        outline.setStyle(Paint.Style.STROKE);
+        outline.setStrokeWidth(2f * CARD_GAP);
+        outline.setStrokeJoin(Paint.Join.ROUND);
+        outline.getFillPath(shape, band);
+        return union(shape, band);
     }
 
     private static boolean hasNumber(PageKind kind) {
