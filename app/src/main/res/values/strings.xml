@@ -1371,6 +1371,7 @@
                 <string name="settings_keyboard_layouts_title">Layouts</string>
                 <string name="settings_keyboard_layouts_summary">Choose the layouts the keyboard cycles through</string>
                 <string name="settings_keyboard_layout_main">Launcher layout (layout.xml, else QWERTY)</string>
+                <string name="settings_keyboard_layout_main_short">Launcher layout</string>
                 <string name="settings_keyboard_layouts_instructions">The keyboard cycles through these in order. Bind a key to “Cycle keyboard layout”, put a switch_forward key in your layout.xml, or pick one from the command palette.</string>
                 <string name="settings_keyboard_layouts_in_cycle">In the cycle</string>
                 <string name="settings_keyboard_layouts_available">All layouts</string>

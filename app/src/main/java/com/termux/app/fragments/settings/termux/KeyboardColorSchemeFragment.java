@@ -173,11 +173,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mSwatchGrid.setTag(TAG_SWATCH_GRID);
         root.addView(mSwatchGrid, gridParams);
 
-        // 5. The card: the editing capsule, then the Font chooser.
+        // 5. The card: the editing capsule, then the Font and Layouts rows.
         // The card carries its own params, so the gap above it is not thrown away.
         View card = buildPaletteCard(context);
         root.addView(card, card.getLayoutParams());
-        root.addView(buildLayoutsRow(context));
         selectRole(KEY_FILL_INDEX);
         createSwatches();
 
@@ -286,9 +285,32 @@ public class KeyboardColorSchemeFragment extends Fragment {
             mPreferences.setInAppKeyboardTheme(wanted);
     }
 
-    /** A two-line row, title over summary, that opens the pick/reset flow. */
+    /** The Font row: opens the pick/reset flow. */
     @NonNull
     private View buildTypefaceRow(@NonNull android.content.Context context) {
+        mFontSummary = new TextView(context);
+        View row = buildCardRow(context, R.string.termux_in_app_keyboard_font_title, mFontSummary,
+            view -> onFontRowClicked());
+        updateFontSummary();
+        return row;
+    }
+
+    /** The Layouts row: opens the page where the cycle's layouts are chosen. */
+    @NonNull
+    private View buildLayoutsRow(@NonNull android.content.Context context) {
+        TextView summary = new TextView(context);
+        summary.setText(R.string.settings_keyboard_layouts_summary);
+        return buildCardRow(context, R.string.settings_keyboard_layouts_title, summary, view -> {
+            if (getActivity() instanceof com.termux.app.activities.SettingsActivity)
+                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
+                    KeyboardLayoutsFragment.class, R.string.settings_keyboard_layouts_title, null);
+        });
+    }
+
+    /** One of the card's two-line rows, title over summary; every row in the card is built here. */
+    @NonNull
+    private View buildCardRow(@NonNull android.content.Context context, int titleRes,
+                              @NonNull TextView summary, @NonNull View.OnClickListener onClick) {
         LinearLayout row = new LinearLayout(context);
         row.setOrientation(LinearLayout.VERTICAL);
         android.util.TypedValue ripple = new android.util.TypedValue();
@@ -303,16 +325,14 @@ public class KeyboardColorSchemeFragment extends Fragment {
         TextView title = new TextView(context);
         title.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
-        title.setText(R.string.termux_in_app_keyboard_font_title);
+        title.setText(titleRes);
         row.addView(title);
-        mFontSummary = new TextView(context);
-        mFontSummary.setTextAppearance(
+        summary.setTextAppearance(
             com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
-        mFontSummary.setTextColor(MaterialColors.getColor(context,
+        summary.setTextColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
-        row.addView(mFontSummary);
-        row.setOnClickListener(view -> onFontRowClicked());
-        updateFontSummary();
+        row.addView(summary);
+        row.setOnClickListener(onClick);
         return row;
     }
 
@@ -416,7 +436,7 @@ public class KeyboardColorSchemeFragment extends Fragment {
             base.functionKeyBackground, base.functionLabelColor);
     }
 
-    /** Card holding the editing capsule (reset, edit) and the Font chooser. */
+    /** Card holding the editing capsule (reset, edit), the Font chooser and the Layouts link. */
     @NonNull
     private View buildPaletteCard(@NonNull android.content.Context context) {
         MaterialCardView card = new MaterialCardView(context);
@@ -481,6 +501,8 @@ public class KeyboardColorSchemeFragment extends Fragment {
         content.addView(heading);
 
         content.addView(buildTypefaceRow(context), new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        content.addView(buildLayoutsRow(context), new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
         card.addView(content);
@@ -646,41 +668,6 @@ public class KeyboardColorSchemeFragment extends Fragment {
         R.drawable.ic_keyboard_color_role_background
     };
 
-    /** A plain row at the foot of the page that opens the Layouts page. */
-    @NonNull
-    private View buildLayoutsRow(@NonNull android.content.Context context) {
-        LinearLayout row = new LinearLayout(context);
-        row.setOrientation(LinearLayout.VERTICAL);
-        row.setPadding(dp(8), dp(12), dp(8), dp(12));
-        android.util.TypedValue ripple = new android.util.TypedValue();
-        if (context.getTheme().resolveAttribute(
-                android.R.attr.selectableItemBackground, ripple, true))
-            row.setBackgroundResource(ripple.resourceId);
-        row.setClickable(true);
-        TextView title = new TextView(context);
-        title.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_BodyLarge);
-        title.setText(R.string.settings_keyboard_layouts_title);
-        row.addView(title);
-        TextView summary = new TextView(context);
-        summary.setTextAppearance(
-            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
-        summary.setTextColor(MaterialColors.getColor(context,
-            com.google.android.material.R.attr.colorOnSurfaceVariant, Color.GRAY));
-        summary.setText(R.string.settings_keyboard_layouts_summary);
-        row.addView(summary);
-        row.setOnClickListener(view -> {
-            if (getActivity() instanceof com.termux.app.activities.SettingsActivity)
-                ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
-                    KeyboardLayoutsFragment.class, R.string.settings_keyboard_layouts_title, null);
-        });
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        params.topMargin = dp(GAP_DP);
-        row.setLayoutParams(params);
-        return row;
-    }
-
     /**
      * One scrollable line of chips under the preview, one per ring layout; tapping one swaps the
      * preview only, never the layout the user types on. Absent when the ring holds one layout.
@@ -700,7 +687,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
             Chip chip = new Chip(context);
             chip.setChipDrawable(ChipDrawable.createFromAttributes(context, null, 0,
                 com.google.android.material.R.style.Widget_Material3_Chip_Filter));
-            chip.setText(LauncherKeyboardLayouts.labelFor(getResources(), id));
+            // The launcher's own layout carries a long explanatory name on the Layouts page.
+            chip.setText(LauncherKeyboardLayouts.LAYOUT_MAIN.equals(id)
+                ? getString(R.string.settings_keyboard_layout_main_short)
+                : LauncherKeyboardLayouts.labelFor(getResources(), id));
             chip.setSingleLine(true);
             chip.setEllipsize(android.text.TextUtils.TruncateAt.END);
             chip.setMaxWidth(dp(LAYOUT_CHIP_MAX_WIDTH_DP));
