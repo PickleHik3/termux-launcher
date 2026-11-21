@@ -479,7 +479,7 @@ public final class AzScrubRowView extends AppCompatTextView {
         float trackLength = letterTrackLengthPx();
         float slot = letterSlotSizePx();
         float anchorAlong = activeTouchAlong < 0f ? (trackLength * 0.5f) : activeTouchAlong;
-        float waveAmplitude = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0f : (dp(15) * waveStrength);
+        float waveAmplitude = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK ? 0f : (dp(ScrubWave.LIFT_DP) * waveStrength);
         int activeIndex = resolveActiveIndex(anchorAlong);
         boolean hasInlineFocus = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             && waveStrength > 0.01f
@@ -499,7 +499,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 waveLift = com.termux.app.dock.AzBeadRow.liftPx(along, beadFingerAlong, slot,
                     dp(com.termux.app.dock.AzBeadRow.LIFT_PEAK_DP) * beadLiftStrength);
             } else if (activeFocus && interactionMode != InteractionMode.INLINE_EMPHASIS_TRACK) {
-                waveLift *= 1.2f;
+                waveLift *= ScrubWave.FOCUS_LIFT_GAIN;
                 waveLift = Math.max(waveLift, dp(6));
             }
             // On a bead the glyph swells less, so it stays inside its small lens.
@@ -749,9 +749,9 @@ public final class AzScrubRowView extends AppCompatTextView {
         float envelope = ScrubWave.envelope(distance);
         float waveLift = interactionMode == InteractionMode.INLINE_EMPHASIS_TRACK
             ? 0f
-            : ScrubWave.lift(envelope) * (dp(15) * waveStrength);
+            : ScrubWave.lift(envelope) * (dp(ScrubWave.LIFT_DP) * waveStrength);
         if (activeFocus && interactionMode != InteractionMode.INLINE_EMPHASIS_TRACK) {
-            waveLift *= 1.2f;
+            waveLift *= ScrubWave.FOCUS_LIFT_GAIN;
             waveLift = Math.max(waveLift, dp(6));
         }
         float baseTextSize = getTextSize();
@@ -974,7 +974,7 @@ public final class AzScrubRowView extends AppCompatTextView {
             return;
         }
         settleAnimator = ValueAnimator.ofFloat(waveStrength, 0f);
-        settleAnimator.setDuration(165L);
+        settleAnimator.setDuration(ScrubWave.SETTLE_MS);
         settleAnimator.addUpdateListener(animation -> {
             waveStrength = (float) animation.getAnimatedValue();
             updateInteractionLayerOffset();
