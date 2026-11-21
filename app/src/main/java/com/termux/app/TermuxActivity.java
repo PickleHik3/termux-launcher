@@ -4703,6 +4703,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
         Trace.endSection();
+        // The open drawer's section switch wears the same Look's glass and frame.
+        if (mSheets.appDrawerControllerIfBuilt() != null)
+            mSheets.appDrawerControllerIfBuilt().onGlassChanged();
         if (mPaneController == null) return;
         com.termux.app.terminal.PaneSurfaceStyle style = paneSurfaceStyle();
         // This runs behind every chrome apply, several times a page change, and the style is a
@@ -20503,6 +20506,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public int restingPage() {
             return TermuxActivity.this.restingPage();
+        }
+
+        @Nullable @Override public com.termux.app.chrome.LookGlassStyle drawerSwitchGlass(boolean wanted) {
+            com.termux.app.chrome.LookGlassStyle look = lookGlassStyle();
+            look.setDrawerWanted(wanted);
+            return wanted ? look : null;
         }
 
         @Override public int sheetsBandPx() {

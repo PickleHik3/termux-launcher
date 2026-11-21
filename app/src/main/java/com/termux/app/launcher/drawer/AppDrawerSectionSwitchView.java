@@ -31,8 +31,9 @@ import com.termux.app.surfaces.LegendSlider;
  * inks follow the pages exactly, and at rest nothing invalidates. Text is measured when the
  * labels, the width cap or the font scale change, never while drawing.
  *
- * <p>The body is the drawer's small-glass dress, as the search bar wears it: a wash of the chrome's
- * ink and its hairline over the card's glass, the ink the A-Z rope reads (the settled glass ink,
+ * <p>The body is refracting glass laid under this view by the content view ({@link #setGlassShown});
+ * with no glass (no frame, blur off, below Android 13's refraction the slab's own fallback) it is
+ * the search bar's dress: a wash of the chrome's ink and its hairline over the card's glass. The ink the A-Z rope reads (the settled glass ink,
  * else the launcher's text colour), so it follows the launcher's scheme. A tap on a label asks
  * {@link Callbacks#onSectionChosen}; a tap is a down and up within the touch slop, so a drag
  * starting here does nothing.
@@ -80,6 +81,7 @@ public final class AppDrawerSectionSwitchView extends View implements AppDrawerS
     private float mScaledDensity;
     private int mMaxWidthPx;
     private boolean mLaidOut;
+    private boolean mGlassShown;
     private int mLaidOutCap = -1;
     private boolean mLaidOutRtl;
     private float mBaseline;
@@ -106,6 +108,17 @@ public final class AppDrawerSectionSwitchView extends View implements AppDrawerS
 
     public void setCallbacks(@Nullable Callbacks callbacks) {
         mCallbacks = callbacks;
+    }
+
+    /**
+     * Whether refracting glass lies under the body: it then draws neither wash nor hairline (the
+     * glass has its own rim), and only the selected capsule and the labels. Without it the body
+     * is the wash, so the switch never disappears.
+     */
+    public void setGlassShown(boolean shown) {
+        if (mGlassShown == shown) return;
+        mGlassShown = shown;
+        invalidate();
     }
 
     public void setInkSource(@Nullable InkSource source) {
@@ -216,11 +229,13 @@ public final class AppDrawerSectionSwitchView extends View implements AppDrawerS
         int ink = mInkSource != null ? mInkSource.ink() : Color.WHITE;
         float inset = mStroke.getStrokeWidth() * 0.5f;
         float radius = layout.height * 0.5f;
-        mRect.set(inset, inset, layout.width - inset, layout.height - inset);
-        mFill.setColor(withAlpha(ink, BODY_FILL_ALPHA));
-        canvas.drawRoundRect(mRect, radius, radius, mFill);
-        mStroke.setColor(withAlpha(ink, BODY_STROKE_ALPHA));
-        canvas.drawRoundRect(mRect, radius, radius, mStroke);
+        if (!mGlassShown) {
+            mRect.set(inset, inset, layout.width - inset, layout.height - inset);
+            mFill.setColor(withAlpha(ink, BODY_FILL_ALPHA));
+            canvas.drawRoundRect(mRect, radius, radius, mFill);
+            mStroke.setColor(withAlpha(ink, BODY_STROKE_ALPHA));
+            canvas.drawRoundRect(mRect, radius, radius, mStroke);
+        }
 
         mRect.set(AppDrawerSectionSwitchGeometry.capsuleLeft(layout, mPosition),
             layout.capsuleTop, AppDrawerSectionSwitchGeometry.capsuleRight(layout, mPosition),

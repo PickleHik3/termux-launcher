@@ -1287,6 +1287,7 @@ public final class AppDrawerContentView extends FrameLayout
         setTopMargin(mResultsLabel, r.contentTopPx);
         setTopMargin(mNoResults, r.contentTopPx + dp(NO_RESULTS_BELOW_CONTENT_DP));
         applyBottomChrome(r);
+        applySwitchGlass();
     }
 
     private void applyChromeForWidth() {
@@ -3175,6 +3176,116 @@ public final class AppDrawerContentView extends FrameLayout
 
     private int dp(float value) {
         return Math.round(value * mDensity);
+    }
+
+    // ---------------------------------------------------------------- section switch glass
+
+    /** Hands out the Look's glass for the section switch; told whether the switch wants it. */
+    public interface SwitchGlassSource {
+        /** The Look's glass style, held for the switch while {@code wanted}, or null. */
+        @Nullable com.termux.app.chrome.LookGlassStyle style(boolean wanted);
+    }
+
+    @Nullable private SwitchGlassSource mSwitchGlassSource;
+    /** The switch's refracting slab, built while the open drawer wants it and dropped after. */
+    @Nullable private com.termux.app.terminal.PaneGlassBackdropView mSwitchGlass;
+    @Nullable private Object mSwitchGlassKey;
+    private boolean mSwitchGlassWanted;
+    private boolean mDrawerOpenForGlass;
+    private boolean mPlaneMoving = true;
+
+    public void setSwitchGlassSource(@Nullable SwitchGlassSource source) {
+        mSwitchGlassSource = source;
+    }
+
+    /** The drawer opened or closed: the glass is built for an open Default drawer and dropped after. */
+    public void setDrawerOpenForGlass(boolean open) {
+        mDrawerOpenForGlass = open;
+        if (!open) mPlaneMoving = true;
+        applySwitchGlass();
+    }
+
+    /** The Look, the frame or the scheme may have moved: dress again if what it answers changed. */
+    public void refreshSwitchGlass() {
+        if (mSwitchGlassWanted) applySwitchGlass();
+    }
+
+    /** The plane started or stopped moving; the glass is re-aimed once, when it comes to rest. */
+    public void setPlaneMovingForGlass(boolean moving) {
+        if (mPlaneMoving == moving) return;
+        mPlaneMoving = moving;
+        if (!moving && mSwitchGlass != null) mSwitchGlass.invalidateGlassPosition();
+    }
+
+    /**
+     * Dresses the glass under the switch as the page bar's pill is dressed, or drops it. The slab
+     * and the frame it holds exist only while the open drawer is on the Default type. Compared by
+     * the style's key, so a pass with nothing moved does no work; never per frame.
+     */
+    private void applySwitchGlass() {
+        SwitchGlassSource source = mSwitchGlassSource;
+        boolean wanted = source != null
+            && AppDrawerSectionSwitchGlass.wanted(mViewType, mDrawerOpenForGlass);
+        if (!wanted) {
+            if (mSwitchGlassWanted && source != null) source.style(false);
+            mSwitchGlassWanted = false;
+            releaseSwitchGlass();
+            return;
+        }
+        com.termux.app.chrome.LookGlassStyle look = source.style(true);
+        mSwitchGlassWanted = true;
+        if (look == null) {
+            releaseSwitchGlass();
+            return;
+        }
+        Object key = look.key();
+        if (mSwitchGlass != null && key.equals(mSwitchGlassKey)) return;
+        mSwitchGlassKey = key;
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSwitchGlass;
+        if (glass == null) {
+            glass = new com.termux.app.terminal.PaneGlassBackdropView(getContext());
+            glass.setClipToOutline(true);
+            glass.setOutlineProvider(new ViewOutlineProvider() {
+                @Override public void getOutline(View view, android.graphics.Outline out) {
+                    out.setRoundRect(0, 0, view.getWidth(), view.getHeight(),
+                        view.getHeight() / 2f);
+                }
+            });
+            com.termux.app.terminal.PaneGlass.followLayout(glass);
+            glass.setVisibility(GONE);
+            // Under the switch in Z, over the content beneath.
+            addView(glass, indexOfChild(mSectionSwitch), new LayoutParams(
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+            mSwitchGlass = glass;
+        }
+        float radius = AppDrawerSectionSwitchGlass.radiusPx(Math.round(
+            AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity));
+        boolean shown = com.termux.app.wall.pageswitch.PageBarGlass.dress(getContext(), look,
+            this, glass, radius);
+        // No frame or no glass (blur off, battery saver): the switch draws its wash instead.
+        mSectionSwitch.setGlassShown(shown);
+        if (shown) glass.requestLayout();
+    }
+
+    private void releaseSwitchGlass() {
+        mSwitchGlassKey = null;
+        mSectionSwitch.setGlassShown(false);
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSwitchGlass;
+        if (glass == null) return;
+        mSwitchGlass = null;
+        removeView(glass);
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSwitchGlass;
+        // The switch's exact rect, as the chrome layout and its measured width placed it.
+        if (glass != null && glass.getVisibility() != GONE
+            && mSectionSwitch.getVisibility() == VISIBLE) {
+            glass.layout(mSectionSwitch.getLeft(), mSectionSwitch.getTop(),
+                mSectionSwitch.getRight(), mSectionSwitch.getBottom());
+        }
     }
 
     /** @return the shipped vertical app grid */

@@ -51,6 +51,7 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @NonNull private final ChromeRenderer mChrome;
     @NonNull private final Host mHost;
     private boolean mWorn;
+    private boolean mDrawerWanted;
     @Nullable private Bitmap mFrame;
     @Nullable private Bitmap mClearFrame;
 
@@ -76,14 +77,31 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     public void setWorn(boolean worn) {
         if (mWorn == worn) return;
         mWorn = worn;
-        if (!worn) {
-            mFrame = null;
-            mClearFrame = null;
-        }
+        dropFramesIfUnworn();
+    }
+
+    /**
+     * The open drawer's section switch wears this glass too. Kept apart from {@link #setWorn},
+     * which the widgets page owns, so neither lets go of the frame the other still draws.
+     */
+    public void setDrawerWanted(boolean wanted) {
+        if (mDrawerWanted == wanted) return;
+        mDrawerWanted = wanted;
+        dropFramesIfUnworn();
+    }
+
+    private void dropFramesIfUnworn() {
+        if (worn()) return;
+        mFrame = null;
+        mClearFrame = null;
+    }
+
+    private boolean worn() {
+        return mWorn || mDrawerWanted;
     }
 
     public boolean isWorn() {
-        return mWorn;
+        return worn();
     }
 
     /** Whether some widget is drawing {@code frame}; for the blur cache's in-use scan. */
@@ -104,7 +122,7 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @NonNull
     public Object key() {
         GlassRefraction.Look refraction = paneGlassRefraction();
-        List<Object> key = Arrays.asList(spec(), mWorn, paneGlassTintColor(),
+        List<Object> key = Arrays.asList(spec(), worn(), paneGlassTintColor(),
             identity(paneGlassBlurFrame()), identity(paneGlassClearFrame()),
             new Rect(paneGlassBlurFrameRect()), identity(paneGlassFrostFilter()), refraction);
         return key;
@@ -178,7 +196,7 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @Override @Nullable public Bitmap paneGlassBlurFrame() {
         LookGlassSpec spec = spec();
         View wallpaperFrame = mHost.wallpaperFrame();
-        if (!mWorn || !spec.wantsBlurFrame() || wallpaperFrame == null || !mHost.wallpaperBlurs()) {
+        if (!worn() || !spec.wantsBlurFrame() || wallpaperFrame == null || !mHost.wallpaperBlurs()) {
             mFrame = null;
             return null;
         }
@@ -190,7 +208,7 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @Override @Nullable public Bitmap paneGlassClearFrame() {
         LookGlassSpec spec = spec();
         View wallpaperFrame = mHost.wallpaperFrame();
-        if (!mWorn || !spec.slabShown() || wallpaperFrame == null || !mHost.wallpaperBlurs()
+        if (!worn() || !spec.slabShown() || wallpaperFrame == null || !mHost.wallpaperBlurs()
                 || !WallpaperFrostPainter.wantsClearFrame(paneGlassRefraction(), spec.blurDp)) {
             mClearFrame = null;
             return null;

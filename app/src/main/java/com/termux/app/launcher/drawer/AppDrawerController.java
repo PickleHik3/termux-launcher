@@ -129,6 +129,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
          */
         default void onDrawerOpenSettled(boolean open, boolean userDriven) {}
 
+        /**
+         * The Look's glass for the section switch's refracting slab, held (its blur frame asked
+         * for) while {@code wanted}; null where there is none. Released with {@code false}.
+         */
+        @Nullable
+        default com.termux.app.chrome.LookGlassStyle drawerSwitchGlass(boolean wanted) {
+            return null;
+        }
+
         /** Wallpaper frost for the plane's glass; true when the live blur should rest. */
         boolean applyWallpaperFrost(@NonNull ImageView frost);
 
@@ -787,6 +796,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (content != null) content.onAppCatalogChanged();
     }
 
+    /** The Look, the wallpaper frame or the scheme may have moved; the switch's glass re-dresses if so. */
+    public void onGlassChanged() {
+        AppDrawerContentView content = mContent;
+        if (content != null) content.refreshSwitchGlass();
+    }
+
     /** Applies a launcher preference reload without rebuilding the activity or drawer tree. */
     public void onPreferencesReloaded() {
         TermuxAppSharedPreferences preferences = mHost.preferences();
@@ -913,6 +928,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     @VisibleForTesting
     void applyBackdropRest() {
+        AppDrawerContentView content = mContent;
+        if (content != null) {
+            content.setPlaneMovingForGlass(
+                !isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
+        }
         com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
         if (backdrop == null) return;
         backdrop.setMoving(!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
@@ -1319,6 +1339,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         AppDrawerContentView content = new AppDrawerContentView(mHost.context(),
             mHost.suggestionBar());
         content.setCallbacks(this);
+        content.setSwitchGlassSource(mHost::drawerSwitchGlass);
         content.setRevealListener(this::retargetReveal);
         content.setFrameRequestListener(this::requestFrames);
         content.setSearchKeyboardRequestListener(this::onSearchKeyboardRequested);
@@ -1890,6 +1911,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         // right presentation once and nothing writes back the value just read.
         content.restoreSection(storedSection(preferences));
         content.setViewType(mLayoutConfig.viewType);
+        content.setDrawerOpenForGlass(true);
         applyContentMetrics(content, contentRect, false);
         content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
         // Visible, but not yet interactive: interactivity is settle()'s to grant, and it grants it
@@ -2577,6 +2599,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 // A re-open must never start from a stale chain or a dim cell: the rope goes back to
                 // the straight rest line and the highlight releases every attached child to 1/1.
                 content.resetDrawerFx();
+                content.setDrawerOpenForGlass(false);
                 content.setVisibility(View.INVISIBLE);
             } else {
                 // The query lives on the controller and outlives any view: a drawer closed before
