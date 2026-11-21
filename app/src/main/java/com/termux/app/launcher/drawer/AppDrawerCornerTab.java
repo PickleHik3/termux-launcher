@@ -12,7 +12,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.terminal.PaneGlass;
@@ -179,9 +178,11 @@ final class AppDrawerCornerTab {
         if (tab != null) return tab;
         ViewGroup view = mHost.view();
         tab = new PaneControlsView(view.getContext());
-        // Wave 2 adds the Edit button here: one more PaneControlsView.Action.glyph with
-        // CornerTabGlyphs.EDIT, before the settings gear.
-        tab.setActions(PaneControlsView.Action.glyph(ACTION_SETTINGS, CornerTabGlyphs.SETTINGS,
+        // Wave 2 adds the Edit button here: one more drawn action with
+        // vectorMark(context, R.drawable.ic_drawer_corner_edit), before the settings gear.
+        tab.setActions(PaneControlsView.Action.drawn(ACTION_SETTINGS,
+            vectorMark(view.getContext(), R.drawable.ic_drawer_corner_settings),
+            PaneControlsView.TINT_PRIMARY,
             view.getContext().getString(R.string.pane_controls_open_settings)));
         tab.setListener(id -> {
             if (id != ACTION_SETTINGS) return;
@@ -193,6 +194,36 @@ final class AppDrawerCornerTab {
             ViewGroup.LayoutParams.MATCH_PARENT));
         mTab = tab;
         return tab;
+    }
+
+    /**
+     * A tab mark that draws a vector in the tab's own ink (the drawable's baked colour is ignored),
+     * in the 16dp square {@code MinimalModeGlyph} fills.
+     */
+    @NonNull
+    static PaneControlsView.Mark vectorMark(@NonNull android.content.Context context, int drawableRes) {
+        return new PaneControlsView.Mark() {
+            @androidx.annotation.Nullable private android.graphics.drawable.Drawable mIcon;
+
+            @Override
+            public void draw(@NonNull android.graphics.Canvas canvas,
+                             @NonNull android.graphics.RectF button,
+                             @NonNull android.graphics.Paint paint, float density) {
+                android.graphics.drawable.Drawable icon = mIcon;
+                if (icon == null) {
+                    icon = androidx.core.content.ContextCompat.getDrawable(context, drawableRes);
+                    if (icon == null) return;
+                    icon = icon.mutate();
+                    mIcon = icon;
+                }
+                int half = Math.round(8f * density);
+                int cx = Math.round(button.centerX());
+                int cy = Math.round(button.centerY());
+                icon.setBounds(cx - half, cy - half, cx + half, cy + half);
+                icon.setTint(paint.getColor());
+                icon.draw(canvas);
+            }
+        };
     }
 
     boolean isShown() {
