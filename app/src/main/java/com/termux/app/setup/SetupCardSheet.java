@@ -272,6 +272,7 @@ final class SetupCardSheet extends LinearLayout {
         primary.setAllCaps(false);
         primary.setText(done ? R.string.setup_cards_review
             : SetupCards.PAGE_SWITCHER.equals(card.id) ? R.string.setup_card_page_switcher_add
+            : SetupCards.PAGE_INDICATOR.equals(card.id) ? R.string.setup_card_page_indicator_open
             : R.string.setup_cards_continue);
         primary.setOnClickListener(v -> {
             // Review of a done permission or home card has no page class: the stub says Done.

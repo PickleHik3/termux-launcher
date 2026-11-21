@@ -86,6 +86,7 @@ public final class SetupCardSystem {
             done.add(SetupCards.HOME);
         if (PageSwitcherKeyAdd.isOn(TermuxPropertiesFile.load(context)::getProperty))
             done.add(SetupCards.PAGE_SWITCHER);
+            done.add(SetupCards.PAGE_INDICATOR);
         Set<String> selected = AiModelDownloads.selected(context);
         if (!selected.isEmpty() && AiModelDownloads.installedIds(context).containsAll(selected))
             done.add(SetupCards.AI);

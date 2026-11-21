@@ -28,6 +28,7 @@ import com.termux.app.HomeAppChooser;
 import com.termux.app.ReducedMotion;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.termux.EssentialNotificationRulesFragment;
+import com.termux.app.fragments.settings.termux.ExtraKeysEditorFragment;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.ShizukuBackend;
@@ -448,7 +449,14 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         // seeding does for earlier users, so nothing is due after it.
         Context context = mHost.context();
         SetupCards.Stored stored = SetupCardSystem.stored(context);
-        if (cardsSeen ? stored.markSeen(SetupCardSystem.cards(context)) : stored.startSeen())
+        boolean changed = cardsSeen ? stored.markSeen(SetupCardSystem.cards(context))
+            : stored.startSeen();
+        // The page indicator note is for users who had the indicator; a new user never did.
+        if (!stored.isDismissed(SetupCards.PAGE_INDICATOR)) {
+            stored.setDismissed(SetupCards.PAGE_INDICATOR, true);
+            changed = true;
+        }
+        if (changed)
             SetupCardSystem.save(context, stored);
         // The old tour is gone, but this stays the "has used the app before" marker the gate
         // reads, and older code paths that read it still see the tour as done (8 is its last run).
@@ -720,6 +728,15 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             case SetupCards.HOME:
                 HomeAppChooser.open(context);
                 break;
+            case SetupCards.PAGE_INDICATOR: {
+                startSafely(SettingsActivity.createFragmentIntent(context,
+                    ExtraKeysEditorFragment.class, R.string.settings_edit_extra_keys_title,
+                    null, null));
+                SetupCards.Stored stored = SetupCardSystem.stored(context);
+                stored.completeStep(id, 0);
+                SetupCardSystem.save(context, stored);
+                break;
+            }
             case SetupCards.PAGE_SWITCHER: {
                 SetupCardSystem.addPageSwitcherKey(context);
                 // Marks the card done even when no bar had a row to put the key on.

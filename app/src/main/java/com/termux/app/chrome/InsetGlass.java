@@ -79,7 +79,34 @@ public final class InsetGlass {
     /** How far up the light reaches from the bottom, as a share of the well's height. */
     public static final float RIM_LIGHT_REACH_SHARE = 0.5f;
 
+    /*
+     * The concave glass's inverted rim (PageBarGlassStyle.CONCAVE): the convex cards' lit top
+     * edge turned over, the same two hairlines and shapes as the well's rim above, and the only
+     * cue the concave bar draws: no floor, no contact shadow. With nothing else to carry the
+     * depth they stand at the strengths the well's rim had before the well's cues were halved.
+     */
+    /** The dark hairline along the upper rim: about 25 % on a dark ground, 15 % on a light one. */
+    public static final int CONCAVE_RIM_SHADOW_ALPHA_DARK = 0x40;
+    public static final int CONCAVE_RIM_SHADOW_ALPHA_LIGHT = 0x26;
+    /** The light hairline along the lower rim at its centre: about 45 % dark, 85 % light. */
+    public static final int CONCAVE_RIM_LIGHT_ALPHA_DARK = 0x73;
+    public static final int CONCAVE_RIM_LIGHT_ALPHA_LIGHT = 0xD9;
+
     private InsetGlass() {}
+
+    /** The concave glass's dark hairline along the upper rim. */
+    @ColorInt
+    public static int concaveRimShadow(boolean darkGround) {
+        return argb(darkGround ? CONCAVE_RIM_SHADOW_ALPHA_DARK : CONCAVE_RIM_SHADOW_ALPHA_LIGHT,
+            SHADOW_RGB);
+    }
+
+    /** The concave glass's light hairline along the lower rim, at its centre. */
+    @ColorInt
+    public static int concaveRimLight(boolean darkGround) {
+        return argb(darkGround ? CONCAVE_RIM_LIGHT_ALPHA_DARK : CONCAVE_RIM_LIGHT_ALPHA_LIGHT,
+            LIGHT_RGB);
+    }
 
     /** The floor's colours at {@link #FLOOR_POSITIONS}, into {@code out} (five long). */
     @NonNull
@@ -170,6 +197,12 @@ public final class InsetGlass {
      * The opaque ground content stands on at {@code share} of the well's height: {@code ground}
      * (opaque) under the floor there. What the glyph inks are solved and checked on.
      */
+    @ColorInt
+    public static int groundAt(@ColorInt int ground, boolean darkGround, float share, boolean floor) {
+        return floor ? groundAt(ground, darkGround, share) : 0xFF000000 | (ground & 0x00FFFFFF);
+    }
+
+    /** {@link #groundAt(int, boolean, float, boolean)} under the well's floor. */
     @ColorInt
     public static int groundAt(@ColorInt int ground, boolean darkGround, float share) {
         int floor = floorAt(share, darkGround);

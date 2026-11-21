@@ -41,11 +41,13 @@ public final class SetupCards {
     public static final String AI = "ai";
     public static final String HOME = "home";
     public static final String PAGE_SWITCHER = "pageSwitcher";
+    /** The note for upgrading users: the page indicator became the page switcher key. */
+    public static final String PAGE_INDICATOR = "pageIndicator";
     public static final String GUIDE = "guide";
 
     /** Every card id, in the order the sheet lists them. */
     static final String[] ORDER = {SHIZUKU, ACCESSIBILITY, NOTIFICATIONS, NOTIFICATION_ACCESS,
-        PINNED, DISPLAY, AI, HOME, PAGE_SWITCHER, GUIDE};
+        PINNED, DISPLAY, AI, HOME, PAGE_SWITCHER, PAGE_INDICATOR, GUIDE};
 
     public enum State { OPEN, DONE, DISMISSED }
 
@@ -237,7 +239,7 @@ public final class SetupCards {
             int[] steps = stepsOf(id);
             // The page switcher key reads done from the bars, or from Add having run when no bar
             // had a row to put it on.
-            int completed = PAGE_SWITCHER.equals(id)
+            int completed = PAGE_SWITCHER.equals(id) || PAGE_INDICATOR.equals(id)
                 ? (systemDone.contains(id) ? steps.length : stored.manualCount(id, steps.length))
                 : isSystemChecked(id) ? (systemDone.contains(id) ? steps.length : 0)
                 : systemDone.contains(id) ? steps.length : stored.manualCount(id, steps.length);
@@ -326,6 +328,7 @@ public final class SetupCards {
             case AI: return R.string.setup_card_ai_name;
             case HOME: return R.string.setup_card_home_name;
             case PAGE_SWITCHER: return R.string.setup_card_page_switcher_name;
+            case PAGE_INDICATOR: return R.string.setup_card_page_indicator_name;
             default: return R.string.setup_card_guide_name;
         }
     }
@@ -349,6 +352,7 @@ public final class SetupCards {
             case AI: return R.string.setup_card_ai_description;
             case HOME: return R.string.setup_card_home_description;
             case PAGE_SWITCHER: return R.string.setup_card_page_switcher_description;
+            case PAGE_INDICATOR: return R.string.setup_card_page_indicator_description;
             default: return R.string.setup_card_guide_description;
         }
     }
@@ -367,6 +371,7 @@ public final class SetupCards {
                 R.string.setup_card_ai_step_download};
             case HOME: return new int[] {R.string.setup_card_home_step};
             case PAGE_SWITCHER: return new int[] {R.string.setup_card_page_switcher_step};
+            case PAGE_INDICATOR: return new int[] {R.string.setup_card_page_indicator_step};
             default: return new int[] {R.string.setup_card_guide_step};
         }
     }

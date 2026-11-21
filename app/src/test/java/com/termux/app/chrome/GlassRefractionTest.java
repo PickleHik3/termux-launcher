@@ -134,7 +134,7 @@ public class GlassRefractionTest {
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens", "uEdgeGain",
             "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf",
-            "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap",
+            "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap", "uConcave",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -242,9 +242,10 @@ public class GlassRefractionTest {
     @Test
     public void noPixelReadsMoreThanSixSamples() {
         // 3 + 3 in a dispersed band, 1 + 1 elsewhere in the band and 1 on the face. Four of each in
-        // the text: three on the split path, one plain. The eased outermost dp moves the sample
-        // rather than reading a second one.
-        assertEquals(4, count(GlassRefraction.AGSL, "content.eval("));
+        // the text: three on the split path, one plain; and the concave lens's one, which reads
+        // that sample and returns. The eased outermost dp moves the sample rather than reading a
+        // second one.
+        assertEquals(5, count(GlassRefraction.AGSL, "content.eval("));
         assertEquals(4, count(GlassRefraction.AGSL, "sharp.eval("));
     }
 
@@ -1034,8 +1035,9 @@ public class GlassRefractionTest {
         assertTrue(agsl.contains(
             "float kb = heldK(kRaw * exp((at - max(inside + rimSplit, 0.0)) / gs), kMax);"));
         assertFalse("the old red band is gone", agsl.contains("rimBold"));
-        // No new pass and no new input: the same four taps of each picture.
-        assertEquals(4, count(agsl, "content.eval("));
+        // No new pass and no new input: the same four taps of each picture, and the concave
+        // lens's one content tap, which returns before the light.
+        assertEquals(5, count(agsl, "content.eval("));
         assertEquals(4, count(agsl, "sharp.eval("));
     }
 

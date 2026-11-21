@@ -2133,6 +2133,9 @@ public class LauncherCtlApiServer {
         // memory; a script changes it now and then, so the limit is tight.
         rateLimiters.put("POST:/v1/wallpaper", new SimpleRateLimiter(6, 60_000));
         rateLimiters.put("GET:/v1/wallpaper", new SimpleRateLimiter(30, 60_000));
+        // A developer switch flipped by hand to compare two looks.
+        rateLimiters.put("GET:/v1/pagebar-glass", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/pagebar-glass", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/ai/tier", new SimpleRateLimiter(30, 60_000));
@@ -3253,6 +3256,19 @@ public class LauncherCtlApiServer {
             "(microamperes) as JSON, as termux-battery-status does.\n" +
             "EOF\n" +
             "      ;;\n" +
+            "    pagebar-glass) cat <<'EOF'\n" +
+            "launcherctl pagebar-glass - how Home's page bar draws its glass (developer)\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl pagebar-glass\n" +
+            "  launcherctl pagebar-glass concave|well\n" +
+            "\n" +
+            "Without a style, prints the one in use. concave sinks the glass into the page: the\n" +
+            "wallpaper is drawn in toward the bar's middle (with Fancier Glass on), dark along the\n" +
+            "top edge and light along the bottom. well draws the shaded well instead. The bar\n" +
+            "changes at once.\n" +
+            "EOF\n" +
+            "      ;;\n" +
             "    motion-log) cat <<'EOF'\n" +
             "launcherctl motion-log - the motion log\n" +
             "\n" +
@@ -3939,6 +3955,13 @@ public class LauncherCtlApiServer {
             "        ;;\n" +
             "      clear) api POST /v1/motion-log/clear '{}' ;;\n" +
             "      *) echo 'usage: launcherctl motion-log dump|clear' >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  pagebar-glass)\n" +
+            "    case \"${2:-}\" in\n" +
+            "      '') api GET /v1/pagebar-glass ;;\n" +
+            "      concave|well) api POST /v1/pagebar-glass \"{\\\"style\\\":\\\"$2\\\"}\" ;;\n" +
+            "      *) echo 'usage: launcherctl pagebar-glass [concave|well]' >&2; exit 2 ;;\n" +
             "    esac\n" +
             "    ;;\n" +
             "  layout)\n" +

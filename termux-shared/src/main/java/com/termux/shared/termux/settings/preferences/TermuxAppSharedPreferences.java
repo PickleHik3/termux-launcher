@@ -4523,6 +4523,17 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_MOTION_LOG_ENABLED, value, false);
     }
 
+    /** The page bar's glass as stored, "concave" or "well"; the caller parses and defaults it. */
+    @NonNull
+    public String getPageBarGlassStyle() {
+        return SharedPreferenceUtils.getString(mSharedPreferences, TERMUX_APP.KEY_PAGE_BAR_GLASS_STYLE,
+            TERMUX_APP.DEFAULT_VALUE_PAGE_BAR_GLASS_STYLE, true);
+    }
+
+    public void setPageBarGlassStyle(@NonNull String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_PAGE_BAR_GLASS_STYLE, value, false);
+    }
+
     public void setTerminalDynamicColorsEnabled(boolean value) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED, value, false);
     }
