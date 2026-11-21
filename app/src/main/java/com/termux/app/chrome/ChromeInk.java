@@ -1174,9 +1174,6 @@ public final class ChromeInk {
                 && answer.textInk == textInk && answer.graphicInk == graphicInk
                 && Double.compare(answer.textTarget, textTarget) == 0
                 && Double.compare(answer.graphicTarget, graphicTarget) == 0) {
-            // DIAG(widgets): a memoised widget answer; revert before merge.
-            diagWidget("memo", rootRect, answer, dim, strength, current, ownOpacityPercent,
-                answer.resolution);
             return answer.resolution;
         }
         android.graphics.ColorMatrix matrix = null;
@@ -1206,24 +1203,7 @@ public final class ChromeInk {
         answer.graphicInk = graphicInk;
         answer.textTarget = textTarget;
         answer.graphicTarget = graphicTarget;
-        // DIAG(widgets): a widget answer solved afresh; revert before merge.
-        diagWidget("solve under=#" + Integer.toHexString(under), rootRect, answer, dim, strength,
-            current, ownOpacityPercent, resolution);
         return resolution;
-    }
-
-    /** DIAG(widgets): one WidgetDress line for a widget's answer; revert before merge. */
-    private void diagWidget(@NonNull String how, @NonNull Rect rootRect,
-                            @NonNull WidgetAnswer answer, int dim, int strength,
-                            @Nullable Polarity current, int ownOpacityPercent,
-                            @Nullable OnGlass.Resolution resolution) {
-        android.util.Log.i("WidgetDress", "ink " + how + " t=" + android.os.SystemClock.uptimeMillis()
-            + " rect=" + rootRect.toShortString() + " sampled=" + answer.sampled
-            + " wallpaper=#" + Integer.toHexString(answer.wallpaper) + " dim=#"
-            + Integer.toHexString(dim) + " frozen=" + measuringStopped() + " opacity="
-            + ownOpacityPercent + " evenOut=" + strength + " polarity=" + current
-            + (resolution == null ? " res=none" : " surface=#" + Integer.toHexString(resolution.surface)
-                + " ink=#" + Integer.toHexString(resolution.ink)));
     }
 
     /**

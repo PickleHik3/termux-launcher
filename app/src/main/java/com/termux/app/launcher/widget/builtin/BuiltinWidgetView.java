@@ -875,25 +875,6 @@ public abstract class BuiltinWidgetView extends FrameLayout
      *
      * @return whether the card's fill or rim moved, so it is dressed again
      */
-    /** DIAG(widgets): one WidgetDress line per dress, with six caller frames; revert before merge. */
-    private void diagDress(boolean moved, boolean onGlass, int tint, int fill, int ground,
-                           boolean rim) {
-        StackTraceElement[] st = new Throwable().getStackTrace();
-        StringBuilder by = new StringBuilder();
-        for (int k = 2; k < Math.min(st.length, 8); k++) {
-            String cls = st[k].getClassName();
-            by.append(cls.substring(cls.lastIndexOf('.') + 1)).append('.')
-                .append(st[k].getMethodName()).append(':').append(st[k].getLineNumber()).append(' ');
-        }
-        android.util.Log.i("WidgetDress", "dress t=" + android.os.SystemClock.uptimeMillis()
-            + " w=" + System.identityHashCode(this) + " rect=" + inkRect.toShortString()
-            + " moved=" + moved + " glassWorn=" + glassWorn + " onGlass=" + onGlass
-            + " bare=" + bareWorn + " tint=#" + Integer.toHexString(tint) + " fill=#"
-            + Integer.toHexString(fill) + " wasFill=#" + Integer.toHexString(cardFill)
-            + " ground=#" + Integer.toHexString(ground) + " rim=" + rim + " alpha=" + getAlpha()
-            + " evenOut=" + (bodyAnswer.evenOut != null) + " by=" + by);
-    }
-
     private boolean measureInk() {
         if (bareWorn) return measureBare();
         com.termux.app.chrome.WidgetInkSource ink = preview ? null : inkSource(fedLook);
@@ -920,8 +901,6 @@ public abstract class BuiltinWidgetView extends FrameLayout
             else rim = BuiltinWidgetGlass.edgeRimWanted(style.card, ink.widgetWallpaper(inkRect));
         }
         boolean moved = fill != cardFill || rim != edgeRim;
-        // DIAG(widgets): each dress of the card's body and what asked for it; revert before merge.
-        diagDress(moved, onGlass, tint, fill, ground, rim);
         cardFill = fill;
         edgeRim = rim;
         groundSurface = ground;
