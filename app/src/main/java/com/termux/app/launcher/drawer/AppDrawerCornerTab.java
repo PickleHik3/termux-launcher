@@ -247,6 +247,7 @@ final class AppDrawerCornerTab {
                     break;
             }
         }
+        for (PaneControlsView.Action action : actions) action.inCell();
         tab.setActions(actions);
     }
 
