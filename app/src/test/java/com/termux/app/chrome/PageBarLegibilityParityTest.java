@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.color.utilities.Hct;
+import com.termux.app.launcher.paging.PageTickStripView;
 import com.termux.app.launcher.widget.HomeLabelInk;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
@@ -185,8 +186,8 @@ public class PageBarLegibilityParityTest {
      * System light and night, each over a pale and a dark wallpaper (the page's ink following the
      * wallpaper): every page mark reads on the ground it is drawn on, and the current page is the
      * strongest. The pill's glyphs on its body (the bubble's disc wears that same body and draws
-     * the same current glyph), and the bubble's label on the bare wallpaper,
-     * with Adaptive legibility off and on.
+     * the same current glyph), the bubble's label on the bare wallpaper, and the dock's capsules
+     * on the wallpaper they stand over; with Adaptive legibility off and on.
      */
     @Test
     public void everyPageMarkReadsOnItsGroundInTheFourStates() {
@@ -216,6 +217,18 @@ public class PageBarLegibilityParityTest {
                     assertTrue(where + " label", drawn(label, wallpaper)
                         >= OnGlass.TARGET_BODY_TEXT);
 
+                    PageTickStripView strip = new PageTickStripView(context);
+                    strip.setGlassInk(wallpaper, WallpaperInk.bareInk(wallpaper,
+                        HomeLabelInk.DARK_INK, HomeLabelInk.PALE_INK));
+                    strip.setAccentColor(accent);
+                    strip.setPages(2, 0f);
+                    double active = drawn(strip.tickColorAt(0), wallpaper);
+                    double resting = drawn(strip.tickColorAt(1), wallpaper);
+                    assertTrue(where + " capsule active " + active, active >= PageMarkInk.CURRENT);
+                    assertTrue(where + " capsule resting " + resting,
+                        resting >= PageMarkInk.OTHER_FLOOR);
+                    assertTrue(where + " capsule active " + active + " over resting " + resting,
+                        active > resting);
                 }
             }
         }

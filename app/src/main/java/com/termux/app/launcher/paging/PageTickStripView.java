@@ -13,6 +13,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassInk;
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.chrome.PageMarkInk;
 import com.termux.app.place.EdgeStackView;
 
 /**
@@ -108,23 +109,20 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
 
     /**
      * The two inks the capsules morph between: the accent for the page being shown, and the band's
-     * neutral ink (the chrome's own, not a faded accent) for the rest.
+     * neutral ink (the chrome's own, not a faded accent) for the rest, both solved on the ground
+     * the capsules stand on, on that ground's side ({@link PageMarkInk}, the page bar's rule).
      *
-     * <p>The active capsule says which page you are on, so it is a meaningful graphic and takes
-     * {@link OnGlass#TARGET_LARGE_TEXT}. A capsule at rest says only that there is another page
-     * there, so it takes {@link OnGlass#TARGET_DECORATION} and keeps its muted look by asking for
-     * it as an <em>alpha</em>, {@link PageTickStrip#INACTIVE_ALPHA}, which {@link GlassInk#legible}
-     * raises only if that cannot clear the floor on this band.</p>
+     * <p>The active capsule says which page you are on: it is held to {@link PageMarkInk#CURRENT}.
+     * A capsule at rest says only that there is another page there: it keeps its muted look as an
+     * alpha of the neutral ink, a tier under the active one and never under the contract's
+     * graphics tier ({@link PageMarkInk#OTHER_FLOOR}) while the active one reads.</p>
      */
     private void resolveInks() {
         if (Color.alpha(glassBackdrop) == 0) return;
         int neutralSeed = Color.alpha(glassInkColor) == 0 ? accentColor : glassInkColor;
         boolean pale = GlassInk.isPaleSide(neutralSeed, glassBackdrop);
-        int restingAlpha = Math.round(255f * PageTickStrip.INACTIVE_ALPHA);
-        activeInk = GlassInk.legibleOn(glassBackdrop, accentColor, pale,
-            OnGlass.TARGET_LARGE_TEXT, 0xFF);
-        restingInk = GlassInk.legibleOn(glassBackdrop, neutralSeed, pale,
-            OnGlass.TARGET_DECORATION, restingAlpha);
+        activeInk = PageMarkInk.current(glassBackdrop, accentColor, pale);
+        restingInk = PageMarkInk.other(glassBackdrop, neutralSeed, activeInk);
     }
 
     /** The colour one capsule is drawn in at this fractional page position, alpha included. */

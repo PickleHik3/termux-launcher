@@ -13041,31 +13041,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@code glass}, transparent before it is measured. A dress pass, never per frame.
      */
     private void syncPageTickGround(@Nullable OnGlass.Resolution glass) {
+        mTickGroundGlass = glass;
         SuggestionBarView bar = mSuggestionBarView;
         if (bar == null) return;
         int surface = glass == null ? Color.TRANSPARENT : glass.surface;
         int ink = glass == null ? Color.TRANSPARENT : glass.ink;
         PageTickStripView strip = boundPageTickStrip();
-        if (strip != null && strip.getWidth() > 0 && strip.getHeight() > 0
-                && PageTickStrip.standsOnWallpaper(strip.getId() == R.id.apps_bar_indicator_band,
-                    mDock.appliedDockLayout().slabTopInsetPx > 0, mDock.beads() != null)) {
+        boolean onWallpaper = false;
+        if (strip != null && strip.getWidth() > 0 && strip.getHeight() > 0) {
             com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(strip, mTickGroundLocation,
                 mDockInkRootScratch);
             mTickGroundRect.set(mTickGroundLocation[0], mTickGroundLocation[1],
                 mTickGroundLocation[0] + strip.getWidth(),
                 mTickGroundLocation[1] + strip.getHeight());
             ChromeInk chromeInk = mChrome.ink();
-            int wallpaper = chromeInk.wallpaperSample(mTickGroundRect);
-            if (Color.alpha(wallpaper) == 0) wallpaper = chromeInk.wallpaperFallback();
-            if (Color.alpha(wallpaper) != 0) {
-                surface = wallpaper;
-                ink = com.termux.app.chrome.WallpaperInk.bareInk(wallpaper,
+            onWallpaper = PageTickStrip.standsOnWallpaper(
+                strip.getId() == R.id.apps_bar_indicator_band,
+                mDock.appliedDockLayout().slabTopInsetPx > 0, mDock.beads() != null);
+            // The wallpaper behind them, or, on the slab with no A-Z answer to borrow, the
+            // dock's face as measured there.
+            int ground = onWallpaper ? chromeInk.wallpaperSample(mTickGroundRect)
+                : glass == null ? chromeInk.faceUnder(GlassBackdropCache.Band.DOCK, mTickGroundRect)
+                : Color.TRANSPARENT;
+            if (onWallpaper && Color.alpha(ground) == 0) ground = chromeInk.wallpaperFallback();
+            if (Color.alpha(ground) != 0) {
+                surface = OnGlass.opaque(ground);
+                ink = com.termux.app.chrome.WallpaperInk.bareInk(surface,
                     com.termux.app.launcher.widget.HomeLabelInk.DARK_INK,
                     com.termux.app.launcher.widget.HomeLabelInk.PALE_INK);
             }
         }
         bar.setTickGround(surface, ink);
     }
+
+    /** The A-Z answer the ticks last borrowed on the slab; re-read on the dock's dress pass. */
+    @Nullable private OnGlass.Resolution mTickGroundGlass;
 
     private void syncAzScrubLettersAndTint() {
         if (!isAzIndexEnabled() || mAzScrubRowView == null || mSuggestionBarView == null) {
@@ -13887,6 +13897,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (azLettersOnWallpaper()) azOpacity = 0f;
         if (mChrome.glass().noteDockGlassUnder(GlassBackdropCache.Band.AZ_STRIP, azOpacity))
             syncAzScrubLettersAndTint();
+        // The capsules' ground follows the dock's dress even when the A-Z face did not move.
+        else syncPageTickGround(mTickGroundGlass);
         syncExtraKeysInk(dockOpacity);
         syncPromptLineInk(dockOpacity);
         mDock.syncDockTilesInk(dockOpacity);
