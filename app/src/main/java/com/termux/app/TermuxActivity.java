@@ -29421,6 +29421,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */
     private void refreshPageGlyphs() {
+        {
+            com.termux.app.wall.pageswitch.PageBarModel diag = pageBarModel();
+            int terms = 0;
+            for (com.termux.app.wall.pageswitch.PageBarModel.Entry e : diag.entries())
+                if (e.kind == com.termux.app.page.PageKind.TERMINAL) terms++;
+            android.util.Log.d("TL-PageBarDiag", "refreshPageGlyphs rowWindows=" + rowWindowCount()
+                + " terminalEntries=" + terms + " entries=" + diag.entries().size()
+                + " session=" + System.identityHashCode(mCurrentWSession));
+        }
         if (mWidgetPaneController != null) {
             mWidgetPaneController.setPageBarEntry(mPageBar);
             mWidgetPaneController.setPageBar(pageBarModel());
@@ -29439,6 +29448,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void refreshPageGlyphsIfWindowsMoved() {
         int count = rowWindowCount();
         int current = count == 0 ? -1 : rowCurrentIndex();
+        android.util.Log.d("TL-PageBarDiag", "ifWindowsMoved count=" + count + " current=" + current
+            + " held=" + mGlyphWindowCount + "/" + mGlyphWindowCurrent);
         if (count == mGlyphWindowCount && current == mGlyphWindowCurrent) return;
         mGlyphWindowCount = count;
         mGlyphWindowCurrent = current;
@@ -30336,6 +30347,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
+        android.util.Log.d("TL-PageBarDiag", "windowBar items=" + items.size() + " bar="
+            + chips.count(com.termux.app.chrome.WindowChips.Surface.BAR) + " rowCount=" + chips.rowCount()
+            + " rowWindows=" + rowWindowCount() + " session=" + System.identityHashCode(mCurrentWSession)
+            + " displayFront=" + isDisplayWindowInFront());
         // The bar lists the Terminal's own windows; the floats are Home's chips (#295).
         items = new java.util.ArrayList<>(
             items.subList(0, chips.count(com.termux.app.chrome.WindowChips.Surface.BAR)));
