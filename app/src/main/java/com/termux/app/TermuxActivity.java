@@ -29478,27 +29478,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Gives Home's glyph row the pages the wall has now; called when a page settles or the list changes. */
     private void refreshPageGlyphs() {
-        { // DIAG(TL-PageBarDiag): revert before merge.
-            com.termux.app.wall.pageswitch.PageBarModel diag = pageBarModel();
-            int terms = 0;
-            for (com.termux.app.wall.pageswitch.PageBarModel.Entry e : diag.entries())
-                if (e.kind == com.termux.app.page.PageKind.TERMINAL) terms++;
-            String line = "model rowWindows=" + rowWindowCount() + " terminalEntries=" + terms
-                + " entries=" + diag.entries().size();
-            if (!line.equals(mDiagPageBarModel)) {
-                mDiagPageBarModel = line;
-                android.util.Log.d("TL-PageBarDiag", line + " up=" + android.os.SystemClock.uptimeMillis());
-            }
-        }
         if (mWidgetPaneController != null) {
             mWidgetPaneController.setPageBarEntry(mPageBar);
             mWidgetPaneController.setPageBar(pageBarModel());
         }
         refreshPageSwitcherKey();
     }
-
-    /** DIAG(TL-PageBarDiag): the model line last logged; revert before merge. */
-    @Nullable private String mDiagPageBarModel;
 
     /** The window count and current window the glyphs were last given. */
     private int mGlyphWindowCount = -1;
