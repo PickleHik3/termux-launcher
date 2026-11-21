@@ -17,10 +17,10 @@ import com.termux.app.page.PageKind;
 /**
  * Draws a page glyph: its Roundline outline ({@link PageGlyphSlots}) stroked in one colour and,
  * in the Home and Terminal glyphs, the page number in that colour, bold, centred in the glyph's
- * number box by its ink. Every number 1..99 in every kind stands one cap height, the largest at
- * which the widest of them fits the smallest box, so a 1 beside a 12 and a house beside a
- * terminal read alike. The current page is told apart by colour alone, outline and number in the
- * caller's accent: an interior wash read as a smudge on mid-tone glass. Numbers above 99 draw as
+ * number box by its ink. Every one-digit number stands one size and every two-digit number
+ * another, each the largest at which the widest of its count fits the smallest box, so a 1 beside
+ * a 2 and a house beside a terminal read alike while a lone digit stays large. The current page is told apart by colour alone, outline and number
+ * in the caller's accent: an interior wash read as a smudge on mid-tone glass. Numbers above 99 draw as
  * "99+".
  *
  * <p>The paths and every number's ink metrics are built once, here; drawing allocates nothing.
@@ -49,8 +49,13 @@ public final class PageGlyphPainter {
     private final float mCapTop;
     private final float mCapHeight;
     private final float[] mLayout = new float[3];
-    /** The one text size of the numbers 1..99, in units; "99+" shrinks from it to fit. */
-    private final float mNumberSize;
+    /**
+     * The text size, in units, of every one-digit number and of every two-digit number: the
+     * largest at which the widest of that count fits the smallest box. "99+" shrinks from the
+     * two-digit size to fit.
+     */
+    private final float mOneDigitSize;
+    private final float mTwoDigitSize;
     private final float mMinBoxW;
 
     public PageGlyphPainter() {
@@ -84,8 +89,12 @@ public final class PageGlyphPainter {
         mText.getTextBounds("0123456789", 0, 10, bounds);
         mCapTop = bounds.top / REFERENCE_SIZE;
         mCapHeight = Math.max(1e-3f, bounds.height() / REFERENCE_SIZE);
-        float widest = 0f;
-        for (int n = 1; n <= MAX_NUMBER; n++) widest = Math.max(widest, mInkWidth[n]);
+        float widestOne = 0f;
+        float widestTwo = 0f;
+        for (int n = 1; n <= MAX_NUMBER; n++) {
+            if (n < 10) widestOne = Math.max(widestOne, mInkWidth[n]);
+            else widestTwo = Math.max(widestTwo, mInkWidth[n]);
+        }
         float boxW = Float.MAX_VALUE;
         float boxH = Float.MAX_VALUE;
         for (PageKind kind : PageKind.values()) {
@@ -94,7 +103,8 @@ public final class PageGlyphPainter {
             boxH = Math.min(boxH, box[3] - box[1]);
         }
         mMinBoxW = boxW;
-        mNumberSize = Math.min(boxH / mCapHeight, boxW / widest);
+        mOneDigitSize = Math.min(boxH / mCapHeight, boxW / widestOne);
+        mTwoDigitSize = Math.min(boxH / mCapHeight, boxW / widestTwo);
     }
 
     /** Every contour of {@code data} filled on its own, then joined, whichever way it winds. */
@@ -172,7 +182,8 @@ public final class PageGlyphPainter {
     void placeNumber(@NonNull PageKind kind, int number, @NonNull float[] out) {
         int index = number > MAX_NUMBER ? 0 : number;
         float[] box = PageGlyphSlots.box(kind);
-        float size = Math.min(mNumberSize, mMinBoxW / mInkWidth[index]);
+        float size = Math.min(number < 10 ? mOneDigitSize : mTwoDigitSize,
+            mMinBoxW / mInkWidth[index]);
         out[0] = (box[0] + box[2]) / 2f - (mInkLeft[index] + mInkWidth[index] / 2f) * size;
         out[1] = (box[1] + box[3]) / 2f - (mCapTop + mCapHeight / 2f) * size;
         out[2] = size;
