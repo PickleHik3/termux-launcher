@@ -92,8 +92,7 @@ public abstract class FocuslessKeyIntake implements TerminalKeyEventHandler.KeyV
                                            boolean shift) {
         if (!isActive()) return false;
         if (FieldKeys.classify(value, ctrl, alt) == FieldKeys.Kind.CHORD) {
-            String text = value.getKind() == KeyValue.Kind.Char
-                ? String.valueOf(value.getChar()) : value.getString();
+            String text = FieldKeys.chordText(value);
             if (ownsChord(text, ctrl, alt)) {
                 onText(text, ctrl, alt);
                 return true;
