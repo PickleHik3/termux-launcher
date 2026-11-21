@@ -179,6 +179,15 @@ public final class AppDrawerContentView extends FrameLayout
     private final AppDrawerChromeLayout.Morph mSearchMorph = new AppDrawerChromeLayout.Morph();
     @Nullable private AppDrawerChromeLayout.Result mChromeResult;
     private final android.graphics.RectF mPillRect = new android.graphics.RectF();
+    /** The band of the lists' bottom the full bar still hides, and the reused clip that shows it. */
+    private int mListHiddenPx;
+    private final android.graphics.Rect mListClip = new android.graphics.Rect();
+    private final java.util.ArrayList<View> mListClipped = new java.util.ArrayList<>(2);
+    /** Re-clips a list whose size changed (the card's height moves with the keyboard). */
+    private final View.OnLayoutChangeListener mListClipOnLayout =
+        (v, l, t, r, b, ol, ot, or, ob) -> {
+            if (b - t != ob - ot || r - l != or - ol) applyListClip(v);
+        };
     private final TextView mResultsLabel;
     private final TextView mNoResults;
     private final RecyclerView mGrid;
@@ -528,7 +537,17 @@ public final class AppDrawerContentView extends FrameLayout
 
         mAdapter = new AppDrawerAppsAdapter(dock);
         mLayoutManager = new GridLayoutManager(context, AppDrawerGridMetrics.MIN_COLUMNS);
-        mGrid = new RecyclerView(context);
+        mGrid = new RecyclerView(context) {
+            @Override
+            public boolean dispatchTouchEvent(MotionEvent ev) {
+                // Rows hidden under a full bar's band take no touch (see applyListFold).
+                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN && mListHiddenPx > 0
+                    && ev.getY() >= getHeight() - mListHiddenPx) {
+                    return false;
+                }
+                return super.dispatchTouchEvent(ev);
+            }
+        };
         mGrid.setLayoutManager(mLayoutManager);
         mGrid.setAdapter(mAdapter);
         mGrid.setHasFixedSize(true);
@@ -646,6 +665,8 @@ public final class AppDrawerContentView extends FrameLayout
         categoryParams.bottomMargin = 0;
         mCategoryView.setVisibility(GONE);
         addView(mCategoryView, categoryParams);
+        mGrid.addOnLayoutChangeListener(mListClipOnLayout);
+        mCategoryView.addOnLayoutChangeListener(mListClipOnLayout);
 
         // The categories search chrome: a quiet mono "N RESULTS" band between the pill and the
         // rows, and a centred no-results state. Both exist only while that presentation is up.
@@ -1100,17 +1121,21 @@ public final class AppDrawerContentView extends FrameLayout
      * compares first; runs on an inset, placement or type change, never per frame.
      */
     private void applyBottomChrome(@NonNull AppDrawerChromeLayout.Result r) {
-        int inset = r.innerBottomInsetPx;
+        int inset = r.foldBandPx > 0 ? r.foldBandPx : r.innerBottomInsetPx;
         float rowTrailing = AppDrawerGridMetrics.rowBottomPx(mDensity);
-        int listPadding = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
+        // A bar at the bottom: the list runs to the card's edge and keeps the bar's band as end
+        // padding (the band is the button's clearance too), so the last row rests where it did
+        // above the full bar; only the drawn and touchable edge follows the fold (applyListFold).
+        int listPadding = r.foldBandPx > 0 ? r.foldBandPx
+            : AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
         if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
-        setBottomMargin(mGrid, r.contentBottomPx);
+        int listBottom = r.foldBandPx > 0 ? 0 : r.contentBottomPx;
+        setBottomMargin(mGrid, listBottom);
         setBottomMargin(mColumn, r.contentBottomPx);
-        setBottomMargin(mCategoryView, r.contentBottomPx);
-        // The pages never follow the fold: their band is fixed, with the floor that keeps the
-        // button off the last row, so a swipe never re-lays a page.
+        setBottomMargin(mCategoryView, listBottom);
+        // The pages' band stays what it was: pages are metered to it, so the button overlays them.
         setBottomMargin(mHorizontalPager, r.contentBottomPx
-            + Math.max(Math.round(pagerBottomBandPx(r.restInsetPx)), r.pagerFloorPx));
+            + Math.round(pagerBottomBandPx(r.restInsetPx)));
         setBottomMargin(mPageIndicator, r.contentBottomPx + r.restInsetPx);
         mCategoryView.setBottomInsetPx(inset);
         int gravity = (mSearchAtBottom ? Gravity.BOTTOM : Gravity.TOP) | Gravity.CENTER_HORIZONTAL;
@@ -1128,6 +1153,41 @@ public final class AppDrawerContentView extends FrameLayout
         if (r == null) return;
         AppDrawerChromeLayout.morph(r, mSearchFold, mSearchMorph);
         mPill.applyMorph(mSearchFold, mSearchMorph);
+        applyListFold();
+    }
+
+    /** How far the full bar's band still hides the list's bottom: the band times the unfolded share. */
+    private int hiddenBandPx() {
+        AppDrawerChromeLayout.Result r = mChromeResult;
+        if (r == null || r.foldBandPx <= 0) return 0;
+        return Math.round(r.foldBandPx * (1f - Math.max(0f, Math.min(1f, mSearchFold))));
+    }
+
+    /**
+     * Raises the list's drawn bottom edge by the band the full bar still holds: a draw-time clip
+     * that follows the fold fraction (the layout never changes), identical to the old layout at 0
+     * and the card's edge at 1. A touch that starts in the hidden band reaches neither list.
+     */
+    private void applyListFold() {
+        mListHiddenPx = hiddenBandPx();
+        mCategoryView.setHiddenBottomPx(mListHiddenPx);
+        applyListClip(mGrid);
+        applyListClip(mCategoryView);
+    }
+
+    private void applyListClip(@NonNull View list) {
+        int h = list.getHeight();
+        if (mListHiddenPx <= 0 || h <= 0) {
+            if (mListClipped.contains(list)) {
+                list.setClipBounds(null);
+                mListClipped.remove(list);
+            }
+            return;
+        }
+        android.graphics.Rect clip = mListClip;
+        clip.set(0, 0, list.getWidth(), Math.max(0, h - mListHiddenPx));
+        list.setClipBounds(clip);
+        if (!mListClipped.contains(list)) mListClipped.add(list);
     }
 
     /** The round button parks away from the A-Z strip: on the strip's far side, else the end side. */
