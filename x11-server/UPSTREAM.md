@@ -160,15 +160,23 @@ screen is to own the server. See `project-docs/reference/launcher/pane-wall-x11-
   there too; a clip with text and no picture still goes through upstream's `sendClipboardAnnounce`,
   so text paste is unchanged. The server lists the text targets in TARGETS only when the clip has
   text. When an X client asks for an image target the server calls the new `@Keep
-  requestClipboardImage(String)` (resolved with `FindMethodOrDie`), which reads the picture off
-  the main thread — copied when its own type was asked, decoded and re-encoded otherwise — and
-  answers through the new `sendClipboardImage`, an empty array being a refusal. The bytes are
-  never kept on either side after the answer, and are capped at 32 MiB
-  (`ClipboardImageTargets.MAX_BYTES`, `LORIE_CLIPBOARD_IMAGE_MAX`); a picture over 64 MiB decoded
-  is not converted. `sendClipboardImage` is a plain native, not `@FastNative`: it writes the whole
-  picture on the main thread (the socket is one stream every other event is written to) and may
-  block. A nightly merge must carry `requestClipboardImage`, `sendClipboardAnnounceTargets` and
-  `sendClipboardImage` forward with the patch, or the first view dies in `nativeInit` or
+  requestClipboardImage(String, int)` (resolved with `FindMethodOrDie`) with the target and the
+  clipboard serial, which moves on every announce. The view reads the picture off the main thread
+  — copied when its own type was asked, decoded and re-encoded otherwise — and answers through the
+  new `sendClipboardImageChunk`: 64 KiB per frame (`ClipboardImageTargets.CHUNK_BYTES`,
+  `LORIE_CLIPBOARD_IMAGE_CHUNK`), one frame per main-thread message, each carrying the serial
+  back and a last-chunk flag; a last chunk with no bytes is a refusal. One picture's chunks are
+  all sent before the next picture is read, refusals included, so answers never interleave. The
+  server assembles one picture at a time on its X thread, drops chunks for a stale serial, and
+  frees a half-built picture (refusing its requesters) on a new announce, a chunk for another
+  target or a disconnect. The bytes are never kept on either side after the answer, and are
+  capped at 32 MiB (`ClipboardImageTargets.MAX_BYTES`, `LORIE_CLIPBOARD_IMAGE_MAX`; the PNG
+  encoder writes into a stream that stops at the cap); a picture over 64 MiB decoded is not
+  converted. `sendClipboardImageChunk` and `sendClipboardAnnounceTargets` are plain natives, not
+  `@FastNative`: they may wait on a full socket, and a frame that cannot be written whole drops
+  the connection through `xcallback`'s hangup path. A nightly merge must carry
+  `requestClipboardImage(String, int)`, `sendClipboardAnnounceTargets` and
+  `sendClipboardImageChunk` forward with the patch, or the first view dies in `nativeInit` or
   `RegisterNatives`.
 
 ## `loader/`

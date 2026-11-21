@@ -153,4 +153,24 @@ public class ClipboardImageTargetsTest {
         assertEquals(2, out.size());
         assertTrue(out.overflowed());
     }
+
+    @Test
+    public void chunksCoverThePictureInOrderAndTheLastIsShort() {
+        int total = ClipboardImageTargets.CHUNK_BYTES * 2 + 5;
+        assertEquals(ClipboardImageTargets.CHUNK_BYTES, ClipboardImageTargets.chunkLength(total, 0));
+        assertEquals(ClipboardImageTargets.CHUNK_BYTES,
+                ClipboardImageTargets.chunkLength(total, ClipboardImageTargets.CHUNK_BYTES));
+        assertEquals(5, ClipboardImageTargets.chunkLength(total, ClipboardImageTargets.CHUNK_BYTES * 2));
+    }
+
+    @Test
+    public void aRefusalIsOneEmptyChunk() {
+        assertEquals(0, ClipboardImageTargets.chunkLength(0, 0));
+    }
+
+    @Test
+    public void aPictureOfExactlyOneChunkIsOneChunk() {
+        int total = ClipboardImageTargets.CHUNK_BYTES;
+        assertEquals(total, ClipboardImageTargets.chunkLength(total, 0));
+    }
 }

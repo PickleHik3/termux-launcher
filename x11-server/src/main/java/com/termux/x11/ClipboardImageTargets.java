@@ -89,6 +89,14 @@ final class ClipboardImageTargets {
         return !imageType.equals(target);
     }
 
+    /** The most picture bytes one chunk carries: {@code LORIE_CLIPBOARD_IMAGE_CHUNK} in lorie.h. */
+    static final int CHUNK_BYTES = 64 * 1024;
+
+    /** How many of {@code total} bytes the chunk starting at {@code offset} carries. */
+    static int chunkLength(int total, int offset) {
+        return Math.max(0, Math.min(CHUNK_BYTES, total - offset));
+    }
+
     /** Whether a picture of {@code size} bytes may be sent. */
     static boolean withinCap(long size) {
         return size >= 0 && size <= MAX_BYTES;
