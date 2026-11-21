@@ -44,6 +44,8 @@ public final class ElementRows {
         COMMAND_PALETTE_BUTTON,
         /** The dock's New float terminal tile ({@link DockCard#KEY_FLOAT_TERMINAL_BUTTON}). */
         FLOAT_TERMINAL_BUTTON,
+        /** The page bar on Home: {@code app_launcher_home_page_indicator} "dots" or "off". */
+        PAGE_BAR,
         /** No eye. */
         NONE
     }
@@ -52,6 +54,8 @@ public final class ElementRows {
     public enum Item {
         STATUS_BAR(R.string.editor_elements_status_bar, R.drawable.ic_editor_status_bar,
             EditorCard.STATUS, Element.STATUS, null, Visibility.ELEMENT),
+        PAGE_BAR(R.string.editor_elements_page_bar, R.drawable.ic_ms_more_horiz,
+            EditorCard.HOME, null, null, Visibility.PAGE_BAR),
         APPS_ROW(R.string.editor_elements_apps_row, R.drawable.ic_symbol_apps,
             EditorCard.DOCK, Element.APPS, null, Visibility.ELEMENT),
         AZ(R.string.editor_elements_az, R.drawable.ic_ms_sort_by_alpha,
@@ -92,6 +96,11 @@ public final class ElementRows {
             this.visibility = visibility;
         }
 
+        /** Whether the row opens a card: the page bar's settings are the row's own switch. */
+        public boolean opensCard() {
+            return visibility != Visibility.PAGE_BAR;
+        }
+
         /** Whether the row carries an eye. */
         public boolean hasEye() {
             return visibility != Visibility.NONE;
@@ -114,19 +123,27 @@ public final class ElementRows {
         }
     }
 
-    /** The rows both page cards list, top to bottom. */
+    /** The rows both page cards list, top to bottom (Home adds the page bar). */
     private static final List<Item> ROWS = Collections.unmodifiableList(java.util.Arrays.asList(
         Item.STATUS_BAR, Item.APPS_ROW, Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD,
         Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL));
 
+    /** Home's rows: the page bar stands under the status bar, above the dock's bars it sits over. */
+    private static final List<Item> HOME_ROWS;
+    static {
+        List<Item> rows = new ArrayList<>(ROWS);
+        rows.add(rows.indexOf(Item.APPS_ROW), Item.PAGE_BAR);
+        HOME_ROWS = Collections.unmodifiableList(rows);
+    }
+
     /**
      * The rows {@code screen}'s card lists, top to bottom: the same list on Home and the
-     * Terminal, each written to its own page's layout. A row the page never wears is left out
+     * Terminal, but for Home's page bar, each written to its own page's layout. A row the page never wears is left out
      * by the editor's host ({@code offers}).
      */
     @NonNull
     public static List<Item> rows(@NonNull PageKind screen) {
-        return ROWS;
+        return screen == PageKind.HOME ? HOME_ROWS : ROWS;
     }
 
     /** The page card that holds the list: Home's on Home, the Terminal's on the Terminal's. */

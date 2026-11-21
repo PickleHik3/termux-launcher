@@ -2136,6 +2136,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case FLOAT_TERMINAL_BUTTON:
                     return mDock.option(
                         com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL);
+                case PAGE_BAR:
+                    return !"off".equals(AppearanceSettingsStore.getString(mHost.context(),
+                        HomeSettings.KEY_PAGE_INDICATOR, null));
                 case NONE:
                 default:
                     return true;
@@ -2171,6 +2174,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case FLOAT_TERMINAL_BUTTON:
                     mDock.setOption(
                         com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL, shown);
+                    break;
+                case PAGE_BAR:
+                    writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, shown ? "dots" : "off");
                     break;
                 case NONE:
                 default:
@@ -3052,9 +3058,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case NUMERALS:
                     return indexOf(NUMERALS, AppearanceSettingsStore.getString(context,
                         "app_launcher_builtin_widget_style", null), 0);
-                case PAGE_DOTS:
-                    return "off".equals(AppearanceSettingsStore.getString(context,
-                        HomeSettings.KEY_PAGE_INDICATOR, null)) ? 0 : 1;
                 case WALLPAPER_DIM: return prefs.getTerminalWallpaperDim();
                 case TERMINAL_OPACITY: return prefs.getTerminalBackgroundOpacity();
                 case TERMINAL_BLUR: return prefs.getTerminalGlassBlurRadius();
@@ -3809,9 +3812,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 AppearanceSettingsStore.putString(context, "app_launcher_builtin_widget_style",
                     NUMERALS[clamp(value, 0, 1)]);
                 settingsWritten();
-                break;
-            case PAGE_DOTS:
-                writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, value != 0 ? "dots" : "off");
                 break;
             case WALLPAPER_DIM:
             case TERMINAL_OPACITY:
@@ -6768,7 +6768,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case GLASS_WIDGETS: return R.drawable.ic_ms_widgets;
             case TWO_LINE: return R.drawable.ic_ms_wrap_text;
             case LABEL_SHADOW: return R.drawable.ic_ms_blur_on;
-            case PAGE_DOTS: return R.drawable.ic_ms_more_horiz;
             case WALLPAPER_SCROLL: return R.drawable.ic_ms_wallpaper;
             case WALLPAPER_DIM: return R.drawable.ic_ms_wallpaper;
             case CHANGE_WALLPAPER: return R.drawable.ic_ms_wallpaper;

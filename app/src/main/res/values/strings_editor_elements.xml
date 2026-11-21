@@ -9,6 +9,7 @@
     <string name="editor_elements_status_bar">Status bar</string>
     <string name="editor_elements_apps_row">Apps row</string>
     <string name="editor_elements_az">A–Z</string>
+    <string name="editor_elements_page_bar">Page bar</string>
     <string name="editor_elements_extra_keys">Extra keys</string>
     <string name="editor_elements_keyboard">Keyboard</string>
     <string name="editor_elements_search_field">Search field</string>

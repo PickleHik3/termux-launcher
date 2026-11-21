@@ -42,7 +42,7 @@
     <string name="settings_home_label_shadow_title">Label shadow</string>
 
     <!-- Page indicator (F8) -->
-    <string name="settings_home_page_indicator_title">Page indicator</string>
+    <string name="settings_home_page_indicator_title">Page bar</string>
     <string name="settings_home_page_indicator_glyphs">Glyphs</string>
     <string name="settings_home_page_indicator_off">Off</string>
 

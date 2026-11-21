@@ -141,7 +141,7 @@ public class EditorRowsTest {
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
             Row.ICON_PACK), EditorRows.tier(EditorCard.HOME, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
-            Row.PAGE_DOTS, Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
+            Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
             Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
             Row.SECTION_LINKS, Row.LINK_GESTURES,
             Row.LINK_PAGES),

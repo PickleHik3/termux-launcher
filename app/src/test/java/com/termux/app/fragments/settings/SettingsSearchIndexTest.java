@@ -112,7 +112,7 @@ public class SettingsSearchIndexTest {
             {"label shadow", "app_launcher_home_label_shadow"},
             {"folder density", "app_launcher_home_folder_density"},
             {"widget numerals", "app_launcher_builtin_widget_style"},
-            {"page indicator", "app_launcher_home_page_indicator"},
+            {"page bar", "app_launcher_home_page_indicator"},
             {"wallpaper scrolls", "wallpaper_parallax"},
             {"12-hour time", "top_pane_clock_am_pm"},
             {"cpu usage", "status_widget_cpu"},

@@ -24,7 +24,7 @@ public final class HomeCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE, Row.ICON_PACK)
-            .tier(3, Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
+            .tier(3, Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
                 Row.FOLDERS, Row.WALLPAPER_SCROLL)
             .tier(3, Row.SECTION_WIDGETS, Row.GLASS_WIDGETS, Row.NUMERALS)
             .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)

@@ -109,7 +109,6 @@
     <string name="appearance_row_page_transition">Transition</string>
     <string name="appearance_row_folders">Folders</string>
     <string name="appearance_row_numerals">Numerals font</string>
-    <string name="appearance_row_page_dots">Page dots</string>
     <string name="appearance_row_wallpaper_dim">Wallpaper dim</string>
     <string name="appearance_row_wallpaper_scroll">Wallpaper scrolling</string>
     <!-- The Match rows: copy the other screen's layout and glass onto this one. -->

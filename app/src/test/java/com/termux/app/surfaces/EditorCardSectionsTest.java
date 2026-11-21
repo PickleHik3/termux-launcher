@@ -107,7 +107,7 @@ public class EditorCardSectionsTest {
         check(EditorCard.HOME, expect(
             CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
                 Row.ICON_PACK),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.PAGE_DOTS,
+            "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW,
                 Row.FOLDERS, Row.WALLPAPER_SCROLL),
             "SECTION_WIDGETS", Arrays.asList(Row.GLASS_WIDGETS, Row.NUMERALS),
             "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),

@@ -131,7 +131,6 @@ public final class EditorRows {
         PAGE_TRANSITION(Kind.SEGMENTS, R.string.appearance_row_page_transition,
             R.drawable.ic_ed_transition_slide),
         NUMERALS(Kind.SEGMENTS, R.string.appearance_row_numerals, R.drawable.ic_editor_text_size),
-        PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
         /**
          * The black dim over the wallpaper on the Terminal's pages, Display and Assistant pages
          * included (the Terminal card's Background); Home's pages have none.

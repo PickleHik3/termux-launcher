@@ -28,20 +28,34 @@ public class ElementRowsTest {
     private static final List<Item> SHARED = Arrays.asList(Item.STATUS_BAR, Item.APPS_ROW,
         Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD, Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL);
 
+    private static final List<Item> HOME = Arrays.asList(Item.STATUS_BAR, Item.PAGE_BAR,
+        Item.APPS_ROW, Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD, Item.COMMAND_PALETTE,
+        Item.FLOAT_TERMINAL);
+
     /**
-     * Home and the Terminal list the same rows, each written to its own page's layout; the
+     * Home and the Terminal list the same rows, Home with the page bar under its status bar, each written to its own page's layout; the
      * Search field and the Drawer icon are the Dock card's Show/hide tiles (spec §3, Dock).
      */
     @Test
     public void bothPageCardsListTheSameRows() {
         assertEquals(SHARED, ElementRows.rows(PageKind.TERMINAL));
-        assertEquals(SHARED, ElementRows.rows(PageKind.HOME));
+        assertEquals(HOME, ElementRows.rows(PageKind.HOME));
+        assertFalse(ElementRows.rows(PageKind.TERMINAL).contains(Item.PAGE_BAR));
         for (PageKind screen : new PageKind[] {PageKind.TERMINAL, PageKind.HOME}) {
             assertFalse(ElementRows.rows(screen).contains(Item.SEARCH_FIELD));
             assertFalse(ElementRows.rows(screen).contains(Item.DRAWER_ICON));
         }
         for (Item item : SHARED)
             assertTrue(item + " has an eye", item.hasEye());
+    }
+
+    @Test
+    public void thePageBarHasAnEyeAndNoCardOfItsOwn() {
+        assertEquals(Visibility.PAGE_BAR, Item.PAGE_BAR.visibility);
+        assertTrue(Item.PAGE_BAR.hasEye());
+        assertFalse(Item.PAGE_BAR.opensCard());
+        for (Item item : SHARED)
+            assertTrue(item + " opens its card", item.opensCard());
     }
 
     @Test
