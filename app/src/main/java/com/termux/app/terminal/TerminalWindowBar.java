@@ -1399,11 +1399,29 @@ public final class TerminalWindowBar extends HorizontalScrollView {
      * reused across a refresh, and a rebuilt row loses the selection slide.
      */
     @NonNull
+    /**
+     * The box the add and close icons occupy, in dp. The old 10dp marks drew a 1.3dp stroke; the
+     * Roundline window icons are 24-unit outlines with a 2-unit stroke, so 16dp gives them a
+     * 1.33dp stroke (13dp of ink) and leaves air in the 24dp row.
+     */
+    static final int WINDOW_ICON_DP = 16;
+
+    /** {@code res} reporting {@link #WINDOW_ICON_DP} as its size, so a CENTER image view keeps it. */
+    @NonNull
+    static android.graphics.drawable.Drawable windowIcon(@NonNull Context context, int res) {
+        android.graphics.drawable.Drawable icon = ContextCompat.getDrawable(context, res);
+        final int side = Math.round(WINDOW_ICON_DP * context.getResources().getDisplayMetrics().density);
+        return new android.graphics.drawable.DrawableWrapper(icon.mutate()) {
+            @Override public int getIntrinsicWidth() { return side; }
+            @Override public int getIntrinsicHeight() { return side; }
+        };
+    }
+
     private AppCompatImageButton ensureCloseButton() {
         AppCompatImageButton close = mCloseButton;
         if (close == null) {
             close = new AppCompatImageButton(getContext());
-            close.setImageResource(R.drawable.ic_status_bar_close_window);
+            close.setImageDrawable(windowIcon(getContext(), R.drawable.ic_rl_window_close));
             close.setScaleType(ImageView.ScaleType.CENTER);
             close.setPadding(0, 0, 0, 0);
             // Clickable and focusable on purpose: the status bar's gesture treats a clickable
@@ -2030,7 +2048,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
             : MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
                 ContextCompat.getColor(context, R.color.termux_primary));
         AppCompatImageButton add = new AppCompatImageButton(context);
-        add.setImageResource(R.drawable.ic_status_bar_add_window);
+        add.setImageDrawable(windowIcon(context, R.drawable.ic_rl_window_add));
         ImageViewCompat.setImageTintList(add, ColorStateList.valueOf(plusTint(accent)));
         add.setScaleType(ImageView.ScaleType.CENTER);
         add.setBackground(null);

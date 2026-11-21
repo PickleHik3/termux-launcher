@@ -36,9 +36,9 @@ public class AppNoticeTest {
 
     @Test
     public void kindPicksTheIconWhenTheCallerHasNoOpinion() {
-        // Plain information is just the sentence: no mark.
-        assertEquals(0, item(AppNoticeItem.Kind.INFO, null).resolvedIcon());
-        assertFalse(item(AppNoticeItem.Kind.INFO, null).hasMark());
+        // Plain information wears the generic info mark.
+        assertEquals(R.drawable.ic_rl_info, item(AppNoticeItem.Kind.INFO, null).resolvedIcon());
+        assertTrue(item(AppNoticeItem.Kind.INFO, null).hasMark());
         assertEquals(R.drawable.ic_rl_success, item(AppNoticeItem.Kind.SUCCESS, null).resolvedIcon());
         assertEquals(R.drawable.ic_rl_warning, item(AppNoticeItem.Kind.WARNING, null).resolvedIcon());
         assertEquals(R.drawable.ic_rl_error, item(AppNoticeItem.Kind.ERROR, null).resolvedIcon());

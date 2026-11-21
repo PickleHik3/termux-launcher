@@ -19,8 +19,6 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.widget.ImageViewCompat;
 
-import com.airbnb.lottie.LottieAnimationView;
-import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.theme.TextScale;
@@ -88,10 +86,10 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
 
     private final GaugeIcon mIcon;
     @Nullable private BatteryIconDrawable mBatteryIcon;
-    @Nullable private LottieAnimationView mAnimation;
+    /** The weather's two-tint picture, built on first use: only the weather widget has one. */
+    @Nullable private WeatherIconDrawable mWeatherIcon;
+    @Nullable private WeatherIcons.Icon mWeatherShown;
     private final TextView mValue;
-    @Nullable private String mAnimationAsset;
-    private final Runnable mSettleAnimation = this::settleAnimation;
     private boolean mAccent;
     private boolean mMuted;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
@@ -168,7 +166,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     public void setIconResource(@DrawableRes int drawableRes) {
         mIcon.setImageResource(drawableRes);
         mIcon.setVisibility(VISIBLE);
-        hideAnimation();
+        mWeatherShown = null;
     }
 
     /**
@@ -178,75 +176,25 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     public void setIconDrawable(@NonNull Drawable drawable) {
         if (mIcon.getDrawable() != drawable) mIcon.setImageDrawable(drawable);
         if (mIcon.getVisibility() != VISIBLE) mIcon.setVisibility(VISIBLE);
-        hideAnimation();
+        if (drawable != mWeatherIcon) mWeatherShown = null;
     }
 
     /**
-     * A bundled Lottie animation shown before the value instead of an icon. The view is
-     * created on first use: only the weather widget has one, and inflating a Lottie view for the
-     * CPU and RAM widgets that will never play anything is pure cost.
-     *
-     * @param assetPath a path under {@code assets/}, e.g. {@code weather/clear-day.json}
+     * The weather's picture before the value, in the icon's box: its cloud in the widget's icon ink
+     * and its sun, moon or bolt in the accent. Only on a change, so the repeat calls of a refresh
+     * pass cost nothing.
      */
-    public void setIconAnimation(@NonNull String assetPath) {
-        if (mAnimation == null) {
-            mAnimation = new LottieAnimationView(getContext());
-            // Plays once per condition change and holds its last frame. Looping pins the whole
-            // activity to the panel's full refresh rate for as long as the status bar is up:
-            // measured on Pong at 1215 frames/10s and 47% of a core, against 431 frames and 33%
-            // with this line — and that 33% is the flip clock, which is there either way. The
-            // card's headline icon still loops, because it only runs while the card is open.
-            mAnimation.setRepeatCount(0);
-            mAnimation.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-            // Meteocons are multi-colour by design, so unlike the vector icons this one is not
-            // tinted to the widget's Material role.
-            addView(mAnimation, indexOfChild(mValue), new LayoutParams(dp(19), dp(19)));
-        }
-        if (!assetPath.equals(mAnimationAsset)) {
-            mAnimationAsset = assetPath;
-            mAnimation.setAnimation(assetPath);
-            mAnimation.playAnimation();
-        }
-        mAnimation.setVisibility(VISIBLE);
-        mIcon.setVisibility(GONE);
+    public void setWeatherIcon(@NonNull WeatherIcons.Icon icon) {
+        if (mWeatherIcon == null) mWeatherIcon = new WeatherIconDrawable(getContext());
+        if (mWeatherShown == icon && mIcon.getDrawable() == mWeatherIcon) return;
+        setIconDrawable(mWeatherIcon);
+        mWeatherShown = icon;
+        applyColors();
     }
 
-    /**
-     * Loops the icon animation for {@code durationMs}, then lets the current pass finish and holds
-     * the last frame again.
-     *
-     * <p>The steady state deliberately does not loop — measured on Pong at 1215 frames/10s and 47%
-     * of a core against 431 frames and 33% held still — so this is the bounded exception: a few
-     * seconds of movement when the user has just arrived, where the animation is the point, and
-     * then back to a still icon for the hours it sits there afterwards.
-     */
-    public void replayIconAnimation(long durationMs) {
-        if (mAnimation == null || mAnimationAsset == null) return;
-        if (getVisibility() != VISIBLE || mAnimation.getVisibility() != VISIBLE) return;
-        removeCallbacks(mSettleAnimation);
-        mAnimation.setRepeatCount(LottieDrawable.INFINITE);
-        mAnimation.playAnimation();
-        postDelayed(mSettleAnimation, durationMs);
-    }
-
-    /** Back to play-once: the running pass finishes and the icon holds its last frame. */
-    private void settleAnimation() {
-        if (mAnimation != null) mAnimation.setRepeatCount(0);
-    }
-
-    private void hideAnimation() {
-        if (mAnimation == null) return;
-        removeCallbacks(mSettleAnimation);
-        mAnimation.setRepeatCount(0);
-        mAnimation.setVisibility(GONE);
-        mAnimation.pauseAnimation();
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        removeCallbacks(mSettleAnimation);
-        settleAnimation();
-        super.onDetachedFromWindow();
+    /** Re-tints the weather's two layers with the ink and accent {@link #applyColors} settled on. */
+    private void tintWeather(@ColorInt int ink, @ColorInt int accent) {
+        if (mWeatherShown != null && mWeatherIcon != null) mWeatherIcon.set(mWeatherShown, ink, accent);
     }
 
     /**
@@ -379,6 +327,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         if (mDeckDisplay != null) {
             int lit = mMuted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(lit));
+            tintWeather(lit, lit);
             mIcon.setEmptyColor(ColorUtils.setAlphaComponent(mDeckDisplay, 90));
             mValue.setTextColor(lit);
             return;
@@ -391,6 +340,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
             int label = mMuted ? mMutedInk : mLabelInk;
             int icon = mMuted ? mMutedInk : mIconInk;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(icon));
+            tintWeather(icon, mMuted ? mMutedInk : primary);
             mIcon.setEmptyColor(mMutedInk);
             mValue.setTextColor(label);
             return;
@@ -402,6 +352,8 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         int alpha = mMuted ? 120 : mAccent ? 255 : 238;
         ImageViewCompat.setImageTintList(mIcon,
             ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
+        tintWeather(ColorUtils.setAlphaComponent(roleColor, alpha),
+            ColorUtils.setAlphaComponent(mMuted ? roleColor : primary, alpha));
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
     }
 

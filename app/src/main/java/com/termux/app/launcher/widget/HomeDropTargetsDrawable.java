@@ -98,7 +98,7 @@ final class HomeDropTargetsDrawable extends Drawable {
             Drawable glyph = ContextCompat.getDrawable(context,
                 targets.get(i) == HomeDropTargets.Target.UNINSTALL
                     ? com.termux.R.drawable.ic_app_menu_uninstall
-                    : com.termux.R.drawable.ic_symbol_close);
+                    : com.termux.R.drawable.ic_rl_close);
             if (glyph != null) glyph = glyph.mutate();
             Entry entry = new Entry(labels.get(i), glyph);
             entry.labelWidth = Math.round(text.measureText(entry.label));

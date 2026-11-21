@@ -21,7 +21,8 @@ public class EditorDoorTest {
     @Test
     public void aScreensDoorOpensThatScreensCard() {
         for (PageKind page : pagesAndNone()) {
-            assertEquals(EditorCard.HOME, EditorDoor.HOME_SHEET_APPEARANCE.cardFor(page, null));
+            assertEquals("the Home sheet's Appearance opens Global, from any page",
+                EditorCard.APPEARANCE, EditorDoor.HOME_SHEET_APPEARANCE.cardFor(page, null));
             assertEquals("the terminal's sheet opens the Terminal card, not the editor at rest",
                 EditorCard.TERMINAL, EditorDoor.TERMINAL_SHEET_APPEARANCE.cardFor(page, null));
         }
@@ -135,8 +136,8 @@ public class EditorDoorTest {
 
     @Test
     public void eachDoorLogsOneLineNamingItAndItsCard() {
-        assertEquals("home-sheet-appearance -> HOME",
-            EditorDoor.HOME_SHEET_APPEARANCE.line(EditorCard.HOME));
+        assertEquals("home-sheet-appearance -> APPEARANCE",
+            EditorDoor.HOME_SHEET_APPEARANCE.line(EditorCard.APPEARANCE));
         assertEquals("terminal-sheet-appearance -> TERMINAL",
             EditorDoor.TERMINAL_SHEET_APPEARANCE.line(EditorCard.TERMINAL));
         assertEquals("pane-controls-appearance -> REST", EditorDoor.PANE_CONTROLS.line(null));

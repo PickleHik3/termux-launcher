@@ -1,6 +1,7 @@
 package com.termux.app.terminal.inappkeyboard;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
@@ -76,11 +77,42 @@ public class KeyboardSymbolIconsTest {
 
     @Test
     public void symbolsWithNoDrawingYetStayOnTheFont() {
-        int[] kept = {0xE00A /* shift */, 0xE012 /* capslock */, 0xE016 /* compose */,
-            0xE001 /* emoji */, 0xE017 /* clipboard */, 0xE004 /* config */, 0xE030 /* copy */,
-            0xE031 /* cut */, 0xE033 /* select all */, 0xE034 /* share */, 0xE037 /* redo */,
-            0xE01B /* delete word */, 0xE013, 0xE014, 0xE009};
+        int[] kept = {0xE00A /* shift */, 0xE034 /* share */, 0xE035 /* paste plain */};
         for (int c : kept) assertNull("U+" + Integer.toHexString(c), icons.iconFor(cp(c), true));
+    }
+
+    @Test
+    public void noCodePointIsMappedTwice() {
+        java.util.HashSet<Integer> seen = new java.util.HashSet<>();
+        for (int[] row : KeyboardSymbolIcons.KEY_FONT_ICONS) {
+            assertEquals("U+" + Integer.toHexString(row[0]), true, seen.add(row[0]));
+        }
+        seen.clear();
+        for (int[] row : KeyboardSymbolIcons.OTHER_ICONS) {
+            assertEquals("U+" + Integer.toHexString(row[0]), true, seen.add(row[0]));
+        }
+    }
+
+    @Test
+    public void configAndTheInputMethodKeysAreIcons() {
+        assertEquals(cp(0xE004), KeyValue.CONFIG.getString());
+        assertEquals(cp(0xE009), KeyValue.CHANGE_METHOD.getString());
+        assertEquals(cp(0xE013), KeyValue.getKeyByName("switch_forward").getString());
+        assertEquals(cp(0xE014), KeyValue.getKeyByName("switch_backward").getString());
+        assertEquals(cp(0xE012), KeyValue.getKeyByName("capslock").getString());
+        assertEquals(cp(0xE01B), KeyValue.getKeyByName("delete_word").getString());
+        assertEquals(cp(0xE01C), KeyValue.getKeyByName("forward_delete_word").getString());
+        assertEquals(cp(0xE037), KeyValue.getKeyByName("redo").getString());
+        assertEquals(cp(0xE031), KeyValue.getKeyByName("cut").getString());
+        assertEquals(cp(0xE030), KeyValue.getKeyByName("copy").getString());
+        assertEquals(cp(0xE033), KeyValue.getKeyByName("selectAll").getString());
+        assertEquals(cp(0xE001), KeyValue.getKeyByName("switch_emoji").getString());
+        assertEquals(cp(0xE017), KeyValue.getKeyByName("switch_clipboard").getString());
+        assertEquals(cp(0xE016), KeyValue.COMPOSE.getString());
+        for (int c : new int[] {0xE004, 0xE009, 0xE013, 0xE014, 0xE012, 0xE01B, 0xE01C, 0xE037,
+            0xE031, 0xE030, 0xE033, 0xE001, 0xE017, 0xE016, 0xE01A}) {
+            assertNotNull("U+" + Integer.toHexString(c), icons.iconFor(cp(c), true));
+        }
     }
 
     @Test
@@ -130,6 +162,15 @@ public class KeyboardSymbolIconsTest {
     @Test
     public void thePastePictureStaysAGlyphWhilePlainPasteIsAnIcon() {
         assertNotNull(icons.iconFor(cp(0xE032), true));
-        assertNull(icons.iconFor(cp(0xF02E9), false));
+        assertNotNull(icons.iconFor(cp(0xF02E9), false));
+        assertNotEquals(KeyboardSymbolIcons.drawableFor(0xF02E9, false),
+            KeyboardSymbolIcons.drawableFor(0xE032, true));
+    }
+
+    @Test
+    public void windowAndSessionMarksAreIcons() {
+        for (int c : new int[] {0xF0733, 0xF0736, 0xF0739, 0xF0730}) {
+            assertNotNull("U+" + Integer.toHexString(c), icons.iconFor(cp(c), false));
+        }
     }
 }

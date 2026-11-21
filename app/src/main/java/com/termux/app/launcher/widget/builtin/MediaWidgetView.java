@@ -42,11 +42,11 @@ import com.termux.app.statusbar.TopPaneMediaState;
  * playing app. Without notification access the card asks for it, and a tap opens the switch.
  */
 public class MediaWidgetView extends BuiltinWidgetView {
-    private static final String GLYPH_PLAY = "";
-    private static final String GLYPH_PAUSE = "";
-    private static final String GLYPH_PREVIOUS = "";
-    private static final String GLYPH_NEXT = "";
-    private static final String GLYPH_ACCESS = "";
+    private static final String GLYPH_PLAY = WidgetIcons.PLAY;
+    private static final String GLYPH_PAUSE = WidgetIcons.PAUSE;
+    private static final String GLYPH_PREVIOUS = WidgetIcons.SKIP_PREVIOUS;
+    private static final String GLYPH_NEXT = WidgetIcons.SKIP_NEXT;
+    private static final String GLYPH_ACCESS = WidgetIcons.LOCK;
 
     private static final int TOUCH_DP = WidgetTokens.TOUCH_TARGET_DP;
     /** The disc a transport glyph sits on, inside its 48 dp target. */
@@ -475,7 +475,11 @@ public class MediaWidgetView extends BuiltinWidgetView {
 
         if (playButton != null) {
             boolean playing = has && current.playing;
-            playButton.setText(playing ? GLYPH_PAUSE : GLYPH_PLAY);
+            Object shown = playing ? GLYPH_PAUSE : GLYPH_PLAY;
+            if (playButton.getTag() != shown) {
+                playButton.setTag(shown);
+                playButton.setText(WidgetIcons.label(getContext(), (String) shown));
+            }
             playButton.setContentDescription(resuming
                 ? getContext().getString(R.string.bw_feeds_media_resume, resume.label)
                 : getContext().getString(playing
@@ -611,7 +615,7 @@ public class MediaWidgetView extends BuiltinWidgetView {
             touchPx = ui.dp(TOUCH_DP);
             midPx = ui.dp(TOUCH_MID_DP);
             minPx = ui.dp(TOUCH_MIN_DP);
-            setText(glyph);
+            setText(WidgetIcons.label(ui.context, glyph));
             setTextSize(TypedValue.COMPLEX_UNIT_SP, sp);
             if (ui.style.nerd != null) setTypeface(ui.style.nerd);
             setTextColor(color);

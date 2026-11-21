@@ -2860,9 +2860,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static final int[] DESIGN_LABELS = {R.string.layout_editor_dock_style_glass_tray,
         R.string.layout_editor_dock_style_lens_beads, R.string.layout_editor_dock_style_wall_strip,
         R.string.layout_editor_dock_style_peek_glass};
-    private static final int[] DESIGN_ICONS = {R.drawable.ic_symbol_dock_glass_tray,
-        R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip,
-        R.drawable.ic_symbol_dock_peek_glass};
+    private static final int[] DESIGN_ICONS = {R.drawable.ic_rl_dock_tray,
+        R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip,
+        R.drawable.ic_rl_dock_peek};
 
     /** The keyboard's forms, as the Type segments name them. */
     /** The keyboard's shapes in percent: Settings › Keyboard › Size's ranges. */

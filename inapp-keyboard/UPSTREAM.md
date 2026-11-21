@@ -322,7 +322,9 @@ fails when the catalogue has gone stale.
   reads the same cache through `Keyboard2View.symbolIcon`. On a refresh, re-add the three
   branches and the `drawnString` hook after taking upstream's new label drawing, and keep
   `label_ink` beside `label_paint` so both colours stay one rule. Test:
-  `Keyboard2ViewSymbolIconsTest`.
+  `Keyboard2ViewSymbolIconsTest`. Nothing inside this module changed when the table grew to the
+  settings, input-method, layout-switch, emoji, caps, compose, clipboard, edit and
+  window/session keys: only the app's `KeyboardSymbolIcons` table did.
 
 ## Refresh procedure
 

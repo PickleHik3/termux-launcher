@@ -134,7 +134,7 @@ public class TerminalActionsSheetTest {
         for (HomeActionsSheetPolicy.Item item : HomeActionsSheetPolicy.itemsFor(true, true, false, 1, false)) {
             assertNotNull(item.name(), sheet.rowFor(item));
         }
-        assertEquals(R.drawable.ic_symbol_terminal, HomeActionsSheet.iconFor(HomeActionsSheetPolicy.Item.TERMINAL));
+        assertEquals(R.drawable.ic_rl_terminal, HomeActionsSheet.iconFor(HomeActionsSheetPolicy.Item.TERMINAL));
         assertEquals(R.string.home_actions_terminal, HomeActionsSheet.labelFor(HomeActionsSheetPolicy.Item.TERMINAL));
     }
 

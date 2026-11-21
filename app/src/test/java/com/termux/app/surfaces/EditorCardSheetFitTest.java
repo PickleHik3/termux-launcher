@@ -957,8 +957,8 @@ public class EditorCardSheetFitTest {
         }
 
         @Nullable @Override public int[] chipIcons(@NonNull Row row) {
-            return row == Row.DESIGN ? new int[] {R.drawable.ic_symbol_dock_glass_tray,
-                R.drawable.ic_symbol_dock_lens_beads, R.drawable.ic_symbol_dock_wall_strip}
+            return row == Row.DESIGN ? new int[] {R.drawable.ic_rl_dock_tray,
+                R.drawable.ic_rl_dock_beads, R.drawable.ic_rl_dock_strip}
                 : null;
         }
 

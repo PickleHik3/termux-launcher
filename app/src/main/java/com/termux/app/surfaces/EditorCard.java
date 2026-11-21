@@ -27,9 +27,9 @@ public enum EditorCard {
      * (its Layout, Minimal layout). The old Workspace card merged into it (spec §3).
      */
     TERMINAL("terminal", SurfaceSlot.CANVAS, R.string.appearance_card_terminal,
-        R.drawable.ic_symbol_terminal),
+        R.drawable.ic_rl_terminal),
     DOCK("dock", SurfaceSlot.DOCK, R.string.appearance_card_dock,
-        R.drawable.ic_symbol_dock_glass_tray),
+        R.drawable.ic_rl_dock_tray),
     KEYBOARD("keyboard", SurfaceSlot.KEYBOARD, R.string.appearance_card_keyboard,
         R.drawable.ic_symbol_keyboard),
     APPEARANCE("appearance", null, R.string.appearance_card_customization,
