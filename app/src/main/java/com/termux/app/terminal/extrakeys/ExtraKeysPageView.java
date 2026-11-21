@@ -991,8 +991,17 @@ public final class ExtraKeysPageView extends ViewGroup {
         cancelPress();
         ExtraKeyCapView cap = capAtPoint(ev.getX(), ev.getY());
         String value = cap == null ? null : cap.key().getKey();
-        if (cap == null || value == null || cap.isDead() || !owner.ownsKey(value)
-            || !owner.down(ev, cap)) return false;
+        // DIAG(TL-PageBarDiag): which gate refuses an owned key's down; revert before merge.
+        String refused = cap == null ? "no-cap-at-point" : value == null ? "no-value"
+            : cap.isDead() ? "dead-cap" : !owner.ownsKey(value) ? null
+            : !owner.down(ev, cap) ? "owner-refused" : "";
+        if (refused == null) return false;
+        if (!refused.isEmpty()) {
+            android.util.Log.d("TL-PageBarDiag", "beginOwned refused=" + refused + " x="
+                + Math.round(ev.getX()) + " y=" + Math.round(ev.getY()) + " caps=" + mCaps.size()
+                + " w=" + getWidth() + " h=" + getHeight());
+            return false;
+        }
         mOwnedCap = cap;
         cap.pressAt(ev.getX() - cap.getLeft(), ev.getY() - cap.getTop());
         pressHaptic(cap);
