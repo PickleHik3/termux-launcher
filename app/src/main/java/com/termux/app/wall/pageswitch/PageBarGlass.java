@@ -12,6 +12,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.InsetGlass;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.chrome.PageMarkInk;
 import com.termux.app.chrome.WallpaperInk;
@@ -47,6 +48,8 @@ public final class PageBarGlass {
         @ColorInt public int other = Color.WHITE;
         /** The current page's glyph: the accent made legible on {@link #ground}. */
         @ColorInt public int accent = Color.WHITE;
+        /** Whether the Home pill's well stands on a dark ground ({@link InsetGlass}); true until measured. */
+        public boolean wellDark = true;
     }
 
     /**
@@ -133,7 +136,8 @@ public final class PageBarGlass {
             return false;
         }
         PaneGlass.applyAtRadius(look, frame, glass, radiusPx);
-        glass.setRim(radiusPx, look);
+        // A well pressed into the page has no raised rim ({@link InsetGlass}).
+        glass.setRim(-1f, look);
         glass.invalidateOutline();
         return true;
     }
@@ -159,6 +163,7 @@ public final class PageBarGlass {
         scratch.offset(origin[0], origin[1]);
         solve(view.getContext(), source, scratch, glassWorn, look.paneGlassTintColor(), accent,
             body, out);
+        sink(out, accent);
         if (glass != null) glass.setEvenOut(glassWorn ? body.evenOut : null);
     }
 
@@ -190,6 +195,20 @@ public final class PageBarGlass {
         out.accent = PageMarkInk.current(answer.surface, accent,
             GlassInk.isPaleSide(textInk, answer.surface));
         out.other = PageMarkInk.other(answer.surface, textInk, out.accent);
+    }
+
+    /**
+     * The Home pill pressed into the page ({@link InsetGlass}): the ground {@link #solve} measured
+     * under the well's shade, and the glyph inks solved again on that ground by the page marks'
+     * rule, with the card's text ink kept. {@link Ink#wellDark} says which side the cues take.
+     */
+    static void sink(@NonNull Ink out, @ColorInt int accent) {
+        if (Color.alpha(out.ground) == 0) return;
+        boolean dark = GlassInk.isPaleSide(out.ink, out.ground);
+        out.wellDark = dark;
+        out.ground = InsetGlass.groundIn(out.ground, dark);
+        out.accent = PageMarkInk.current(out.ground, accent, GlassInk.isPaleSide(out.ink, out.ground));
+        out.other = PageMarkInk.other(out.ground, out.ink, out.accent);
     }
 
     /**

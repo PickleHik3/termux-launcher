@@ -6,11 +6,13 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -40,8 +42,8 @@ import com.termux.app.terminal.PaneSurfaceStyle;
 import java.util.List;
 
 /**
- * The page bar on Home: a glass pill of one glyph per page in the wall's own order, the current
- * page's in the accent. A tap on a glyph goes to its page; a slide lifts the glyph under the
+ * The page bar on Home: a glass well pressed into the page ({@link com.termux.app.chrome.InsetGlass})
+ * holding one glyph per page in the wall's own order, the current page's in the accent. A tap on a glyph goes to its page; a slide lifts the glyph under the
  * finger out of the pill on the A–Z bar's wave, its neighbours by less, with the page's name
  * riding above it, and goes to the page on release only ({@link PageBarSlide},
  * {@link PageBarLayout}). The pill's outline never changes: the lift is draw-time offsets of the
@@ -88,6 +90,18 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final int mTouchSlop;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /**
+     * Home's well ({@link com.termux.app.chrome.InsetGlass}): the shade over it, the inner shadow
+     * under its top edge and the lip along its bottom; shaders made by {@link #syncWell} on a
+     * size or ground change only.
+     */
+    private final Paint mWellShade = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellLip = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private boolean mWellBuilt;
+    private float mWellTop;
+    private float mWellHeight;
+    private boolean mWellDark;
     private final RectF mRect = new RectF();
     private final Rect mInkRect = new Rect();
     private final Rect mInkScratch = new Rect();
@@ -162,6 +176,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(mDensity);
+        mWellLip.setStyle(Paint.Style.STROKE);
         mGlass = new PaneGlassBackdropView(context);
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
@@ -358,6 +373,37 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mGlass.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
         mGlass.layout(left, top, left + w, top + h);
+        syncWell(layout);
+    }
+
+    /**
+     * Home's well cues for the slab where it stands now and the ground it was measured on
+     * ({@link PageBarGlass.Ink#wellDark}): the shade, the inner shadow fading down from the top
+     * edge and the lip fading in toward the bottom. Builds only when one of those changed: on a
+     * layout or a dress pass, never per frame.
+     */
+    private void syncWell(@Nullable PageBarLayout layout) {
+        if (layout == null || mKeyEntry) return;
+        float top = layout.slabTopPx();
+        float height = layout.slabHeightPx();
+        boolean dark = mInk.wellDark;
+        if (mWellBuilt && top == mWellTop && height == mWellHeight && dark == mWellDark) return;
+        mWellBuilt = true;
+        mWellTop = top;
+        mWellHeight = height;
+        mWellDark = dark;
+        mWellShade.setColor(com.termux.app.chrome.InsetGlass.wellShade(dark));
+        float depth = com.termux.app.chrome.InsetGlass.shadowDepthPx(mDensity, height);
+        int shadow = com.termux.app.chrome.InsetGlass.innerShadow(dark);
+        mWellShadow.setShader(depth <= 0f ? null : new LinearGradient(0f, top, 0f, top + depth,
+            shadow, shadow & 0x00FFFFFF, Shader.TileMode.CLAMP));
+        float lip = com.termux.app.chrome.InsetGlass.lipWidthPx(mDensity, height);
+        int lipColor = com.termux.app.chrome.InsetGlass.lip(dark);
+        mWellLip.setStrokeWidth(lip);
+        mWellLip.setShader(lip <= 0f ? null : new LinearGradient(0f,
+            top + height * com.termux.app.chrome.InsetGlass.LIP_FROM_SHARE, 0f, top + height,
+            lipColor & 0x00FFFFFF, lipColor, Shader.TileMode.CLAMP));
+        invalidate();
     }
 
     /**
@@ -443,6 +489,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mInk.veil = Color.TRANSPARENT;
         mInk.ink = Color.WHITE;
         mInk.other = Color.WHITE;
+        mInk.wellDark = true;
         mBody.evenOut = null;
         if (layout != null) {
             mInkRect.set(Math.round(layout.slabLeftPx()), Math.round(layout.slabTopPx()),
@@ -455,6 +502,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mGlass.setEvenOut(null);
         }
         measureLiftInk(layout);
+        syncWell(layout);
         invalidate();
     }
 
@@ -599,9 +647,33 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mRect.inset(0.5f * mDensity, 0.5f * mDensity);
             canvas.drawRoundRect(mRect, radius, radius, mStroke);
         }
+        if (!mKeyEntry) drawWell(canvas, layout, radius);
         // While the overlay holds the lift, the glyphs draw there only, never twice; without a
-        // parent to lift into they lift here, clipped to the band.
+        // parent to lift into they lift here, clipped to the band. Lifted glyphs rise out of the
+        // well over its cues.
         if (mLiftHost == null) drawGlyphs(canvas, layout, fold, mEnter);
+    }
+
+    /**
+     * Home's well over its glass (or its solid card): the shade, the inner shadow under the top
+     * edge and the lip inside the bottom edge, all cut to the slab's outline
+     * ({@link #syncWell}). Allocates nothing.
+     */
+    private void drawWell(@NonNull Canvas canvas, @NonNull PageBarLayout layout, float radius) {
+        float left = layout.slabLeftPx();
+        float top = layout.slabTopPx();
+        mRect.set(left, top, left + layout.slabWidthPx(), top + layout.slabHeightPx());
+        canvas.drawRoundRect(mRect, radius, radius, mWellShade);
+        if (mWellShadow.getShader() != null) {
+            canvas.drawRoundRect(mRect, radius, radius, mWellShadow);
+        }
+        float lip = mWellLip.getStrokeWidth();
+        if (lip > 0f && mWellLip.getShader() != null) {
+            // Inset by half the stroke so the lip lies inside the outline and follows its curve.
+            mRect.inset(lip / 2f, lip / 2f);
+            float r = Math.max(0f, radius - lip / 2f);
+            canvas.drawRoundRect(mRect, r, r, mWellLip);
+        }
     }
 
     /**
