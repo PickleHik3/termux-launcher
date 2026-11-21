@@ -875,7 +875,7 @@ public final class AppDrawerCategoryView extends ViewGroup
 
     /** How large the carried tile grows. */
     private static final float REORDER_LIFT_SCALE = 1.04f;
-    private static final long REORDER_SETTLE_MS = 160L;
+    static final long REORDER_SETTLE_MS = 160L;
     /** Edge auto-scroll: the zone at the overview's top and bottom, and the fastest step per frame. */
     private static final float REORDER_EDGE_ZONE_DP = 64f;
     private static final float REORDER_EDGE_MAX_STEP_DP = 14f;

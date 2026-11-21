@@ -126,4 +126,95 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(resolve(2f, 1200, false, 0).searchWidthPx,
             resolve(2f, 1200, false, 0, true, 50).searchWidthPx);
     }
+
+    private static AppDrawerChromeLayout.Result fold(boolean bottom, int inset, boolean atLeft,
+                                                     boolean collapsed) {
+        return AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(2f, 1080, false, 0,
+            bottom, inset, 2000, atLeft, collapsed));
+    }
+
+    @Test public void theButtonKeepsTheBarsMarginsAndItsHeightAsDiameter() {
+        AppDrawerChromeLayout.Result left = fold(false, 40, true, false);
+        AppDrawerChromeLayout.Result right = fold(false, 40, false, false);
+        int size = Math.round(46f * 2f);
+        int side = Math.round(16f * 2f);
+        assertEquals(size, left.buttonSizePx);
+        assertEquals(side, left.buttonLeftPx);
+        assertEquals(1080 - side - size, right.buttonLeftPx);
+        // Bar on top: the larger of the inset and the side margin above the card's bottom.
+        assertEquals(2000 - Math.max(40, side) - size, left.buttonTopPx);
+        assertEquals(2000 - side - size, fold(false, 0, true, false).buttonTopPx);
+        // Bar at the bottom: the bar's own margin.
+        assertEquals(2000 - 40 - size, fold(true, 40, true, false).buttonTopPx);
+    }
+
+    @Test public void theBarsRestRectIsWhereItIsLaidOut() {
+        AppDrawerChromeLayout.Result top = fold(false, 40, true, false);
+        assertEquals((1080 - top.searchWidthPx) / 2, top.barLeftPx);
+        assertEquals(top.searchTopPx, top.barTopPx);
+        AppDrawerChromeLayout.Result bottom = fold(true, 40, true, false);
+        assertEquals(2000 - 40 - bottom.searchHeightPx, bottom.barTopPx);
+    }
+
+    @Test public void morphEndsAreTheFullBarAndTheCircleInBothCorners() {
+        for (boolean atLeft : new boolean[] {true, false}) {
+            for (boolean bottom : new boolean[] {true, false}) {
+                AppDrawerChromeLayout.Result r = fold(bottom, 40, atLeft, false);
+                AppDrawerChromeLayout.Morph m = new AppDrawerChromeLayout.Morph();
+                AppDrawerChromeLayout.morph(r, 0f, m);
+                assertEquals(0f, m.translationX, 0f);
+                assertEquals(0f, m.translationY, 0f);
+                assertEquals(0f, m.drawnLeft, 0f);
+                assertEquals(r.searchWidthPx, m.drawnRight, 0f);
+                AppDrawerChromeLayout.morph(r, 1f, m);
+                float left = r.barLeftPx + m.translationX + m.drawnLeft;
+                float right = r.barLeftPx + m.translationX + m.drawnRight;
+                float top = r.barTopPx + m.translationY;
+                assertEquals(r.buttonLeftPx, left, 0.001f);
+                assertEquals(r.buttonLeftPx + r.buttonSizePx, right, 0.001f);
+                assertEquals(r.buttonTopPx, top, 0.001f);
+                assertEquals(r.buttonSizePx, right - left, 0.001f);
+            }
+        }
+    }
+
+    @Test public void morphIsMonotoneAndClamped() {
+        AppDrawerChromeLayout.Result r = fold(false, 40, true, false);
+        AppDrawerChromeLayout.Morph a = new AppDrawerChromeLayout.Morph();
+        AppDrawerChromeLayout.Morph b = new AppDrawerChromeLayout.Morph();
+        AppDrawerChromeLayout.morph(r, 0.3f, a);
+        AppDrawerChromeLayout.morph(r, 0.6f, b);
+        assertTrue(b.drawnRight < a.drawnRight);
+        assertTrue(b.translationY > a.translationY);
+        AppDrawerChromeLayout.morph(r, 2f, a);
+        AppDrawerChromeLayout.morph(r, 1f, b);
+        assertEquals(b.drawnRight, a.drawnRight, 0f);
+    }
+
+    @Test public void pagesReserveTheButtonsBandAtRestSoAFoldNeverRelaysThem() {
+        AppDrawerChromeLayout.Result open = fold(false, 40, true, false);
+        AppDrawerChromeLayout.Result folded = fold(false, 40, true, true);
+        assertEquals(open.pagerFloorPx, folded.pagerFloorPx);
+        assertEquals(open.restInsetPx, folded.restInsetPx);
+        assertEquals(40, folded.restInsetPx);
+        // The floor stands above the button's top by the content gap.
+        assertEquals(2000 - folded.buttonTopPx + Math.round(10f * 2f), folded.pagerFloorPx);
+        // A bar at the bottom needs none.
+        assertEquals(0, fold(true, 40, true, true).pagerFloorPx);
+    }
+
+    @Test public void aFoldedTopBarLeavesTheListRoomForTheButton() {
+        AppDrawerChromeLayout.Result open = fold(false, 40, true, false);
+        AppDrawerChromeLayout.Result folded = fold(false, 40, true, true);
+        assertEquals(40, open.innerBottomInsetPx);
+        assertTrue(folded.innerBottomInsetPx
+            >= Math.round(16f * 2f) + folded.buttonSizePx + Math.round(10f * 2f));
+        // The top band and the content's top never move with the fold.
+        assertEquals(open.contentTopPx, folded.contentTopPx);
+        // A bar at the bottom has its band already; nothing changes.
+        assertEquals(fold(true, 40, true, false).innerBottomInsetPx,
+            fold(true, 40, true, true).innerBottomInsetPx);
+        assertEquals(fold(true, 40, true, false).contentBottomPx,
+            fold(true, 40, true, true).contentBottomPx);
+    }
 }

@@ -48,9 +48,25 @@ public final class AppDrawerChromeLayout {
         public final int switchHeightPx;
         public final boolean searchAtBottom;
         public final int bottomInsetPx;
+        /** The content view's height; zero before its first layout (every top is then zero). */
+        public final int heightPx;
+        /** The round button parks in the left corner; else the right (see {@link #morph}). */
+        public final boolean buttonAtLeft;
+        /** The bar rests as the round button: the list leaves room for it (bar on top only). */
+        public final boolean collapsed;
 
         public Input(float density, int availableWidthPx, boolean switchShown,
                      int switchHeightPx, boolean searchAtBottom, int bottomInsetPx) {
+            this(density, availableWidthPx, switchShown, switchHeightPx, searchAtBottom,
+                bottomInsetPx, 0, false, false);
+        }
+
+        public Input(float density, int availableWidthPx, boolean switchShown,
+                     int switchHeightPx, boolean searchAtBottom, int bottomInsetPx,
+                     int heightPx, boolean buttonAtLeft, boolean collapsed) {
+            this.heightPx = Math.max(0, heightPx);
+            this.buttonAtLeft = buttonAtLeft;
+            this.collapsed = collapsed;
             this.density = density;
             this.availableWidthPx = availableWidthPx;
             this.switchShown = switchShown;
@@ -81,10 +97,34 @@ public final class AppDrawerChromeLayout {
         public final int contentBottomPx;
         /** The inset the content keeps under its last row: the whole inset, or zero over the bar. */
         public final int innerBottomInsetPx;
+        /** The full bar's left and top in the content view (top is zero before a height is known). */
+        public final int barLeftPx;
+        public final int barTopPx;
+        /** The round button's left and top, and its diameter (the bar's height). */
+        public final int buttonLeftPx;
+        public final int buttonTopPx;
+        public final int buttonSizePx;
+        /** The inset under the content whatever the fold: the pages' dots keep to it. */
+        public final int restInsetPx;
+        /**
+         * How far the pages' bottom stands above the card's bottom at least, so a folded bar's
+         * button never covers a page's last row. Fixed (not tied to the fold) so a page is never
+         * re-laid mid-gesture; zero with the bar at the bottom.
+         */
+        public final int pagerFloorPx;
 
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
-               int contentTopPx, int contentBottomPx, int innerBottomInsetPx) {
+               int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
+               int barLeftPx, int barTopPx, int buttonLeftPx, int buttonTopPx,
+               int buttonSizePx, int restInsetPx, int pagerFloorPx) {
+            this.restInsetPx = restInsetPx;
+            this.pagerFloorPx = pagerFloorPx;
+            this.barLeftPx = barLeftPx;
+            this.barTopPx = barTopPx;
+            this.buttonLeftPx = buttonLeftPx;
+            this.buttonTopPx = buttonTopPx;
+            this.buttonSizePx = buttonSizePx;
             this.sideMarginPx = sideMarginPx;
             this.switchTopPx = switchTopPx;
             this.switchHeightPx = switchHeightPx;
@@ -114,13 +154,54 @@ public final class AppDrawerChromeLayout {
         int switchTop = in.switchShown ? top : 0;
         int topChrome = in.switchShown
             ? top + switchHeight + px(SWITCH_TO_SEARCH_DP, in.density) : top;
+        int barLeft = (in.availableWidthPx - searchWidth) / 2;
+        // The button keeps the bar's side margin from the card's edge; from the bottom it keeps the
+        // bar's own margin when the bar is down there, else at least the side margin.
+        int buttonBottom = in.searchAtBottom ? in.bottomInsetPx : Math.max(in.bottomInsetPx, side);
+        int buttonLeft = in.buttonAtLeft ? side : in.availableWidthPx - side - searchHeight;
+        int buttonTop = in.heightPx > 0 ? in.heightPx - buttonBottom - searchHeight : 0;
         if (in.searchAtBottom) {
+            int barTop = in.heightPx > 0 ? in.heightPx - in.bottomInsetPx - searchHeight : 0;
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, in.bottomInsetPx + searchHeight + gap,
-                0);
+                0, barLeft, barTop, buttonLeft, buttonTop, searchHeight, 0, 0);
         }
+        // The bar on top: the round button floats over the list's last rows, so a folded bar has
+        // the list keep that much under its last row. The top band is kept as it is.
+        int clearance = buttonBottom + searchHeight + gap;
+        int inner = in.collapsed ? Math.max(in.bottomInsetPx, clearance) : in.bottomInsetPx;
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
-            searchWidth, 0, topChrome + searchHeight + gap, 0, in.bottomInsetPx);
+            searchWidth, 0, topChrome + searchHeight + gap, 0, inner, barLeft, topChrome,
+            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, clearance);
+    }
+
+    /**
+     * Where the bar is at one fold fraction: the pill view stays laid out as the full bar and is
+     * moved by {@code translationX/Y} (a draw-time transform, no layout) while it draws the capsule
+     * between {@code drawnLeft} and {@code drawnRight} in its own coordinates.
+     */
+    public static final class Morph {
+        public float translationX;
+        public float translationY;
+        public float drawnLeft;
+        public float drawnRight;
+    }
+
+    /**
+     * The bar at {@code fraction} (0 the full bar, 1 the round button), written into {@code out}.
+     * The capsule keeps the edge nearest its corner and narrows toward it, so the glyph rides to
+     * the middle of the circle; the view slides in a straight line to the corner.
+     */
+    public static void morph(@NonNull Result r, float fraction, @NonNull Morph out) {
+        float f = Math.max(0f, Math.min(1f, fraction));
+        float width = r.searchWidthPx;
+        float narrow = Math.max(0f, width - r.buttonSizePx);
+        boolean toRight = r.buttonLeftPx > r.barLeftPx;
+        float originFinal = toRight ? r.buttonLeftPx - narrow : r.buttonLeftPx;
+        out.translationX = f * (originFinal - r.barLeftPx);
+        out.translationY = f * (r.buttonTopPx - r.barTopPx);
+        out.drawnLeft = toRight ? f * narrow : 0f;
+        out.drawnRight = toRight ? width : width - f * narrow;
     }
 
     /** The bar's width for {@code contentWidthPx} between the side margins. */
