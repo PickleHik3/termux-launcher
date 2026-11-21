@@ -849,7 +849,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onShowNotice(CharSequence text) {
-        AppNotice.confirm(mContext, "⧉", text);
+        AppNotice.confirm(mContext, R.drawable.ic_rl_copy, text);
     }
 
     @Override

@@ -16,11 +16,12 @@ public final class AiUnloadGauge {
 
     /**
      * Where the robot's ink starts and ends down its square, as fractions of its height
-     * ({@code ic_symbol_smart_toy}: y 80..840 of a 960 viewport). The gauge spans the ink, not
+     * ({@code ic_rl_assistant}: y 1.5..22 of a 24 viewport, the antenna ball
+     * top to the head outline's bottom edge). The gauge spans the ink, not
      * the transparent margin around it, so a quarter left reads as a quarter of the robot.
      */
-    public static final float ROBOT_INK_TOP = 80f / 960f;
-    public static final float ROBOT_INK_BOTTOM = 840f / 960f;
+    public static final float ROBOT_INK_TOP = 1.5f / 24f;
+    public static final float ROBOT_INK_BOTTOM = 22f / 24f;
 
     private long mDeadlineMs;
     private long mWindowMs;

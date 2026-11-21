@@ -51,6 +51,7 @@ public final class KeyPopupController implements Keyboard2View.KeyPopupListener 
             keyboardView.symbolFont());
         mOverlay.setPalette(KeyPopupPalette.resolve(context));
         mOverlay.setReducedMotion(ReducedMotion.isEnabled(context));
+        mOverlay.setIconSource(keyboardView::symbolIcon);
     }
 
     /** The view the popup is drawn in. Attached only while the setting is on. */

@@ -1572,6 +1572,7 @@ public final class TermuxInAppKeyboard {
         // Nerd Font icons (the space bar's swipe glyphs, tool keys) stay in the bundled symbols
         // font whatever face the user picked for labels; a picked font rarely has them.
         configBuilder.symbolFont = bundledSymbolsLabelFont();
+        configBuilder.symbolIcons = new KeyboardSymbolIcons(requireContainer().getContext());
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), recordedPalette());

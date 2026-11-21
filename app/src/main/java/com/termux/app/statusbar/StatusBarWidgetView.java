@@ -6,7 +6,6 @@ import android.graphics.Canvas;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -25,7 +24,6 @@ import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.theme.TextScale;
-import com.termux.shared.termux.font.NerdFontSpans;
 
 /**
  * Compact trailing status-bar widget: a native vector icon plus a short value, e.g. a CPU/RAM
@@ -36,21 +34,22 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
 
     public enum ColorRole { PRIMARY, SECONDARY, TERTIARY }
 
-    /** The CPU reading's glyph (nf-oct-cpu), wherever the launcher shows the reading. */
-    public static final String CPU_GLYPH = "\uf4bc";
-    /** The memory reading's glyph (nf-fa-memory). */
-    public static final String RAM_GLYPH = "\uefc5";
+    /**
+     * The icon's box, every mark's alike (CPU, RAM, the AI robot, the bell). The 24-unit Roundline
+     * icons ink about 20 of it, 12.5dp here: the size the 11.5sp glyph read at.
+     */
+    private static final int ICON_BOX_DP = 15;
 
-    /** Dresses this widget as the CPU reading: its glyph and its tier, the primary role. */
+    /** Dresses this widget as the CPU reading: its icon and its tier, the primary role. */
     public void dressAsCpu() {
         setColorRole(ColorRole.PRIMARY);
-        setIconGlyph(CPU_GLYPH);
+        setIconResource(R.drawable.ic_rl_cpu);
     }
 
-    /** Dresses this widget as the memory reading: its glyph and its tier, the secondary role. */
+    /** Dresses this widget as the memory reading: its icon and its tier, the secondary role. */
     public void dressAsRam() {
         setColorRole(ColorRole.SECONDARY);
-        setIconGlyph(RAM_GLYPH);
+        setIconResource(R.drawable.ic_rl_memory);
     }
 
     /**
@@ -89,7 +88,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
 
     private final GaugeIcon mIcon;
     @Nullable private BatteryIconDrawable mBatteryIcon;
-    private final TextView mGlyph;
     @Nullable private LottieAnimationView mAnimation;
     private final TextView mValue;
     @Nullable private String mAnimationAsset;
@@ -135,20 +133,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         mIcon = new GaugeIcon(context);
         mIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mIcon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        addView(mIcon, new LayoutParams(dp(15), dp(15)));
-
-        // The glyph alternative to the vector icon, drawn with the bundled symbols face. One
-        // Nerd Font name covers states a vector set would need a file each for — which is what
-        // makes a full day/night weather mapping practical.
-        mGlyph = new TextView(context);
-        mGlyph.setGravity(Gravity.CENTER);
-        mGlyph.setIncludeFontPadding(false);
-        mGlyph.setSingleLine(true);
-        mGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-        mGlyph.setTypeface(NerdFontSpans.typeface(context));
-        mGlyph.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        mGlyph.setVisibility(GONE);
-        addView(mGlyph, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+        addView(mIcon, new LayoutParams(dp(ICON_BOX_DP), dp(ICON_BOX_DP)));
 
         mValue = new TextView(context);
         mValue.setGravity(Gravity.CENTER_VERTICAL);
@@ -183,7 +168,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     public void setIconResource(@DrawableRes int drawableRes) {
         mIcon.setImageResource(drawableRes);
         mIcon.setVisibility(VISIBLE);
-        mGlyph.setVisibility(GONE);
         hideAnimation();
     }
 
@@ -194,12 +178,11 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     public void setIconDrawable(@NonNull Drawable drawable) {
         if (mIcon.getDrawable() != drawable) mIcon.setImageDrawable(drawable);
         if (mIcon.getVisibility() != VISIBLE) mIcon.setVisibility(VISIBLE);
-        if (mGlyph.getVisibility() != GONE) mGlyph.setVisibility(GONE);
         hideAnimation();
     }
 
     /**
-     * A bundled Lottie animation shown before the value instead of an icon or a glyph. The view is
+     * A bundled Lottie animation shown before the value instead of an icon. The view is
      * created on first use: only the weather widget has one, and inflating a Lottie view for the
      * CPU and RAM widgets that will never play anything is pure cost.
      *
@@ -226,23 +209,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         }
         mAnimation.setVisibility(VISIBLE);
         mIcon.setVisibility(GONE);
-        mGlyph.setVisibility(GONE);
-    }
-
-    /**
-     * A Nerd Font code point shown before the value instead of a vector icon. Falls back to
-     * whatever icon is already set when the bundled face failed to load, so a widget is never
-     * left drawing a tofu box where its icon was.
-     */
-    public void setIconGlyph(@NonNull CharSequence glyph) {
-        if (mGlyph.getTypeface() == null) return;
-        // Only on a change: this runs on every window-bar refresh, and a TextView's setText
-        // requests a layout of the whole cluster whether or not the glyph differs.
-        if (!android.text.TextUtils.equals(mGlyph.getText(), glyph)) mGlyph.setText(glyph);
-        mGlyph.setVisibility(VISIBLE);
-        mIcon.setVisibility(GONE);
-        hideAnimation();
-        applyColors();
     }
 
     /**
@@ -369,7 +335,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         float glow = display == null ? 0f : dp(4);
         int glowColour = display == null ? 0 : ColorUtils.setAlphaComponent(display, 153);
         mValue.setShadowLayer(glow, 0f, 0f, glowColour);
-        mGlyph.setShadowLayer(glow, 0f, 0f, glowColour);
         applyColors();
     }
 
@@ -415,7 +380,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
             int lit = mMuted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(lit));
             mIcon.setEmptyColor(ColorUtils.setAlphaComponent(mDeckDisplay, 90));
-            mGlyph.setTextColor(lit);
             mValue.setTextColor(lit);
             return;
         }
@@ -428,7 +392,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
             int icon = mMuted ? mMutedInk : mIconInk;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(icon));
             mIcon.setEmptyColor(mMutedInk);
-            mGlyph.setTextColor(icon);
             mValue.setTextColor(label);
             return;
         }
@@ -439,7 +402,6 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         int alpha = mMuted ? 120 : mAccent ? 255 : 238;
         ImageViewCompat.setImageTintList(mIcon,
             ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
-        mGlyph.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
     }
 

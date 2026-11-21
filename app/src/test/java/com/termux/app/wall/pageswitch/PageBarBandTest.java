@@ -10,12 +10,19 @@ public class PageBarBandTest {
 
     private static final float EPS = 0.01f;
 
-    @Test public void bandIsTopAirAndPillWithBottomAirOnlyOverDockRows() {
-        assertEquals(64f, PageBarBand.bandHeightDp(true, true), EPS);
-        assertEquals(52f, PageBarBand.bandHeightDp(true, false), EPS);
-        assertEquals(128, PageBarBand.bandHeightPx(true, true, 0, 2f));
-        assertEquals(104, PageBarBand.bandHeightPx(true, false, 0, 2f));
+    @Test public void bandIsTheTouchRowLessTheGapUnderTheSlabWithoutDockRows() {
+        // Was 64 / 52 dp (4 air + 48 pill + 12 air): the drawn slab shrank to 24.5 dp and only
+        // the 48 dp touch row stays.
+        assertEquals(48f, PageBarBand.bandHeightDp(true, true), EPS);
+        assertEquals(44f, PageBarBand.bandHeightDp(true, false), EPS);
+        assertEquals(96, PageBarBand.bandHeightPx(true, true, 0, 2f));
+        assertEquals(88, PageBarBand.bandHeightPx(true, false, 0, 2f));
         assertEquals(PageBarLayout.bandHeightDp(), PageBarBand.bandHeightDp(true, true), EPS);
+    }
+
+    @Test public void atPongsDensityTheBandGivesTheGridFortyTwoPixels() {
+        assertEquals(126, PageBarBand.bandHeightPx(true, true, 0, 2.625f));
+        assertEquals(168 - 126, Math.round(64f * 2.625f) - PageBarBand.bandHeightPx(true, true, 0, 2.625f));
     }
 
     @Test public void indicatorOffGivesTheWholeBandBack() {
@@ -23,12 +30,14 @@ public class PageBarBandTest {
         assertEquals(0, PageBarBand.bandHeightPx(false, false, 20, 3f));
     }
 
-    @Test public void withNoDockRowsThePillStandsTheDocksEdgeGapAboveThePanesBottom() {
-        // The pill's bottom is the air under it above the band's bottom, which is the pane's
-        // bottom with no reserve: the line the dock's bottom would stand on.
+    @Test public void withNoDockRowsTheSlabStandsTheDocksEdgeGapAboveThePanesBottom() {
+        // The slab's bottom is the edge gap above the band's bottom, which is the pane's bottom
+        // with no reserve: the line the dock's bottom would stand on.
         int edgeGap = 16;
-        int top = Math.round((PageBarLayout.TOP_AIR_DP + PageBarLayout.PILL_HEIGHT_DP) * 2f);
+        int top = Math.round((PageBarLayout.PILL_HEIGHT_DP - PageBarLayout.GAP_DP) * 2f);
         assertEquals(top + edgeGap, PageBarBand.bandHeightPx(true, false, edgeGap, 2f));
+        PageBarLayout l = new PageBarLayout(2f, 800f, 4);
+        assertEquals(top, l.slabBottomPx(), EPS);
         assertEquals("a flush dock keeps no gap, so neither does the pill", top,
             PageBarBand.bandHeightPx(true, false, 0, 2f));
         assertEquals(top, PageBarBand.bandHeightPx(true, false, -4, 2f));
@@ -47,9 +56,10 @@ public class PageBarBandTest {
         assertEquals(0, PageBarBand.bottomMarginPx(-5));
     }
 
-    @Test public void pillTopIsTheTopAir() {
-        assertEquals(8f, PageBarBand.pillTopPx(2f), EPS);
-        assertEquals(new PageBarLayout(2f, 800f, 4).pillTopPx(), PageBarBand.pillTopPx(2f), EPS);
+    @Test public void overDockRowsTheSlabStandsTheGapAboveTheBandsBottom() {
+        PageBarLayout l = new PageBarLayout(2f, 800f, 4);
+        assertEquals(PageBarBand.bandHeightPx(true, true, 0, 2f) - PageBarLayout.GAP_DP * 2f,
+            l.slabBottomPx(), EPS);
     }
 
     @Test public void pillShowsOnlyWithTheIndicatorOnAndNoKeyboard() {
@@ -113,9 +123,11 @@ public class PageBarBandTest {
         assertEquals(PageBarBand.pillLeftPx(80f, 1000f, 1080f, offset.pillWidthPx(), 1f),
             offset.pillLeftPx(), EPS);
         assertEquals(540f - 80f, offset.pillLeftPx() + offset.pillWidthPx() / 2f, EPS);
-        // The pane-centred constructors keep the old centring, the key's bar included.
-        assertEquals((1000f - 159f) / 2f, new PageBarLayout(1f, 1000f, 3).pillLeftPx(), EPS);
-        assertEquals((1000f - 159f) / 2f,
+        // The pane-centred constructors keep the old centring, the key's bar included; Home's
+        // slots are MIN_SLOT_DP wide.
+        float three = 3f * PageBarLayout.MIN_SLOT_DP;
+        assertEquals((1000f - three) / 2f, new PageBarLayout(1f, 1000f, 3).pillLeftPx(), EPS);
+        assertEquals((1000f - three) / 2f,
             new PageBarLayout(1f, 1000f, 3, 100f, 1200f).pillLeftPx(), EPS);
         assertEquals(16f, new PageBarLayout(1f, 360f, 3, true).pillLeftPx(), EPS);
     }

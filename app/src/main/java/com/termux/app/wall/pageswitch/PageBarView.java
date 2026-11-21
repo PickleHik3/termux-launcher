@@ -6,11 +6,18 @@ import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.LinearGradient;
 import android.graphics.Outline;
 import android.graphics.Paint;
+import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.Shader;
+import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.os.Bundle;
+import android.text.TextPaint;
+import android.text.TextUtils;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
@@ -21,10 +28,12 @@ import android.view.ViewParent;
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.core.graphics.ColorUtils;
 import androidx.core.view.accessibility.AccessibilityNodeInfoCompat;
 import androidx.customview.widget.ExploreByTouchHelper;
 
 import com.termux.R;
+import com.termux.app.ScrubWave;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetView;
 import com.termux.app.page.PageKind;
 import com.termux.app.terminal.PaneGlassBackdropView;
@@ -33,15 +42,18 @@ import com.termux.app.terminal.PaneSurfaceStyle;
 import java.util.List;
 
 /**
- * The page bar on Home: a glass pill of one glyph per page in the wall's own order, the current
- * page's in the accent. A tap on a glyph goes to its page; a slide lifts the glyph under the
- * finger into a {@link PageBarBubbleView} above the pill, spreads its neighbours aside and goes
- * to the page on release only ({@link PageBarSlide}, {@link PageBarLayout}). The pill's outline
- * never changes: the slide is draw-time transforms of the glyphs, no layout. Nothing animates or
- * invalidates at rest; while a finger is down only this view and the bubble draw.
+ * The page bar on Home: a glass well pressed into the page ({@link com.termux.app.chrome.InsetGlass})
+ * holding one glyph per page in the wall's own order, the current page's in the accent. A tap on a glyph goes to its page; a slide lifts the glyph under the
+ * finger out of the pill on the A–Z bar's wave, its neighbours by less, with the page's name
+ * riding above it, and goes to the page on release only ({@link PageBarSlide},
+ * {@link PageBarLayout}). The pill's outline never changes: the lift is draw-time offsets of the
+ * glyphs, no layout. While lifted the glyphs draw in a drawable on the parent's overlay, so they
+ * can rise past this view's bounds; nothing new appears. Nothing animates or invalidates at rest;
+ * while a finger is down only this view and that overlay draw.
  *
- * <p>The view is the whole band under Home's grid ({@link PageBarBand}); the pill stands in it,
- * centred on the window. Its glass is a {@link PaneGlassBackdropView} child, dressed as a widget's slab is.
+ * <p>The view is the whole band under Home's grid ({@link PageBarBand}); the touch row fills it
+ * and the drawn slab stands in it, centred on the window. The slab's glass is a
+ * {@link PaneGlassBackdropView} child, dressed as a widget's slab is.
  * Fed a {@link PageBarModel} by the activity; the model, fold and layout are rebuilt only when
  * it or the width changes.</p>
  */
@@ -67,7 +79,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         void touchEnded();
     }
 
-    private static final long ENTER_MS = 120L;
+    /** The page's name over the lifted glyph. */
+    private static final float LABEL_TEXT_SP = 13f;
     /** The current page's accent falls to this share of itself while sliding. */
     private static final float SLIDE_ACCENT_KEEP = 0.45f;
 
@@ -77,6 +90,27 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final int mTouchSlop;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
+    /**
+     * Home's well ({@link com.termux.app.chrome.InsetGlass}): the shade over it, the inner shadow
+     * drawn as rings inside its outline, and the rim hairlines outside it (dark across the top,
+     * light across the bottom arc); shaders and ring alphas made by {@link #syncWell} on a size
+     * or ground change only.
+     */
+    private final Paint mWellFloor = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellShadow = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellRim = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final Paint mWellRimLight = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final int[] mWellFloorColors = new int[com.termux.app.chrome.InsetGlass.FLOOR_POSITIONS.length];
+    private final android.graphics.Matrix mWellRimMatrix = new android.graphics.Matrix();
+    private float mWellLeft;
+    private float mWellWidth;
+    @NonNull private int[] mWellRingAlpha = new int[0];
+    private int mWellRings;
+    private float mWellRingStep;
+    private boolean mWellBuilt;
+    private float mWellTop;
+    private float mWellHeight;
+    private boolean mWellDark;
     private final RectF mRect = new RectF();
     private final Rect mInkRect = new Rect();
     private final Rect mInkScratch = new Rect();
@@ -87,8 +121,23 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     /** The mock's translucent fill and outline over the solid card, as alphas of the ink. */
     static final int MOCK_FILL_ALPHA = 0x21;
     static final int MOCK_STROKE_ALPHA = 0x4D;
-    /** The bubble label's ink, measured on the wallpaper above the bubble ({@link #measureLabelInk}). */
-    @ColorInt private int mBubbleLabelInk = Color.WHITE;
+    /** The name's ink, measured on the wallpaper above the slab ({@link #measureLiftInk}). */
+    @ColorInt private int mLabelInk = Color.WHITE;
+    /** The current page's and the others' ink for a glyph lifted onto that wallpaper. */
+    @ColorInt private int mLiftAccent = Color.WHITE;
+    @ColorInt private int mLiftOther = Color.WHITE;
+    private final TextPaint mLabelPaint = new TextPaint(Paint.ANTI_ALIAS_FLAG);
+    private final float mLabelAscent;
+    private final float mLabelDescent;
+    /** The name shown over the lifted glyph, ellipsized once per change, and its width. */
+    @NonNull private String mLabel = "";
+    @NonNull private CharSequence mLabelText = "";
+    private float mLabelWidth;
+    private float mLabelRoom = -1f;
+    private int mLabelSlot;
+    /** Draws the lifted glyphs and the name on the parent's overlay while {@link #mLiftHost} holds it. */
+    private final LiftLayer mLiftLayer = new LiftLayer();
+    @Nullable private ViewGroup mLiftHost;
     /** The widget body the pill was last dressed in ({@link PageBarGlass#measure}), reused. */
     private final com.termux.app.chrome.WidgetBody.Answer mBody =
         new com.termux.app.chrome.WidgetBody.Answer();
@@ -101,11 +150,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     @Nullable private PageBarFold.Result mFold;
     @Nullable private PageBarLayout mLayout;
     @Nullable private PageBarSlide mSlide;
-    private float[] mCenters = new float[0];
-    private float[] mScales = new float[0];
-    private boolean[] mFolded = new boolean[0];
     @NonNull private String[] mSlotLabels = new String[0];
-    @Nullable private PageBarBubbleView mBubble;
     @Nullable private BuiltinWidgetView.GlassSource mSource;
     @Nullable private PaneSurfaceStyle mLook;
     private boolean mGlassShown;
@@ -124,6 +169,18 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private float mWindowWidth;
     private float mPillLeft = -1f;
     private float mPillWidth = -1f;
+    /** The key's pop-up as one more card of the stack ({@link PageBarPopupFrame}); -1 width: not set. */
+    private float mRaisedLeft;
+    private float mRaisedWidth = -1f;
+    private float mRaisedRadius = -1f;
+    /** The raised glass the key's pop-up wears ({@link com.termux.app.chrome.ElevatedGlass}); null for its solid card. */
+    @Nullable private PaneSurfaceStyle mRaisedLook;
+    /**
+     * The raised glass wants a blur frame that was still baking when it was dressed: the blur
+     * cache's landing ({@link #redressIfFrameLate}) dresses it again. Set on a dress pass only.
+     */
+    private boolean mRaisedFrameLate;
+    private final Rect mNoFrame = new Rect();
 
     public PageBarView(@NonNull Context context) {
         super(context);
@@ -133,24 +190,34 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(mDensity);
+        mWellShadow.setStyle(Paint.Style.STROKE);
+        mWellRim.setStyle(Paint.Style.STROKE);
+        mWellRimLight.setStyle(Paint.Style.STROKE);
         mGlass = new PaneGlassBackdropView(context);
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override public void getOutline(View view, Outline out) {
-                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), view.getHeight() / 2f);
+                out.setRoundRect(0, 0, view.getWidth(), view.getHeight(), slabRadiusPx());
             }
         });
         com.termux.app.terminal.PaneGlass.followLayout(mGlass);
         mGlass.setVisibility(GONE);
         addView(mGlass);
-        mEnterAnim.setDuration(ENTER_MS);
+        mLabelPaint.setTextSize(android.util.TypedValue.applyDimension(
+            android.util.TypedValue.COMPLEX_UNIT_SP, LABEL_TEXT_SP,
+            context.getResources().getDisplayMetrics()));
+        mLabelPaint.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
+        Paint.FontMetrics fm = mLabelPaint.getFontMetrics();
+        mLabelAscent = -fm.ascent;
+        mLabelDescent = fm.descent;
+        mEnterAnim.setDuration(ScrubWave.SETTLE_MS);
         mEnterAnim.addUpdateListener(a -> {
             mEnter = (float) a.getAnimatedValue();
             onEnterChanged();
         });
         mEnterAnim.addListener(new AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(Animator animation) {
-                if (mEnter <= 0f && !mSliding) hideBubble();
+                if (mEnter <= 0f && !mSliding) hideLift();
             }
         });
         mAccess = new Access(this);
@@ -170,6 +237,43 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (mKeyEntry == keyEntry) return;
         mKeyEntry = keyEntry;
         rebuild();
+    }
+
+    /**
+     * The key's pop-up's drawn bar: its left and width in this view and its corner radius
+     * ({@link PageBarPopupFrame}). Rebuilds only when one differs.
+     */
+    void setRaisedFrame(float leftPx, float widthPx, float radiusPx) {
+        if (leftPx == mRaisedLeft && widthPx == mRaisedWidth && radiusPx == mRaisedRadius) return;
+        mRaisedLeft = leftPx;
+        mRaisedWidth = widthPx;
+        mRaisedRadius = radiusPx;
+        rebuild();
+        mGlass.invalidateOutline();
+    }
+
+    /** The raised glass the key's pop-up wears while shown; null puts it on its solid card. */
+    void setRaisedGlass(@Nullable PaneSurfaceStyle look) {
+        mRaisedLook = look;
+    }
+
+    /**
+     * The key's pop-up was put away: its glass lets the shared blur frame go and hides, so nothing
+     * is held while it is away.
+     */
+    void dropRaisedGlass() {
+        mRaisedLook = null;
+        mRaisedFrameLate = false;
+        mGlassShown = false;
+        mGlass.setGlass(null, mNoFrame, Color.TRANSPARENT, null, 0, slabRadiusPx(), null, false);
+        if (mGlass.getVisibility() != GONE) mGlass.setVisibility(GONE);
+    }
+
+    /** The drawn slab's corner radius: the raised frame's for the key's pop-up, else a capsule. */
+    private float slabRadiusPx() {
+        PageBarLayout layout = mLayout;
+        float capsule = layout == null ? 0f : layout.slabHeightPx() / 2f;
+        return mKeyEntry && mRaisedRadius >= 0f ? Math.min(mRaisedRadius, capsule) : capsule;
     }
 
     /**
@@ -213,15 +317,13 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             List<PageBarModel.Entry> entries = model.entries();
             mFold = PageBarFold.fold(entries, PageBarLayout.maxSlots(mDensity, width));
             int slots = mFold.slots.size();
-            mLayout = mKeyEntry ? new PageBarLayout(mDensity, width, slots, true)
-                : new PageBarLayout(mDensity, width, slots, mPaneLeft, mWindowWidth);
-            mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, mKeyEntry);
-            if (mCenters.length != slots) {
-                mCenters = new float[slots];
-                mScales = new float[slots];
-                mFolded = new boolean[slots];
+            if (mKeyEntry && mRaisedWidth > 0f) {
+                mLayout = PageBarLayout.raised(mDensity, width, slots, mRaisedLeft, mRaisedWidth);
+            } else {
+                mLayout = mKeyEntry ? new PageBarLayout(mDensity, width, slots, true)
+                    : new PageBarLayout(mDensity, width, slots, mPaneLeft, mWindowWidth);
             }
-            for (int i = 0; i < slots; i++) mFolded[i] = mFold.slots.get(i).folded();
+            mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, mKeyEntry);
             mSlotLabels = new String[slots];
             for (int i = 0; i < slots; i++) mSlotLabels[i] = labelOf(mFold.slots.get(i), entries);
         }
@@ -281,13 +383,85 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (changed && !mKeyEntry && notePaneInWindow()) rebuild();
         PageBarLayout layout = mLayout;
         if (layout == null) return;
-        int left = Math.round(layout.pillLeftPx());
-        int top = Math.round(layout.pillTopPx());
-        int w = Math.round(layout.pillWidthPx());
-        int h = Math.round(layout.pillHeightPx());
+        int left = Math.round(layout.slabLeftPx());
+        int top = Math.round(layout.slabTopPx());
+        int w = Math.round(layout.slabWidthPx());
+        int h = Math.round(layout.slabHeightPx());
         mGlass.measure(MeasureSpec.makeMeasureSpec(w, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(h, MeasureSpec.EXACTLY));
         mGlass.layout(left, top, left + w, top + h);
+        syncWell(layout);
+    }
+
+    /**
+     * Home's well cues for the slab where it stands now and the ground it was measured on
+     * ({@link PageBarGlass.Ink#wellDark}): the shade, the inner shadow fading down from the top
+     * edge and the lip fading in toward the bottom. Builds only when one of those changed: on a
+     * layout or a dress pass, never per frame.
+     */
+    private void syncWell(@Nullable PageBarLayout layout) {
+        if (layout == null || mKeyEntry) return;
+        float top = layout.slabTopPx();
+        float height = layout.slabHeightPx();
+        boolean dark = mInk.wellDark;
+        float left = layout.slabLeftPx();
+        float width = layout.slabWidthPx();
+        if (mWellBuilt && top == mWellTop && height == mWellHeight && dark == mWellDark
+                && left == mWellLeft && width == mWellWidth) {
+            return;
+        }
+        mWellBuilt = true;
+        mWellLeft = left;
+        mWellWidth = width;
+        mWellTop = top;
+        mWellHeight = height;
+        mWellDark = dark;
+        // The floor: darkest under the top lip, clear in the lower part, a faint light at the bottom.
+        mWellFloor.setShader(new LinearGradient(0f, top, 0f, top + height,
+            com.termux.app.chrome.InsetGlass.floorColors(dark, mWellFloorColors),
+            com.termux.app.chrome.InsetGlass.FLOOR_POSITIONS, Shader.TileMode.CLAMP));
+        // The contact shadow: rings inside the outline, their colour by height (strongest under
+        // the top, the sides' share at mid height, clear at the bottom), their alpha by depth.
+        int rings = com.termux.app.chrome.InsetGlass.ringCount(mDensity, height);
+        if (mWellRingAlpha.length < rings) mWellRingAlpha = new int[rings];
+        for (int i = 0; i < rings; i++) {
+            mWellRingAlpha[i] = com.termux.app.chrome.InsetGlass.ringAlpha(i, rings);
+        }
+        mWellRings = rings;
+        mWellRingStep = com.termux.app.chrome.InsetGlass.ringStepPx(mDensity);
+        // Each ring is twice the step wide, so neighbours overlap and no seam shows between them.
+        mWellShadow.setStrokeWidth(2f * mWellRingStep);
+        int shadowTop = com.termux.app.chrome.InsetGlass.innerShadow(dark);
+        int shadowSide = com.termux.app.chrome.InsetGlass.innerShadowSide(dark);
+        mWellShadow.setShader(rings <= 0 ? null : new LinearGradient(0f, top, 0f, top + height,
+            new int[] {shadowTop, shadowSide, shadowSide & 0x00FFFFFF}, new float[] {0f, 0.5f, 1f},
+            Shader.TileMode.CLAMP));
+        // The rim of the hole, outside the outline: a subtle dark hairline across the top, and
+        // the bottom arc's light, an ellipse round the centre bottom as wide as the well and
+        // RIM_LIGHT_REACH_SHARE of its height tall, so it is strongest there and fades up the ends.
+        float rim = com.termux.app.chrome.InsetGlass.rimWidthPx(mDensity, height);
+        int rimShadow = com.termux.app.chrome.InsetGlass.rimShadow(dark);
+        int rimLight = com.termux.app.chrome.InsetGlass.rimLight(dark);
+        mWellRim.setStrokeWidth(rim);
+        mWellRim.setShader(rim <= 0f ? null : new LinearGradient(0f, top - rim, 0f,
+            top + height * com.termux.app.chrome.InsetGlass.RIM_SHADOW_TO_SHARE,
+            rimShadow, rimShadow & 0x00FFFFFF, Shader.TileMode.CLAMP));
+        mWellRimLight.setStrokeWidth(rim);
+        float reach = Math.max(1f, height * com.termux.app.chrome.InsetGlass.RIM_LIGHT_REACH_SHARE);
+        float cx = left + width / 2f;
+        float bottom = top + height + rim;
+        android.graphics.RadialGradient light = rim <= 0f ? null : new android.graphics.RadialGradient(
+            cx, bottom, reach, new int[] {rimLight,
+                com.termux.app.chrome.OnGlass.withAlpha(rimLight, Math.round((rimLight >>> 24)
+                    * com.termux.app.chrome.InsetGlass.RIM_LIGHT_MID)),
+                rimLight & 0x00FFFFFF},
+            new float[] {0f, 0.5f, 1f}, Shader.TileMode.CLAMP);
+        if (light != null) {
+            mWellRimMatrix.setScale(Math.max(1f, (width / 2f + rim) / reach), 1f, cx, bottom);
+            light.setLocalMatrix(mWellRimMatrix);
+        }
+        mWellRimLight.setShader(light);
+        invalidate();
     }
 
     /**
@@ -330,6 +504,9 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (mEntry != null) mEntry.removeHitArea(this);
         removeCallbacks(mRedress);
         cancelStream();
+        mEnterAnim.cancel();
+        mEnter = 0f;
+        hideLift();
         if (mSource != null) mSource.setBarGlassWanted(false);
         mSource = null;
         super.onDetachedFromWindow();
@@ -345,21 +522,23 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
      * or mode), never per frame. Compares before it invalidates.
      */
     public void redress() {
+        if (mKeyEntry) {
+            redressRaised(mLayout);
+            return;
+        }
         mSource = PageBarGlass.sourceFor(this);
         mLook = mSource == null ? null : mSource.widgetGlassStyle();
         PageBarLayout layout = mLayout;
         if (mSource != null) mSource.setBarGlassWanted(layout != null && PageBarGlass.wants(getContext(), mLook));
         boolean shown = layout != null && PageBarGlass.dress(getContext(), mLook, this, mGlass,
-            layout.pillHeightPx() / 2f);
+            layout.slabHeightPx() / 2f);
         mGlassShown = shown;
         if (shown) mGlass.invalidateOutline();
         if (mFixedInk) {
             mInk.veil = Color.TRANSPARENT;
             fixInks();
             mGlass.setEvenOut(null);
-            mBubbleLabelInk = mInk.ink;
-            PageBarBubbleView popBubble = mBubble;
-            if (popBubble != null) dressBubble(popBubble);
+            liftInkIsSlabInk();
             invalidate();
             return;
         }
@@ -368,21 +547,90 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mInk.veil = Color.TRANSPARENT;
         mInk.ink = Color.WHITE;
         mInk.other = Color.WHITE;
+        mInk.wellDark = true;
         mBody.evenOut = null;
         if (layout != null) {
-            mInkRect.set(Math.round(layout.pillLeftPx()), Math.round(layout.pillTopPx()),
-                Math.round(layout.pillLeftPx() + layout.pillWidthPx()),
-                Math.round(layout.pillBottomPx()));
+            mInkRect.set(Math.round(layout.slabLeftPx()), Math.round(layout.slabTopPx()),
+                Math.round(layout.slabLeftPx() + layout.slabWidthPx()),
+                Math.round(layout.slabBottomPx()));
+            // Where the glyphs' tops and bottoms stand down the well, for the floor's ink check.
+            float glyphShare = layout.glyphPx() / Math.max(1f, layout.slabHeightPx());
             PageBarGlass.measure(this, mInkRect, mLook, accent, shown, mInk, mBody, mGlass,
-                mOrigin, mRoot, mInkScratch);
+                (1f - glyphShare) / 2f, (1f + glyphShare) / 2f, mOrigin, mRoot, mInkScratch);
         } else {
             mInk.accent = accent;
             mGlass.setEvenOut(null);
         }
-        mBubbleLabelInk = measureLabelInk(layout);
-        PageBarBubbleView bubble = mBubble;
-        if (bubble != null) dressBubble(bubble);
+        measureLiftInk(layout);
+        syncWell(layout);
         invalidate();
+    }
+
+    /**
+     * The key's pop-up dressed in its raised glass where the Look's glass may be worn (the system's
+     * battery saver, outline text and high contrast put it on its solid card, as a widget's), the
+     * glyph inks solved on the glass's ground; else the solid card and its fixed inks. Once per
+     * opening and on a dress pass, never per frame.
+     */
+    private void redressRaised(@Nullable PageBarLayout layout) {
+        PaneSurfaceStyle look = mRaisedLook;
+        boolean shown = layout != null && look != null && PageBarGlass.wants(getContext(), look);
+        if (shown) {
+            float radius = slabRadiusPx();
+            shown = com.termux.app.terminal.PaneGlass.applyAtRadius(look, this, mGlass, radius);
+            if (shown) {
+                // The raised rim is drawn over the glass in dispatchDraw, not the style's own.
+                mGlass.setRim(-1f, look);
+                if (mGlass.getVisibility() != VISIBLE) mGlass.setVisibility(VISIBLE);
+                mGlass.setElevation(getResources().getDimension(
+                    com.google.android.material.R.dimen.m3_comp_menu_container_elevation));
+                mGlass.invalidateOutline();
+            }
+        }
+        if (!shown && mGlass.getVisibility() != GONE) mGlass.setVisibility(GONE);
+        mGlassShown = shown;
+        mRaisedFrameLate = shown && look instanceof com.termux.app.chrome.LookGlassStyle
+            && ((com.termux.app.chrome.LookGlassStyle) look).spec().wantsBlurFrame()
+            && !holdsFrame(mGlass);
+        mGlass.setEvenOut(null);
+        if (shown) {
+            int wallpaper = Color.TRANSPARENT;
+            if (look instanceof com.termux.app.chrome.WidgetInkSource) {
+                com.termux.app.chrome.WidgetInkSource source =
+                    (com.termux.app.chrome.WidgetInkSource) look;
+                mInkRect.set(Math.round(layout.slabLeftPx()), Math.round(layout.slabTopPx()),
+                    Math.round(layout.slabLeftPx() + layout.slabWidthPx()),
+                    Math.round(layout.slabBottomPx()));
+                com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, mOrigin, mRoot);
+                mInkRect.offset(mOrigin[0], mOrigin[1]);
+                wallpaper = source.wallpaperSample(mInkRect);
+                if (Color.alpha(wallpaper) == 0) wallpaper = source.wallpaperFallback();
+            }
+            PageBarGlass.raisedInk(PageBarGlass.raisedGround(look.paneGlassTintColor(), wallpaper,
+                mFixedInkColor), mFixedInkColor, mFixedAccent, mInk);
+        } else {
+            mInk.veil = Color.TRANSPARENT;
+            fixInks();
+        }
+        liftInkIsSlabInk();
+        invalidate();
+    }
+
+    private static boolean holdsFrame(@NonNull PaneGlassBackdropView glass) {
+        android.graphics.Bitmap frame = glass.heldFrame();
+        return frame != null && !frame.isRecycled();
+    }
+
+    /**
+     * The blur cache landed a frame (a glass pass): the key's pop-up, shown and dressed while its
+     * raised radius was still baking, is dressed again so it wears the frame instead of its tint
+     * alone. Two fields read otherwise; nothing per frame.
+     */
+    void redressIfFrameLate() {
+        if (!mKeyEntry || !mRaisedFrameLate || mRaisedLook == null || getVisibility() != VISIBLE) {
+            return;
+        }
+        redressRaised(mLayout);
     }
 
     /**
@@ -400,33 +648,41 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mInk.other = com.termux.app.chrome.PageMarkInk.other(ground, mFixedInkColor, mInk.accent);
     }
 
+    /** No wallpaper to read (the key's pop-up, or no Look yet): lifted glyphs and the name keep the slab's inks. */
+    private void liftInkIsSlabInk() {
+        mLabelInk = mInk.ink;
+        mLiftAccent = mInk.accent;
+        mLiftOther = mInk.other;
+    }
+
     /**
-     * The bubble's label ink: the bare-text ink of the wallpaper above the bubble's disc, where the
-     * label stands ({@link PageBarGlass#labelInk}); the pill's ink while nothing can be read.
+     * The inks above the slab, where lifted glyphs and the name stand on bare wallpaper: the
+     * name's bare-text ink ({@link PageBarGlass#labelInk}) and the page marks' inks solved on that
+     * wallpaper as {@link #mInk} is on the slab ({@link com.termux.app.chrome.PageMarkInk}). One
+     * sample from the name's peak down to the slab's top; a dress pass, never per frame.
      */
-    @ColorInt
-    private int measureLabelInk(@Nullable PageBarLayout layout) {
+    private void measureLiftInk(@Nullable PageBarLayout layout) {
         if (layout == null || !(mLook instanceof com.termux.app.chrome.WidgetInkSource)) {
-            return mInk.ink;
+            liftInkIsSlabInk();
+            return;
         }
         com.termux.app.chrome.WidgetInkSource source = (com.termux.app.chrome.WidgetInkSource) mLook;
-        float discTop = layout.pillTopPx() + layout.bubbleCenterYFromPillTopPx()
-            - PageBarLayout.BUBBLE_DIAMETER_DP * mDensity / 2f;
-        float labelBottom = discTop - PageBarLayout.LABEL_GAP_DP * mDensity;
-        // A band of the pill's height is room for the label's one line.
-        mInkRect.set(Math.round(layout.pillLeftPx()),
-            Math.round(labelBottom - layout.pillHeightPx()),
-            Math.round(layout.pillLeftPx() + layout.pillWidthPx()), Math.round(labelBottom));
+        float top = layout.labelBaselinePeakPx(mLabelDescent) - mLabelAscent;
+        mInkRect.set(Math.round(layout.slabLeftPx()), Math.round(top),
+            Math.round(layout.slabLeftPx() + layout.slabWidthPx()), Math.round(layout.slabTopPx()));
         com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, mOrigin, mRoot);
         mInkRect.offset(mOrigin[0], mOrigin[1]);
         int wallpaper = source.wallpaperSample(mInkRect);
         if (Color.alpha(wallpaper) == 0) wallpaper = source.wallpaperFallback();
-        return PageBarGlass.labelInk(wallpaper, mInk.ink);
-    }
-
-    /** The bubble wears the pill's body (its fill and even-out) and the label its own ink. */
-    private void dressBubble(@NonNull PageBarBubbleView bubble) {
-        bubble.dress(mLook, mInk.veil, mGlassShown ? mBody.evenOut : null, mBubbleLabelInk);
+        if (Color.alpha(wallpaper) == 0) {
+            liftInkIsSlabInk();
+            return;
+        }
+        int ground = com.termux.app.chrome.OnGlass.opaque(wallpaper);
+        mLabelInk = PageBarGlass.labelInk(ground, mInk.ink);
+        mLiftAccent = com.termux.app.chrome.PageMarkInk.current(ground, mInk.accent,
+            com.termux.app.chrome.GlassInk.isPaleSide(mLabelInk, ground));
+        mLiftOther = com.termux.app.chrome.PageMarkInk.other(ground, mLabelInk, mLiftAccent);
     }
 
     // ---- Drawing ----------------------------------------------------------------------------
@@ -437,14 +693,26 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         PageBarLayout layout = mLayout;
         PageBarFold.Result fold = mFold;
         if (layout == null || fold == null) return;
-        float left = layout.pillLeftPx();
-        float top = layout.pillTopPx();
-        float height = layout.pillHeightPx();
-        mRect.set(left, top, left + layout.pillWidthPx(), top + height);
-        if (mGlassShown) {
+        float left = layout.slabLeftPx();
+        float top = layout.slabTopPx();
+        float height = layout.slabHeightPx();
+        mRect.set(left, top, left + layout.slabWidthPx(), top + height);
+        float radius = slabRadiusPx();
+        if (mGlassShown && mKeyEntry) {
+            // The raised glass's rim, the over-glass rim made stronger (ElevatedGlass), only where
+            // the glass draws no Fancier Glass edge of its own: that edge is the cards' rim light.
+            if (!mGlass.drawsEdge()) {
+                mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(
+                    com.termux.app.chrome.GlassTokens.HIGHLIGHT,
+                    com.termux.app.chrome.ElevatedGlass.rimAlpha(
+                        Color.alpha(com.termux.app.chrome.GlassTokens.RIM_OVER_GLASS_START))));
+                mRect.inset(0.5f * mDensity, 0.5f * mDensity);
+                canvas.drawRoundRect(mRect, radius, radius, mStroke);
+            }
+        } else if (mGlassShown) {
             if (Color.alpha(mInk.veil) != 0) {
                 mFill.setColor(mInk.veil);
-                canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
+                canvas.drawRoundRect(mRect, radius, radius, mFill);
             }
         } else {
             // No glass: the solid card the ink was measured for, as a widget's slab falls back
@@ -454,35 +722,129 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             int card = mFixedInk ? PageBarGlass.cardFor(mInk.ink) : mInk.veil;
             if (Color.alpha(card) != 0) {
                 mFill.setColor(card);
-                canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
+                canvas.drawRoundRect(mRect, radius, radius, mFill);
             }
             mFill.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_FILL_ALPHA));
-            canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
-            mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_STROKE_ALPHA));
-            mRect.inset(0.5f * mDensity, 0.5f * mDensity);
-            canvas.drawRoundRect(mRect, height / 2f, height / 2f, mStroke);
+            canvas.drawRoundRect(mRect, radius, radius, mFill);
+            // The ink outline is the key's card's; Home's well has no light inside it.
+            if (mKeyEntry) {
+                mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_STROKE_ALPHA));
+                mRect.inset(0.5f * mDensity, 0.5f * mDensity);
+                canvas.drawRoundRect(mRect, radius, radius, mStroke);
+            }
         }
-        boolean lifted = mEnter > 0f;
-        if (lifted) layout.slidePositions(mFocusFloat, mEnter, mCenters, mScales, mFolded);
-        float cy = top + height / 2f;
+        if (!mKeyEntry) drawWell(canvas, layout, radius);
+        // While the overlay holds the lift, the glyphs draw there only, never twice; without a
+        // parent to lift into they lift here, clipped to the band. Lifted glyphs rise out of the
+        // well over its cues.
+        if (mLiftHost == null) drawGlyphs(canvas, layout, fold, mEnter);
+    }
+
+    /**
+     * Home's well over its glass (or its solid card): the shade, the inner shadow's rings inside
+     * the outline and the rim hairlines just outside it ({@link #syncWell}). The rim stands in
+     * the touch row's air around the slab, inside this view, so nothing is laid out for it.
+     * Allocates nothing.
+     */
+    private void drawWell(@NonNull Canvas canvas, @NonNull PageBarLayout layout, float radius) {
+        float left = layout.slabLeftPx();
+        float top = layout.slabTopPx();
+        float right = left + layout.slabWidthPx();
+        float bottom = top + layout.slabHeightPx();
+        mRect.set(left, top, right, bottom);
+        canvas.drawRoundRect(mRect, radius, radius, mWellFloor);
+        if (mWellShadow.getShader() != null) {
+            // Ring i stands i steps in; its stroke reaches from the outline (ring 0) inward.
+            for (int i = 0; i < mWellRings; i++) {
+                float inset = mWellRingStep * (i + 1);
+                if (2f * inset >= bottom - top) break;
+                mRect.set(left + inset, top + inset, right - inset, bottom - inset);
+                float r = Math.max(0f, radius - inset);
+                mWellShadow.setAlpha(mWellRingAlpha[i]);
+                canvas.drawRoundRect(mRect, r, r, mWellShadow);
+            }
+        }
+        float rim = mWellRim.getStrokeWidth();
+        if (rim > 0f && mWellRim.getShader() != null) {
+            // Outset by half the stroke so the hairline lies just outside the outline.
+            mRect.set(left - rim / 2f, top - rim / 2f, right + rim / 2f, bottom + rim / 2f);
+            float r = radius + rim / 2f;
+            canvas.drawRoundRect(mRect, r, r, mWellRim);
+            if (mWellRimLight.getShader() != null) canvas.drawRoundRect(mRect, r, r, mWellRimLight);
+        }
+    }
+
+    /**
+     * Every glyph at its lift for {@code enter} (0: at rest). A glyph's ink moves from the slab's
+     * to the wallpaper's as it leaves the slab ({@link PageBarLayout#outOfSlab}). Allocates nothing.
+     */
+    private void drawGlyphs(@NonNull Canvas canvas, @NonNull PageBarLayout layout,
+                            @NonNull PageBarFold.Result fold, float enter) {
+        float focus = mFocusFloat;
         float glyph = layout.glyphPx();
         List<PageBarFold.Slot> slots = fold.slots;
-        int accent = (mInk.accent & 0x00FFFFFF)
-            | (Math.round(255f * (1f - (1f - SLIDE_ACCENT_KEEP) * mEnter)) << 24);
+        int keep = Math.round(255f * (1f - (1f - SLIDE_ACCENT_KEEP) * mEnter)) << 24;
+        int accent = (mInk.accent & 0x00FFFFFF) | keep;
+        int liftAccent = (mLiftAccent & 0x00FFFFFF) | keep;
         // The others a tier under the current page (PageMarkInk), solved at the dress pass.
         int neutral = mInk.other;
         for (int i = 0; i < slots.size(); i++) {
-            float scale = lifted ? mScales[i] : 1f;
-            if (scale <= 0.01f) continue;
-            float cx = lifted ? mCenters[i] : layout.restCenterX(i);
-            float size = glyph * scale;
+            float cx = layout.restCenterX(i);
+            float cy = layout.liftedCenterYPx(i, focus, enter);
+            float size = glyph * layout.scaleAt(i, focus, enter);
+            float out = enter > 0f ? layout.outOfSlab(i, focus, enter) : 0f;
             PageBarFold.Slot slot = slots.get(i);
-            int fill = slot.current ? accent : neutral;
+            int other = out > 0f ? ColorUtils.blendARGB(neutral, mLiftOther, out) : neutral;
+            int fill = slot.current
+                ? (out > 0f ? ColorUtils.blendARGB(accent, liftAccent, out) : accent) : other;
             if (slot.folded()) {
-                mPainter.drawStack(canvas, slot.kind, slot.number, cx, cy, size, fill, neutral);
+                mPainter.drawStack(canvas, slot.kind, slot.number, cx, cy, size, fill, other);
             } else {
                 mPainter.draw(canvas, slot.kind, slot.number, cx, cy, size, fill);
             }
+        }
+    }
+
+    /** The page's name over the lifted glyph under the finger, fading with the lift. */
+    private void drawLabel(@NonNull Canvas canvas, @NonNull PageBarLayout layout) {
+        CharSequence text = mLabelText;
+        if (text.length() == 0 || mEnter <= 0f || mLabelSlot >= layout.slotCount()) return;
+        float baseline = layout.labelBaselinePx(mLabelSlot, mFocusFloat, mEnter, mLabelDescent);
+        float x = layout.labelLeftPx(mLabelSlot, mLabelWidth);
+        mLabelPaint.setColor((mLabelInk & 0x00FFFFFF)
+            | (Math.round(Color.alpha(mLabelInk) * Math.min(1f, mEnter)) << 24));
+        canvas.drawText(text, 0, text.length(), x, baseline, mLabelPaint);
+    }
+
+    /** Names the page under the finger; ellipsizes only when the name or its room changed. */
+    private void bindLabel(int slot, @NonNull String label, float room) {
+        mLabelSlot = slot;
+        if (label.equals(mLabel) && room == mLabelRoom) return;
+        mLabel = label;
+        mLabelRoom = room;
+        mLabelText = TextUtils.ellipsize(label, mLabelPaint, room, TextUtils.TruncateAt.END);
+        mLabelWidth = mLabelPaint.measureText(mLabelText, 0, mLabelText.length());
+    }
+
+    /** The lifted glyphs and the name, on the parent's overlay in the parent's coordinates. */
+    private final class LiftLayer extends Drawable {
+        @Override public void draw(@NonNull Canvas canvas) {
+            PageBarLayout layout = mLayout;
+            PageBarFold.Result fold = mFold;
+            if (layout == null || fold == null) return;
+            int save = canvas.save();
+            canvas.translate(getLeft() + getTranslationX(), getTop() + getTranslationY());
+            drawGlyphs(canvas, layout, fold, mEnter);
+            drawLabel(canvas, layout);
+            canvas.restoreToCount(save);
+        }
+
+        @Override public void setAlpha(int alpha) {}
+
+        @Override public void setColorFilter(@Nullable android.graphics.ColorFilter filter) {}
+
+        @Override public int getOpacity() {
+            return PixelFormat.TRANSLUCENT;
         }
     }
 
@@ -571,12 +933,12 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         cancelStream();
     }
 
-    /** Puts the bar away: the touch, the slide and the bubble, all given back. */
+    /** Puts the bar away: the touch, the slide and the lift, all given back. */
     public void release() {
         cancelStream();
         mEnterAnim.cancel();
         mEnter = 0f;
-        hideBubble();
+        hideLift();
     }
 
     private void onResult(@NonNull PageBarSlide slide, @NonNull PageBarSlide.Result result) {
@@ -601,7 +963,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         if (slide.state() != PageBarSlide.State.SLIDING) return;
         if (!mSliding) startSlide();
         if (slide.focusChanged() && entry != null) entry.focusCrossed();
-        if (mLayout != null) mFocusFloat = mLayout.focusAt(slide.x());
+        PageBarLayout layout = mLayout;
+        if (layout != null) {
+            mFocusFloat = layout.focusAt(slide.x());
+            nameFocus(layout, slide);
+        }
         onEnterChanged();
     }
 
@@ -617,9 +983,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private void startSlide() {
         mSliding = true;
         if (mEntry != null) mEntry.slidingChanged(true);
-        ensureBubble();
-        PageBarBubbleView bubble = mBubble;
-        if (bubble != null) bubble.setVisibility(VISIBLE);
+        showLift();
         animateEnter(1f);
     }
 
@@ -630,61 +994,54 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         animateEnter(0f);
     }
 
+    /** Rises to 1 or settles to 0 over the A–Z wave's settle time, on a draw value only. */
     private void animateEnter(float to) {
         mEnterAnim.cancel();
         if (mEntry == null || mEntry.isReducedMotion() || !isAttachedToWindow()) {
             mEnter = to;
             onEnterChanged();
-            if (to <= 0f) hideBubble();
+            if (to <= 0f) hideLift();
             return;
         }
         mEnterAnim.setFloatValues(mEnter, to);
         mEnterAnim.start();
     }
 
-    /** Draw-time only: the bar and the bubble repaint; nothing lays out. */
+    /** Draw-time only: the bar and the lift repaint; nothing lays out. */
     private void onEnterChanged() {
         invalidate();
-        updateBubble();
+        if (mLiftHost != null) mLiftLayer.invalidateSelf();
     }
 
-    private void ensureBubble() {
-        if (mBubble != null || !(getParent() instanceof ViewGroup)) return;
-        PageBarBubbleView bubble = new PageBarBubbleView(getContext(), mPainter);
-        bubble.setVisibility(GONE);
-        ((ViewGroup) getParent()).addView(bubble, new android.widget.FrameLayout.LayoutParams(
-            LayoutParams.MATCH_PARENT, bubble.heightPx()));
-        mBubble = bubble;
-        dressBubble(bubble);
-    }
-
-    private void hideBubble() {
-        PageBarBubbleView bubble = mBubble;
-        if (bubble == null || bubble.getVisibility() == GONE) return;
-        bubble.release();
-        bubble.setVisibility(GONE);
-    }
-
-    private void updateBubble() {
-        PageBarBubbleView bubble = mBubble;
-        PageBarLayout layout = mLayout;
+    /** The page under the finger names the label: a folded slot's member under it. */
+    private void nameFocus(@NonNull PageBarLayout layout, @NonNull PageBarSlide slide) {
         PageBarFold.Result fold = mFold;
-        PageBarSlide slide = mSlide;
         PageBarModel model = mModel;
-        if (bubble == null || layout == null || fold == null || slide == null || model == null
-            || bubble.getVisibility() != VISIBLE) {
-            return;
-        }
-        int slotIndex = Math.round(mFocusFloat);
-        slotIndex = mSliding ? slide.focusSlot() : Math.max(0, Math.min(fold.slots.size() - 1, slotIndex));
+        if (fold == null || model == null) return;
+        int slotIndex = slide.focusSlot();
+        if (slotIndex < 0 || slotIndex >= fold.slots.size()) return;
         PageBarFold.Slot slot = fold.slots.get(slotIndex);
         int member = slot.folded() ? layout.subIndexAt(slide.x(), slotIndex, slot.count) : 0;
-        PageBarModel.Entry e = model.entries().get(slot.first + member);
-        bubble.bind(e.label, e.kind, e.number, getLeft() + layout.bubbleCenterX(slotIndex),
-            mInk.accent, mInk.ink);
-        bubble.setTranslationY(bubble.topForDiscCenter(getTop() + layout.pillTopPx()
-            + layout.bubbleCenterYFromPillTopPx()));
-        bubble.setAlpha(mEnter);
+        bindLabel(slotIndex, model.entries().get(slot.first + member).label, layout.labelRoomPx());
+    }
+
+    /** Lays the lift layer on the parent's overlay, sized to the parent; once per slide. */
+    private void showLift() {
+        if (mLiftHost != null || !(getParent() instanceof ViewGroup)) return;
+        ViewGroup host = (ViewGroup) getParent();
+        mLiftLayer.setBounds(0, 0, host.getWidth(), host.getHeight());
+        host.getOverlay().add(mLiftLayer);
+        mLiftHost = host;
+        invalidate();
+    }
+
+    /** Takes the lift layer off the overlay; the glyphs draw in the bar again. */
+    private void hideLift() {
+        ViewGroup host = mLiftHost;
+        if (host == null) return;
+        host.getOverlay().remove(mLiftLayer);
+        mLiftHost = null;
+        invalidate();
     }
 
     // ---- Accessibility ----------------------------------------------------------------------
@@ -748,7 +1105,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             return false;
         }
         float x = layout.restCenterX(id);
-        float y = layout.pillTopPx() + layout.pillHeightPx() / 2f;
+        float y = layout.slabCenterYPx();
         slide.down(x, y);
         if (slide.up(x, y) != PageBarSlide.Result.TAP || slide.entryIndex() < 0) return false;
         entry.chosen(model.entries().get(slide.entryIndex()).target);

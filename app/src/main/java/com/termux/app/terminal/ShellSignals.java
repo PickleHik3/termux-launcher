@@ -249,7 +249,7 @@ public final class ShellSignals {
             return false;
         AppNotice.shell(mContext, headline == null ? detail : headline,
             headline == null || detail.isEmpty() ? null : detail,
-            "" /* nf-fa-bell */, true, onTap);
+            R.drawable.ic_rl_bell, true, onTap);
         return true;
     }
 

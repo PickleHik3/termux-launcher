@@ -12,9 +12,6 @@ public final class StatusNotificationsMark {
     /** The most the count reads before it says "9+": the mark stays one narrow glyph wide. */
     public static final int MAX_SHOWN = 9;
 
-    /** nf-md-bell, from the bar's own symbol font, as the mouse mark's glyph is. */
-    public static final String GLYPH = "󰂚";
-
     private StatusNotificationsMark() {}
 
     /** Whether the mark stands: the indicator is on and something is waiting. */

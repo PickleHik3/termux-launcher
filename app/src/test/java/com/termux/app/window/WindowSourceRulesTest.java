@@ -288,6 +288,8 @@ public class WindowSourceRulesTest {
         "app/terminal/TerminalSheetController.java:1",
         // the lifted chip's shadow (it draws last by the strip's draw order)
         "app/terminal/TerminalWindowBar.java:3",
+        // the raised glass's lift shadow on the key's page bar (its child; the bar's layer orders it)
+        "app/wall/pageswitch/PageBarView.java:1",
         // elevation for a shadow or lift: classify when its layer moves
         "app/terminal/extrakeys/HomePillView.java:3",
         // elevation for a shadow or lift: classify when its layer moves
