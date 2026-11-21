@@ -59,6 +59,18 @@ public final class ExtraKeyIcons {
         return new String(Character.toChars(codePoint));
     }
 
+    /** Whether {@code label} holds any of this table's icons, which a screen reader cannot say. */
+    public static boolean containsIcon(@androidx.annotation.Nullable CharSequence label) {
+        if (label == null) return false;
+        int index = 0;
+        while (index < label.length()) {
+            int codePoint = Character.codePointAt(label, index);
+            if (isIcon(codePoint)) return true;
+            index += Character.charCount(codePoint);
+        }
+        return false;
+    }
+
     /** Whether {@code codePoint} is one of this table's icons. */
     public static boolean isIcon(int codePoint) {
         for (int icon : ALL) if (icon == codePoint) return true;

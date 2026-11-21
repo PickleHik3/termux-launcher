@@ -2,6 +2,7 @@ package com.termux.shared.termux.extrakeys;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.shared.termux.font.NerdFontSpans;
@@ -33,4 +34,34 @@ public class ExtraKeyIconsTest {
         }
     }
 
+    @Test public void theDefaultMapsDrawArrowsAndKeySymbolsAsIcons() {
+        ExtraKeysConstants.ExtraKeyDisplayMap map =
+            ExtraKeysInfo.getCharDisplayMapForStyle("default");
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.ARROW_LEFT), map.get("LEFT"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.ENTER), map.get("ENTER"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.TAB), map.get("TAB"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.BACKSPACE), map.get("BKSP"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.DELETE_FORWARD), map.get("DEL"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.MENU), map.get("DRAWER"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PASTE), map.get("PASTE"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.SCROLL), map.get("SCROLL"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD), map.get("KEYBOARD"));
+        // Word keys stay words.
+        assertNull(map.get("ESC"));
+        assertNull(map.get("CTRL"));
+        assertNull(map.get("HOME"));
+        ExtraKeysConstants.ExtraKeyDisplayMap all = ExtraKeysInfo.getCharDisplayMapForStyle("all");
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.KEY_HOME), all.get("HOME"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.KEY_END), all.get("END"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PAGE_UP), all.get("PGUP"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PAGE_DOWN), all.get("PGDN"));
+    }
+
+    @Test public void aStoredSymbolOrNerdDisplayStaysLiteral() {
+        ExtraKeysConstants.ExtraKeyDisplayMap map =
+            ExtraKeysInfo.getCharDisplayMapForStyle("default");
+        assertEquals("←", ExtraKeyButton.resolveDisplay("LEFT", "←", map));
+        assertEquals("󰥻",
+            ExtraKeyButton.resolveDisplay("KEYBOARD", "󰥻", map));
+    }
 }
