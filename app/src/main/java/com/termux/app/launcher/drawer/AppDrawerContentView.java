@@ -167,6 +167,18 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mSearchAtBottom;
     private final AppDrawerSearchPillView mPill;
     private final AppDrawerSearchInputView mInput;
+    /**
+     * The search bar's fold, owned here: 0 the full bar, 1 the round button in the corner. The
+     * resting target is {@link #mSearchCollapsed}; one reused animator walks the fraction there
+     * (from wherever it stands, so a reversal mid-flight starts from the current value), and each
+     * step only moves and redraws the pill.
+     */
+    private float mSearchFold;
+    private boolean mSearchCollapsed;
+    @Nullable private ValueAnimator mSearchFoldAnimator;
+    private final AppDrawerChromeLayout.Morph mSearchMorph = new AppDrawerChromeLayout.Morph();
+    @Nullable private AppDrawerChromeLayout.Result mChromeResult;
+    private final android.graphics.RectF mPillRect = new android.graphics.RectF();
     private final TextView mResultsLabel;
     private final TextView mNoResults;
     private final RecyclerView mGrid;
@@ -543,13 +555,17 @@ public final class AppDrawerContentView extends FrameLayout
                 KeyboardScrollListener keyboard = mKeyboardScrollListener;
                 if (keyboard != null && mGridUserScrolling && mGridDragHidesKeyboard && dy > 0)
                     keyboard.onListScrolledDown(dy);
+                // Back at the top (a scroll up, or the A-Z strip's jump), the bar is back too.
+                // (A layout's own dy of 0 is not a scroll.)
+                if (dy < 0 && mSearchCollapsed) unfoldSearchAtTop(recyclerView);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                     if (!mGridUserScrolling) {
-                        notifyListDragStarted();
+                        notifyListDragStarted(recyclerView.computeVerticalScrollRange()
+                            > recyclerView.computeVerticalScrollExtent());
                         // Decided once, as the drag starts: a list that fits has no scroll to give.
                         mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
                             recyclerView.computeVerticalScrollRange(),
@@ -559,6 +575,7 @@ public final class AppDrawerContentView extends FrameLayout
                     mGridUserScrolling = true;
                 } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
                     mGridUserScrolling = false;
+                    if (mSearchCollapsed) unfoldSearchAtTop(recyclerView);
                     KeyboardScrollListener keyboard = mKeyboardScrollListener;
                     if (keyboard != null) keyboard.onListScrollIdle();
                 }
@@ -593,7 +610,14 @@ public final class AppDrawerContentView extends FrameLayout
                                                        int newState) {
                 mHorizontalDropGate.onScrollStateChanged(newState);
                 // A sideways page swipe is browsing too, like dragging a list.
-                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) notifyListDragStarted();
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    notifyListDragStarted(recyclerView.canScrollHorizontally(1)
+                        || recyclerView.canScrollHorizontally(-1));
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mSearchCollapsed
+                    && mHorizontalPager.getSelectedPage() == 0) {
+                    // The first page is the pages' top.
+                    unfoldSearch(AppDrawerSearchCollapsePolicy.Event.SCROLLED_TO_TOP, true);
+                }
             }
         });
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
@@ -893,17 +917,32 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     /** A list the finger started dragging: the keyboard's cue. Shared by every list. */
-    private void notifyListDragStarted() {
+    private void notifyListDragStarted(boolean scrollable) {
         KeyboardScrollListener keyboard = mKeyboardScrollListener;
         if (keyboard != null) keyboard.onListDragStarted();
+        // The same cue folds the search bar into its round button: the user is browsing now.
+        foldSearchForBrowse(scrollable);
     }
 
-    /** Sends {@link KeyboardScrollListener#onListDragStarted} when {@code list} starts a drag. */
+    /**
+     * Sends {@link KeyboardScrollListener#onListDragStarted} when {@code list} starts a drag, and
+     * unfolds the search bar when the list is scrolled back to its top.
+     */
     private void hideKeyboardWhenDragged(@NonNull RecyclerView list) {
         list.addOnScrollListener(new RecyclerView.OnScrollListener() {
             @Override
+            public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (dy < 0 && mSearchCollapsed) unfoldSearchAtTop(recyclerView);
+            }
+
+            @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
-                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) notifyListDragStarted();
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    notifyListDragStarted(recyclerView.canScrollVertically(1)
+                        || recyclerView.canScrollVertically(-1));
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    unfoldSearchAtTop(recyclerView);
+                }
             }
         });
     }
@@ -947,6 +986,8 @@ public final class AppDrawerContentView extends FrameLayout
     public void setInteractive(boolean interactive) {
         if (mInteractive == interactive) return;
         mInteractive = interactive;
+        // Every open starts with the full bar.
+        if (interactive) unfoldSearch(AppDrawerSearchCollapsePolicy.Event.DRAWER_OPENED, false);
         if (!interactive) removeCallbacks(mAutoOpenOnlyMatch);
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
@@ -1066,6 +1107,90 @@ public final class AppDrawerContentView extends FrameLayout
         int gravity = (mSearchAtBottom ? Gravity.BOTTOM : Gravity.TOP) | Gravity.CENTER_HORIZONTAL;
         applySearchBarParams(mPill, r, gravity);
         applySearchBarParams(mInput, r, gravity);
+        mChromeResult = r;
+        applySearchMorph();
+    }
+
+    // ------------------------------------------------------------------ search bar fold
+
+    /** Moves and redraws the pill for the current fold; no layout, no allocation. */
+    private void applySearchMorph() {
+        AppDrawerChromeLayout.Result r = mChromeResult;
+        if (r == null) return;
+        AppDrawerChromeLayout.morph(r, mSearchFold, mSearchMorph);
+        mPill.applyMorph(mSearchFold, mSearchMorph);
+    }
+
+    /** The round button parks away from the A-Z strip: on the strip's far side, else the end side. */
+    private boolean searchButtonAtLeft() {
+        switch (mAzSide) {
+            case RIGHT: return true;
+            case LEFT: return false;
+            default: return getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        }
+    }
+
+    /** Folds the bar as the user browses; a list that fits never does (nothing would unfold it). */
+    private void foldSearchForBrowse(boolean scrollable) {
+        setSearchCollapsed(AppDrawerSearchCollapsePolicy.collapsedAfter(mSearchCollapsed,
+            AppDrawerSearchCollapsePolicy.Event.SCROLL_STARTED, scrollable, hasQuery(),
+            mEditModel.isEditing()), true);
+    }
+
+    /** Unfolds the bar for {@code event}; the policy keeps it full while a query shows or editing. */
+    private void unfoldSearch(@NonNull AppDrawerSearchCollapsePolicy.Event event,
+                              boolean animate) {
+        if (!mSearchCollapsed && mSearchFold <= 0f) return;
+        setSearchCollapsed(AppDrawerSearchCollapsePolicy.collapsedAfter(mSearchCollapsed, event,
+            false, hasQuery(), mEditModel.isEditing()), animate);
+    }
+
+    /** The scrolled list reached its top: the bar comes back. */
+    private void unfoldSearchAtTop(@NonNull RecyclerView list) {
+        if (mSearchCollapsed && !list.canScrollVertically(-1)) {
+            unfoldSearch(AppDrawerSearchCollapsePolicy.Event.SCROLLED_TO_TOP, true);
+        }
+    }
+
+    /**
+     * Sets the bar's resting shape and walks the fold there. The resting layout (the list's room
+     * for the button, the hidden field out of the way) is set once at the start and compares first;
+     * the top band keeps its size so the list never jumps under the finger.
+     */
+    private void setSearchCollapsed(boolean collapsed, boolean animate) {
+        ValueAnimator animator = mSearchFoldAnimator;
+        float target = collapsed ? 1f : 0f;
+        boolean changed = mSearchCollapsed != collapsed;
+        boolean heading = animate && animator != null && animator.isRunning();
+        if (!changed && (mSearchFold == target || heading)) return;
+        if (changed) {
+            mSearchCollapsed = collapsed;
+            // The field sits under the bar's old place; hidden, it neither takes a tap there nor
+            // keeps the system keyboard's focus once the bar has folded.
+            int visibility = collapsed ? INVISIBLE : VISIBLE;
+            if (mInput.getVisibility() != visibility) mInput.setVisibility(visibility);
+            applyBottomChrome(resolveChrome());
+        }
+        if (!animate || !isAttachedToWindow() || AnimationSpeed.isOff(getContext())) {
+            if (animator != null) animator.cancel();
+            mSearchFold = target;
+            applySearchMorph();
+            return;
+        }
+        if (animator == null) {
+            animator = ValueAnimator.ofFloat(0f, 1f);
+            animator.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            animator.addUpdateListener(a -> {
+                mSearchFold = (float) a.getAnimatedValue();
+                applySearchMorph();
+            });
+            mSearchFoldAnimator = animator;
+        }
+        animator.cancel();
+        animator.setFloatValues(mSearchFold, target);
+        animator.setDuration(AnimationSpeed.scale(getContext(),
+            AppDrawerCategoryView.REORDER_SETTLE_MS));
+        animator.start();
     }
 
     private void applySearchBarParams(@NonNull View bar, @NonNull AppDrawerChromeLayout.Result r,
@@ -1095,7 +1220,8 @@ public final class AppDrawerContentView extends FrameLayout
         boolean shown = mViewType == AppDrawerViewType.DEFAULT;
         int switchHeight = Math.round(AppDrawerSectionSwitchGeometry.HEIGHT_DP * mDensity);
         return AppDrawerChromeLayout.resolve(new AppDrawerChromeLayout.Input(mDensity, getWidth(),
-            shown, switchHeight, mSearchAtBottom, mBottomInsetPx));
+            shown, switchHeight, mSearchAtBottom, mBottomInsetPx, getHeight(),
+            searchButtonAtLeft(), mSearchCollapsed));
     }
 
     /** Settings › Search bar at the bottom; read once per open. */
@@ -1836,6 +1962,8 @@ public final class AppDrawerContentView extends FrameLayout
         AppDrawerSearchController search = mSearch;
         if (search != null) search.setInputEnabled(next.searchEnabled());
         mPill.setAlpha(next.searchDimmed() ? SEARCH_DIMMED_ALPHA : 1f);
+        // Edit mode dims and parks the bar where it stands: it never wears the round button.
+        if (next.isEditing()) unfoldSearch(AppDrawerSearchCollapsePolicy.Event.EDIT_STARTED, false);
         applyEditOutlines(this, next.outlinesVisible());
         mCornerTab.onEditModelChanged();
     }
@@ -1999,6 +2127,8 @@ public final class AppDrawerContentView extends FrameLayout
         mAdapter.presetHighlight(highlight);
         mHorizontalAdapter.presetHighlight(highlight);
         mPill.setQuery(search == null ? "" : search.query(), search == null ? 0 : search.caret());
+        // Results showing: the full bar, whatever folded it.
+        if (hasQuery()) unfoldSearch(AppDrawerSearchCollapsePolicy.Event.QUERY_CHANGED, true);
         if (mTextFieldSearch) {
             mInput.mirror(search == null ? "" : search.query(), search == null ? 0 : search.caret());
         }
@@ -2268,7 +2398,7 @@ public final class AppDrawerContentView extends FrameLayout
         // drag sends it (the controller keeps one that was up before the drawer opened).
         if (!mScrubSentKeyboard) {
             mScrubSentKeyboard = true;
-            notifyListDragStarted();
+            notifyListDragStarted(true);
         }
         mScrubLetter = letter;
         int position = mSectionIndex.firstPositionForLetter(letter);
@@ -2417,6 +2547,8 @@ public final class AppDrawerContentView extends FrameLayout
     @Override
     public void onSearchPillTapped() {
         if (!mEditModel.searchEnabled()) return;
+        // The round button opens back into the bar before the keyboard is asked for.
+        unfoldSearch(AppDrawerSearchCollapsePolicy.Event.BUTTON_TAPPED, true);
         requestSearchKeyboard();
     }
 
@@ -2551,6 +2683,15 @@ public final class AppDrawerContentView extends FrameLayout
         View[] chrome = {mPill, mInput, mSectionSwitch, mColumn};
         for (View view : chrome) {
             if (view == null || view.getVisibility() != VISIBLE || n + 4 > out.length) continue;
+            if (view == mPill) {
+                // Folded, the hold is blocked by the round button, not by the bar's old place.
+                mPill.getDrawnRect(mPillRect);
+                out[n++] = mPillRect.left;
+                out[n++] = mPillRect.top;
+                out[n++] = mPillRect.right;
+                out[n++] = mPillRect.bottom;
+                continue;
+            }
             out[n++] = view.getX();
             out[n++] = view.getY();
             out[n++] = view.getX() + view.getWidth();
@@ -3302,7 +3443,11 @@ public final class AppDrawerContentView extends FrameLayout
         mSectionPager.setPageWidthPx(w);
         // The search bar's width follows the drawer's; a layout pass cannot ask for another, so the
         // new width is applied right after this one.
-        if (w != oldw) post(this::applyChromeForWidth);
+        // A folded bar's button stands a fixed distance above the card's bottom, so a new height
+        // moves it too.
+        if (w != oldw || (h != oldh && (mSearchCollapsed || mSearchFold > 0f))) {
+            post(this::applyChromeForWidth);
+        }
         // The pages stand at position times the width: a new width moves them with the same draw.
         applyPageTransforms();
     }
