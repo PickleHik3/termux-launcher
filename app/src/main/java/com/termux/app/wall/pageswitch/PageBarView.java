@@ -207,10 +207,6 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             List<PageBarModel.Entry> entries = model.entries();
             mFold = PageBarFold.fold(entries, PageBarLayout.maxSlots(mDensity, width));
             int slots = mFold.slots.size();
-            StringBuilder diag = new StringBuilder("fold entries=").append(entries.size())
-                .append(" maxSlots=").append(PageBarLayout.maxSlots(mDensity, width)).append(" slots=");
-            for (PageBarFold.Slot s : mFold.slots) diag.append(s.kind).append(':').append(s.count).append('/').append(s.number).append(' ');
-            android.util.Log.d("TL-PageBarDiag", diag.toString());
             mLayout = mKeyEntry ? new PageBarLayout(mDensity, width, slots, true)
                 : new PageBarLayout(mDensity, width, slots, mPaneLeft, mWindowWidth);
             mSlide = new PageBarSlide(mLayout, mFold, entries, mTouchSlop, mKeyEntry);
