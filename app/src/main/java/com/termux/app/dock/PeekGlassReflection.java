@@ -422,6 +422,34 @@ public final class PeekGlassReflection {
     }
 
     /**
+     * The card a sync aims the reflection by. Apart, the reflection is part of Home's card: once
+     * Home has stood at rest it is aimed by Home's rest card whichever page is in front or however
+     * far a crossing has come, so the Terminal's rest finds nothing to re-aim and the landing
+     * nothing to correct. Not apart (or before Home's first rest), the card cut now.
+     */
+    @NonNull
+    public static PeekGlassGeometry.Card aimCard(boolean apart,
+                                                 @androidx.annotation.Nullable PeekGlassGeometry.Card homeRestCard,
+                                                 @NonNull PeekGlassGeometry.Card shown) {
+        return apart && homeRestCard != null ? homeRestCard : shown;
+    }
+
+    /**
+     * Where the row stands over the host for the reflection's aim ({@link #update}'s rowDy), with
+     * {@link #aimCard}'s rule: apart, where Home's rest laid it out, never the live layout read
+     * with another page in front (the Terminal's rows stand the row elsewhere over the parked
+     * host); not apart, where it stood when {@code shown} was cut.
+     *
+     * @param homeRestRows the rows over the host at Home's last rest
+     * @param cutRows      the rows over the host when the shown card was cut
+     */
+    public static float aimRowDy(boolean apart,
+                                 @androidx.annotation.Nullable PeekGlassGeometry.Card homeRestCard,
+                                 float homeRestRows, float cutRows) {
+        return apart && homeRestCard != null ? homeRestRows : cutRows;
+    }
+
+    /**
      * Holds the reflection as it stands ({@link Sync#KEEP}): nothing is recorded or captured from
      * the row while it does not stand; a change the row asked for meanwhile is recorded once when
      * the hold lets go.

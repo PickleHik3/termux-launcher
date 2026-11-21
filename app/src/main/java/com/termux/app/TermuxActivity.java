@@ -6077,7 +6077,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Aimed as the card was cut: the row where it stood over the host then, and the whole
         // reflection moved by as much as the rows have moved over the host since, the same as
         // the card's top (peekCardCut), so the mirror stays under the icons and on the card.
-        float cutAt = card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx;
+        // Apart it is aimed by Home's rest whichever page is in front (PeekGlassReflection#aimCard):
+        // the same aim compares equal, so the Terminal's rest re-aims nothing.
+        boolean apart = mSideCards.hostLook() != null;
+        float cutAt = com.termux.app.dock.PeekGlassReflection.aimRowDy(apart, mHomeRestCard,
+            mHomeRestCardRowsPx, card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx);
+        card = com.termux.app.dock.PeekGlassReflection.aimCard(apart, mHomeRestCard, card);
         boolean diagWasHeld = reflection.held();
         if (diagWasHeld) diagPeekRefl("release-before", "heldLetGo cutFrom="
             + (card == mPeekCard ? "peekCard" : "homeRestCard"));
