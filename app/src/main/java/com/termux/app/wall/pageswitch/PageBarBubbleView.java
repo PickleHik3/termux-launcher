@@ -30,7 +30,7 @@ final class PageBarBubbleView extends ViewGroup {
 
     private static final float LABEL_TEXT_SP = 13f;
 
-    private final PageGlyphPainter mPainter;
+    private final PageBarGlyphPainter mPainter;
     private final PaneGlassBackdropView mGlass;
     private final Paint mFill = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final Paint mStroke = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -51,7 +51,7 @@ final class PageBarBubbleView extends ViewGroup {
     private float mCenterX;
     private boolean mGlassShown;
 
-    PageBarBubbleView(@NonNull Context context, @NonNull PageGlyphPainter painter) {
+    PageBarBubbleView(@NonNull Context context, @NonNull PageBarGlyphPainter painter) {
         super(context);
         mPainter = painter;
         mDensity = context.getResources().getDisplayMetrics().density;
@@ -163,8 +163,8 @@ final class PageBarBubbleView extends ViewGroup {
             canvas.drawCircle(mCenterX, discTop + mDiameter / 2f, mDiameter / 2f - 0.5f, mStroke);
         }
         float glyph = PageBarLayout.GLYPH_DP * mDensity * PageBarLayout.FOCUS_SCALE;
-        mPainter.draw(canvas, mKind, mNumber, discLeft + (mDiameter - glyph) / 2f,
-            discTop + (mDiameter - glyph) / 2f, glyph, mAccent);
+        mPainter.draw(canvas, mKind, mNumber, discLeft + mDiameter / 2f, discTop + mDiameter / 2f,
+            glyph, mAccent);
         float inset = PageBarLayout.SIDE_INSET_DP * mDensity;
         float room = Math.max(0f, getWidth() - 2f * inset);
         if (mEllipsizedFor != room) {

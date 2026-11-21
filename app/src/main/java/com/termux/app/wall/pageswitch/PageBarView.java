@@ -69,10 +69,10 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private static final long ENTER_MS = 120L;
     /** The current page's accent falls to this share of itself while sliding. */
     private static final float SLIDE_ACCENT_KEEP = 0.45f;
-    private static final int PLATE_BACK_ALPHA = 0x59;
-    private static final int PLATE_FRONT_ALPHA = 0x99;
 
-    private final PageGlyphPainter mPainter;
+    private final PageBarGlyphPainter mPainter;
+    private final double[] mLabA = new double[3];
+    private final double[] mLabB = new double[3];
     private final PaneGlassBackdropView mGlass;
     private final float mDensity;
     private final int mTouchSlop;
@@ -118,7 +118,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mPainter = new PageGlyphPainter(context);
+        mPainter = new PageBarGlyphPainter();
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(mDensity);
@@ -381,30 +381,21 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         List<PageBarFold.Slot> slots = fold.slots;
         int accent = (mInk.accent & 0x00FFFFFF)
             | (Math.round(255f * (1f - (1f - SLIDE_ACCENT_KEEP) * mEnter)) << 24);
+        float dim = PageBarInk.neutralAlpha(mInk.accent, mInk.ink, mLabA, mLabB);
+        int neutral = (mInk.ink & 0x00FFFFFF) | (Math.round(Color.alpha(mInk.ink) * dim) << 24);
         for (int i = 0; i < slots.size(); i++) {
             float scale = lifted ? mScales[i] : 1f;
             if (scale <= 0.01f) continue;
             float cx = lifted ? mCenters[i] : layout.restCenterX(i);
             float size = glyph * scale;
             PageBarFold.Slot slot = slots.get(i);
-            if (slot.folded()) drawPlates(canvas, cx, cy, size);
-            mPainter.draw(canvas, slot.kind, slot.number, cx - size / 2f, cy - size / 2f, size,
-                slot.current ? accent : mInk.ink);
+            int fill = slot.current ? accent : neutral;
+            if (slot.folded()) {
+                mPainter.drawStack(canvas, slot.kind, slot.number, cx, cy, size, fill, neutral);
+            } else {
+                mPainter.draw(canvas, slot.kind, slot.number, cx, cy, size, fill);
+            }
         }
-    }
-
-    /** The two offset back plates of a folded slot, as the mock draws them: 22 units is the glyph's size. */
-    private void drawPlates(Canvas canvas, float cx, float cy, float size) {
-        float unit = size / PageBarLayout.GLYPH_DP;
-        float w = 22f * unit;
-        float h = 19f * unit;
-        float r = 5f * unit;
-        mFill.setColor((mInk.ink & 0x00FFFFFF) | (PLATE_BACK_ALPHA << 24));
-        mRect.set(cx - 5f * unit, cy - 13.5f * unit, cx - 5f * unit + w, cy - 13.5f * unit + h);
-        canvas.drawRoundRect(mRect, r, r, mFill);
-        mFill.setColor((mInk.ink & 0x00FFFFFF) | (PLATE_FRONT_ALPHA << 24));
-        mRect.set(cx - 8f * unit, cy - 11.5f * unit, cx - 8f * unit + w, cy - 11.5f * unit + h);
-        canvas.drawRoundRect(mRect, r, r, mFill);
     }
 
     // ---- Touch ------------------------------------------------------------------------------

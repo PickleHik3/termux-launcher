@@ -138,6 +138,25 @@ public final class PageGlyphPainter {
 
     private final Path[][] mPaths = new Path[PATH_DATA.length][];
     private final Paint mStrokePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
+    private final float[] mFit = new float[2];
+
+    /**
+     * How a number of ink width {@code inkWidth} fits a slot {@code maxWidth} wide: {@code out[0]}
+     * the share of the text size to keep and {@code out[1]} the horizontal scale. One wider than
+     * the slot is condensed; three characters and more ({@code overflow}) only to
+     * {@link PageGlyphSlots#MIN_CONDENSE}, then shrunk evenly. Shared with {@link PageBarGlyphPainter}.
+     */
+    static void fit(float inkWidth, float maxWidth, boolean overflow, @NonNull float[] out) {
+        out[0] = 1f;
+        out[1] = 1f;
+        if (inkWidth <= maxWidth) return;
+        float scaleX = maxWidth / inkWidth;
+        if (overflow && scaleX < PageGlyphSlots.MIN_CONDENSE) {
+            out[0] = scaleX / PageGlyphSlots.MIN_CONDENSE;
+            scaleX = PageGlyphSlots.MIN_CONDENSE;
+        }
+        out[1] = scaleX;
+    }
 
     private void drawGlyph(@NonNull Canvas canvas, @NonNull PageKind kind, float left,
                            float top, float size, int color) {
@@ -175,16 +194,9 @@ public final class PageGlyphPainter {
         float maxWidth = slotW * unit;
         // The cap height is the slot's: the text size follows from the digits' measured ink.
         float textSize = slotH * unit / mCapHeight;
-        float inkWidth = mInkWidth[index] * textSize;
-        float scaleX = 1f;
-        if (inkWidth > maxWidth) {
-            scaleX = maxWidth / inkWidth;
-            // Three characters and more: condense only so far, then shrink evenly.
-            if (index == 0 && scaleX < PageGlyphSlots.MIN_CONDENSE) {
-                textSize *= scaleX / PageGlyphSlots.MIN_CONDENSE;
-                scaleX = PageGlyphSlots.MIN_CONDENSE;
-            }
-        }
+        fit(mInkWidth[index] * textSize, maxWidth, index == 0, mFit);
+        textSize *= mFit[0];
+        float scaleX = mFit[1];
         mText.setTextSize(textSize);
         mText.setTextScaleX(scaleX);
         mText.setColor(color);
