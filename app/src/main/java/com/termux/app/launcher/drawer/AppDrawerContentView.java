@@ -1092,6 +1092,8 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** The pager landed (or was jumped): settle what the pages show and, for a turn, report it. */
     private void onPagerSettled(@NonNull AppDrawerSection section, boolean changed) {
+        android.util.Log.d("DrawerSection", "settled " + section + " changed=" + changed
+            + " pagesActive=" + mPagesActive); // DIAG
         if (!mPagesActive) return;
         boolean differs = section != mSection;
         mSection = section;
@@ -2684,12 +2686,15 @@ public final class AppDrawerContentView extends FrameLayout
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 beginSectionTracking(ev);
+                android.util.Log.d("DrawerSection", "down claim=" + mSectionGesture.claim()); // DIAG
                 // A down on a settling pager catches it, before any child sees it.
                 return mSectionGesture.claim() == AppDrawerSectionGesturePolicy.Claim.SECTION;
             case MotionEvent.ACTION_MOVE:
                 return trackSectionMove(ev);
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
+                android.util.Log.d("DrawerSection", "intercept end action=" + ev.getActionMasked()
+                    + " stream=" + mSectionStream + " claim=" + mSectionGesture.claim()); // DIAG
                 if (!mSectionStream) endSectionTracking();
                 return false;
             default:
@@ -2753,6 +2758,8 @@ public final class AppDrawerContentView extends FrameLayout
         AppDrawerSectionGesturePolicy.Claim claim = mSectionGesture.evaluate(
             ev.getX() - mSectionDownX, ev.getY() - mSectionDownY, mTouchSlopPx,
             isPickupArmed());
+        android.util.Log.d("DrawerSection", "move dx=" + (ev.getX() - mSectionDownX) + " dy="
+            + (ev.getY() - mSectionDownY) + " claim=" + claim + " pickup=" + isPickupArmed()); // DIAG
         if (claim != AppDrawerSectionGesturePolicy.Claim.SECTION) return false;
         startSectionStream(ev);
         return true;
@@ -2814,6 +2821,8 @@ public final class AppDrawerContentView extends FrameLayout
                     tracker.computeCurrentVelocity(1000);
                     velocity = tracker.getXVelocity();
                 }
+                android.util.Log.d("DrawerSection", "up v=" + velocity + " pos="
+                    + mSectionPager.position() + " w=" + getWidth()); // DIAG
                 mSectionPager.release(rtl ? velocity : -velocity, getWidth(), mDensity);
                 endSectionStream();
                 break;
