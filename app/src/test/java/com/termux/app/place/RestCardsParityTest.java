@@ -410,7 +410,21 @@ public class RestCardsParityTest {
             for (int i = 0; i < termSolo.cards().size(); i++) {
                 RestCards.Card want = termSolo.cards().get(i);
                 RestCards.Card got = termRest.cards().get(i);
-                assertSameCard(at + " terminal", want, got);
+                if (want.id == CardId.DOCK && !up) {
+                    // The keys card is the keys band only (ADR 0032, the developer's 2026-11-21
+                    // decision): with the keyboard down the capsule alone stands the flush
+                    // padding's lower half taller, and the card does not. Everything but its
+                    // bottom edge (and the corners clamped to its height) is the capsule's.
+                    assertEquals(at + " terminal DOCK id", want.id, got.id);
+                    assertEquals(at + " terminal DOCK left", want.box.left, got.box.left, EPS);
+                    assertEquals(at + " terminal DOCK top", want.box.top, got.box.top, EPS);
+                    assertEquals(at + " terminal DOCK right", want.box.right, got.box.right, EPS);
+                    assertTrue(at + " terminal DOCK is never taller than the capsule",
+                        got.box.bottom <= want.box.bottom + EPS);
+                    assertEquals(at + " terminal DOCK pieces", want.pieces, got.pieces);
+                } else {
+                    assertSameCard(at + " terminal", want, got);
+                }
                 assertEquals(at, want.view == StackView.HOST ? StackView.KEYS_CARD : want.view,
                     got.view);
             }
@@ -431,17 +445,14 @@ public class RestCardsParityTest {
             assertNotNull(at, keys);
             assertEquals(at, StackView.KEYS_CARD, keys.view);
             int side = DockHostBounds.sideMarginPx(true, tv.dock.horizontalInsetPx);
-            // While the flush rule pads a lone Terminal (keyboard down) its card stands the
-            // padding's lower half taller than the band: today's host does, and the card is
-            // that host (a named finding, see the crossing test's KEYS_CARD entries).
-            float flushTaller = up ? 0f : tv.r.flushBottomInsetPx;
+            // One size in both keyboard states: the keys band only, never the flush padding's
+            // lower half the capsule wears with the keyboard down.
             assertEquals(at + " keys card height",
-                bandOf(Element.EXTRA_KEYS, tv.dock, termPass) + flushTaller,
-                keys.box.height(), EPS);
+                bandOf(Element.EXTRA_KEYS, tv.dock, termPass), keys.box.height(), EPS);
             assertEquals(at + " keys card left", side, keys.box.left, EPS);
             assertEquals(at + " keys card right", w - side, keys.box.right, EPS);
             Box drawn = drawnHost(tv, w);
-            assertEquals(at + " keys card bottom", drawn.bottom, keys.box.bottom, EPS);
+            assertEquals(at + " keys card top", drawn.top, keys.box.top, EPS);
             float radius = Math.min(cornersPx(termPass, f.density), keys.box.height() / 2f);
             assertEquals(at + " keys card corners", radius, keys.corners.topLeft, EPS);
             assertEquals(at + " keys card corners", radius, keys.corners.bottomRight, EPS);

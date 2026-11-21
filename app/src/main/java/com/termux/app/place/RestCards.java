@@ -465,7 +465,14 @@ public final class RestCards {
         final boolean unified = !r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
                 floating, rest.keyboardGlassShared);
-        final float hostBottom = unified || insets.dockFootPx > 0 ? containerBottom : columnTop;
+        final float hostBottomOfStack = unified || insets.dockFootPx > 0 ? containerBottom
+            : columnTop;
+        // The extra-keys card is the keys band only, in both keyboard states (ADR 0032): the
+        // flush padding the lone Terminal wears under its keys stays air, so the card never
+        // re-sizes when the keyboard comes or goes.
+        final float hostBottom = keysCard
+            ? Math.min(hostBottomOfStack, hostTop + bandPx(Element.EXTRA_KEYS, dock, pass))
+            : hostBottomOfStack;
         final boolean hostLaidOut = containerLaidOut && pass.toolbarShown && hostBottom > hostTop;
         if (hostLaidOut)
             mLaidOut[hostView.ordinal()] =

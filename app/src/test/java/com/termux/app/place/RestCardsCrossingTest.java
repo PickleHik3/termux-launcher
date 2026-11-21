@@ -202,30 +202,6 @@ public class RestCardsCrossingTest {
         "(b) KEYBOARD_COLUMN TOP FLOATING WALL_STRIP HOME->TERMINAL",
         // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
         "(b) KEYBOARD_COLUMN TOP FLOATING WALL_STRIP TERMINAL->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING GLASS_TRAY HOME->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING GLASS_TRAY HOME->TERMINAL",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING GLASS_TRAY TERMINAL->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING LENS_BEADS HOME->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING LENS_BEADS HOME->TERMINAL",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING LENS_BEADS TERMINAL->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING PEEK_GLASS HOME->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING WALL_STRIP HOME->HOME",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING WALL_STRIP HOME->TERMINAL",
-        // the flush rule pads a lone Terminal while its keyboard is down, so the extra-keys card is laid out taller by the padding's lower half than keyboard up. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=false/true [32.0,1375.0 - 1048.0,1488.0] -> [32.0,1405.0 - 1048.0,1503.0]
-        "(b) KEYS_CARD BOTTOM FLOATING WALL_STRIP TERMINAL->HOME",
         // The shape model parts a split keyboard into two halves 0.4 of the width each, so the extra-keys row's bottom over the parting is a rim, while the keyboard's one host across both halves joins it. Fixtures: split keyboard. e.g. split keyboard (GLASS_TRAY) up=true [0.0,1493.0 - 1080.0,1591.0] RIM | [0.0,1591.0 - 1080.0,2261.0] JOIN
         "(c) DOCK/KEYBOARD EDGES DOCKED GLASS_TRAY TERMINAL",
         // The shape model parts a split keyboard into two halves 0.4 of the width each, so the extra-keys row's bottom over the parting is a rim, while the keyboard's one host across both halves joins it. Fixtures: split keyboard. e.g. split keyboard (LENS_BEADS) up=true [0.0,1493.0 - 1080.0,1591.0] RIM | [0.0,1591.0 - 1080.0,2261.0] JOIN
@@ -401,7 +377,14 @@ public class RestCardsCrossingTest {
                 String where = f.name + " up=" + fromUp + "/" + toUp + " " + was + " -> " + now;
                 if (was.left != now.left || was.right != now.right)
                     found.add("(b) " + view + " SIDES" + tail, where);
-                if (was.bottom != now.bottom) found.add("(b) " + view + " BOTTOM" + tail, where);
+                if (view == StackView.KEYS_CARD) {
+                    // The keys card rides the Terminal's lane: the flush rule lifts the lane
+                    // (and the card with it) by the padding while the keyboard is down, a
+                    // translation a crossing does. What it may never do is change size (ADR 0032).
+                    if (was.height() != now.height())
+                        found.add("(b) " + view + " BOTTOM" + tail, where);
+                } else if (was.bottom != now.bottom)
+                    found.add("(b) " + view + " BOTTOM" + tail, where);
                 else if (was.top != now.top) found.add("(b) " + view + " TOP" + tail, where);
             }
         }
