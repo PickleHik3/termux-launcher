@@ -129,9 +129,9 @@ public class ExtraKeyActionPickerRowsTest {
             cellFor(search(focus), "tool:" + focus + ":up").mark);
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_FOCUS_LEFT),
             cellFor(search(focus), "tool:" + focus + ":left").mark);
-        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_RESIZE),
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_RESIZE_DOWN),
             cellFor(search(resize), "tool:" + resize + ":down").mark);
-        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_MOVE_EDGE),
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PANE_MOVE_EDGE_RIGHT),
             cellFor(search(edge), "tool:" + edge + ":right").mark);
         String next = LauncherToolRegistry.TOOL_TERMINAL_JUMP_NEXT_PROMPT;
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.PROMPT_NEXT),
