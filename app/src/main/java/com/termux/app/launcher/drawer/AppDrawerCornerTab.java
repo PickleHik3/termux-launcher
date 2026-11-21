@@ -67,12 +67,6 @@ final class AppDrawerCornerTab {
         /** The drawer card's corner radius, in px. */
         float cardCornerRadiusPx();
 
-        /** How far the chrome there keeps a top corner's tab below the card's top edge. */
-        int cornerClearTopPx();
-
-        /** How far the chrome there keeps a bottom corner's tab above the card's bottom edge. */
-        int cornerClearBottomPx();
-
         /**
          * The card's own glass for the tab, held while the tab is out; null where there is none.
          * Called again with {@code false} once the tab is away.
@@ -200,7 +194,7 @@ final class AppDrawerCornerTab {
     private void showAt(int corner) {
         PaneControlsView tab = ensureTab();
         applyButtons(tab);
-        applyPlacement(tab, corner);
+        applyPlacement(tab);
         dress();
         tab.show(corner);
     }
@@ -243,23 +237,13 @@ final class AppDrawerCornerTab {
     }
 
     /**
-     * The tab's room is the card less the chrome in its corner's way, so it comes out of the
-     * edge of that room; the card's corner arc is only the tab's where the tab is at the card's
-     * own edge.
+     * The tab is the card's own corner: the view is the card (the content is laid out at the
+     * card's rectangle), the tab fills it with no margin and the card's corner arc is its own. It
+     * is added after the search bar and the section switch, so it draws over them and takes the
+     * touches inside its bounds.
      */
-    private void applyPlacement(@NonNull PaneControlsView tab, int corner) {
-        boolean top = CornerZones.isTop(corner);
-        int clear = Math.max(0, top ? mHost.cornerClearTopPx() : mHost.cornerClearBottomPx());
-        android.widget.FrameLayout.LayoutParams params =
-            (android.widget.FrameLayout.LayoutParams) tab.getLayoutParams();
-        int topMargin = top ? clear : 0;
-        int bottomMargin = top ? 0 : clear;
-        if (params.topMargin != topMargin || params.bottomMargin != bottomMargin) {
-            params.topMargin = topMargin;
-            params.bottomMargin = bottomMargin;
-            tab.setLayoutParams(params);
-        }
-        tab.setPaneBorder(clear > 0 ? 0f : mHost.cardCornerRadiusPx(), 0f);
+    private void applyPlacement(@NonNull PaneControlsView tab) {
+        tab.setPaneBorder(mHost.cardCornerRadiusPx(), 0f);
     }
 
     /** Dresses the tab in the card's own glass, as the section switch is. */

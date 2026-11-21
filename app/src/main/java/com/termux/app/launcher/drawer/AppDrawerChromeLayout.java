@@ -81,22 +81,10 @@ public final class AppDrawerChromeLayout {
         public final int contentBottomPx;
         /** The inset the content keeps under its last row: the whole inset, or zero over the bar. */
         public final int innerBottomInsetPx;
-        /**
-         * How far a corner tab on a top corner stands below the card's top edge to stay clear of
-         * the chrome there: the content's own top (under the switch and a top bar), or zero when
-         * nothing stands in the top corners (the bar is at the bottom and there is no switch).
-         */
-        public final int cornerTabTopClearPx;
-        /**
-         * The same for a bottom corner: the content's bottom edge, just above a bottom bar and the
-         * inset it stands on, or zero with the bar at the top.
-         */
-        public final int cornerTabBottomClearPx;
 
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
-               int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
-               int cornerTabTopClearPx, int cornerTabBottomClearPx) {
+               int contentTopPx, int contentBottomPx, int innerBottomInsetPx) {
             this.sideMarginPx = sideMarginPx;
             this.switchTopPx = switchTopPx;
             this.switchHeightPx = switchHeightPx;
@@ -108,8 +96,6 @@ public final class AppDrawerChromeLayout {
             this.contentTopPx = contentTopPx;
             this.contentBottomPx = contentBottomPx;
             this.innerBottomInsetPx = innerBottomInsetPx;
-            this.cornerTabTopClearPx = cornerTabTopClearPx;
-            this.cornerTabBottomClearPx = cornerTabBottomClearPx;
         }
     }
 
@@ -131,11 +117,10 @@ public final class AppDrawerChromeLayout {
         if (in.searchAtBottom) {
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, in.bottomInsetPx + searchHeight + gap,
-                0, in.switchShown ? topChrome : 0, in.bottomInsetPx + searchHeight + gap);
+                0);
         }
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
-            searchWidth, 0, topChrome + searchHeight + gap, 0, in.bottomInsetPx,
-            topChrome + searchHeight + gap, 0);
+            searchWidth, 0, topChrome + searchHeight + gap, 0, in.bottomInsetPx);
     }
 
     /** The bar's width for {@code contentWidthPx} between the side margins. */

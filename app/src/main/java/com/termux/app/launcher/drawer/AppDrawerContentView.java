@@ -259,14 +259,6 @@ public final class AppDrawerContentView extends FrameLayout
                 return mCardCornerRadiusPx;
             }
 
-            @Override public int cornerClearTopPx() {
-                return resolveChrome().cornerTabTopClearPx;
-            }
-
-            @Override public int cornerClearBottomPx() {
-                return resolveChrome().cornerTabBottomClearPx;
-            }
-
             @Nullable @Override
             public com.termux.app.chrome.DrawerCardGlassStyle tabGlass(boolean wanted) {
                 return holdTabGlass(wanted);
