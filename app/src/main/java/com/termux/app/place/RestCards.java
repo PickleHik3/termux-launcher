@@ -472,15 +472,20 @@ public final class RestCards {
         // The glass host: pinned to the container's top and above the keyboard's column, or to
         // the container's bottom while it is one surface with the Docked keyboard or owns the foot.
         final int sideMargin = DockHostBounds.sideMarginPx(floats, dock.horizontalInsetPx);
-        final float hostTop = containerTop + DockHostBounds.topInsetPx(
-            rest.statusOnDockPlank ? 0 : r.statusBandPx, dock.slabTopInsetPx, slack);
+        // The extra-keys card stands on its row, which stands on the keyboard's column under the
+        // bands nearer the edge: the keys stand where they stood under the one card, below the
+        // flush padding's air the stack keeps above its rows.
+        final float hostTop = keysCard
+            ? keysRowTopPx(layout, dock, pass, columnTop)
+            : containerTop + DockHostBounds.topInsetPx(
+                rest.statusOnDockPlank ? 0 : r.statusBandPx, dock.slabTopInsetPx, slack);
         final boolean unified = !r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
                 floating, rest.keyboardGlassShared);
         final float hostBottomOfStack = unified || insets.dockFootPx > 0 ? containerBottom
             : columnTop;
         // The extra-keys card is the keys band only, in both keyboard states (ADR 0032): the
-        // flush padding the lone Terminal wears under its keys stays air, so the card never
+        // flush padding the lone Terminal wears around its keys stays air, so the card never
         // re-sizes when the keyboard comes or goes.
         final float hostBottom = keysCard
             ? Math.min(hostBottomOfStack, hostTop + bandPx(Element.EXTRA_KEYS, dock, pass))
@@ -572,6 +577,20 @@ public final class RestCards {
                 liftLaidOut(StackView.UNDER, -mTerminalLiftPx);
             }
         }
+    }
+
+    /**
+     * The extra-keys row's top: on the column's top, above the bands over the keyboard that stand
+     * nearer the edge (outermost first, as {@link EdgeStackPolicy#overKeyboard} lists them).
+     */
+    private static float keysRowTopPx(@NonNull PlaceLayout layout, @NonNull DockLayout dock,
+                                      @NonNull StackLayout.Input pass, float columnTop) {
+        float below = 0f;
+        for (Element e : EdgeStackPolicy.overKeyboard(layout)) {
+            if (e == Element.EXTRA_KEYS) break;
+            below += bandPx(e, dock, pass);
+        }
+        return columnTop - below - bandPx(Element.EXTRA_KEYS, dock, pass);
     }
 
     private void liftLaidOut(@NonNull StackView view, int px) {

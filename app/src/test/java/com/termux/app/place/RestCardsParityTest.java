@@ -290,6 +290,17 @@ public class RestCardsParityTest {
         return v;
     }
 
+    /** The extra-keys row's top as drawn: on the column's top, the bands nearer the edge under it. */
+    private static float drawnKeysRowTop(Views v, PlaceLayout layout, StackLayout.Input pass) {
+        float below = 0f;
+        for (Element e : EdgeStackPolicy.overKeyboard(layout)) {
+            if (e == Element.EXTRA_KEYS) break;
+            below += bandOf(e, v.dock, pass);
+        }
+        return v.containerTop + v.frame.ty[StackScene.V_CONTAINER] + v.frame.ty[StackScene.V_ROWS]
+            + v.columnTop - below - bandOf(Element.EXTRA_KEYS, v.dock, pass);
+    }
+
     /** The host as drawn on the screen: laid out, moved by the transforms, cut by the clips. */
     private static Box drawnHost(Views v, int widthPx) {
         float shift = v.containerTop + v.frame.ty[StackScene.V_CONTAINER];
@@ -413,11 +424,13 @@ public class RestCardsParityTest {
                 if (want.id == CardId.DOCK && !up) {
                     // The keys card is the keys band only (ADR 0032, the developer's 2026-11-21
                     // decision): with the keyboard down the capsule alone stands the flush
-                    // padding's lower half taller, and the card does not. Everything but its
-                    // bottom edge (and the corners clamped to its height) is the capsule's.
+                    // padding taller, and the card does not. The keys stand where they stood in
+                    // the capsule, under the flush padding's upper part, so the card's top is the
+                    // capsule's that much lower; its sides are the capsule's.
                     assertEquals(at + " terminal DOCK id", want.id, got.id);
                     assertEquals(at + " terminal DOCK left", want.box.left, got.box.left, EPS);
-                    assertEquals(at + " terminal DOCK top", want.box.top, got.box.top, EPS);
+                    assertTrue(at + " terminal DOCK top within the capsule",
+                        got.box.top >= want.box.top - EPS);
                     assertEquals(at + " terminal DOCK right", want.box.right, got.box.right, EPS);
                     assertTrue(at + " terminal DOCK is never taller than the capsule",
                         got.box.bottom <= want.box.bottom + EPS);
@@ -451,8 +464,9 @@ public class RestCardsParityTest {
                 bandOf(Element.EXTRA_KEYS, tv.dock, termPass), keys.box.height(), EPS);
             assertEquals(at + " keys card left", side, keys.box.left, EPS);
             assertEquals(at + " keys card right", w - side, keys.box.right, EPS);
-            Box drawn = drawnHost(tv, w);
-            assertEquals(at + " keys card top", drawn.top, keys.box.top, EPS);
+            // Where the keys row is drawn: on the column, above the bands nearer the edge.
+            assertEquals(at + " keys card top", drawnKeysRowTop(tv, f.layoutOf(PageRef.TERMINAL),
+                termPass), keys.box.top, EPS);
             float radius = Math.min(cornersPx(termPass, f.density), keys.box.height() / 2f);
             assertEquals(at + " keys card corners", radius, keys.corners.topLeft, EPS);
             assertEquals(at + " keys card corners", radius, keys.corners.bottomRight, EPS);

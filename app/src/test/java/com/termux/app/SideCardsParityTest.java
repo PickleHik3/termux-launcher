@@ -430,6 +430,32 @@ public class SideCardsParityTest {
             answer.homeSideDropPx(), answer.terminalSideLiftPx(), terminalShare);
     }
 
+    /**
+     * The keys card is laid out where its row is: on the keyboard's column as it is laid out, in
+     * both of the Terminal's keyboard states, so the card's laid-out rect is the answer's and its
+     * keys are drawn where they stood under the one card (the lift above, the flush padding's
+     * upper part above that).
+     */
+    @Test public void theKeysCardIsLaidOutOnItsRowInBothKeyboardStates() {
+        int cases = 0;
+        int lifted = 0;
+        for (Fixture f : LayoutFixtures.cardFixtures()) {
+            for (boolean up : new boolean[] {false, true}) {
+                RestCards answer = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false, true));
+                if (!answer.apart()) continue;
+                String label = f.name + " terminal kb=" + up;
+                com.termux.app.place.ChromeShape.Box keys = answer.laidOut(RestCards.StackView.KEYS_CARD);
+                com.termux.app.place.ChromeShape.Box column = answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
+                if (keys == null || column == null) continue;
+                assertEquals(label, column.top, keys.bottom, 0f);
+                if (answer.terminalSideLiftPx() > 0) lifted++;
+                cases++;
+            }
+        }
+        assertTrue("some keys cards", cases > 0);
+        assertTrue("some with the keyboard down's lift", lifted > 0);
+    }
+
     /** What the controller lays the Terminal's extra-keys card out at. */
     private static String keysLayoutOf(@NonNull SideCardsController controller,
                                        @NonNull com.termux.app.dock.KeysCardLayout card) {
