@@ -48,7 +48,8 @@ one kind share one stacked glyph with a count; slide over it to pick one. The sm
 the pill show the dock's pages when it has more than one.
 
 The optional page switcher key on the extra-keys bar pops the same bar up above the keys for one
-use. Settings › Home › Page indicator turns the bar off.
+use. To hide the bar, turn off Page bar in the Home card's Layout list in the Appearance editor;
+Home's grid then takes its room. The bar also steps aside while a keyboard is up on Home.
 
 ## App icons on Home
 
