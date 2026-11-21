@@ -12,6 +12,10 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 
 import com.google.android.material.color.MaterialColors;
+import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.OnGlass;
+import com.termux.app.chrome.WallpaperInk;
+import com.termux.app.launcher.widget.HomeLabelInk;
 
 /**
  * A border swipe's grabber: a short pill centred on the current page's bottom border for the
@@ -73,6 +77,14 @@ public final class BorderGrabber {
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mRect = new RectF();
     private int mColor;
+    /**
+     * A Home grabber's colour at rest, alpha included: {@link #mColor} at
+     * {@link #HOME_REST_ALPHA} until a ground is known, then made legible on it
+     * ({@link #homeColorOn}). Drawn brighter under a finger in proportion.
+     */
+    private int mHomeColor;
+    /** The wallpaper the Home grabber stands on; transparent before it is read. */
+    private int mHomeGround = android.graphics.Color.TRANSPARENT;
     /** 0 at rest, 1 under a finger. */
     private float mEmphasis;
     private boolean mPressed;
@@ -98,7 +110,52 @@ public final class BorderGrabber {
         int color = accent(mHost.getContext());
         if (color == mColor) return;
         mColor = color;
+        mHomeColor = homeColorOn(mHomeGround, mColor);
         mHost.invalidate();
+    }
+
+    /**
+     * The wallpaper the Home grabber stands on, read on Home's dress pass; transparent keeps the
+     * accent as it was drawn before anything was read.
+     */
+    void setHomeGround(int ground) {
+        if (ground == mHomeGround) return;
+        mHomeGround = ground;
+        int color = homeColorOn(ground, mColor);
+        if (color == mHomeColor) return;
+        mHomeColor = color;
+        mHost.invalidate();
+    }
+
+    /**
+     * The Home grabber at rest on {@code ground}: the accent toned on the ground's side (the side
+     * of the bare-text ink Home's labels take there) and raised from {@link #HOME_REST_ALPHA} only
+     * as far as the contract's graphics tier ({@link OnGlass#TARGET_LARGE_TEXT}) needs. With no
+     * ground, the accent at the rest alpha.
+     */
+    static int homeColorOn(int ground, int accent) {
+        int rest = Math.round(255f * HOME_REST_ALPHA * (android.graphics.Color.alpha(accent) / 255f));
+        if (android.graphics.Color.alpha(ground) == 0) return OnGlass.withAlpha(accent, rest);
+        int base = OnGlass.opaque(ground);
+        boolean pale = GlassInk.isPaleSide(WallpaperInk.bareInk(base, HomeLabelInk.DARK_INK,
+            HomeLabelInk.PALE_INK), base);
+        return GlassInk.legibleOn(base, accent, pale, OnGlass.TARGET_LARGE_TEXT, rest);
+    }
+
+    /**
+     * The colour the Home grabber is painted in at {@code emphasis} and {@code visibility},
+     * alpha included: the rest colour carries the rest alpha (raised where the ground needs it),
+     * and a finger brightens it in the same proportion {@link #homeAlpha} brightens the rest.
+     */
+    int homePaintColor(float emphasis, float visibility) {
+        float alpha = homeAlpha(emphasis) / HOME_REST_ALPHA * Math.min(1f, visibility);
+        return OnGlass.withAlpha(mHomeColor,
+            Math.min(255, Math.round(alpha * android.graphics.Color.alpha(mHomeColor))));
+    }
+
+    /** The Home grabber's colour at rest, alpha included, for tests. */
+    int homeColor() {
+        return mHomeColor;
     }
 
     /**
@@ -221,9 +278,7 @@ public final class BorderGrabber {
         float density = mHost.getResources().getDisplayMetrics().density;
         homeBounds(mRect, restLeft + shiftX, restTop, restRight + shiftX, restBottom, mEmphasis,
             mTrackPx, density);
-        float alpha = homeAlpha(mEmphasis) * Math.min(1f, visibility);
-        mPaint.setColor(mColor);
-        mPaint.setAlpha(Math.round(255f * alpha * (android.graphics.Color.alpha(mColor) / 255f)));
+        mPaint.setColor(homePaintColor(mEmphasis, visibility));
         float radius = mRect.height() / 2f;
         canvas.drawRoundRect(mRect, radius, radius, mPaint);
     }

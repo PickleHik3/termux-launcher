@@ -2712,6 +2712,31 @@ public final class PaneWallLayout extends ViewGroup
             mReducedMotion);
     }
 
+    /** Where Home's grabber was last measured on the wallpaper, in screen space; reused. */
+    private final android.graphics.Rect mHomeGroundRect = new android.graphics.Rect();
+    private final int[] mHomeGroundRoot = new int[2];
+
+    /**
+     * Reads the wallpaper under Home's grabber at rest through {@code source} (the page's Look,
+     * the shared measurement unless Adaptive legibility is on) and has the grabber made legible
+     * on it ({@link BorderGrabber#setHomeGround}). Home's dress pass, never per frame.
+     */
+    public void refreshHomeGrabberGround(
+            @NonNull com.termux.app.chrome.WidgetInkSource source) {
+        View home = mPageViews.get(PageKind.HOME);
+        if (home == null || !loadHomeGrabber(home)) return;
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, mWindowLocation,
+            mHomeGroundRoot);
+        mHomeGroundRect.set(Math.round(mHomePill[0]) + mWindowLocation[0],
+            Math.round(mHomePill[1]) + mWindowLocation[1],
+            Math.round(mHomePill[2]) + mWindowLocation[0],
+            Math.round(mHomePill[3]) + mWindowLocation[1]);
+        if (mHomeGroundRect.isEmpty()) return;
+        int ground = source.wallpaperSample(mHomeGroundRect);
+        if (android.graphics.Color.alpha(ground) == 0) ground = source.wallpaperFallback();
+        mGrabber.setHomeGround(ground);
+    }
+
     /** Re-read the grabbers' and the glow's accent, after a theme or scheme change. */
     public void refreshGrabberColor() {
         mGrabber.refreshColor();

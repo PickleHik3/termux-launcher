@@ -843,6 +843,16 @@ public final class WidgetPaneFrame extends PaneContentFrame
         // Look, so a new wallpaper, dim or mode reaches them on the pass that reaches the widgets.
         if (mGrid instanceof com.termux.app.launcher.widget.WidgetPaneView)
             ((com.termux.app.launcher.widget.WidgetPaneView) mGrid).refreshWallpaperInk();
+        // So does Home's grabber, which stands over the dock where the dock shows no dashes.
+        if (look instanceof com.termux.app.chrome.WidgetInkSource) {
+            for (android.view.ViewParent p = getParent(); p != null; p = p.getParent()) {
+                if (p instanceof PaneWallLayout) {
+                    ((PaneWallLayout) p).refreshHomeGrabberGround(
+                        (com.termux.app.chrome.WidgetInkSource) look);
+                    break;
+                }
+            }
+        }
     }
 
     /**
