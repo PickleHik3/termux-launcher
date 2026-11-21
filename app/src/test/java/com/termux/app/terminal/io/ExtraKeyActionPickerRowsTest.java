@@ -44,6 +44,7 @@ public class ExtraKeyActionPickerRowsTest {
     private static final String RENDER_DIR =
         "/home/amalvajdan/.cache/window-restructure/rounds/key-picker/";
     private static final int ACTION_TYPE = 3;
+    private String query = "";
 
     @org.junit.Before
     public void registerTheBarsIcons() {
@@ -126,21 +127,46 @@ public class ExtraKeyActionPickerRowsTest {
         int slot = Math.round(ExtraKeyActionPicker.MARK_SLOT_DP
             * context().getResources().getDisplayMetrics().density);
         int rows = 0;
-        boolean sawText = false;
         for (ExtraKeyActionPicker.Cell cell : picker.buildCells()) {
             if (cell.mark == null) continue;
             rows++;
             LinearLayout row = (LinearLayout) bind(picker, cell);
             assertEquals(slot, row.getChildAt(0).getLayoutParams().width);
-            String tool = cell.choice.id.replace("tool:", "").split(":")[0];
-            if (ExtraKeyActionLabels.defaultCapGlyph(tool) == null
-                && !cell.choice.id.startsWith("tool:wall.go")) {
-                sawText = true;
-                assertEquals(cell.mark, ((TextView) row.getChildAt(0)).getText().toString());
-            }
         }
         assertTrue(rows > 10);
-        assertTrue("some action has a text cap", sawText);
+    }
+
+    private static TextView markOf(View row) {
+        return (TextView) ((ViewGroup) row).getChildAt(0);
+    }
+
+    @Test
+    public void aShortTextCapShowsItsTextAndALongOneTheGenericMark() {
+        ExtraKeyActionPicker picker = new ExtraKeyActionPicker(context());
+        View shortCap = bind(picker, new ExtraKeyActionPicker.Cell(
+            ACTION_TYPE, "Escape", null, null, "Esc"));
+        assertEquals("Esc", markOf(shortCap).getText().toString());
+        View longCap = bind(picker, new ExtraKeyActionPicker.Cell(
+            ACTION_TYPE, "Toggle scratchpad", null, null, "Toggle scratchpad"));
+        CharSequence mark = markOf(longCap).getText();
+        assertTrue(mark instanceof android.text.Spanned);
+        assertEquals("Toggle scratchpad", longCap.getContentDescription().toString());
+        // A row with no cap of its own wears the same generic mark.
+        View typed = bind(picker, new ExtraKeyActionPicker.Cell(
+            ACTION_TYPE, "Send zz", null, null, null));
+        assertEquals(mark.toString(), markOf(typed).getText().toString());
+        assertTrue(markOf(typed).getText() instanceof android.text.Spanned);
+    }
+
+    @Test
+    public void typedSearchRowsLeadWithTheSameSlot() {
+        ExtraKeyActionPicker picker = new ExtraKeyActionPicker(context());
+        ExtraKeyActionPicker.Cell first = search("zzqq").get(0);
+        assertEquals(ACTION_TYPE, first.type);
+        LinearLayout row = (LinearLayout) bind(picker, first);
+        assertEquals(Math.round(ExtraKeyActionPicker.MARK_SLOT_DP
+            * context().getResources().getDisplayMetrics().density),
+            row.getChildAt(0).getLayoutParams().width);
     }
 
     @Test
@@ -152,6 +178,9 @@ public class ExtraKeyActionPickerRowsTest {
                 RuntimeEnvironment.setFontScale(Float.parseFloat(scale));
                 shoot("actions", scale, night, ExtraKeyActionPicker.Category.ACTIONS);
                 shoot("common", scale, night, ExtraKeyActionPicker.Category.COMMON);
+                query = "pane";
+                shoot("actions-search", scale, night, ExtraKeyActionPicker.Category.ACTIONS);
+                query = "";
             }
         }
     }
@@ -161,6 +190,7 @@ public class ExtraKeyActionPickerRowsTest {
         Context context = context();
         ExtraKeyActionPicker picker = new ExtraKeyActionPicker(context);
         picker.category = category;
+        picker.query = query;
         ExtraKeyActionPicker.GridAdapter adapter = picker.new GridAdapter();
         adapter.rebuild();
         RecyclerView grid = new RecyclerView(context);

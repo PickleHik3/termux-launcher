@@ -30,6 +30,7 @@ import com.google.android.material.textfield.TextInputLayout;
 import com.termux.R;
 import com.termux.app.material.M3;
 import com.termux.launcherctl.LauncherToolRegistry;
+import com.termux.shared.termux.extrakeys.ExtraKeyIcons;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import org.json.JSONArray;
@@ -385,16 +386,16 @@ public final class ExtraKeyActionPicker {
             String typed = query.trim();
             ExtraKeyChord.Parsed chord = ExtraKeyChord.parse(typed);
             if (chord != null) {
-                cells.add(new Cell(CELL_WIDE,
+                cells.add(new Cell(CELL_ACTION,
                     context.getString(R.string.settings_extra_keys_action_send_chord, chord.display), null,
                     new Choice("macro:" + chord.macro, chord.display,
                         new ExtraKeysLayoutModel.Key(chord.macro, true, chord.display, null))));
             }
-            cells.add(new Cell(CELL_WIDE,
+            cells.add(new Cell(CELL_ACTION,
                 context.getString(R.string.settings_extra_keys_action_send_text, typed), null,
                 new Choice("text:" + typed, typed, new ExtraKeysLayoutModel.Key(typed))));
             if (typed.contains(" ")) {
-                cells.add(new Cell(CELL_WIDE, typed,
+                cells.add(new Cell(CELL_ACTION, typed,
                     context.getString(R.string.settings_extra_keys_action_macro_summary),
                     new Choice("macro:" + ExtraKeyChord.normaliseMacro(typed), typed,
                         new ExtraKeysLayoutModel.Key(ExtraKeyChord.normaliseMacro(typed), true, null, null))));
@@ -450,13 +451,16 @@ public final class ExtraKeyActionPicker {
                 if (choices != null) {
                     // A fixed set of values is a row each - "Pane layout · grid" - so binding one
                     // is picking rather than typing a value the user would have to already know.
+                    String ownIcon = ExtraKeyActionLabels.defaultCapGlyph(tool.name);
                     for (String choice : choices) {
                         String choiceLabel = label + " · " + choice;
                         ExtraKeysLayoutModel.Key key =
                             toolKey(tool.name, required, choice, choiceLabel, true);
                         cells.add(new Cell(CELL_ACTION, choiceLabel, null,
                             new Choice("tool:" + tool.name + ":" + choice, choiceLabel, key),
-                            key.display));
+                            // The row wears its action's own icon even where the key's cap
+                            // is the value's text, so a list of choices stays in one column.
+                            ownIcon != null ? ownIcon : key.display));
                     }
                 } else if (required == null) {
                     ExtraKeysLayoutModel.Key key = toolKey(tool.name, null, null, label, false);
@@ -538,13 +542,15 @@ public final class ExtraKeyActionPicker {
             mark.setTextColor(colorText);
             mark.setGravity(Gravity.CENTER);
             mark.setMaxLines(1);
+            // dp, not sp: the slot is a fixed width, so a cap in it must not grow with the font.
+            mark.setTextSize(android.util.TypedValue.COMPLEX_UNIT_DIP, 14);
             mark.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             row.addView(mark, new LinearLayout.LayoutParams(pad(MARK_SLOT_DP),
                 ViewGroup.LayoutParams.WRAP_CONTENT));
             TextView name = new TextView(context);
             M3.textAppearance(name, com.google.android.material.R.attr.textAppearanceLabelLarge);
             name.setTextColor(colorText);
-            name.setSingleLine(true);
+            name.setMaxLines(2);
             name.setEllipsize(TextUtils.TruncateAt.END);
             name.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0,
@@ -577,16 +583,18 @@ public final class ExtraKeyActionPicker {
             boolean isSelected = selected != null && cell.choice != null
                 && selected.id.equals(cell.choice.id);
             // The mark goes through the span the bar's cap uses, so an icon is the drawable the
-            // bar will draw and a text cap is its text; the name is what a screen reader says.
+            // bar will draw. A text cap shows only when all of it fits the slot; anything else,
+            // and a row with no cap of its own, wears the one generic mark, never an ellipsis.
             TextView mark = (TextView) row.getChildAt(0);
-            CharSequence cap = NerdFontSpans.span(context, cell.mark == null ? "" : cell.mark);
-            // A text cap ellipsizes inside its slot; an icon never needs to, and an ellipsizing
-            // layout does not draw a drawable span.
-            TextUtils.TruncateAt ellipsize =
-                cap instanceof android.text.Spanned ? null : TextUtils.TruncateAt.END;
-            if (mark.getEllipsize() != ellipsize) mark.setEllipsize(ellipsize);
+            CharSequence cap = cell.mark == null ? "" : NerdFontSpans.span(context, cell.mark);
+            boolean icon = cap instanceof android.text.Spanned;
+            if (!icon && (cap.length() == 0
+                || mark.getPaint().measureText(cap.toString()) > pad(MARK_SLOT_DP))) {
+                cap = NerdFontSpans.span(context, ExtraKeyIcons.string(ExtraKeyIcons.COMMAND));
+            }
             mark.setText(cap);
-            ((TextView) row.getChildAt(1)).setText(cell.label);
+            ((TextView) row.getChildAt(1)).setText(
+                cell.summary == null ? cell.label : cell.label + "\n" + cell.summary);
             row.setContentDescription(cell.label);
             styleCell(row, cell, isSelected);
         }
