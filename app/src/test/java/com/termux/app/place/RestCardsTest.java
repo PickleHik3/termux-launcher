@@ -278,4 +278,63 @@ public class RestCardsTest {
                     pass.extraKeysRowEnabled) : 0, rows);
         }
     }
+
+    /**
+     * Home's keyboard raised on demand draws over the dock (#309). While the cards stand apart the
+     * host is laid out from this answer, so its rect, its drawn cards and its dress are Home's
+     * keyboard-down rest's at both keyboard states, and with the keyboard up the keyboard's card
+     * covers its glass. Not apart the host is laid out by the stack's own rules: its top never
+     * moves, and only where the dock owns the foot under the gesture pill (a kept band) does its
+     * bottom change hands with the keyboard.
+     */
+    @Test public void homesHostUnderTheCoverIsOneRectForBothKeyboardStates() {
+        int apart = 0;
+        int together = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures())
+            for (DockStyle design : DockStyle.CHOICES)
+                for (boolean floating : new boolean[] {false, true}) {
+            LayoutFixtures.Fixture f = base.withHomeDesign(design);
+            String at = f.name + (floating ? " FLOATING" : " DOCKED");
+            RestCards down = RestCards.of(f.cardsRest(PageRef.HOME, false, false, floating));
+            RestCards up = RestCards.of(f.cardsRest(PageRef.HOME, true, false, floating));
+            ChromeShape.Box was = down.laidOut(StackView.HOST);
+            ChromeShape.Box now = up.laidOut(StackView.HOST);
+            if (was == null || now == null) {
+                assertEquals(at, was == null, now == null);
+                continue;
+            }
+            assertEquals(at, down.apart(), up.apart());
+            if (up.apart()) {
+                apart++;
+                assertEquals(at + " laid out", was.toString(), now.toString());
+                assertEquals(at, hostCards(down), hostCards(up));
+                RestCards.HostLook look = up.homeHostLook();
+                assertNotNull(at, look);
+                assertEquals(at + " dressed as the keyboard-down rest", false, look.keyboardUp);
+                assertEquals(at, down.homeHostLook().foot, look.foot);
+                assertEquals(at, String.valueOf(down.homeHostLook().peekCut),
+                    String.valueOf(look.peekCut));
+                assertEquals(at, String.valueOf(down.homeHostRect()),
+                    String.valueOf(up.homeHostRect()));
+                if (up.card(CardId.KEYBOARD) != null)
+                    for (RestCards.Card card : up.cards())
+                        if (card.view == StackView.HOST && card.id != CardId.FOOT)
+                            assertTrue(at + " covered " + card, up.covered().contains(card));
+            } else {
+                together++;
+                assertEquals(at + " top", was.top, now.top, 0f);
+                if (was.bottom != now.bottom)
+                    assertTrue(at + " only the foot changes hands", f.keptBandPx > 0);
+            }
+        }
+        assertTrue("some fixtures stand apart", apart > 0);
+        assertTrue("and some do not", together > 0);
+    }
+
+    private static String hostCards(RestCards cards) {
+        StringBuilder out = new StringBuilder();
+        for (RestCards.Card card : cards.cards())
+            if (card.view == StackView.HOST) out.append(card).append(' ');
+        return out.toString();
+    }
 }

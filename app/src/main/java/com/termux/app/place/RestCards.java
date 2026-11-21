@@ -183,7 +183,10 @@ public final class RestCards {
         public final boolean floats;
         /** The dock's glass owns the foot under the gesture pill ({@link DockSpec#footExists}). */
         public final boolean foot;
-        /** The keyboard state the rest was answered with. */
+        /**
+         * The keyboard state the host is dressed for: the rest's, except under Home's keyboard
+         * cover while the host is laid out from the answer, where it is the keyboard-down rest's.
+         */
         public final boolean keyboardUp;
         /** The Peek card cut in the host's coordinates, as the pass cuts it; null off Peek. */
         @Nullable public final PeekGlassGeometry.Card peekCut;
@@ -253,6 +256,8 @@ public final class RestCards {
     private float mRowsDropPx;
     /** The same at Home's rest, whichever page is in front (adopted like the host's look). */
     private float mHomeRowsDropPx;
+    /** How far below its layout the glass host is drawn at this rest. */
+    private float mHostShiftPx;
     /** How the host dresses its card at this rest (the Home half's, once adopted); null for the Terminal's. */
     @Nullable private HostLook mHostLook;
 
@@ -278,8 +283,10 @@ public final class RestCards {
         final int homeMargin = frontHome ? mine : theirs;
         final int terminalMargin = frontHome ? theirs : mine;
         final int drop = SideCards.homeSideDropPx(homeMargin, terminalMargin, true);
-        RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome);
-        RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome);
+        // Home's side is laid out from this answer (the host's pin), so under its keyboard's cover
+        // its host keeps its keyboard-down rect at both keyboard states.
+        RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome, frontHome);
+        RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome, !frontHome);
         answer.adopt(otherCards, frontHome);
         if (!frontHome) {
             answer.mHostLook = otherCards.mHostLook;
@@ -437,6 +444,16 @@ public final class RestCards {
      * @param keysCard   the dock's card is the Terminal's extra-keys card ({@link StackView#KEYS_CARD})
      */
     private RestCards(@NonNull Rest rest, int homeDropPx, boolean keysCard) {
+        this(rest, homeDropPx, keysCard, false);
+    }
+
+    /**
+     * @param hostHeld the glass host is laid out from this answer (Home's card while the cards
+     *                 stand apart): under Home's keyboard cover ({@link HomeKeyboardCover}) it
+     *                 stands at its keyboard-down rest, laid out and dressed the same whether the
+     *                 keyboard is up or down, drawn the rows' drop lower and covered by the keyboard
+     */
+    private RestCards(@NonNull Rest rest, int homeDropPx, boolean keysCard, boolean hostHeld) {
         final StackLayout.Input pass = rest.pass;
         final StackView hostView = keysCard ? StackView.KEYS_CARD : StackView.HOST;
         mPage = rest.page;
@@ -510,6 +527,10 @@ public final class RestCards {
         final float rowsDrop = HomeKeyboardCover.rowsDropPx(liftsRows, keyboardLaid, shift);
         final float hostShift = shift + rowsDrop;
         mRowsDropPx = rowsDrop;
+        mHostShiftPx = hostShift;
+        // Home's card under its keyboard's cover: the keyboard-down rest's host, whole (#309).
+        final RestCards held = hostHeld && !keysCard && !liftsRows && up
+            ? new RestCards(keyboardDownOf(rest), 0, false, false) : null;
         if (containerLaidOut && keyboardLaid + keyboardFootPx + underBlock > 0)
             mLaidOut[StackView.KEYBOARD_COLUMN.ordinal()] = new Box(0f, columnTop, w, columnBottom);
 
@@ -534,8 +555,11 @@ public final class RestCards {
         final float hostBottom = keysCard
             ? Math.min(hostBottomOfStack, hostTop + bandPx(Element.EXTRA_KEYS, dock, pass))
             : hostBottomOfStack;
-        final boolean hostLaidOut = containerLaidOut && pass.toolbarShown && hostBottom > hostTop;
-        if (hostLaidOut)
+        final boolean hostLaidOut = held != null ? held.mLaidOut[hostView.ordinal()] != null
+            : containerLaidOut && pass.toolbarShown && hostBottom > hostTop;
+        if (held != null)
+            mLaidOut[hostView.ordinal()] = held.mLaidOut[hostView.ordinal()];
+        else if (hostLaidOut)
             mLaidOut[hostView.ordinal()] =
                 new Box(sideMargin, hostTop, w - sideMargin, hostBottom);
 
@@ -565,7 +589,15 @@ public final class RestCards {
         // DOCK or PEEK: the host's glass.
         PeekGlassGeometry.Card peekCut = null;
         Box hostDrawn = null;
-        if (hostLaidOut) {
+        if (held != null) {
+            // Drawn where the rows are: this rest's drop below the one rect, which the keyboard's
+            // card draws over (listed in covered() below).
+            float dy = hostShift - held.mHostShiftPx;
+            for (Card card : held.mCards) if (card.view == hostView) mCards.add(movedBy(card, dy));
+            HostLook look = held.mHostLook;
+            if (look != null) mHostLook = dy == 0f ? look : new HostLook(look.design, look.peek,
+                look.floats, look.foot, look.keyboardUp, look.peekCut, movedBy(look.drawn, dy));
+        } else if (hostLaidOut) {
             hostDrawn = new Box(sideMargin, hostTop + hostShift, w - sideMargin,
                 Math.min(hostBottom + hostShift, containerBottom));
             float drawnBottom = Math.min(hostBottom + hostShift, containerBottom);
@@ -584,7 +616,7 @@ public final class RestCards {
             }
             if (hostFoot) addFoot(hostView, sideMargin, footTop, w - sideMargin, h);
         }
-        if (!keysCard)
+        if (!keysCard && held == null)
             mHostLook = new HostLook(half.design, peekStands, floats, dockFoot, up, peekCut,
                 hostDrawn);
         // UNDER: the bands under the keyboard wear the dock's sheet unless the Peek card does.
@@ -645,6 +677,58 @@ public final class RestCards {
             below += bandPx(e, dock, pass);
         }
         return columnTop - below - bandPx(Element.EXTRA_KEYS, dock, pass);
+    }
+
+    /** {@code rest} with its keyboard down: the same side, the same measures, no other side. */
+    @NonNull
+    private static Rest keyboardDownOf(@NonNull Rest rest) {
+        StackLayout.Input up = rest.pass;
+        StackLayout.Input in = new StackLayout.Input(up.dock);
+        in.toolbarShown = up.toolbarShown;
+        in.keyboardShown = false;
+        in.extraKeysRowEnabled = up.extraKeysRowEnabled;
+        in.toolbarHeightPx = up.toolbarHeightPx;
+        in.keyboardHeightPx = 0;
+        in.statusBandPx = up.statusBandPx;
+        in.imeLiftPx = up.imeLiftPx;
+        in.ceilingBeforeMarginPx = up.ceilingBeforeMarginPx;
+        in.keyboardOverlays = up.keyboardOverlays;
+        in.dockOverlays = up.dockOverlays;
+        in.homeKeyboardAlwaysOn = up.homeKeyboardAlwaysOn;
+        in.systemImeTakePx = up.systemImeTakePx;
+        in.travelHoldsContent = up.travelHoldsContent;
+        in.heldReservationPx = up.heldReservationPx;
+        in.flushAllowed = up.flushAllowed;
+        in.flush = up.flush;
+        Rest down = new Rest(in, rest.page, rest.screenWidthPx, rest.screenHeightPx, rest.density,
+            rest.measuredExtraKeysRowPx, rest.measuredKeyboardPx, rest.statusThicknessDockedPx,
+            rest.statusThicknessFloatingPx);
+        down.keyboardGlassShared = rest.keyboardGlassShared;
+        down.statusOnDockPlank = rest.statusOnDockPlank;
+        down.keptBandPx = rest.keptBandPx;
+        down.restFlushPaddingPx = rest.restFlushPaddingPx;
+        down.keyboardChinPx = rest.keyboardChinPx;
+        down.floatingKeyboardRoom = rest.floatingKeyboardRoom;
+        down.floatingKeyboardHeightPx = rest.floatingKeyboardHeightPx;
+        down.floatingKeyboardWidthScale = rest.floatingKeyboardWidthScale;
+        down.floatingKeyboardMinWidthPx = rest.floatingKeyboardMinWidthPx;
+        down.floatingKeyboardX = rest.floatingKeyboardX;
+        down.floatingKeyboardY = rest.floatingKeyboardY;
+        return down;
+    }
+
+    @Nullable
+    private static Box movedBy(@Nullable Box box, float dy) {
+        return box == null || dy == 0f ? box
+            : new Box(box.left, box.top + dy, box.right, box.bottom + dy);
+    }
+
+    @NonNull
+    private static Card movedBy(@NonNull Card card, float dy) {
+        if (dy == 0f) return card;
+        return new Card(card.id, card.view, movedBy(card.box, dy), card.corners,
+            card.edge(Edge.TOP), card.edge(Edge.BOTTOM), card.edge(Edge.LEFT),
+            card.edge(Edge.RIGHT), card.pieces);
     }
 
     private static boolean overlaps(@NonNull Box a, @NonNull Box b) {
