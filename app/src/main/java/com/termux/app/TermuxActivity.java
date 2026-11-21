@@ -6343,6 +6343,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             targetLeftMargin = horizontalMargin;
             targetRightMargin = horizontalMargin;
         }
+        if (viewId == R.id.accessory_surface_host && mSideCards.hostPinned()) {
+            // Home's card while it stands apart from the Terminal's: laid out at Home's rest from
+            // the answer, whatever page is in front.
+            mDock.applyDockSurfaceShape(view, capsuleSurface, mSideCards.hostHeightPx(), true, true);
+            View container = findViewById(R.id.accessory_stack_container);
+            if (mSideCards.layOutHost(params, container == null ? 0 : container.getPaddingBottom()))
+                view.setLayoutParams(params);
+            return;
+        }
         mDock.applyDockSurfaceShape(view, capsuleSurface, targetHeight,
             viewId == R.id.accessory_surface_host, viewId == R.id.accessory_surface_host);
         if (params.leftMargin != targetLeftMargin || params.topMargin != targetTop ||
@@ -6358,6 +6367,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
+    /** Takes the bottom pin the host wore while the cards stood apart off; whether there was one. */
+    private static boolean dropHostBottomPin(@NonNull RelativeLayout.LayoutParams params) {
+        if (params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) == 0) return false;
+        params.removeRule(RelativeLayout.ALIGN_PARENT_BOTTOM);
+        return true;
+    }
+
     /** Positions the dock glass behind either the dock rows alone or the unified default stack. */
     private void applyAccessorySurfaceBounds(@NonNull ChromeSpec state) {
         View surface = findViewById(R.id.accessory_surface_host);
@@ -6368,11 +6384,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) layoutParams;
             boolean unified = shouldUseUnifiedDefaultKeyboardGlassSurface(state);
             boolean rulesChanged = false;
-            if (unified) {
+            if (mSideCards.hostPinned()) {
+                // The pin is applied with the bounds below.
+            } else if (unified) {
                 rulesChanged = params.getRule(RelativeLayout.ABOVE) != 0
                     || params.getRule(RelativeLayout.ALIGN_PARENT_TOP) != RelativeLayout.TRUE;
                 params.removeRule(RelativeLayout.ABOVE);
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
+                rulesChanged |= dropHostBottomPin(params);
             } else {
                 // The dock's sheet alone is pinned at both ends, the stack's top and the top of the
                 // keyboard's column, exactly where the rows stand. Anchoring only the bottom and
@@ -6385,6 +6404,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 params.addRule(RelativeLayout.ALIGN_PARENT_TOP, RelativeLayout.TRUE);
                 params.addRule(RelativeLayout.ABOVE, R.id.accessory_keyboard_column);
                 params.alignWithParent = true;
+                rulesChanged |= dropHostBottomPin(params);
             }
             if (rulesChanged)
                 surface.setLayoutParams(params);
@@ -10838,6 +10858,48 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         new com.termux.app.statusbar.TopStackScene.End();
     private final com.termux.app.statusbar.TopStackScene.End mTopEndRest =
         new com.termux.app.statusbar.TopStackScene.End();
+
+    /** Home's and the Terminal's Floating cards at rest, from one answer (ADR 0032, #302). */
+    private final com.termux.app.dock.SideCardsController mSideCards =
+        new com.termux.app.dock.SideCardsController(new com.termux.app.dock.SideCardsController.Host() {
+            @Nullable @Override public View view(int id) { return hotView(id); }
+            @Override public boolean crossing() { return mCrossing.crossing(); }
+            @Nullable @Override public com.termux.app.wall.PageRef frontPage() {
+                if (mLastWallPage == com.termux.app.page.PageKind.HOME) return com.termux.app.wall.PageRef.HOME;
+                return mLastWallPage == com.termux.app.page.PageKind.TERMINAL && !isDisplayWindowInFront()
+                    ? com.termux.app.wall.PageRef.TERMINAL : null;
+            }
+            @Nullable @Override public PlaceLayout layoutOf(@NonNull com.termux.app.wall.PageRef page) {
+                return page.isHome() ? homePlaceLayout() : terminalPlaceLayout();
+            }
+            @NonNull @Override public com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(
+                    @NonNull PlaceLayout layout, @NonNull com.termux.app.page.PageKind rowsPage) {
+                return mDock.dockSnapshot(layout, rowsPage);
+            }
+            @Override public int screenWidthPx() { return getResources().getDisplayMetrics().widthPixels; }
+            @Override public int screenHeightPx() { return getResources().getDisplayMetrics().heightPixels; }
+            @Override public float density() { return getResources().getDisplayMetrics().density; }
+            @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
+            @Override public int measuredKeyboardPx() {
+                View keyboard = findViewById(R.id.inapp_keyboard_container);
+                return keyboardStaysLaidOut() && keyboard != null && keyboard.getVisibility() != View.GONE
+                    ? mKeyboardGeometry.measureHeightPx() : 0;
+            }
+            @Override public int bottomStatusBandPx(@NonNull PlaceLayout layout) {
+                return com.termux.app.place.EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM)
+                    .contains(com.termux.app.place.Element.STATUS) ? mStatusBar.bottomStatusBandPx() : 0;
+            }
+            @Override public int keptBandPx() { return mBottomKeptPx; }
+            @Override public int terminalRestFlushPaddingPx() { return terminalRestFlushPx(mLastWallPage == com.termux.app.page.PageKind.HOME); }
+            @Override public boolean terminalFlushAllowed() {
+                return visiblePaneCount() <= 1 && !(mPaneController != null && mPaneController.isActivePaneFloating())
+                    && !isImeVisible();
+            }
+            @Override public boolean statusOnDockPlank() { return mStatusBarOnDockPlank; }
+            @Override public boolean keyboardGlassShared() { return isInAppKeyboardGlassSurface(); }
+            @Override public int keyboardChinPx() { return resolveInAppKeyboardBottomPaddingPx(); }
+            @Override public void sidesApart(boolean apart, int homeDropPx) { mStackRenderer.setSidesApart(apart, homeDropPx); }
+        });
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
         @Override public void laneMoved(@NonNull View host) {
@@ -18027,12 +18089,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 accessoryStackContainer.getPaddingRight(),
                 flushBottomInsetPx);
         }
+        // Home's card and the Terminal's extra-keys card, from one answer at rest: the container
+        // keeps the Terminal's margin at both rests while they stand apart.
+        if (mSideCards.update(stackIn)) applyAccessorySurfaceBounds(state);
         boolean accessoryHeightChanged = updateAccessoryStackContainerHeight(accessoryStackContainer, combinedHeight);
         // What the container's layout listener holds the laid-out keyboard to.
         mKeyboardGeometry.noteReservedHeightPx(state.keyboardHeight);
         boolean accessoryMarginChanged = updateAccessoryStackContainerBottomMargin(
             accessoryStackContainer,
-            accessoryBottomMarginPx
+            mSideCards.containerMarginPx(accessoryBottomMarginPx)
         );
         // A pass that moves the stack's bottom (the foot coming or going, its height, its padding)
         // while the travel holds it below its layout re-cuts the travel's clips for that bottom.
@@ -18467,10 +18532,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The Terminal stands its flush padding only at a rest with the keyboard down. Until it
         // has rested with it down (as after a restart on Home) it is worked out the way its own
         // pass would, from its rest's room and the laid-out terminal.
-        int flush = mTerminalRestFlushKnown || !frontHome ? mTerminalRestFlushPaddingPx
-            : Math.max(0, resolveTerminalFlushDockPaddingPx(
-                mCrossingController == null ? 0 : mCrossingController.travelRestReservationPx(
-                    com.termux.app.page.PageKind.TERMINAL, false), 0));
+        int flush = terminalRestFlushPx(frontHome);
         slack += com.termux.app.place.StackLanes.flushSlackPx(flush,
             otherStandsFlush ? flush : 0);
         // DIAG(host-shift): the flush worked out before the Terminal rested; revert before merge.
@@ -18481,6 +18543,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int slabInset = com.termux.app.dock.DockGeometry.compute(snapshot.restOf(otherPage))
             .slabTopInsetPx;
         return (mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx()) + slabInset + slack;
+    }
+
+    /**
+     * The Terminal's flush padding at its own rest: the one it last rested with, or, before it has
+     * rested with its keyboard down (a start on Home), worked out the way its own pass would.
+     */
+    private int terminalRestFlushPx(boolean frontHome) {
+        return mTerminalRestFlushKnown || !frontHome ? mTerminalRestFlushPaddingPx
+            : Math.max(0, resolveTerminalFlushDockPaddingPx(
+                mCrossingController == null ? 0 : mCrossingController.travelRestReservationPx(
+                    com.termux.app.page.PageKind.TERMINAL, false), 0));
     }
 
     /** Whether {@link #mTerminalRestFlushPaddingPx} was taken from a Terminal rest yet. */
