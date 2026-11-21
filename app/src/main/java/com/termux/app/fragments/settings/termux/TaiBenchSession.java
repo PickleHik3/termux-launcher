@@ -15,7 +15,13 @@ import com.termux.ai.TaiDownloadHub;
 import com.termux.ai.TaiFeatureCheckRunner;
 import com.termux.ai.TaiFunction;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiBenchHost;
+import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
+import com.termux.ai.SttAcceleratorChoices;
+import com.termux.ai.TaiSpeechModels;
+import com.termux.ai.TaiVoiceBench;
+import com.termux.ai.TaiVoiceBenchRunner;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -24,6 +30,8 @@ import org.json.JSONObject;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -36,18 +44,18 @@ import java.util.concurrent.atomic.AtomicBoolean;
 /**
  * The benchmark run, app-scoped: a run outlives the screen that started it. One worker thread
  * downloads the models that need downloading (spec decision 2), then calls
- * {@link TaiManager#benchRun}, which blocks while the runtime streams; every event is posted to
+ * {@link TaiBenchHost#benchRun}, which blocks while the runtime streams; every event is posted to
  * the main thread, folded into the one {@link TaiBenchRunState}, and the attached listeners
  * (the Run screen, while it is open) are told. Re-opening the benchmark while a run is going
  * shows the Run screen over this same state.
  *
  * <p>Stop is {@link TaiManager#cancelRuntime} on a separate thread (the worker is blocked in
  * the stream); the harness keeps the phases that finished. "Skip the wait" is
- * {@link TaiManager#skipBenchCooldown}. While a run is active the phone's battery, heat and free
+ * {@link TaiBenchHost#skipBenchCooldown}. While a run is active the phone's battery, heat and free
  * RAM are sampled every {@link #CONDITIONS_INTERVAL_MS} for the Run screen's tiles.
  *
  * <p>Models that were downloaded for the run are deleted afterwards when the plan says so; their
- * results stay in the store, marked not installed by {@link TaiManager#benchmarks}.
+ * results stay in the store, marked not installed by {@link TaiBenchHost#benchmarks}.
  *
  * <p>The feature check ({@link #startFeatureCheck}) is a run of this same session: its runner sends
  * events of the harness's shape, so the Run screen, Stop, "Skip the wait" and the hold on leaving
@@ -116,8 +124,17 @@ public final class TaiBenchSession {
     private final AtomicBoolean running = new AtomicBoolean();
     private final AtomicBoolean stopRequested = new AtomicBoolean();
     @Nullable private volatile ScheduledFuture<?> sampling;
-    /** The feature check in progress, which runs in this process; {@code null} during a bench run. */
-    @Nullable private volatile TaiFeatureCheckRunner featureCheck;
+    /** A run that goes on in this process (the feature check, a voice run); {@code null} during a text bench run. */
+    @Nullable private volatile LocalRun featureCheck;
+
+    /** What Stop, "Skip the wait" and the hold reach on a run in this process. */
+    private interface LocalRun {
+        void requestStop(@NonNull String reason);
+
+        void skipCooldown();
+
+        void setHeld(boolean held);
+    }
     /** The ids of the models this run downloaded, to delete afterwards; the last finished run's until the next starts. */
     @NonNull private volatile List<String> downloadedIds = Collections.emptyList();
 
@@ -216,7 +233,22 @@ public final class TaiBenchSession {
         List<TaiFunction> chosen = new ArrayList<>(features);
         worker.execute(() -> {
             TaiFeatureCheckRunner runner = new TaiFeatureCheckRunner(app, this::post);
-            featureCheck = runner;
+            featureCheck = new LocalRun() {
+                @Override
+                public void requestStop(@NonNull String reason) {
+                    runner.requestStop(reason);
+                }
+
+                @Override
+                public void skipCooldown() {
+                    runner.skipCooldown();
+                }
+
+                @Override
+                public void setHeld(boolean held) {
+                    runner.setHeld(held);
+                }
+            };
             // A Stop that came before the runner existed reached no one: pass it on.
             if (stopRequested.get()) runner.requestStop("cancelled");
             try {
@@ -234,13 +266,81 @@ public final class TaiBenchSession {
         return true;
     }
 
+    /**
+     * Starts a voice run of the installed speech models {@code models} ({@link TaiVoiceBenchRunner}); ignored
+     * (returns {@code false}) while a run is active. Each model runs on the CPU, and on the GPU where the
+     * Speech accelerator row offers it.
+     */
+    @MainThread
+    public boolean startVoice(@NonNull Context context, @NonNull List<Model> models) {
+        if (!running.compareAndSet(false, true)) return false;
+        stopRequested.set(false);
+        List<TaiBenchRunState.Planned> planned = new ArrayList<>();
+        for (Model model : models) planned.add(new TaiBenchRunState.Planned(model.modelId, model.displayName, false));
+        state.begin(TaiVoiceBench.PRESET_ID, planned, 0.0, System.currentTimeMillis());
+        notifyListeners();
+        Context app = context.getApplicationContext();
+        startSampling(app);
+        List<Model> chosen = new ArrayList<>(models);
+        worker.execute(() -> {
+            TaiVoiceBenchRunner runner = TaiVoiceBenchRunner.forContext(app, this::post);
+            featureCheck = new LocalRun() {
+                @Override
+                public void requestStop(@NonNull String reason) {
+                    runner.requestStop(reason);
+                }
+
+                @Override
+                public void skipCooldown() {
+                    runner.skipCooldown();
+                }
+
+                @Override
+                public void setHeld(boolean held) {
+                    runner.setHeld(held);
+                }
+            };
+            if (stopRequested.get()) runner.requestStop("cancelled");
+            try {
+                if (!stopRequested.get()) runner.run(voiceTargets(app, chosen), false);
+            } catch (RuntimeException e) {
+                String message = e.getMessage() == null || e.getMessage().isEmpty() ? e.getClass().getSimpleName() : e.getMessage();
+                post(synthetic("error").put("code", "benchmark_failed").put("message", message));
+            } finally {
+                featureCheck = null;
+                stopSampling();
+                running.set(false);
+                post(synthetic("session_end").put("reason", stopRequested.get() ? "cancelled" : "ended"));
+            }
+        });
+        return true;
+    }
+
+    /** The chosen speech models as they are installed now, each with whether the GPU is offered for it. */
+    @NonNull
+    private static List<TaiVoiceBenchRunner.Target> voiceTargets(@NonNull Context app, @NonNull List<Model> models) {
+        Map<String, TaiModelSpec> installed = new HashMap<>();
+        for (TaiModelSpec spec : TaiSpeechModels.installed(new TaiModelStore(app))) installed.put(spec.id, spec);
+        boolean deviceGpu = SttAcceleratorChoices.deviceSupportsGpu(app);
+        List<TaiVoiceBenchRunner.Target> targets = new ArrayList<>();
+        for (Model model : models) {
+            TaiModelSpec spec = installed.get(model.modelId);
+            if (spec == null) continue;
+            boolean gpu = SttAcceleratorChoices.gpuOffered(deviceGpu, SttAcceleratorChoices.gpuFailure(app, spec));
+            boolean gpuOnly = TaiSpeechModels.needsGpuFp32(spec.id);
+            targets.add(new TaiVoiceBenchRunner.Target(spec.id, model.displayName, spec.localPath, spec.sizeBytes,
+                gpu || gpuOnly, gpuOnly));
+        }
+        return targets;
+    }
+
     /** Stops the run after the current generation; downloads in progress are cancelled. */
     public void stop(@NonNull Context context) {
         if (!running.get()) return;
         stopRequested.set(true);
         post(synthetic("stop_requested"));
         Context app = context.getApplicationContext();
-        TaiFeatureCheckRunner check = featureCheck;
+        LocalRun check = featureCheck;
         control.execute(() -> {
             if (check != null) {
                 check.requestStop("cancelled");
@@ -256,7 +356,7 @@ public final class TaiBenchSession {
     /** "Skip the wait": ends the cool-down in progress; that entry is marked warm start. */
     public void skipWait(@NonNull Context context) {
         if (!running.get()) return;
-        TaiFeatureCheckRunner check = featureCheck;
+        LocalRun check = featureCheck;
         if (check != null) {
             check.skipCooldown();
             return;
@@ -264,7 +364,7 @@ public final class TaiBenchSession {
         Context app = context.getApplicationContext();
         control.execute(() -> {
             try {
-                TaiManager.getInstance(app).skipBenchCooldown();
+                TaiManager.getInstance(app).benchHost().skipBenchCooldown();
             } catch (JSONException | RuntimeException ignored) {
             }
         });
@@ -277,7 +377,7 @@ public final class TaiBenchSession {
      */
     public void hold(@NonNull Context context, boolean held) {
         if (!running.get()) return;
-        TaiFeatureCheckRunner check = featureCheck;
+        LocalRun check = featureCheck;
         if (check != null) {
             check.setHeld(held);
             return;
@@ -285,7 +385,7 @@ public final class TaiBenchSession {
         Context app = context.getApplicationContext();
         control.execute(() -> {
             try {
-                TaiManager.getInstance(app).holdBench(new JSONObject().put("held", held).toString());
+                TaiManager.getInstance(app).benchHost().holdBench(new JSONObject().put("held", held).toString());
             } catch (JSONException | RuntimeException ignored) {
             }
         });
@@ -319,7 +419,7 @@ public final class TaiBenchSession {
         if (plan.removeAfterwards) {
             for (String modelId : downloaded) {
                 try {
-                    manager.deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
+                    manager.modelManagement().deleteModel(new JSONObject().put("modelId", modelId).put("confirm", true).toString());
                 } catch (JSONException | RuntimeException ignored) {
                 }
             }
@@ -328,7 +428,7 @@ public final class TaiBenchSession {
         // The run is over (finished or stopped): nothing left to hold, so clear it rather than
         // leave it set for whatever runs next.
         try {
-            manager.holdBench(new JSONObject().put("held", false).toString());
+            manager.benchHost().holdBench(new JSONObject().put("held", false).toString());
         } catch (JSONException | RuntimeException ignored) {
         }
     }
@@ -339,7 +439,7 @@ public final class TaiBenchSession {
             .put("totalBytes", model.sizeBytes));
         JSONObject started;
         try {
-            started = manager.downloadCatalogModel(model.modelId);
+            started = manager.modelManagement().downloadCatalogModel(model.modelId);
         } catch (JSONException | RuntimeException e) {
             started = null;
         }
@@ -352,7 +452,7 @@ public final class TaiBenchSession {
         while (true) {
             if (stopRequested.get()) {
                 try {
-                    manager.cancelDownload(new JSONObject().put("modelId", model.modelId).toString());
+                    manager.modelManagement().cancelDownload(new JSONObject().put("modelId", model.modelId).toString());
                 } catch (JSONException | RuntimeException ignored) {
                 }
                 post(synthetic("download_done").put("modelId", model.modelId).put("ok", false).put("reason", "stopped"));
@@ -403,7 +503,7 @@ public final class TaiBenchSession {
             return;
         }
         try {
-            manager.benchRun(body.toString(), new TaiManager.OpenAiStreamSink() {
+            manager.benchHost().benchRun(body.toString(), new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) {
                     post(event);
@@ -423,7 +523,7 @@ public final class TaiBenchSession {
     /** The leaderboard after an entry landed, reduced to what the state needs: key, rank, decode speed. */
     private void postLeaderboard(@NonNull TaiManager manager) {
         try {
-            JSONObject board = manager.benchmarks().optJSONObject("leaderboard");
+            JSONObject board = manager.benchHost().benchmarks().optJSONObject("leaderboard");
             JSONArray ranked = board == null ? null : board.optJSONArray("ranked");
             if (ranked == null) return;
             JSONArray slim = new JSONArray();

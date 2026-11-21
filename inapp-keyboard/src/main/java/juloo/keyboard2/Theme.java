@@ -52,6 +52,8 @@ public final class Theme
   public final int keyBorderColorRight;
   public final int keyBorderColorBottom;
   public final float opacity;
+  /** The palette this theme was resolved from; its deck block draws the deck look. */
+  public final Palette palette;
 
   /** Primary constructor for an app-resolved Material palette. */
   public Theme(Context context, Palette palette)
@@ -91,6 +93,7 @@ public final class Theme
     keyBorderColorRight = palette.borderColor;
     keyBorderColorBottom = palette.borderColor;
     opacity = palette.opacity;
+    this.palette = palette;
   }
 
   /** Static-style fallback for previews, XML inflation, and tests. */
@@ -158,6 +161,22 @@ public final class Theme
     public final int functionKeyBackground;
     /** Label (and sub-label) color for a function key; see {@link #functionKeyBackground}. */
     public final int functionLabelColor;
+    /** The deck look: an opaque plastic bed and bevelled push-button keys with lights, drawn
+        while the host's terminal effect is on. False for every palette not made by
+        {@link #withDeck}, and then the deck colors below are unused. Local addition. */
+    public final boolean deck;
+    /** The bed's bottom and top (a vertical gradient), opaque. */
+    public final int deckBed;
+    public final int deckBedTop;
+    /** A key's fill, its 1 dp top edge and its 2 dp foot. */
+    public final int deckKey;
+    public final int deckKeyTop;
+    public final int deckKeyFoot;
+    /** A light (a latched modifier's label and bar, the return key's fill), the ink on a lit
+        fill, and a lit key's foot. */
+    public final int deckLit;
+    public final int deckLitInk;
+    public final int deckLitFoot;
 
     public Palette(int keyboardBackground, int keyBackground,
         int actionKeyBackground, int spaceBarBackground,
@@ -270,6 +289,108 @@ public final class Theme
       this.keyGradientBottomOverlay = keyGradientBottomOverlay;
       this.functionKeyBackground = functionKeyBackground;
       this.functionLabelColor = functionLabelColor;
+      this.deck = false;
+      this.deckBed = 0;
+      this.deckBedTop = 0;
+      this.deckKey = 0;
+      this.deckKeyTop = 0;
+      this.deckKeyFoot = 0;
+      this.deckLit = 0;
+      this.deckLitInk = 0;
+      this.deckLitFoot = 0;
+    }
+
+    /**
+     * Local addition (see UPSTREAM.md, "Palette blend"): the palette {@code t} of the way from
+     * {@code from} to {@code to}, every colour blended channel by channel in ARGB; geometry,
+     * dimming factors, the indicator and the deck are {@code from}'s. Exactly {@code from} at 0 and
+     * {@code to} at 1. The host blends the legends between two looks as a crossing moves, so they
+     * drift from one ink to the other instead of flipping.
+     */
+    public static Palette blend(Palette from, Palette to, float t)
+    {
+      if (!(t > 0f)) return from;
+      if (t >= 1f) return to;
+      Palette p = new Palette(
+          mix(from.keyboardBackground, to.keyboardBackground, t),
+          mix(from.keyBackground, to.keyBackground, t),
+          mix(from.actionKeyBackground, to.actionKeyBackground, t),
+          mix(from.spaceBarBackground, to.spaceBarBackground, t),
+          mix(from.activatedKeyBackground, to.activatedKeyBackground, t),
+          mix(from.labelColor, to.labelColor, t),
+          mix(from.subLabelColor, to.subLabelColor, t),
+          mix(from.activatedLabelColor, to.activatedLabelColor, t),
+          mix(from.pressedLabelColor, to.pressedLabelColor, t),
+          mix(from.lockedModifierColor, to.lockedModifierColor, t),
+          mix(from.borderColor, to.borderColor, t), from.borderEnabled, from.borderWidth,
+          from.borderRadius, from.opacity, from.secondaryDimming, from.greyedDimming,
+          mix(from.actionLabelColor, to.actionLabelColor, t),
+          mix(from.actionSubLabelColor, to.actionSubLabelColor, t), from.indicatorColors,
+          mix(from.keyGradientTopOverlay, to.keyGradientTopOverlay, t),
+          mix(from.keyGradientBottomOverlay, to.keyGradientBottomOverlay, t),
+          mix(from.functionKeyBackground, to.functionKeyBackground, t),
+          mix(from.functionLabelColor, to.functionLabelColor, t));
+      return from.deck
+          ? p.withDeck(from.deckBed, from.deckBedTop, from.deckKey, from.deckKeyTop,
+              from.deckKeyFoot, from.deckLit, from.deckLitInk, from.deckLitFoot)
+          : p;
+    }
+
+    private static int mix(int a, int b, float t)
+    {
+      int ar = (a >>> 24) & 0xFF, rr = (a >>> 16) & 0xFF, gr = (a >>> 8) & 0xFF, br = a & 0xFF;
+      return (Math.round(ar + (((b >>> 24) & 0xFF) - ar) * t) << 24)
+          | (Math.round(rr + (((b >>> 16) & 0xFF) - rr) * t) << 16)
+          | (Math.round(gr + (((b >>> 8) & 0xFF) - gr) * t) << 8)
+          | Math.round(br + ((b & 0xFF) - br) * t);
+    }
+
+    private Palette(Palette p, int bed, int bedTop, int key, int keyTop,
+        int keyFoot, int lit, int litInk, int litFoot)
+    {
+      keyboardBackground = p.keyboardBackground;
+      keyBackground = p.keyBackground;
+      actionKeyBackground = p.actionKeyBackground;
+      spaceBarBackground = p.spaceBarBackground;
+      activatedKeyBackground = p.activatedKeyBackground;
+      labelColor = p.labelColor;
+      subLabelColor = p.subLabelColor;
+      activatedLabelColor = p.activatedLabelColor;
+      pressedLabelColor = p.pressedLabelColor;
+      lockedModifierColor = p.lockedModifierColor;
+      borderColor = p.borderColor;
+      borderEnabled = p.borderEnabled;
+      borderWidth = p.borderWidth;
+      borderRadius = p.borderRadius;
+      opacity = p.opacity;
+      secondaryDimming = p.secondaryDimming;
+      greyedDimming = p.greyedDimming;
+      actionLabelColor = p.actionLabelColor;
+      actionSubLabelColor = p.actionSubLabelColor;
+      indicatorColors = p.indicatorColors;
+      keyGradientTopOverlay = p.keyGradientTopOverlay;
+      keyGradientBottomOverlay = p.keyGradientBottomOverlay;
+      functionKeyBackground = p.functionKeyBackground;
+      functionLabelColor = p.functionLabelColor;
+      deck = true;
+      deckBed = bed;
+      deckBedTop = bedTop;
+      deckKey = key;
+      deckKeyTop = keyTop;
+      deckKeyFoot = keyFoot;
+      deckLit = lit;
+      deckLitInk = litInk;
+      deckLitFoot = litFoot;
+    }
+
+    /** This palette wearing the deck look; every other role is kept, for the moment the deck
+        comes off. Colors are made opaque. */
+    public Palette withDeck(int bed, int bedTop, int key, int keyTop,
+        int keyFoot, int lit, int litInk, int litFoot)
+    {
+      return new Palette(this, bed | 0xFF000000, bedTop | 0xFF000000,
+          key | 0xFF000000, keyTop | 0xFF000000, keyFoot | 0xFF000000, lit | 0xFF000000,
+          litInk | 0xFF000000, litFoot | 0xFF000000);
     }
 
     static Palette fromStyle(Context context, AttributeSet attrs)
@@ -566,6 +687,12 @@ public final class Theme
         p.setColor((color & 0x00FFFFFF) | _label_alpha_bits);
         p.setTextSize(text_size);
         return p;
+      }
+
+      /** The colour a label drawn in [color] ends up with, as {@link #label_paint} sets it. */
+      public int label_ink(int color)
+      {
+        return (color & 0x00FFFFFF) | _label_alpha_bits;
       }
 
       private static Paint pick(LabelFace face, Paint key, Paint symbol, Paint text)

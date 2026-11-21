@@ -18,6 +18,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
@@ -39,6 +40,8 @@ import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.material.M3;
 import com.termux.app.notice.AppNotice;
+import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
+import com.termux.app.terminal.inappkeyboard.InAppKeyboardLayoutSource;
 import com.termux.app.terminal.inappkeyboard.KeyboardLayoutFiles;
 import com.termux.app.terminal.PaneMotionOverlayView;
 import com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts;
@@ -76,6 +79,7 @@ public class KeyboardLayoutsFragment extends Fragment {
 
     private TermuxAppSharedPreferences mPreferences;
     private final List<String> mSelection = new ArrayList<>();
+    private FrameLayout mPreviewHolder;
     private LinearLayout mUserList;
     private LinearLayout mCycleList;
     private LinearLayout mAvailableList;
@@ -129,6 +133,17 @@ public class KeyboardLayoutsFragment extends Fragment {
         LinearLayout root = new LinearLayout(context);
         root.setOrientation(LinearLayout.VERTICAL);
         root.setPadding(dp(16), dp(12), dp(16), dp(24));
+
+        // A look at the layout in use; it only shows, so touches never reach its keys.
+        mPreviewHolder = new FrameLayout(context) {
+            @Override
+            public boolean onInterceptTouchEvent(android.view.MotionEvent event) {
+                return true;
+            }
+        };
+        root.addView(mPreviewHolder, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        refreshPreview();
 
         TextView instructions = new TextView(context);
         instructions.setText(R.string.settings_keyboard_layouts_instructions);
@@ -198,6 +213,7 @@ public class KeyboardLayoutsFragment extends Fragment {
                 renderUser();
                 renderCycle();
                 renderAvailable();
+                refreshPreview();
             });
         });
     }
@@ -450,6 +466,24 @@ public class KeyboardLayoutsFragment extends Fragment {
         renderUser();
         renderCycle();
         renderAvailable();
+        refreshPreview();
+    }
+
+    /**
+     * Draws the layout the keyboard would type on now (the stored one while the ring holds it,
+     * else the ring's first), in the user's colours. A second view only ever exists in the holder.
+     */
+    private void refreshPreview() {
+        if (mPreviewHolder == null || !isAdded()) return;
+        String active = InAppKeyboardLayoutSource.activeId(mSelection,
+            mPreferences.getInAppKeyboardActiveLayout());
+        Context context = requireContext();
+        mPreviewHolder.removeAllViews();
+        mPreviewHolder.addView(KeyboardPreviewFactory.create(context, mPreferences,
+                InAppKeyboardColorScheme.fromJson(context,
+                    mPreferences.getInAppKeyboardColorScheme()), active),
+            new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
     }
 
     /** A rendered row: the whole item, and the strip its buttons go in. */

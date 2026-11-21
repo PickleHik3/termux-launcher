@@ -37,7 +37,7 @@ public class IconPackChoicesLiveApplyTest {
 
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
         prefs = TermuxAppSharedPreferences.build(context, false);
         assertNotNull(prefs);
         shadowOf((Application) context).clearBroadcastIntents();

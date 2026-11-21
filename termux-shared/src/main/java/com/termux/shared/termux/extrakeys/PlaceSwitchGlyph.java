@@ -58,6 +58,29 @@ public final class PlaceSwitchGlyph {
     public static final double MIN_HUE_SEPARATION = 60d;
 
     /**
+     * Hues a switch that the spread has to move may not land in on light glass: from here (inclusive)
+     * to {@link #MUDDY_HUE_END} (exclusive). At tone 45 HCT cannot hold amber, yellow or
+     * yellow-green at any brightness, so they come out as mustard and olive, and off their page
+     * ({@link #UNFOCUSED_ALPHA}) duller still. Chroma alone cannot tell them from ordinary hues,
+     * so this is a hue band. Max chroma at tone 45 (light) / 75 (dark), sampled every 10 degrees:
+     * <pre>
+     * hue   0:80/44  10:80/41  20:80/40  30:80/39  40:68/41  50:56/44  60:48/49  70:44/59
+     * hue  80:42/58  90:41/58 100:42/59 110:45/63 120:49/69 130:56/79 140:67/80 150:57/79
+     * hue 160:47/66 170:42/59 180:39/55 190:38/52 200:37/52 210:38/52 220:39/54 230:41/56
+     * hue 240:44/50 250:49/46 260:57/43 270:70/42 280:78/42 290:80/43 300:80/44 310:80/48
+     * hue 320:80/54 330:80/64 340:80/56 350:80/50
+     * </pre>
+     * Teals at 190-230 hold less chroma (37-41) than olive (41-45) yet read cleanly, which is why
+     * a chroma threshold was rejected. Oranges at 40 and greens from 140 stay allowed (a 125 edge still gave #527500, olive-green at hue ~128). Dark glass
+     * has no such band: bright yellow reads fine there. A role's own hue is never moved by this.
+     */
+    public static final double MUDDY_HUE_START = 50d;
+    public static final double MUDDY_HUE_END = 140d;
+
+    /** Step of the forward walk that leaves the muddy band, degrees. */
+    private static final double HUE_WALK_STEP = 15d;
+
+    /**
      * Below this chroma a colour has no hue worth raising — the two fixed roles, black and white,
      * and any near-neutral. Those are returned exactly as given: a user who asked for black asked
      * for black, and inventing a hue for it would be inventing a colour they never chose. They take
@@ -112,7 +135,8 @@ public final class PlaceSwitchGlyph {
      * on an earlier switch: then this one is turned to the first free hue {@link
      * #MIN_HUE_SEPARATION} beyond the switch it clashed with. The first switch therefore always
      * keeps its role's hue exactly, and a row whose roles already sit on different hues comes back
-     * untouched.
+     * untouched. On light glass a moved switch also steps on past {@link #MUDDY_HUE_START}..{@link
+     * #MUDDY_HUE_END} (falling back to the plain result if no free hue is outside it).
      *
      * @param colors each switch's role colour, in the order the row draws them.
      * @param onDarkGlass whether the row's glass is dark.
@@ -130,6 +154,7 @@ public final class PlaceSwitchGlyph {
                 continue;
             }
             double hue = source.getHue();
+            double own = hue;
             // One pass per hue already taken is enough to find a free one when there is one, and
             // bounds the search when there is not: past six switches the circle has no room left
             // for another 60° slot, and the switch simply keeps the hue its role gave it.
@@ -139,6 +164,8 @@ public final class PlaceSwitchGlyph {
                     break;
                 hue = normalizeHue(clash + MIN_HUE_SEPARATION);
             }
+            if (!onDarkGlass && hue != own && isMuddy(hue))
+                hue = leaveMuddyBand(hue, taken, takenCount);
             taken[takenCount++] = hue;
             out[i] = vivid(hue, source.getChroma(), onDarkGlass);
         }
@@ -166,6 +193,24 @@ public final class PlaceSwitchGlyph {
         double chroma = Math.max(sourceChroma, VIVID_CHROMA);
         double tone = onDarkGlass ? TONE_ON_DARK_GLASS : TONE_ON_LIGHT_GLASS;
         return Hct.from(hue, chroma, tone).toInt() | 0xFF000000;
+    }
+
+    private static boolean isMuddy(double hue) {
+        double h = normalizeHue(hue);
+        return h >= MUDDY_HUE_START && h < MUDDY_HUE_END;
+    }
+
+    /**
+     * Walks forward from a moved hue to the first one outside the muddy band that keeps
+     * {@link #MIN_HUE_SEPARATION} from every taken hue; {@code hue} itself when none does.
+     */
+    private static double leaveMuddyBand(double hue, @NonNull double[] taken, int count) {
+        for (double h = hue + HUE_WALK_STEP; h < hue + 360d; h += HUE_WALK_STEP) {
+            double cand = normalizeHue(h);
+            if (!isMuddy(cand) && Double.isNaN(clashingHue(cand, taken, count)))
+                return cand;
+        }
+        return hue;
     }
 
     /** The taken hue {@code hue} sits too close to, or NaN when it is clear of all of them. */

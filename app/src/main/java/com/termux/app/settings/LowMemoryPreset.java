@@ -57,6 +57,11 @@ public final class LowMemoryPreset {
                 if (isOwnKey(key) || Objects.equals(before.get(key), entry.getValue())) continue;
                 snapshot.put(key, encode(before.get(key)));
             }
+            for (Map.Entry<String, ?> entry : before.entrySet()) {
+                String key = entry.getKey();
+                if (!isOwnKey(key) && !after.containsKey(key))
+                    snapshot.put(key, encode(entry.getValue()));
+            }
         } catch (JSONException e) {
             snapshot = new JSONObject();
         }
@@ -128,9 +133,8 @@ public final class LowMemoryPreset {
         for (SurfacePresets.Preset look : SurfacePresets.presets()) {
             if (SOLID_LOOK_ID.equals(look.id)) SurfacePresets.apply(prefs, look);
         }
-        // What the editor's Terminal Opacity slider writes: the terminal's own cell, and the copy
+        // What the editor's Terminal Opacity slider writes: the terminal's own key, and the copy
         // wallpaper mode restores from. The other surfaces keep Solid's opacity.
-        prefs.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, TERMINAL_OPACITY_PERCENT);
         prefs.setTerminalBackgroundOpacity(TERMINAL_OPACITY_PERCENT);
         prefs.setTerminalCursorTrailEnabled(false);
         // Solid's defaults already set the classic glass motion.

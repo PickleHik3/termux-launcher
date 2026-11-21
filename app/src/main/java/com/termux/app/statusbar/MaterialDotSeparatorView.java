@@ -29,6 +29,8 @@ public final class MaterialDotSeparatorView extends View {
     @NonNull private StatusBarWidgetView.ColorRole mRole = StatusBarWidgetView.ColorRole.SECONDARY;
     /** What the chrome measured; null until the bar has been measured, and then the old colour. */
     @Nullable private Integer mInk;
+    /** The deck look's display colour while a terminal effect is on; null otherwise. */
+    @Nullable private Integer mDeckDisplay;
     /** Whether a row short of room has taken this dot out: it keeps no width and draws nothing. */
     private boolean mTucked;
     /** The width the dot takes when it is not tucked, as last measured. */
@@ -61,7 +63,23 @@ public final class MaterialDotSeparatorView extends View {
         invalidate();
     }
 
+    /**
+     * The deck look (wave 8): the dot in the display window's colour at half strength, or back to
+     * the chrome's ink for {@code null}.
+     */
+    public void setDeckLook(@Nullable com.termux.app.terminal.DeckLook deck) {
+        Integer display = deck == null ? null : deck.display;
+        if (java.util.Objects.equals(mDeckDisplay, display)) return;
+        mDeckDisplay = display;
+        applyColor();
+        invalidate();
+    }
+
     private void applyColor() {
+        if (mDeckDisplay != null) {
+            mPaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(mDeckDisplay, 128));
+            return;
+        }
         if (mInk != null) {
             mPaint.setColor(mInk);
             return;

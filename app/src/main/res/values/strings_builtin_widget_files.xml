@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Tasks and Scratchpad: built-in widgets that show a file from the home folder. -->
+    <!-- Tasks and Notes: built-in widgets that show a file from the home folder. -->
     <string name="bw_files_path_label">File</string>
     <string name="bw_files_notes_files_label">More files to switch between, separated by commas</string>
     <string name="bw_files_editor_unavailable">The editor couldn\'t open right now</string>
@@ -14,6 +14,10 @@
     </plurals>
     <string name="bw_files_tasks_left_short">left</string>
     <string name="bw_files_tasks_header">%1$d left · %2$d done</string>
+    <string name="bw_files_tasks_header_open">Today · %1$d open</string>
+    <string name="bw_files_tasks_header_open_short">%1$d open</string>
+    <string name="bw_files_tasks_open_label">open</string>
+    <string name="bw_files_tasks_writes_to">Writes to %1$s</string>
     <string name="bw_files_tasks_empty">No tasks yet</string>
     <string name="bw_files_tasks_add">Add</string>
     <string name="bw_files_tasks_add_description">Add a task</string>
@@ -29,7 +33,7 @@
     </plurals>
     <string name="bw_files_tasks_description_done">%1$s, %2$d done</string>
 
-    <!-- Scratchpad -->
+    <!-- Notes (the kind id stays "notes") -->
     <string name="bw_files_notes_new">new note</string>
     <string name="bw_files_notes_note">Note</string>
     <string name="bw_files_notes_open">Edit %1$s</string>
@@ -43,6 +47,9 @@
     <string name="bw_files_age_now">just now</string>
     <string name="bw_files_age_minutes">%dm</string>
     <string name="bw_files_age_hours">%dh</string>
+    <string name="bw_files_age_label_now">just now</string>
+    <string name="bw_files_age_label_minutes">%d min ago</string>
+    <string name="bw_files_age_label_hours">%d h ago</string>
     <string name="bw_files_edited_now">edited just now</string>
     <string name="bw_files_edited_ago">edited %1$s ago</string>
     <string name="bw_files_edited_on">edited %1$s</string>

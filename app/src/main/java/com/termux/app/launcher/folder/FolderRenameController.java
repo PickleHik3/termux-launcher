@@ -8,7 +8,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
-import com.termux.app.terminal.PasteText;
+import com.termux.app.terminal.inappkeyboard.FieldEditor;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import juloo.keyboard2.KeyValue;
@@ -29,15 +29,29 @@ public final class FolderRenameController implements TerminalKeyEventHandler.Key
     @Nullable private String folderId;
     private long revision;
     private boolean active;
-    private final ClipboardText clipboardSource;
 
     public FolderRenameController() {
         this(() -> null);
     }
 
     public FolderRenameController(@NonNull ClipboardText clipboardSource) {
-        this.clipboardSource = clipboardSource;
+        this.fieldEditor = new FieldEditor(clipboardSource);
     }
+
+    private final FieldEditor fieldEditor;
+
+    /** The draft, as the in-app keyboard's editing keys see it. */
+    private final FieldEditor.Field field = new FieldEditor.Field() {
+        @Nullable @Override public String fieldText() { return model == null ? null : model.text(); }
+
+        @Override public void replaceFieldText(@NonNull String text) {
+            if (model == null) return;
+            model.replaceAll(text);
+            changed();
+        }
+
+        @Override public void insertFieldText(@NonNull String text) { insert(text); }
+    };
 
     public boolean begin(long revision, @NonNull String folderId, @NonNull String title,
                          @NonNull Host host) {
@@ -47,6 +61,7 @@ public final class FolderRenameController implements TerminalKeyEventHandler.Key
         this.host = host;
         this.model = new FolderRenameModel(title);
         active = true;
+        fieldEditor.reset();
         host.onDraftChanged(model);
         return true;
     }
@@ -86,6 +101,8 @@ public final class FolderRenameController implements TerminalKeyEventHandler.Key
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (!active) return false;
+        // Edits, chords and tool keys follow the one field rule; what is left is the draft's.
+        if (fieldEditor.handle(field, value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) insert(String.valueOf(value.getChar()));
@@ -97,8 +114,6 @@ public final class FolderRenameController implements TerminalKeyEventHandler.Key
                 switch (value.getEditing()) {
                     case SPACE_BAR: insert(" "); break;
                     case BACKSPACE: backspace(); break;
-                    case PASTE:
-                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 break;
@@ -158,11 +173,6 @@ public final class FolderRenameController implements TerminalKeyEventHandler.Key
             case KeyEvent.KEYCODE_BACK: cancel(); return true;
             default: return false;
         }
-    }
-
-    private void pasteClipboard() {
-        String text = clipboardSource.read();
-        if (text != null && !text.isEmpty()) insert(PasteText.sanitizeSingleLine(text));
     }
 
     private void insert(@NonNull String value) {

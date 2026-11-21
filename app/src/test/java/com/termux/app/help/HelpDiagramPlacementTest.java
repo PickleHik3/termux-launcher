@@ -5,13 +5,13 @@ import android.app.Application;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
-import com.termux.app.wall.PaneWallPage;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import com.termux.app.page.PageKind;
 import static org.junit.Assert.*;
 
 /**
@@ -37,7 +37,7 @@ public class HelpDiagramPlacementTest {
 
     private void openTopic(String topicId) {
         HelpNavigation navigation = new HelpNavigation();
-        navigation.openTopic(PaneWallPage.TERMINAL, topicId);
+        navigation.openTopic(PageKind.TERMINAL, topicId);
         panel.show();
         panel.render(navigation, false);
     }
@@ -77,7 +77,7 @@ public class HelpDiagramPlacementTest {
     @Test public void movingToAnotherPageDropsTheDiagram() {
         openTopic("places");
         HelpNavigation navigation = new HelpNavigation();
-        navigation.open(PaneWallPage.TERMINAL);
+        navigation.open(PageKind.TERMINAL);
         panel.render(navigation, false);
         assertNull(panel.diagram());
         assertNull(diagramOnPage());

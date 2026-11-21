@@ -13,14 +13,23 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 
 /**
- * The terminal's own page: panes and their tmux-style controls, full screen, system
- * keyboard compatibility, and whether the launcher stays reachable from Recents.
- *
- * <p>Splits the terminal half out of the old combined Terminal &amp; status page; the clock and
- * status-widget half is now {@link StatusBarPreferencesFragment}.
+ * Terminal: the section for the Terminal half. The overview is this class itself, an Appearance
+ * row and one row per part (windows and panes, status bar, text and display, clipboard); each
+ * focused subpage is a thin subclass naming its own XML and title, sharing this store, so every
+ * row writes the key it always did whichever page holds it. Every lookup here is null-tolerant.
  */
 @Keep
 public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
+
+    @androidx.annotation.XmlRes
+    protected int preferencesXml() {
+        return R.xml.terminal_preferences;
+    }
+
+    @androidx.annotation.StringRes
+    protected int titleRes() {
+        return R.string.settings_destination_terminal;
+    }
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -28,17 +37,64 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         if (context == null) return;
         PreferenceManager manager = getPreferenceManager();
         manager.setPreferenceDataStore(new TerminalPreferencesDataStore(context));
-        setPreferencesFromResource(R.xml.terminal_preferences, rootKey);
+        setPreferencesFromResource(preferencesXml(), rootKey);
         androidx.preference.Preference retro = findPreference("terminal_retro_effect");
         if (retro != null) retro.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
+        androidx.preference.Preference events = findPreference("terminal_screen_events");
+        if (events != null) events.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
+        androidx.preference.Preference composite = findPreference("terminal_retro_composite");
+        if (composite != null) composite.setVisible(com.termux.app.terminal.PaneRetroEffect.available());
+        androidx.preference.Preference engine = findPreference("terminal_engine");
+        if (engine != null) engine.setVisible(com.termux.terminal.TerminalEngine.isAvailable());
+        androidx.preference.Preference clipboardReset = findPreference("terminal_clipboard_read_reset");
+        if (clipboardReset != null) {
+            clipboardReset.setVisible(com.termux.terminal.TerminalEngine.isAvailable());
+            clipboardReset.setOnPreferenceClickListener(row -> {
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+                    com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context, false);
+                if (preferences != null) preferences.clearClipboardReadAlways();
+                com.termux.app.notice.AppNotice.confirm(context, R.drawable.ic_rl_clipboard,
+                    context.getString(R.string.msg_clipboard_permissions_reset));
+                return true;
+            });
+        }
+        // Each of these pages keeps one Appearance row, on the Terminal card.
+        for (String doorKey : new String[] {"terminal_layout_editor", "terminal_text_layout_editor",
+            "terminal_windows_layout_editor"}) {
+            androidx.preference.Preference layout = findPreference(doorKey);
+            if (layout != null) layout.setOnPreferenceClickListener(row -> {
+                SettingsEditorDoors.openEditor(this, row,
+                    com.termux.app.surfaces.EditorDoor.SETTINGS_TERMINAL);
+                return true;
+            });
+        }
+        androidx.preference.Preference notifications = findPreference("terminal_notifications");
+        if (notifications != null) notifications.setOnPreferenceClickListener(row -> {
+            openNotificationSettings(context);
+            return true;
+        });
         SettingsLayoutUtils.applyScreenLayout(this);
+    }
+
+    /** The app's own notification settings, where each kind has its channel. */
+    private static void openNotificationSettings(Context context) {
+        android.content.Intent intent = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O
+            ? new android.content.Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                .putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.getPackageName())
+            : new android.content.Intent(android.provider.Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+                android.net.Uri.parse("package:" + context.getPackageName()));
+        try {
+            context.startActivity(intent.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK));
+        } catch (android.content.ActivityNotFoundException ignored) {
+            // No settings screen to open on this device.
+        }
     }
 
     @Override
     public void onResume() {
         super.onResume();
         if (getActivity() != null) {
-            getActivity().setTitle(R.string.settings_destination_terminal);
+            getActivity().setTitle(titleRes());
         }
     }
 
@@ -56,7 +112,8 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         @Override public void putBoolean(String key, boolean value) {
             if ("split_pane_controls".equals(key)) io.putBoolean("compatibility_mode", !value);
             else if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
-                || "terminal_padding_fill".equals(key)) view.putBoolean(key, value);
+                || "terminal_screen_events".equals(key) || "terminal_retro_composite".equals(key))
+                view.putBoolean(key, value);
             else if ("show_in_recents_when_not_default".equals(key)) style.putBoolean(key, value);
             else io.putBoolean(key, value);
         }
@@ -64,13 +121,15 @@ public class TerminalPreferencesFragment extends MaterialPreferenceFragment {
         @Override public boolean getBoolean(String key, boolean fallback) {
             if ("split_pane_controls".equals(key)) return !io.getBoolean("compatibility_mode", !fallback);
             if ("fullscreen".equals(key) || "terminal_margin_adjustment".equals(key)
-                || "terminal_padding_fill".equals(key)) return view.getBoolean(key, fallback);
+                || "terminal_screen_events".equals(key) || "terminal_retro_composite".equals(key))
+                return view.getBoolean(key, fallback);
             if ("show_in_recents_when_not_default".equals(key)) return style.getBoolean(key, fallback);
             return io.getBoolean(key, fallback);
         }
 
         private static boolean isViewStringKey(String key) {
-            return "terminal_cursor_trail_style".equals(key) || "terminal_retro_effect".equals(key);
+            return "terminal_cursor_trail_style".equals(key) || "terminal_retro_effect".equals(key)
+                || "terminal_engine".equals(key);
         }
 
         @Override public void putString(String key, @Nullable String value) {

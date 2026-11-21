@@ -99,6 +99,19 @@ public final class StatusBarEdgeArrangement {
             strip.setGravity(vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
             stretch(strip, vertical);
         }
+        // The slot the two sides' strips share takes the room; each strip fills it.
+        View sides = host.findViewById(R.id.terminal_status_sides);
+        if (sides != null) stretch(sides, vertical);
+        PlaceContentStrip homeStrip = host.findViewById(R.id.terminal_status_home_chips);
+        if (homeStrip != null) {
+            homeStrip.setVertical(vertical);
+            homeStrip.setGravity(vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
+        }
+        View homeBar = host.findViewById(R.id.terminal_home_float_bar);
+        View homeColumn = host.findViewById(R.id.terminal_home_float_column);
+        if (homeColumn != null) stretch(homeColumn, vertical);
+        if (homeBar != null && vertical) homeBar.setVisibility(View.GONE);
+        if (homeColumn != null && !vertical) homeColumn.setVisibility(View.GONE);
 
         View sessions = host.findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) fit(sessions, vertical);

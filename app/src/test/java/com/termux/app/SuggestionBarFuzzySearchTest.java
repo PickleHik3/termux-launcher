@@ -40,6 +40,8 @@ public class SuggestionBarFuzzySearchTest {
     @Test
     public void testPrefixMode_keepsStableOrder() throws Exception {
         SuggestionBarView suggestionBarView = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        suggestionBarView.setDockIconSizePx(Math.round(24f * suggestionBarView.getResources().getDisplayMetrics().density));
         suggestionBarView.setShowIcons(false);
 
         List<SuggestionBarButton> buttons = Arrays.asList(
@@ -64,6 +66,8 @@ public class SuggestionBarFuzzySearchTest {
     @Test
     public void testFuzzyMode_ranksByRatioAndRespectsTolerance() throws Exception {
         SuggestionBarView suggestionBarView = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        suggestionBarView.setDockIconSizePx(Math.round(24f * suggestionBarView.getResources().getDisplayMetrics().density));
         suggestionBarView.setShowIcons(false);
         suggestionBarView.setSearchTolerance(70);
 

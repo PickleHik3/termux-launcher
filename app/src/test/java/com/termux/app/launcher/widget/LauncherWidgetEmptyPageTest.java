@@ -156,7 +156,7 @@ public class LauncherWidgetEmptyPageTest {
 
         JSONArray fresh = new JSONObject(storage.value).getJSONArray("freshPages");
         assertEquals(1, fresh.length());
-        assertEquals(1, fresh.getInt(0));
+        assertEquals("persisted by page id: index 1 is id 2", 2, fresh.getInt(0));
 
         LauncherWidgetRepository restored = new LauncherWidgetRepository(storage);
         assertEquals(2, restored.pageCount());

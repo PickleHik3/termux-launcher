@@ -36,6 +36,7 @@ public final class LauncherCategoryCatalogue {
         for (LauncherAppEntry entry : catalogue) {
             if (entry == null) continue;
             if (X11Apps.isLinuxApp(entry.appRef)) continue;
+            if (com.termux.app.launcher.LauncherEntries.isEntry(entry.appRef)) continue;
             if (labelByPackage.containsKey(entry.appRef.packageName)) continue;
             labelByPackage.put(entry.appRef.packageName, entry.label);
         }

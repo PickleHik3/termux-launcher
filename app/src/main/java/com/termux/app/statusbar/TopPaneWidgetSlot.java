@@ -27,6 +27,35 @@ import java.util.List;
  */
 public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Observer {
 
+    /**
+     * How far each edge of the bar is drawn out past where it is laid out while a crossing eases
+     * its Margin (BarMarginEase): each child nearer an edge is drawn moved with that edge, at its
+     * own size. Drawn only, never laid out; 0 at rest, where drawing is untouched.
+     */
+    private float mEdgeGrowPx;
+
+    /** Sets {@link #mEdgeGrowPx}; a redraw of this row only, and only when it moves. */
+    public void setEdgeGrow(float growPx) {
+        if (growPx == mEdgeGrowPx) return;
+        mEdgeGrowPx = growPx;
+        invalidate();
+    }
+
+    @Override
+    protected boolean drawChild(@NonNull android.graphics.Canvas canvas, @NonNull View child,
+                                long drawingTime) {
+        float dx = mEdgeGrowPx == 0f ? 0f : com.termux.app.place.BarMarginEase.contentShiftPx(
+            child.getLeft(), child.getRight(), getWidth(), mEdgeGrowPx);
+        if (dx == 0f) return super.drawChild(canvas, child, drawingTime);
+        int save = canvas.save();
+        try {
+            canvas.translate(dx, 0f);
+            return super.drawChild(canvas, child, drawingTime);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
     private static final float GUTTER_DP = 12f;
     private static final float GAP_DP = 12f;
     /** The least run the media strip or the pinned cards keep beside a compact clock. */
@@ -67,6 +96,11 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     @Nullable private String mClockAlignment;
     /** Whether the media row may claim the slot; off, the slot acts as if nothing played. */
     private boolean mMediaEnabled = true;
+    /**
+     * Whether the clock shows (the Status bar card's Clock toggle). Hidden, it is GONE and takes
+     * no room: whatever shares the slot spans the whole run.
+     */
+    private boolean mClockShown = true;
 
     public TopPaneWidgetSlot(Context context) {
         this(context, null);
@@ -110,6 +144,7 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     protected void onFinishInflate() {
         super.onFinishInflate();
         mClock = findViewById(R.id.terminal_clock_widget);
+        if (mClock != null && !mClockShown) mClock.setVisibility(GONE);
         mNotifications = findViewById(R.id.terminal_pinned_notifications);
         mMedia = findViewById(R.id.terminal_media_widget);
         mIcons = new PinnedNotificationIconCache(getContext());
@@ -195,6 +230,20 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
     /** "Mute this rule": the card's rule stops matching, so the rebuild takes the card away. */
     private void muteRule(@NonNull PinnedNotification notification) {
         TopPaneFeed.muteRule(getContext(), notification.matchedRuleId);
+    }
+
+    /** Shows or hides the clock; hidden, the media row and the pinned cards take its room. */
+    public void setClockShown(boolean shown) {
+        if (mClockShown == shown) return;
+        mClockShown = shown;
+        if (mClock != null) mClock.setVisibility(shown ? VISIBLE : GONE);
+        requestLayout();
+        invalidate();
+    }
+
+    /** Whether the clock shows ({@link #setClockShown}). */
+    public boolean isClockShown() {
+        return mClockShown;
     }
 
     private void openPinned(@NonNull PinnedNotification notification) {
@@ -336,10 +385,9 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
 
         int gutter = Math.round(dp(GUTTER_DP));
         int gap = Math.round(dp(GAP_DP));
-        // The bar's home place icon sits beside the clock, whatever the clock's alignment; the
-        // clock and everything else lay out after it. The neighbours peek past the edges behind
-        // the content and take no room.
-        int contentStart = StatusBarLensView.leadingCellWidthPx(getContext());
+        // No place mark stands beside the clock any more (#90), so its cell is closed up: the
+        // clock and everything else start one gutter in, the same air the trailing end keeps.
+        int contentStart = Math.max(StatusBarLensView.leadingCellWidthPx(getContext()), gutter);
         int available = Math.max(0, width - gutter - contentStart);
 
         int clockHeight = height;
@@ -357,10 +405,10 @@ public final class TopPaneWidgetSlot extends ViewGroup implements TopPaneFeed.Ob
             int cap = Math.max(Math.round(available * .55f), available - sideMin - gap);
             cap = Math.max(0, cap);
             mClock.setFitBudget(cap, heightBudget, mClockShared);
-            int clockWidth = Math.min(cap,
+            int clockWidth = !mClockShown ? 0 : Math.min(cap,
                 (int) Math.ceil(mClock.fitWidthPx(cap, heightBudget, mClockShared)));
-            row = TopPaneSlotRow.shared(width, contentStart, gutter, gap, clockWidth,
-                mClockAlignment);
+            row = TopPaneSlotRow.shared(width, contentStart, gutter, mClockShown ? gap : 0,
+                clockWidth, mClockAlignment);
         }
         mClock.measure(MeasureSpec.makeMeasureSpec(row.clockWidth(), MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(clockHeight, MeasureSpec.EXACTLY));

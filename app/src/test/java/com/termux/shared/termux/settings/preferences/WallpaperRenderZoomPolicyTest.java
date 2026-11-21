@@ -4,7 +4,7 @@ import static org.junit.Assert.assertEquals;
 
 import org.junit.Test;
 
-/** The wallpaper alignment's default and bounds, decided without a store or a device. */
+/** The wallpaper copy's composite zoom per ROM, decided without a store or a device. */
 public class WallpaperRenderZoomPolicyTest {
 
     @Test
@@ -23,15 +23,5 @@ public class WallpaperRenderZoomPolicyTest {
         assertEquals(100, TermuxAppSharedPreferences.defaultWallpaperRenderZoom("Nothing Phone"));
         assertEquals(100, TermuxAppSharedPreferences.defaultWallpaperRenderZoom(""));
         assertEquals(100, TermuxAppSharedPreferences.defaultWallpaperRenderZoom(null));
-    }
-
-    @Test
-    public void clampUsesTheSameBoundsAsItsSlider() {
-        assertEquals(90, TermuxAppSharedPreferences.clampWallpaperRenderZoom(89));
-        assertEquals(90, TermuxAppSharedPreferences.clampWallpaperRenderZoom(0));
-        assertEquals(90, TermuxAppSharedPreferences.clampWallpaperRenderZoom(90));
-        assertEquals(108, TermuxAppSharedPreferences.clampWallpaperRenderZoom(108));
-        assertEquals(120, TermuxAppSharedPreferences.clampWallpaperRenderZoom(120));
-        assertEquals(120, TermuxAppSharedPreferences.clampWallpaperRenderZoom(400));
     }
 }

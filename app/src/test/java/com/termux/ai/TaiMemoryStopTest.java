@@ -20,6 +20,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * A native load the runtime's watch ends for memory is not a crash: the crash marker goes, the next
@@ -27,10 +29,12 @@ import static org.junit.Assert.assertTrue;
  * and automatic loads of that model on that accelerator wait out a short cooldown.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiMemoryStopTest {
     private static final long MIB = 1024L * 1024L;
     private static final long E4B = 3_659_530_240L;
-    private static final long PONG_TOTAL = 11_530_736L * 1024L;
+    /** A phone small enough that the fixed floors apply (the RAM-share rule gives less), so the plan arithmetic below holds. */
+    private static final long SMALL_TOTAL = 4L * 1024L * 1024L * 1024L;
 
     private Context context;
     private TaiDeviceCapabilities device;
@@ -131,7 +135,7 @@ public class TaiMemoryStopTest {
             ? stop.optString("accelerator") : null;
         TaiLoadBudget.History history = (accelerator, window) -> TaiRuntimeHistory.measuredLoadBytes(context, e4b,
             device, TaiModelSpec.BACKEND_LITERT_LM, accelerator, window);
-        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false, PONG_TOTAL,
+        return TaiLoadBudget.plan(new TaiLoadBudget.Request(TaiModelSpec.BACKEND_LITERT_LM, E4B, false, SMALL_TOTAL,
             available, Arrays.asList("gpu", "cpu"), 2048, crashed, crashedContext, false, history,
             Collections.<TaiResidency.Entry>emptyList()).withHeldBack(heldBack));
     }

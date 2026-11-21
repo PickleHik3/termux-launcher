@@ -12,8 +12,11 @@ import java.io.File;
 import java.io.FileOutputStream;
 
 import static org.junit.Assert.assertEquals;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiModelStoreInstalledSizeTest {
 
     private static void write(File file, int bytes) throws Exception {

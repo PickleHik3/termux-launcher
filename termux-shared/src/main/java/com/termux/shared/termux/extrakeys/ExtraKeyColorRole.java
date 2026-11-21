@@ -114,6 +114,26 @@ public enum ExtraKeyColorRole {
             : MaterialColors.getColor(context, labelAttr, labelFallback);
     }
 
+    /**
+     * The role a place switch wears when its key names none: widgets primary, terminal secondary,
+     * display tertiary, assistant error (the one palette role the other three leave free). A key
+     * the editor adds carries no colour, and without this its glyph took the row's grey label
+     * colour and came out a dull mustard. Null for any other key.
+     */
+    @Nullable
+    public static ExtraKeyColorRole defaultForPlaceSwitch(@Nullable String keyValue) {
+        if (keyValue == null)
+            return null;
+        String key = keyValue.startsWith("tool:") ? keyValue.substring(5) : keyValue;
+        switch (key) {
+            case "wall.widgets": return PRIMARY;
+            case "wall.terminal": return SECONDARY;
+            case "wall.display": return TERTIARY;
+            case "wall.assistant": return ERROR;
+            default: return null;
+        }
+    }
+
     /** The role a stored token names, or null for an absent, empty or unknown one. */
     @Nullable
     public static ExtraKeyColorRole fromToken(@Nullable String token) {

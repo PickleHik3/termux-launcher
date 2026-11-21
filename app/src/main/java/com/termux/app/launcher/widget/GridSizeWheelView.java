@@ -47,6 +47,8 @@ final class GridSizeWheelView extends View {
     @NonNull private final GridSizeWheelPolicy mPolicy;
     private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
     @Nullable private Listener mListener;
+    /** Words for the stops, first stop first, when the wheel picks from a list and not numbers. */
+    @Nullable private String[] mLabels;
     private int mValue;
     /** Where this drag started, and the value it started from. */
     private float mDownY;
@@ -76,7 +78,7 @@ final class GridSizeWheelView extends View {
                 info.setRangeInfo(AccessibilityNodeInfoCompat.RangeInfoCompat.obtain(
                     AccessibilityNodeInfoCompat.RangeInfoCompat.RANGE_TYPE_INT,
                     mPolicy.minimum(), mPolicy.maximum(), mValue));
-                info.setStateDescription(String.valueOf(mValue));
+                info.setStateDescription(textFor(mValue));
                 if (mValue < mPolicy.maximum()) {
                     info.addAction(AccessibilityNodeInfoCompat.AccessibilityActionCompat
                         .ACTION_SCROLL_FORWARD);
@@ -107,6 +109,25 @@ final class GridSizeWheelView extends View {
                 return super.performAccessibilityAction(host, action, args);
             }
         });
+    }
+
+    /**
+     * Turns the wheel into a pick from {@code labels}: stop {@code minimum + i} reads
+     * {@code labels[i]}. The value the listener hears is still the stop's number.
+     */
+    void setLabels(@Nullable String[] labels) {
+        mLabels = labels;
+        mPitchPx = pitch();
+        requestLayout();
+        invalidate();
+    }
+
+    @NonNull
+    private String textFor(int number) {
+        String[] labels = mLabels;
+        int index = number - mPolicy.minimum();
+        if (labels != null && index >= 0 && index < labels.length) return labels[index];
+        return String.valueOf(number);
     }
 
     /** One number up or down, the way a key or a screen reader's swipe asks for it. */
@@ -159,6 +180,12 @@ final class GridSizeWheelView extends View {
 
     int value() {
         return mValue;
+    }
+
+    /** What the wheel reads now: the number, or the word of a labelled stop. */
+    @NonNull
+    String valueText() {
+        return textFor(mValue);
     }
 
     @Override
@@ -240,7 +267,7 @@ final class GridSizeWheelView extends View {
 
     private void announce() {
         CharSequence label = getContentDescription();
-        String number = String.valueOf(mValue);
+        String number = textFor(mValue);
         ViewCompat.setStateDescription(this, number);
         sendAccessibilityEvent(AccessibilityEvent.TYPE_VIEW_SELECTED);
         if (label == null) {
@@ -269,7 +296,7 @@ final class GridSizeWheelView extends View {
             int alpha = Math.round(255f * (1f - distance) * (1f - distance));
             if (alpha <= 0) continue;
             mPaint.setColor(ColorUtils.setAlphaComponent(onSurface, alpha));
-            canvas.drawText(String.valueOf(number), getWidth() / 2f,
+            canvas.drawText(textFor(number), getWidth() / 2f,
                 y - (mPaint.ascent() + mPaint.descent()) / 2f, mPaint);
         }
     }
@@ -283,6 +310,12 @@ final class GridSizeWheelView extends View {
     }
 
     private float widthPx() {
+        String[] labels = mLabels;
+        if (labels != null) {
+            float widestLabel = 0f;
+            for (String label : labels) widestLabel = Math.max(widestLabel, mPaint.measureText(label));
+            return GridSizeWheelPolicy.widthPx(density(), widestLabel, mPaint.getTextSize());
+        }
         float widest = 0f;
         for (char digit = '0'; digit <= '9'; digit++) {
             widest = Math.max(widest, mPaint.measureText(String.valueOf(digit)));

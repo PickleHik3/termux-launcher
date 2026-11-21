@@ -107,14 +107,16 @@ public class FancierGlassPreferencesTest {
     @Test
     public void everyBlurSettingTakesUpToFortyEightDp() {
         preferences.setStatusBarBlurRadius(99);
-        assertEquals(48, preferences.getStatusBarBlurRadius());
+        assertEquals(36, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        // The panes' own Blur is plain dp, no Frost stop: its ceiling is 48 itself.
         preferences.setTerminalGlassBlurRadius(99);
         assertEquals(48, preferences.getTerminalGlassBlurRadius());
         preferences.setExtraKeysBlurRadius(99);
-        assertEquals(48, preferences.getExtraKeysBlurRadius());
+        assertEquals(36, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         preferences.setInAppKeyboardBlurRadius(99);
-        assertEquals(48, preferences.getInAppKeyboardBlurRadius());
+        assertEquals(36, preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         preferences.setExtraKeysBlurRadius(44);
-        assertEquals(44, preferences.getExtraKeysBlurRadius());
+        // 44 dp is past the last Frost stop: its 36.
+        assertEquals(36, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 }

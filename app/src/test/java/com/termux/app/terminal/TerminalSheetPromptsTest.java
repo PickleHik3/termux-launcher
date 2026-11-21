@@ -157,7 +157,7 @@ public class TerminalSheetPromptsTest {
     }
 
     /**
-     * Saving a workspace is the drawer's footer, not a prompt of its own: the field is unfolded and
+     * Saving a terminal is the drawer's footer, not a prompt of its own: the field is unfolded and
      * already taking keys, and folding it back leaves the drawer where it was rather than dropping
      * the user on the terminal — the whole point of answering inside the surface that asked.
      */

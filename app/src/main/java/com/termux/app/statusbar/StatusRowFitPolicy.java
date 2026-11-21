@@ -65,4 +65,23 @@ public final class StatusRowFitPolicy {
         if (savingPx <= 0 || stripWeight <= 0f || totalWeight <= 0f) return 0;
         return Math.round(savingPx * Math.min(1f, stripWeight / totalWeight));
     }
+
+    /**
+     * The least the chip strip may be given: its own padding, the badge before the chips (its
+     * margins and width), the window bar's margins and padding, and the one chip in front. Below
+     * it the strip clips what the corners' inset has pushed into it. Every corner inset sits in
+     * {@code badgeLeadPx} or {@code paddingPx}, so a bigger radius raises the floor rather than
+     * the chip going out of view.
+     *
+     * @param paddingPx the strip's padding along the row, both ends
+     * @param badgeLeadPx the badge's margins along the row, 0 when it is not shown
+     * @param badgeWidthPx the badge's own width, 0 when it is not shown
+     * @param barChromePx the window bar's margins and padding along the row
+     * @param frontChipPx the width of the chip in front, 0 when the bar has none
+     */
+    public static int stripMinPx(int paddingPx, int badgeLeadPx, int badgeWidthPx,
+                                 int barChromePx, int frontChipPx) {
+        return Math.max(0, paddingPx) + Math.max(0, badgeLeadPx) + Math.max(0, badgeWidthPx)
+            + Math.max(0, barChromePx) + Math.max(0, frontChipPx);
+    }
 }

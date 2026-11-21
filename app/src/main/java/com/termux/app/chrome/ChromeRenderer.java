@@ -7,12 +7,12 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.Trace;
 import android.view.View;
-import android.view.ViewTreeObserver;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.R;
+import com.termux.app.window.FramePipeline;
+import com.termux.app.window.FrameStep;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.util.concurrent.Executor;
@@ -31,8 +31,9 @@ import java.util.concurrent.Executors;
  * through {@link #requestSync(int)} and the module decides what that costs.</p>
  *
  * <p>Everything the module needs from the Activity goes through {@link Surfaces}, which is what
- * makes the ordering testable without a window: build the spec, apply it, then let the pre-draw
- * gates run.</p>
+ * makes the ordering testable without a window: build the spec, apply it, then let the frame
+ * pipeline's table run. The commit is the table's {@link FrameStep#CHROME_COMMIT} step; it never
+ * hooks a frame or commits on demand of its own.</p>
  */
 public final class ChromeRenderer {
 
@@ -49,6 +50,21 @@ public final class ChromeRenderer {
         @Nullable View findChromeView(int viewId);
 
         @Nullable TermuxAppSharedPreferences preferences();
+
+        /**
+         * The half of the wall whose look values the stack (the dock, its sheets and bands, the
+         * extra keys and the keyboard) wears now (ADR 0013): the half whose rows it stands.
+         */
+        @NonNull
+        default int stackLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
+        }
+
+        /** The half of the wall whose look values the status bar wears now (ADR 0013). */
+        @NonNull
+        default int statusLookPage() {
+            return TermuxAppSharedPreferences.terminalPageId();
+        }
 
         /** The frames' Vibrancy: the stored glass Vibrancy, today's frame without preferences. */
         @Override
@@ -68,9 +84,9 @@ public final class ChromeRenderer {
         default int glassFrameTint() {
             TermuxAppSharedPreferences preferences = preferences();
             if (preferences == null) return GlassFrameTint.NONE;
-            int amount = preferences.getSurfaceBaseValue(
+            int amount = preferences.getSurfaceGlobalValue(
                 TermuxAppSharedPreferences.SurfaceProperty.TINT);
-            int opacity = preferences.getSurfaceBaseValue(
+            int opacity = preferences.getSurfaceGlobalValue(
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY);
             if (GlassFrameTint.strength(amount, opacity) <= 0f) return GlassFrameTint.NONE;
             return new GlassSurfaceFactory(this).look(amount).frameTint(opacity);
@@ -83,6 +99,15 @@ public final class ChromeRenderer {
         @NonNull
         default LegibilityLevel legibilityLevel() {
             return LegibilityLevel.of(preferences());
+        }
+
+        /**
+         * Whether each glass item measures the wallpaper behind itself ("Adaptive legibility");
+         * off, every item reads the one measurement of the whole picture ({@link LegibilityScope}).
+         */
+        default boolean adaptiveLegibility() {
+            TermuxAppSharedPreferences p = preferences();
+            return p != null && p.isAdaptiveLegibility();
         }
 
         float dpToPx(float dp);
@@ -101,6 +126,45 @@ public final class ChromeRenderer {
          * Transparent when the slider is at 0. Read, never changed: the slider is the user's.
          */
         default int wallpaperDimColor() {
+            return android.graphics.Color.TRANSPARENT;
+        }
+
+        /**
+         * The ground under {@code screenRect}: the dim of the wall page (or pages, at a seam)
+         * the rect stands on, which on a Terminal page folds in the canvas tint when it is not
+         * glass. Home never carries the terminal's tint. Asked by the ink for a band, a widget or
+         * a pane instead of one wall-wide dim; the default is {@link #wallpaperDimColor()} for
+         * hosts that have no per-page ground.
+         */
+        default int groundUnder(@androidx.annotation.NonNull android.graphics.Rect screenRect) {
+            return wallpaperDimColor();
+        }
+
+        /**
+         * Home's own ground: what a Home widget stands on wherever the wall is. A widget is
+         * measured where it is laid out on its page, the slide left out, so the ground under that
+         * rect now is whichever page is in front ({@link #groundUnder}): the Terminal's dim, while
+         * the Terminal is. The default is {@link #wallpaperDimColor()}, as for
+         * {@link #groundUnder}.
+         */
+        default int homeGround() {
+            return wallpaperDimColor();
+        }
+
+        /**
+         * Whether the terminal's panes are glass slabs, each drawing its own frame over the
+         * ground strip, so their text stands on no page dim (ADR 0031 section 4).
+         */
+        default boolean paneGlassSlabs() {
+            return false;
+        }
+
+        /**
+         * The wallpaper as the system describes it ({@link WallpaperInk#hintColor}), for the ink
+         * to assume until a sample is read; transparent when the launcher shows its own picture
+         * or the system says nothing. Read, never changed.
+         */
+        default int wallpaperHintColor() {
             return android.graphics.Color.TRANSPARENT;
         }
 
@@ -233,13 +297,11 @@ public final class ChromeRenderer {
     public static final int SCOPE_ACCESSORY_RENDER = 1;
     /** Invalidates the dock/unified accessory crop alone: its geometry moved under a settled plane. */
     public static final int SCOPE_DOCK_BACKDROP = 1 << 1;
-    /** Invalidates the under-pill nav strip's crop alone: the strip was rebuilt or re-laid out. */
-    public static final int SCOPE_NAV_STRIP_BACKDROP = 1 << 7;
     /**
-     * Invalidates the dock/unified accessory crop and the under-pill nav strip's crop — what the
-     * old reason-keyword path ({@code "wallpaper"}, {@code "style"}, {@code "blur"}) marked dirty.
+     * Invalidates the dock/unified accessory crop — what the old reason-keyword path
+     * ({@code "wallpaper"}, {@code "style"}, {@code "blur"}) marked dirty.
      */
-    public static final int SCOPE_BACKDROPS = SCOPE_DOCK_BACKDROP | SCOPE_NAV_STRIP_BACKDROP;
+    public static final int SCOPE_BACKDROPS = SCOPE_DOCK_BACKDROP;
     /** Invalidates the keyboard-local crop as well; only the paths that touched all three pass it. */
     public static final int SCOPE_KEYBOARD_BACKDROP = 1 << 2;
     /** Throws away the shared pre-blurred wallpaper frames — the most expensive thing to request. */
@@ -257,8 +319,9 @@ public final class ChromeRenderer {
      * Pong, 2026-09-08). What every caller actually needs is "applied before the user sees the next
      * frame", so the apply now rides the frame's animation phase: after input, before layout and
      * draw. A request made from inside a traversal (an inset dispatch, a layout listener) has
-     * missed that phase, so a pre-draw gate commits it in the same frame instead, re-running the
-     * layout when the apply moved anything.</p>
+     * missed that phase, so the frame pipeline's pre-draw hook commits it in the same frame and the
+     * frame draws; what the apply moved is laid out on the next frame (ADR 0028: nothing cancels a
+     * draw but the window's first frame).</p>
      */
     public static final int SCOPE_APPLY_THIS_FRAME = 1 << 5;
     /** Restarts the blur backstop heartbeat and arms the short recovery retry. */
@@ -285,43 +348,44 @@ public final class ChromeRenderer {
 
     /** True while a {@link #SCOPE_APPLY_THIS_FRAME} commit waits for its frame. */
     private boolean mCommitPending;
-    /** The view the pending commit is riding; null when it fell back to a plain post. */
-    @Nullable private View mCommitGateView;
-    private final Runnable mCommitRunnable = this::commit;
-    private final ViewTreeObserver.OnPreDrawListener mCommitPreDrawListener = this::commitBeforeDraw;
 
-    /**
-     * The root view until its first frame draws; null before the first request found it and
-     * after that frame. While it is set, top-pane frost passes after the first are held for that
-     * frame's pre-draw — see {@link #holdFrostForFirstFrame()}.
-     */
-    @Nullable private View mFirstFrameGate;
-    /** True once the root has drawn a frame (or was already attached when first seen). */
-    private boolean mFirstFrameDrawn;
+    /** The window's frame table; the commit is its {@link FrameStep#CHROME_COMMIT} step. */
+    @NonNull private final FramePipeline mFrames;
+
     /** Whether a top-pane frost pass has run yet. */
     private boolean mFrostRanOnce;
     /** A top-pane frost pass was asked for before the first frame and waits for its pre-draw. */
     private boolean mFrostHeld;
-    private final ViewTreeObserver.OnPreDrawListener mFirstFramePreDrawListener =
-        this::onFirstFramePreDraw;
 
     private final Runnable mRenderSyncRunnable;
     private final Runnable mBlurHeartbeatRunnable;
     private final Runnable mBlurRecoveryRunnable;
 
-    /** The production renderer: wallpaper decodes and blurs run on their own thread. */
+    /** A renderer with its own blur thread and a window-less frame pipeline. */
     public ChromeRenderer(@NonNull Surfaces surfaces) {
         this(surfaces, newBlurWorker());
     }
 
     /**
      * {@code blurWorker} null keeps every blur-cache miss synchronous, which is what a window-less
-     * test wants; the Activity passes a worker so a miss costs the main thread nothing but a
-     * re-render when the frame lands.
+     * test wants. The renderer gets a frame pipeline of its own with no window, so its commit
+     * rides a plain post.
      */
     public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker) {
+        this(surfaces, blurWorker, new FramePipeline());
+    }
+
+    /**
+     * The production renderer: the Activity passes a worker so a blur-cache miss costs the main
+     * thread nothing but a re-render when the frame lands, and the window's frame pipeline, whose
+     * {@link FrameStep#CHROME_COMMIT} step this renderer binds.
+     */
+    public ChromeRenderer(@NonNull Surfaces surfaces, @Nullable Executor blurWorker,
+                          @NonNull FramePipeline frames) {
         mSurfaces = surfaces;
         mBlurWorker = blurWorker;
+        mFrames = frames;
+        frames.bind(FrameStep.CHROME_COMMIT, this::runFrameStep);
         mRenderSyncRunnable = () -> runRenderSync(mSurfaces.buildChromeSpec());
         mBlurHeartbeatRunnable = new Runnable() {
             @Override
@@ -385,13 +449,65 @@ public final class ChromeRenderer {
     }
 
     /**
+     * The chrome starts travelling across the seam: its bands keep the even-out they stand on
+     * ({@link ChromeInk#holdEvenOut}), so ground moving under them books no whole apply per frame.
+     */
+    public void holdEvenOut() {
+        mInk.holdEvenOut();
+    }
+
+    /**
+     * The travel is over and the landed frame is drawn: the even-out is let go, and if any band
+     * was held off ground it has since left, one pass measures it where it rests. Called after the
+     * landing frame, never in it, so the pass this books falls on a frame where nothing moves.
+     */
+    public void settleEvenOut() {
+        if (!mInk.releaseEvenOut()) return;
+        Trace.beginSection("Chrome.settleEvenOut");
+        try {
+            requestSync(SCOPE_APPLY_THIS_FRAME | SCOPE_ACCESSORY_RENDER);
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /** Whether {@link #holdEvenOut} is in force and not yet settled. */
+    public boolean isEvenOutHeld() {
+        return mInk.isEvenOutHeld();
+    }
+
+    /** Set while {@link #commit} runs its apply. */
+    private boolean mCommitRunning;
+
+    /** An apply was asked for from inside the running commit's first apply: it applies once more. */
+    private boolean mApplyAskedInCommit;
+
+    /** The commit's one extra apply is running; a request now books the next commit. */
+    private boolean mExtraApplyRunning;
+
+    /**
+     * A top-pane frost was asked for while the frame's commit was booked: the commit runs it after
+     * its apply, unless the apply ran one itself, so the frame cuts the frost once.
+     */
+    private boolean mFrostOwedToCommit;
+
+    /**
+     * Whether an apply asked for now is folded into the post-layout render pass instead of booking
+     * another commit: only from inside a commit, and only while the even-out is held for a
+     * crossing ({@link #holdEvenOut}), so nothing at rest changes.
+     */
+    boolean foldsIntoRenderPass() {
+        return mCommitRunning && mInk.isEvenOutHeld();
+    }
+
+    /**
      * The shared pre-blurred frames have gone. Every crop cut from one is stale, and so is every
      * wallpaper sample the chrome's ink was measured from — one callback for both, so no path can
      * drop the frames and leave the ink believing in a wallpaper that is no longer there.
      */
     private void onBlurFramesCleared() {
         mLedger.markFrostDirty();
-        mInk.invalidate();
+        mInk.framesCleared();
     }
 
     /** One low-priority thread: decodes and blurs are sequential, and never on the main thread. */
@@ -477,11 +593,13 @@ public final class ChromeRenderer {
         // states, because the apply asks unconditionally (Pong, 2026-09-09).
         long dirtyBefore = mLedger.dirtyGeneration();
         mRenderSyncRunning = true;
+        Trace.beginSection("Chrome.renderSync");
         try {
             mSurfaces.applyChromeSpec(spec);
             mSurfaces.enforceAccessoryFxInvariants();
         } finally {
             mRenderSyncRunning = false;
+            Trace.endSection();
         }
         if (mRenderSyncAskedForItself && mLedger.dirtyGeneration() != dirtyBefore) {
             requestSync(SCOPE_ACCESSORY_RENDER);
@@ -499,7 +617,6 @@ public final class ChromeRenderer {
     }
 
     private void sync(int scopes) {
-        armFirstFrameGate();
         noteChromeShade();
         if ((scopes & SCOPE_WALLPAPER_BLUR_CACHE) != 0) {
             mBlurCache.clear();
@@ -507,17 +624,33 @@ public final class ChromeRenderer {
         if ((scopes & SCOPE_DOCK_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
         }
-        if ((scopes & SCOPE_NAV_STRIP_BACKDROP) != 0) {
-            mLedger.markDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
-        }
         if ((scopes & SCOPE_KEYBOARD_BACKDROP) != 0) {
             mLedger.markDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
         }
         if ((scopes & SCOPE_APPLY_THIS_FRAME) != 0) {
-            scheduleCommit();
+            if (foldsIntoRenderPass()) {
+                // Asked from inside the frame's own commit while the chrome travels across the
+                // seam (the ink measuring a band's new dress, mostly): the post-layout pass that
+                // follows applies the whole spec again anyway, so it is that pass, not a second
+                // whole apply before this frame's draw (24 ms of a drag frame on pong).
+                scopes |= SCOPE_ACCESSORY_RENDER;
+            } else if (mCommitRunning && !mExtraApplyRunning) {
+                // Asked from inside the commit's own apply: the commit applies once more at its
+                // end, in the same step, rather than booking one that would run late in pre-draw.
+                mApplyAskedInCommit = true;
+            } else {
+                scheduleCommit();
+            }
         }
-        if ((scopes & SCOPE_TOP_PANE_FROST) != 0 && !holdFrostForFirstFrame()) {
-            runTopPaneFrost();
+        if ((scopes & SCOPE_TOP_PANE_FROST) != 0) {
+            if (mCommitPending) {
+                // The frame's commit is booked and runs before this frame draws: the frost goes
+                // with it, cut once against what its apply leaves, rather than now and again
+                // after the apply moved the bands (5.5 ms of a drag frame on pong, twice).
+                mFrostOwedToCommit = true;
+            } else if (!holdFrostForFirstFrame()) {
+                runTopPaneFrost();
+            }
         }
         if ((scopes & SCOPE_ACCESSORY_RENDER) != 0) {
             if (mRenderSyncRunning) {
@@ -564,6 +697,8 @@ public final class ChromeRenderer {
 
     private void runTopPaneFrost() {
         mFrostRanOnce = true;
+        // Whatever pass was owed is this one: it cuts against the state as it is now.
+        mFrostOwedToCommit = false;
         Trace.beginSection("Frost.updateTopPane");
         try {
             mFrost.updateTopPane();
@@ -575,74 +710,32 @@ public final class ChromeRenderer {
     // ------------------------------------------------------- first-frame frost hold
 
     /**
-     * Watches the root for its first frame, from the first request onwards. A root already
-     * attached when first seen may have drawn already, so nothing is held for it.
-     */
-    private void armFirstFrameGate() {
-        if (mFirstFrameDrawn || mFirstFrameGate != null) return;
-        View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
-        if (gate == null) return;
-        if (gate.isAttachedToWindow()) {
-            mFirstFrameDrawn = true;
-            return;
-        }
-        // A detached view hands out its floating observer, which the window adopts on attach.
-        gate.getViewTreeObserver().addOnPreDrawListener(mFirstFramePreDrawListener);
-        mFirstFrameGate = gate;
-    }
-
-    /**
      * Whether this top-pane frost pass waits for the first frame's pre-draw instead of running now.
      *
      * <p>A cold start asked for the pass from onCreate, onStart, both onResumes and every apply
      * before anything was drawn — 6 to 19 ms each on Pong, nine of them ahead of the first frame,
      * and every one before the first layout cut its frost against views that had no size yet.
      * Nobody sees any of them until that frame draws, so the passes after the first are folded into
-     * one, run in that frame's pre-draw against settled layout. The first still runs at once: it is
-     * what asks the blur worker for the frames the backdrop, the gutter and the panes need, and
-     * those take long enough that asking late would show later.</p>
+     * one, run by this renderer's step in that frame's pre-draw against settled layout. The first
+     * still runs at once: it is what asks the blur worker for the frames the backdrop, the gutter
+     * and the panes need, and those take long enough that asking late would show later.</p>
      */
     private boolean holdFrostForFirstFrame() {
-        if (mFirstFrameDrawn || mFirstFrameGate == null || !mFrostRanOnce) return false;
+        if (!mFrames.isBeforeFirstFrame() || !mFrostRanOnce) return false;
         mFrostHeld = true;
         return true;
     }
 
     /**
-     * The first frame's pre-draw: the commit this frame owes runs first (as its own gate would),
-     * then the held frost, cut against what that apply laid out. If either moved a view the draw
-     * is cancelled for one more layout, as {@link #commitBeforeDraw()} does, and the gate stays
-     * up for the frame that does draw.
+     * The renderer's step in the frame table: the commit this frame owes, then a frost held for the
+     * first frame once that frame has come, cut against what the apply laid out.
      */
-    private boolean onFirstFramePreDraw() {
-        View gate = mFirstFrameGate;
-        if (mDestroyed || gate == null) {
-            releaseFirstFrameGate();
-            return true;
-        }
-        boolean ran = mCommitPending || mFrostHeld;
+    private void runFrameStep() {
         if (mCommitPending) commit();
-        if (mFrostHeld) {
+        if (mFrostHeld && !mFrames.isBeforeFirstFrame()) {
             mFrostHeld = false;
-            runTopPaneFrost();
+            if (!mDestroyed) runTopPaneFrost();
         }
-        // Only a layout this callback caused cancels the draw; anyone else's is theirs to judge.
-        if (ran && gate.isLayoutRequested()) return false;
-        releaseFirstFrameGate();
-        return true;
-    }
-
-    private void releaseFirstFrameGate() {
-        mFirstFrameDrawn = true;
-        View gate = mFirstFrameGate;
-        mFirstFrameGate = null;
-        if (gate == null) return;
-        ViewTreeObserver observer = gate.getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(mFirstFramePreDrawListener);
-        // Nothing may be left held once the gate is gone; a torn-down renderer just drops it.
-        boolean held = mFrostHeld;
-        mFrostHeld = false;
-        if (held && !mDestroyed) runTopPaneFrost();
     }
 
     /** True while a top-pane frost pass waits for the first frame. */
@@ -660,42 +753,25 @@ public final class ChromeRenderer {
         return mCommitPending;
     }
 
-    /**
-     * Runs a pending {@link #SCOPE_APPLY_THIS_FRAME} commit now instead of at its gate. For a
-     * caller already in the frame's animation phase (the editor's slider pass): a commit asked for
-     * there is otherwise left to the pre-draw gate, after layout, where any view the apply moves
-     * cancels the draw and the tick costs a frame. Run here, the frame's own layout picks it up.
-     * Nothing pending, nothing runs.
-     */
-    public void commitNow() {
-        commit();
-    }
-
     // ------------------------------------------------------------------ commit
 
     /**
-     * Books the one apply pass for this frame. On an attached window it rides the root view's
-     * animation phase, which the platform runs after input and before layout, so the layout that
-     * follows already sees the applied visibilities; a pre-draw gate on the same view catches a
-     * request made after that phase had passed. Without an attached root — before the first
-     * layout, after {@code onStop}, in a window-less test — a plain post keeps the old contract.
+     * Books the one apply pass for this frame: the commit is marked owed and the frame pipeline is
+     * asked for a frame. The pipeline runs it in the frame's animation phase (before layout, so the
+     * layout that follows sees the applied visibilities) or, asked after that phase, in its
+     * pre-draw hook. A caller that needs the apply before the next frame asks the pipeline for a
+     * named flush; the renderer never commits on demand.
      */
     private void scheduleCommit() {
         if (mCommitPending) {
             return;
         }
         mCommitPending = true;
-        View gate = mSurfaces.findChromeView(R.id.activity_termux_root_view);
-        if (gate == null || !gate.isAttachedToWindow()) {
-            mHandler.post(mCommitRunnable);
-            return;
-        }
-        mCommitGateView = gate;
-        gate.postOnAnimation(mCommitRunnable);
-        ViewTreeObserver observer = gate.getViewTreeObserver();
-        if (observer.isAlive()) {
-            observer.addOnPreDrawListener(mCommitPreDrawListener);
-        }
+        // An empty marker inside whoever booked the commit, so a trace names the caller of every
+        // whole apply (the booking is once per frame at most, so this costs nothing at rest).
+        Trace.beginSection("Chrome.bookCommit");
+        Trace.endSection();
+        mFrames.requestFrame(FrameStep.CHROME_COMMIT);
     }
 
     private void commit() {
@@ -706,43 +782,44 @@ public final class ChromeRenderer {
         if (mDestroyed) {
             // Booked before onDestroy, delivered after it: applying the spec now would cut fresh
             // backdrops from a blur cache whose worker has been shut down.
+            mFrostOwedToCommit = false;
             return;
         }
         Trace.beginSection("Chrome.commit");
+        // The commit applies the whole spec, which is the very pass an accessory render asked for
+        // before it would run a moment later: that render is withdrawn (a request made during or
+        // after the apply books its own).
+        boolean withdrewRender = mRenderSyncPending;
+        if (withdrewRender) {
+            mHandler.removeCallbacks(mRenderSyncRunnable);
+            mRenderSyncPending = false;
+        }
+        mCommitRunning = true;
         try {
             mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+            if (mApplyAskedInCommit) {
+                // At most one extra apply: a request during it books the next commit.
+                mApplyAskedInCommit = false;
+                mExtraApplyRunning = true;
+                mSurfaces.applyChromeSpec(mSurfaces.buildChromeSpec());
+            }
         } finally {
+            mApplyAskedInCommit = false;
+            mExtraApplyRunning = false;
+            mCommitRunning = false;
             Trace.endSection();
         }
-    }
-
-    /**
-     * The pre-draw gate: a commit still pending here was requested from inside this traversal.
-     * Apply it now, and when the apply moved a view, cancel this draw so the layout runs again
-     * before anything is shown — one frame later beats one frame wrong.
-     */
-    private boolean commitBeforeDraw() {
-        if (!mCommitPending) {
-            return true;
+        if (withdrewRender) mSurfaces.enforceAccessoryFxInvariants();
+        // A frost asked for while this commit was booked, which its apply did not run itself.
+        if (mFrostOwedToCommit) {
+            mFrostOwedToCommit = false;
+            if (!holdFrostForFirstFrame()) runTopPaneFrost();
         }
-        View gate = mCommitGateView;
-        commit();
-        return gate == null || !gate.isLayoutRequested();
     }
 
+    /** Drops the owed commit; the pipeline's booked frame then finds nothing to do here. */
     private void unscheduleCommit() {
         mCommitPending = false;
-        View gate = mCommitGateView;
-        mCommitGateView = null;
-        mHandler.removeCallbacks(mCommitRunnable);
-        if (gate == null) {
-            return;
-        }
-        gate.removeCallbacks(mCommitRunnable);
-        ViewTreeObserver observer = gate.getViewTreeObserver();
-        if (observer.isAlive()) {
-            observer.removeOnPreDrawListener(mCommitPreDrawListener);
-        }
     }
 
     /**
@@ -796,6 +873,7 @@ public final class ChromeRenderer {
      */
     public void cancelPendingWork() {
         unscheduleCommit();
+        mFrostOwedToCommit = false;
         mHandler.removeCallbacks(mRenderSyncRunnable);
         mHandler.removeCallbacks(mBlurHeartbeatRunnable);
         mHandler.removeCallbacks(mBlurRecoveryRunnable);
@@ -818,7 +896,8 @@ public final class ChromeRenderer {
 
     public void onDestroy() {
         mDestroyed = true;
-        releaseFirstFrameGate();
+        // Nothing may be left held; a torn-down renderer just drops it.
+        mFrostHeld = false;
         if (mBlurWorker instanceof ExecutorService) {
             ((ExecutorService) mBlurWorker).shutdownNow();
             // A job it never ran never posts back: the loans its capture took are given back here.

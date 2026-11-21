@@ -188,6 +188,80 @@ public class TaiRemoteClientTest {
     }
 
     @Test
+    public void cancel_disconnectsTheLiveConnectionOnce() throws Exception {
+        TaiRemoteClient.Cancel cancel = new TaiRemoteClient.Cancel();
+        DisconnectCounter connection = new DisconnectCounter();
+        assertTrue(cancel.attach(connection));
+        assertFalse(cancel.isCancelled());
+        cancel.cancel();
+        cancel.cancel();
+        assertTrue(cancel.isCancelled());
+        assertEquals(1, connection.disconnects);
+    }
+
+    @Test
+    public void cancel_beforeAConnectionRefusesItAndDisconnectsIt() throws Exception {
+        TaiRemoteClient.Cancel cancel = new TaiRemoteClient.Cancel();
+        cancel.cancel();
+        DisconnectCounter connection = new DisconnectCounter();
+        assertFalse(cancel.attach(connection));
+        assertEquals(1, connection.disconnects);
+    }
+
+    @Test
+    public void cancel_aDetachedConnectionIsLeftAlone() throws Exception {
+        TaiRemoteClient.Cancel cancel = new TaiRemoteClient.Cancel();
+        DisconnectCounter connection = new DisconnectCounter();
+        cancel.attach(connection);
+        cancel.detach(connection);
+        cancel.cancel();
+        assertEquals(0, connection.disconnects);
+    }
+
+    @Test(timeout = 10_000L)
+    public void cancel_endsARateLimitWaitAtOnceWithoutRaisingTheInterruptFlag() throws Exception {
+        TaiRemoteClient.Cancel cancel = new TaiRemoteClient.Cancel();
+        FakeTransport transport = new FakeTransport(
+            new TaiRemoteClient.Reply(429, "{}", "60"),
+            new TaiRemoteClient.Reply(200, chatReply("ok"), null));
+        Thread canceller = new Thread(() -> {
+            try {
+                Thread.sleep(50L);
+            } catch (InterruptedException ignored) {
+            }
+            cancel.cancel();
+        });
+        canceller.start();
+        long started = System.nanoTime();
+        TaiRemoteClient.Reply reply = TaiRemoteClient.exchange(new JSONObject().put("model", "m"), 120_000L,
+            transport, cancel.sleeper(), System::currentTimeMillis, cancel);
+        assertEquals(429, reply.status);
+        assertEquals(1, transport.sent.size());
+        assertTrue((System.nanoTime() - started) / 1_000_000L < 5_000L);
+        assertFalse(Thread.currentThread().isInterrupted());
+        canceller.join();
+    }
+
+    @Test
+    public void cancelledSource_isTheRuntimesCancelShape() throws Exception {
+        JSONObject error = TaiManager.openAiError(TaiRemoteClient.cancelledSource());
+        assertEquals("generation_cancelled", error.getJSONObject("error").getString("code"));
+        assertEquals(499, error.optInt("_statusCode"));
+    }
+
+    private static final class DisconnectCounter extends java.net.HttpURLConnection {
+        int disconnects;
+
+        DisconnectCounter() throws java.net.MalformedURLException {
+            super(new java.net.URL("http://127.0.0.1/"));
+        }
+
+        @Override public void disconnect() { disconnects++; }
+        @Override public boolean usingProxy() { return false; }
+        @Override public void connect() { }
+    }
+
+    @Test
     public void exchange_givesUpAfterTheLastRetryAndReturnsThe429() throws Exception {
         TaiRemoteClient.Reply limited = new TaiRemoteClient.Reply(429, "{}", null);
         FakeTransport transport = new FakeTransport(limited, limited, limited, limited, limited);

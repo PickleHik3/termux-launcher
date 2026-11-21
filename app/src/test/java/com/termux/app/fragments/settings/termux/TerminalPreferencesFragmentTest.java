@@ -1,6 +1,8 @@
 package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -25,68 +27,116 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.ConscryptMode;
 
 /**
- * Phase 6: the Terminal page carries panes, full screen, system keyboard
- * compatibility, and Recents visibility — the terminal half of the old combined
- * "Terminal & status" page. The clock/status-widget half is {@link StatusBarPreferencesFragment}.
+ * The Terminal section (settings restructure 10-19): a Layout row and one row per part of the
+ * Terminal half. The rows the old Terminal page held moved, keys unchanged, to Windows &amp; panes,
+ * Text &amp; display and Clipboard &amp; compatibility; Status bar and Linux apps joined from the root.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 @ConscryptMode(ConscryptMode.Mode.OFF)
 public class TerminalPreferencesFragmentTest {
 
-    private TerminalPreferencesFragment launch() {
+    private <T extends TerminalPreferencesFragment> T launch(Class<T> page) {
         Application app = RuntimeEnvironment.getApplication();
         Intent intent = new Intent(app, SettingsActivity.class)
-            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, TerminalPreferencesFragment.class.getName());
+            .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, page.getName());
         ActivityController<SettingsActivity> controller =
             Robolectric.buildActivity(SettingsActivity.class, intent).create().start().resume();
         SettingsActivity activity = controller.get();
         activity.getSupportFragmentManager().executePendingTransactions();
         Fragment fragment = activity.getSupportFragmentManager().findFragmentById(R.id.settings);
-        assertTrue(fragment instanceof TerminalPreferencesFragment);
-        return (TerminalPreferencesFragment) fragment;
+        assertTrue(page.isInstance(fragment));
+        return page.cast(fragment);
     }
 
     @Test
-    public void everyTerminalRowIsExposedAndStatusRowsAreGone() {
-        TerminalPreferencesFragment fragment = launch();
+    public void theSectionPageListsTheTerminalHalfInPlanOrder() {
+        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
         PreferenceScreen screen = fragment.getPreferenceScreen();
-
-        assertTrue(screen.findPreference("fullscreen") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("terminal_margin_adjustment") instanceof SwitchPreferenceCompat);
-        org.junit.Assert.assertNull("Recents moved to App behavior",
-            screen.findPreference("show_in_recents_when_not_default"));
-        assertTrue(screen.findPreference("split_pane_controls") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("show_key_hints") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("pane_dwindle_default") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("pane_focus_grows") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("pane_agent_api") instanceof SwitchPreferenceCompat);
-
-        // Moved to the Appearance page.
-        org.junit.Assert.assertNull(screen.findPreference("lazy_mode"));
-        org.junit.Assert.assertNull(screen.findPreference("fancier_glass"));
-
-        // Moved to the Status bar page: not reachable here any more.
-        org.junit.Assert.assertNull(screen.findPreference("top_pane_clock_style"));
-        org.junit.Assert.assertNull(screen.findPreference("status_widget_cpu"));
-        // Duplicate of the Layout page's "Look of this place": removed outright.
-        org.junit.Assert.assertNull(screen.findPreference("customize_status_surface"));
-
+        String[] rows = {"terminal_layout_editor", "terminal_sub_windows", "status_bar",
+            "terminal_sub_text", "terminal_sub_tui_themes", "terminal_sub_clipboard", "terminal_notifications"};
+        assertEquals(rows.length, screen.getPreferenceCount());
+        for (int i = 0; i < rows.length; i++) assertEquals(rows[i], screen.getPreference(i).getKey());
+        assertEquals(StatusBarPreferencesFragment.class.getName(),
+            screen.findPreference("status_bar").getFragment());
+        assertNull("Linux apps is a root section again", screen.findPreference("display"));
+        assertEquals("the font moved in from Appearance", TermuxFontsPreferencesFragment.class.getName(),
+            launch(TerminalTextPreferencesFragment.class).findPreference("terminal_fonts").getFragment());
+        assertNull("the rows live on the subpages now", screen.findPreference("split_pane_controls"));
         assertEquals("Terminal", activityTitle(fragment));
     }
 
     @Test
-    public void splitPaneControlsInvertsIntoTheCompatibilityModeKey() {
+    public void everyTerminalRowIsOnItsSubpageWithItsKey() {
+        PreferenceScreen windows = launch(TerminalWindowsPreferencesFragment.class).getPreferenceScreen();
+        for (String key : new String[] {"show_key_hints", "pane_agent_api"}) {
+            assertTrue(key, windows.findPreference(key) instanceof SwitchPreferenceCompat);
+        }
+        // One home per setting: how the panes tile and split is the editor's Terminal card.
+        for (String key : new String[] {"split_pane_controls", "pane_dwindle_default", "pane_focus_grows"}) {
+            assertNull(key, windows.findPreference(key));
+        }
+        assertNotNull(windows.findPreference("terminal_windows_layout_editor"));
+        PreferenceScreen text = launch(TerminalTextPreferencesFragment.class).getPreferenceScreen();
+        assertNull("Full screen is the Appearance editor's", text.findPreference("fullscreen"));
+        assertNull("Edge colours follow Wallpaper colors", text.findPreference("terminal_padding_fill"));
+        for (String key : new String[] {"terminal_cursor_trail_style", "terminal_retro_effect",
+            "terminal_screen_events", "terminal_retro_composite"}) {
+            assertNull(key + " is the editor's Terminal card", text.findPreference(key));
+        }
+        assertNotNull(text.findPreference("terminal_text_layout_editor"));
+        PreferenceScreen clipboard = launch(TerminalClipboardPreferencesFragment.class).getPreferenceScreen();
+        assertTrue(clipboard.findPreference("terminal_margin_adjustment") instanceof SwitchPreferenceCompat);
+        assertTrue(clipboard.findPreference("terminal_osc52_clipboard_read_enabled") instanceof SwitchPreferenceCompat);
+        assertTrue(clipboard.findPreference("terminal_clipboard_cleanup") instanceof SwitchPreferenceCompat);
+
+        // Not on any Terminal page: Recents is General's, the clock is the Status bar's.
+        for (PreferenceScreen screen : new PreferenceScreen[] {windows, text, clipboard}) {
+            assertNull(screen.findPreference("show_in_recents_when_not_default"));
+            assertNull(screen.findPreference("lazy_mode"));
+            assertNull(screen.findPreference("top_pane_clock_style"));
+            assertNull(screen.findPreference("status_widget_cpu"));
+        }
+    }
+
+    @Test
+    public void theTerminalEngineRowIsOnCompatibilityAndShowsOnlyWhereGhosttyCanRun() {
+        boolean available = com.termux.terminal.TerminalEngine.isAvailable();
+        TerminalClipboardPreferencesFragment fragment = launch(TerminalClipboardPreferencesFragment.class);
+        androidx.preference.ListPreference row = fragment.findPreference("terminal_engine");
+        assertTrue(row != null);
+        assertEquals("Standard (Termux)", row.getEntries()[0].toString());
+        assertEquals("Fast (LibGhostty)", row.getEntries()[1].toString());
+        assertEquals("standard", row.getEntryValues()[0].toString());
+        assertEquals("ghostty", row.getEntryValues()[1].toString());
+        assertEquals("every install starts on Standard", "standard",
+            TerminalViewPreferencesDataStore.getInstance(RuntimeEnvironment.getApplication())
+                .getString("terminal_engine", null));
+        assertEquals("hidden unless the library loads", available, row.isVisible());
+        boolean searchable = false;
+        for (com.termux.app.fragments.settings.SettingsSearchIndex.Entry entry :
+            com.termux.app.fragments.settings.SettingsSearchIndex.build(RuntimeEnvironment.getApplication()).entries())
+            searchable |= "terminal_engine".equals(entry.key);
+        assertEquals("search finds it exactly when the row shows", available, searchable);
+    }
+
+    @Test
+    public void theResetRowIsOnTheClipboardPageAndClearsTheAlwaysGrants() {
         Application app = RuntimeEnvironment.getApplication();
-        TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
-        io.putBoolean("compatibility_mode", false);
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(app, false);
+        assertTrue(preferences != null);
+        preferences.addClipboardReadAlways("claude");
+        assertTrue(preferences.getClipboardReadAlways().contains("claude"));
 
-        TerminalPreferencesFragment fragment = launch();
-        SwitchPreferenceCompat splitPanes = fragment.findPreference("split_pane_controls");
-        assertTrue(splitPanes.isChecked());
-
-        splitPanes.setChecked(false);
-        assertTrue(io.getBoolean("compatibility_mode", false));
+        TerminalClipboardPreferencesFragment fragment = launch(TerminalClipboardPreferencesFragment.class);
+        androidx.preference.Preference row = fragment.findPreference("terminal_clipboard_read_reset");
+        assertTrue(row != null);
+        assertEquals("Reset clipboard permissions", row.getTitle().toString());
+        assertEquals("shown only where the Fast engine can run",
+            com.termux.terminal.TerminalEngine.isAvailable(), row.isVisible());
+        row.performClick();
+        assertTrue(preferences.getClipboardReadAlways().isEmpty());
     }
 
     private static String activityTitle(Fragment fragment) {

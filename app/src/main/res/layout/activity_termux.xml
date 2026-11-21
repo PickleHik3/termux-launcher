@@ -2,10 +2,22 @@
      status strip), placed by absolute geometry, so it never mirrors: it stays left to right in
      every locale. Reading-order surfaces inside it (the sheet plane below) opt back in with
      layoutDirection="locale". -->
-<com.termux.app.terminal.TermuxActivityRootView
+<!-- The window root (ADR 0028 section 6): the one view the content view holds, same bounds. The
+     launcher's shell stands in it, with ground, pages, chrome and sheets inside; the editor and the
+     notices stand beside the shell in their own hosts, so the Appearance editor scaling the shell to
+     a miniature never scales them. Nothing is added to the window decor or beside this root. -->
+<FrameLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/window_layers_root"
+    android:layoutDirection="ltr"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipChildren="false"
+    android:clipToPadding="false">
+
+<com.termux.app.terminal.TermuxActivityRootView
     android:id="@+id/activity_termux_root_view"
     android:layoutDirection="ltr"
     android:layout_width="match_parent"
@@ -15,11 +27,19 @@
     android:clipChildren="false"
     android:clipToPadding="false">
 
-        <FrameLayout
+        <com.termux.app.place.BottomInsetFrameLayout
             android:id="@+id/terminal_root_container"
             android:layout_width="match_parent"
             android:layout_height="0dp"
             android:layout_weight="1"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+        <!-- Layer 0, GROUND (ADR 0028 section 6): what the shell draws behind its content. -->
+        <com.termux.app.chrome.LiveBackdropFrameLayout
+            android:id="@+id/window_layer_ground"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
             android:clipChildren="false"
             android:clipToPadding="false">
 
@@ -33,6 +53,17 @@
             android:layout_height="match_parent"
             android:importantForAccessibility="no"
             android:visibility="invisible" />
+
+        <!-- The ground strip: each wall page's own ground (wallpaper dim; on the Terminal page the
+             canvas tint when it is not glass), with a soft seam that travels with the page edge.
+             Painted over the window's rect, above the wallpaper and below every page. Shown only
+             in wallpaper mode; opaque mode keeps the terminal's own background. -->
+        <com.termux.app.chrome.GroundStripView
+            android:id="@+id/ground_strip"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
 
         <!-- The joined Docked frame's glass: one sheet behind the status bar, the canvas band, the
              dock rows and the keyboard, so there is no seam between them. Dressed (and shown) by
@@ -52,31 +83,29 @@
             android:visibility="gone"
             android:background="?attr/termuxColorSurfaceBase">
 
-            <!-- Wallpaper-mode frost: RealtimeBlurView cannot sample the system wallpaper behind
-                 the transparent window, so this shows a crop of the dock's pre-blurred wallpaper
-                 frame instead. Populated in updateTopPaneWallpaperFrost(). -->
-            <ImageView
-                android:id="@+id/terminal_status_bar_wallpaper_backdrop"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:scaleType="fitXY"
-                android:importantForAccessibility="no"
-                android:visibility="gone" />
-
-            <com.github.mmin18.widget.RealtimeBlurView
-                android:id="@+id/terminal_status_bar_glass_blur"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                app:realtimeBlurRadius="10dp"
-                app:realtimeOverlayColor="@android:color/transparent" />
-
-            <View
+            <!-- The strip's glass draws the wallpaper frost itself (WallpaperFrostPainter
+                 installs it) and registers with the glass service. -->
+            <com.termux.app.chrome.BarGlassView
                 android:id="@+id/terminal_status_bar_glass_surface"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent" />
         </FrameLayout>
 
-        <RelativeLayout
+        <!-- The deck look's band behind the system status bar (wave 8): the window bar's opaque
+             slab carried up under the clock while a terminal effect is drawn, over whatever glass
+             the strip or the joined Docked frame lays there. Owned by applyDeckBands alone; gone
+             off the deck. -->
+        <View
+            android:id="@+id/deck_status_band"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_gravity="top"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
+
+        <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/activity_termux_root_relative_layout"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -86,10 +115,9 @@
             android:clipToPadding="false"
             android:orientation="vertical">
 
-        <LinearLayout
+        <com.termux.app.chrome.LiveBackdropLinearLayout
             android:id="@+id/terminal_content_column"
             android:layout_alignParentTop="true"
-            android:layout_above="@+id/accessory_stack_container"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:orientation="vertical"
@@ -118,27 +146,19 @@
                 android:clipToPadding="false"
                 android:visibility="gone">
 
-                <!-- Wallpaper-mode frost twin of terminal_status_bar_wallpaper_backdrop; both
-                     crops come from the same shared blur frame so the seam is invisible. -->
-                <ImageView
-                    android:id="@+id/terminal_window_bar_wallpaper_backdrop"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    android:scaleType="fitXY"
-                    android:importantForAccessibility="no"
-                    android:visibility="gone" />
-
-                <com.github.mmin18.widget.RealtimeBlurView
-                    android:id="@+id/terminal_window_bar_blur"
-                    android:layout_width="match_parent"
-                    android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
-
-                <View
+                <com.termux.app.chrome.BarGlassView
                     android:id="@+id/terminal_window_bar_background"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent" />
+
+                <!-- The second card when the camera stands mid-bar: the bar splits round the
+                     hole into two cards, this one the narrower. Gone otherwise. -->
+
+                <com.termux.app.chrome.BarGlassView
+                    android:id="@+id/terminal_window_bar_background_side"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
 
                 <!-- The lens edges and the place icons, behind everything the bar shows: the
                      neighbours rest half past the edges and the icon at home sits beside the
@@ -227,15 +247,25 @@
                     android:clipChildren="true"
                     android:clipToPadding="true">
 
+                    <!-- The two sides' row content share one slot, which clips them: the
+                         Terminal's badge and window chips, and Home's float chips (ADR 0030
+                         section 2). Each strip slides with its side (TopStackRenderer), one wall
+                         apart, so only the front side's shows at rest. -->
+                    <FrameLayout
+                        android:id="@+id/terminal_status_sides"
+                        android:layout_width="0dp"
+                        android:layout_height="match_parent"
+                        android:layout_weight="1"
+                        android:clipChildren="true">
+
                     <!-- The place's own row content: its badge and its chips. The strip slides
                          with the pane wall and dissolves at the bar's edges, so one place's row
                          leaves through the lens and the next arrives through it, while the
                          stat widgets beside it hold still. -->
                     <com.termux.app.statusbar.PlaceContentStrip
                         android:id="@+id/terminal_status_place_content"
-                        android:layout_width="0dp"
+                        android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:layout_weight="1"
                         android:paddingStart="14dp"
                         android:gravity="center_vertical">
 
@@ -265,6 +295,36 @@
                             android:visibility="gone"
                             android:contentDescription="@string/termux_window_bar_content_description" />
                     </com.termux.app.statusbar.PlaceContentStrip>
+
+                    <!-- Home's own chips: one per float on the Home page shown, the window
+                         chips' own views and look, never the Terminal's list. -->
+                    <com.termux.app.statusbar.PlaceContentStrip
+                        android:id="@+id/terminal_status_home_chips"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:paddingStart="14dp"
+                        android:gravity="center_vertical">
+
+                        <com.termux.app.terminal.TerminalWindowBar
+                            android:id="@+id/terminal_home_float_bar"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:background="@android:color/transparent"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_home_float_bar_content_description" />
+
+                        <com.termux.app.statusbar.StatusBarWindowColumn
+                            android:id="@+id/terminal_home_float_column"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginTop="6dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_home_float_bar_content_description" />
+                    </com.termux.app.statusbar.PlaceContentStrip>
+
+                    </FrameLayout>
 
                     <!-- The CPU/RAM/weather cluster: CPU · RAM · Weather at the row's end
                          everywhere, except the Widgets place, where TermuxActivity reverses
@@ -313,6 +373,22 @@
                             android:visibility="gone" />
 
                         <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_battery"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/termux_status_widget_battery_content_description" />
+
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_battery_weather"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
                             android:id="@+id/terminal_status_widget_weather"
                             android:layout_width="wrap_content"
                             android:layout_height="match_parent"
@@ -343,6 +419,25 @@
                         android:paddingEnd="3dp"
                         android:clipChildren="false"
                         android:clipToPadding="false">
+
+                        <!-- The notifications mark (status_widget_notifications): a bell and the
+                             count while notifications wait, the ones the dock badges; gone with
+                             none, or with the indicator off. -->
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_notifications"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_notifications"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/editor_st_notifications_indicator_description" />
 
                         <!-- The AI glyph is not a preference: it appears only while a model is
                              actually resident, so it owns its own visibility and its own dot. -->
@@ -403,17 +498,9 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent">
 
-                    <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_az_bar_host_blur"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        app:realtimeBlurRadius="10dp"
-                        app:realtimeOverlayColor="@android:color/transparent" />
-
                     <!-- Wallpaper-mode frost: the shared pre-blurred frame at this capsule's
-                         own place on screen, which the blur above cannot see. While it shows,
-                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
-                         installs it. -->
+                         own place on screen (the Wallpaper backdrop kind).
+                         WallpaperFrostPainter.applyOffDockSheet() installs it. -->
                     <ImageView
                         android:id="@+id/place_az_bar_host_frost"
                         android:layout_width="match_parent"
@@ -457,17 +544,9 @@
                     android:layout_alignTop="@+id/place_off_dock_plank_bars"
                     android:layout_alignBottom="@+id/place_off_dock_plank_bars">
 
-                    <com.github.mmin18.widget.RealtimeBlurView
-                        android:id="@+id/place_off_dock_plank_blur"
-                        android:layout_width="match_parent"
-                        android:layout_height="match_parent"
-                        app:realtimeBlurRadius="10dp"
-                        app:realtimeOverlayColor="@android:color/transparent" />
-
                     <!-- Wallpaper-mode frost: the shared pre-blurred frame at this plank's
-                         own place on screen, which the blur above cannot see. While it shows,
-                         the live blur is GONE; WallpaperFrostPainter.applyOffDockSheet()
-                         installs it. -->
+                         own place on screen (the Wallpaper backdrop kind).
+                         WallpaperFrostPainter.applyOffDockSheet() installs it. -->
                     <ImageView
                         android:id="@+id/place_off_dock_plank_frost"
                         android:layout_width="match_parent"
@@ -503,7 +582,7 @@
                  answers for the sides is structure rather than padding anyone applies. It clips:
                  a rail holds more icons than the screen is tall and scrolls them, and an unclipped
                  band let the scrolled ones out past the canvas to sit beside the dock. -->
-            <LinearLayout
+            <com.termux.app.chrome.LiveBackdropLinearLayout
                 android:id="@+id/terminal_canvas_band"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
@@ -556,8 +635,9 @@
                         android:visibility="gone" />
                 </LinearLayout>
 
-                <!-- The extra keys standing off the dock: the toolbar pager's own first-page
-                     ExtraKeysView is lent to this host. syncExtraKeysHost() fills and sizes it. -->
+                <!-- The extra keys standing off the dock: the activity's own standalone
+                     ExtraKeysPageView of key page 1 stands in this host. syncExtraKeysHost() fills
+                     and sizes it. -->
                 <FrameLayout
                     android:id="@+id/place_extra_keys_host"
                     android:layout_width="wrap_content"
@@ -567,7 +647,7 @@
 
             </com.termux.app.place.EdgeStackView>
 
-            <FrameLayout
+            <com.termux.app.chrome.LiveBackdropFrameLayout
                 android:id="@+id/terminal_surface_host"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
@@ -596,7 +676,7 @@
                     <!-- Split-pane host: TerminalPaneController inflates the recursive pane
                          tree (view_terminal_pane.xml per leaf) into this frame. A single
                          unsplit shell is just one pane filling the host. -->
-                    <FrameLayout
+                    <com.termux.app.chrome.LiveBackdropFrameLayout
                         android:id="@+id/terminal_pane_host"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
@@ -612,7 +692,7 @@
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone" />
-            </FrameLayout>
+            </com.termux.app.chrome.LiveBackdropFrameLayout>
 
             <com.termux.app.place.EdgeStackView
                 android:id="@+id/place_edge_stack_right"
@@ -621,16 +701,29 @@
                 app:edgeStackEdge="right"
                 android:clipChildren="false"
                 android:clipToPadding="false" />
-            </LinearLayout>
+            </com.termux.app.chrome.LiveBackdropLinearLayout>
 
             <!-- The content column ends at the canvas band. The whole bottom edge — the status
                  bar included — stands in accessory_row_stack below, because that is the one
                  container that keeps its bands above the in-app keyboard and on the dock's glass.
                  There used to be a second bottom stack here holding only the status bar, which is
                  what pinned it above the dock whatever order the user gave it. -->
-        </LinearLayout>
+        </com.termux.app.chrome.LiveBackdropLinearLayout>
 
-        <RelativeLayout
+        <!-- The deck look's band behind the system navigation bar (wave 8): from the bottom of the
+             accessory stack (the keyboard's foot) to the screen's bottom edge, the keyboard's
+             opaque slab while a terminal effect is drawn. Owned by applyDeckBands alone; gone off
+             the deck. -->
+        <View
+            android:id="@+id/deck_nav_band"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_below="@+id/accessory_stack_container"
+            android:layout_alignParentBottom="true"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
+        <com.termux.app.chrome.LiveBackdropRelativeLayout
             android:id="@+id/accessory_stack_container"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
@@ -639,7 +732,30 @@
             android:clipToPadding="false"
             android:visibility="gone">
 
-            <FrameLayout
+            <!-- First child: it draws behind the dock's glass (child order, not Z). -->
+            <com.termux.app.LauncherAzGestureFxView
+                android:id="@+id/apps_bar_az_fx_underlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_above="@id/accessory_keyboard_column"
+                android:layout_alignWithParentIfMissing="true"
+                android:clickable="false"
+                android:focusable="false"
+                android:visibility="gone" />
+
+            <!-- The shelf under a floating Glass tray: a contact shadow and a faint glow on the
+                 wallpaper below the slab. Behind the glass host, which it follows; drawn below
+                 its own bounds, which nothing above it clips. Shown only where the dock's glass
+                 refracts (Android 13 and up). -->
+            <com.termux.app.DockShelfView
+                android:id="@+id/accessory_shelf_fx"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:visibility="invisible" />
+
+            <!-- The dock's glass host. Drawn as Lens beads, everything in it is clipped to the
+                 beads (DockSurfaceHostLayout.setBeads); otherwise a plain FrameLayout. -->
+            <com.termux.app.DockSurfaceHostLayout
                 android:id="@+id/accessory_surface_host"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
@@ -690,17 +806,7 @@
                     android:layout_height="300dp"
                     android:layout_gravity="center"
                     android:visibility="gone" />
-            </FrameLayout>
-
-            <com.termux.app.LauncherAzGestureFxView
-                android:id="@+id/apps_bar_az_fx_underlay"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_above="@id/accessory_keyboard_column"
-                android:layout_alignWithParentIfMissing="true"
-                android:clickable="false"
-                android:focusable="false"
-                android:visibility="gone" />
+            </com.termux.app.DockSurfaceHostLayout>
 
             <!-- The whole bottom edge: the pinned apps, the alphabets index, the extra keys and —
                  when the place stands it here — the status bar, in the order
@@ -756,6 +862,8 @@
                         android:id="@+id/apps_bar_viewpager"
                         android:layout_width="match_parent"
                         android:layout_height="0dp"
+                        android:clipChildren="false"
+                        android:clipToPadding="false"
                         android:visibility="gone">
 
                         <!-- Transform host owned solely by the dock plank physics: the icon row
@@ -779,15 +887,6 @@
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
-                    <com.termux.app.AzScrubRowView
-                        android:id="@+id/apps_bar_az_row"
-                        android:layout_width="match_parent"
-                        android:layout_height="19dp"
-                        android:gravity="center_vertical"
-                        android:textColor="?attr/termuxColorOnSurfaceVariant"
-                        android:elevation="10dp"
-                        android:visibility="gone" />
-
                     <!-- Keybind hint row: takes the A-Z row's exact slot while a Ctrl+Alt prefix is
                          latched, so the hints cost no terminal space at all. Chips are built in
                          TermuxActivity.showKeybindHintDockRow(). -->
@@ -795,37 +894,88 @@
                         android:id="@+id/keybind_hint_dock_row"
                         android:layout_width="match_parent"
                         android:layout_height="match_parent"
-                        android:elevation="11dp"
                         android:scrollbars="none"
                         android:clickable="true"
                         android:visibility="gone" />
+
+                    <com.termux.app.AzScrubRowView
+                        android:id="@+id/apps_bar_az_row"
+                        android:layout_width="match_parent"
+                        android:layout_height="19dp"
+                        android:gravity="center_vertical"
+                        android:textColor="?attr/termuxColorOnSurfaceVariant"
+                        android:visibility="gone" />
                 </FrameLayout>
 
-                <FrameLayout
+                <com.termux.app.dock.KeysRowHostLayout
                     android:id="@+id/terminal_toolbar_host"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:clipChildren="false"
                     android:clipToPadding="false">
 
-                    <androidx.viewpager.widget.ViewPager
+                    <!-- The Terminal's extra-keys card while it stands apart from Home's dock card
+                         (SideCards): laid out from the answer at rest and never the size that sizes
+                         this row (KeysCardLayout). It rides the Terminal's lane with the row. Its
+                         glass layers are the dock capsule's, dressed by the dock (GONE until then);
+                         the shelf stands beside it because it draws below the card's cut. -->
+                    <com.termux.app.DockShelfView
+                        android:id="@+id/extra_keys_card_shelf_fx"
+                        android:layout_width="match_parent"
+                        android:layout_height="match_parent"
+                        android:visibility="gone" />
+
+                    <com.termux.app.dock.KeysCardLayout
+                        android:id="@+id/extra_keys_card"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:clipChildren="true"
+                        android:clipToPadding="true"
+                        android:visibility="gone">
+
+                        <ImageView
+                            android:id="@+id/extra_keys_card_blur_backdrop"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:scaleType="fitXY"
+                            android:visibility="gone" />
+
+                        <View
+                            android:id="@+id/extra_keys_card_top_edge_fx"
+                            android:layout_width="match_parent"
+                            android:layout_height="12dp"
+                            android:layout_gravity="top"
+                            android:visibility="gone" />
+
+                        <View
+                            android:id="@+id/extra_keys_card_background"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone"
+                            android:background="?attr/termuxColorSurfacePanelHigh"/>
+
+                        <com.termux.app.DockEdgeGlowView
+                            android:id="@+id/extra_keys_card_edge_glow_fx"
+                            android:layout_width="match_parent"
+                            android:layout_height="match_parent"
+                            android:visibility="gone" />
+
+                        <View
+                            android:id="@+id/extra_keys_card_specular_fx"
+                            android:layout_width="300dp"
+                            android:layout_height="300dp"
+                            android:layout_gravity="center"
+                            android:visibility="gone" />
+                    </com.termux.app.dock.KeysCardLayout>
+
+                    <com.termux.app.terminal.extrakeys.ExtraKeysBarView
                         android:id="@+id/terminal_toolbar_view_pager"
                         android:visibility="gone"
                         android:layout_width="match_parent"
                         android:layout_height="37.5dp"
                         android:background="@android:color/transparent"/>
-                </FrameLayout>
+                </com.termux.app.dock.KeysRowHostLayout>
             </com.termux.app.place.EdgeStackView>
-
-            <com.termux.app.LauncherAzGestureFxView
-                android:id="@+id/apps_bar_az_fx_overlay"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:layout_above="@id/accessory_keyboard_column"
-                android:layout_alignWithParentIfMissing="true"
-                android:clickable="false"
-                android:focusable="false"
-                android:visibility="gone" />
 
             <!-- The keyboard and the bands standing under it, bottom-anchored as one column: the
                  keyboard on top and accessory_under_keyboard_stack below it, so the bands a place
@@ -846,7 +996,7 @@
                 android:clipChildren="false"
                 android:clipToPadding="false">
 
-                <LinearLayout
+                <com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout
                     android:id="@+id/inapp_keyboard_container"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
@@ -877,7 +1027,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:contentDescription="@string/termux_in_app_keyboard_height_adjust_cancel"
-                                    app:icon="@drawable/ic_symbol_close" />
+                                    app:icon="@drawable/ic_rl_close" />
 
                                 <FrameLayout
                                     android:id="@+id/inapp_keyboard_height_adjust_handle"
@@ -900,7 +1050,7 @@
                                     android:layout_width="wrap_content"
                                     android:layout_height="wrap_content"
                                     android:contentDescription="@string/termux_in_app_keyboard_height_adjust_confirm"
-                                    app:icon="@drawable/ic_symbol_check" />
+                                    app:icon="@drawable/ic_rl_check" />
                             </LinearLayout>
                         </FrameLayout>
 
@@ -971,7 +1121,7 @@
                         android:id="@+id/inapp_keyboard_view_host"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content" />
-                </LinearLayout>
+                </com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout>
 
                 <!-- The bottom bands a place stands under the keyboard, outermost last as in every
                      bottom stack (EdgeStackPolicy.underKeyboard). applyEdgeStacks() moves the
@@ -988,7 +1138,17 @@
                     android:clipToPadding="false"
                     android:visibility="gone" />
             </LinearLayout>
-        </RelativeLayout>
+            <!-- Last child: the orb and the edge bloom draw over the keyboard (child order, not Z). -->
+            <com.termux.app.LauncherAzGestureFxView
+                android:id="@+id/apps_bar_az_fx_overlay"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_above="@id/accessory_keyboard_column"
+                android:layout_alignWithParentIfMissing="true"
+                android:clickable="false"
+                android:focusable="false"
+                android:visibility="gone" />
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
 
         <!-- The minimised A–Z index: a half-pill tab flush against the screen's side, outside the
              pane's border, and the letters it slides out over the canvas while held. The whole
@@ -1018,13 +1178,21 @@
             android:focusable="false"
             android:clipChildren="false"
             android:clipToPadding="false"
-            android:elevation="14dp"
+            android:visibility="gone" />
+
+        <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
+             stays on screen with its matches lit. Filled by TerminalFindCoordinator. -->
+        <FrameLayout
+            android:id="@+id/terminal_find_bar_host"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_alignParentBottom="true"
             android:visibility="gone" />
 
         <!-- The Appearance editor's tap layer. It covers the whole frame while the editor is up,
              so nothing under it - the terminal, the dock's apps, the keyboard's keys - receives a
              touch; each group below is laid in code over its element's measured rect, and a tap on
-             one selects that element. Elevated over the floating keyboard's host so a floating
+             one selects that element. Last in the body, so it stands over the floating keyboard's host and a floating
              keyboard is a tap target too, not a keyboard. -->
         <FrameLayout
             android:id="@+id/surface_tuning_gesture_overlay"
@@ -1032,7 +1200,6 @@
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
             android:layout_alignParentBottom="true"
-            android:elevation="18dp"
             android:visibility="gone">
 
             <!-- The bare wallpaper: first child and the whole frame, so every element's group
@@ -1095,28 +1262,62 @@
                 android:visibility="gone" />
         </FrameLayout>
 
-        <!-- Scrollback find strip: one text line above the dock, so the transcript it searches
-             stays on screen with its matches lit. Filled by TerminalFindCoordinator. -->
-        <FrameLayout
-            android:id="@+id/terminal_find_bar_host"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
-            android:elevation="16dp"
-            android:visibility="gone" />
-
+        <!-- Last in the body: the A-Z scrub's labels draw over everything in it (child order, not Z). -->
         <com.termux.app.LauncherAzGestureFxView
             android:id="@+id/apps_bar_az_label_overlay"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
             android:layout_alignParentTop="true"
-            android:layout_above="@id/accessory_stack_container"
-            android:layout_alignWithParentIfMissing="true"
+            android:layout_alignParentBottom="true"
             android:clickable="false"
             android:focusable="false"
             android:visibility="gone" />
-        </RelativeLayout>
+        </com.termux.app.chrome.LiveBackdropRelativeLayout>
+        <!-- Layer 2, CHROME (ADR 0028 section 6): the layers that stand over the body. -->
+        <com.termux.app.chrome.LiveBackdropFrameLayout
+            android:id="@+id/window_layer_chrome"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
+        <!-- The Home pill's layer: Home's extra keys as a small floating glass pill. Full size, no
+             background, and it claims a touch only when the down lands on the pill or its chip.
+             It sits just before the app drawer so the drawer, the palette and the sheets draw
+             over it and see touches first, while the wall (Home's widget pages) is under it.
+             HomePillController hides the pill (INVISIBLE) whenever Home is not showing it. -->
+        <com.termux.app.terminal.extrakeys.HomePillLayer
+            android:id="@+id/home_pill_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
+
+        <!-- The page switcher key's layer: full size, no background, and not clickable while the
+             bar is away. PageBarController raises the key's page bar in it and takes touches only
+             while the bar stays open after a tap. -->
+        <FrameLayout
+            android:id="@+id/page_switch_layer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clickable="false"
+            android:focusable="false"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
+
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
+
+        <!-- Layer 3, SHEETS: the drawer, the palette, the terminal sheet and what opens on them, and
+             the rename chip (a rename can start from a sheet, so the chip is the host's last child).
+             The one host that reaches the screen's bottom edge with the stack's layout: sheets run
+             under the gesture pill (BottomInsetFrameLayout.setReachingLayer). -->
+        <com.termux.app.chrome.LiveBackdropFrameLayout
+            android:id="@+id/window_layer_sheets"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false">
+
         <!-- App drawer overlay plane. A full-bleed sibling of the padded content root, so it paints
              over the whole accessory stack while still losing to the command palette in z. It is
              deliberately NOT part of the accessory stack: the drawer animates with transforms only,
@@ -1146,12 +1347,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/app_drawer_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="10dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
         </FrameLayout>
 
@@ -1185,12 +1389,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/command_palette_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="18dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
         </FrameLayout>
 
@@ -1233,12 +1440,15 @@
                     android:importantForAccessibility="no"
                     android:visibility="gone" />
 
-                <com.github.mmin18.widget.RealtimeBlurView
+                <!-- What the window draws beneath the panel, blurred (PanelBackdrop: a Snapshot,
+                     or Live while Live blur is on). The panel's lowest view after the frost, so
+                     nothing of the panel is in its own picture. -->
+                <ImageView
                     android:id="@+id/terminal_sheet_blur"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
-                    app:realtimeBlurRadius="18dp"
-                    app:realtimeOverlayColor="@android:color/transparent" />
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no" />
             </FrameLayout>
 
             <!-- Cards, oldest first: a sheet opened from a sheet (the workspace picker's confirm)
@@ -1261,10 +1471,11 @@
             android:layout_height="match_parent"
             android:clickable="false"
             android:focusable="false"
-            android:elevation="20dp"
             android:visibility="gone" />
 
-    </FrameLayout>
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
+
+    </com.termux.app.place.BottomInsetFrameLayout>
 
     <FrameLayout
         android:id="@+id/activity_termux_bottom_space_view"
@@ -1280,3 +1491,33 @@
     </FrameLayout>
 
 </com.termux.app.terminal.TermuxActivityRootView>
+
+    <!-- Layer 4, EDITOR: the Appearance editor's card sheet, bar and picker, and the setup sheet.
+         Beside the shell, not in it: the editor scales the shell. -->
+    <FrameLayout
+        android:id="@+id/window_layer_editor"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false">
+
+        <!-- The card sheet, the bar and their hints, whose elevations cast their shadows inside
+             this host: the picker's host is added after it in the layer, so it stands over them
+             by child order, not Z. -->
+        <FrameLayout
+            android:id="@+id/editor_panel_host"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:clipChildren="false"
+            android:clipToPadding="false" />
+    </FrameLayout>
+
+    <!-- Layer 5, NOTICES: notices, the reset cards, the help overlay and the transient popups. -->
+    <FrameLayout
+        android:id="@+id/window_layer_notices"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:clipChildren="false"
+        android:clipToPadding="false" />
+
+</FrameLayout>

@@ -4,8 +4,8 @@ import android.content.Context;
 import android.content.res.ColorStateList;
 import android.graphics.Canvas;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -19,27 +19,77 @@ import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.widget.ImageViewCompat;
 
-import com.airbnb.lottie.LottieAnimationView;
-import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
-import com.termux.shared.termux.font.NerdFontSpans;
+import com.termux.app.theme.TextScale;
 
 /**
  * Compact trailing status-bar widget: a native vector icon plus a short value, e.g. a CPU/RAM
  * percentage or a temperature. Sized to sit on the same row as the window pills. Tapping it
  * is expected to open an anchored detail card; the widget itself is the anchor view.
  */
-public final class StatusBarWidgetView extends LinearLayout {
+public final class StatusBarWidgetView extends LinearLayout implements TextScale.Follower {
 
     public enum ColorRole { PRIMARY, SECONDARY, TERTIARY }
 
+    /**
+     * The icon's box, every mark's alike (CPU, RAM, the AI robot, the bell). The 24-unit Roundline
+     * icons ink about 20 of it, 12.5dp here: the size the 11.5sp glyph read at.
+     */
+    private static final int ICON_BOX_DP = 15;
+
+    /** Dresses this widget as the CPU reading: its icon and its tier, the primary role. */
+    public void dressAsCpu() {
+        setColorRole(ColorRole.PRIMARY);
+        setIconResource(R.drawable.ic_rl_cpu);
+    }
+
+    /** Dresses this widget as the memory reading: its icon and its tier, the secondary role. */
+    public void dressAsRam() {
+        setColorRole(ColorRole.SECONDARY);
+        setIconResource(R.drawable.ic_rl_memory);
+    }
+
+    /**
+     * Dresses this widget as the battery reading: its tier (the tertiary role) and a drawn battery
+     * in the icon's box instead of a glyph. Returns the picture to set the reading on; repeat calls
+     * return the same one.
+     */
+    @NonNull
+    BatteryIconDrawable dressAsBattery() {
+        setColorRole(ColorRole.TERTIARY);
+        if (mBatteryIcon == null) mBatteryIcon = new BatteryIconDrawable();
+        setIconDrawable(mBatteryIcon);
+        return mBatteryIcon;
+    }
+
+    /**
+     * The role colour a tier is written in, from {@code context}'s theme (the launcher's scheme
+     * chrome included): the seed every reading's measured ink is toned from.
+     */
+    @ColorInt
+    public static int seedFor(@NonNull Context context, @NonNull ColorRole role) {
+        int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
+            ContextCompat.getColor(context, R.color.termux_primary));
+        switch (role) {
+            case SECONDARY:
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorSecondary,
+                    ContextCompat.getColor(context, R.color.termux_secondary));
+            case TERTIARY:
+                return MaterialColors.getColor(context,
+                    com.termux.shared.R.attr.termuxColorTertiary, primary);
+            default:
+                return primary;
+        }
+    }
+
     private final GaugeIcon mIcon;
-    private final TextView mGlyph;
-    @Nullable private LottieAnimationView mAnimation;
+    @Nullable private BatteryIconDrawable mBatteryIcon;
+    /** The weather's two-tint picture, built on first use: only the weather widget has one. */
+    @Nullable private WeatherIconDrawable mWeatherIcon;
+    @Nullable private WeatherIcons.Icon mWeatherShown;
     private final TextView mValue;
-    @Nullable private String mAnimationAsset;
-    private final Runnable mSettleAnimation = this::settleAnimation;
     private boolean mAccent;
     private boolean mMuted;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
@@ -52,6 +102,8 @@ public final class StatusBarWidgetView extends LinearLayout {
     @Nullable private Integer mLabelInk;
     @Nullable private Integer mIconInk;
     @Nullable private Integer mMutedInk;
+    /** The deck look's display colour while a terminal effect is on; null otherwise (wave 8). */
+    @Nullable private Integer mDeckDisplay;
     /** The stats share a floor so a value ticking between widths does not shift its neighbours. */
     private static final int MIN_WIDTH_WITH_VALUE_DP = 34;
     /** The widget's own room at each end along a row, and what it keeps of it in a tight row. */
@@ -79,20 +131,7 @@ public final class StatusBarWidgetView extends LinearLayout {
         mIcon = new GaugeIcon(context);
         mIcon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
         mIcon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        addView(mIcon, new LayoutParams(dp(15), dp(15)));
-
-        // The glyph alternative to the vector icon, drawn with the bundled symbols face. One
-        // Nerd Font name covers states a vector set would need a file each for — which is what
-        // makes a full day/night weather mapping practical.
-        mGlyph = new TextView(context);
-        mGlyph.setGravity(Gravity.CENTER);
-        mGlyph.setIncludeFontPadding(false);
-        mGlyph.setSingleLine(true);
-        mGlyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 11.5f);
-        mGlyph.setTypeface(NerdFontSpans.typeface(context));
-        mGlyph.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        mGlyph.setVisibility(GONE);
-        addView(mGlyph, new LayoutParams(LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+        addView(mIcon, new LayoutParams(dp(ICON_BOX_DP), dp(ICON_BOX_DP)));
 
         mValue = new TextView(context);
         mValue.setGravity(Gravity.CENTER_VERTICAL);
@@ -127,93 +166,35 @@ public final class StatusBarWidgetView extends LinearLayout {
     public void setIconResource(@DrawableRes int drawableRes) {
         mIcon.setImageResource(drawableRes);
         mIcon.setVisibility(VISIBLE);
-        mGlyph.setVisibility(GONE);
-        hideAnimation();
+        mWeatherShown = null;
     }
 
     /**
-     * A bundled Lottie animation shown before the value instead of an icon or a glyph. The view is
-     * created on first use: only the weather widget has one, and inflating a Lottie view for the
-     * CPU and RAM widgets that will never play anything is pure cost.
-     *
-     * @param assetPath a path under {@code assets/}, e.g. {@code weather/clear-day.json}
+     * A drawn picture shown before the value, in the icon's box. It takes the widget's icon ink as
+     * its tint. Only on a change, so the repeat calls of a refresh pass cost nothing.
      */
-    public void setIconAnimation(@NonNull String assetPath) {
-        if (mAnimation == null) {
-            mAnimation = new LottieAnimationView(getContext());
-            // Plays once per condition change and holds its last frame. Looping pins the whole
-            // activity to the panel's full refresh rate for as long as the status bar is up:
-            // measured on Pong at 1215 frames/10s and 47% of a core, against 431 frames and 33%
-            // with this line — and that 33% is the flip clock, which is there either way. The
-            // card's headline icon still loops, because it only runs while the card is open.
-            mAnimation.setRepeatCount(0);
-            mAnimation.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-            // Meteocons are multi-colour by design, so unlike the vector icons this one is not
-            // tinted to the widget's Material role.
-            addView(mAnimation, indexOfChild(mValue), new LayoutParams(dp(19), dp(19)));
-        }
-        if (!assetPath.equals(mAnimationAsset)) {
-            mAnimationAsset = assetPath;
-            mAnimation.setAnimation(assetPath);
-            mAnimation.playAnimation();
-        }
-        mAnimation.setVisibility(VISIBLE);
-        mIcon.setVisibility(GONE);
-        mGlyph.setVisibility(GONE);
+    public void setIconDrawable(@NonNull Drawable drawable) {
+        if (mIcon.getDrawable() != drawable) mIcon.setImageDrawable(drawable);
+        if (mIcon.getVisibility() != VISIBLE) mIcon.setVisibility(VISIBLE);
+        if (drawable != mWeatherIcon) mWeatherShown = null;
     }
 
     /**
-     * A Nerd Font code point shown before the value instead of a vector icon. Falls back to
-     * whatever icon is already set when the bundled face failed to load, so a widget is never
-     * left drawing a tofu box where its icon was.
+     * The weather's picture before the value, in the icon's box: its cloud in the widget's icon ink
+     * and its sun, moon or bolt in the accent. Only on a change, so the repeat calls of a refresh
+     * pass cost nothing.
      */
-    public void setIconGlyph(@NonNull CharSequence glyph) {
-        if (mGlyph.getTypeface() == null) return;
-        // Only on a change: this runs on every window-bar refresh, and a TextView's setText
-        // requests a layout of the whole cluster whether or not the glyph differs.
-        if (!android.text.TextUtils.equals(mGlyph.getText(), glyph)) mGlyph.setText(glyph);
-        mGlyph.setVisibility(VISIBLE);
-        mIcon.setVisibility(GONE);
-        hideAnimation();
+    public void setWeatherIcon(@NonNull WeatherIcons.Icon icon) {
+        if (mWeatherIcon == null) mWeatherIcon = new WeatherIconDrawable(getContext());
+        if (mWeatherShown == icon && mIcon.getDrawable() == mWeatherIcon) return;
+        setIconDrawable(mWeatherIcon);
+        mWeatherShown = icon;
         applyColors();
     }
 
-    /**
-     * Loops the icon animation for {@code durationMs}, then lets the current pass finish and holds
-     * the last frame again.
-     *
-     * <p>The steady state deliberately does not loop — measured on Pong at 1215 frames/10s and 47%
-     * of a core against 431 frames and 33% held still — so this is the bounded exception: a few
-     * seconds of movement when the user has just arrived, where the animation is the point, and
-     * then back to a still icon for the hours it sits there afterwards.
-     */
-    public void replayIconAnimation(long durationMs) {
-        if (mAnimation == null || mAnimationAsset == null) return;
-        if (getVisibility() != VISIBLE || mAnimation.getVisibility() != VISIBLE) return;
-        removeCallbacks(mSettleAnimation);
-        mAnimation.setRepeatCount(LottieDrawable.INFINITE);
-        mAnimation.playAnimation();
-        postDelayed(mSettleAnimation, durationMs);
-    }
-
-    /** Back to play-once: the running pass finishes and the icon holds its last frame. */
-    private void settleAnimation() {
-        if (mAnimation != null) mAnimation.setRepeatCount(0);
-    }
-
-    private void hideAnimation() {
-        if (mAnimation == null) return;
-        removeCallbacks(mSettleAnimation);
-        mAnimation.setRepeatCount(0);
-        mAnimation.setVisibility(GONE);
-        mAnimation.pauseAnimation();
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        removeCallbacks(mSettleAnimation);
-        settleAnimation();
-        super.onDetachedFromWindow();
+    /** Re-tints the weather's two layers with the ink and accent {@link #applyColors} settled on. */
+    private void tintWeather(@ColorInt int ink, @ColorInt int accent) {
+        if (mWeatherShown != null && mWeatherIcon != null) mWeatherIcon.set(mWeatherShown, ink, accent);
     }
 
     /**
@@ -291,6 +272,20 @@ public final class StatusBarWidgetView extends LinearLayout {
         applyColors();
     }
 
+    /**
+     * The deck look (wave 8): the reading lit in the display window's colour with a soft glow
+     * while a terminal effect is on; {@code null} puts the chrome's ink back. Sizes unchanged.
+     */
+    public void setDeckLook(@Nullable com.termux.app.terminal.DeckLook deck) {
+        Integer display = deck == null ? null : deck.display;
+        if (java.util.Objects.equals(mDeckDisplay, display)) return;
+        mDeckDisplay = display;
+        float glow = display == null ? 0f : dp(4);
+        int glowColour = display == null ? 0 : ColorUtils.setAlphaComponent(display, 153);
+        mValue.setShadowLayer(glow, 0f, 0f, glowColour);
+        applyColors();
+    }
+
     /** Accent styling used while the widget's detail card is open. */
     public void setAccent(boolean accent) {
         if (mAccent == accent) return;
@@ -326,7 +321,17 @@ public final class StatusBarWidgetView extends LinearLayout {
 
         // The trailing stats read as one status cluster. Color and dot separators provide the
         // grouping, so individual pill backgrounds only add visual noise.
-        setBackground(null);
+        if (getBackground() != null) setBackground(null);
+
+        // The deck's display window: every reading lit in the display colour, a muted one dimmed.
+        if (mDeckDisplay != null) {
+            int lit = mMuted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
+            ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(lit));
+            tintWeather(lit, lit);
+            mIcon.setEmptyColor(ColorUtils.setAlphaComponent(mDeckDisplay, 90));
+            mValue.setTextColor(lit);
+            return;
+        }
 
         // Measured ink wins outright. It was resolved on what this band is really drawn over and
         // it carries whatever alpha that leaves room for, so laying the tier's old alpha over it
@@ -335,8 +340,8 @@ public final class StatusBarWidgetView extends LinearLayout {
             int label = mMuted ? mMutedInk : mLabelInk;
             int icon = mMuted ? mMutedInk : mIconInk;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(icon));
+            tintWeather(icon, mMuted ? mMutedInk : primary);
             mIcon.setEmptyColor(mMutedInk);
-            mGlyph.setTextColor(icon);
             mValue.setTextColor(label);
             return;
         }
@@ -347,8 +352,13 @@ public final class StatusBarWidgetView extends LinearLayout {
         int alpha = mMuted ? 120 : mAccent ? 255 : 238;
         ImageViewCompat.setImageTintList(mIcon,
             ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
-        mGlyph.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
+        tintWeather(ColorUtils.setAlphaComponent(roleColor, alpha),
+            ColorUtils.setAlphaComponent(mMuted ? roleColor : primary, alpha));
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
+    }
+
+    @Override public void onTextScaleChanged() {
+        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
     }
 
     /**
@@ -356,8 +366,7 @@ public final class StatusBarWidgetView extends LinearLayout {
      * this is one answer applied three times; the hierarchy is hue and order.
      */
     private void applyTier() {
-        mValue.setTextSize(TypedValue.COMPLEX_UNIT_SP,
-            StatusBarInk.textSizeSpFor(mColorRole));
+        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
         int weight = StatusBarInk.weightFor(mColorRole);
         // The two-argument form so a heavy tier would be bold even where the platform has no bold
         // cut of the medium face: TextView then asks the paint for it rather than dropping it. At

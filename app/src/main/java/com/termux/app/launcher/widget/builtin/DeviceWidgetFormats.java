@@ -7,8 +7,8 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * The short readings the Battery and System widgets print: "5.1/7.7G", "3d 4h", "31.4°C",
- * "18 W", the hour axis under the 24-hour chart. Android-free so every rule here is a unit test.
+ * The short readings the Device widget prints: "3.1/7.7 GB", "1 h 10 m", "34°C", "18 W", the
+ * hour axis under the 24-hour chart. Android-free so every rule here is a unit test.
  * Numbers use {@link Locale#ROOT}: these are stat readouts in the mono face, set the way a
  * terminal tool prints them.
  */
@@ -24,20 +24,26 @@ public final class DeviceWidgetFormats {
 
     // ----- sizes ----------------------------------------------------------------------------
 
-    /** Memory as "used/totalG" from kilobytes (binary gigabytes, as /proc/meminfo counts). */
+    /**
+     * Memory as "used/total GB" from kilobytes (binary gigabytes, as /proc/meminfo counts); empty
+     * while the total is unknown, so a bar's value is left out rather than shown as a dash.
+     */
     @NonNull public static String memoryPair(long usedKb, long totalKb) {
-        if (totalKb <= 0) return UNKNOWN;
+        if (totalKb <= 0) return "";
         return pair(usedKb / KIB_PER_GIB, totalKb / KIB_PER_GIB);
     }
 
-    /** Storage as "used/totalG" from bytes (decimal gigabytes, as the system's storage screen counts). */
+    /**
+     * Storage as "used/total GB" from bytes (decimal gigabytes, as the system's storage screen
+     * counts); empty while the total is unknown.
+     */
     @NonNull public static String storagePair(long usedBytes, long totalBytes) {
-        if (totalBytes <= 0) return UNKNOWN;
+        if (totalBytes <= 0) return "";
         return pair(usedBytes / BYTES_PER_GB, totalBytes / BYTES_PER_GB);
     }
 
     @NonNull private static String pair(double used, double total) {
-        return gigabytes(Math.max(0d, used)) + "/" + gigabytes(total) + "G";
+        return gigabytes(Math.max(0d, used)) + "/" + gigabytes(total) + " GB";
     }
 
     /** One decimal below ten, whole numbers from ten up: "5.1", "7.7", "156", "256". */
@@ -71,12 +77,12 @@ public final class DeviceWidgetFormats {
         return mins + "m";
     }
 
-    /** A remaining charge time: "42 min", "1 h 5 min", "2 h"; rounded up to the minute. */
+    /** A remaining charge time: "42 min", "1 h 10 m", "2 h"; rounded up to the minute. */
     @NonNull public static String duration(long millis) {
         long minutes = Math.max(1L, (Math.max(0L, millis) + 59_999L) / 60_000L);
         if (minutes < 60) return minutes + " min";
         long hours = minutes / 60, mins = minutes % 60;
-        return mins == 0 ? hours + " h" : hours + " h " + mins + " min";
+        return mins == 0 ? hours + " h" : hours + " h " + mins + " m";
     }
 
     /** Whole minutes in {@code millis}, rounded up, for a spoken description. */
@@ -123,6 +129,15 @@ public final class DeviceWidgetFormats {
     @NonNull public static String celsius(int tenths) {
         if (tenths == Integer.MIN_VALUE) return UNKNOWN;
         return String.format(Locale.ROOT, "%.1f°C", tenths / 10f);
+    }
+
+    /**
+     * "31°C" from tenths of a degree, rounded: the Device's Temp bar, whose value has to fit
+     * beside its label at any font scale. Empty when unknown.
+     */
+    @NonNull public static String celsiusWhole(int tenths) {
+        if (tenths == Integer.MIN_VALUE) return "";
+        return Math.round(tenths / 10f) + "°C";
     }
 
     /** "31.4°" from tenths of a degree. */

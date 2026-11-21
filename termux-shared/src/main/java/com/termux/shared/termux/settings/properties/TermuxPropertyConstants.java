@@ -1,5 +1,6 @@
 package com.termux.shared.termux.settings.properties;
 
+import com.termux.shared.termux.extrakeys.ExtraKeyIcons;
 import com.google.common.collect.ImmutableBiMap;
 import com.termux.shared.termux.shell.am.TermuxAmSocketServer;
 import com.termux.shared.theme.NightMode;
@@ -401,6 +402,24 @@ public final class TermuxPropertyConstants {
     public static final String KEY_EXTRA_KEYS = "extra-keys";
     public static final String KEY_EXTRA_KEYS2 = "extra-keys2";
 
+    /**
+     * Key sets and key sizes per target: the page-1 line, the page-2 line and the height line of the
+     * Terminal, Display, Home and Assistant bars. A line that is absent (or blank) makes the target
+     * follow its shipped set or Global.
+     */
+    public static final String KEY_EXTRA_KEYS_TERMINAL = "extra-keys-terminal";
+    public static final String KEY_EXTRA_KEYS_TERMINAL2 = "extra-keys-terminal2";
+    public static final String KEY_EXTRA_KEYS_TERMINAL_HEIGHT = "extra-keys-terminal-height";
+    public static final String KEY_EXTRA_KEYS_DISPLAY = "extra-keys-display";
+    public static final String KEY_EXTRA_KEYS_DISPLAY2 = "extra-keys-display2";
+    public static final String KEY_EXTRA_KEYS_DISPLAY_HEIGHT = "extra-keys-display-height";
+    public static final String KEY_EXTRA_KEYS_HOME = "extra-keys-home";
+    public static final String KEY_EXTRA_KEYS_HOME2 = "extra-keys-home2";
+    public static final String KEY_EXTRA_KEYS_HOME_HEIGHT = "extra-keys-home-height";
+    public static final String KEY_EXTRA_KEYS_ASSISTANT = "extra-keys-assistant";
+    public static final String KEY_EXTRA_KEYS_ASSISTANT2 = "extra-keys-assistant2";
+    public static final String KEY_EXTRA_KEYS_ASSISTANT_HEIGHT = "extra-keys-assistant-height";
+
 
     //public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[ESC, TAB, CTRL, ALT, {key: '-', popup: '|'}, DOWN, UP]]"; // Upstream Termux's row
 
@@ -408,9 +427,11 @@ public final class TermuxPropertyConstants {
      * The launcher's own key row, shipped as the default so a fresh install needs no
      * termux.properties at all. A value for {@link #KEY_EXTRA_KEYS} in the properties file
      * replaces it, which is also what the {@code extrakeys.edit} editor writes on save — so an
-     * app update can change this row without touching anyone's edited one.
+     * app update can change this row without touching anyone's edited one. The three page keys
+     * ({@code tool:wall.widgets}, {@code tool:wall.terminal}, {@code tool:wall.display}) left it for
+     * the navigation dot; they stay in the key picker.
      */
-    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, display: '󰥻', popup: {key: 'tool:keyboard.cycle_form', display: ''}}, {key: 'tool:mouse.toggle', display: '󰍽'}, {key: 'tool:wall.widgets', display: '', color: 'primary'}, {key: 'tool:wall.terminal', display: '', color: 'secondary'}, {key: 'tool:wall.display', display: '', color: 'tertiary'}, {key: 'tool:pane.split', display: '󱇚', popup: {key: 'tool:window.new', display: '󱂬'}}, {key: 'tool:session.browser', display: '󰉹', popup: {key: 'tool:session.new', display: '󰝜'}}]]";
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS = "[[{key: KEYBOARD, display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "', popup: {key: 'tool:keyboard.cycle_form', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "'}}, {key: 'tool:mouse.toggle', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.MOUSE) + "'}, {key: 'tool:pane.split', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.SPLIT) + "', popup: {key: 'tool:window.new', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.WINDOW_ADD) + "'}}, {key: 'tool:session.browser', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.SESSIONS) + "', popup: {key: 'tool:session.new', display: '󰝜'}}]]";
 
     /**
      * The second page ships empty: one row is what the launcher needs, and the in-app keyboard's
@@ -418,6 +439,20 @@ public final class TermuxPropertyConstants {
      * shown blank, so this is one page by default. Add keys here — or in the editor — to get it.
      */
     public static final String DEFAULT_IVALUE_EXTRA_KEYS2 = "[]";
+
+    /**
+     * The Assistant page's own row: the keyboard key as Global has it, dictate and paste. Written to
+     * {@link #KEY_EXTRA_KEYS_ASSISTANT} once, by the upgrade that made every page follow Global.
+     */
+    public static final String DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT = "[[{key: KEYBOARD, display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "', popup: {key: 'tool:keyboard.cycle_form', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD) + "'}}, {key: 'tool:voice.dictate', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.MIC) + "'}, {key: 'tool:clipboard.paste', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.PASTE) + "'}]]";
+
+    /**
+     * The keys the Home pill starts with when it is switched on and Home has no key set of its own
+     * ({@link #KEY_EXTRA_KEYS_HOME} absent or blank): the command palette, the app drawer and
+     * settings. The caps are the ones the key picker gives those tools (the palette, which has none
+     * of its own, wears a magnifier).
+     */
+    public static final String HOME_PILL_STARTER_EXTRA_KEYS = "[[{key: 'tool:app.command_palette', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.COMMAND) + "'}, {key: 'tool:app.open_app_drawer', display: '" + ExtraKeyIcons.string(ExtraKeyIcons.APPS) + "'}, {key: 'tool:app.open_settings', display: '\uf013'}]]";
 
     /**
      * Defines the key for extra keys style
@@ -500,9 +535,9 @@ public final class TermuxPropertyConstants {
     public static final Set<String> TERMUX_APP_PROPERTIES_LIST = new HashSet<>(Arrays.asList(/* boolean */
     KEY_DISABLE_FILE_SHARE_RECEIVER, KEY_DISABLE_FILE_VIEW_RECEIVER, KEY_DISABLE_HARDWARE_KEYBOARD_SHORTCUTS, KEY_DISABLE_TERMINAL_SESSION_CHANGE_TOAST, KEY_ENFORCE_CHAR_BASED_INPUT, KEY_EXTRA_KEYS_TEXT_ALL_CAPS, KEY_HIDE_SOFT_KEYBOARD_ON_STARTUP, KEY_RUN_TERMUX_AM_SOCKET_SERVER, KEY_TERMINAL_ONCLICK_URL_OPEN, KEY_DRAW_BOLD_TEXT_WITH_BRIGHT_COLORS, KEY_USE_CTRL_SPACE_WORKAROUND, KEY_USE_FULLSCREEN, KEY_USE_FULLSCREEN_WORKAROUND, TermuxConstants.PROP_ALLOW_EXTERNAL_APPS, KEY_ACTIVITY_FINISH_REMOVE_TASK, /* int */
     KEY_BELL_BEHAVIOUR, KEY_DELETE_TMPDIR_FILES_OLDER_THAN_X_DAYS_ON_EXIT, KEY_TERMINAL_CURSOR_BLINK_RATE, KEY_TERMINAL_CURSOR_STYLE, KEY_TERMINAL_MARGIN_HORIZONTAL, KEY_TERMINAL_MARGIN_VERTICAL, KEY_TERMINAL_TRANSCRIPT_ROWS, /* float */
-    KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, /* Integer */
+    KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR, KEY_EXTRA_KEYS_TERMINAL_HEIGHT, KEY_EXTRA_KEYS_DISPLAY_HEIGHT, KEY_EXTRA_KEYS_HOME_HEIGHT, KEY_EXTRA_KEYS_ASSISTANT_HEIGHT, /* Integer */
     KEY_SHORTCUT_CREATE_SESSION, KEY_SHORTCUT_NEXT_SESSION, KEY_SHORTCUT_PREVIOUS_SESSION, KEY_SHORTCUT_RENAME_SESSION, /* String */
-    KEY_BACK_KEY_BEHAVIOUR, KEY_DEFAULT_WORKING_DIRECTORY, KEY_EXTRA_KEYS, KEY_EXTRA_KEYS2, KEY_EXTRA_KEYS_STYLE, KEY_NIGHT_MODE, KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, KEY_VOLUME_KEYS_BEHAVIOUR, KEY_BACKGROUND_OVERLAY_COLOR, KEY_TERMINAL_TERM));
+    KEY_BACK_KEY_BEHAVIOUR, KEY_DEFAULT_WORKING_DIRECTORY, KEY_EXTRA_KEYS, KEY_EXTRA_KEYS2, KEY_EXTRA_KEYS_TERMINAL, KEY_EXTRA_KEYS_TERMINAL2, KEY_EXTRA_KEYS_DISPLAY, KEY_EXTRA_KEYS_DISPLAY2, KEY_EXTRA_KEYS_HOME, KEY_EXTRA_KEYS_HOME2, KEY_EXTRA_KEYS_ASSISTANT, KEY_EXTRA_KEYS_ASSISTANT2, KEY_EXTRA_KEYS_STYLE, KEY_NIGHT_MODE, KEY_SOFT_KEYBOARD_TOGGLE_BEHAVIOUR, KEY_VOLUME_KEYS_BEHAVIOUR, KEY_BACKGROUND_OVERLAY_COLOR, KEY_TERMINAL_TERM));
 
     /**
      * Defines the set for keys loaded by termux that have default boolean behaviour with false as default.

@@ -1,15 +1,18 @@
 package com.termux.launcherctl;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
+import com.termux.ai.FeatureRequest;
 import com.termux.ai.TaiApiCompatibility;
 import com.termux.ai.TaiCliFormatter;
 import com.termux.ai.TaiEventLog;
 import com.termux.ai.TaiManager;
+import com.termux.ai.TaiSpeech;
 import com.termux.ai.TaiSettings;
 import com.termux.app.launcher.LauncherAppLauncher;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
@@ -114,7 +117,8 @@ public class LauncherCtlApiServer {
     private volatile String token;
     private volatile boolean authRequired = true;
     private volatile String bindMode = TaiSettings.BIND_MODE_LOCALHOST;
-    private volatile long lanSessionDeadlineMs;
+    /** When the LAN exposure window ends, on {@link SystemClock#elapsedRealtime()}; 0 when not in LAN mode. */
+    private volatile long lanSessionDeadlineElapsedMs;
     private volatile boolean lanSessionExpiring;
     private volatile int port;
     private ServerSocket serverSocket;
@@ -146,8 +150,9 @@ public class LauncherCtlApiServer {
             String bindMode = settings.getApiBindMode();
             this.bindMode = bindMode;
             long lanStartedAt = settings.getLanSessionStartedAt();
-            lanSessionDeadlineMs = TaiSettings.BIND_MODE_LAN.equals(bindMode) && lanStartedAt > 0
-                ? lanStartedAt + TaiSettings.LAN_SESSION_MAX_MS : 0L;
+            lanSessionDeadlineElapsedMs = TaiSettings.BIND_MODE_LAN.equals(bindMode)
+                ? lanDeadlineOnElapsedClock(lanStartedAt, System.currentTimeMillis(), SystemClock.elapsedRealtime())
+                : 0L;
             lanSessionExpiring = false;
             authRequired = effectiveAuthRequired(settings);
             serverSocket = createLoopbackServerSocket(settings.getApiPort(), bindMode);
@@ -163,6 +168,25 @@ public class LauncherCtlApiServer {
         } finally {
             starting = false;
         }
+    }
+
+    /**
+     * Carries the persisted LAN window (a wall-clock start, so it survives a restart) onto the
+     * monotonic clock once at start, so a wall-clock change while listening neither stretches nor
+     * cuts the window. Returns 0 when there is no window.
+     */
+    static long lanDeadlineOnElapsedClock(long startedAtWallMs, long nowWallMs, long nowElapsedMs) {
+        if (startedAtWallMs <= 0L) return 0L;
+        // A start stamped in the future (the clock moved back) earns no more than one full window.
+        long remainingMs = Math.min(TaiSettings.LAN_SESSION_MAX_MS,
+            startedAtWallMs + TaiSettings.LAN_SESSION_MAX_MS - nowWallMs);
+        // Never 0, which means no window: an already-spent window ends at once.
+        return Math.max(1L, nowElapsedMs + remainingMs);
+    }
+
+    /** Whether a window from {@link #lanDeadlineOnElapsedClock} has ended at {@code nowElapsedMs}. */
+    static boolean isLanSessionOver(long deadlineElapsedMs, long nowElapsedMs) {
+        return deadlineElapsedMs > 0L && nowElapsedMs > deadlineElapsedMs;
     }
 
     /**
@@ -316,10 +340,13 @@ public class LauncherCtlApiServer {
     }
 
     private void startAcceptLoop(Context context) {
+        // The loop owns the socket it was started for: the field is guarded by this object's lock,
+        // which the loop does not hold, and a restart puts a new socket there that is not this loop's.
+        final ServerSocket socket = serverSocket;
         acceptLoop = controlExecutor.submit(() -> {
-            while (running && serverSocket != null && !serverSocket.isClosed()) {
+            while (running && !socket.isClosed()) {
                 try {
-                    Socket client = serverSocket.accept();
+                    Socket client = socket.accept();
                     try {
                         clientExecutor.submit(() -> handleClient(client, context));
                     } catch (RejectedExecutionException rejected) {
@@ -352,7 +379,7 @@ public class LauncherCtlApiServer {
             }
             route = request.method + " " + request.path;
 
-            if (lanSessionDeadlineMs > 0 && System.currentTimeMillis() > lanSessionDeadlineMs) {
+            if (isLanSessionOver(lanSessionDeadlineElapsedMs, SystemClock.elapsedRealtime())) {
                 beginLanSessionExpiry();
                 writeResponse(output, forbiddenResponse("lan_session_expired",
                     "The LAN exposure window has ended; re-enable LAN mode and collect the new token"));
@@ -581,14 +608,14 @@ public class LauncherCtlApiServer {
                 if (chatRequest.optBoolean("stream", true)) {
                     return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, false));
                 }
-                return ollamaJsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaChatFromOpenAi(chatReply(context, chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/api/generate".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject chatRequest = TaiApiCompatibility.ollamaGenerateRequest(request.body);
                 if (chatRequest.optBoolean("stream", true)) {
                     return ndjsonResponse(output -> writeOllamaChatStream(context, chatRequest.toString(), output, true));
                 }
-                return ollamaJsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(manager.openAiChatCompletions(chatRequest.toString())));
+                return ollamaJsonResponse(TaiApiCompatibility.ollamaGenerateFromOpenAi(chatReply(context, chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/api/embed".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject embedRequest = TaiApiCompatibility.ollamaEmbedRequest(request.body);
@@ -625,6 +652,9 @@ public class LauncherCtlApiServer {
                         result.text.getBytes(StandardCharsets.UTF_8), null);
                 }
                 return jsonResponse(result.json);
+            } else if (com.termux.app.sound.SoundRoutes.handles(request.method, request.path)) {
+                return jsonResponse(com.termux.app.sound.SoundRoutes.handle(context, request.path,
+                    queryParameters(request.query), request.body));
             } else if (signalToolFor(request.method, request.path) != null) {
                 return jsonResponse(runSignalRequest(request));
             } else if (DeviceControlRoutes.handles(request.method, request.path)) {
@@ -633,11 +663,16 @@ public class LauncherCtlApiServer {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
                 com.termux.app.x11.X11GpuProbe.Result gpu = com.termux.app.x11.X11GpuProbe.probe(context);
-                if ("env".equals(queryParameters(request.query).get("format"))) {
+                String format = queryParameters(request.query).get("format");
+                if ("env".equals(format) || "table".equals(format)) {
+                    // table: the profile list termux-x11-gpu-setup benchmarks (X11GpuProbe.Result#toTable).
+                    String text = "table".equals(format) ? gpu.toTable() : gpu.toEnv();
                     return new HttpResponse(200, "text/plain; charset=utf-8",
-                        gpu.toEnv().getBytes(StandardCharsets.UTF_8), null);
+                        text.getBytes(StandardCharsets.UTF_8), null);
                 }
-                return jsonResponse(gpu.toJson());
+                JSONObject json = gpu.toJson();
+                new com.termux.app.x11.X11GpuProfileStore(context).putChoice(json, gpu);
+                return jsonResponse(json);
             } else if ("POST".equals(request.method) && "/v1/auth/rotate".equals(request.path)) {
                 return jsonResponse(rotateAuthToken(context, false));
             } else if ("GET".equals(request.method) && "/v1/ai/status".equals(request.path)) {
@@ -650,24 +685,24 @@ public class LauncherCtlApiServer {
             } else if ("GET".equals(request.method) && "/v1/ai/models".equals(request.path)) {
                 return maybeTextResponse(request, "models", TaiManager.getInstance(context).models());
             } else if ("POST".equals(request.method) && "/v1/ai/models/import".equals(request.path)) {
-                return maybeTextResponse(request, "import", TaiManager.getInstance(context).importModel(request.body));
+                return maybeTextResponse(request, "import", TaiManager.getInstance(context).modelManagement().importModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/download".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).downloadModel(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().downloadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/download-catalog".equals(request.path)) {
                 JSONObject body = request.body == null || request.body.trim().isEmpty() ? new JSONObject() : new JSONObject(request.body);
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).downloadCatalogModel(body.optString("modelId", body.optString("model", ""))));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().downloadCatalogModel(body.optString("modelId", body.optString("model", ""))));
             } else if ("GET".equals(request.method) && "/v1/ai/models/downloads".equals(request.path)) {
-                return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).downloads());
+                return maybeTextResponse(request, "downloads", TaiManager.getInstance(context).modelManagement().downloads());
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/cancel".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).cancelDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().cancelDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/pause".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).pauseDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().pauseDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/resume".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).resumeDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().resumeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/downloads/prioritize".equals(request.path)) {
-                return maybeTextResponse(request, "download", TaiManager.getInstance(context).prioritizeDownload(request.body));
+                return maybeTextResponse(request, "download", TaiManager.getInstance(context).modelManagement().prioritizeDownload(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/delete".equals(request.path)) {
-                return maybeTextResponse(request, "delete", TaiManager.getInstance(context).deleteModel(request.body));
+                return maybeTextResponse(request, "delete", TaiManager.getInstance(context).modelManagement().deleteModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/models/load".equals(request.path)) {
                 return maybeTextResponse(request, "load", TaiManager.getInstance(context).loadModel(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/load".equals(request.path)) {
@@ -682,7 +717,7 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "keep-warm", TaiManager.getInstance(context).keepWarmRuntime(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/runtime/benchmark".equals(request.path)) {
                 // LiteRT-LM's own benchmark(): tai benchmark --native, kept for comparing numbers.
-                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchmark(request.body));
+                return maybeTextResponse(request, "benchmark", TaiManager.getInstance(context).benchHost().benchmark(request.body));
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/run".equals(request.path)) {
                 // Bench v1. With stream:true the harness's events go out as they happen — SSE, or
                 // one plain line per phase when the CLI asks for text; otherwise the run's summary.
@@ -693,11 +728,11 @@ public class LauncherCtlApiServer {
                     }
                     return sseResponse(output -> writeBenchStream(context, request.body, output));
                 }
-                return maybeTextResponse(request, "benchmark-run", manager.benchRunCollect(request.body));
+                return maybeTextResponse(request, "benchmark-run", manager.benchHost().benchRunCollect(request.body));
             } else if ("GET".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
-                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchmarks());
+                return maybeTextResponse(request, "benchmarks", TaiManager.getInstance(context).benchHost().benchmarks());
             } else if ("DELETE".equals(request.method) && "/v1/ai/benchmarks".equals(request.path)) {
-                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).clearBenchmarks(request.body));
+                return maybeTextResponse(request, "benchmarks-clear", TaiManager.getInstance(context).benchHost().clearBenchmarks(request.body));
             } else if ("DELETE".equals(request.method) && "/v1/ai/runtime/history".equals(request.path)) {
                 return maybeTextResponse(request, "history-clear", TaiManager.getInstance(context).clearRuntimeHistory());
             } else if ("GET".equals(request.method) && "/v1/ai/logs".equals(request.path)) {
@@ -714,7 +749,7 @@ public class LauncherCtlApiServer {
                 return maybeTextResponse(request, "cancel", TaiManager.getInstance(context).cancelRuntime());
             } else if ("POST".equals(request.method) && "/v1/ai/benchmarks/skip-wait".equals(request.path)) {
                 // "Skip the wait" (spec Screen 5): ends the active bench's cool-down at once.
-                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).skipBenchCooldown());
+                return maybeTextResponse(request, "skip-wait", TaiManager.getInstance(context).benchHost().skipBenchCooldown());
             } else if ("GET".equals(request.method) && "/v1/models".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).openAiModels());
             } else if ("GET".equals(request.method) && isModelRetrievePath(request.path)) {
@@ -724,20 +759,20 @@ public class LauncherCtlApiServer {
                 if (manager.isStreamRequest(request.body)) {
                     return sseResponse(output -> writeChatCompletionStream(context, request.body, output));
                 }
-                return jsonResponse(TaiManager.getInstance(context).openAiChatCompletions(request.body));
+                return jsonResponse(chatReply(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/responses".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 JSONObject chatRequest = TaiApiCompatibility.responsesRequestToChat(request.body);
                 if (chatRequest.optBoolean("stream", false)) {
                     return sseResponse(output -> writeResponsesStream(context, chatRequest.toString(), output));
                 }
-                return jsonResponse(TaiApiCompatibility.responsesFromChat(manager.openAiChatCompletions(chatRequest.toString())));
+                return jsonResponse(TaiApiCompatibility.responsesFromChat(chatReply(context, chatRequest.toString())));
             } else if ("POST".equals(request.method) && "/v1/completions".equals(request.path)) {
                 TaiManager manager = TaiManager.getInstance(context);
                 if (manager.isStreamRequest(request.body)) {
                     return sseResponse(output -> writeCompletionStream(context, request.body, output));
                 }
-                return jsonResponse(TaiManager.getInstance(context).openAiCompletions(request.body));
+                return jsonResponse(completionReply(context, request.body));
             } else if ("POST".equals(request.method) && "/v1/embeddings".equals(request.path)) {
                 return jsonResponse(TaiManager.getInstance(context).embeddings(request.body));
             } else if ("POST".equals(request.method) && "/v1/tokenize".equals(request.path)) {
@@ -746,15 +781,15 @@ public class LauncherCtlApiServer {
                 return audioTranscriptions(context, request);
             } else if ("POST".equals(request.method) && "/v1/audio/speech".equals(request.path)) {
                 String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
-                return audioSpeech(context, body, TaiManager.apiSpeechCharacterLimit());
+                return audioSpeech(context, body, TaiSpeech.apiSpeechCharacterLimit());
             } else if ("POST".equals(request.method) && "/v1/ai/speak".equals(request.path)) {
                 return aiSpeak(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/speak/stop".equals(request.path)) {
-                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).stopSpeaking());
+                return maybeTextResponse(request, "speak-stop", TaiManager.getInstance(context).speech().stopSpeaking());
             } else if ("POST".equals(request.method) && "/v1/ai/images/generations".equals(request.path)) {
                 return imageGenerations(context, request);
             } else if ("POST".equals(request.method) && "/v1/ai/images/cancel".equals(request.path)) {
-                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).cancelImage());
+                return maybeTextResponse(request, "image-cancel", TaiManager.getInstance(context).images().cancelImage());
             }
 
             JSONObject notFound = jsonError("not_found", "Unknown endpoint");
@@ -810,18 +845,18 @@ public class LauncherCtlApiServer {
      */
     private HttpResponse audioSpeech(Context context, String body, int maxChars) throws JSONException {
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject refusal = manager.checkSpeechRequest(body, maxChars);
+        JSONObject refusal = manager.speech().checkSpeechRequest(body, maxChars);
         if (refusal != null) return jsonResponse(refusal);
         Map<String, String> headers = new HashMap<>();
         headers.put("Cache-Control", "no-cache");
         headers.put("X-Tai-Sample-Rate", "24000");
-        if ("pcm".equals(TaiManager.speechResponseFormat(body))) {
-            JSONObject warm = manager.ttsWarm(body);
+        if ("pcm".equals(TaiSpeech.speechResponseFormat(body))) {
+            JSONObject warm = manager.speech().ttsWarm(body);
             if (isSpeechFailure(warm)) return jsonResponse(speechFailure(warm));
             headers.put("X-Accel-Buffering", "no");
             return new HttpResponse(200, "audio/pcm", output -> {
                 try {
-                    manager.synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
+                    manager.speech().synthesizeSpeech(body, maxChars, (pcm, sampleRate) -> {
                         output.write(pcm);
                         output.flush();
                     });
@@ -841,7 +876,7 @@ public class LauncherCtlApiServer {
         final int[] rate = {24000};
         JSONObject result;
         try (FileOutputStream sink = new FileOutputStream(collected)) {
-            result = manager.synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
+            result = manager.speech().synthesizeSpeech(body, maxChars, (bytes, sampleRate) -> {
                 rate[0] = sampleRate;
                 sink.write(bytes);
             });
@@ -857,10 +892,10 @@ public class LauncherCtlApiServer {
             return jsonResponse(speechFailure(result));
         }
         long dataBytes = collected.length();
-        headers.put("Content-Length", Long.toString(TaiManager.wavHeader(0, rate[0]).length + dataBytes));
+        headers.put("Content-Length", Long.toString(TaiSpeech.wavHeader(0, rate[0]).length + dataBytes));
         return new HttpResponse(200, "audio/wav", output -> {
             try (InputStream in = new java.io.FileInputStream(collected)) {
-                output.write(TaiManager.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
+                output.write(TaiSpeech.wavHeader((int) Math.min(Integer.MAX_VALUE, dataBytes), rate[0]));
                 byte[] buffer = new byte[64 * 1024];
                 int read;
                 while ((read = in.read(buffer)) != -1) output.write(buffer, 0, read);
@@ -882,7 +917,7 @@ public class LauncherCtlApiServer {
     private HttpResponse imageGenerations(Context context, HttpRequest request) throws JSONException {
         String body = request.body == null || request.body.trim().isEmpty() ? "{}" : request.body;
         TaiManager manager = TaiManager.getInstance(context);
-        JSONObject refusal = manager.checkImageRequest(body);
+        JSONObject refusal = manager.images().checkImageRequest(body);
         if (refusal != null) return jsonResponse(refusal);
         boolean stream = new JSONObject(body).optBoolean("stream", false);
         if (stream && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
@@ -890,7 +925,7 @@ public class LauncherCtlApiServer {
         }
         if (stream) return sseResponse(output -> writeImageSseStream(manager, body, output));
         try {
-            return jsonResponse(manager.generateImage(body, percent -> { }));
+            return jsonResponse(manager.images().generateImage(body, percent -> { }));
         } catch (IOException e) {
             return jsonResponse(jsonError("internal_error", e.getMessage() == null ? "" : e.getMessage()));
         }
@@ -898,7 +933,7 @@ public class LauncherCtlApiServer {
 
     private void writeImageSseStream(TaiManager manager, String body, OutputStream output) throws IOException {
         try {
-            JSONObject result = manager.generateImage(body, percent -> {
+            JSONObject result = manager.images().generateImage(body, percent -> {
                 try {
                     writeSseEvent(output, new JSONObject().put("type", "image_generation.progress")
                         .put("progress", percent).toString());
@@ -921,7 +956,7 @@ public class LauncherCtlApiServer {
     /** The lines {@code tai image} reads: {@code progress N}, then {@code done PATH} and {@code info JSON}, or {@code error TEXT}. */
     private void writeImageTextStream(TaiManager manager, String body, OutputStream output) throws IOException {
         try {
-            JSONObject result = manager.generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
+            JSONObject result = manager.images().generateImage(body, percent -> writeTextLine(output, TaiCliFormatter.imageProgressLine(percent)));
             writeTextLine(output, result.has("error") ? TaiCliFormatter.imageErrorLine(result)
                 : TaiCliFormatter.imageDoneLines(result));
         } catch (JSONException e) {
@@ -945,9 +980,9 @@ public class LauncherCtlApiServer {
     private HttpResponse aiSpeak(Context context, HttpRequest request) throws JSONException {
         JSONObject body = speakBody(request);
         if (body.has("response_format")) {
-            return audioSpeech(context, body.toString(), TaiManager.speakCharacterLimit());
+            return audioSpeech(context, body.toString(), TaiSpeech.speakCharacterLimit());
         }
-        JSONObject result = TaiManager.getInstance(context).speak(body.toString());
+        JSONObject result = TaiManager.getInstance(context).speech().speak(body.toString());
         if (isSpeechFailure(result) && "text".equalsIgnoreCase(request.headers.get("x-tai-output"))) {
             JSONObject nested = result.optJSONObject("error");
             if (nested != null) {
@@ -1044,7 +1079,7 @@ public class LauncherCtlApiServer {
         }
         JSONObject result;
         try {
-            result = TaiManager.getInstance(context).transcribe(taiRequest.toString());
+            result = TaiManager.getInstance(context).speech().transcribe(taiRequest.toString());
         } finally {
             // The runtime process deletes the upload once it has read it; this covers every early exit.
             deleteQuietly(upload);
@@ -1583,7 +1618,10 @@ public class LauncherCtlApiServer {
             return error;
         }
 
-        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context).getAllAppsBlocking();
+        // A Linux app installed from a pane a moment ago is found: the catalogue re-lists the
+        // desktop files first when they changed.
+        List<LauncherAppEntry> apps = LauncherAppDataProvider.getInstance(context)
+            .getAllAppsWithCurrentLinuxAppsBlocking();
         AppLaunchMatch match = resolveLaunchMatch(apps, query);
         if (match.entry == null) {
             JSONObject error = jsonError(match.errorCode, match.message);
@@ -2085,6 +2123,9 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/vibrate", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
+        rateLimiters.put("POST:/v1/look", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("GET:/v1/motion-log", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/motion-log/clear", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/volume", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/toast", new SimpleRateLimiter(60, 60_000));
@@ -2092,6 +2133,9 @@ public class LauncherCtlApiServer {
         // memory; a script changes it now and then, so the limit is tight.
         rateLimiters.put("POST:/v1/wallpaper", new SimpleRateLimiter(6, 60_000));
         rateLimiters.put("GET:/v1/wallpaper", new SimpleRateLimiter(30, 60_000));
+        // A developer switch flipped by hand to compare two looks.
+        rateLimiters.put("GET:/v1/pagebar-glass", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/pagebar-glass", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/ai/tier", new SimpleRateLimiter(30, 60_000));
@@ -2987,15 +3031,18 @@ public class LauncherCtlApiServer {
             "  launcherctl vibrate [-d MS] [--force]\n" +
             "  launcherctl torch on|off\n" +
             "  launcherctl battery\n" +
+            "  launcherctl motion-log dump|clear\n" +
+            "  launcherctl look get|set|reset ...\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
             "  launcherctl wallpaper get\n" +
-            "  launcherctl x11 gpu [--env]\n" +
+            "  launcherctl x11 gpu [--env|--table]\n" +
+            "  launcherctl media player|gone|seeked|streams ...   (the launcher's media helper)\n" +
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
-            "battery, volume, toast, wallpaper and x11.\n" +
+            "battery, motion-log, look, volume, toast, wallpaper, x11 and media.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -3210,6 +3257,58 @@ public class LauncherCtlApiServer {
             "(microamperes) as JSON, as termux-battery-status does.\n" +
             "EOF\n" +
             "      ;;\n" +
+            "    pagebar-glass) cat <<'EOF'\n" +
+            "launcherctl pagebar-glass - how Home's page bar draws its glass (developer)\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl pagebar-glass\n" +
+            "  launcherctl pagebar-glass concave|well\n" +
+            "\n" +
+            "Without a style, prints the one in use. concave sinks the glass into the page: the\n" +
+            "wallpaper is drawn in toward the bar's middle (with Fancier Glass on), dark along the\n" +
+            "top edge and light along the bottom. well draws the shaded well instead. The bar\n" +
+            "changes at once.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    motion-log) cat <<'EOF'\n" +
+            "launcherctl motion-log - the motion log\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl motion-log dump\n" +
+            "  launcherctl motion-log clear\n" +
+            "\n" +
+            "With Settings > Debugging > Motion log on, the launcher notes page changes and\n" +
+            "resizes, one line each with its uptime in milliseconds. dump prints the last 2,000\n" +
+            "lines, then a --- counters --- line and the counter table (every hold and guard with\n" +
+            "its count, first and last time and last detail, kept past the 2,000); clear empties\n" +
+            "both.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    look) cat <<'EOF'\n" +
+            "launcherctl look - the glass look\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl look get PROPERTY [--element E]\n" +
+            "  launcherctl look set PROPERTY VALUE [--element E]\n" +
+            "  launcherctl look reset [PROPERTY] [--element E]\n" +
+            "\n" +
+            "Without --element a value is Global's: blur opacity tint colour corners depth edge\n" +
+            "grain rim vibrancy margin.\n" +
+            "Elements: status, dock and keyboard each own an opacity and a blur (a blur brings its\n" +
+            "grain); background is the Terminal's Background: opacity, blur and dim.\n" +
+            "Values: a number; blur takes a stop 0-7 or a size such as 12dp (the Terminal's blur is\n" +
+            "a size in dp); colour takes primary, secondary or tertiary; rim takes off, hairline or\n" +
+            "bright; corners takes dp or auto.\n" +
+            "get prints the value and whether it is the element's own or Global's; reset puts an\n" +
+            "element back on Global (the Terminal's Background back to its shipped numbers).\n" +
+            "\n" +
+            "Examples:\n" +
+            "  launcherctl look set opacity 60 --element dock\n" +
+            "  launcherctl look get opacity --element dock\n" +
+            "  launcherctl look reset --element dock\n" +
+            "  launcherctl look set dim 30 --element background\n" +
+            "EOF\n" +
+            "      ;;\n" +
             "    volume) cat <<'EOF'\n" +
             "launcherctl volume - stream volumes\n" +
             "\n" +
@@ -3244,10 +3343,26 @@ public class LauncherCtlApiServer {
             "launcherctl x11 - Linux apps on the display\n" +
             "\n" +
             "Usage:\n" +
-            "  launcherctl x11 gpu [--env]\n" +
+            "  launcherctl x11 gpu [--env|--table]\n" +
             "\n" +
             "gpu says which graphics profile fits this phone and whether its packages are\n" +
-            "installed; --env prints the exports instead, ready to eval.\n" +
+            "installed, and which one you picked; --env prints the exports instead, ready to\n" +
+            "eval; --table prints the profile list the graphics benchmark tries.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    media) cat <<'EOF'\n" +
+            "launcherctl media - what Linux media players are doing, for the media notification\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl media player NAME [PID] < REPLY\n" +
+            "  launcherctl media gone NAME\n" +
+            "  launcherctl media seeked NAME MICROSECONDS\n" +
+            "  launcherctl media streams COUNT\n" +
+            "\n" +
+            "The launcher's own media helper reports through these; you do not need them. NAME is\n" +
+            "an MPRIS bus name (org.mpris.MediaPlayer2.*); REPLY is what dbus-send --print-reply\n" +
+            "printed for the player's Properties.GetAll. streams is how many sound streams are\n" +
+            "playing through the launcher's sound server.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    *) return 1 ;;\n" +
@@ -3676,6 +3791,44 @@ public class LauncherCtlApiServer {
             "    *) echo 'usage: launcherctl torch on|off' >&2; exit 2 ;;\n" +
             "  esac\n" +
             "}\n" +
+            "layout_cmd() {\n" +
+            "  sub=\"${1:-}\"; kind=\"${2:-}\"\n" +
+            "  case \"$sub\" in\n" +
+            "    get)\n" +
+            "      [ -n \"$kind\" ] || { echo \"usage: launcherctl layout get <home|terminal|terminal_minimal|display|sizes>\" >&2; exit 2; }\n" +
+            "      api POST /v1/layout \"{\\\"op\\\":\\\"get\\\",\\\"kind\\\":\\\"$kind\\\"}\"\n" +
+            "      ;;\n" +
+            "    set)\n" +
+            "      file=\"${3:-}\"\n" +
+            "      [ -n \"$kind\" ] && [ -n \"$file\" ] || { echo \"usage: launcherctl layout set <kind> FILE\" >&2; exit 2; }\n" +
+            "      [ -r \"$file\" ] || { echo \"launcherctl layout: cannot read $file\" >&2; exit 2; }\n" +
+            "      api POST /v1/layout \"{\\\"op\\\":\\\"set\\\",\\\"kind\\\":\\\"$kind\\\",\\\"layout\\\":$(cat \"$file\")}\"\n" +
+            "      ;;\n" +
+            "    *)\n" +
+            "      echo \"usage: launcherctl layout get <kind> | layout set <kind> FILE\" >&2; exit 2\n" +
+            "      ;;\n" +
+            "  esac\n" +
+            "}\n" +
+            "look_cmd() {\n" +
+            "  usage='usage: launcherctl look get|set|reset ... (see launcherctl look --help)'\n" +
+            "  op=\"${1:-}\"\n" +
+            "  case \"$op\" in get|set|reset) shift ;; *) echo \"$usage\" >&2; exit 2 ;; esac\n" +
+            "  prop='' val='' elem='' have_val=0\n" +
+            "  while [ \"$#\" -gt 0 ]; do\n" +
+            "    case \"$1\" in\n" +
+            "      --element) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; elem=\"$2\"; shift 2 ;;\n" +
+            "      --page|--kind) echo 'launcherctl look: the look is the same on every page: leave out --page and --kind' >&2; exit 2 ;;\n" +
+            "      -*) echo \"launcherctl look: unknown option $1\" >&2; exit 2 ;;\n" +
+            "      *) if [ -z \"$prop\" ]; then prop=\"$1\"; elif [ \"$have_val\" -eq 0 ] && [ \"$op\" = set ]; then val=\"$1\"; have_val=1; else echo \"$usage\" >&2; exit 2; fi; shift ;;\n" +
+            "    esac\n" +
+            "  done\n" +
+            "  [ \"$op\" = reset ] || [ -n \"$prop\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  [ \"$op\" != set ] || [ \"$have_val\" -eq 1 ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "  body=\"{\\\"op\\\":\\\"$op\\\",\\\"property\\\":$(printf '%s' \"$prop\" | json_str)\"\n" +
+            "  [ \"$op\" != set ] || body=\"$body,\\\"value\\\":$(printf '%s' \"$val\" | json_str)\"\n" +
+            "  [ -z \"$elem\" ] || body=\"$body,\\\"element\\\":$(printf '%s' \"$elem\" | json_str)\"\n" +
+            "  api POST /v1/look \"$body}\"\n" +
+            "}\n" +
             "volume_cmd() {\n" +
             "  if [ \"$#\" -eq 0 ]; then api GET /v1/volume; return; fi\n" +
             "  [ \"$#\" -eq 2 ] || { echo 'usage: launcherctl volume [STREAM VALUE]' >&2; exit 2; }\n" +
@@ -3729,7 +3882,7 @@ public class LauncherCtlApiServer {
             "esac\n" +
             "if [ \"$#\" -eq 1 ]; then\n" +
             "  case \"$cmd\" in\n" +
-            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11)\n" +
+            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11|media)\n" +
             "      group_help \"$cmd\" >&2\n" +
             "      exit 2\n" +
             "      ;;\n" +
@@ -3791,6 +3944,34 @@ public class LauncherCtlApiServer {
             "  battery)\n" +
             "    api GET /v1/battery\n" +
             "    ;;\n" +
+            "  motion-log)\n" +
+            "    case \"${2:-}\" in\n" +
+            "      dump)\n" +
+            "        # The buffered lines, one per line, oldest first.\n" +
+            "        out=$(api GET /v1/motion-log) || { printf '%s\\n' \"$out\"; exit 1; }\n" +
+            "        case \"$out\" in\n" +
+            "          *'\"lines\":[]'*) ;;\n" +
+            "          *) printf '%s\\n' \"$out\" | sed 's/^.*\"lines\":\\[\"//; s/\"\\]}$//; s/\",\"/\\n/g' ;;\n" +
+            "        esac\n" +
+            "        ;;\n" +
+            "      clear) api POST /v1/motion-log/clear '{}' ;;\n" +
+            "      *) echo 'usage: launcherctl motion-log dump|clear' >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  pagebar-glass)\n" +
+            "    case \"${2:-}\" in\n" +
+            "      '') api GET /v1/pagebar-glass ;;\n" +
+            "      concave|well) api POST /v1/pagebar-glass \"{\\\"style\\\":\\\"$2\\\"}\" ;;\n" +
+            "      *) echo 'usage: launcherctl pagebar-glass [concave|well]' >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  layout)\n" +
+            "    shift || true; layout_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  look)\n" +
+            "    shift || true\n" +
+            "    look_cmd \"$@\"\n" +
+            "    ;;\n" +
             "  volume)\n" +
             "    shift || true\n" +
             "    volume_cmd \"$@\"\n" +
@@ -3829,14 +4010,58 @@ public class LauncherCtlApiServer {
             "      gpu)\n" +
             "        # What this phone's GPU can do for Linux apps on the display, and the exact\n" +
             "        # environment that asks for it: JSON, or with --env lines to eval in a shell.\n" +
-            "        if [ \"${2:-}\" = \"--env\" ]; then api GET \"/v1/x11/gpu?format=env\"; else api GET /v1/x11/gpu; fi\n" +
+            "        # --table is the profile list termux-x11-gpu-setup benchmarks.\n" +
+            "        case \"${2:-}\" in\n" +
+            "          --env) api GET \"/v1/x11/gpu?format=env\" ;;\n" +
+            "          --table) api GET \"/v1/x11/gpu?format=table\" ;;\n" +
+            "          *) api GET /v1/x11/gpu ;;\n" +
+            "        esac\n" +
             "        ;;\n" +
-            "      *) echo \"usage: launcherctl x11 gpu [--env]\" >&2; exit 2 ;;\n" +
+            "      *) echo \"usage: launcherctl x11 gpu [--env|--table]\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  media)\n" +
+            "    shift || true\n" +
+            "    sub=\"${1:-}\" name=\"${2:-}\"\n" +
+            "    case \"$sub\" in\n" +
+            "      player|gone|seeked) ;;\n" +
+            "      streams)\n" +
+            "        case \"$name\" in ''|*[!0-9]*) echo \"usage: launcherctl media streams COUNT\" >&2; exit 2 ;; esac\n" +
+            "        api POST \"/v1/media/streams?playing=$name\" '{}'\n" +
+            "        exit $?\n" +
+            "        ;;\n" +
+            "      *) group_help media >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    # A bus name, which is also safe in a URL as it stands.\n" +
+            "    case \"$name\" in\n" +
+            "      org.mpris.MediaPlayer2.*) ;;\n" +
+            "      *) echo \"launcherctl media: NAME must be an MPRIS bus name\" >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    case \"$name\" in *[!A-Za-z0-9._-]*) echo \"launcherctl media: NAME must be an MPRIS bus name\" >&2; exit 2 ;; esac\n" +
+            "    case \"$sub\" in\n" +
+            "      gone) api POST \"/v1/media/gone?name=$name\" '{}' ;;\n" +
+            "      seeked)\n" +
+            "        position=\"${3:-}\"\n" +
+            "        case \"$position\" in ''|-|*[!0-9-]*|?*-*) echo \"usage: launcherctl media seeked NAME MICROSECONDS\" >&2; exit 2 ;; esac\n" +
+            "        api POST \"/v1/media/seeked?name=$name&position=$position\" '{}'\n" +
+            "        ;;\n" +
+            "      player)\n" +
+            "        pid=\"${3:-0}\"\n" +
+            "        case \"$pid\" in ''|*[!0-9]*) pid=0 ;; esac\n" +
+            "        need_server\n" +
+            "        # The reply goes as it was printed, on stdin; the launcher reads it.\n" +
+            "        out=$(curl -sS --connect-timeout 2 --max-time \"$API_MAX_TIME\" -X POST -w '\\n%{http_code}' \\\n" +
+            "          -H \"Authorization: Bearer $TOKEN\" -H \"Content-Type: text/plain\" \\\n" +
+            "          --data-binary @- \"$BASE/v1/media/player?name=$name&pid=$pid\")\n" +
+            "        code=$(printf '%s\\n' \"$out\" | tail -n 1)\n" +
+            "        printf '%s\\n' \"$out\" | sed '$d'\n" +
+            "        [ \"$code\" -lt 400 ] 2>/dev/null\n" +
+            "        ;;\n" +
             "    esac\n" +
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, volume, toast, wallpaper, x11. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
@@ -3997,6 +4222,35 @@ public class LauncherCtlApiServer {
         return new HttpResponse(200, "text/plain; charset=utf-8", bodyWriter, headers);
     }
 
+    /** A single chat reply from Feature request, as the OpenAI chat route returns it. */
+    private static JSONObject chatReply(Context context, String body) throws JSONException {
+        return FeatureRequest.get(context).reply(FeatureRequest.Call.http(FeatureRequest.Kind.CHAT, body));
+    }
+
+    private static JSONObject completionReply(Context context, String body) throws JSONException {
+        return FeatureRequest.get(context).reply(FeatureRequest.Call.http(FeatureRequest.Kind.COMPLETION, body));
+    }
+
+    /**
+     * Streams a chat or completion from Feature request into one of this server's writers: TEXT and
+     * ERROR events go to {@code onEvent} as the exact OpenAI chunk, DONE to {@code onDone}, WAITING and
+     * LOADING to nothing.
+     *
+     * The writers' IOException (the HTTP client went away) must come out of this sink, never be
+     * swallowed: Feature request cancels that one request when its sink throws, which stops the
+     * generation (or drops the remote connection) instead of letting it run on unheard.
+     */
+    private static void streamFeature(Context context, FeatureRequest.Kind kind, String body,
+                                      TaiManager.OpenAiStreamSink sink) throws JSONException, IOException {
+        FeatureRequest.get(context).start(FeatureRequest.Call.http(kind, body).stream(true), event -> {
+            if (event.type == FeatureRequest.Event.Type.DONE) {
+                sink.onDone();
+            } else if (event.openAi != null) {
+                sink.onEvent(event.openAi);
+            }
+        }).await();
+    }
+
     private void writeResponsesStream(Context context, String chatBody, OutputStream output) throws IOException {
         String responseId = "resp_" + System.currentTimeMillis();
         String messageId = "msg_" + System.currentTimeMillis();
@@ -4017,7 +4271,7 @@ public class LauncherCtlApiServer {
         StringBuilder fullText = new StringBuilder();
         boolean[] failed = new boolean[]{false};
         try {
-            TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.CHAT, chatBody, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     try {
@@ -4101,7 +4355,7 @@ public class LauncherCtlApiServer {
             throw new IOException(e);
         }
         try {
-            TaiManager.getInstance(context).openAiChatCompletionsStream(chatBody, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.CHAT, chatBody, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     try {
@@ -4157,7 +4411,7 @@ public class LauncherCtlApiServer {
 
     private void writeChatCompletionStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).openAiChatCompletionsStream(body, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.CHAT, body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());
@@ -4177,7 +4431,7 @@ public class LauncherCtlApiServer {
     /** Bench v1 events as SSE, one {@code data:} line per event, ended by {@code [DONE]}. */
     private void writeBenchStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+            TaiManager.getInstance(context).benchHost().benchRun(body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());
@@ -4197,7 +4451,7 @@ public class LauncherCtlApiServer {
     /** The same events as the lines {@code tai benchmark} shows; token events are not printed. */
     private void writeBenchTextStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).benchRun(body, new TaiManager.OpenAiStreamSink() {
+            TaiManager.getInstance(context).benchHost().benchRun(body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     String line = TaiCliFormatter.formatBenchEvent(event);
@@ -4218,7 +4472,7 @@ public class LauncherCtlApiServer {
 
     private void writeCompletionStream(Context context, String body, OutputStream output) throws IOException {
         try {
-            TaiManager.getInstance(context).openAiCompletionsStream(body, new TaiManager.OpenAiStreamSink() {
+            streamFeature(context, FeatureRequest.Kind.COMPLETION, body, new TaiManager.OpenAiStreamSink() {
                 @Override
                 public void onEvent(@NonNull JSONObject event) throws IOException {
                     writeSseEvent(output, event.toString());

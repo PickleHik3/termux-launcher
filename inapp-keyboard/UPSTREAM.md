@@ -75,8 +75,12 @@ fails when the catalogue has gone stale.
   mutation/reset APIs, cancels callbacks on detach, and prevents parent
   interception during active touches. Unlike upstream's IME window (which gets
   automatic exclusion), the activity-embedded view registers its own
-  view-local `setSystemGestureExclusionRects` in `onLayout` (SDK >= 29) so
-  edge-column swipes are not recognized as system Back gestures. The host may
+  view-local `setSystemGestureExclusionRects` in `onLayout` and
+  `onApplyWindowInsets` (SDK >= 29) so edge-column swipes are not recognized
+  as system Back gestures. It asks only for the two side strips, each as wide
+  as the window's system-gesture inset on that side: an exclusion that
+  reaches the navigation handle turns off the system's sideways swipe to the
+  previous app. The host may
   also apply a live height scale; measurement multiplies `Config.rowHeightPx`
   and derives the height cap from `maxKeyboardHeightFraction` by the same factor
   so enlarged keyboards are not silently limited by the unscaled cap. An
@@ -86,6 +90,9 @@ fails when the catalogue has gone stale.
   corner-radius overrides: the former scales both immutable `Config` margin
   ratios, while the latter takes precedence over `Config`/palette radius;
   setters clear `Theme.Computed` and rebuild it during the next measurement.
+  The host may also apply a live legend scale (`setLabelScale`), which
+  multiplies the measured label and sublabel sizes and leaves key geometry
+  alone; the launcher feeds it the shared Text size.
 - `ACTION_CANCEL` commits live pointers (`Pointers.onTouchCancelCommit`)
   instead of aborting like upstream. Embedded in an activity the only cancel
   source is the system pilfering the stream for a navigation gesture; the
@@ -283,6 +290,41 @@ fails when the catalogue has gone stale.
   changes, drawn at `PASTE_PICTURE_SCALE` (0.78) of the key's size so the full-em picture
   matches the key-font glyphs beside it; colour and the value sent are the key's own. Upstream has
   no such state.
+- Edge reach (local addition, 2026-11-16): `Keyboard2View.getKeyForPress` is what `onTouch`
+  asks on finger-down. A press on the keyboard's frame starts the outer key beside it: the margin
+  above the top row, the margin under the bottom row, the side margins, and a row's indent up to
+  `EDGE_REACH_KEY_WIDTHS` (half a key) from its first or last key. Upstream starts nothing there,
+  so a thumb that lands a few pixels off `q`, `a`, `p` or the bottom row loses the keystroke. The
+  cap keeps a blank wider than the usual half-key indent from typing a key the user was nowhere
+  near. Space between two keys of a row and anything past the bottom margin still start nothing,
+  and `getKeyAtPosition`, which the popup, `hasKeyAt` and key painting read, is unchanged.
+
+- Palette blend (local addition, 2026-11-17): `Theme.Palette.blend(from, to, t)` returns the palette
+  `t` of the way between two palettes, every colour blended channel by channel in ARGB and
+  everything else (geometry, dimming, indicator, deck) taken from `from`; exactly `from` at 0 and
+  `to` at 1. `Keyboard2View.setPaletteColors(palette)` is `setPalette` without `requestLayout`, for a
+  palette that differs only in colours. The launcher blends the legends' ink between two page looks
+  as a crossing moves (ADR 0029 section 8), so they drift pale to dark with no flip and no layout.
+  Upstream has no such state.
+
+- Symbol icons (deliberate deviation, 2026-11-21): a key's symbol can be drawn from a drawable
+  instead of a font glyph, so the keyboard matches the extra-keys bar's Roundline icons. Upstream
+  draws every symbol as text from `special_font.ttf`. The hook is `SymbolIcons` (new file,
+  `Config.symbolIcons` / `Config.Builder.symbolIcons`, null by default): `iconFor(label, keyFont)`
+  answers a drawable or null, `toolLabel(toolId, symbol)` lets a launcher tool key's glyph resolve
+  to an icon label. Null hook or null answer draws exactly as upstream. The module never sees the
+  host's resources. Touched upstream-derived files: `Keyboard2View.java` (the icon cache and
+  `symbolIcon`, `drawSymbolIcon`, `iconTextSize`; branches at the top of `drawLabel`,
+  `drawSubLabel`, `subLabelBounds`; `drawnString` asks `toolLabel` for tool keys;
+  `SYMBOL_ICON_EM`, the icon box in text sizes; the cache is cleared in `applyTheme`) and
+  `Theme.java` (`Computed.Key.label_ink`, the colour a label paint would take). `KeyValue.java` and
+  `LabelFace.java` are untouched; the app's table is `KeyboardSymbolIcons` and the key pop-up
+  reads the same cache through `Keyboard2View.symbolIcon`. On a refresh, re-add the three
+  branches and the `drawnString` hook after taking upstream's new label drawing, and keep
+  `label_ink` beside `label_paint` so both colours stay one rule. Test:
+  `Keyboard2ViewSymbolIconsTest`. Nothing inside this module changed when the table grew to the
+  settings, input-method, layout-switch, emoji, caps, compose, clipboard, edit and
+  window/session keys: only the app's `KeyboardSymbolIcons` table did.
 
 ## Refresh procedure
 

@@ -14,6 +14,7 @@ import org.robolectric.annotation.Config;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
+import android.app.Application;
 
 /**
  * The font size is kept per display, and a handle's own context is made from the application,
@@ -22,7 +23,7 @@ import static org.junit.Assert.assertNotNull;
  * context tied to no display, which the suite's default SDK never reaches.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.TIRAMISU)
+@Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
 public class TermuxAppSharedPreferencesDisplayTest {
 
     @Test

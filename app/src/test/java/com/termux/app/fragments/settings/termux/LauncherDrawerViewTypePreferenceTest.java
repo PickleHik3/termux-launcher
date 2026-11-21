@@ -38,7 +38,7 @@ public class LauncherDrawerViewTypePreferenceTest {
         Application app = RuntimeEnvironment.getApplication();
         PreferenceManager manager = new PreferenceManager(app);
         PreferenceScreen root = manager.inflateFromResource(app, R.xml.root_preferences, null);
-        Preference launcher = root.findPreference("launcher_apps");
+        Preference launcher = root.findPreference("dock_drawer");
         assertEquals("Apps", launcher.getTitle().toString());
         assertEquals(LauncherPreferencesFragment.class.getName(), launcher.getFragment());
 
@@ -60,7 +60,7 @@ public class LauncherDrawerViewTypePreferenceTest {
         Preference found = screen.findPreference("app_launcher_drawer_view_type");
         assertTrue(found instanceof SegmentedPillPreference);
         SegmentedPillPreference pill = (SegmentedPillPreference) found;
-        assertEquals(3, pill.segmentCount());
+        assertEquals(4, pill.segmentCount());
         pill.setValue("categories");
         assertEquals("categories", pill.getValue());
     }

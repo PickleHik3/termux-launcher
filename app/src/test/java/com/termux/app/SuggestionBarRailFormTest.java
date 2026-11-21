@@ -7,10 +7,12 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.app.launcher.drawer.DockRailScrollView;
 import com.termux.app.launcher.model.AppRef;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.launcher.paging.PageTickStripView;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -59,8 +61,17 @@ public class SuggestionBarRailFormTest {
         return out;
     }
 
-    private SuggestionBarView render(boolean vertical, int count, int width, int height) {
+    /** A bar handed its sizes, as the dock hands them: a bar handed none draws no icons (#135). */
+    private SuggestionBarView sized() {
         SuggestionBarView bar = new SuggestionBarView(context, null);
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
+        bar.setDockRailSizePx(DockLayoutPolicy.railIconSizePx(density()),
+            DockLayoutPolicy.railSlotLengthPx(density()));
+        return bar;
+    }
+
+    private SuggestionBarView render(boolean vertical, int count, int width, int height) {
+        SuggestionBarView bar = sized();
         bar.setVerticalForm(vertical);
         bar.setMaxButtonCount(count);
         measureAndLayout(bar, width, height);
@@ -89,10 +100,6 @@ public class SuggestionBarRailFormTest {
         int band = Math.round(density() * (DockLayoutPolicy.DOCK_RAIL_ICON_SIZE_DP
             + 2 * DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP));
         return band - 2 * Math.round(density() * DockLayoutPolicy.DOCK_RAIL_EDGE_MARGIN_DP);
-    }
-
-    private static boolean stableRenderBounds(SuggestionBarView bar) {
-        return ReflectionHelpers.callInstanceMethod(bar, "hasStableRenderBounds");
     }
 
     private static List<PinnedItem> pinned(int count) {
@@ -181,20 +188,11 @@ public class SuggestionBarRailFormTest {
     }
 
     @Test
-    public void theRenderGateFollowsTheAxis() {
-        SuggestionBarView rail = new SuggestionBarView(context, null);
-        rail.setVerticalForm(true);
-        measureAndLayout(rail, railBarWidthPx(), RAIL_HEIGHT);
-        assertTrue("a rail's own band is bounds enough", stableRenderBounds(rail));
-
-        SuggestionBarView row = new SuggestionBarView(context, null);
-        measureAndLayout(row, railBarWidthPx(), ROW_HEIGHT);
-        assertFalse("lying down that is still a squeezed row", stableRenderBounds(row));
-
-        SuggestionBarView stub = new SuggestionBarView(context, null);
-        stub.setVerticalForm(true);
-        measureAndLayout(stub, 1, 1);
-        assertFalse("a column with no bounds at all is still refused", stableRenderBounds(stub));
+    public void aRailHandedNoSizeHasNoIcon() {
+        SuggestionBarView unsized = new SuggestionBarView(context, null);
+        unsized.setVerticalForm(true);
+        measureAndLayout(unsized, railBarWidthPx(), RAIL_HEIGHT);
+        assertEquals(0, (int) ReflectionHelpers.callInstanceMethod(unsized, "iconSizePx"));
     }
 
     @Test
@@ -202,38 +200,192 @@ public class SuggestionBarRailFormTest {
         // The dock hands its row height to whatever bar it can find, every styling reload
         // included. Standing up, the bar is sized by the rail's metrics and nothing else.
         SuggestionBarView rail = render(true, 4, railBarWidthPx(), RAIL_HEIGHT);
-        rail.setDockRowHeightHintPx(Math.round(density() * 96f));
+        com.termux.app.dock.DockLayout dock = com.termux.app.dock.DockLayoutPolicy.compute(
+            com.termux.app.dock.DockLayoutPolicy.DockInputs.builder()
+                .preferencesAvailable(true)
+                .appsRowEnabledPref(true)
+                .appsRowAlone(true)
+                .appsRowPageStripShown(true)
+                .surface(com.termux.app.dock.DockSurfaceSpec.forStyle(
+                    com.termux.app.dock.DockStyle.LENS_BEADS))
+                .density(density())
+                .barHeightScale(DockLayoutPolicy.maxUsefulScale(false))
+                .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density()))
+                .rowWidthPx(1058)
+                .slotCount(7)
+                .build());
+        assertTrue("the dock has a row band to hand over", dock.appsRowBandHintPx > 0);
+        rail.setDockLayout(dock);
         measureAndLayout(rail, railBarWidthPx(), RAIL_HEIGHT);
 
-        assertTrue(stableRenderBounds(rail));
+        assertEquals("standing up there is no row height", 0, rail.restHeightPx());
         assertEquals(DockLayoutPolicy.railIconSizePx(density()),
             (int) ReflectionHelpers.callInstanceMethod(rail, "iconSizePx"));
         assertIsAColumn(rail, 4);
     }
 
     @Test
-    public void theRailPagesByTheColumnItWasGiven() {
-        // Was "the rail is one page": one page holding every pinned item ran past the bottom of
-        // the canvas and the icons down there were clipped away with nothing able to reach them.
-        SuggestionBarView rail = new SuggestionBarView(context, null);
+    public void theRailIsOneColumnOfEveryPinWhateverItsLength() {
+        // #146: paged by its own length, a rail inside its scroll never learnt that its band had
+        // shrunk, and ran its last slot on under the dock. Its host scrolls the one column now.
+        SuggestionBarView rail = sized();
         rail.setVerticalForm(true);
         rail.setMaxButtonCount(4);
         ReflectionHelpers.setField(rail, "pinnedItems", pinned(11));
         int column = 5 * DockLayoutPolicy.railSlotLengthPx(density());
         measureAndLayout(rail, railBarWidthPx(), column);
 
-        assertEquals("as many slots as the column holds", 5,
+        assertEquals("every pin in the one column", 11,
             (int) ReflectionHelpers.callInstanceMethod(rail, "computePinnedItemsPerPage"));
-        assertEquals("and the rest are pages behind it", 3,
+        assertEquals("one page", 1,
             (int) ReflectionHelpers.callInstanceMethod(rail, "getPinnedPagesCount"));
-        assertTrue(rail.hasPinnedOverflowPages());
+        assertFalse(rail.hasPinnedOverflowPages());
+    }
+
+    /**
+     * A rail of {@code pins} pins with {@code extra} more apps installed, the most-used page as
+     * {@code mostUsed} says, standing in its scroll at a band of three slots and rendered.
+     */
+    private DockRailScrollView railInScroll(int pins, int extra, boolean mostUsed) {
+        SuggestionBarView rail = sized();
+        List<LauncherAppEntry> apps = entries(pins + extra);
+        Map<String, LauncherAppEntry> cache = ReflectionHelpers.getField(rail, "resolvedRefCache");
+        List<PinnedItem> items = new ArrayList<>();
+        for (int i = 0; i < apps.size(); i++) {
+            cache.put(apps.get(i).appRef.stableId(), apps.get(i));
+            if (i < pins) items.add(new PinnedAppItem(apps.get(i).appRef));
+        }
+        ReflectionHelpers.setField(rail, "pinnedItems", items);
+        ReflectionHelpers.setField(rail, "allApps", new ArrayList<>(apps));
+        rail.setMaxButtonCount(extra);
+        rail.setMostUsedPageEnabled(mostUsed);
+        rail.setVerticalForm(true);
+
+        int slot = DockLayoutPolicy.railSlotLengthPx(density());
+        DockRailScrollView scroll = new DockRailScrollView(context);
+        scroll.setFillViewport(true);
+        scroll.setRailSlotLengthPx(slot);
+        scroll.addView(rail, new ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        measureAndLayout(scroll, railBarWidthPx(), 3 * slot);
+        rail.reloadWithInput("", null);
+        measureAndLayout(scroll, railBarWidthPx(), 3 * slot);
+        return scroll;
+    }
+
+    /** How far a ScrollView lets its column travel: the column less the scroll's own inside. */
+    private static int scrollRangePx(DockRailScrollView scroll) {
+        int inside = scroll.getHeight() - scroll.getPaddingTop() - scroll.getPaddingBottom();
+        return Math.max(0, scroll.getChildAt(0).getHeight() - inside);
+    }
+
+    private static void measureAndLayout(View view, int width, int height) {
+        view.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        view.layout(0, 0, view.getMeasuredWidth(), view.getMeasuredHeight());
+    }
+
+    @Test
+    public void theRailStandsTheMostUsedAppsAfterItsLastPinWhereTheScrollReachesThem() {
+        // The developer's call, 2026-10-23: the rail keeps the most-used page, at the end of its
+        // one column, since a page turn there would be the scroll's own axis.
+        DockRailScrollView scroll = railInScroll(7, 3, true);
+        SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
+        int slot = DockLayoutPolicy.railSlotLengthPx(density());
+
+        assertEquals("still one page", 1,
+            (int) ReflectionHelpers.callInstanceMethod(rail, "getPinnedPagesCount"));
+        assertFalse("which no page turn could reach", rail.hasPinnedOverflowPages());
+        assertEquals("no trailing page to tick", -1, rail.getPinnedDynamicPageIndex());
+        assertIsAColumn(rail, 10);
+        assertEquals("ten slots: the pins, then the most-used apps",
+            DockLayoutPolicy.railContentLengthPx(7, 3, slot), rail.getMeasuredHeight());
+        List<LauncherAppEntry> mostUsed =
+            ReflectionHelpers.callInstanceMethod(rail, "railMostUsedEntries");
+        assertEquals(3, mostUsed.size());
+        for (LauncherAppEntry entry : mostUsed) {
+            assertTrue("none of them a pin: " + entry.label,
+                Integer.parseInt(entry.label.substring("App ".length())) >= 7);
+        }
+
+        // The scroll stands three whole slots, and its end shows the last of them.
+        assertEquals(3 * slot, scroll.getMeasuredHeight());
+        assertEquals("the scroll travels the seven it does not show", 7 * slot,
+            scrollRangePx(scroll));
+        assertEquals("so its end shows the last most-used app",
+            scrollRangePx(scroll) + scroll.getHeight(), rail.getChildAt(9).getBottom());
+    }
+
+    @Test
+    public void theRailsTicksAreThePinsAndTheMostUsedAppsLitByTheScroll() {
+        DockRailScrollView scroll = railInScroll(7, 3, true);
+        SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
+        PageTickStripView ticks = new PageTickStripView(context);
+        com.termux.app.launcher.paging.PageTicksWriter writer =
+            new com.termux.app.launcher.paging.PageTicksWriter();
+        writer.bind(ticks);
+        rail.setPageTicksListener(writer::write);
+
+        assertEquals("the row's two ticks", 2, ticks.getPageCount());
+        assertEquals(View.VISIBLE, ticks.getVisibility());
+        assertEquals("the pins on show", 0f, ticks.getPagePosition(), 0.001f);
+
+        scroll.scrollTo(0, scrollRangePx(scroll));
+        assertEquals("scrolled to the end, the most-used apps are lit", 1f,
+            ticks.getPagePosition(), 0.001f);
+        scroll.scrollTo(0, scrollRangePx(scroll) / 2);
+        assertEquals("and halfway between on the way", 0.5f, ticks.getPagePosition(), 0.01f);
+    }
+
+    @Test
+    public void withTheMostUsedPageOffTheRailShowsNoTicks() {
+        DockRailScrollView scroll = railInScroll(7, 3, false);
+        SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
+        PageTickStripView ticks = new PageTickStripView(context);
+        com.termux.app.launcher.paging.PageTicksWriter writer =
+            new com.termux.app.launcher.paging.PageTicksWriter();
+        writer.bind(ticks);
+        rail.setPageTicksListener(writer::write);
+        assertEquals(1, ticks.getPageCount());
+        assertEquals(View.INVISIBLE, ticks.getVisibility());
+    }
+
+    @Test
+    public void withTheMostUsedPageOffTheRailIsItsPins() {
+        DockRailScrollView scroll = railInScroll(7, 3, false);
+        SuggestionBarView rail = (SuggestionBarView) scroll.getChildAt(0);
+        int slot = DockLayoutPolicy.railSlotLengthPx(density());
+
+        assertIsAColumn(rail, 7);
+        assertEquals(DockLayoutPolicy.railContentLengthPx(7, 0, slot), rail.getMeasuredHeight());
+        assertEquals("the scroll ends at the last pin", 4 * slot, scrollRangePx(scroll));
+    }
+
+    @Test
+    public void lyingDownTheMostUsedAppsAreStillAPageOfTheirOwn() {
+        SuggestionBarView row = sized();
+        seedPinned(row, 4);
+        List<LauncherAppEntry> apps = entries(7);
+        ReflectionHelpers.setField(row, "allApps", new ArrayList<>(apps));
+        row.setMaxButtonCount(4);
+        row.setMostUsedPageEnabled(true);
+        measureAndLayout(row, ROW_WIDTH, ROW_HEIGHT);
+        row.reloadWithInput("", null);
+        measureAndLayout(row, ROW_WIDTH, ROW_HEIGHT);
+
+        assertEquals("the pins' page, then the most-used page", 2,
+            (int) ReflectionHelpers.callInstanceMethod(row, "getPinnedPagesCount"));
+        assertEquals(1, row.getPinnedDynamicPageIndex());
+        assertEquals("the page on show is the pins alone", 4, row.getChildCount());
+        assertTrue(((List<?>) ReflectionHelpers.callInstanceMethod(row, "railMostUsedEntries"))
+            .isEmpty());
     }
 
     @Test
     public void reloadingWhileStandingUpKeepsTheColumn() {
         // `termux-reload-settings` comes back through reloadWithInput. It used to defer, leaving
         // the rail blank until something else rebuilt it.
-        SuggestionBarView bar = new SuggestionBarView(context, null);
+        SuggestionBarView bar = sized();
         seedPinned(bar, 5);
         bar.setMaxButtonCount(5);
         measureAndLayout(bar, ROW_WIDTH, ROW_HEIGHT);

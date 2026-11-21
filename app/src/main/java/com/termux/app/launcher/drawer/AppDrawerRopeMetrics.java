@@ -7,14 +7,15 @@ import androidx.annotation.NonNull;
  * a glyph may be, and the two functions of transition progress that drive the rope.
  *
  * <p>Density arrives as a number and every dp constant is multiplied by it here, so the class never
- * sees a {@code Context} and its test runs under bare JUnit. Instances are immutable results of
- * {@link #resolve}.
+ * sees a {@code Context} and its test runs under bare JUnit. Instances are the results of
+ * {@link #resolve}; the column re-resolves its own one in place for a new visible height.
  *
  * <p><b>The clamps are the point.</b> The same 27 letters have to fit a ~1500px track on a 1080p
  * phone and a ~2100px one at 1440p, where an unclamped slot would put a 24dp letter on screen, and
  * still be legible on a short track — a landscape plane, or a split-screen one — where the honest
- * answer is a slot smaller than the glyph would like. So the slot is capped from above and the glyph
- * is clamped from both sides and then held inside its slot, which keeps adjacent letters from
+ * answer is a slot smaller than the glyph would like. The slots always share the whole track, so
+ * the letters run from the grid's top to the card's bottom at every card height; the glyph is
+ * clamped from both sides and then held inside its slot, which keeps adjacent letters from
  * overlapping at the small end and keeps them from reading as a heading list at the large end.
  *
  * <p>{@link #indexForY} carries {@link #LETTER_SLOT_HYSTERESIS_RATIO}, the same value and the same
@@ -28,8 +29,6 @@ public final class AppDrawerRopeMetrics {
     public static final float COLUMN_WIDTH_DP = 30f;
     /** Padding above and below the track, so the first and last letters are not against the edges. */
     public static final float TRACK_INSET_DP = 10f;
-    /** Ceiling on a slot: 27 letters over a 1440p plane would otherwise get 24dp each. */
-    public static final float MAX_SLOT_DP = 26f;
     /** Share of a slot a glyph may take before the letters read as one block. */
     public static final float GLYPH_SLOT_FRACTION = 0.62f;
     /** Glyph bounds. The floor is the smallest legible letter; the ceiling matches the dock's row. */
@@ -49,35 +48,44 @@ public final class AppDrawerRopeMetrics {
     /** Alpha is done well before the anchor is, so the settle happens in full view. */
     public static final float COLUMN_ALPHA_END = 0.60f;
 
+    // Written only by set(): by resolve() for a new instance, and by resizeTo() for the column's
+    // own one while the plane's bottom moves over it, so that path allocates nothing per frame.
     /** Letters actually drawn, always in {@code 1..}{@link AppDrawerRopeModel#MAX_LETTERS}. */
-    public final int letterCount;
+    public int letterCount;
     /** Width of the strip, which is also the right margin the grid must carry. */
-    public final float columnWidthPx;
+    public float columnWidthPx;
     /** Top of the first slot. */
-    public final float trackTopPx;
-    /** {@link #slotHeightPx} times {@link #letterCount}; the track is centred in the space given. */
-    public final float trackHeightPx;
-    public final float slotHeightPx;
+    public float trackTopPx;
+    /** {@link #slotHeightPx} times {@link #letterCount}: the whole space given, less the insets. */
+    public float trackHeightPx;
+    public float slotHeightPx;
     /** Text size for a glyph, never larger than its slot. */
-    public final float glyphTextSizePx;
+    public float glyphTextSizePx;
     /** {@link #ENTRY_OFFSET_DP} in pixels: the anchor's position at {@code p = 0}. */
-    public final float entryOffsetPx;
+    public float entryOffsetPx;
+    /** The height these metrics were resolved for. */
+    public float availableHeightPx;
+    private float mDensity;
 
-    private AppDrawerRopeMetrics(int letterCount, float columnWidthPx, float trackTopPx,
-                                 float trackHeightPx, float slotHeightPx, float glyphTextSizePx,
-                                 float entryOffsetPx) {
-        this.letterCount = letterCount;
-        this.columnWidthPx = columnWidthPx;
-        this.trackTopPx = trackTopPx;
-        this.trackHeightPx = trackHeightPx;
-        this.slotHeightPx = slotHeightPx;
-        this.glyphTextSizePx = glyphTextSizePx;
-        this.entryOffsetPx = entryOffsetPx;
-    }
+    private AppDrawerRopeMetrics() {}
 
     /** The strip width alone, for the controller sizing the grid before any letters are known. */
     public static float resolveColumnWidthPx(float density) {
         return COLUMN_WIDTH_DP * (density > 0f ? density : 1f);
+    }
+
+    /**
+     * The height the track spans: the column's laid-out height, or less while the plane's visible
+     * bottom stands above the column's bottom (the card's bottom following the keyboard's reveal),
+     * so the letters are spaced over the part of the strip the card shows.
+     *
+     * @param columnHeightPx  the column view's laid-out height
+     * @param columnTopPx     the column's top, in the coordinates {@code visibleBottomPx} is in
+     * @param visibleBottomPx the plane's visible bottom; {@code +∞} when it does not cut the strip
+     */
+    public static float visibleTrackHeightPx(float columnHeightPx, float columnTopPx,
+                                             float visibleBottomPx) {
+        return Math.max(0f, Math.min(columnHeightPx, visibleBottomPx - columnTopPx));
     }
 
     /**
@@ -88,6 +96,18 @@ public final class AppDrawerRopeMetrics {
     @NonNull
     public static AppDrawerRopeMetrics resolve(float availableHeightPx, int letterCount,
                                                float density) {
+        AppDrawerRopeMetrics metrics = new AppDrawerRopeMetrics();
+        metrics.set(availableHeightPx, letterCount, density);
+        return metrics;
+    }
+
+    /** These metrics again for another height, same letters and density; nothing is allocated. */
+    void resizeTo(float availableHeightPx) {
+        if (availableHeightPx == this.availableHeightPx) return;
+        set(availableHeightPx, letterCount, mDensity);
+    }
+
+    private void set(float availableHeightPx, int letterCount, float density) {
         // A degenerate density would take every derived number to NaN or zero; the drawer is rebuilt
         // on configuration change, so a bad frame must degrade rather than poison the column.
         float d = density > 0f ? density : 1f;
@@ -96,15 +116,23 @@ public final class AppDrawerRopeMetrics {
         // On a very short track the fixed inset would eat the whole thing, so it gives way first.
         float insetPx = Math.min(TRACK_INSET_DP * d, height * 0.25f);
         float usablePx = Math.max(0f, height - (insetPx * 2f));
-        float slotHeightPx = Math.min(MAX_SLOT_DP * d, usablePx / count);
-        float trackHeightPx = slotHeightPx * count;
-        float trackTopPx = insetPx + ((usablePx - trackHeightPx) * 0.5f);
+        // Evenly over the whole track, A at its top and the last letter at its bottom.
+        float slotHeightPx = usablePx / count;
+        float trackHeightPx = usablePx;
+        float trackTopPx = insetPx;
         float glyphTextSizePx = Math.min(MAX_GLYPH_DP * d,
             Math.max(MIN_GLYPH_DP * d, slotHeightPx * GLYPH_SLOT_FRACTION));
         // The floor must never win by enough to overlap the neighbouring letter.
         glyphTextSizePx = Math.min(glyphTextSizePx, slotHeightPx);
-        return new AppDrawerRopeMetrics(count, COLUMN_WIDTH_DP * d, trackTopPx, trackHeightPx,
-            slotHeightPx, glyphTextSizePx, ENTRY_OFFSET_DP * d);
+        this.letterCount = count;
+        this.columnWidthPx = COLUMN_WIDTH_DP * d;
+        this.trackTopPx = trackTopPx;
+        this.trackHeightPx = trackHeightPx;
+        this.slotHeightPx = slotHeightPx;
+        this.glyphTextSizePx = glyphTextSizePx;
+        this.entryOffsetPx = ENTRY_OFFSET_DP * d;
+        this.availableHeightPx = availableHeightPx;
+        this.mDensity = density;
     }
 
     /** Centre of a letter's slot, in the column view's own coordinates. */

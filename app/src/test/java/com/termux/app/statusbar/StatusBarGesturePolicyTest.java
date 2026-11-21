@@ -162,4 +162,9 @@ public class StatusBarGesturePolicyTest {
         assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.LEFT));
         assertFalse(StatusBarGesturePolicy.expansionAllowed(Edge.RIGHT));
     }
+
+    @Test public void secondFingerCancels() {
+        StatusBarGesturePolicy p = policy(true, false, false, false, TopStatusBarState.COMPACT);
+        assertEquals(StatusBarGesturePolicy.Claim.CHILD_OWNED, p.secondPointer());
+    }
 }

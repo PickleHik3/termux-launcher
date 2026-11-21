@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="960" android:viewportHeight="960">
+    <path android:fillColor="?attr/colorOnSurfaceVariant" android:pathData="M280 120H680Q800 120 800 240V720Q800 840 680 840H280Q160 840 160 720V240Q160 120 280 120ZM280 200Q240 200 240 240V720Q240 760 280 760H680Q720 760 720 720V240Q720 200 680 200H280ZM330 260H630Q680 260 680 310V310Q680 360 630 360H330Q280 360 280 310V310Q280 260 330 260Z"/>
+    <path android:fillColor="?attr/colorOnSurfaceVariant" android:fillAlpha="0.45" android:pathData="M330 600H630Q680 600 680 650V650Q680 700 630 700H330Q280 700 280 650V650Q280 600 330 600Z"/>
+</vector>

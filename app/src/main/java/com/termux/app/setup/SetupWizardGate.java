@@ -1,0 +1,80 @@
+package com.termux.app.setup;
+
+/**
+ * Whether the setup wizard is due, and whether it runs for someone who already uses the app.
+ *
+ * <p>The wizard has its own version. Raising {@link #CURRENT} shows it again to everyone who has
+ * finished an older one. Pure: the stored values go in, the answer comes out.
+ */
+public final class SetupWizardGate {
+
+    /** The wizard's version. */
+    public static final int CURRENT = 1;
+
+    /** The answer: whether to show, and whether this person has used the app before. */
+    public static final class Decision {
+        public final boolean show;
+        public final boolean updater;
+
+        Decision(boolean show, boolean updater) {
+            this.show = show;
+            this.updater = updater;
+        }
+    }
+
+    /** Set once the old tour's progress has been carried into the new guide. */
+    public static final String KEY_MIGRATED_V1 = "setup_migrated_v1";
+
+    private SetupWizardGate() {}
+
+    /**
+     * Whether the old tour's progress is carried into the guide now: the wizard is due for
+     * someone who has used the app before (so they did the old tour), and it has not been done.
+     */
+    public static boolean shouldMigrate(Decision decision, boolean alreadyMigrated) {
+        return decision.show && decision.updater && !alreadyMigrated;
+    }
+
+    /**
+     * Whether a due wizard waits before it opens: the bootstrap is not installed yet and nothing
+     * has settled it (an install ending, installed or failed, or the wait's backstop finding no
+     * install running). Fresh installs see the wizard after the bootstrap is ready, never neither.
+     */
+    public static boolean waitsForBootstrap(boolean bootstrapInstalled, boolean bootstrapSettled) {
+        return !bootstrapInstalled && !bootstrapSettled;
+    }
+
+    /**
+     * Whether the wizard and its cards come first, holding back the other first-run cards and
+     * hints: the wizard is due (up, or waiting to open), the wizard or its card sheet is up, or the
+     * cards are due and the check that opens them is still to run in this session. Cards that are
+     * due but will only open on a later start hold nothing back.
+     *
+     * @param wizardDue         this wizard version has not been finished
+     * @param sheetOpen         the wizard or the card sheet is on screen
+     * @param cardsDue          a card would open the sheet at launch
+     * @param cardsOfferPending the launch's check for the cards has not run yet
+     */
+    public static boolean comesFirst(boolean wizardDue, boolean sheetOpen, boolean cardsDue,
+                                     boolean cardsOfferPending) {
+        return wizardDue || sheetOpen || (cardsDue && cardsOfferPending);
+    }
+
+    /**
+     * @param storedVersion the wizard version stored as done, 0 for never
+     * @param tourCompleted whether the old first-boot tour was ever finished
+     * @param useAsWritten  whether Use as was ever stored
+     */
+    public static Decision decide(int storedVersion, boolean tourCompleted, boolean useAsWritten) {
+        return decide(storedVersion, tourCompleted, useAsWritten, false);
+    }
+
+    /**
+     * @param firstRunSeen whether an older build's first-run card was ever answered (the wallpaper
+     *                     prompt flag): an updater who never finished the old tour nor touched Use as
+     */
+    public static Decision decide(int storedVersion, boolean tourCompleted, boolean useAsWritten,
+                                  boolean firstRunSeen) {
+        return new Decision(storedVersion < CURRENT, tourCompleted || useAsWritten || firstRunSeen);
+    }
+}

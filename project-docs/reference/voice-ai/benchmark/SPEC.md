@@ -242,6 +242,41 @@ The recommended downloads come from the signed remote catalogue (`TaiRemoteCatal
 - **Model centre:** each row shows its best recent decode speed as a quiet pill, e.g. "21 tok/s".
 - **API:** `GET /v1/ai/benchmarks` and `tai benchmark --results` return the same records.
 
+## Voice (`voice_v1`, issue #223)
+
+Speech-to-text models in the same Benchmark: a **Text | Voice** choice heads Home and decides
+which board Home shows, what Run a benchmark opens, and which history a Result reads. No second
+UI and no new tab; records share `benchmarks.json` with `kind: voice` and `benchVersion: voice_v1`,
+so the text board never ranks them (`TaiBenchStore.toJson` returns a `voiceLeaderboard` beside it).
+
+- **Clips:** three bundled public-domain clips, the bytes `scripts/stt-bench/fetch-clips.sh` makes
+  (16 kHz mono PCM16 WAV, `assets/tai/bench/voice/`, 1.89 MB): JFK 3 s, JFK 11 s, the first 45 s
+  of G. W. Bush's radio address of 1 Nov 2008. References in `TaiVoiceBench.CLIPS`: the inaugural
+  lines, and the official White House transcript up to the 45 s cut (a pause after "throughout
+  the Nation"). No recording, no download.
+- **Run:** `TaiVoiceBenchRunner`, in the app process like the feature check, through the speech
+  requests voice input sends, each naming its processor (`accelerator` on a speech request
+  overrides the setting). Per installed speech model: CPU, then GPU where the Speech accelerator
+  row offers it (`SttAcceleratorChoices.gpuOffered`). Per entry: a cold load (`sttWarm` with
+  `_taiSttColdLoad`, which closes the speech graph first), one warm-up of the 3 s clip, then
+  `TIMED_RUNS` = 3 timed transcriptions of every clip. On a Nothing A065 that is about three
+  minutes for Whisper small.en and Parakeet on both processors, before cool-downs.
+- **Figures:** speed is audio seconds over the summed per-clip median wall times ("4.2× real
+  time"); word error rate is word-level Levenshtein over the reference's words after lower-casing
+  and dropping punctuation, summed over the clips (each clip's first timed transcript); load is the
+  warm answer's `loadMs`. A transcription that had to reload does not count its load. Battery and
+  heat are in `conditions`, not shown.
+- **GPU fallback:** a GPU entry whose graph came up on the CPU is recorded `ranOn: cpu` with
+  `gpuFallback` (the reason), reads "GPU unavailable, ran on CPU", and is listed under Not ranked.
+- **Board:** one row per model and processor, the latest clean complete record; ranked by speed,
+  then fewer word errors. Not ranked: wrong text (word error rate ≥ 50%), GPU fallbacks, crashes.
+- **Guards:** the bench's start check (battery, heat), `TaiBenchConditionsGuard` between steps
+  (cool-down, MODERATE pause, SEVERE stop, the screen left), the thermal listener, and the
+  runtime's own speech memory check (`decideSttLoad`), which skips a model that does not fit.
+- **Use this:** on a voice Result, sets the speech model (`TaiSpeechModels.activate`) and the
+  Speech accelerator (`tai_stt_accelerator`) to the processor the result ran on. Nothing is
+  picked automatically.
+
 ## CLI
 
 `tai benchmark [model...] [--preset quick|standard] [--cpu|--gpu] [--compare] [--eagle] [--force]`,

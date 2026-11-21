@@ -127,4 +127,66 @@ public class PaneShapeTest {
             previous = radius;
         }
     }
+
+    @Test
+    public void tradedClearance_neverLetsTheArcCutACornerCell() {
+        for (float radius = 0f; radius <= 200f; radius += 0.5f) {
+            for (int floor = 0; floor <= 16; floor++) {
+                int vertical = PaneShape.verticalInsetPx(radius, floor);
+                int side = PaneShape.sideInsetPx(radius, vertical);
+                assertTrue("never below the rim's floor", vertical >= floor);
+                if (radius <= 0f) continue;
+                double toCentre = Math.hypot(radius - Math.min(side, radius),
+                    radius - Math.min(vertical, radius));
+                assertTrue("corner (" + side + ", " + vertical + ") outside a " + radius + "px arc",
+                    toCentre <= radius + EPS);
+            }
+        }
+    }
+
+    @Test
+    public void tradedClearance_spendsNoMoreSideThanItGivesBack() {
+        for (float radius = 1f; radius <= 200f; radius += 0.5f) {
+            int even = PaneShape.contentInsetPx(radius);
+            int vertical = PaneShape.verticalInsetPx(radius, 0);
+            int side = PaneShape.sideInsetPx(radius, vertical);
+            assertTrue(vertical <= even);
+            assertTrue("at " + radius + "px the sides grew " + (side - even) + " for "
+                + (even - vertical), side - even <= even - vertical);
+        }
+    }
+
+    @Test
+    public void sideClearanceIsMinimal() {
+        for (float radius = 1f; radius <= 200f; radius += 0.5f) {
+            for (int vertical = 0; vertical < radius; vertical++) {
+                int side = PaneShape.sideInsetPx(radius, vertical);
+                if (side == 0) continue;
+                assertTrue("side " + side + " is larger than a " + radius + "px arc needs at "
+                    + vertical, Math.hypot(radius - (side - 1), radius - vertical) > radius);
+            }
+        }
+    }
+
+    @Test
+    public void pongsPane_tradesSixPixelsAnEnd() {
+        // 24dp Corners at 2.625: a 63px arc, and a 1dp glass rim plus the 2dp gap floors at 8px.
+        // The even clearance is 19px; the top and bottom come in to 13px and the sides go to 25px.
+        assertEquals(19, PaneShape.contentInsetPx(63f));
+        assertEquals(13, PaneShape.verticalInsetPx(63f, 8));
+        assertEquals(25, PaneShape.sideInsetPx(63f, 13));
+    }
+
+    @Test
+    public void squareCorner_holdsOnlyTheFloor() {
+        assertEquals(8, PaneShape.verticalInsetPx(0f, 8));
+        assertEquals(0, PaneShape.sideInsetPx(0f, 8));
+    }
+
+    @Test
+    public void floorPastTheArc_winsOutright() {
+        // A 10px arc owes 3px; an 8px rim floor is all the vertical gap there is, and clears it.
+        assertEquals(8, PaneShape.verticalInsetPx(10f, 8));
+        assertTrue(PaneShape.sideInsetPx(10f, 8) <= PaneShape.contentInsetPx(10f));
+    }
 }

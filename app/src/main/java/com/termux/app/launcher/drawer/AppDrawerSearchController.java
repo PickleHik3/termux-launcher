@@ -9,7 +9,7 @@ import com.termux.app.launcher.data.LauncherRankingEngine;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
-import com.termux.app.terminal.PasteText;
+import com.termux.app.terminal.inappkeyboard.FieldEditor;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import java.util.ArrayList;
@@ -62,7 +62,7 @@ public final class AppDrawerSearchController
         /** True while the drawer is open, i.e. while the three channels may claim anything. */
         boolean isSearchActive();
 
-        /** Enter, on any channel: act on the first result. */
+        /** Enter, on any channel: open the highlighted result (the first when none is). */
         void onSearchCommitRequested();
 
         /** Esc, or Back with an empty query: put the drawer away. */
@@ -78,24 +78,43 @@ public final class AppDrawerSearchController
          *                     disarms the close gesture and invalidates any anchored popup
          */
         void onSearchResultsChanged(@NonNull List<LauncherAppEntry> results, boolean queryChanged);
+
+        /** The arrow keys moved the highlight; either index may be {@link AppDrawerSearchSelection#NONE}. */
+        default void onSearchHighlightChanged(int oldIndex, int newIndex) { }
+
+        /** Results per row in the current presentation: 1 for a list, the column count for a grid. */
+        default int searchColumns() {
+            return 1;
+        }
     }
 
     private final AppDrawerSearchModel mModel = new AppDrawerSearchModel();
-    private final ClipboardText mClipboardSource;
+    private final AppDrawerSearchSelection mSelection = new AppDrawerSearchSelection();
 
     @NonNull private List<LauncherAppEntry> mCatalogue = Collections.emptyList();
     @NonNull private List<LauncherAppEntry> mResults = Collections.emptyList();
     @Nullable private Host mHost;
     @Nullable private ResultsListener mListener;
     private boolean mTextFieldOwnsInput;
+    /** False while the drawer is being edited: typing is swallowed, only Back and Esc act. */
+    private boolean mInputEnabled = true;
 
     public AppDrawerSearchController() {
         this(() -> null);
     }
 
     public AppDrawerSearchController(@NonNull ClipboardText clipboardSource) {
-        mClipboardSource = clipboardSource;
+        mFieldEditor = new FieldEditor(clipboardSource);
     }
+
+    private final FieldEditor mFieldEditor;
+
+    /** The query, as the in-app keyboard's editing keys see it. */
+    private final FieldEditor.Field mField = new FieldEditor.Field() {
+        @NonNull @Override public String fieldText() { return mModel.query(); }
+        @Override public void replaceFieldText(@NonNull String text) { replaceQuery(text, text.length()); }
+        @Override public void insertFieldText(@NonNull String text) { insert(text); }
+    };
 
     public void setHost(@Nullable Host host) {
         mHost = host;
@@ -157,6 +176,75 @@ public final class AppDrawerSearchController
         return mResults.isEmpty() ? null : mResults.get(0);
     }
 
+    /** The result the arrow keys have highlighted, or {@link AppDrawerSearchSelection#NONE}. */
+    public int highlightedIndex() {
+        return mSelection.index();
+    }
+
+    /** What Enter opens: the highlighted result, else the first (touch clears the highlight). */
+    @Nullable
+    public LauncherAppEntry commitTarget() {
+        int index = mSelection.index();
+        if (index >= 0 && index < mResults.size()) return mResults.get(index);
+        return firstResult();
+    }
+
+    /** A touch on the results: the highlight is a keyboard affordance and goes away. */
+    public void clearHighlight() {
+        int before = mSelection.index();
+        if (mSelection.clear()) notifyHighlight(before, mSelection.index());
+    }
+
+    /**
+     * An arrow key over the results. Up and Down always move the highlight while there is a query;
+     * Left and Right do only in a grid, where they are the way along a row — in a list they stay the
+     * caret's.
+     *
+     * @return true when the key was spent on the highlight
+     */
+    public boolean handleHighlightKey(int keyCode) {
+        if (!hasQuery()) return false;
+        int columns = columns();
+        boolean moved;
+        switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+                moved = moveHighlight(-1, columns, true);
+                break;
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                moved = moveHighlight(1, columns, true);
+                break;
+            case KeyEvent.KEYCODE_DPAD_LEFT:
+                if (columns <= 1) return false;
+                moved = moveHighlight(-1, 1, false);
+                break;
+            case KeyEvent.KEYCODE_DPAD_RIGHT:
+                if (columns <= 1) return false;
+                moved = moveHighlight(1, 1, false);
+                break;
+            default:
+                return false;
+        }
+        return true;
+    }
+
+    private int columns() {
+        ResultsListener listener = mListener;
+        return listener == null ? 1 : Math.max(1, listener.searchColumns());
+    }
+
+    private boolean moveHighlight(int direction, int columns, boolean byRow) {
+        int before = mSelection.index();
+        boolean moved = byRow ? mSelection.moveRows(direction, columns)
+            : mSelection.moveBy(direction);
+        if (moved) notifyHighlight(before, mSelection.index());
+        return moved;
+    }
+
+    private void notifyHighlight(int oldIndex, int newIndex) {
+        ResultsListener listener = mListener;
+        if (listener != null) listener.onSearchHighlightChanged(oldIndex, newIndex);
+    }
+
     /**
      * The catalogue to rank against, pushed in by the grid whenever the provider has loaded or
      * changed. Re-ranks the current query against it, so a package install lands in a filtered grid
@@ -186,6 +274,7 @@ public final class AppDrawerSearchController
      */
     public void reset() {
         mModel.clear();
+        mFieldEditor.reset();
         rank(true);
     }
 
@@ -198,6 +287,7 @@ public final class AppDrawerSearchController
         // filterAndRank already answers an empty query with a copy of the input list, in order, so
         // the "no filter" case needs no branch of its own here.
         mResults = LauncherRankingEngine.filterAndRank(mCatalogue, mModel.query(), SEARCH_TOLERANCE);
+        mSelection.onResults(mResults.size(), !mModel.isEmpty(), queryChanged);
         notifyResults(queryChanged);
     }
 
@@ -217,6 +307,9 @@ public final class AppDrawerSearchController
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
         if (!isActive()) return false;
+        // Edits, chords and tool keys follow the one field rule (FieldKeys); the keyboard's own
+        // keys never get here. What is left is the query's.
+        if (mFieldEditor.handle(mField, value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) insert(String.valueOf(value.getChar()));
@@ -228,8 +321,6 @@ public final class AppDrawerSearchController
                 switch (value.getEditing()) {
                     case SPACE_BAR: insert(" "); break;
                     case BACKSPACE: backspace(); break;
-                    case PASTE:
-                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 return true;
@@ -258,6 +349,13 @@ public final class AppDrawerSearchController
         }
     }
 
+    /** Whether typed text reaches the query; off while the drawer's edit mode is on. */
+    public void setInputEnabled(boolean enabled) {
+        mInputEnabled = enabled;
+        // Search is inert while editing; a bead left on a result would claim an Enter it ignores.
+        if (!enabled) clearHighlight();
+    }
+
     // ------------------------------------------------------------------ hardware keys
 
     /**
@@ -267,6 +365,13 @@ public final class AppDrawerSearchController
      */
     public boolean handleKeyDown(int keyCode, @NonNull KeyEvent event) {
         if (!isActive()) return false;
+        if (!mInputEnabled) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
+                dismiss();
+            }
+            return true;
+        }
         // Whichever keyboard the search uses, a stroke that reaches this channel was sent to the
         // terminal, never to the drawer's text field: a focused field takes its own keys. So it is
         // typed into the query here, in either mode — declining it would hand it to the shell
@@ -290,6 +395,7 @@ public final class AppDrawerSearchController
      * @return true when the drawer consumed the code point
      */
     public boolean handleCodePoint(int codePoint, boolean ctrlDown) {
+        if (!mInputEnabled) return isActive();
         CommandPaletteSoftKeyDecision.Action action =
             CommandPaletteSoftKeyDecision.decide(isActive(), false, codePoint, ctrlDown);
         switch (action) {
@@ -316,7 +422,11 @@ public final class AppDrawerSearchController
     // ------------------------------------------------------------------ editing
 
     private boolean handleKeyCode(int keyCode) {
+        if (handleHighlightKey(keyCode)) return true;
         switch (keyCode) {
+            case KeyEvent.KEYCODE_DPAD_UP:
+            case KeyEvent.KEYCODE_DPAD_DOWN:
+                return true;
             case KeyEvent.KEYCODE_DPAD_LEFT:
                 moveCaret(-1);
                 return true;
@@ -337,11 +447,6 @@ public final class AppDrawerSearchController
             default:
                 return false;
         }
-    }
-
-    private void pasteClipboard() {
-        String text = mClipboardSource.read();
-        if (text != null && !text.isEmpty()) insert(PasteText.sanitizeSingleLine(text));
     }
 
     private void insert(@NonNull String text) {

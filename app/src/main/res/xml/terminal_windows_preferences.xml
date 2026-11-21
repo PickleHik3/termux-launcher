@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terminal › Windows & panes: the old Terminal page's Sessions and panes group, keys unchanged.
+     Split-pane controls, automatic tiling and focus-grows are the editor's Terminal card. Swipe on
+     the terminal to switch windows moved to Home › Gestures. -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <Preference
+        app:key="terminal_windows_layout_editor"
+        app:persistent="false"
+        app:title="@string/settings_layout_editor_title"
+        app:summary="@string/settings_appearance_door_summary" />
+    <PreferenceCategory app:title="@string/settings_sessions_panes_header">
+        <SwitchPreferenceCompat
+            app:key="show_key_hints"
+            app:title="@string/settings_show_key_hints_title"
+            app:summary="@string/settings_show_key_hints_summary"
+            android:defaultValue="true" />
+        <SwitchPreferenceCompat
+            app:key="pane_agent_api"
+            app:title="@string/settings_pane_agent_api_title"
+            app:summary="@string/settings_pane_agent_api_summary"
+            android:defaultValue="true" />
+    </PreferenceCategory>
+</PreferenceScreen>

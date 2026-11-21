@@ -162,18 +162,18 @@ public class X11PaneFrameControlsTest {
         assertFalse(page.isScaleRailShown());
     }
 
-    /** The "Wallpaper & style" glyph opens the in-app wallpaper picker. */
+    /** The "Appearance" glyph opens the Appearance editor, as every corner tab does. */
     @Test
-    public void theTabCarriesTheWallpaperButton() {
+    public void theTabCarriesTheAppearanceButton() {
         X11PaneFrame page = pageWithControlsOut();
         List<String> log = new ArrayList<>();
         page.setHost(new X11PaneFrame.Host() {
             @Override public void startDisplay() {}
-            @Override public void openWallpaperPicker() { log.add("wallpaper"); }
+            @Override public void openSurfaceEditor() { log.add("appearance"); }
         });
 
-        tapAction(page, X11PaneFrame.ACTION_WALLPAPER);
-        assertEquals(Collections.singletonList("wallpaper"), log);
+        tapAction(page, X11PaneFrame.ACTION_APPEARANCE);
+        assertEquals(Collections.singletonList("appearance"), log);
         assertFalse(page.isControlsTabShown());
         assertFalse(page.isScaleRailShown());
     }

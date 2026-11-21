@@ -199,7 +199,7 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
 
     /**
      * Builds and returns {@code window}'s interpreter, building it on first use only. Each window
-     * gets its own {@link TaiXnnpackDelegate}, set up exactly as the single-graph load used to be.
+     * gets its own interpreter, set up exactly as the single-graph load used to be.
      * Updates the shared {@link TaiResidency} EMBEDDING entry to the sum of every window loaded so
      * far, using the same {@link TaiLoadMeter} measurement a single load used to record (item 5).
      */
@@ -209,12 +209,8 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         if (existing != null) return existing;
         File graphFile = windowGraphs == null ? null : windowGraphs.get(window);
         if (graphFile == null) throw new IllegalStateException("No installed graph for window " + window);
-        // Stock Interpreter XNNPACK never gets worker threads (one core on pong, as Whisper found);
-        // the JNI shim's delegate spawns a real pthreadpool. See TaiXnnpackDelegate.
-        TaiXnnpackDelegate delegate = TaiXnnpackDelegate.create(DEFAULT_THREADS);
-        Interpreter.Options options = delegate != null
-            ? new Interpreter.Options().setNumThreads(DEFAULT_THREADS).setUseXNNPACK(false).addDelegate(delegate)
-            : new Interpreter.Options().setNumThreads(DEFAULT_THREADS).setUseXNNPACK(true);
+        // The stock LiteRT Interpreter XNNPACK path.
+        Interpreter.Options options = new Interpreter.Options().setNumThreads(DEFAULT_THREADS).setUseXNNPACK(true);
         // The same MemAvailable meter a chat load runs, across the interpreter's construction only.
         TaiLoadMeter meter = TaiLoadMeter.start(appContext);
         Interpreter interpreter;
@@ -231,15 +227,13 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         // BOS + EOS framing needs at least two slots in every input row.
         if (sequenceLength < 2) {
             interpreter.close();
-            if (delegate != null) delegate.close();
             throw new IllegalStateException("Embedding model reports an unusable sequence length: " + sequenceLength);
         }
         if (outputDimensions <= 0) {
             interpreter.close();
-            if (delegate != null) delegate.close();
             throw new IllegalStateException("Embedding model reports an unusable output dimension: " + outputDimensions);
         }
-        WindowRuntime windowRuntime = new WindowRuntime(interpreter, delegate, sequenceLength, outputDimensions,
+        WindowRuntime windowRuntime = new WindowRuntime(interpreter, sequenceLength, outputDimensions,
             graphFile.length(), measured >= 0L ? measured : null);
         windowRuntimes.put(window, windowRuntime);
         updateResidency(spec);
@@ -405,14 +399,11 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         return response;
     }
 
-    /** Closes all interpreters first, then all delegates, matching the single-graph load's order. */
+    /** Closes every window's interpreter. */
     @Override
     public synchronized void close() {
         for (WindowRuntime windowRuntime : windowRuntimes.values()) {
             windowRuntime.interpreter.close();
-        }
-        for (WindowRuntime windowRuntime : windowRuntimes.values()) {
-            if (windowRuntime.delegate != null) windowRuntime.delegate.close();
         }
         windowRuntimes.clear();
         tokenizer = null;
@@ -435,19 +426,17 @@ final class LiteRtEmbeddingRuntime implements AutoCloseable {
         }
     }
 
-    /** One window's loaded graph: its interpreter, delegate, and what it reports about itself. */
+    /** One window's loaded graph: its interpreter and what it reports about itself. */
     private static final class WindowRuntime {
         @NonNull final Interpreter interpreter;
-        @Nullable final TaiXnnpackDelegate delegate;
         final int sequenceLength;
         final int outputDimensions;
         final long fileBytes;
         @Nullable final Long measuredBytes;
 
-        WindowRuntime(@NonNull Interpreter interpreter, @Nullable TaiXnnpackDelegate delegate, int sequenceLength,
+        WindowRuntime(@NonNull Interpreter interpreter, int sequenceLength,
                      int outputDimensions, long fileBytes, @Nullable Long measuredBytes) {
             this.interpreter = interpreter;
-            this.delegate = delegate;
             this.sequenceLength = sequenceLength;
             this.outputDimensions = outputDimensions;
             this.fileBytes = fileBytes;

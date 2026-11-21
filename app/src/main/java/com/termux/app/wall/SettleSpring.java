@@ -22,6 +22,23 @@ public final class SettleSpring {
     static final long MAX_DURATION_MS = 3000L;
     private static final long STEP_MS = 4L;
 
+    /**
+     * A page's settle ({@link #page}), one for the wall's slide and the Home pages' turn: from
+     * still a whole width takes about the 560 ms the terminal's window pan takes; a flick is
+     * carried on by its own speed, and one thrown hard near its rest stiffens the spring rather
+     * than overshooting. Per second, at Normal animation speed.
+     */
+    public static final float PAGE_OMEGA = 18f;
+    /** The stiffest a page's settle may get for a throw at its rest, per second. */
+    public static final float PAGE_MAX_OMEGA = 60f;
+    /** How close to rest, in px, a page's settle counts as landed. */
+    public static final float PAGE_REST_PX = 0.5f;
+    /**
+     * The fastest release, in px per second, a page's settle carries on from: a stray tracker
+     * reading is not a throw.
+     */
+    public static final float PAGE_MAX_VELOCITY_PX_PER_SEC = 12000f;
+
     private final float mFrom;
     private final float mVelocity;
     private final float mOmega;
@@ -48,6 +65,20 @@ public final class SettleSpring {
         if (from != 0f && v * from < 0f) omega = Math.max(omega, Math.abs(v / from));
         omega = Math.min(omega, Math.max(1f, maxOmega));
         return new SettleSpring(from, v, omega);
+    }
+
+    /**
+     * A page's settle: a page {@code displacementPx} from its rest, released at
+     * {@code velocityPxPerSec} (clamped to {@link #PAGE_MAX_VELOCITY_PX_PER_SEC}), on
+     * {@link #PAGE_OMEGA}, with {@code springTime} General › Animation speed's stretch on it
+     * ({@code AnimationSpeed.springTime}). Land it with {@code durationMs(PAGE_REST_PX)}.
+     */
+    public static SettleSpring page(float displacementPx, float velocityPxPerSec,
+                                    float springTime) {
+        float v = Float.isNaN(velocityPxPerSec) ? 0f : Math.max(-PAGE_MAX_VELOCITY_PX_PER_SEC,
+            Math.min(PAGE_MAX_VELOCITY_PX_PER_SEC, velocityPxPerSec));
+        float time = springTime > 0f ? springTime : 1f;
+        return of(displacementPx, v, PAGE_OMEGA / time, PAGE_MAX_OMEGA / time);
     }
 
     /** The natural frequency the spring was given, per second. */

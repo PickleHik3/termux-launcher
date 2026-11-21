@@ -56,15 +56,19 @@ public class KeyboardThemePageTest {
         assertEquals("system", preferences.getInAppKeyboardTheme());
     }
 
+    /** The keyboard's look moved from Look to Keyboard, Look (settings restructure 10-19). */
     @Test
-    public void styleScreenHasOneKeyboardThemeRow() {
-        Fragment style = launch(TermuxStylePreferencesFragment.class);
-        TermuxStylePreferencesFragment fragment = (TermuxStylePreferencesFragment) style;
+    public void keyboardScreenHasOneKeyboardThemeRow() {
+        Fragment keyboard = launch(KeyboardPreferencesFragment.class);
+        KeyboardPreferencesFragment fragment = (KeyboardPreferencesFragment) keyboard;
         Preference row = fragment.findPreference("in_app_keyboard_color_scheme_editor");
         assertNotNull(row);
         assertEquals(KeyboardColorSchemeFragment.class.getName(), row.getFragment());
         assertNull(fragment.findPreference("in_app_keyboard_theme"));
         assertNull(fragment.findPreference("in_app_keyboard_font"));
         assertNotNull(fragment.findPreference("customize_keyboard_surface"));
+        TuiAppThemesPreferencesFragment tui =
+            (TuiAppThemesPreferencesFragment) launch(TuiAppThemesPreferencesFragment.class);
+        assertNull("one home: not on the TUI themes page", tui.findPreference("in_app_keyboard_color_scheme_editor"));
     }
 }

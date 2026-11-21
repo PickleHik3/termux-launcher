@@ -2,8 +2,8 @@ package com.termux.app.statusbar;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.PaneWallPolicy;
 
 import java.util.List;
@@ -29,9 +29,11 @@ public final class StatusBarLensPolicy {
     private StatusBarLensPolicy() {}
 
     /** Bar widths between {@code page} and the place on screen, with the wall's offset folded in. */
-    public static float distance(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
-                                 @NonNull PaneWallPage page, float offsetPx, int widthPx) {
-        int rel = page == current ? 0 : PaneWallPolicy.relativePosition(pages, current, page);
+    public static float distance(@NonNull List<PageKind> pages, @NonNull PageKind current,
+                                 @NonNull PageKind page, float offsetPx, int widthPx) {
+        int from = pages.indexOf(current);
+        int to = pages.indexOf(page);
+        int rel = page == current || from < 0 || to < 0 ? 0 : to - from;
         float offset = widthPx <= 0 ? 0f : offsetPx / (float) widthPx;
         return rel + offset;
     }

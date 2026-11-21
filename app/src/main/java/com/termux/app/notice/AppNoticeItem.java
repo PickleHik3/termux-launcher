@@ -1,7 +1,10 @@
 package com.termux.app.notice;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
+import com.termux.R;
 
 /**
  * One queued notice: what the chip shows for a single message.
@@ -50,6 +53,11 @@ public final class AppNoticeItem {
     @Nullable public final CharSequence sub;
     /** Overrides the kind's default glyph when a caller has a better one for the action. */
     @Nullable public final String glyph;
+    /**
+     * The icon the mark draws, 0 for none. Outranks {@link #glyph}; with neither, the kind's
+     * default icon draws (see {@link #resolvedIcon}).
+     */
+    @DrawableRes public final int icon;
     public final long durationMs;
     /**
      * What tapping the chip does, when the notice is about somewhere the user can be taken —
@@ -99,10 +107,19 @@ public final class AppNoticeItem {
                          @Nullable CharSequence sub, @Nullable String glyph, long durationMs,
                          @Nullable Runnable onActivate, boolean attention,
                          @Nullable CharSequence actionHint, boolean fleeting) {
+        this(kind, title, sub, glyph, 0, durationMs, onActivate, attention, actionHint, fleeting);
+    }
+
+    public AppNoticeItem(@NonNull Kind kind, @NonNull CharSequence title,
+                         @Nullable CharSequence sub, @Nullable String glyph,
+                         @DrawableRes int icon, long durationMs,
+                         @Nullable Runnable onActivate, boolean attention,
+                         @Nullable CharSequence actionHint, boolean fleeting) {
         this.kind = kind;
         this.title = title;
         this.sub = sub;
         this.glyph = glyph;
+        this.icon = icon;
         this.durationMs = durationMs;
         this.onActivate = onActivate;
         this.attention = attention;
@@ -119,17 +136,37 @@ public final class AppNoticeItem {
         return durationMs <= 0L;
     }
 
-    /** The glyph actually drawn: the caller's, or the kind's default. */
+    /**
+     * The icon the mark draws, or 0 when it draws text or nothing: the caller's icon, else (when
+     * the caller gave text, or the shell is asking for attention) none, else the kind's own.
+     * Plain INFO wears the generic info mark.
+     */
+    @DrawableRes
+    public int resolvedIcon() {
+        if (icon != 0) return icon;
+        if (attention || (glyph != null && !glyph.isEmpty())) return 0;
+        switch (kind) {
+            case SUCCESS: return R.drawable.ic_rl_success;
+            case WARNING: return R.drawable.ic_rl_warning;
+            case ERROR: return R.drawable.ic_rl_error;
+            case INFO:
+            default: return R.drawable.ic_rl_info;
+        }
+    }
+
+    /**
+     * The text mark drawn when {@link #resolvedIcon} is 0: the caller's glyph, "!" for attention,
+     * otherwise empty (no mark).
+     */
     @NonNull
     public String resolvedGlyph() {
+        if (icon != 0) return "";
         if (glyph != null && !glyph.isEmpty()) return glyph;
-        if (attention) return "!";
-        switch (kind) {
-            case SUCCESS: return "✓";
-            case WARNING: return "⚠";
-            case ERROR: return "✕";
-            case INFO:
-            default: return "›";
-        }
+        return attention ? "!" : "";
+    }
+
+    /** Whether the pill draws a mark in front of the title. */
+    public boolean hasMark() {
+        return resolvedIcon() != 0 || !resolvedGlyph().isEmpty();
     }
 }

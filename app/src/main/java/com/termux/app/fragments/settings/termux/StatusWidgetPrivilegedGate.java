@@ -91,6 +91,16 @@ final class StatusWidgetPrivilegedGate {
     }
 
     private static void openPrivilegedAccessSettings(@NonNull Context context) {
+        // Inside Settings the screen is pushed in place, so no second Settings instance stacks.
+        Context unwrapped = context;
+        while (unwrapped instanceof android.content.ContextWrapper
+                && !(unwrapped instanceof SettingsActivity))
+            unwrapped = ((android.content.ContextWrapper) unwrapped).getBaseContext();
+        if (unwrapped instanceof SettingsActivity) {
+            ((SettingsActivity) unwrapped).openScreen(PrivilegedAccessPreferencesFragment.class,
+                R.string.termux_privileged_access_preferences_title, null);
+            return;
+        }
         Intent intent = SettingsActivity.createFragmentIntent(context,
             PrivilegedAccessPreferencesFragment.class,
             R.string.termux_privileged_access_preferences_title);

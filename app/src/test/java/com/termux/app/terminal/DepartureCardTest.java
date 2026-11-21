@@ -28,13 +28,14 @@ import org.robolectric.annotation.Config;
 import org.robolectric.annotation.GraphicsMode;
 
 import java.util.Collections;
+import android.app.Application;
 
 /**
  * The window-switch card: its content, ground outline and position share one origin, and outside
  * the panes' rounded slabs it is transparent (no square plate).
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE) // Path clipping and bitmap pixels need the real canvas.
 public class DepartureCardTest {
 

@@ -42,6 +42,17 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return viewRoot == null ? null : (T) viewRoot.findViewById(viewId);
     }
 
+    /** The band the host reaches through under the pill; tests set it. */
+    int sheetsBandPx;
+
+    @Override public int sheetsBandPx() {
+        return sheetsBandPx;
+    }
+
+    @Override public int restingPage() {
+        return TermuxAppSharedPreferences.terminalPageId();
+    }
+
     @Nullable @Override public TermuxAppSharedPreferences preferences() {
         return preferences;
     }
@@ -59,15 +70,53 @@ final class FakeAppDrawerHost implements AppDrawerController.Host {
         return false;
     }
 
-    /** The last opacity the drawer asked of the under-pill strip; 1 until it asks for anything. */
-    float decorNavStripAlpha = 1f;
+    /** Whether the built-in keyboard is up (a laid-out one that is down is not). */
+    boolean inAppKeyboardShown = true;
 
-    @Override public void setDecorNavStripAlpha(float alpha) {
-        decorNavStripAlpha = alpha;
+    @Override public boolean inAppKeyboardShown() {
+        return inAppKeyboardShown;
+    }
+
+    /** Whether the close puts down a keyboard the drawer's search raised. */
+    boolean closeLowersKeyboard;
+
+    @Override public boolean drawerCloseLowersKeyboard() {
+        return closeLowersKeyboard;
+    }
+
+    /** The terminal pane's gap, corner radius and Margin; negative means the host gives none. */
+    float paneGapPx = -1f;
+    float paneCornerRadiusPx = -1f;
+    float marginPx = -1f;
+    float keyboardCardRadiusPx;
+
+    @Override public float searchKeyboardMarginPx() {
+        return marginPx;
+    }
+
+    @Override public float inAppKeyboardCardRadiusPx() {
+        return keyboardCardRadiusPx;
+    }
+
+    @Override public float searchKeyboardGapPx() {
+        return paneGapPx;
+    }
+
+    @Override public float searchKeyboardCornerRadiusPx() {
+        return paneCornerRadiusPx;
     }
 
     @Override public void flushPendingAccessoryGeometry() {
         flushes++;
+    }
+
+    /** What the activity's one stack pass does to the test's tree; null leaves the tree alone. */
+    @Nullable Runnable stackLayoutForRaisedKeyboard;
+    int stackLayoutsForRaisedKeyboard;
+
+    @Override public void layOutAccessoryStackForRaisedKeyboard() {
+        stackLayoutsForRaisedKeyboard++;
+        if (stackLayoutForRaisedKeyboard != null) stackLayoutForRaisedKeyboard.run();
     }
 
     @Override public void setInterceptorActive(boolean active) {

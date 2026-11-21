@@ -259,6 +259,34 @@ public final class GlassInk {
     /** The halo under a pale glyph: the desaturated near-black both rails have always stroked with. */
     public static final int HALO_DARK = 0xFF1A1F2A;
 
+    /** The halo's alpha under a resting and under a focused glyph before any backdrop is measured. */
+    public static final int HALO_UNMEASURED_ALPHA = 195;
+    public static final int HALO_UNMEASURED_FOCUS_ALPHA = 215;
+
+    /** The halo stroke's width: the A-Z bar's, drawn under every floating glyph. */
+    public static final float HALO_STROKE_DP = 1.4f;
+
+    /** How strong the faint shadow under a floating glyph is. */
+    public static final int FLOATING_SHADOW_ALPHA = 0x40;
+
+    /**
+     * The faint shadow under a glyph floating over content nothing has measured: the side of the
+     * glyph's ink away from it, so a dark halo never sits under dark ink — pale ink takes
+     * {@link #HALO_DARK}, dark ink takes {@link #HALO_PALE}.
+     */
+    @ColorInt
+    public static int floatingShadow(@ColorInt int glyphInk) {
+        int seed = SchemeTone.tone(glyphInk | 0xFF000000) >= 50d ? HALO_DARK : HALO_PALE;
+        return (seed & 0x00FFFFFF) | (FLOATING_SHADOW_ALPHA << 24);
+    }
+
+    /** The halo of a glyph over content nothing has measured: what the A-Z row starts with. */
+    @ColorInt
+    public static int unmeasuredHalo(boolean focused) {
+        return (HALO_DARK & 0x00FFFFFF)
+            | ((focused ? HALO_UNMEASURED_FOCUS_ALPHA : HALO_UNMEASURED_ALPHA) << 24);
+    }
+
     /**
      * The halo under a dark glyph: {@link #HALO_DARK}'s mirror, the same faint blue cast so the two
      * are the same material seen from either side rather than one designed colour and one white.

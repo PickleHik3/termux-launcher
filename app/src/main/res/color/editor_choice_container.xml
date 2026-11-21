@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- An editor choice button's container (connected groups and on/off toggles, appearance-cards
+     overhaul §4): the chosen or on one filled with the primary, the rest tonal. Editor only;
+     Settings keep settings_segment_container. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:alpha="0.12" android:color="?attr/colorOnSurface" />
+    <item android:state_checked="true" android:color="?attr/colorPrimary" />
+    <item android:color="?attr/colorSecondaryContainer" />
+</selector>

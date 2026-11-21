@@ -65,16 +65,16 @@ public class WallpaperBlurCacheTest {
 
     @Test
     public void theLeastRecentlyUsedRadiusIsEvictedAtTheCap() {
-        for (int radius : new int[] {4, 8, 12, 16, 20, 24}) cache.obtain(radius, wallpaperFrame);
+        for (int radius : new int[] {4, 8, 12, 16, 20, 24, 28, 32}) cache.obtain(radius, wallpaperFrame);
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
 
         // Touch the oldest so recency, not insertion order, decides what goes.
         cache.obtain(4, wallpaperFrame);
-        cache.obtain(28, wallpaperFrame);
+        cache.obtain(36, wallpaperFrame);
 
         assertEquals(WallpaperBlurCache.MAX_CACHED_WALLPAPER_BLUR_RADII, cache.residentRadiiCount());
         assertFalse("the least recently used radius should be gone", cache.hasRadius(8));
-        for (int radius : new int[] {4, 12, 16, 20, 24, 28}) assertTrue(cache.hasRadius(radius));
+        for (int radius : new int[] {4, 12, 16, 20, 24, 28, 32, 36}) assertTrue(cache.hasRadius(radius));
     }
 
     @Test
@@ -84,7 +84,12 @@ public class WallpaperBlurCacheTest {
         // Room for one frame and a half: the second frame in must push the first out.
         WallpaperBlurCache budgeted = new WallpaperBlurCache(source, null, frameBytes * 3 / 2);
 
+        long[] now = {0L};
+        budgeted.mClockMs = () -> now[0];
+
         budgeted.obtain(4, wallpaperFrame);
+        // Radius 4 is no longer asked for: only then may the budget take it.
+        now[0] += WallpaperBlurCache.IN_USE_WINDOW_MS + 1;
         budgeted.obtain(8, wallpaperFrame);
 
         assertEquals(1, budgeted.residentRadiiCount());
@@ -94,10 +99,63 @@ public class WallpaperBlurCacheTest {
     }
 
     @Test
+    public void radiiStillAskedForNeverThrashUnderTheByteBudget() {
+        Bitmap probe = cache.obtain(4, wallpaperFrame);
+        long frameBytes = probe.getAllocationByteCount();
+        // Room for two and a half frames; four radii are in use, as Home's glass asks them.
+        WallpaperBlurCache budgeted = new WallpaperBlurCache(source, null, frameBytes * 5 / 2);
+        long[] now = {0L};
+        budgeted.mClockMs = () -> now[0];
+        int[] radii = {0, 2, 7, 12};
+        int before = source.captureCount;
+
+        for (int pass = 0; pass < 10; pass++) {
+            for (int radius : radii) budgeted.obtain(radius, wallpaperFrame);
+            now[0] += 100;
+        }
+
+        // The source captures once for all radii, so count bakes by distinct frames instead.
+        for (int radius : radii) assertTrue(budgeted.hasRadius(radius));
+        Bitmap[] held = new Bitmap[radii.length];
+        for (int i = 0; i < radii.length; i++) held[i] = budgeted.obtain(radii[i], wallpaperFrame);
+        int captures = source.captureCount;
+        for (int pass = 0; pass < 5; pass++) {
+            for (int i = 0; i < radii.length; i++) {
+                assertSame("pass " + pass + " must hit radius " + radii[i], held[i],
+                    budgeted.obtain(radii[i], wallpaperFrame));
+            }
+        }
+        assertEquals(captures, source.captureCount);
+        assertEquals(4, budgeted.residentRadiiCount());
+        assertTrue(budgeted.residentBytes() > frameBytes * 5 / 2);
+        assertTrue(captures - before <= radii.length);
+    }
+
+    @Test
+    public void aRadiusNoLongerAskedForIsStillEvictedUnderTheByteBudget() {
+        Bitmap probe = cache.obtain(4, wallpaperFrame);
+        long frameBytes = probe.getAllocationByteCount();
+        WallpaperBlurCache budgeted = new WallpaperBlurCache(source, null, frameBytes * 5 / 2);
+        long[] now = {0L};
+        budgeted.mClockMs = () -> now[0];
+
+        budgeted.obtain(0, wallpaperFrame);
+        budgeted.obtain(2, wallpaperFrame);
+        now[0] += WallpaperBlurCache.IN_USE_WINDOW_MS + 1;
+        budgeted.obtain(7, wallpaperFrame);
+        budgeted.obtain(12, wallpaperFrame);
+
+        assertFalse(budgeted.hasRadius(0));
+        assertFalse(budgeted.hasRadius(2));
+        assertTrue(budgeted.hasRadius(7));
+        assertTrue(budgeted.hasRadius(12));
+    }
+
+    @Test
     public void anEvictedFrameSomeViewIsStillDrawingIsDroppedWithoutRecycling() {
         Bitmap doomed = cache.obtain(8, wallpaperFrame);
         source.inUse.add(doomed);
-        for (int radius : new int[] {12, 16, 20, 24, 28, 32}) cache.obtain(radius, wallpaperFrame);
+        for (int radius : new int[] {12, 16, 20, 24, 28, 32, 36, 40}) cache.obtain(radius, wallpaperFrame);
 
         assertFalse(cache.hasRadius(8));
         assertFalse("recycling a frame a view holds crashes its next draw", doomed.isRecycled());
@@ -564,7 +622,7 @@ public class WallpaperBlurCacheTest {
     @Test
     public void anEvictedFrameIsDroppedNeverRecycled() {
         Bitmap first = cache.obtain(4, wallpaperFrame);
-        for (int radius : new int[] {8, 12, 16, 20, 24, 28}) cache.obtain(radius, wallpaperFrame);
+        for (int radius : new int[] {8, 12, 16, 20, 24, 28, 32, 36}) cache.obtain(radius, wallpaperFrame);
 
         assertFalse(cache.hasRadius(4));
         assertFalse(first.isRecycled());

@@ -24,6 +24,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The managed config's exact text is the contract between the installer, the loader and the
@@ -35,6 +37,7 @@ import static org.junit.Assert.assertTrue;
  * {@code ~/.termux/font.ttf} or {@code font-italic.ttf}.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class FontInstallerTest {
 
     private static final String SYMBOLS = "SymbolsNerdFontMono.ttf";

@@ -1,0 +1,484 @@
+package com.termux.app.dock;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.chrome.ChromeSpec;
+import com.termux.app.place.Element;
+
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Objects;
+
+/**
+ * Dock rows: the one adapter between the activity and the dock's accessory views (ADR 0011). Handed
+ * the chrome spec and the applied DockLayout, it writes which of the views show (the stack, the
+ * dock's glass host and its sheet, the shelf under it, the pinned apps' pager and their page band,
+ * the A–Z row and its effect layers, the extra keys, the bands under the keyboard, the status bar)
+ * and how tall the rows are, and it answers whether an Element's row is on screen and which design
+ * dresses the rows shown. The keyboard's column has no presence of its own to write: it holds the
+ * keyboard, whose own view is the keyboard's to show, and the bands under it, and it lays out at no
+ * height while both are gone.
+ *
+ * <p>Nothing else reads the views' visibility to learn this: a reader asks here, or subscribes
+ * ({@link Listener}) and is told once per change. Subscribers are told before the views are
+ * written, so a drag on the pinned apps is cancelled while its source is still on screen.</p>
+ *
+ * <p>The design is the applied layout's ({@link DockLayout#surface}), which Dock geometry measured
+ * for the half whose rows the frame shows. The rows never learn which half is committed, so a
+ * crossing that stands the other half's rows is dressed as that half from its first frame
+ * ({@link #wornSurface}).</p>
+ *
+ * <p>The Android views are the production adapter ({@link Views}); tests hand a fake.</p>
+ */
+public final class DockRows {
+
+    /** What stands in the pinned apps' page band. */
+    public enum PageBand {
+        /** No apps row on the dock: the band goes with it. */
+        GONE,
+        /**
+         * An apps row with no ticks of its own bound yet: the band is kept, empty, since the dock's
+         * height counts it ({@link DockLayout#combinedHeight}) and a gone band would be a gap.
+         */
+        HELD,
+        /** The row's own ticks draw the band; whether anything shows in it is the row's answer. */
+        TICKS
+    }
+
+    /** The dock's accessory views, as this adapter writes them. */
+    public interface Views {
+        /** The whole accessory stack: the dock, the keyboard, a status bar along the bottom. */
+        void setStackShown(boolean shown);
+        /** The dock's glass host, behind its rows. */
+        void setSurfaceShown(boolean shown);
+        /** The dock's own sheet of glass inside that host. */
+        void setDockGlassShown(boolean shown);
+        /** The shelf under the dock's glass: its contact shadow and glow. */
+        void setShelfShown(boolean shown);
+        /** The pager of {@link Element#APPS}, the row of {@link Element#AZ}, or the extra keys. */
+        void setRowShown(@NonNull Element row, boolean shown);
+        /** The pinned apps' page band; {@link PageBand#TICKS} hands it to the row's ticks. */
+        void setPageBand(@NonNull PageBand band);
+        /** The A–Z row's effect and label layers, which rest hidden. */
+        void setAzLayersShown(boolean shown);
+        /** The stack under the keyboard; answers whether it moved. */
+        boolean setUnderKeyboardShown(boolean shown);
+        /** The status bar, wherever it stands; answers whether it moved. */
+        boolean setStatusBarShown(boolean shown);
+        /**
+         * The height of {@link Element#APPS}' pager, {@link Element#AZ}'s row or
+         * {@link Element#EXTRA_KEYS}' row; whether it moved.
+         */
+        boolean setRowHeight(@NonNull Element row, int px);
+        /** The pinned apps' page band's height; whether it moved. */
+        boolean setPageBandHeight(int px);
+        /** The empty air at the page band's foot under its ticks; whether it moved. */
+        default boolean setPageBandAir(int px) { return false; }
+        /** Whether the ticks the pinned apps feed are the dock's own band (not another edge's). */
+        boolean pageTicksAreTheDocks();
+    }
+
+    /**
+     * Which row views stand in the stack for either side's layout: the rows the front layout shows
+     * and the rows only the other side's layout shows (a lane of that side, drawn off screen). The
+     * views show by this, so a crossing or a landing never switches a row's visibility; what
+     * {@link Shown} answers stays the front layout's, which is what the readers ask.
+     */
+    public static final class Union {
+        public final boolean apps;
+        public final boolean az;
+        public final boolean extraKeys;
+
+        public Union(boolean apps, boolean az, boolean extraKeys) {
+            this.apps = apps;
+            this.az = az;
+            this.extraKeys = extraKeys;
+        }
+    }
+
+    /** Told when what the dock shows changes. */
+    public interface Listener {
+        void onRowsChanged(@NonNull Shown shown);
+    }
+
+    /** What the dock shows, as a value: one per pass, compared to tell a change. */
+    public static final class Shown {
+        public final boolean stack;
+        /** Whether the dock's glass host is up (the dock has rows to stand). */
+        public final boolean surfaceHost;
+        public final boolean dockGlass;
+        public final boolean apps;
+        public final boolean az;
+        public final boolean extraKeys;
+        public final boolean underKeyboard;
+        /** A status bar standing along the bottom, in the stack beside the dock's rows. */
+        public final boolean statusOnStack;
+        @NonNull public final PageBand pageBand;
+        /** The design the shown rows are dressed in; null before a layout was applied. */
+        @Nullable public final DockSurfaceSpec surface;
+
+        Shown(boolean stack, boolean surfaceHost, boolean dockGlass, boolean apps, boolean az,
+              boolean extraKeys, boolean underKeyboard, boolean statusOnStack,
+              @NonNull PageBand pageBand, @Nullable DockSurfaceSpec surface) {
+            this.stack = stack;
+            this.surfaceHost = surfaceHost;
+            this.dockGlass = dockGlass;
+            this.apps = apps;
+            this.az = az;
+            this.extraKeys = extraKeys;
+            this.underKeyboard = underKeyboard;
+            this.statusOnStack = statusOnStack;
+            this.pageBand = pageBand;
+            this.surface = surface;
+        }
+
+        /** This with bands standing under the keyboard or not. */
+        @NonNull
+        Shown withUnderKeyboard(boolean shown) {
+            return new Shown(stack, surfaceHost, dockGlass, apps, az, extraKeys, shown,
+                statusOnStack, pageBand, surface);
+        }
+
+        /** This dressed in {@code design}. */
+        @NonNull
+        Shown withSurface(@Nullable DockSurfaceSpec design) {
+            return new Shown(stack, surfaceHost, dockGlass, apps, az, extraKeys, underKeyboard,
+                statusOnStack, pageBand, design);
+        }
+
+        /**
+         * Whether {@code element}'s row is on screen in the dock's stack. An Element standing on
+         * another edge has no row here.
+         */
+        public boolean rowOnScreen(@NonNull Element element) {
+            switch (element) {
+                case APPS: return apps;
+                case AZ: return az;
+                case EXTRA_KEYS: return extraKeys;
+                case STATUS: return statusOnStack;
+                default: return false;
+            }
+        }
+
+        @Override
+        public boolean equals(@Nullable Object other) {
+            if (this == other) return true;
+            if (!(other instanceof Shown)) return false;
+            Shown that = (Shown) other;
+            return stack == that.stack && surfaceHost == that.surfaceHost
+                && dockGlass == that.dockGlass && apps == that.apps && az == that.az
+                && extraKeys == that.extraKeys && underKeyboard == that.underKeyboard
+                && statusOnStack == that.statusOnStack && pageBand == that.pageBand
+                && Objects.equals(surface, that.surface);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(stack, surfaceHost, dockGlass, apps, az, extraKeys, underKeyboard,
+                statusOnStack, pageBand, surface);
+        }
+    }
+
+    @NonNull private final Views mViews;
+    @NonNull private final List<Listener> mListeners = new ArrayList<>();
+    @NonNull private Shown mShown;
+    @Nullable private DockLayout mLayout;
+    private boolean mShelfShown;
+    private boolean mStatusBarShown;
+    private boolean mKeyboardLaidOut;
+    /** The side in front, and whose lane each of APPS, AZ and EXTRA_KEYS is (null: the stack's). */
+    @NonNull private com.termux.app.page.Side mFrontSide = com.termux.app.page.Side.TERMINAL;
+    @NonNull private final com.termux.app.page.Side[] mLaneSides = new com.termux.app.page.Side[3];
+    /** The other side's applied rest, which sizes the rows only that side shows; null for none. */
+    @Nullable private DockLayout mOtherLayout;
+
+    public DockRows(@NonNull Views views) {
+        mViews = views;
+        mShown = new Shown(false, false, false, false, false, false, false, false,
+            PageBand.GONE, null);
+    }
+
+    public void addListener(@NonNull Listener listener) {
+        if (!mListeners.contains(listener)) mListeners.add(listener);
+    }
+
+    public void removeListener(@NonNull Listener listener) {
+        mListeners.remove(listener);
+    }
+
+    /**
+     * What shows for {@code chrome}: the dock's rows while it has any, the stack while the dock,
+     * the keyboard or a status bar along the bottom stands in it.
+     */
+    @NonNull
+    public static Shown presence(@NonNull ChromeSpec chrome, boolean bottomStatusBar,
+                                 boolean underKeyboard,
+                                 boolean ticksAreTheDocks, @Nullable DockSurfaceSpec surface) {
+        boolean dock = chrome.toolbarShown;
+        boolean apps = dock && chrome.appsRowEnabled;
+        PageBand band = !apps ? PageBand.GONE : ticksAreTheDocks ? PageBand.TICKS : PageBand.HELD;
+        return new Shown(
+            stackShown(dock, chrome.keyboardShown, bottomStatusBar),
+            dock,
+            dock,
+            apps,
+            dock && chrome.azRowEnabled,
+            dock && chrome.extraKeysRowEnabled,
+            underKeyboard,
+            bottomStatusBar,
+            band,
+            surface);
+    }
+
+    /**
+     * The page band the views stand: the front layout's ({@link Shown#pageBand}), except that the
+     * apps row a lane keeps standing for the other side ({@link Union#apps}) keeps its band with
+     * it, as that side's rest shows it. So the dock's page capsules (or Home's grabber, where the
+     * dock has one page) are the same while another page is in front and through a crossing back
+     * as at Home's rest: the landing changes nothing in the band, and the ticks' count and page
+     * are the row's own, whichever page is in front.
+     */
+    @NonNull
+    public static PageBand standingBand(@NonNull PageBand front, boolean appsInUnion,
+                                        boolean ticksAreTheDocks) {
+        if (front != PageBand.GONE || !appsInUnion) return front;
+        return ticksAreTheDocks ? PageBand.TICKS : PageBand.HELD;
+    }
+
+    /**
+     * Whether the accessory stack is on screen. Since the whole bottom edge stands in it, a status
+     * bar the place put along the bottom keeps it up on its own — the dock's rows can all be
+     * hidden or standing on other edges and the bar still has to be drawn.
+     */
+    public static boolean stackShown(boolean dockShown, boolean keyboardShown,
+                                     boolean bottomStatusBar) {
+        return dockShown || keyboardShown || bottomStatusBar;
+    }
+
+    /**
+     * One chrome pass: the views shown as {@code chrome} says, written every pass (some are
+     * shared — the letters' slot with the keybind strip, the band with the row's ticks — and the
+     * pass has always put them back), and the subscribers told first when anything changed. A
+     * status bar is on the stack while it is shown ({@link #setStatusBarShown}) and stands along
+     * the bottom ({@code statusBarOnBottomEdge}).
+     */
+    public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge) {
+        apply(chrome, statusBarOnBottomEdge, null);
+    }
+
+    /**
+     * {@link #apply(ChromeSpec, boolean)} with the rows that stand for either side:
+     * {@code union}'s rows show whichever side is in front, so a row of the other side's lane is
+     * laid out and dressed at rest. Null shows the front layout's rows alone.
+     */
+    public void apply(@NonNull ChromeSpec chrome, boolean statusBarOnBottomEdge,
+                      @Nullable Union union) {
+        boolean ticksAreTheDocks = mViews.pageTicksAreTheDocks();
+        Shown shown = presence(chrome, mStatusBarShown && statusBarOnBottomEdge,
+            mShown.underKeyboard, ticksAreTheDocks, surfaceOf(mLayout));
+        announce(shown);
+        // The in-app keyboard stays laid out while down: the container it stands in stays
+        // laid out with it, though no row or status bar keeps the stack "shown" for readers.
+        mViews.setStackShown(shown.stack || mKeyboardLaidOut);
+        mViews.setDockGlassShown(shown.dockGlass);
+        mViews.setSurfaceShown(shown.surfaceHost);
+        mViews.setRowShown(Element.APPS, shown.apps || (union != null && union.apps));
+        mViews.setPageBand(standingBand(shown.pageBand, union != null && union.apps,
+            ticksAreTheDocks));
+        mViews.setRowShown(Element.EXTRA_KEYS,
+            shown.extraKeys || (union != null && union.extraKeys));
+        mViews.setRowShown(Element.AZ, shown.az || (union != null && union.az));
+        mViews.setAzLayersShown(false);
+    }
+
+    /**
+     * The geometry pass's applied layout: the rows' heights, and the design the shown rows wear.
+     *
+     * @return whether a height moved
+     */
+    public boolean applyLayout(@NonNull DockLayout layout) {
+        mLayout = layout;
+        Shown shown = mShown;
+        if (shown.surface != layout.surface) announce(shown.withSurface(layout.surface));
+        // A row in a side's lane is sized by that side's rest whichever side is in front, so a
+        // page change or a landing never moves it. A row in no lane (the shared stack) is sized
+        // by the front layout, or by the other side's rest while only that side shows it.
+        DockLayout other = mOtherLayout;
+        DockLayout appsFrom = mLaneSides[0] != null
+            ? LaneDress.layoutFor(mLaneSides[0], mFrontSide, layout, other)
+            : (mShown.apps || other == null ? layout : other);
+        DockLayout azFrom = mLaneSides[1] != null
+            ? LaneDress.layoutFor(mLaneSides[1], mFrontSide, layout, other)
+            : (mShown.az || other == null ? layout : other);
+        boolean moved = mViews.setRowHeight(Element.APPS, appsFrom.appsBarHeightPx);
+        // The page band is the apps row's own: it stands and is sized with that row.
+        moved |= mViews.setPageBandHeight(appsFrom.indicatorBandHeightPx);
+        moved |= mViews.setPageBandAir(appsFrom.appsRowStripAirPx);
+        moved |= mViews.setRowHeight(Element.AZ, azFrom.azRowHeightPx);
+        return moved;
+    }
+
+    /**
+     * The other side's rest, read for the rows only that side shows; null when the layouts have
+     * no lane. Taken by the next {@link #applyLayout}.
+     */
+    public void setOtherLayout(@Nullable DockLayout other) {
+        mOtherLayout = other;
+    }
+
+    /**
+     * The extra-keys row's height for this pass, 0 while the row is off.
+     *
+     * @return whether it moved
+     */
+    public boolean setExtraKeysHeight(int px) {
+        return mViews.setRowHeight(Element.EXTRA_KEYS, Math.max(0, px));
+    }
+
+    /**
+     * Whether bands stand under the keyboard: the stack below it shows while it holds one.
+     *
+     * @return whether the stack's presence moved
+     */
+    public boolean setUnderKeyboardBands(boolean shown) {
+        Shown now = mShown;
+        if (now.underKeyboard != shown) announce(now.withUnderKeyboard(shown));
+        return mViews.setUnderKeyboardShown(shown);
+    }
+
+    /** Whether the shelf under the dock's glass is up: its contact shadow and glow. */
+    public void setShelfShown(boolean shown) {
+        mShelfShown = shown;
+        mViews.setShelfShown(shown);
+    }
+
+    /**
+     * Whether the status bar is shown, wherever it stands. Along the bottom it is a band of the
+     * stack, so the next chrome pass ({@link #apply}) counts it there.
+     *
+     * @return whether it moved
+     */
+    public boolean setStatusBarShown(boolean shown) {
+        mStatusBarShown = shown;
+        return mViews.setStatusBarShown(shown);
+    }
+
+    /** Whether {@code element}'s row is on screen in the dock's stack. */
+    public boolean isRowOnScreen(@NonNull Element element) {
+        return mShown.rowOnScreen(element);
+    }
+
+    /**
+     * Whose lane each lane-capable row is, with {@code front} in front; a null side is a row of
+     * the shared stack. Read by {@link #dressFor}; taken by the next {@link
+     * com.termux.app.dock.DockDress#applyDockLayout} pass.
+     */
+    public void setLanes(@NonNull com.termux.app.page.Side front,
+                         @Nullable com.termux.app.page.Side apps,
+                         @Nullable com.termux.app.page.Side az,
+                         @Nullable com.termux.app.page.Side extraKeys) {
+        mFrontSide = front;
+        mLaneSides[0] = apps;
+        mLaneSides[1] = az;
+        mLaneSides[2] = extraKeys;
+    }
+
+    /**
+     * The layout that dresses {@code row}: its own side's while it is a lane of the side that is
+     * not in front ({@link LaneDress}), else {@code front}.
+     */
+    @NonNull
+    public DockLayout dressFor(@NonNull Element row, @NonNull DockLayout front) {
+        int i = row == Element.APPS ? 0 : row == Element.AZ ? 1 : row == Element.EXTRA_KEYS ? 2 : -1;
+        return i < 0 ? front : LaneDress.layoutFor(mLaneSides[i], mFrontSide, front, mOtherLayout);
+    }
+
+    /** Whether {@code row} is a lane of the side that is not in front. */
+    public boolean isOtherSidesLane(@NonNull Element row) {
+        int i = row == Element.APPS ? 0 : row == Element.AZ ? 1 : row == Element.EXTRA_KEYS ? 2 : -1;
+        return i >= 0 && mLaneSides[i] != null && mLaneSides[i] != mFrontSide
+            && mOtherLayout != null;
+    }
+
+    /**
+     * Whether the in-app keyboard stays laid out while down ({@code TermuxActivity
+     * #keyboardStaysLaidOut}): the stack's container then stays laid out even when nothing else
+     * puts the stack up. {@link #stackShown} is not changed by it. Taken by the next
+     * {@link #apply}.
+     */
+    public void setKeyboardLaidOut(boolean laidOut) {
+        mKeyboardLaidOut = laidOut;
+    }
+
+    /** Whether the accessory stack is up. */
+    public boolean stackShown() {
+        return mShown.stack;
+    }
+
+    /** Whether the dock's glass host is up. */
+    public boolean surfaceShown() {
+        return mShown.surfaceHost;
+    }
+
+    /** Whether bands stand under the keyboard. */
+    public boolean underKeyboardBandsShown() {
+        return mShown.underKeyboard;
+    }
+
+    /** Whether the shelf under the dock's glass is up. */
+    public boolean shelfShown() {
+        return mShelfShown;
+    }
+
+    /** Whether the status bar is shown, wherever it stands. */
+    public boolean statusBarShown() {
+        return mStatusBarShown;
+    }
+
+    /**
+     * The design the rows on screen are dressed in: the applied layout's, measured for the half
+     * whose rows the frame shows. Null before a layout was applied.
+     */
+    @Nullable
+    public DockSurfaceSpec surface() {
+        return mShown.surface;
+    }
+
+    /**
+     * The design the readers of the dock's dressing draw (the slab's glass program, its contact
+     * shadow, the beads). While a crossing stands it is the applied layout's, the half whose rows
+     * the frame shows, and {@code committed} is never worn: a crossing that stands the other
+     * half's rows is dressed as that half. At rest it is {@code committed}, the committed half's
+     * dress, so a design just picked in the Layout editor is worn before the pass that lays it
+     * out; and before any layout was applied there is nothing else to wear.
+     */
+    @NonNull
+    public DockSurfaceSpec wornSurface(@NonNull DockSurfaceSpec committed, boolean crossing) {
+        DockSurfaceSpec shown = mShown.surface;
+        return crossing && shown != null ? shown : committed;
+    }
+
+    /** What the dock shows now. */
+    @NonNull
+    public Shown shown() {
+        return mShown;
+    }
+
+    /** The layout last applied; null before one. */
+    @Nullable
+    public DockLayout layout() {
+        return mLayout;
+    }
+
+    @Nullable
+    private static DockSurfaceSpec surfaceOf(@Nullable DockLayout layout) {
+        return layout == null ? null : layout.surface;
+    }
+
+    private void announce(@NonNull Shown shown) {
+        if (shown.equals(mShown)) return;
+        mShown = shown;
+        for (Listener listener : new ArrayList<>(mListeners)) listener.onRowsChanged(shown);
+    }
+}

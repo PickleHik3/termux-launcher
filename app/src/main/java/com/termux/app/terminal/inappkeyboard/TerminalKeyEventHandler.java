@@ -78,6 +78,8 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
     public void key_up(KeyValue value, Pointers.Modifiers modifiers) {
         if (value == null)
             return;
+        com.termux.terminal.LatencyProbe.commit();
+        com.termux.app.terminal.InputQuiet.noteKey();
         dispatch(value, TerminalModifiers.from(modifiers));
     }
 
@@ -98,11 +100,24 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
      * <p>This is how an in-activity overlay — the command palette — types from the in-app
      * keyboard without the system IME: the keyboard's own pipeline stays intact and the
      * overlay only decides, per value, whether the terminal ever sees it.
+     *
+     * <p>The keyboard's own keys ({@link FieldKeys#isKeyboardOwned}) are not offered from the
+     * keyboard's keys: they act on the keyboard whatever has it. A text field edits by
+     * {@link FieldKeys}' rule, through {@link FieldEditor} unless it is a real {@code EditText}.
      */
     public interface KeyValueInterceptor {
 
         /** @return true when the value was consumed and must not reach the terminal. */
         boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt, boolean shift);
+
+        /**
+         * Whether a Ctrl/Alt chord (or the next stroke of a pending sequence) is offered to the
+         * user's key bindings before this interceptor sees it. A surface that needs the raw
+         * chord, such as binding capture or X11 forwarding, answers false.
+         */
+        default boolean yieldsToBindings() {
+            return true;
+        }
     }
 
     /** Installs the overlay interceptor, or clears it with {@code null}. */
@@ -161,9 +176,57 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         return mModifiers;
     }
 
+    /**
+     * Offer a Ctrl/Alt chord, or any stroke continuing a pending sequence, to the user's key
+     * bindings. Plain keys are not offered, so letters still type into a search or palette.
+     */
+    private boolean offerToBindings(KeyValue value, TerminalModifiers modifiers,
+                                    KeyValueInterceptor interceptor) {
+        if (interceptor != null && !interceptor.yieldsToBindings())
+            return false;
+        boolean chord = modifiers.isCtrl() || modifiers.isAlt();
+        if (!chord && !mHostActions.isBindingSequencePending())
+            return false;
+        int keyCode;
+        TerminalModifiers stroke = modifiers;
+        switch (value.getKind()) {
+            case Char: {
+                char c = value.getChar();
+                if (c == '?') {
+                    keyCode = KeyEvent.KEYCODE_SLASH;
+                    stroke = modifiers.withShift();
+                    break;
+                }
+                Integer code = com.termux.app.terminal.TerminalKeyBindingResolver.keyCodeForToken(
+                    com.termux.app.terminal.TerminalKeyBindingResolver.tokenForChar(c));
+                if (code == null)
+                    return false;
+                keyCode = code;
+                if (Character.isUpperCase(c))
+                    stroke = modifiers.withShift();
+                break;
+            }
+            case Keyevent:
+                keyCode = value.getKeyevent();
+                break;
+            default:
+                return false;
+        }
+        long now = SystemClock.uptimeMillis();
+        KeyEvent down = new KeyEvent(now, now, KeyEvent.ACTION_DOWN, keyCode, 0,
+            stroke.toKeyEventMetaState(), KeyCharacterMap.VIRTUAL_KEYBOARD, 0, 0,
+            VIRTUAL_KEY_SOURCE);
+        return mHostActions.offerBindingChord(down);
+    }
+
     private void dispatch(KeyValue value, TerminalModifiers modifiers) {
         KeyValueInterceptor interceptor = mInterceptor;
-        if (interceptor != null && interceptor.interceptKeyValue(value,
+        if (offerToBindings(value, modifiers, interceptor))
+            return;
+        // The keyboard's own keys (settings, the clipboard pane, layout switches, hide, …) act
+        // here whatever has the keyboard, so no field can swallow them (FieldKeys).
+        if (interceptor != null && !FieldKeys.isKeyboardOwned(value)
+            && interceptor.interceptKeyValue(value,
             modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift()))
             return;
         switch (value.getKind()) {

@@ -13,6 +13,7 @@ import android.net.Uri;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -21,11 +22,8 @@ import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
-import com.airbnb.lottie.LottieAnimationView;
-import com.airbnb.lottie.LottieDrawable;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
-import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.text.SimpleDateFormat;
@@ -77,7 +75,8 @@ public final class WeatherCardView extends LinearLayout {
     private final TextView mHeadlineUnit;
     private final TextView mConditionLine;
     private final TextView mRangeLine;
-    private final LottieAnimationView mCurrentIcon;
+    private final ImageView mCurrentIcon;
+    private final WeatherIconDrawable mCurrentDrawable;
     private final LinearLayout mStatsRow;
     private final TextView mWindValue;
     private final TextView mHumidityValue;
@@ -198,7 +197,10 @@ public final class WeatherCardView extends LinearLayout {
         rangeParams.topMargin = dp(3);
         readout.addView(mRangeLine, rangeParams);
 
-        mCurrentIcon = weatherAnimation(context, true);
+        mCurrentIcon = new ImageView(context);
+        mCurrentIcon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mCurrentDrawable = new WeatherIconDrawable(context);
+        mCurrentIcon.setImageDrawable(mCurrentDrawable);
         LayoutParams iconParams = new LayoutParams(dp(66), dp(66));
         iconParams.topMargin = dp(4);
         iconParams.setMarginStart(dp(12));
@@ -332,9 +334,8 @@ public final class WeatherCardView extends LinearLayout {
         mConditionLine.setText(conditionLine(weather));
         mRangeLine.setText(rangeLine(weather));
 
-        mCurrentIcon.setVisibility(VISIBLE);
-        playAnimation(mCurrentIcon,
-            WeatherController.animationAssetFor(weather.currentCode, weather.currentIsDay));
+        mCurrentDrawable.set(WeatherIcons.forCode(weather.currentCode, weather.currentIsDay),
+            mOnSurface, mPrimary);
 
         bindStats(weather);
         bindFooter(weather);
@@ -412,19 +413,19 @@ public final class WeatherCardView extends LinearLayout {
      */
     private void bindStats(@NonNull WeatherController.Weather weather) {
         boolean any = false;
-        any |= bindStat(mWindValue, "", Double.isNaN(weather.windKmh) ? null
+        any |= bindStat(mWindValue, WeatherIcons.WIND, Double.isNaN(weather.windKmh) ? null
             : getContext().getString(R.string.weather_card_stat_wind_value,
                 Math.round(weather.windKmh)));
-        any |= bindStat(mHumidityValue, "", Double.isNaN(weather.humidityPct) ? null
+        any |= bindStat(mHumidityValue, WeatherIcons.HUMIDITY, Double.isNaN(weather.humidityPct) ? null
             : Math.round(weather.humidityPct) + "%");
         int rain = nextHourPrecipProb();
-        any |= bindStat(mRainValue, "", rain < 0 ? null : rain + "%");
-        any |= bindStat(mUvValue, "", Double.isNaN(weather.uvIndexMax) ? null
+        any |= bindStat(mRainValue, WeatherIcons.DROP, rain < 0 ? null : rain + "%");
+        any |= bindStat(mUvValue, WeatherIcons.UV, Double.isNaN(weather.uvIndexMax) ? null
             : String.valueOf(Math.round(weather.uvIndexMax)));
         mStatsRow.setVisibility(any ? VISIBLE : GONE);
     }
 
-    private boolean bindStat(@NonNull TextView value, @NonNull String glyph,
+    private boolean bindStat(@NonNull TextView value, @NonNull WeatherIcons.Icon icon,
                              @Nullable String text) {
         View cell = (View) value.getParent();
         if (text == null) {
@@ -432,7 +433,15 @@ public final class WeatherCardView extends LinearLayout {
             return false;
         }
         cell.setVisibility(VISIBLE);
-        value.setText(NerdFontSpans.span(getContext(), glyph + " " + text));
+        value.setText(text);
+        if (value.getTag() != icon) {
+            value.setTag(icon);
+            WeatherIconDrawable drawable = new WeatherIconDrawable(getContext());
+            drawable.set(icon, ColorUtils.setAlphaComponent(mOnSurface, 230), mPrimary);
+            drawable.setBounds(0, 0, dp(STAT_ICON_DP), dp(STAT_ICON_DP));
+            value.setCompoundDrawablesRelative(drawable, null, null, null);
+            value.setCompoundDrawablePadding(dp(4));
+        }
         return true;
     }
 
@@ -570,13 +579,18 @@ public final class WeatherCardView extends LinearLayout {
         row.addView(label, new LayoutParams(dp(42), LayoutParams.WRAP_CONTENT));
 
         // The day's sky, so the week reads as weather and not as a bare table of numbers.
-        TextView glyph = new TextView(getContext());
-        glyph.setText(NerdFontSpans.span(getContext(),
-            WeatherController.glyphFor(day.code)));
-        glyph.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-        glyph.setGravity(Gravity.CENTER);
-        glyph.setTextColor(today ? mTertiary : ColorUtils.setAlphaComponent(mOnSurface, 179));
-        row.addView(glyph, new LayoutParams(dp(24), LayoutParams.WRAP_CONTENT));
+        // A daily code has no is_day flag: the day picture, as the forecast has always shown.
+        ImageView glyph = new ImageView(getContext());
+        glyph.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
+        WeatherIconDrawable sky = new WeatherIconDrawable(getContext());
+        sky.set(WeatherIcons.forCode(day.code, true),
+            today ? mOnSurface : ColorUtils.setAlphaComponent(mOnSurface, 179),
+            today ? mTertiary : mPrimary);
+        glyph.setImageDrawable(sky);
+        row.addView(glyph, new LayoutParams(dp(WEEK_ICON_DP), dp(WEEK_ICON_DP)));
+        LayoutParams skyParams = (LayoutParams) glyph.getLayoutParams();
+        skyParams.setMarginStart(dp(4));
+        skyParams.setMarginEnd(dp(4));
 
         TextView low = new TextView(getContext());
         low.setText(fmtTemp(day.minC));
@@ -605,24 +619,6 @@ public final class WeatherCardView extends LinearLayout {
         rowParams.bottomMargin = dp(5);
         row.setLayoutParams(rowParams);
         return row;
-    }
-
-    /**
-     * The headline icon, which loops for as long as the card is open — unlike the status bar's,
-     * which holds still, this one is on screen only while the user is looking straight at it.
-     */
-    private LottieAnimationView weatherAnimation(@NonNull Context context, boolean loop) {
-        LottieAnimationView icon = new LottieAnimationView(context);
-        icon.setRepeatCount(loop ? LottieDrawable.INFINITE : 0);
-        icon.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
-        return icon;
-    }
-
-    /** Loads and starts an asset, tolerating a missing file rather than taking the card down. */
-    private void playAnimation(@NonNull LottieAnimationView view, @NonNull String assetPath) {
-        view.setFailureListener(error -> view.setVisibility(INVISIBLE));
-        view.setAnimation(assetPath);
-        view.playAnimation();
     }
 
     /** One column of the conditions strip: the reading over its small label. Returns the value. */
@@ -709,6 +705,10 @@ public final class WeatherCardView extends LinearLayout {
         Calendar now = Calendar.getInstance();
         return new SimpleDateFormat("yyyy-MM-dd'T'HH':00'", Locale.ROOT).format(now.getTime());
     }
+
+    /** The sky beside a week row's day name, and the figure beside a conditions reading. */
+    private static final int WEEK_ICON_DP = 16;
+    private static final int STAT_ICON_DP = 14;
 
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);

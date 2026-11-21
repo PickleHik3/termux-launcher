@@ -1,10 +1,14 @@
 package com.termux.app.launcher.drawer;
 
 import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.LinearLayout;
@@ -25,7 +29,8 @@ import com.termux.app.launcher.model.LauncherAppEntry;
  * never renders on the main thread, so a cold scroll costs a tile per cell, not three bitmaps and
  * a blur.</p>
  */
-public class AppDrawerAppCellView extends LinearLayout {
+public class AppDrawerAppCellView extends LinearLayout
+    implements com.termux.app.launcher.animation.LaunchIconSource {
 
     /** Stream-level guard used because a nested close deliberately does not cancel its child. */
     public interface ClickGate {
@@ -34,8 +39,31 @@ public class AppDrawerAppCellView extends LinearLayout {
 
     public static final ClickGate ALLOW_CLICKS = () -> false;
 
+    /** Edit mode's outline: thin, static and in the cell's own ink at this alpha. */
+    static final int EDIT_OUTLINE_ALPHA = 0x59;
+    private static final float EDIT_OUTLINE_STROKE_DP = 1f;
+    private static final float EDIT_OUTLINE_INSET_DP = 2f;
+    private static final float EDIT_OUTLINE_RADIUS_DP = 16f;
+
     @NonNull public final ImageView icon;
     @NonNull public final TextView label;
+    private boolean mKeyboardHighlighted;
+    private boolean mEditOutline;
+    @Nullable private Paint mOutlinePaint;
+    private final RectF mOutlineRect = new RectF();
+    /** The glass bead behind the highlighted result; one per cell, made on first highlight. */
+    @Nullable private AppDrawerGlassBeadDrawable mBead;
+    private final int[] mContentBox = new int[4];
+    private final int[] mBeadBox = new int[4];
+
+    /** The package this cell shows, for the home handoff; null while unbound. */
+    @Nullable private String launchPackage;
+
+    @Override public boolean launchesPackage(@NonNull String packageName) {
+        return packageName.equals(launchPackage);
+    }
+    @Override public boolean isDrawerCell() { return true; }
+    @Override @Nullable public View launchIconView() { return icon; }
 
     public AppDrawerAppCellView(@NonNull Context context) {
         super(context);
@@ -44,6 +72,9 @@ public class AppDrawerAppCellView extends LinearLayout {
         setClickable(true);
         setClipChildren(false);
         setClipToPadding(false);
+        // A group with no background is flagged will-not-draw, and the renderer then never calls
+        // onDrawForeground: the edit outline would not show. Set once, so toggling never lays out.
+        setWillNotDraw(false);
 
         icon = new ImageView(context);
         icon.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -100,6 +131,15 @@ public class AppDrawerAppCellView extends LinearLayout {
         bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, null, categoryChoiceListener);
     }
 
+    /** Category detail grid: the popup's category row plus the drawer's pickup, as in grid and list. */
+    void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+              int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
+              @Nullable AppDrawerPickupDelegate pickupDelegate,
+              @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, pickupDelegate,
+            categoryChoiceListener);
+    }
+
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight,
                               @NonNull ClickGate clickGate) {
@@ -116,6 +156,7 @@ public class AppDrawerAppCellView extends LinearLayout {
                               float iconSize, float rowHeight, @NonNull ClickGate clickGate,
                               @Nullable AppDrawerPickupDelegate pickupDelegate,
                               @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        launchPackage = entry.appRef.packageName;
         int iconPx = iconSize > 0f ? Math.max(1, Math.round(iconSize)) : 0;
         applyGeometry(rowHeight, iconPx);
         if (dock != null && iconPx > 0) {
@@ -131,7 +172,9 @@ public class AppDrawerAppCellView extends LinearLayout {
         label.setTextColor(dock != null ? dock.getLauncherTextColor() : Color.WHITE);
         setContentDescription(entry.label);
         setOnClickListener(view -> {
-            if (!clickGate.suppressCellClick() && dock != null)
+            // Editing: an app does not launch on a tap (it is picked up instead).
+            if (!clickGate.suppressCellClick() && dock != null
+                && !AppDrawerContentView.isEditingAround(this))
                 dock.launchEntryFromDrawer(icon, entry);
         });
         if (dock != null) {
@@ -155,9 +198,19 @@ public class AppDrawerAppCellView extends LinearLayout {
             iconParams.height = iconPx;
             icon.setLayoutParams(iconParams);
         }
-        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP
-            * getResources().getDisplayMetrics().density);
-        if (label.getPaddingTop() != gap) label.setPadding(0, gap, 0, 0);
+        float density = getResources().getDisplayMetrics().density;
+        int top = Math.round(AppDrawerGridMetrics.rowTopPx(density));
+        if (getPaddingTop() != top) {
+            setPadding(getPaddingLeft(), top, getPaddingRight(), getPaddingBottom());
+        }
+        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP * density);
+        // Air inside the cell on both sides: neighbouring labels never touch, and the outer
+        // columns' labels stand off the card's edge.
+        int side = Math.round(AppDrawerGridMetrics.labelSideInsetPx(density));
+        if (label.getPaddingTop() != gap || label.getPaddingLeft() != side
+            || label.getPaddingRight() != side) {
+            label.setPadding(side, gap, side, 0);
+        }
     }
 
     /**
@@ -177,8 +230,167 @@ public class AppDrawerAppCellView extends LinearLayout {
         setScaleY(scale);
     }
 
+    /**
+     * The result a physical keyboard's arrow keys are on: a glass bead hugging the icon and name,
+     * reported to screen readers as selected. Set when the highlight moves, placed in
+     * {@link #onLayout} — never per frame.
+     */
+    public final void setKeyboardHighlight(boolean highlighted) {
+        if (mKeyboardHighlighted == highlighted && !highlighted) return;
+        mKeyboardHighlighted = highlighted;
+        setSelected(highlighted);
+        refreshBackground();
+        if (highlighted) placeBead();
+    }
+
+    public final boolean isKeyboardHighlighted() {
+        return mKeyboardHighlighted;
+    }
+
+    /** Edit mode's outline on or off; one invalidate when it changes, nothing at rest. */
+    public final void setEditOutline(boolean on) {
+        if (mEditOutline == on) return;
+        mEditOutline = on;
+        invalidate();
+    }
+
+    public final boolean hasEditOutline() {
+        return mEditOutline;
+    }
+
+    /** A cell that scrolls in while the drawer is edited comes in outlined. */
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setEditOutline(AppDrawerContentView.isEditingAround(this));
+    }
+
+    @Override
+    public void onDrawForeground(@NonNull Canvas canvas) {
+        super.onDrawForeground(canvas);
+        if (!mEditOutline) return;
+        Paint paint = mOutlinePaint;
+        float density = getResources().getDisplayMetrics().density;
+        if (paint == null) {
+            paint = new Paint(Paint.ANTI_ALIAS_FLAG);
+            paint.setStyle(Paint.Style.STROKE);
+            mOutlinePaint = paint;
+        }
+        paint.setStrokeWidth(Math.max(1f, EDIT_OUTLINE_STROKE_DP * density));
+        paint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+            label.getCurrentTextColor(), EDIT_OUTLINE_ALPHA));
+        float inset = EDIT_OUTLINE_INSET_DP * density;
+        mOutlineRect.set(inset, inset, getWidth() - inset, getHeight() - inset);
+        float radius = EDIT_OUTLINE_RADIUS_DP * density;
+        canvas.drawRoundRect(mOutlineRect, radius, radius, paint);
+    }
+
+    /** The grid cell has no background at rest; a presentation with one overrides this. */
+    protected void refreshBackground() {
+        setBackground(mKeyboardHighlighted ? beadDrawable() : null);
+    }
+
+    /** The bead, made on first use with its colours read from the chrome as it stands. */
+    @NonNull
+    protected final AppDrawerGlassBeadDrawable beadDrawable() {
+        if (mBead == null) {
+            mBead = new AppDrawerGlassBeadDrawable(getResources().getDisplayMetrics().density);
+        } else {
+            mBead.resolveColors();
+        }
+        return mBead;
+    }
+
+    /** A stacked cell centres its bead on the icon; a row presentation hugs its content instead. */
+    protected boolean centersHighlightOnIcon() {
+        return true;
+    }
+
+    /** Grows {@code box} to take in whatever else this presentation shows beside icon and label. */
+    protected void unionExtraContent(@NonNull int[] box) {}
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        if (mKeyboardHighlighted) placeBead();
+    }
+
+    private void placeBead() {
+        AppDrawerGlassBeadDrawable bead = mBead;
+        int width = getWidth();
+        int height = getHeight();
+        if (bead == null || width <= 0 || height <= 0 || icon.getWidth() <= 0) return;
+        int iconLeft = offsetIn(icon, true);
+        int iconTop = offsetIn(icon, false);
+        int[] box = mContentBox;
+        box[0] = iconLeft;
+        box[1] = iconTop;
+        box[2] = iconLeft + icon.getWidth();
+        box[3] = iconTop + icon.getHeight();
+        unionTextBounds(label, box);
+        unionExtraContent(box);
+        float density = getResources().getDisplayMetrics().density;
+        int padding = Math.round(AppDrawerHighlightShape.PADDING_DP * density);
+        int spare = Math.max(1, Math.round(AppDrawerHighlightShape.SPARE_DP * density));
+        AppDrawerHighlightShape.resolve(width, height, box, iconLeft + icon.getWidth() / 2,
+            centersHighlightOnIcon(),
+            padding, spare, mBeadBox);
+        int[] out = mBeadBox;
+        float radius = AppDrawerHighlightShape.radiusPx(icon.getWidth(), padding,
+            out[2] - out[0], out[3] - out[1]);
+        bead.setInner(out[0], out[1], out[2], out[3], radius);
+    }
+
+    /** Grows {@code box} over {@code view}'s text: the measured line, not the view's full width. */
+    protected final void unionTextBounds(@NonNull TextView view, @NonNull int[] box) {
+        if (view.getVisibility() == GONE || view.getWidth() <= 0
+            || TextUtils.isEmpty(view.getText())) return;
+        int left = offsetIn(view, true);
+        int top = offsetIn(view, false);
+        int areaLeft = left + view.getCompoundPaddingLeft();
+        int areaRight = left + view.getWidth() - view.getCompoundPaddingRight();
+        int textLeft = areaLeft;
+        int textRight = areaRight;
+        android.text.Layout layout = view.getLayout();
+        if (layout != null && layout.getLineCount() > 0) {
+            // Width of the line as shown (ellipsis included), placed by the view's own gravity.
+            int lineWidth = Math.min(areaRight - areaLeft, (int) Math.ceil(layout.getLineWidth(0)));
+            int gravity = Gravity.getAbsoluteGravity(view.getGravity(), view.getLayoutDirection())
+                & Gravity.HORIZONTAL_GRAVITY_MASK;
+            if (gravity == Gravity.RIGHT) {
+                textLeft = areaRight - lineWidth;
+            } else if (gravity == Gravity.LEFT) {
+                textRight = areaLeft + lineWidth;
+            } else {
+                textLeft = areaLeft + (areaRight - areaLeft - lineWidth) / 2;
+                textRight = textLeft + lineWidth;
+            }
+        }
+        int textTop = top + view.getCompoundPaddingTop();
+        int textBottom = top + view.getHeight() - view.getCompoundPaddingBottom();
+        if (textRight <= textLeft || textBottom <= textTop) return;
+        box[0] = Math.min(box[0], textLeft);
+        box[1] = Math.min(box[1], textTop);
+        box[2] = Math.max(box[2], textRight);
+        box[3] = Math.max(box[3], textBottom);
+    }
+
+    /** {@code view}'s left or top in this cell's pixels, through any wrapper between. */
+    private int offsetIn(@NonNull View view, boolean horizontal) {
+        int offset = 0;
+        View v = view;
+        while (v != this && v != null) {
+            offset += horizontal ? v.getLeft() : v.getTop();
+            android.view.ViewParent parent = v.getParent();
+            v = parent instanceof View ? (View) parent : null;
+        }
+        return offset;
+    }
+
     /** Releases rendered artwork, app-specific listeners and transient scrub state. */
     public void unbind() {
+        launchPackage = null;
+        if (mKeyboardHighlighted) setKeyboardHighlight(false);
         cancelLongPress();
         setOnClickListener(null);
         setOnLongClickListener(null);

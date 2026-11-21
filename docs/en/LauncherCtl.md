@@ -175,7 +175,7 @@ launcherctl clipboard paste
 
 Writes or reads the Android clipboard, the one the terminal, the keyboard, the display and every
 app share. `copy` works whether or not the launcher is on screen. `paste` only answers while the
-launcher is on screen and **Settings → Terminal → Let programs read the clipboard** is on.
+launcher is on screen and **Settings → Terminal → Clipboard & compatibility → Let programs read the clipboard** is on.
 
 ```sh
 git diff | launcherctl clipboard copy
@@ -283,6 +283,90 @@ otherwise. Long by default; `--short` for a brief one.
 launcherctl toast --short 'build done'
 ```
 
+## motion-log
+
+```text
+launcherctl motion-log dump
+launcherctl motion-log clear
+```
+
+With **Settings > Debugging > Motion log** on, the launcher notes each page change and resize as
+one line with its uptime in milliseconds, in memory and in `adb logcat -s TermuxMotion`. `dump`
+prints the last 2,000 lines, oldest first; `clear` empties them. Nothing is recorded while the
+switch is off.
+
+```sh
+launcherctl motion-log clear
+launcherctl motion-log dump > motion.txt
+```
+
+## look
+
+```text
+launcherctl look get PROPERTY [--element ELEMENT]
+launcherctl look set PROPERTY VALUE [--element ELEMENT]
+launcherctl look reset [PROPERTY] [--element ELEMENT]
+```
+
+Reads and sets the look the way the Appearance editor's cards do, and nothing more.
+
+- **Global**, without `--element`: `blur`, `opacity`, `tint`, `colour`, `corners`, `depth`, `edge`,
+  `grain`, `rim`, `vibrancy` and `margin`.
+- **A surface's own look**, with `--element status`, `dock` or `keyboard`: `opacity` and `blur`
+  only. Setting one gives that surface its own value; everything else about it is Global's, so
+  `--element` with any other property is refused.
+- **The Terminal's Background**, with `--element background`: `opacity`, `blur` and `dim`
+  (Wallpaper dim). These are the Terminal's own and never follow Global.
+
+The look is the same on every page, so there is no `--page` or `--kind`. Menus, dialogs and
+widgets wear Global and have no look of their own; `--element widgets`, `sheets` and `terminal`
+are refused.
+
+```text
+launcherctl look set opacity 60 --element dock
+launcherctl look set dim 30 --element background
+```
+
+Values are numbers, except `blur`, which takes a step from 0 to 7 or a size in dp such as `12dp`
+(the Terminal's blur is always a size in dp, up to 48); `colour`, which takes `primary`,
+`secondary` or `tertiary`; `rim`, which takes `off`, `hairline` or `bright`; and `corners`, which
+takes dp or `auto`. A value outside a property's range is held to it.
+
+`get` answers the value and whose it is: the element's own (`"from":"dock"`), Global's
+(`"from":"Global"`), the shipped look (`"from":"shipped"`) or, for the Background, the Terminal's
+(`"from":"Terminal"`). `set` changes one value and the launcher redraws at once. `reset` puts an
+element back on Global, which is the reset arrow in the editor; without a property it resets
+everything the element owns. Without `--element` it resets Global's own values, and for the
+Background it puts the shipped numbers back.
+
+```sh
+launcherctl look set opacity 60 --element dock
+launcherctl look get opacity --element dock
+launcherctl look reset --element dock
+```
+
+## layout
+
+```
+launcherctl layout get <kind>
+launcherctl layout set <kind> FILE
+```
+
+Prints or replaces one layout document (ADR 0020). `<kind>` is `home`, `terminal`,
+`terminal_minimal`, `display`, or `sizes` (the sizes every kind shares). `set` checks the file
+first and refuses it with the bad field named; nothing changes then. `set` replaces the whole
+document: a field left out falls back to its default, so start from `layout get`. A known field
+with a value the launcher cannot read (an unknown `dock_design`, a placement that is not an
+edge, an `icon_size` outside s/m/l/xl, a negative `*_order`, a size outside its range) is
+refused; a field this build does not know is kept as it is. A good file is written whole and
+shows at once.
+
+```
+launcherctl layout get home > h.json
+# edit one value in h.json
+launcherctl layout set home h.json
+```
+
 ## wallpaper
 
 ```text
@@ -303,11 +387,13 @@ launcherctl wallpaper set ~/pics/a.jpg --lock
 ## x11 gpu
 
 ```text
-launcherctl x11 gpu [--env]
+launcherctl x11 gpu [--env|--table]
 ```
 
 Says which graphics profile fits this phone for Linux apps on the display, and whether its packages
-are installed. `--env` prints the exports instead, ready to `eval`. See
+are installed; `pick` is the profile chosen on the Graphics acceleration page (`auto` follows the
+ranking) and `in_use` / `in_use_env` what an app is started with now. `--env` prints the exports
+instead, ready to `eval`; `--table` prints the list of profiles the graphics benchmark tries. See
 [GPU acceleration for your apps](X11_Display.md#gpu-acceleration-for-your-apps).
 
 ```sh

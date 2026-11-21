@@ -38,11 +38,11 @@ public class TaiPlatformCapsTest {
     }
 
     @Test
-    public void adreno830WithTheWarnedCompilerIsUnknown() {
+    public void adreno830WithTheWarnedCompilerIsCpuFirst() {
         Facts facts = new Facts(true, QUALCOMM, "Adreno (TM) 830", "", "QTI", "SM8750", "Phone",
             "QUALCOMM Adreno(TM) 830", "OpenCL 3.0 QUALCOMM build: commit Compiler E031.47.12.03", "");
         GpuVerdict verdict = TaiPlatformCaps.classify(facts);
-        assertVerdict(GpuFamily.ADRENO, GpuPath.UNKNOWN, verdict);
+        assertVerdict(GpuFamily.ADRENO, GpuPath.CPU_FIRST, verdict);
         assertEquals("This GPU driver is known to give wrong answers; update the phone's software", verdict.reason);
     }
 

@@ -52,7 +52,7 @@ public class LauncherAppDataProviderHiddenAppsTest {
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
         packages = shadowOf(context.getPackageManager());
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
         context.getSharedPreferences(
                 TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
                 Context.MODE_PRIVATE)

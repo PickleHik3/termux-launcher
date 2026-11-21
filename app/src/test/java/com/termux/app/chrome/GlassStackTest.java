@@ -31,7 +31,7 @@ import static org.junit.Assert.assertTrue;
 
 /**
  * The glass stack: the Floating keyboard capsule and the dock resolve to one material for the same
- * Base, and the builder lays the layers the same way for every surface.
+ * Global, and the builder lays the layers the same way for every surface.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -51,30 +51,30 @@ public class GlassStackTest {
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
         preferences = new TermuxAppSharedPreferences(context, store, null);
-        preferences.migrateSurfaceInheritance();
+        preferences.migrateLookGrid(java.util.Collections.emptyList());
         for (SurfaceSlot slot : SurfaceSlot.values())
             preferences.reattachSurface(slot);
         surfaces = new FakeChromeSurfaces(context);
         glass = new GlassSurfaceFactory(surfaces);
     }
 
-    /** What the dock draws with the same Base: its own getters, its rim, its refraction rule. */
+    /** What the dock draws with the same Global: its own getters, its rim, its refraction rule. */
     private GlassStack.Spec dockSpec(GlassRefraction.Look fancier) {
-        return GlassStack.Spec.of(preferences.getExtraKeysBlurRadius(),
-            preferences.getAppBarOpacity() / 100f, preferences.getDockGlassGrain(), RADIUS_PX,
+        return GlassStack.Spec.of(preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()),
+            preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()) / 100f, preferences.getDockGlassGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()), RADIUS_PX,
             fancier).withRim(true);
     }
 
     private GlassStack.Spec keyboardSpec(GlassRefraction.Look fancier) {
-        return GlassStack.keyboard(preferences, preferences.getAppBarOpacity() / 100f, RADIUS_PX,
+        return GlassStack.keyboard(preferences, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()) / 100f, RADIUS_PX,
             fancier).withRim(true);
     }
 
     @Test
-    public void theKeyboardCapsuleAndTheDockResolveToOneSpecForTheSameBase() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.BLUR, 17);
-        preferences.setSurfaceBaseValue(SurfaceProperty.OPACITY, 61);
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 43);
+    public void theKeyboardCapsuleAndTheDockResolveToOneSpecForTheSameGlobal() {
+        preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 17);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.OPACITY, 61);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 43);
 
         for (GlassRefraction.Look fancier : new GlassRefraction.Look[] {null, FANCIER}) {
             GlassStack.Spec keyboard = keyboardSpec(fancier);
@@ -105,7 +105,8 @@ public class GlassStackTest {
         preferences.setInAppKeyboardBackdropOpacity(70);
 
         GlassStack.Spec keyboard = keyboardSpec(null);
-        assertEquals(3, keyboard.blurRadiusDp);
+        // Blur 3 is no Frost stop; the nearest stop's blur is 5.
+        assertEquals(5, keyboard.blurRadiusDp);
         assertEquals(80, keyboard.grainPercent);
         assertEquals(0.9f, keyboard.tintAlpha, 0f);
         assertEquals("the whole-stack alpha is the keyboard's own row", 70,
@@ -115,7 +116,7 @@ public class GlassStackTest {
 
     @Test
     public void theStackIsFrameThenTintGrainAndOneRimUnderTheStackAlpha() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 30);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 30);
         Bitmap frame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
         SharedFrameDrawable backdrop = new SharedFrameDrawable(frame, new Rect(0, 0, 40, 40), null,
             out -> { out[0] = 0; out[1] = 0; });
@@ -277,7 +278,7 @@ public class GlassStackTest {
 
     @Test
     public void aSchemeColourStandsInForTheTintAndKeepsTheRim() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 0);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 0);
         GlassStack.Spec spec = keyboardSpec(null).withTintColor(0x80112233);
 
         LayerDrawable stack = (LayerDrawable) GlassStack.build(glass, spec, 2f, null);
@@ -289,7 +290,7 @@ public class GlassStackTest {
 
     @Test
     public void aSchemeColourStackWearsTheSurfacesGrainBetweenTheTintAndTheRim() {
-        preferences.setSurfaceBaseValue(SurfaceProperty.GRAIN, 14);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 14);
         GlassStack.Spec spec = keyboardSpec(null).withTintColor(0x80112233);
 
         LayerDrawable stack = (LayerDrawable) GlassStack.build(glass, spec, 2f, null);
@@ -313,7 +314,7 @@ public class GlassStackTest {
     }
 
     @Test
-    public void whileTheKeyboardFollowsBaseAStaleBackdropOpacityDoesNotFadeIt() {
+    public void whileTheKeyboardFollowsGlobalAStaleBackdropOpacityDoesNotFadeIt() {
         preferences.setInAppKeyboardBackdropOpacityRaw(35);
 
         assertEquals(100, GlassStack.keyboardStackAlphaPercent(preferences));
@@ -345,12 +346,12 @@ public class GlassStackTest {
     @Test
     public void theKeyboardSpecWearsItsOwnTintStrength() {
         assertEquals("no accent ships", 0, keyboardSpec(null).tintStrengthPercent);
-        preferences.setSurfaceBaseValue(SurfaceProperty.TINT, 60);
+        preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 60);
         assertEquals(60, keyboardSpec(null).tintStrengthPercent);
 
         preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.TINT, 25);
         assertEquals(25, keyboardSpec(null).tintStrengthPercent);
-        assertEquals("the dock keeps following Base", 60, preferences.getDockTintStrength());
+        assertEquals("the dock keeps following Global", 60, preferences.getDockTintStrength(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertNotEquals(keyboardSpec(null).withTintStrength(60), keyboardSpec(null));
         assertEquals("the plain spec mixes in no accent", 0, dockSpec(null).tintStrengthPercent);
     }

@@ -8,6 +8,7 @@ import static org.junit.Assert.assertTrue;
 import org.junit.Test;
 
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * The wall's geometry and page set. A missing page is skipped rather than left as a dead swipe,
@@ -18,98 +19,105 @@ public class PaneWallPolicyTest {
     private static final int WIDTH = 1080;
     private static final float EPS = 0.01f;
 
-    private static List<PaneWallPage> all() {
+    private static List<PageKind> all() {
         return PaneWallPolicy.availablePages(false, true, true);
     }
 
     @Test
     public void everyPageIsThereWhenTheInstallHasAllOfThem() {
-        assertEquals(List.of(PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
+        assertEquals(List.of(PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY),
             all());
     }
 
     @Test
     public void terminalOnlyInstallsHaveNoWidgetsPage() {
-        assertEquals(List.of(PaneWallPage.TERMINAL),
+        assertEquals(List.of(PageKind.TERMINAL),
             PaneWallPolicy.availablePages(true, true, false));
     }
 
     @Test
     public void widgetsOffLeavesTheDisplayPageReachable() {
-        assertEquals(List.of(PaneWallPage.TERMINAL, PaneWallPage.DISPLAY),
+        assertEquals(List.of(PageKind.TERMINAL, PageKind.DISPLAY),
             PaneWallPolicy.availablePages(false, false, true));
     }
 
     @Test
-    public void theTerminalIsAlwaysAPage() {
+    public void theTerminalIsAlwaysAnOldPlace() {
         assertTrue(PaneWallPolicy.availablePages(true, false, false)
-            .contains(PaneWallPage.TERMINAL));
-        assertEquals(PaneWallPage.TERMINAL, PaneWallPolicy.homePage());
+            .contains(PageKind.TERMINAL));
+    }
+
+    /**
+     * The row is Home, then the Terminal while its row has a window — the display window counts
+     * as one (ADR 0008, amended 2026-10-19). There is no Display page any more.
+     */
+    @Test
+    public void theRowIsHomeThenTheTerminalAndNeverADisplayPage() {
+        assertEquals(List.of(PageKind.HOME, PageKind.TERMINAL),
+            PaneWallPolicy.rowPages(true));
+        // No window: the Terminal is not on the row; Home always is.
+        assertEquals(List.of(PageKind.HOME), PaneWallPolicy.rowPages(false));
+        assertFalse(PaneWallPolicy.rowPages(true).contains(PageKind.DISPLAY));
+        assertEquals("the home press lands on Home", PageKind.HOME,
+            PaneWallPolicy.homePage());
+    }
+
+    @Test
+    public void theSeamFromHomeStopsWithoutAWindow() {
+        assertTrue(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(true),
+            PageKind.HOME, 1));
+        assertFalse(PaneWallPolicy.hasNeighbour(PaneWallPolicy.rowPages(false),
+            PageKind.HOME, 1));
+        assertFalse("nothing before Home page 1", PaneWallPolicy.hasNeighbour(
+            PaneWallPolicy.rowPages(true), PageKind.HOME, -1));
     }
 
     @Test
     public void neighboursAreComputedOverTheAvailablePagesOnly() {
-        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, false, true);
+        List<PageKind> twoPages = PaneWallPolicy.availablePages(false, false, true);
         // With no Widgets page, a left swipe from the terminal has nowhere to go...
-        assertEquals(PaneWallPage.TERMINAL,
-            PaneWallPolicy.neighbour(twoPages, PaneWallPage.TERMINAL, -1));
-        assertFalse(PaneWallPolicy.hasNeighbour(twoPages, PaneWallPage.TERMINAL, -1));
+        assertEquals(PageKind.TERMINAL,
+            PaneWallPolicy.neighbour(twoPages, PageKind.TERMINAL, -1));
+        assertFalse(PaneWallPolicy.hasNeighbour(twoPages, PageKind.TERMINAL, -1));
         // ...while a right swipe still reaches the Display page.
-        assertEquals(PaneWallPage.DISPLAY,
-            PaneWallPolicy.neighbour(twoPages, PaneWallPage.TERMINAL, 1));
-        assertTrue(PaneWallPolicy.hasNeighbour(twoPages, PaneWallPage.TERMINAL, 1));
+        assertEquals(PageKind.DISPLAY,
+            PaneWallPolicy.neighbour(twoPages, PageKind.TERMINAL, 1));
+        assertTrue(PaneWallPolicy.hasNeighbour(twoPages, PageKind.TERMINAL, 1));
     }
 
     @Test
-    public void threePlacesFormARingThatWrapsBothWays() {
-        assertTrue(PaneWallPolicy.isRing(all()));
-        assertEquals(PaneWallPage.DISPLAY, PaneWallPolicy.neighbour(all(), PaneWallPage.WIDGETS, -1));
-        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(all(), PaneWallPage.DISPLAY, 1));
-        assertTrue(PaneWallPolicy.hasNeighbour(all(), PaneWallPage.WIDGETS, -1));
-        assertTrue(PaneWallPolicy.hasNeighbour(all(), PaneWallPage.DISPLAY, 1));
-        // Two steps round a ring of three is one step the other way: right twice from the
-        // terminal is the Widgets page.
-        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(all(), PaneWallPage.TERMINAL, 2));
+    public void theRowIsALineThatNeverWraps() {
+        assertFalse(PaneWallPolicy.isRing(all()));
+        assertEquals(PageKind.HOME, PaneWallPolicy.neighbour(all(), PageKind.HOME, -1));
+        assertEquals(PageKind.DISPLAY, PaneWallPolicy.neighbour(all(), PageKind.DISPLAY, 1));
+        assertFalse(PaneWallPolicy.hasNeighbour(all(), PageKind.HOME, -1));
+        assertFalse(PaneWallPolicy.hasNeighbour(all(), PageKind.DISPLAY, 1));
+        assertEquals(PageKind.DISPLAY, PaneWallPolicy.neighbour(all(), PageKind.TERMINAL, 2));
     }
 
     @Test
     public void twoPlacesStayALineWithAnEnd() {
-        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, true, false);
+        List<PageKind> twoPages = PaneWallPolicy.availablePages(false, true, false);
         assertFalse(PaneWallPolicy.isRing(twoPages));
-        assertEquals(PaneWallPage.WIDGETS, PaneWallPolicy.neighbour(twoPages, PaneWallPage.WIDGETS, -1));
-        assertEquals(PaneWallPage.TERMINAL, PaneWallPolicy.neighbour(twoPages, PaneWallPage.TERMINAL, 1));
-        assertFalse(PaneWallPolicy.hasNeighbour(twoPages, PaneWallPage.TERMINAL, 1));
-    }
-
-    @Test
-    public void relativePositionIsTheShorterWayRoundARing() {
-        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.TERMINAL, PaneWallPage.WIDGETS));
-        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.TERMINAL, PaneWallPage.DISPLAY));
-        // From the Widgets page the Display page is one step to the left, not two to the right.
-        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.WIDGETS, PaneWallPage.DISPLAY));
-        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.WIDGETS, PaneWallPage.TERMINAL));
-        assertEquals(-1, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
-        assertEquals(1, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.WIDGETS));
-        assertEquals(0, PaneWallPolicy.relativePosition(all(), PaneWallPage.DISPLAY, PaneWallPage.DISPLAY));
-        // On a line the distance is what it is.
-        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, false, true);
-        assertEquals(-1, PaneWallPolicy.relativePosition(twoPages, PaneWallPage.DISPLAY, PaneWallPage.TERMINAL));
+        assertEquals(PageKind.HOME, PaneWallPolicy.neighbour(twoPages, PageKind.HOME, -1));
+        assertEquals(PageKind.TERMINAL, PaneWallPolicy.neighbour(twoPages, PageKind.TERMINAL, 1));
+        assertFalse(PaneWallPolicy.hasNeighbour(twoPages, PageKind.TERMINAL, 1));
     }
 
     @Test
     public void theTilesAreTheNeighboursLeftFirst() {
-        assertEquals(java.util.Arrays.asList(PaneWallPage.WIDGETS, PaneWallPage.DISPLAY),
-            PaneWallPolicy.tiles(all(), PaneWallPage.TERMINAL));
-        assertEquals(java.util.Arrays.asList(PaneWallPage.DISPLAY, PaneWallPage.TERMINAL),
-            PaneWallPolicy.tiles(all(), PaneWallPage.WIDGETS));
-        assertEquals(java.util.Arrays.asList(PaneWallPage.TERMINAL, PaneWallPage.WIDGETS),
-            PaneWallPolicy.tiles(all(), PaneWallPage.DISPLAY));
+        assertEquals(java.util.Arrays.asList(PageKind.HOME, PageKind.DISPLAY),
+            PaneWallPolicy.tiles(all(), PageKind.TERMINAL));
+        assertEquals(java.util.Arrays.asList(PageKind.TERMINAL, PageKind.DISPLAY),
+            PaneWallPolicy.tiles(all(), PageKind.HOME));
+        assertEquals(java.util.Arrays.asList(PageKind.HOME, PageKind.TERMINAL),
+            PaneWallPolicy.tiles(all(), PageKind.DISPLAY));
         // Two places: the one other page, and the side it is on is its relative position.
-        List<PaneWallPage> twoPages = PaneWallPolicy.availablePages(false, true, false);
-        assertEquals(java.util.Collections.singletonList(PaneWallPage.WIDGETS),
-            PaneWallPolicy.tiles(twoPages, PaneWallPage.TERMINAL));
-        assertEquals(java.util.Collections.singletonList(PaneWallPage.TERMINAL),
-            PaneWallPolicy.tiles(twoPages, PaneWallPage.WIDGETS));
+        List<PageKind> twoPages = PaneWallPolicy.availablePages(false, true, false);
+        assertEquals(java.util.Collections.singletonList(PageKind.HOME),
+            PaneWallPolicy.tiles(twoPages, PageKind.TERMINAL));
+        assertEquals(java.util.Collections.singletonList(PageKind.TERMINAL),
+            PaneWallPolicy.tiles(twoPages, PageKind.HOME));
     }
 
     @Test
@@ -177,9 +185,12 @@ public class PaneWallPolicyTest {
     }
 
     @Test
-    public void aFlickCommitsWhateverWayTheDragWasHeading() {
-        // Dragged well past the commit distance to the right, then flicked back left.
-        assertEquals(1, PaneWallPolicy.settle(WIDTH * 0.5f, -FLICK, WIDTH, DENSITY, true, true));
+    public void aReversalPastAThirdGoesHome() {
+        // Dragged well past the commit distance to the right, then flicked back left: the page it
+        // started on, not the one beyond (it used to fly on to the right, #152).
+        assertEquals(0, PaneWallPolicy.settle(WIDTH * 0.5f, -FLICK, WIDTH, DENSITY, true, true));
+        // Short of a third, the flick back decides on its own.
+        assertEquals(1, PaneWallPolicy.settle(WIDTH * 0.3f, -FLICK, WIDTH, DENSITY, true, true));
     }
 
     @Test
@@ -213,19 +224,83 @@ public class PaneWallPolicyTest {
         assertEquals(1f, PaneWallPolicy.pageOutlineAlpha(0f, 0), EPS);
     }
 
+    /** The terminal page's alpha as the wall poses it {@code slidePx} from its rest. */
+    private static float poseAlpha(com.termux.app.launcher.home.HomePageTransition effect,
+                                   float slidePx) {
+        com.termux.app.launcher.home.HomePageTransition.Transform pose =
+            new com.termux.app.launcher.home.HomePageTransition.Transform();
+        WallPageTransition.pose(effect, slidePx, WIDTH, true, pose);
+        return pose.alpha;
+    }
+
+    /**
+     * Under a transition that fades the terminal's page (Stack, toward Home or back), its glass
+     * edge and its rims go with the page's own fade, so the text never shows without them: the
+     * frame line wears the page's alpha and the rims, drawn in the page, keep all of theirs.
+     */
+    @Test
+    public void aFadingTerminalPageCarriesItsOutlineInItsFade() {
+        com.termux.app.launcher.home.HomePageTransition stack =
+            com.termux.app.launcher.home.HomePageTransition.STACK;
+        for (float away : new float[] {0.02f, 0.12f, 0.3f, 0.5f, 0.8f, 0.97f}) {
+            float slidePx = WIDTH * away;
+            float pageAlpha = poseAlpha(stack, slidePx);
+            assertEquals("the page fades as it goes, " + away, 1f - away, pageAlpha, EPS);
+            assertTrue(PaneWallPolicy.fadesWithPage(pageAlpha));
+            assertEquals("the frame line at " + away, pageAlpha,
+                PaneWallPolicy.terminalFrameLineAlpha(
+                    PaneWallPolicy.pageOutlineAlpha(slidePx, WIDTH), pageAlpha), EPS);
+            assertEquals("the rims at " + away, 1f, PaneWallPolicy.terminalRimAlpha(
+                PaneWallPolicy.outlineAlpha(slidePx, WIDTH), pageAlpha), EPS);
+        }
+        // Continuous at rest: all of it either way.
+        assertEquals(1f, PaneWallPolicy.terminalFrameLineAlpha(
+            PaneWallPolicy.pageOutlineAlpha(0f, WIDTH), poseAlpha(stack, 0f)), EPS);
+        assertEquals(1f, PaneWallPolicy.terminalRimAlpha(
+            PaneWallPolicy.outlineAlpha(0f, WIDTH), poseAlpha(stack, 0f)), EPS);
+    }
+
+    /** A page the transition only moves keeps the outline fade, so two edges never show. */
+    @Test
+    public void aMovingTerminalPageKeepsTheOutlineFade() {
+        for (com.termux.app.launcher.home.HomePageTransition effect : new
+                com.termux.app.launcher.home.HomePageTransition[] {
+                    com.termux.app.launcher.home.HomePageTransition.SLIDE,
+                    com.termux.app.launcher.home.HomePageTransition.CAROUSEL}) {
+            for (float away : new float[] {0.05f, 0.3f, 0.7f}) {
+                float slidePx = -WIDTH * away;
+                float pageAlpha = poseAlpha(effect, slidePx);
+                assertFalse(effect + " at " + away, PaneWallPolicy.fadesWithPage(pageAlpha));
+                assertEquals(PaneWallPolicy.pageOutlineAlpha(slidePx, WIDTH),
+                    PaneWallPolicy.terminalFrameLineAlpha(
+                        PaneWallPolicy.pageOutlineAlpha(slidePx, WIDTH), pageAlpha), EPS);
+                assertEquals(PaneWallPolicy.outlineAlpha(slidePx, WIDTH),
+                    PaneWallPolicy.terminalRimAlpha(PaneWallPolicy.outlineAlpha(slidePx, WIDTH),
+                        pageAlpha), EPS);
+            }
+        }
+        // Stack moves the page on its other side, toward the next window: the outline fade.
+        float pageAlpha = poseAlpha(com.termux.app.launcher.home.HomePageTransition.STACK,
+            -WIDTH * 0.3f);
+        assertFalse(PaneWallPolicy.fadesWithPage(pageAlpha));
+        // Parked off screen at 0, nothing shows; an unknown alpha is a page at rest.
+        assertEquals(0f, PaneWallPolicy.terminalFrameLineAlpha(1f, 0f), EPS);
+        assertFalse(PaneWallPolicy.fadesWithPage(Float.NaN));
+    }
+
     @Test
     public void wallGoAcceptsTheNamesAndTheRelativeDirections() {
-        List<PaneWallPage> pages = all();
-        assertEquals(PaneWallPage.WIDGETS,
-            PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "widgets"));
-        assertEquals(PaneWallPage.DISPLAY,
-            PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, " Display "));
-        assertEquals(PaneWallPage.TERMINAL,
-            PaneWallPolicy.parsePage(pages, PaneWallPage.WIDGETS, "right"));
-        assertEquals(PaneWallPage.WIDGETS,
-            PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "left"));
-        assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "nowhere"));
-        assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, null));
+        List<PageKind> pages = all();
+        assertEquals(PageKind.HOME,
+            PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, "widgets"));
+        assertEquals(PageKind.TERMINAL,
+            PaneWallPolicy.parsePage(pages, PageKind.HOME, "right"));
+        assertNull("display names a window, which the activity opens; never a page",
+            PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, " Display "));
+        assertEquals(PageKind.HOME,
+            PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, "left"));
+        assertNull(PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, "nowhere"));
+        assertNull(PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, null));
     }
 
     @Test
@@ -250,18 +325,17 @@ public class PaneWallPolicyTest {
 
     @Test
     public void onlyAWallShowingTwoPlacesFadesTheOutlines() {
-        List<PaneWallPage> ring = all();
-        assertTrue(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.TERMINAL, 200f));
-        assertTrue(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.TERMINAL, -200f));
-        // On the ring every page has a neighbour either side; after the commit toward Home the
-        // page the wall left is the neighbour on the other side.
-        assertTrue(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.WIDGETS, -800f));
-        assertFalse(PaneWallPolicy.blendsPlaces(ring, PaneWallPage.TERMINAL, 0f));
+        List<PageKind> ring = all();
+        assertTrue(PaneWallPolicy.blendsPlaces(ring, PageKind.TERMINAL, 200f));
+        assertTrue(PaneWallPolicy.blendsPlaces(ring, PageKind.TERMINAL, -200f));
+        // After the commit toward Home the page the wall left is Home's neighbour on the right.
+        assertTrue(PaneWallPolicy.blendsPlaces(ring, PageKind.HOME, -800f));
+        assertFalse(PaneWallPolicy.blendsPlaces(ring, PageKind.TERMINAL, 0f));
         // A two-page line has an outer edge: pressed into it, the page is alone on screen.
-        List<PaneWallPage> line = PaneWallPolicy.availablePages(false, false, true);
-        assertFalse(PaneWallPolicy.blendsPlaces(line, PaneWallPage.TERMINAL, 200f));
-        assertTrue(PaneWallPolicy.blendsPlaces(line, PaneWallPage.TERMINAL, -200f));
-        assertFalse(PaneWallPolicy.blendsPlaces(line, PaneWallPage.DISPLAY, -200f));
+        List<PageKind> line = PaneWallPolicy.availablePages(false, false, true);
+        assertFalse(PaneWallPolicy.blendsPlaces(line, PageKind.TERMINAL, 200f));
+        assertTrue(PaneWallPolicy.blendsPlaces(line, PageKind.TERMINAL, -200f));
+        assertFalse(PaneWallPolicy.blendsPlaces(line, PageKind.DISPLAY, -200f));
     }
 
     @Test
@@ -281,11 +355,51 @@ public class PaneWallPolicyTest {
     }
 
     @Test
+    public void wallGoNamesHomeAndTheTerminal() {
+        List<PageKind> row = PaneWallPolicy.rowPages(true);
+        assertEquals(PageKind.HOME, PaneWallPolicy.parsePage(row, PageKind.TERMINAL, "home"));
+        assertEquals(PageKind.TERMINAL,
+            PaneWallPolicy.parsePage(row, PageKind.HOME, "workspace"));
+        assertNull("no window, no Terminal to go to", PaneWallPolicy.parsePage(
+            PaneWallPolicy.rowPages(false), PageKind.HOME, "terminal"));
+    }
+
+    @Test
     public void wallGoCannotReachAPageThisInstallDoesNotHave() {
-        List<PaneWallPage> pages = PaneWallPolicy.availablePages(true, true, false);
-        assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "widgets"));
-        assertNull(PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "display"));
-        assertEquals(PaneWallPage.TERMINAL,
-            PaneWallPolicy.parsePage(pages, PaneWallPage.TERMINAL, "terminal"));
+        List<PageKind> pages = PaneWallPolicy.availablePages(true, true, false);
+        assertNull(PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, "widgets"));
+        assertNull(PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, "display"));
+        assertEquals(PageKind.TERMINAL,
+            PaneWallPolicy.parsePage(pages, PageKind.TERMINAL, "terminal"));
+    }
+    @Test
+    public void aHomePageStandsAtTheWallsEdgeAndItsRimIsTheWholeMargin() {
+        // Margin 48 at 1x, and 3px of the terminal border's own air inside the terminal's margin.
+        int margin = 48 + 3;
+        assertEquals("a window keeps its whole margin", margin,
+            PaneWallPolicy.pageInsetPx(PageKind.TERMINAL, margin, 3));
+        assertEquals("the display window, a view the wall does not page, stands at the opening",
+            48, PaneWallPolicy.pageInsetPx(null, margin, 3));
+        assertEquals("a Home page has no frame", 0,
+            PaneWallPolicy.pageInsetPx(PageKind.HOME, margin, 3));
+        assertEquals("a view that is no page keeps the opening", 48,
+            PaneWallPolicy.pageInsetPx(null, margin, 3));
+        assertEquals("air wider than the margin leaves none", 0,
+            PaneWallPolicy.pageInsetPx(null, 2, 3));
+
+        // The air from the screen's edge to Home's first cell: the page's inset plus the grid's
+        // rim, which is Home's Margin. One Margin, as the dock's cards keep.
+        int homeMarginDp = 48;
+        assertEquals(homeMarginDp,
+            PaneWallPolicy.pageInsetPx(PageKind.HOME, homeMarginDp, 0) + homeMarginDp);
+    }
+
+    @Test
+    public void theWallRestsOnHomePageOneOnlyOnHomeStillAtIndexZero() {
+        assertTrue(PaneWallPolicy.restsOnHomePageOne(PageKind.HOME, false, 0));
+        assertFalse("Home 2", PaneWallPolicy.restsOnHomePageOne(PageKind.HOME, false, 1));
+        assertFalse("moving", PaneWallPolicy.restsOnHomePageOne(PageKind.HOME, true, 0));
+        assertFalse("a window", PaneWallPolicy.restsOnHomePageOne(PageKind.ASSISTANT, false, 0));
+        assertFalse("no index", PaneWallPolicy.restsOnHomePageOne(PageKind.HOME, false, -1));
     }
 }

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Settings root's process-limit notice (ProcessLimitNoticePreference): the card, or nothing. -->
+<com.termux.app.processlimit.ProcessLimitNoticeView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/settings_process_limit_notice"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:paddingStart="16dp"
+    android:paddingTop="8dp"
+    android:paddingEnd="16dp"
+    android:paddingBottom="8dp" />

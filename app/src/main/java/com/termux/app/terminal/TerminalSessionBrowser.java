@@ -36,6 +36,7 @@ public final class TerminalSessionBrowser {
         mActivity = activity;
         mView = new SessionsDrawerView(activity);
         mView.setListener(new DrawerListener());
+        mView.setHost(activity.sessionsDrawerHost());
     }
 
     /** True while the drawer is the card on the plane. */
@@ -208,7 +209,7 @@ public final class TerminalSessionBrowser {
             dismiss();
             try {
                 mActivity.loadWorkspace(name, replace, runCommands);
-                AppNotice.show(mActivity,
+                AppNotice.show(mActivity, R.drawable.ic_rl_load,
                     mActivity.getString(R.string.workspace_picker_loaded, name), false);
             } catch (TerminalWorkspace.WorkspaceException e) {
                 AppNotice.show(mActivity, mActivity.getString(R.string.workspace_picker_failed,
@@ -219,7 +220,7 @@ public final class TerminalSessionBrowser {
         @Override public void onDeleteWorkspace(@NonNull String name) {
             try {
                 mActivity.deleteWorkspace(name);
-                AppNotice.show(mActivity,
+                AppNotice.show(mActivity, R.drawable.ic_rl_delete,
                     mActivity.getString(R.string.workspace_deleted, name), false);
             } catch (TerminalWorkspace.WorkspaceException e) {
                 AppNotice.show(mActivity, mActivity.getString(R.string.workspace_picker_failed,

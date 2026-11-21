@@ -38,6 +38,13 @@ public final class X11LinuxAppRunner {
      */
     static final List<String> TOUCH_ENV = java.util.Collections.singletonList("MOZ_USE_XINPUT2=1");
 
+    /**
+     * What tells GTK, Qt and the XIM clients to use fcitx5, for {@link #inputMethodBlock}. The
+     * names are fcitx5's own; Termux packages the GTK modules and the Qt 6 one.
+     */
+    static final List<String> INPUT_METHOD_ENV = java.util.Collections.unmodifiableList(
+        Arrays.asList("GTK_IM_MODULE=fcitx", "QT_IM_MODULE=fcitx", "XMODIFIERS=@im=fcitx"));
+
     /** How long a display gets to come up before the tap is given up on. */
     private static final long START_TIMEOUT_MS = 15_000L;
     /**
@@ -68,6 +75,22 @@ public final class X11LinuxAppRunner {
     static final String SESSION_PID_PATH =
         TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-session.pid";
 
+    /**
+     * Where a desktop's output goes, truncated at every start. A file rather than the launcher's
+     * pipes: a daemon the desktop leaves behind inherits it, and a pipe held that way would keep
+     * the host from ever reporting that the desktop ended. Also the log to read when one misbehaves.
+     */
+    @VisibleForTesting
+    static final String SESSION_LOG_PATH =
+        TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-session.log";
+
+    /**
+     * Exported by the session's shell as its own pid, and so found in {@code /proc/<pid>/environ}
+     * of the desktop it becomes: what tells our session from a stranger that reused the pid.
+     */
+    @VisibleForTesting
+    static final String SESSION_MARKER_VAR = "TERMUX_X11_SESSION_PID";
+
     /** The directory a session is given as {@code XDG_RUNTIME_DIR}, under its own world's tmp. */
     private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
 
@@ -87,8 +110,6 @@ public final class X11LinuxAppRunner {
 
     /** What the runner needs from the activity. */
     public interface Host {
-        boolean isDisplayEnabled();
-        void turnOnDisplay();
         boolean isDisplayRunning();
         void startDisplay();
         /**
@@ -99,8 +120,19 @@ public final class X11LinuxAppRunner {
          * from a bare field afterwards.
          */
         boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit);
-        void showDisplayPlace();
+        /**
+         * Open the display window, or bring it up if it is open: on the row, and the wall on it.
+         * The display may not be running yet; {@link #startDisplay} starts it.
+         */
+        void showDisplayWindow();
+        /**
+         * Bring the display window of {@code app} to the front if it has one open. Answers whether
+         * there was one; the tap then needs nothing started.
+         */
+        boolean raiseWindowFor(@NonNull LinuxAppCatalog.LinuxApp app);
         void showNotice(@NonNull String message);
+        /** The launch gave up before a display came up: drop what it set up (a Display page). */
+        default void launchGaveUp() {}
         /**
          * Ask the user {@code message} — one plain sentence, already built — before a second
          * desktop takes the display from the one running. {@code onYes} runs on the main thread,
@@ -163,16 +195,48 @@ public final class X11LinuxAppRunner {
     @NonNull private final List<QueuedScript> queued = new java.util.ArrayList<>();
     @NonNull private final Handler handler = new Handler(Looper.getMainLooper());
     @NonNull private final X11ElectronSandboxStore sandboxStore;
+    @NonNull private final X11AppSettingsStore appSettings;
+    @NonNull private final X11GpuProfileStore profileStore;
     @Nullable private LinuxAppCatalog.LinuxApp pending;
     /** The desktop holding the display, from the moment its script starts until it exits. */
     @Nullable private LinuxAppCatalog.LinuxApp runningSession;
+    /** Mirrors {@link #runningSession} != null for readers off the main thread (the front-window touch lookup). */
+    private static volatile boolean sDesktopRunning;
+
+    /** Whether a desktop session is running on the display: per-app settings stay out of it. */
+    public static boolean isDesktopRunning() {
+        return sDesktopRunning;
+    }
+
+    /**
+     * Sets the running desktop, and when that changes whether one runs, tells the display to
+     * re-read its preferences: the per-app touch mode applies again the moment the desktop ends.
+     */
+    private void setRunningSession(@Nullable LinuxAppCatalog.LinuxApp app) {
+        runningSession = app;
+        boolean running = app != null;
+        if (running == sDesktopRunning) return;
+        sDesktopRunning = running;
+        try {
+            android.content.Intent intent = new android.content.Intent(
+                com.termux.x11.LoriePreferences.ACTION_PREFERENCES_CHANGED);
+            intent.putExtra("key", "x11_desktop_session");
+            intent.setPackage(context.getPackageName());
+            context.sendBroadcast(intent);
+        } catch (RuntimeException ignored) {
+            // No broadcast, no refresh until the next window change; never a failed launch.
+        }
+    }
     /** The desktop waiting for {@link #runningSession} to be stopped so it can have the display. */
     @Nullable private LinuxAppCatalog.LinuxApp takeOver;
+    /** Whether this server start has already been looked at for a missing window manager. */
+    private boolean bareStartChecked;
     private final Runnable giveUp = this::giveUp;
 
     private void giveUp() {
         if (pending == null) return;
         pending = null;
+        if (host != null) host.launchGaveUp();
         notice(context.getString(com.termux.R.string.termux_x11_app_display_failed));
     }
 
@@ -184,6 +248,8 @@ public final class X11LinuxAppRunner {
         this.context = context.getApplicationContext();
         this.host = host;
         this.sandboxStore = new X11ElectronSandboxStore(this.context);
+        this.appSettings = new X11AppSettingsStore(this.context);
+        this.profileStore = new X11GpuProfileStore(this.context);
     }
 
     /**
@@ -256,7 +322,7 @@ public final class X11LinuxAppRunner {
 
     /**
      * The drawer tapped {@code app}, or launcherctl asked for it. Always continues on the main
-     * thread: the host shows the Display place and reads the controller, both of which are the
+     * thread: the host shows the display window and reads the controller, both of which are the
      * activity's, and the API server calls in from a worker.
      */
     public void run(@NonNull LinuxAppCatalog.LinuxApp app) {
@@ -277,7 +343,7 @@ public final class X11LinuxAppRunner {
         if (app.session && runningSession != null) {
             if (runningSession.id.equals(app.id)) {
                 // Already the desktop on the display: the tap only has to show it.
-                current.showDisplayPlace();
+                current.showDisplayWindow();
                 return;
             }
             String message = context.getString(com.termux.R.string.termux_x11_session_replace,
@@ -285,9 +351,13 @@ public final class X11LinuxAppRunner {
             current.askBeforeReplacingSession(message, () -> replaceSession(app));
             return;
         }
-        if (!current.isDisplayEnabled()) current.turnOnDisplay();
-        current.showDisplayPlace();
+        // Nothing to switch on: the display window opens, and the display starts below if it is
+        // not running (ADR 0008).
+        current.showDisplayWindow();
         if (current.isDisplayRunning()) {
+            // A second tap on an app that already has a window brings it forward; another copy
+            // would only be one more window to lose.
+            if (!app.session && current.raiseWindowFor(app)) return;
             launch(app, false);
             return;
         }
@@ -300,13 +370,137 @@ public final class X11LinuxAppRunner {
 
     /** The controller's running state changed. */
     public void onDisplayRunningChanged(boolean running) {
-        if (!running || pending == null) return;
+        if (!running) {
+            bareStartChecked = false;
+            endDesktopWithDisplay();
+            return;
+        }
+        if (pending == null) {
+            manageBareDisplay();
+            startWithOnce(false);
+            return;
+        }
         LinuxAppCatalog.LinuxApp app = pending;
         pending = null;
         handler.removeCallbacks(giveUp);
         // The display is up because this runner just asked for it: the manager it starts may not
         // be there yet, and a desktop must wait for it rather than race it.
         launch(app, true);
+        startWithOnce(app.session);
+    }
+
+    /**
+     * A desktop dies with the display it ran on, and its script's exit may never be reported (a
+     * daemon it left behind can hold the script's output open). The bookkeeping ends here: the
+     * desktop is no longer the running one, and the pid file it left names nothing. The user
+     * stopped the display, so this is not a kill to tell them about. The script's own exit, if it
+     * comes later, is stale and {@link #onSessionExited} ignores it.
+     */
+    private void endDesktopWithDisplay() {
+        if (runningSession == null) return;
+        Logger.logInfo(LOG_TAG, "Display stopped; " + runningSession.id + " ended with it");
+        setRunningSession(null);
+        takeOver = null;
+        EXECUTOR.execute(() -> new java.io.File(SESSION_PID_PATH).delete());
+    }
+
+    /**
+     * The server last handled by {@link #startWithOnce}, for when the marker file cannot be read
+     * back. Main thread and the worker, so volatile.
+     */
+    @Nullable private volatile String startWithServer;
+
+    /**
+     * #166: the display's Start with choice, run once per server start whatever brought the
+     * display up ({@link DisplayStartWith}). The choice, the server and the marker are all file
+     * work, so they are read on the worker; the launch goes through the same paths a drawer tap
+     * takes. {@code desktopArriving}: the tap that started the display was itself a desktop.
+     */
+    private void startWithOnce(boolean desktopArriving) {
+        boolean desktopOnDisplay = desktopArriving || runningSession != null || takeOver != null;
+        EXECUTOR.execute(() -> {
+            TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(context);
+            if (preferences == null) return;
+            DisplayStartWith.Choice choice = DisplayStartWith.parse(preferences.getX11StartWith(),
+                preferences.getX11StartWithCommand());
+            if (choice.kind == DisplayStartWith.Kind.NOTHING) return;
+            String server = X11ServerProcesses.runningServerIdentity(context.getPackageName());
+            String marked = DisplayStartWith.readMarker();
+            if (marked == null) marked = startWithServer;
+            DisplayStartWith.Decision decision =
+                DisplayStartWith.decide(choice, server, marked, desktopOnDisplay);
+            if (decision.mark && server != null) {
+                startWithServer = server;
+                DisplayStartWith.writeMarker(server);
+            }
+            if (decision.action == DisplayStartWith.Action.START_DESKTOP) {
+                ProotDistro.Container container =
+                    ProotDistro.byName(ProotDistro.installed(), choice.distro);
+                if (container == null || !DisplayStartWith.hasXfce(container)) {
+                    String label = DisplayStartWith.distroLabel(choice.distro);
+                    handler.post(() -> notice(context.getString(
+                        com.termux.R.string.termux_x11_start_with_desktop_missing, label)));
+                    return;
+                }
+                LinuxAppCatalog.LinuxApp desktop = DisplayStartWith.desktopApp(container);
+                handler.post(() -> {
+                    // A drawer tap may have put a desktop on the display in the meantime.
+                    if (runningSession != null || takeOver != null) return;
+                    Logger.logInfo(LOG_TAG, "Starting " + desktop.id + " with the display");
+                    launch(desktop, true);
+                });
+            } else if (decision.action == DisplayStartWith.Action.START_COMMAND) {
+                LinuxAppCatalog.LinuxApp command = DisplayStartWith.commandApp(choice.command);
+                GpuChoice gpu = installedEnv(X11GpuProbe.probe(context), profileStore.pick(), false);
+                String script = gpuServerBlock(gpu.server)
+                    + script(command, X11DisplayHostController.displayName(), gpu.env);
+                handler.post(() -> runStartCommand(script));
+            }
+        });
+    }
+
+    /**
+     * Runs the Start with command once. A command that fails within {@link #QUICK_FAIL_MS} is
+     * reported; nothing is retried, since the user's command is not D7's Electron crash.
+     */
+    private void runStartCommand(@NonNull String script) {
+        com.termux.app.sound.LauncherSound.get(context).onNeed();
+        long started = android.os.SystemClock.elapsedRealtime();
+        Logger.logInfo(LOG_TAG, "Running the display's start command");
+        boolean ran = runScript(script, exitCode -> {
+            Logger.logInfo(LOG_TAG, "The display's start command exited with " + exitCode);
+            boolean quick = android.os.SystemClock.elapsedRealtime() - started < QUICK_FAIL_MS;
+            if (exitCode != 0 && quick) {
+                notice(context.getString(com.termux.R.string.termux_x11_start_with_failed));
+            }
+        });
+        if (!ran) notice(context.getString(com.termux.R.string.termux_x11_start_with_failed));
+    }
+
+    /**
+     * A display the user started from a shell, upstream's way, has no window manager: nothing
+     * passed it {@code -xstartup}. Give it the configured one, once per server start. The wait
+     * lets a desktop started some other way take the screen first; a manager that finds the
+     * screen taken exits, and {@link #windowManagerScript} leaves the pid file alone then.
+     */
+    private void manageBareDisplay() {
+        if (bareStartChecked || runningSession != null) return;
+        bareStartChecked = true;
+        EXECUTOR.execute(() -> {
+            if (!X11ServerProcesses.anyWithoutSession(context.getPackageName())) return;
+            String startWm = X11WindowManager.startCommand(configuredWindowManager());
+            if (startWm == null) return;
+            String pidFile = ProotDistro.singleQuote(X11WindowManager.WM_PID_PATH);
+            // A manager of ours that is already running means there is nothing to do.
+            String script = "wm=$(cat " + pidFile + " 2>/dev/null)\n"
+                + "[ -n \"$wm\" ] && kill -0 \"$wm\" 2>/dev/null && exit 0\n"
+                + "sleep 5\n"
+                + windowManagerScript(startWm, X11DisplayHostController.displayName());
+            handler.post(() -> {
+                Logger.logInfo(LOG_TAG, "Starting the window manager on a display started from a shell");
+                runScript(script, ignored -> { });
+            });
+        });
     }
 
     /**
@@ -319,7 +513,7 @@ public final class X11LinuxAppRunner {
         queued.clear();
         // A desktop on the display outlives this runner — the display does too — but nothing here
         // will hear of its exit any more, so the bookkeeping goes rather than growing stale.
-        runningSession = null;
+        setRunningSession(null);
         takeOver = null;
         // Cancels giveUp and any quick-fail watch left over from a launch this runner will never
         // hear the result of.
@@ -350,7 +544,7 @@ public final class X11LinuxAppRunner {
         boolean started = runScript(stopSessionScript(), exitCode -> {
             LinuxAppCatalog.LinuxApp next = takeOver;
             takeOver = null;
-            runningSession = null;
+            setRunningSession(null);
             if (next != null) run(next);
         });
         if (started) return;
@@ -366,8 +560,11 @@ public final class X11LinuxAppRunner {
     private void onSessionExited(@NonNull LinuxAppCatalog.LinuxApp app, int exitCode,
                                  @Nullable String windowManagerRestart) {
         if (runningSession != app) return;
-        runningSession = null;
+        setRunningSession(null);
         Logger.logInfo(LOG_TAG, "Desktop " + app.id + " ended with " + exitCode);
+        // Killed by Android's process limit, most likely, unless a take-over's stop sent it.
+        com.termux.app.processlimit.ProcessLimitNotice.get(context).onChildKilled(
+            com.termux.app.processlimit.ProcessLimitPolicy.isKillExit(exitCode), takeOver != null);
         // D1: the manager that stood down comes back — unless another desktop is on its way in,
         // which would only have to stand it down again.
         if (windowManagerRestart == null || takeOver != null) return;
@@ -380,13 +577,26 @@ public final class X11LinuxAppRunner {
      * first attempt already needs the flag.
      */
     private void launch(@NonNull LinuxAppCatalog.LinuxApp app, boolean displayJustStarted) {
+        // A Linux app is a first need for sound: the launcher's server starts if it has not, and
+        // the app's task is handed its address like every shell (LauncherSound).
+        com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
+        sound.onNeed();
         // The probe may build a GL context the first time; off the main thread, then back.
         EXECUTOR.execute(() -> {
+            // A distro reaches the server over loopback with the cookie, through a drop-in of its
+            // own, written before the login that reads it.
+            sound.prepareContainer(app.container);
             // A desktop is never the Electron crash D7 remembers, and --no-sandbox is a flag no
             // desktop has ever heard of, so the whole retry stays out of a session's way.
             boolean noSandbox = !app.session && shouldStartWithNoSandbox(app);
             String display = X11DisplayHostController.displayName();
-            List<String> env = installedEnv(X11GpuProbe.probe(context));
+            // The app's own graphics and scale (a desktop has neither: it follows the display).
+            GpuChoice gpu = installedEnv(X11GpuProbe.probe(context),
+                X11AppLaunchEnv.gpuPick(app.session, profileStore.pick(),
+                    appSettings.gpuProfile(app.id)),
+                X11AppLaunchEnv.drawsInSoftware(app.session, profileStore.drawsInSoftware(app.id)));
+            List<String> env = new java.util.ArrayList<>(gpu.env);
+            env.addAll(X11AppLaunchEnv.scaleLines(app.session, appSettings.scale(app.id)));
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
@@ -401,13 +611,20 @@ public final class X11LinuxAppRunner {
                 && X11WindowManager.command(configured) != null
                 ? X11WindowManager.awaitCommand(X11WindowManager.AWAIT_MANAGER_FOR_APP_TRIES)
                 : null;
-            String script = app.session ? sessionScript(app, display, env, stopWm)
-                : script(app, display, env, noSandbox, awaitWm);
+            // A virgl profile's server first: without it, GALLIUM_DRIVER=virpipe has nothing to
+            // talk to. A retry finds it already running.
+            String script = gpuServerBlock(gpu.server) + (app.session
+                ? sessionScript(app, display, env, stopWm)
+                : script(app, display, env, noSandbox, awaitWm));
             String restart = startWm == null ? null : windowManagerScript(startWm, display);
             handler.post(() -> {
                 Logger.logInfo(LOG_TAG, "Running " + app.id + " on the display"
                     + (app.session ? " as a desktop" : "")
-                    + (noSandbox ? " with --no-sandbox" : ""));
+                    + (noSandbox ? " with --no-sandbox" : "")
+                    + " with graphics " + (gpu.profile == null ? "default" : gpu.profile.id));
+                if (gpu.fellBack) {
+                    notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
+                }
                 runAndWatch(app, script, noSandbox, display, env, restart);
             });
         });
@@ -519,7 +736,7 @@ public final class X11LinuxAppRunner {
                 resolve(isQuickFailure(exitCode));
             });
             if (started) {
-                if (app.session) runningSession = app;
+                if (app.session) setRunningSession(app);
                 handler.postDelayed(timeout, QUICK_FAIL_MS);
                 return;
             }
@@ -596,33 +813,124 @@ public final class X11LinuxAppRunner {
             : com.termux.R.string.termux_x11_app_launch_failed);
     }
 
-    /** The best profile whose packages are actually installed; nothing when none is. */
-    @NonNull
-    static List<String> installedEnv(@NonNull X11GpuProbe.Result gpu) {
-        // Software ranked first is the answer (a GPU the virgl profiles have frozen, #162): the
-        // app draws in software whatever else is installed.
-        // An emulator ranks software alone: nothing extra there, as before.
-        if (gpu.ranked.size() > 1 && gpu.ranked.get(0).profile == X11GpuProbe.Profile.SOFTWARE) {
-            return gpu.ranked.get(0).env;
+    /** What one launch is given for graphics, and how it came to be. */
+    public static final class GpuChoice {
+        /** {@code KEY=VALUE} lines to export; empty leaves Mesa to its own default. */
+        @NonNull public final List<String> env;
+        /** The profile those lines select; null when nothing fits at all. */
+        @Nullable public final X11GpuProbe.Profile profile;
+        /** The user picked a profile that is not installed here, so software stood in for it. */
+        public final boolean fellBack;
+        /**
+         * The helper the profile needs running before the app opens GL, without the trailing
+         * {@code &} ({@code virgl_test_server_android --angle-gl}); null when it needs none.
+         */
+        @Nullable public final String server;
+
+        GpuChoice(@NonNull List<String> env, @Nullable X11GpuProbe.Profile profile, boolean fellBack) {
+            this(env, profile, fellBack, null);
         }
-        for (X11GpuProbe.Recommendation r : gpu.ranked) {
-            if (r.installed && r.profile != X11GpuProbe.Profile.SOFTWARE) return r.env;
+
+        GpuChoice(@NonNull X11GpuProbe.Recommendation r) {
+            this(r.env, r.profile, false, r.serverCommand == null ? null
+                : r.serverCommand.replaceAll("\\s*&\\s*$", ""));
         }
-        return java.util.Collections.emptyList();
+
+        private GpuChoice(@NonNull List<String> env, @Nullable X11GpuProbe.Profile profile,
+                          boolean fellBack, @Nullable String server) {
+            this.env = env;
+            this.profile = profile;
+            this.fellBack = fellBack;
+            this.server = server;
+        }
     }
 
     /**
-     * The shell line that runs the app: the display, the GPU environment, the home directory,
-     * then the app's command — its own, or a {@code proot-distro login} around it when the app is
-     * installed in a container. The touch environment goes in first so a GPU profile still has the
-     * last word over anything it sets. Pure, so the composition is tested.
+     * The lines that start a profile's helper ({@link GpuChoice#server}) before the app, once:
+     * nothing when one with the same program name already runs, so a second app or a second tap
+     * does not start a second server. Detached from the script, so it outlives the app it came
+     * up for and the next app finds it; its output goes nowhere. Empty for no helper. Pure.
      */
     @NonNull
+    static String gpuServerBlock(@Nullable String server) {
+        if (server == null || server.trim().isEmpty()) return "";
+        String program = server.trim().split("\\s+")[0];
+        return "if ! pgrep -f " + ProotDistro.singleQuote(serverPattern(program))
+            + " >/dev/null 2>&1; then\n"
+            + "(" + server.trim() + " >/dev/null 2>&1 &)\n"
+            + "sleep 1\n"
+            + "fi\n";
+    }
+
+    /**
+     * The {@code pgrep -f} pattern that finds {@code program} running: its name, bare or after a
+     * directory, at the start of a command line. Anchored because the block runs inside
+     * {@code bash -c <script>}, whose command line holds the name too; a plain name matched that
+     * shell, so the server was never started and every GL app aborted in Mesa. Pure.
+     */
+    @NonNull
+    static String serverPattern(@NonNull String program) {
+        return "^([^ ]*/)?" + program.replace(".", "[.]") + "( |$)";
+    }
+
+    /** {@link #installedEnv(X11GpuProbe.Result, String, boolean)} on {@link X11GpuProfileStore#AUTO}. */
+    @NonNull
+    static List<String> installedEnv(@NonNull X11GpuProbe.Result gpu) {
+        return installedEnv(gpu, X11GpuProfileStore.AUTO, false).env;
+    }
+
+    /**
+     * The graphics a launch gets (#162), in this order:
+     * <ul>
+     *   <li>{@code appInSoftware} (the app's own "draw in software" switch): software, whatever the
+     *       pick. Its exports replace a virgl driver from anywhere, which is what the reporter's
+     *       {@code env -u GALLIUM_DRIVER} wrapper did by hand.</li>
+     *   <li>a picked profile: its exports when it is installed; software otherwise, and
+     *       {@link GpuChoice#fellBack} says so, so the user is told.</li>
+     *   <li>{@link X11GpuProfileStore#AUTO}: the probe's ranking, the best installed profile. Software
+     *       reached in the ranking exports nothing, so a phone with no driver installed (or an
+     *       emulator) runs exactly as Mesa would by itself; on a known-freeze GPU software is
+     *       ranked first and exported, so an installed virgl driver is not used there.</li>
+     * </ul>
+     * Pure, so the composition is tested.
+     */
+    @NonNull
+    public static GpuChoice installedEnv(@NonNull X11GpuProbe.Result gpu, @NonNull String pick,
+                                         boolean appInSoftware) {
+        X11GpuProbe.Recommendation software = gpu.software();
+        if (appInSoftware) return new GpuChoice(software.env, X11GpuProbe.Profile.SOFTWARE, false);
+        X11GpuProbe.Profile picked = X11GpuProbe.Profile.of(pick);
+        if (picked != null) {
+            X11GpuProbe.Recommendation r = gpu.find(picked);
+            if (r != null && (r.installed || picked == X11GpuProbe.Profile.SOFTWARE)) {
+                return new GpuChoice(r);
+            }
+            return new GpuChoice(software.env, X11GpuProbe.Profile.SOFTWARE, true);
+        }
+        for (X11GpuProbe.Recommendation r : gpu.ranked) {
+            if (!r.installed && r.profile != X11GpuProbe.Profile.SOFTWARE) continue;
+            if (r.profile != X11GpuProbe.Profile.SOFTWARE || gpu.knownFreeze) {
+                return new GpuChoice(r);
+            }
+            return new GpuChoice(java.util.Collections.emptyList(), r.profile, false);
+        }
+        return new GpuChoice(java.util.Collections.emptyList(), null, false);
+    }
+
     /** Whether {@code env} routes OpenGL through the virgl server ({@code GALLIUM_DRIVER=virpipe}). */
     static boolean usesVirgl(@NonNull List<String> env) {
         return env.contains("GALLIUM_DRIVER=virpipe");
     }
 
+    /**
+     * The shell line that runs the app: the display, the GPU environment, fcitx5's when it is
+     * there ({@link #inputMethodBlock}), the cursor theme lines of a prefix app
+     * ({@link #cursorBlock}), the home directory,
+     * then the app's command — its own, or a {@code proot-distro login} around it when the app is
+     * installed in a container. The touch environment goes in first so a GPU profile still has the
+     * last word over anything it sets. Pure, so the composition is tested.
+     */
+    @NonNull
     static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                          @NonNull List<String> env) {
         return script(app, display, env, false);
@@ -650,6 +958,9 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
+        // apps keep the cursor guess until that follow-up is verified on a phone.
+        if (app.container.isPrefix()) script.append(cursorBlock()).append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (awaitWindowManager != null) script.append(awaitWindowManager);
         // An Electron app under a virgl profile also draws in software (#162): its own GPU path
@@ -659,6 +970,61 @@ public final class X11LinuxAppRunner {
         script.append("exec ").append(noSandbox ? app.commandWith(extraArgs) : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * The lines that give a prefix app a cursor theme: where an Xcursor lookup searches, and a
+     * theme when the user has none. Toolkits that do their own lookup (Rust and gpui apps) search
+     * {@code /usr/share/icons}, which the prefix does not have. Used in {@link #script} for
+     * prefix apps only: a desktop chooses its own theme and a container's {@code /usr/share/icons}
+     * is already the default path. The prefix path has no quotes or spaces, so it sits as plain
+     * text inside the double-quoted word. {@code core} leaves the cursor to the X server's own
+     * font, the same as finding no theme. Shell builtins and {@code [} only, no variable left
+     * set beyond the two exports. Pure, so the text is tested.
+     */
+    @NonNull
+    static String cursorBlock() {
+        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        String icons = prefix + "/share/icons";
+        return "export XCURSOR_PATH=\"${XCURSOR_PATH:-$HOME/.local/share/icons:$HOME/.icons:"
+            + icons + ":" + prefix + "/share/pixmaps}\"\n"
+            + "if [ -z \"${XCURSOR_THEME:-}\" ] && [ ! -d \"$HOME/.local/share/icons/default\" ]"
+            + " && [ ! -d \"$HOME/.icons/default\" ]"
+            + " && [ ! -d " + ProotDistro.singleQuote(icons + "/default") + " ]; then\n"
+            + "if [ -d " + ProotDistro.singleQuote(icons + "/Adwaita/cursors") + " ]; then\n"
+            + "export XCURSOR_THEME=Adwaita\n"
+            + "else\n"
+            + "export XCURSOR_THEME=core\n"
+            + "fi\n"
+            + "fi\n";
+    }
+
+    /**
+     * The lines that hand an app fcitx5 (#129): the toolkits' input-method modules, and the
+     * display's session bus, which is where the helper started fcitx5 — a GTK or Qt module talks
+     * to fcitx5 over D-Bus alone, so an app on any other bus never reaches it, and its text
+     * fields never report focus.
+     *
+     * <p>Only when fcitx5 is installed and the helper's bus for this display is actually up: its
+     * socket is there and the helper that made it is still alive, by the pid it keeps beside it.
+     * A helper killed outright leaves the socket behind, and an app given a bus nobody answers on
+     * is worse off than one given none. The test is shell builtins only, no process started.
+     * Without fcitx5 the app is run exactly as it always was. Pure, so the composition is tested.
+     */
+    @NonNull
+    static String inputMethodBlock(@NonNull String display) {
+        String bus = X11CliInstaller.imBusPath(display);
+        String pid = X11CliInstaller.imHelperPidPath(display);
+        StringBuilder block = new StringBuilder();
+        block.append("if [ -x ").append(ProotDistro.singleQuote(X11CliInstaller.FCITX5_PATH))
+            .append(" ] && [ -S ").append(ProotDistro.singleQuote(bus)).append(" ]")
+            .append(" && { read -r termux_x11_im_pid < ").append(ProotDistro.singleQuote(pid))
+            .append("; } 2>/dev/null && kill -0 \"$termux_x11_im_pid\" 2>/dev/null; then\n");
+        for (String line : INPUT_METHOD_ENV) block.append("export ").append(line).append('\n');
+        block.append("export DBUS_SESSION_BUS_ADDRESS=")
+            .append(ProotDistro.singleQuote("unix:path=" + bus)).append('\n');
+        block.append("fi\n");
+        return block.toString();
     }
 
     /**
@@ -687,11 +1053,20 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
+        // focused text field opens the Android keyboard. A container has neither it nor its modules.
+        if (app.container.isPrefix()) {
+            script.append(inputMethodBlock(display));
+            script.append(menuDirsBlock());
+        }
         script.append("cd \"$HOME\"\n");
         if (stopWindowManager != null) script.append(stopWindowManager).append('\n');
         script.append("mkdir -p ")
             .append(ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH))
             .append('\n');
+        // From here the desktop talks to a file, not to the host's pipes (see SESSION_LOG_PATH).
+        script.append("exec > ").append(ProotDistro.singleQuote(SESSION_LOG_PATH)).append(" 2>&1\n");
+        script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
         String body = sessionBody(app);
         if (app.container.isPrefix()) script.append(body);
@@ -700,11 +1075,24 @@ public final class X11LinuxAppRunner {
     }
 
     /**
+     * Puts {@code $PREFIX/local/share} ahead of the data dirs a prefix desktop reads, so its menu
+     * lists the apps the store installs there (their entries are in {@code local/share/applications},
+     * which the launcher's drawer reads too). A value the session already had is kept after it.
+     */
+    @NonNull
+    static String menuDirsBlock() {
+        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        return "export XDG_DATA_DIRS=" + ProotDistro.singleQuote(prefix + "/local/share")
+            + ":\"${XDG_DATA_DIRS:-" + prefix + "/share}\"\n";
+    }
+
+    /**
      * What a desktop is started with, in its own world — the prefix's or a container's. Three
      * things, none of which anything else in Termux sets:
      * <ul>
-     *   <li>{@code XDG_RUNTIME_DIR}, made before it is used. Nothing in a Termux prefix or in a
-     *       container sets one, and a desktop's own pieces expect it to be there.</li>
+     *   <li>{@code XDG_RUNTIME_DIR} for a container's desktop, made before it is used: nothing in
+     *       a container sets one, and a desktop's own pieces expect it. A prefix desktop is left
+     *       with its shells' value, so their sockets (herdr-core's) are found from both.</li>
      *   <li>{@code XDG_SESSION_TYPE}, and {@code XDG_CURRENT_DESKTOP} from the session file's own
      *       {@code DesktopNames} when it named any — which is what the key is for.</li>
      *   <li>a session bus, but only for a desktop that starts none itself
@@ -716,9 +1104,14 @@ public final class X11LinuxAppRunner {
     @NonNull
     static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app) {
         StringBuilder body = new StringBuilder();
-        body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
-            .append("\"\n");
-        body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
+        // A prefix desktop keeps the runtime directory its shells have (none, in Termux): tools
+        // that keep a socket there, such as herdr-core, then find the same one inside the
+        // desktop as outside it. A container has no shells of ours to agree with.
+        if (!app.container.isPrefix()) {
+            body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
+                .append("\"\n");
+            body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
+        }
         body.append("export XDG_SESSION_TYPE=x11\n");
         if (!app.desktopNames.isEmpty()) {
             body.append("export XDG_CURRENT_DESKTOP=")
@@ -758,6 +1151,10 @@ public final class X11LinuxAppRunner {
         return "pid=$(cat " + pidFile + " 2>/dev/null)\n"
             + "rm -f " + pidFile + "\n"
             + "[ -n \"$pid\" ] || exit 0\n"
+            // A pid file outlives its desktop; the pid may now be anyone's. Only a process that
+            // carries this session's marker (its own pid, exported before it exec'd) is ours.
+            + "tr '\\0' '\\n' < \"/proc/$pid/environ\" 2>/dev/null"
+            + " | grep -qx \"" + SESSION_MARKER_VAR + "=$pid\" || exit 0\n"
             + "kill \"$pid\" 2>/dev/null\n"
             + "n=0\n"
             + "while [ \"$n\" -lt 40 ] && kill -0 \"$pid\" 2>/dev/null; do\n"

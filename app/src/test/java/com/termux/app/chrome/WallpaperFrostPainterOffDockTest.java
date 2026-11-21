@@ -61,6 +61,18 @@ public class WallpaperFrostPainterOffDockTest {
         return frost;
     }
 
+    /** A bar's glass view filling a laid-out host, as the layout nests it. */
+    private BarGlassView bar(int width, int height) {
+        FrameLayout host = new FrameLayout(context);
+        BarGlassView glass = new BarGlassView(context);
+        host.addView(glass, new FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT));
+        host.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY));
+        host.layout(0, 0, width, height);
+        return glass;
+    }
+
     @Test
     public void theWindowBarIsToldWhetherItsFrostReallyDrawsTheEdge() {
         // Nothing to frost: the bar keeps its stroke.
@@ -70,21 +82,33 @@ public class WallpaperFrostPainterOffDockTest {
         // A look is set, and the frost is up, but this runner draws it plain (no program below
         // Android 13): the rule says refract, the frost does not, and the bar keeps its stroke.
         surfaces.look = new GlassRefraction.Look(9, 20, 10);
-        ImageView statusFrost = sheet(300, 24);
-        ImageView paneFrost = sheet(300, 40);
-        surfaces.views.put(R.id.terminal_status_bar_wallpaper_backdrop, statusFrost);
-        surfaces.views.put(R.id.terminal_window_bar_wallpaper_backdrop, paneFrost);
+        BarGlassView statusFrost = bar(300, 24);
+        BarGlassView paneFrost = bar(300, 40);
+        surfaces.views.put(R.id.terminal_status_bar_glass_surface, statusFrost);
+        surfaces.views.put(R.id.terminal_window_bar_background, paneFrost);
         surfaces.views.put(R.id.terminal_window_bar_host, (View) paneFrost.getParent());
         surfaces.windowBarEdge = null;
         chrome.frost().updateTopPane();
-        assertEquals("the frost is up", View.VISIBLE, paneFrost.getVisibility());
-        assertFalse(SharedFrameDrawable.of(paneFrost.getDrawable()).refracts());
+        assertTrue("the frost is up", paneFrost.frostShown());
+        assertFalse(SharedFrameDrawable.of(paneFrost.getFrost()).refracts());
         assertEquals(Boolean.FALSE, surfaces.windowBarEdge);
 
         // Clearing the top pane tells it too.
         surfaces.windowBarEdge = null;
         chrome.frost().clearTopPane();
         assertEquals(Boolean.FALSE, surfaces.windowBarEdge);
+    }
+
+    /** A bar pair with its frost up, as the layout nests it. */
+    private BarGlassView[] barsWithFrost() {
+        BarGlassView statusFrost = bar(300, 24);
+        BarGlassView paneFrost = bar(300, 40);
+        surfaces.views.put(R.id.terminal_status_bar_glass_surface, statusFrost);
+        surfaces.views.put(R.id.terminal_window_bar_background, paneFrost);
+        surfaces.views.put(R.id.terminal_window_bar_host, (View) paneFrost.getParent());
+        chrome.frost().updateTopPane();
+        assertTrue(paneFrost.frostShown());
+        return new BarGlassView[] {statusFrost, paneFrost};
     }
 
     @Test

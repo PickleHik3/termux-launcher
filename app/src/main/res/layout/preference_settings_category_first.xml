@@ -1,12 +1,19 @@
 <?xml version="1.0" encoding="utf-8"?>
-<TextView xmlns:android="http://schemas.android.com/apk/res/android"
-    android:id="@android:id/title"
+<!-- The first section header on a page: less space above. The frame takes no height when the
+     category has no title (see preference_settings_category). -->
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="wrap_content"
-    android:accessibilityHeading="true"
-    android:paddingStart="@dimen/settings_gutter"
-    android:paddingTop="@dimen/settings_category_first_top"
-    android:paddingEnd="@dimen/settings_gutter"
-    android:paddingBottom="@dimen/settings_category_bottom"
-    android:textAppearance="?attr/textAppearanceTitleSmall"
-    android:textColor="?attr/colorPrimary" />
+    android:layout_height="wrap_content">
+
+    <TextView
+        android:id="@android:id/title"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:accessibilityHeading="true"
+        android:paddingStart="@dimen/settings_gutter"
+        android:paddingTop="@dimen/settings_category_first_top"
+        android:paddingEnd="@dimen/settings_gutter"
+        android:paddingBottom="@dimen/settings_category_bottom"
+        android:textAppearance="?attr/textAppearanceTitleSmall"
+        android:textColor="?attr/colorPrimary" />
+</FrameLayout>

@@ -24,15 +24,15 @@ public class StatusBarWidgetViewTest {
         StatusBarWidgetView widget = new StatusBarWidgetView(
             ApplicationProvider.getApplicationContext(), null);
         widget.setValue("88%");
-        widget.setIconGlyph("\uf4bc");   // nf-oct-cpu, the CPU widget's icon
+        widget.dressAsCpu();
         widget.measure(exact(100), exact(24));
         widget.layout(0, 0, 100, 24);
 
         assertEquals(widget.getPaddingTop(), widget.getPaddingBottom());
         for (int i = 0; i < widget.getChildCount(); i++) {
             View child = widget.getChildAt(i);
-            // The icon comes in two mutually exclusive forms — a vector and a Nerd Font glyph —
-            // so whichever one is unused sits GONE at the origin with nothing to centre.
+            // The icon and the weather animation are mutually exclusive, so whichever one is
+            // unused sits GONE at the origin with nothing to centre.
             if (child.getVisibility() == View.GONE) continue;
             assertEquals(widget.getHeight() / 2f,
                 (child.getTop() + child.getBottom()) / 2f, .51f);
@@ -40,12 +40,37 @@ public class StatusBarWidgetViewTest {
         }
     }
 
-    /** The mouse mark is a glyph alone; it must not carry the stats' shared floor width. */
+    /** CPU, RAM, the bell and the mouse mark are drawn icons: an image child with a drawable, no text glyph. */
+    @Test
+    public void cpuRamBellAndMouse_areDrawnIcons() {
+        android.content.Context context = ApplicationProvider.getApplicationContext();
+        StatusBarWidgetView cpu = new StatusBarWidgetView(context, null);
+        cpu.dressAsCpu();
+        StatusBarWidgetView ram = new StatusBarWidgetView(context, null);
+        ram.dressAsRam();
+        StatusBarWidgetView bell = new StatusBarWidgetView(context, null);
+        bell.setIconResource(com.termux.R.drawable.ic_rl_bell);
+        StatusBarWidgetView mouse = new StatusBarWidgetView(context, null);
+        mouse.setIconResource(com.termux.R.drawable.ic_rl_mouse);
+        for (StatusBarWidgetView widget : new StatusBarWidgetView[] {cpu, ram, bell, mouse}) {
+            android.widget.ImageView icon = (android.widget.ImageView) widget.getChildAt(0);
+            assertEquals(View.VISIBLE, icon.getVisibility());
+            assertTrue(icon.getDrawable() != null);
+            // The icon is the only non-text child besides the value: nothing else is visible.
+            int visible = 0;
+            for (int i = 0; i < widget.getChildCount(); i++) {
+                if (widget.getChildAt(i).getVisibility() == View.VISIBLE) visible++;
+            }
+            assertEquals(2, visible);
+        }
+    }
+
+    /** The mouse mark is an icon alone; it must not carry the stats' shared floor width. */
     @Test
     public void glyphWithoutValue_takesOnlyTheGlyphAndPadding() {
         StatusBarWidgetView widget = new StatusBarWidgetView(
             ApplicationProvider.getApplicationContext(), null);
-        widget.setIconGlyph("\uf245");
+        widget.setIconResource(com.termux.R.drawable.ic_rl_memory);
         widget.setValue("");
         widget.measure(atMost(400), exact(24));
         int glyphWidth = 0;
@@ -92,7 +117,7 @@ public class StatusBarWidgetViewTest {
     @Test
     public void setInk_drawsWhatTheChromeResolvedWithNoAlphaOfItsOwn() {
         StatusBarWidgetView widget = widget(StatusBarWidgetView.ColorRole.SECONDARY);
-        widget.setIconGlyph("\uf4bc");
+        widget.dressAsCpu();
         widget.setInk(0xFF102030, 0xFF405060, 0xFF708090);
 
         assertEquals(0xFF102030, value(widget).getCurrentTextColor());

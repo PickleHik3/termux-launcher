@@ -13,13 +13,19 @@
     <requestFocus />
 
     <com.google.android.material.textfield.TextInputLayout
-        style="?attr/textInputOutlinedStyle"
+        style="?attr/textInputFilledStyle"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         app:hintEnabled="false"
         app:endIconMode="clear_text"
         app:hintTextColor="?attr/colorPrimary"
-        app:shapeAppearance="?attr/shapeAppearanceCornerFull"
+        app:boxBackgroundColor="?attr/colorSurfaceContainerHigh"
+        app:boxCornerRadiusBottomEnd="28dp"
+        app:boxCornerRadiusBottomStart="28dp"
+        app:boxCornerRadiusTopEnd="28dp"
+        app:boxCornerRadiusTopStart="28dp"
+        app:boxStrokeWidth="0dp"
+        app:boxStrokeWidthFocused="0dp"
         app:startIconContentDescription="@null"
         app:startIconDrawable="@drawable/ic_symbol_search">
 
@@ -27,8 +33,12 @@
             android:id="@+id/settings_search_input"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:minHeight="56dp"
+            android:paddingTop="16dp"
+            android:paddingBottom="16dp"
             android:hint="@string/settings_search_hint"
-            android:imeOptions="actionDone"
+            android:imeOptions="actionSearch"
             android:inputType="text"
             android:maxLines="1" />
     </com.google.android.material.textfield.TextInputLayout>

@@ -7,7 +7,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
@@ -17,6 +19,7 @@ import androidx.core.app.NotificationCompat;
 import com.termux.R;
 import com.termux.ai.TaiCallerRequests;
 import com.termux.ai.TaiFunction;
+import com.termux.ai.FeatureRequest;
 import com.termux.ai.TaiManager;
 import com.termux.ai.TaiRuntimePresence;
 import com.termux.app.activities.SettingsActivity;
@@ -56,6 +59,13 @@ public final class LauncherCategorySortService extends Service {
     public static final String ACTION_SORT = "com.termux.app.launcher.action.SORT_CATEGORIES";
     /** The local model id, or {@code remote/<id>} for the remote provider: app sorting's plan. */
     public static final String EXTRA_MODEL_ID = "model_id";
+    /**
+     * The user tapped the chooser's on-device row: the model loads as {@code tai load} does (no
+     * feature named), so the automatic-load RAM preflight does not refuse it. Absent for a refresh.
+     */
+    public static final String EXTRA_USER_ASKED = "user_asked";
+    /** {@code cpu} or {@code gpu} for an explicit load; absent lets the settings decide. */
+    public static final String EXTRA_ACCELERATOR = "accelerator";
 
     private static final String CHANNEL_ID = "termux_launcher_category_sort";
     /**
@@ -125,6 +135,7 @@ public final class LauncherCategorySortService extends Service {
     @NonNull private static volatile Snapshot state = Snapshot.IDLE;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private long lastNotificationUpdateMs;
 
     /** The current run's state in one read. */
@@ -158,9 +169,17 @@ public final class LauncherCategorySortService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         ensureChannel();
+        // Only the main thread starts or ends a run, so this read is the run's real state.
+        if (state.running) {
+            // A second start while a run is going (the row tapped again). The run keeps the
+            // foreground and ends the service itself; stopping here, with the newest start id,
+            // would destroy the service under the run.
+            startForeground(NOTIFICATION_ID, progressNotification(state));
+            return START_NOT_STICKY;
+        }
         startForeground(NOTIFICATION_ID, buildNotification(
             getString(R.string.settings_app_drawer_category_sort_hint_preparing), 0, true, true));
-        if (intent == null || !ACTION_SORT.equals(intent.getAction()) || state.running) {
+        if (intent == null || !ACTION_SORT.equals(intent.getAction())) {
             stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -168,24 +187,34 @@ public final class LauncherCategorySortService extends Service {
 
         update(s -> Snapshot.IDLE.withRunning(true));
         String modelId = intent.getStringExtra(EXTRA_MODEL_ID);
+        boolean userAsked = intent.getBooleanExtra(EXTRA_USER_ASKED, false);
+        String accelerator = intent.getStringExtra(EXTRA_ACCELERATOR);
         executor.execute(() -> {
             try {
-                runSort(modelId);
+                runSort(modelId, userAsked, accelerator);
             } catch (Throwable t) {
                 String error = t.getMessage() == null ? t.toString() : t.getMessage();
                 update(s -> s.withErrorMessage(error).withOutcome(
                     getString(R.string.settings_app_drawer_category_sort_failed, error)));
             } finally {
-                update(s -> s.withRunning(false).withCancelRequested(false));
-                // Order matters: drop the ongoing progress notification first, then post the
-                // result as its own dismissible one — a user who left Settings mid-run learns how
-                // it ended without going back in.
-                stopForeground(true);
-                postResultNotification();
-                stopSelf(startId);
+                mainHandler.post(this::finishRun);
             }
         });
         return START_NOT_STICKY;
+    }
+
+    /**
+     * Ends the run on the main thread, beside {@link #onStartCommand}: no start can land between
+     * the run ending and the service stopping, so stopping for every start so far is right.
+     */
+    private void finishRun() {
+        update(s -> s.withRunning(false).withCancelRequested(false));
+        // Order matters: drop the ongoing progress notification first, then post the result as
+        // its own dismissible one — a user who left Settings mid-run learns how it ended without
+        // going back in.
+        stopForeground(true);
+        postResultNotification();
+        stopSelf();
     }
 
     @Override
@@ -195,7 +224,7 @@ public final class LauncherCategorySortService extends Service {
         super.onDestroy();
     }
 
-    private void runSort(@Nullable String modelId) throws Exception {
+    private void runSort(@Nullable String modelId, boolean userAsked, @Nullable String accelerator) throws Exception {
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(this);
         List<LauncherAppEntry> catalogue = provider.getAllAppsBlocking();
         // Excludes x11:linux (every Linux app's shared package) as well as work/private twins; see
@@ -240,7 +269,7 @@ public final class LauncherCategorySortService extends Service {
         // phase the user can see.
         update(s -> s.withPhase(LauncherCategorySortProgress.PHASE_LOADING_MODEL));
         updateProgressNotification(true);
-        String loadFailure = loadModel(manager, modelId);
+        String loadFailure = loadModel(manager, modelId, userAsked, accelerator);
         if (loadFailure != null) {
             // Every app would retry the same load on its own and fail the same way; under memory
             // pressure that is a reload per app. One clear stop instead.
@@ -376,6 +405,24 @@ public final class LauncherCategorySortService extends Service {
     }
 
     /**
+     * The load request. A feature's load is automatic and the RAM preflight can refuse it; a load
+     * naming no feature is the user asking ({@code TaiManager.loadModelHere}), which is what a tap on
+     * the chooser's on-device row is, so then the function is left out and the accelerator named.
+     */
+    @NonNull
+    static JSONObject loadRequest(@NonNull String modelId, boolean userAsked, @Nullable String accelerator)
+            throws org.json.JSONException {
+        JSONObject request = new JSONObject();
+        request.put("model", modelId);
+        if (!userAsked) {
+            request.put(TaiCallerRequests.FUNCTION, TaiFunction.APP_CATEGORIES.id());
+        } else if (accelerator != null && !accelerator.trim().isEmpty()) {
+            request.put("accelerator", accelerator.trim());
+        }
+        return request;
+    }
+
+    /**
      * Loads the model up front, unless the model is the remote provider's (nothing to load, and the
      * runtime process stays asleep). The load names the feature, so it follows app sorting's plan
      * (its accelerator, speculative decoding and 1024 window), and a resident model whose window
@@ -386,13 +433,12 @@ public final class LauncherCategorySortService extends Service {
      *     memory, a missing file), so a failure here ends the run.
      */
     @Nullable
-    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId) {
+    private String loadModel(@NonNull TaiManager manager, @Nullable String modelId, boolean userAsked,
+                             @Nullable String accelerator) {
         if (modelId == null || modelId.trim().isEmpty()) return null;
         if (TaiCallerRequests.isRemoteModel(modelId)) return null;
         try {
-            JSONObject request = new JSONObject();
-            request.put("model", modelId);
-            request.put(TaiCallerRequests.FUNCTION, TaiFunction.APP_CATEGORIES.id());
+            JSONObject request = loadRequest(modelId, userAsked, accelerator);
             JSONObject result = manager.loadModel(request.toString());
             if (result.optBoolean("ok", false)) return null;
             String message = result.optString("message", "").trim();
@@ -480,14 +526,16 @@ public final class LauncherCategorySortService extends Service {
                                                   boolean emptyFails,
                                                   @NonNull Function<String, Map<String, String>> parse) {
         try {
-            String body = TaiCallerRequests.categoryBody(modelId, prompt, maxTokens).toString();
-            JSONObject response = timeoutMs > 0 ? manager.openAiChatCompletions(body, timeoutMs)
-                : manager.openAiChatCompletions(body);
-            JSONArray choices = response.optJSONArray("choices");
-            JSONObject choice = choices == null ? null : choices.optJSONObject(0);
-            if (choice == null) return LauncherCategoryRemoteSort.Answer.failed(errorText(response));
-            JSONObject reply = choice.optJSONObject("message");
-            String content = reply == null ? "" : reply.optString("content", "");
+            FeatureRequest.Result response = FeatureRequest.get(this).collect(
+                FeatureRequest.Call.chat(TaiFunction.APP_CATEGORIES, TaiCallerRequests.categoryBody(modelId, prompt, maxTokens))
+                    .priority(FeatureRequest.Priority.NORMAL)
+                    .timeoutMs(timeoutMs > 0 ? timeoutMs : TaiManager.DEFAULT_CHAT_TIMEOUT_MS));
+            if (!response.ok()) {
+                JSONObject failure = response.error != null ? response.error
+                    : new JSONObject().put("message", response.errorMessage == null ? "" : response.errorMessage);
+                return LauncherCategoryRemoteSort.Answer.failed(errorText(failure));
+            }
+            String content = response.text;
             if (emptyFails && content.trim().isEmpty())
                 return LauncherCategoryRemoteSort.Answer.failed(getString(R.string.settings_app_drawer_category_sort_remote_failed));
             return LauncherCategoryRemoteSort.Answer.of(parse.apply(content));
@@ -574,10 +622,14 @@ public final class LauncherCategorySortService extends Service {
         lastNotificationUpdateMs = elapsed;
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null) return;
-        Snapshot now = state;
-        manager.notify(NOTIFICATION_ID, buildNotification(progressText(now),
+        manager.notify(NOTIFICATION_ID, progressNotification(state));
+    }
+
+    @NonNull
+    private Notification progressNotification(@NonNull Snapshot now) {
+        return buildNotification(progressText(now),
             LauncherCategorySortProgress.percent(now.phase, now.processed, now.total),
-            LauncherCategorySortProgress.isIndeterminate(now.phase), true));
+            LauncherCategorySortProgress.isIndeterminate(now.phase), true);
     }
 
     /**

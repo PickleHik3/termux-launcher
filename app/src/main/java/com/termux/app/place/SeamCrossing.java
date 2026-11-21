@@ -1,0 +1,1051 @@
+package com.termux.app.place;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.chrome.Dress;
+import com.termux.app.dock.DockStyle;
+import com.termux.app.dock.LensBeadGeometry;
+import com.termux.app.dock.WornDockDesign;
+import com.termux.app.look.PageLook;
+import com.termux.app.page.PageKind;
+import com.termux.app.place.PlaceChromeTravel.Frame;
+import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.SeamTravel.DockPlan;
+import com.termux.app.wall.PageRef;
+
+/**
+ * One crossing of the seam between the wall's halves, Home and the Terminal's window beside it,
+ * from the first frame of a slide that reaches the other half to the settle (#94). It is fed the
+ * two halves' {@link Dress}es and layouts once, as it begins, and answers every frame from what
+ * it read then: how much of the dock shows, whether the rows sink into a keyboard, how much of the
+ * keyboard shows, how far the stack's look has blended, which half's dress the stack wears and
+ * whether it is dressed again on this frame (a slide in only, where none of the stack shows), whether the seam stands another arrangement, how the halves' own
+ * bands and beads ease, and whether the status bar rides with the Terminal's page and for which
+ * page it is dressed. The activity only begins a crossing, applies the answers to its views, and
+ * lands and ends it at settle; how each answer is worked out is {@link SeamTravel}'s and
+ * {@link SeamDress}'s arithmetic, which this composes.
+ *
+ * <p>The frames ask nothing of the store or the preferences and build nothing: what a frame needs
+ * is read and laid out at {@link #begin}, and the answers are one object reused frame to frame.
+ *
+ * <p>A frame is answered in three calls, in the order the activity's frame applies them:
+ * {@link #frame} for everything the frame decides, {@link #standLayout} where the activity runs
+ * the seam's layout pass (the arrangement {@link #layout} answers changes there and not before, so
+ * the passes the frame runs first read the arrangement they did), and {@link #rideBar} once the
+ * pass has laid the status bar out, whose host only then says whether it can ride.
+ *
+ * <p>The settle is two calls too: {@link #land} puts down everything but the stack's dress and
+ * says what the settle has left to do, and {@link #end}, after the page's commit, lets the dress
+ * go; the commit dresses everything for the page it lands on, and the stack keeps the dress it
+ * travelled in until then.
+ */
+public final class SeamCrossing {
+
+    /**
+     * One end of a crossing, as it reads it once, as it begins: the page (#173, spec #167 E), what
+     * it wears there (its dress, its look and its resolved arrangement) and how its stack stands.
+     * Home and the Terminal's window are the two ends every crossing runs between today; an end
+     * names any page, so a crossing between two others is fed the same way.
+     */
+    public static final class Endpoint {
+        @NonNull final PageRef page;
+        @NonNull final Dress dress;
+        /** The page's own Look as it begins; null where the launcher has none to read. */
+        @Nullable final PageLook.Snapshot look;
+        /** The page's resolved arrangement, which {@link Crossing} holds; null for the seam alone. */
+        @Nullable final ResolvedArrangement arrangement;
+        @NonNull final PlaceLayout layout;
+        @NonNull final SeamDress.StackDress stack;
+        final boolean keyboardUp;
+
+        private Endpoint(@NonNull PageRef page, @NonNull Dress dress,
+                         @Nullable PageLook.Snapshot look,
+                         @Nullable ResolvedArrangement arrangement, @NonNull PlaceLayout layout,
+                         @NonNull SeamDress.StackDress stack, boolean keyboardUp) {
+            this.page = page;
+            this.dress = dress;
+            this.look = look;
+            this.arrangement = arrangement;
+            this.layout = layout;
+            this.stack = stack;
+            this.keyboardUp = keyboardUp;
+        }
+
+        /**
+         * @param page       the page this end is: its kind and its id, -1 while unknown
+         * @param dress      what the page wears ({@code DressResolver.dressOf})
+         * @param layout     the arrangement the page stands its chrome in
+         * @param stack      what the stack wears there: the dress's shape and its layout's sizes
+         * @param keyboardUp whether the page keeps the in-app keyboard up, docked or not: up as it
+         *                   rests for the committed page, wanted on arrival for the other; a
+         *                   floating layout's keyboard is a frame of its own and not the stack's
+         */
+        @NonNull
+        public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
+                                  @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
+                                  boolean keyboardUp) {
+            return new Endpoint(page, dress, null, null, layout, stack, keyboardUp);
+        }
+
+        /**
+         * The whole end, as {@link Crossing#begin} takes it: the above, with the page's look and
+         * the resolved arrangement the crossing holds for its life.
+         *
+         * @param look        the page's Look ({@code PageLook#of}); null where there is none
+         * @param arrangement the page's resolved arrangement, held from the crossing's begin to
+         *                    its landing
+         * @see #of(PageRef, Dress, PlaceLayout, SeamDress.StackDress, boolean)
+         */
+        @NonNull
+        public static Endpoint of(@NonNull PageRef page, @NonNull Dress dress,
+                                  @Nullable PageLook.Snapshot look,
+                                  @NonNull ResolvedArrangement arrangement,
+                                  @NonNull PlaceLayout layout, @NonNull SeamDress.StackDress stack,
+                                  boolean keyboardUp) {
+            return new Endpoint(page, dress, look, arrangement, layout, stack, keyboardUp);
+        }
+
+        @NonNull
+        public PageRef page() {
+            return page;
+        }
+
+        @Nullable
+        public ResolvedArrangement arrangement() {
+            return arrangement;
+        }
+
+        @Nullable
+        public PageLook.Snapshot look() {
+            return look;
+        }
+    }
+
+    /**
+     * Whether a joined Docked frame's glass is the one sheet the stack's sheets stand down on, as
+     * the chrome reads it live. Asked during {@link #begin}, once the crossing has noted the other
+     * half (the status bar then wears the Terminal's dress), and only where the other half's dock
+     * could draw beads.
+     */
+    public interface FrameGlass {
+        boolean standsDown();
+    }
+
+    /** What the screen stands as a crossing begins, beside the halves: read once, then held. */
+    public static final class Stage {
+        final boolean beadsDrawn;
+        @NonNull final FrameGlass frameGlass;
+        final boolean splitPanes;
+        /**
+         * Whether the pages slide flat across the screen (the Slide page transition): a bar only
+         * one end wears, or wears apart, rides with its page then, and fades in place under a
+         * transition that turns the pages (Carousel, Depth and the rest), which a flat ride would
+         * not follow. That holds between two Home pages and across the seam alike (amendment
+         * 2026-11-04); a bar both ends stand alike stays still under every transition.
+         */
+        final boolean pagesSlide;
+
+        private Stage(boolean beadsDrawn, @NonNull FrameGlass frameGlass, boolean splitPanes,
+                      boolean pagesSlide) {
+            this.beadsDrawn = beadsDrawn;
+            this.frameGlass = frameGlass;
+            this.splitPanes = splitPanes;
+            this.pagesSlide = pagesSlide;
+        }
+
+        /**
+         * @param beadsDrawn whether the dock draws Lens beads as the committed half lies now
+         * @param frameGlass whether the stack's sheets stand down on a joined Docked frame
+         * @param splitPanes whether the Terminal splits its panes, which a bar laid out over Home
+         *                   for the slide needs
+         */
+        @NonNull
+        public static Stage of(boolean beadsDrawn, @NonNull FrameGlass frameGlass,
+                               boolean splitPanes) {
+            return new Stage(beadsDrawn, frameGlass, splitPanes, true);
+        }
+
+        /**
+         * The same, with how the pages move ({@link #pagesSlide}): false under a page transition
+         * that turns them rather than sliding them flat.
+         */
+        @NonNull
+        public static Stage of(boolean beadsDrawn, @NonNull FrameGlass frameGlass,
+                               boolean splitPanes, boolean pagesSlide) {
+            return new Stage(beadsDrawn, frameGlass, splitPanes, pagesSlide);
+        }
+    }
+
+    /** One frame's answers. The same object every frame: read it before the next frame. */
+    public static final class Answers {
+        float dockReveal;
+        float keyboardReveal;
+        boolean rowsSink;
+        boolean relayout;
+        boolean restyle;
+        boolean restyleShape;
+        boolean bandsMoved;
+        float beadShare;
+        boolean moved;
+        boolean barRedressed;
+        float statusFade;
+        float barMarginShare;
+        float endShare;
+
+        Answers() {
+            clear(1f, 0f);
+        }
+
+        void clear(float dock, float keyboard) {
+            dockReveal = dock;
+            keyboardReveal = keyboard;
+            rowsSink = false;
+            relayout = false;
+            restyle = false;
+            restyleShape = false;
+            bandsMoved = false;
+            beadShare = Float.NaN;
+            moved = false;
+            barRedressed = false;
+            statusFade = Float.NaN;
+            barMarginShare = Float.NaN;
+            endShare = Float.NaN;
+        }
+
+        /**
+         * How far the crossing has come from the committed page toward the other, 0 to 1 with the
+         * wall's offset, on a crossing between two kinds of page; NaN otherwise. What differs by
+         * page and not by look (the inks over each page's ground, the keyboard toward a page
+         * where it is down) crosses by it. It is quantised ({@link #END_STEPS}), so what follows
+         * it is set again only when the step changes.
+         */
+        public float endShare() {
+            return endShare;
+        }
+
+        /**
+         * How far a bar that stands still eases from the committed page's Margin toward the other
+         * page's, 0 to 1 with the wall's offset; NaN while the bar's Margin does not ease (one
+         * Margin on both ends, or a bar that rides or fades). The bar is drawn at
+         * {@link SeamCrossing#barMarginDp} of that share, so the frame the wall lands on draws it
+         * at the arriving page's Margin and the landing's re-dress changes nothing on screen.
+         */
+        public float barMarginShare() {
+            return barMarginShare;
+        }
+
+        /**
+         * The status bar's alpha on a crossing between two Home pages whose bar fades rather than
+         * rides ({@link Stage#pagesSlide}): the share of the way toward the page that wears it,
+         * laid out over the other from the first frame where that page is arriving. NaN while the
+         * bar does not fade, and the frame's own status reveal stands.
+         */
+        public float statusFade() {
+            return statusFade;
+        }
+
+        /** How much of the dock rows the stack stands shows: the seam's reveal, else the frame's. */
+        public float dockReveal() {
+            return dockReveal;
+        }
+
+        /** How much of the keyboard shows: the frame's, between the two rests on the seam's curve. */
+        public float keyboardReveal() {
+            return keyboardReveal;
+        }
+
+        /**
+         * Whether the dock's rows sink into the keyboard's top edge instead of leaving with the
+         * stack's translation, which carries the keyboard too, for a keyboard laid out
+         * {@code keyboardPx} tall in the stack.
+         */
+        public boolean rowsSink(int keyboardPx) {
+            return rowsSink && keyboardPx > 0;
+        }
+
+        /** Whether the seam stands another arrangement on this frame: the layout pass runs. */
+        public boolean relayout() {
+            return relayout;
+        }
+
+        /** Whether that pass dresses the stack again, for the half whose rows it now stands. */
+        public boolean restyle() {
+            return restyle;
+        }
+
+        /** Whether that dress changes the shape too (Style, Corners, Margin), not the sizes alone. */
+        public boolean restyleShape() {
+            return restyleShape;
+        }
+
+        /** Whether a band only one half's dock carries moved: the dock is laid out again. */
+        public boolean bandsMoved() {
+            return bandsMoved;
+        }
+
+        /**
+         * The beaded half's share while one half's dock draws Lens beads and the other's does not
+         * (1 on the beaded half, 0 on the other), which the beads melt into the slab by; NaN while
+         * nothing melts.
+         */
+        public float beadShare() {
+            return beadShare;
+        }
+
+        /** Whether the seam moved anything on this frame that the settle has to put back. */
+        public boolean moved() {
+            return moved;
+        }
+
+        /** Whether the bar is dressed for another page from this frame ({@link #rideBar}). */
+        public boolean barRedressed() {
+            return barRedressed;
+        }
+    }
+
+    /** What a settle has left to do for the crossing ({@link #land}). The same object each time. */
+    public static final class Landing {
+        boolean bandsMoved;
+        boolean laidOut;
+        boolean barTravelled;
+        @Nullable PageKind dressedFor;
+        boolean dressDiffered;
+        boolean shapeDiffered;
+        /** Whether a half's own band was eased: a slide that came back lays the dock out whole. */
+        public boolean bandsMoved() {
+            return bandsMoved;
+        }
+
+        /** Whether the seam stood another arrangement: the committed one is laid out again. */
+        public boolean laidOut() {
+            return laidOut;
+        }
+
+        /** Whether the bar was dressed for a page it rode with: it is dressed for its own again. */
+        public boolean barTravelled() {
+            return barTravelled;
+        }
+
+        /**
+         * Whether the stack is left dressed for the half the wall did not land on ({@code landed}):
+         * a slide that came back past the swap without a frame there to undo it (the drawer or
+         * reduced motion took the last frames). It is dressed back as the settle puts it on screen.
+         */
+        public boolean redressesBack(@NonNull PageKind landed) {
+            return dressDiffered && dressedFor != null && SeamTravel.crosses(dressedFor, landed);
+        }
+
+        /**
+         * Whether the stack already wears the half the wall landed on ({@code landed}): the halves
+         * dress it differently and it changed into the arriving half's dress mid-slide. The page's
+         * commit then has nothing to show the landed frame that the slide has not already shown,
+         * so its whole re-dress may follow that frame instead of holding it.
+         */
+        public boolean stackDressedFor(@NonNull PageKind landed) {
+            return dressDiffered && dressedFor != null && !SeamTravel.crosses(dressedFor, landed);
+        }
+
+        /** Whether that dress back changes the shape too. */
+        public boolean shapeDiffered() {
+            return shapeDiffered;
+        }
+    }
+
+    /**
+     * Everything one crossing holds, from its begin to its settle. A new one is taken at each
+     * settle instead of every field being put back by hand: {@link #land} keeps only what the
+     * page's commit still reads ({@link Run#landed}), and {@link #end} starts afresh.
+     */
+    private static final class Run {
+        // ---- What a crossing reads once, as it begins ----
+
+        @Nullable PageKind committed;
+        /** The two ends as pages: their kinds and their ids (#173 slice E). */
+        @Nullable PageRef committedEnd, otherEnd;
+        /** Whether both ends are pages of one kind: a crossing between two Home pages. */
+        boolean oneKind;
+        /**
+         * Between two Home pages, the end whose layout wears the bar that crosses
+         * ({@link SeamTravel#homeBarWearer}), and whether it fades in place rather than riding
+         * with that page; null where the bar does not cross.
+         */
+        @Nullable PageRef barEnd;
+        boolean barFades;
+        /** The other half's page, its layout, and the dock's plan for the crossing. */
+        @Nullable PageKind other;
+        @Nullable PlaceLayout otherLayout;
+        @NonNull DockPlan plan = DockPlan.NONE;
+        /**
+         * Whether the stack is dressed again when its rows change halves (a slide in, where none of
+         * the stack shows) and whether the halves' shapes differ; which half keeps a keyboard in
+         * the stack.
+         */
+        boolean dressDiffers, shapeDiffers;
+        boolean committedKeyboard, otherKeyboard;
+        /** Whether each half keeps the in-app keyboard up at rest, in the stack or not. */
+        boolean committedKeyboardUp, otherKeyboardUp;
+        /**
+         * Whether both halves stand the bar alike, in one shape, so it stands still (#90); otherwise
+         * whether the Terminal's bar rides with its page; and whether a slide from Home may lay the
+         * Terminal's bar out over Home.
+         */
+        boolean barStill, barRides, statusMayShow;
+        /**
+         * Whether that still bar eases from one Margin to the other with the wall, and the two
+         * Margins in dp as stored.
+         */
+        boolean barMarginEases;
+        /** Whether the crossing runs between two kinds of page: its ends cross with the wall. */
+        boolean endsBlend;
+        int committedMarginDp, otherMarginDp;
+        /** Whether beads melt on this crossing, and whether the committed half is the beaded one. */
+        boolean beadMelt, beadsCommitted;
+        /** The halves' Dock designs and Search fields; the designs null while no crossing holds them. */
+        @Nullable DockStyle committedDesign, otherDesign;
+        boolean committedSearchField, otherSearchField;
+        /** The arrangements the seam can stand, laid out at begin: the other half's rows, bar, both. */
+        @Nullable PlaceLayout dockLayout, statusLayout, dockStatusLayout;
+
+        // ---- What the frames move ----
+
+        /** The arrangement the chrome stands in, null while it stands in the committed one. */
+        @Nullable PlaceLayout layout;
+        /** Whether the arrangement stands the other half's dock rows, and its bar. */
+        boolean dockShown, statusShown;
+        /** The page whose half the stack wears; null while it wears the committed page's. */
+        @Nullable PageKind stackDressPage;
+        /** The stack changed halves while they dress it differently: the next pass dresses it. */
+        boolean restylePending;
+        /** The page the bar is dressed for while it rides; null otherwise. */
+        @Nullable PageKind barPage;
+        /** How far the slide has come toward the other half while the halves' bands differ; NaN otherwise. */
+        float bandProgress = Float.NaN;
+        /** Whether the wall has come to rest: the crossing is held only for the page's commit. */
+        boolean landed;
+
+        /** What a landed crossing keeps through the page's commit: the stack's dress. */
+        @NonNull
+        Run landed() {
+            Run kept = new Run();
+            kept.committed = committed;
+            kept.other = other;
+            kept.stackDressPage = stackDressPage;
+            kept.dressDiffers = dressDiffers;
+            kept.shapeDiffers = shapeDiffers;
+            kept.landed = true;
+            return kept;
+        }
+    }
+
+    /** The steps the end share moves through across a crossing: what follows it is set at most this often. */
+    public static final int END_STEPS = 32;
+
+    @NonNull private Run mRun = new Run();
+
+    private final Answers mAnswers = new Answers();
+    private final Landing mLanding = new Landing();
+
+    /**
+     * The crossing begins on the first frame that reaches {@code other}'s half, or reads the
+     * halves again for a frame that reaches another page of it; what the frames have laid out
+     * stays as it is. Reads and lays out everything the frames will need.
+     */
+    public void begin(@NonNull Endpoint committed, @NonNull Endpoint other,
+                      @NonNull Stage stage) {
+        mLandedFootKeyboard = null;
+        PlaceLayout here = committed.layout;
+        PlaceLayout there = other.layout;
+        mRun.committed = committed.page.kind;
+        mRun.other = other.page.kind;
+        mRun.committedEnd = committed.page;
+        mRun.otherEnd = other.page;
+        mRun.oneKind = !SeamTravel.crosses(committed.page.kind, other.page.kind);
+        mRun.otherLayout = there;
+        // Each half's Dock design, read once here so the frames read no store: one layout gives
+        // both halves one design, and then no band eases and no bead melts (#93).
+        // The designs the halves' slabs wear (WornDockDesign): none where a half shows no apps
+        // row, so a dock-off half and the other never differ by a design neither draws.
+        mRun.committedDesign = WornDockDesign.of(committed.dress.dockDesign(), here);
+        mRun.otherDesign = WornDockDesign.of(other.dress.dockDesign(), there);
+        mRun.committedSearchField = committed.dress.searchField();
+        mRun.otherSearchField = other.dress.searchField();
+        mRun.shapeDiffers = !committed.stack.shape.equals(other.stack.shape);
+        // The chrome wears one look on every page (ADR 0031): only the structure can be apart.
+        boolean structureApart = !committed.stack.structureEquals(other.stack);
+        // One bar across the wall (#90): where both halves stand it alike, in one outline, it
+        // stands still on the crossing instead of riding with the Terminal's page. A Margin
+        // apart only insets it, and the bar eases from one inset to the other with the wall
+        // (Answers#barMarginShare), so the landing's re-dress finds it already drawn there;
+        // riding for it took the bar off a crossing toward Home, with nothing to bring Home's in.
+        mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS))
+            && committed.stack.shape.sameOutline(other.stack.shape);
+        // A still bar between two Margins eases from one to the other with the wall's offset.
+        mRun.committedMarginDp = committed.stack.shape.marginDp;
+        mRun.otherMarginDp = other.stack.shape.marginDp;
+        mRun.barMarginEases = mRun.barStill && !here.slot(Element.STATUS).hidden
+            && mRun.committedMarginDp != mRun.otherMarginDp;
+        PlaceLayout terminalSide = committed.page.isHome() ? there : here;
+        mRun.barRides = !mRun.barStill && !terminalSide.slot(Element.STATUS).hidden;
+        mRun.barEnd = null;
+        mRun.barFades = false;
+        if (mRun.barRides && !stage.pagesSlide && SeamTravel.crosses(committed.page.kind,
+                other.page.kind)) {
+            // The pages turn: the Terminal's bar, which a turned page would not carry flat, fades
+            // in place by the way toward the Terminal's page instead of riding with it.
+            mRun.barRides = false;
+            mRun.barFades = true;
+            mRun.barEnd = committed.page.isHome() ? other.page : committed.page;
+        }
+        // A keyboard in the stack, not one floating in a frame of its own.
+        mRun.committedKeyboardUp = committed.keyboardUp;
+        mRun.otherKeyboardUp = other.keyboardUp;
+        mRun.committedKeyboard = committed.keyboardUp
+            && here.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
+        mRun.otherKeyboard = other.keyboardUp
+            && there.keyboardForm != PlaceLayout.KeyboardForm.FLOATING;
+        // Beads melt only where one half's dock draws them and the other's does not: the
+        // committed half's as they lie now, the other's as its layout lays its row out (the
+        // Terminal's extra keys, or a keyboard in the stack, keep the slab there). The Search
+        // field keeps the beads, in a capsule of its own under them (#84).
+        boolean otherBeads = mRun.otherDesign == DockStyle.LENS_BEADS
+            && LensBeadGeometry.rowWearsBeadsCuttingFrame(there,
+                !stackDressedApart(committed.page.kind) && stage.frameGlass.standsDown(),
+                mRun.otherKeyboard);
+        mRun.beadMelt = stage.beadsDrawn != otherBeads;
+        mRun.beadsCommitted = stage.beadsDrawn;
+        mRun.plan = SeamTravel.dockPlan(here, there);
+        // The one place the stack is dressed again on the way: a slide in toward rows the
+        // committed half has none of, with no keyboard of its own in the stack, where none of the
+        // stack shows (the rows are laid out and dressed in the first frame, below the screen).
+        // Two halves that both stand rows never are; both sides' rows stand in their lanes.
+        mRun.dressDiffers = structureApart && mRun.plan == DockPlan.SLIDE_IN
+            && !mRun.committedKeyboard;
+        // What differs by page and not by look crosses with the wall on every crossing between
+        // two kinds of page (Answers#endShare).
+        mRun.endsBlend = !mRun.oneKind;
+        // Only from Home: the Terminal's bar is the one that travels with its page, unless the
+        // bar is one across the wall and stands still.
+        mRun.statusMayShow = !mRun.barStill && committed.page.isHome()
+            && !other.page.isHome() && SeamTravel.statusRides(there)
+            && SeamTravel.statusCanArriveOver(here) && stage.splitPanes;
+        if (mRun.oneKind) {
+            // Between two Home pages the bar is Home's own on both: the page that wears it
+            // carries it in or out, riding with that page while the pages slide flat and fading in
+            // place while they turn; toward it, it is laid out over the committed page from the
+            // first frame. Any other difference in the bar changes at the landing.
+            PlaceLayout wearer = SeamTravel.homeBarWearer(here, there);
+            mRun.barEnd = wearer == null ? null : wearer == there ? other.page : committed.page;
+            mRun.barRides = mRun.barEnd != null && stage.pagesSlide;
+            mRun.barFades = mRun.barEnd != null && !stage.pagesSlide;
+            mRun.statusMayShow = mRun.barEnd != null && mRun.barEnd.equals(other.page);
+        }
+        boolean dockMayShow = mRun.plan == DockPlan.SLIDE_IN;
+        mRun.dockLayout = dockMayShow ? SeamTravel.withDockOf(here, there) : null;
+        mRun.statusLayout = mRun.statusMayShow ? SeamTravel.withStatusOf(here, there) : null;
+        mRun.dockStatusLayout = dockMayShow && mRun.statusMayShow
+            ? SeamTravel.withStatusOf(mRun.dockLayout, there) : null;
+    }
+
+    /**
+     * Whether the status bar takes off Home's dress for the Terminal's as a crossing begins,
+     * while it is still hidden, before any pass lays it out over Home: from Home, toward a half
+     * that shapes the stack otherwise, unless the bar stands still on screen. Asked once, right
+     * after the {@link #begin} that started the crossing.
+     */
+    public boolean barTakesTerminalDressFirst() {
+        return mRun.shapeDiffers && mRun.committed == PageKind.HOME && !mRun.oneKind
+            && !mRun.barStill;
+    }
+
+    /**
+     * One frame of the wall's travel: every answer the seam has for it. A frame of a gesture that
+     * has not reached the other half answers the travel's own reveals and nothing else.
+     *
+     * @param dressable         whether the chrome can be dressed yet (the preferences are read)
+     * @param bandEaseRuns      whether a Dock design switch is easing the dock's bands, which own
+     *                          them while it runs
+     * @param fieldUnderPalette whether the command palette is up over the Search field, which then
+     *                          stays the design's own
+     */
+    @NonNull
+    public Answers frame(@NonNull Frame frame, boolean dressable, boolean bandEaseRuns,
+                         boolean fieldUnderPalette) {
+        return frame(frame, frame, dressable, bandEaseRuns, fieldUnderPalette);
+    }
+
+    /**
+     * The same, with the wall's own frame beside the chrome's ({@code wallFrame}, the frame of the
+     * wall's offset where a settle keeps the chrome on a clock of its own): the look and a still
+     * bar's Margin blend on the wall's own way.
+     */
+    @NonNull
+    public Answers frame(@NonNull Frame frame, @NonNull Frame wallFrame, boolean dressable,
+                         boolean bandEaseRuns, boolean fieldUnderPalette) {
+        Answers answers = mAnswers;
+        answers.clear(frame.dockReveal, frame.keyboardReveal);
+        PageKind committed = mRun.committed;
+        PageKind other = mRun.other;
+        PageRef committedEnd = mRun.committedEnd;
+        if (committed == null || other == null || committedEnd == null) return answers;
+        // Read by end: a frame of the wall names its sides by kind and reads as by half; a frame
+        // of Home's pager names its pages, and reads the way between two Home pages.
+        float progress = SeamTravel.otherEndProgress(frame, committedEnd);
+        float dressProgress = progress;
+        // Which half's dress the stack wears, noting a change for this frame's pass.
+        PageKind stackPage = SeamDress.stackPage(committed, other, mRun.plan, dressProgress);
+        PageKind dressPage = stackPage == committed ? null : stackPage;
+        if (dressPage != mRun.stackDressPage) {
+            mRun.stackDressPage = dressPage;
+            if (mRun.dressDiffers) mRun.restylePending = true;
+        }
+        boolean crosses = SeamTravel.crosses(committed, other);
+        // A band only one half's dock carries follows its page across the seam.
+        if (dressable && crosses && !bandEaseRuns && mRun.committedDesign != null
+            && mRun.otherDesign != null) {
+            boolean stripMoves = (mRun.committedDesign == DockStyle.WALL_STRIP)
+                != (mRun.otherDesign == DockStyle.WALL_STRIP);
+            boolean fieldMoves = !fieldUnderPalette && mRun.committedSearchField != mRun.otherSearchField;
+            float share = clamp01(dressProgress);
+            if ((stripMoves || fieldMoves) && Float.compare(share, mRun.bandProgress) != 0) {
+                mRun.bandProgress = share;
+                answers.bandsMoved = true;
+            }
+        }
+        // Lens beads only one half draws melt into the slab, or come out of it, the same way.
+        if (dressable && crosses && mRun.beadMelt) {
+            if (mRun.beadsCommitted && SeamTravel.committedRowsLeave(mRun.plan)) {
+                // The beaded half's rows sink below the stack's bottom edge, which cuts them flat:
+                // the beads melt while the chrome still rests and sink as the slab.
+                answers.beadShare = LensBeadGeometry.leavingMeltShare(
+                    SeamTravel.otherEndFraction(frame, committedEnd), SeamFade.START);
+            } else {
+                float share = clamp01(dressProgress);
+                answers.beadShare = mRun.beadsCommitted ? 1f - share : share;
+            }
+        }
+        // The ends cross with the wall, in steps.
+        if (mRun.endsBlend) {
+            float share = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
+            answers.endShare = Math.round(share * END_STEPS) / (float) END_STEPS;
+            answers.moved = true;
+        }
+        // A still bar eases its Margin with the wall itself, not the chrome's own clock.
+        if (mRun.barMarginEases) {
+            answers.barMarginShare = clamp01(SeamTravel.otherEndProgress(wallFrame, committedEnd));
+            answers.moved = true;
+        }
+        // The stack stands the other half's rows, dressed for that half, from the frame the plan
+        // says; from Home the Terminal's bar is laid out as the slide starts.
+        boolean dockShown = SeamTravel.showsOtherDock(mRun.plan, dressProgress);
+        boolean statusShown = progress > 0f && mRun.statusMayShow;
+        // A bar only one end wears, or wears apart, fades with the way toward that end while the
+        // pages turn.
+        if (mRun.barFades && mRun.barEnd != null) {
+            float share = clamp01(progress);
+            answers.statusFade = mRun.barEnd.equals(committedEnd) ? 1f - share : share;
+        }
+        if (dockShown != mRun.dockShown || statusShown != mRun.statusShown || mRun.restylePending) {
+            mRun.dockShown = dockShown;
+            mRun.statusShown = statusShown;
+            answers.relayout = true;
+            answers.restyle = mRun.restylePending;
+            answers.restyleShape = mRun.shapeDiffers;
+            mRun.restylePending = false;
+        }
+        if (mRun.plan != DockPlan.NONE) {
+            answers.dockReveal = SeamTravel.dockReveal(mRun.plan, progress);
+        }
+        answers.moved = answers.moved || answers.relayout || mRun.plan != DockPlan.NONE;
+        // The keyboard's reveal is the frame's own: a pure function of the seam's progress between
+        // the two rests, on the curve the look blends on, so it never swaps at the half.
+        // With a keyboard in the stack the rows sink into its top edge, since the stack's
+        // translation carries the keyboard too.
+        answers.rowsSink = mRun.plan != DockPlan.NONE;
+        return answers;
+    }
+
+    /**
+     * The arrangement this frame's answers stand, as the activity runs the seam's layout pass
+     * ({@link Answers#relayout}): {@link #layout} answers it from here on.
+     */
+    public void standLayout() {
+        mRun.layout = mRun.dockShown ? (mRun.statusShown ? mRun.dockStatusLayout : mRun.dockLayout)
+            : mRun.statusShown ? mRun.statusLayout : null;
+    }
+
+    /**
+     * Whether the status bar rides with the Terminal's page on this frame, which crosses the seam
+     * to a Home page while the halves wear the bar apart (a Home layout that places or shapes it
+     * otherwise): a bar both halves wear alike stands still (#90), and so does every bar on a
+     * slide between Home's own pages. Notes the page it is dressed for, so its chips do not
+     * change while it is on screen ({@link Answers#barRedressed}).
+     *
+     * @param hostCanRide whether the bar's host is laid out, along the top, on a wall
+     */
+    public boolean rideBar(@NonNull Frame frame, boolean hostCanRide) {
+        if (mRun.oneKind) {
+            // Home's own bar on both ends: it rides with the page that wears it and is dressed
+            // for Home throughout, so its chips are never dressed again.
+            boolean rides = hostCanRide && mRun.other != null && mRun.barRides;
+            mAnswers.barRedressed = false;
+            mRun.barPage = null;
+            return rides;
+        }
+        boolean rides = hostCanRide && mRun.other != null && mRun.barRides
+            && (frame.from == PageKind.HOME || frame.toward == PageKind.HOME);
+        PageKind barPage = null;
+        if (rides) {
+            barPage = frame.toward != PageKind.HOME ? frame.toward
+                : frame.from != PageKind.HOME ? frame.from
+                : mRun.committed == PageKind.HOME ? null : mRun.committed;
+        }
+        mAnswers.barRedressed = barPage != mRun.barPage;
+        mRun.barPage = barPage;
+        return rides;
+    }
+
+    /**
+     * Where the bar is drawn on this frame while it rides ({@link #rideBar}), as an x offset from
+     * its rest: with the Terminal's page across the seam ({@link SeamTravel#terminalScreenXPx}),
+     * with the Home page that wears it between two Home pages ({@link SeamTravel#endScreenXPx}).
+     */
+    public float barScreenXPx(@NonNull Frame frame, int widthPx) {
+        PageRef barEnd = mRun.barEnd;
+        if (mRun.oneKind && barEnd != null) return SeamTravel.endScreenXPx(frame, barEnd, widthPx);
+        return SeamTravel.terminalScreenXPx(frame, widthPx);
+    }
+
+    /**
+     * The Margin, in dp as stored, a still bar is drawn at {@code share} of the way from the
+     * committed page toward the other ({@link Answers#barMarginShare}): the committed page's at 0,
+     * the other's at 1. The activity resolves both ends to px and draws between those, since a
+     * surface's inset is not linear in its Margin; this is the stored value the ends name.
+     */
+    public float barMarginDp(float share) {
+        float t = Float.isNaN(share) ? 0f : clamp01(share);
+        return mRun.committedMarginDp + (mRun.otherMarginDp - mRun.committedMarginDp) * t;
+    }
+
+    /** The committed page's Margin as the crossing read it, in dp as stored. */
+    public int committedBarMarginDp() {
+        return mRun.committedMarginDp;
+    }
+
+    /** The other page's Margin as the crossing read it, in dp as stored. */
+    public int otherBarMarginDp() {
+        return mRun.otherMarginDp;
+    }
+
+    /**
+     * Whether two ends make a crossing (#173 slice E, spec #167 E): pages of the two halves
+     * always do; two Home pages only where their layouts differ in what can morph mid-slide,
+     * the dock's rows ({@link SeamTravel#dockPlan}) or a bar one of them wears
+     * ({@link SeamTravel#homeBarWearer}), and nothing else of their dress differs. Two Home pages
+     * that dress alike are a plain flip; a Dock design, a Search field or a stack dress apart
+     * changes at the landing, as it did before. Asked before {@link #begin}, once per gesture.
+     */
+    public static boolean crosses(@NonNull Endpoint here, @NonNull Endpoint there) {
+        if (SeamTravel.crosses(here.page.kind, there.page.kind)) return true;
+        if (!SeamTravel.crosses(here.page, there.page)) return false;
+        if (here.dress.dockDesign() != there.dress.dockDesign()
+            || here.dress.searchField() != there.dress.searchField()
+            || !here.stack.equals(there.stack)) return false;
+        // Two Home pages standing other rows still cross: the morph of the dock's row and the bar
+        // run, and the rows themselves change at the landing (no dip: nothing is laid out on the way).
+        return SeamTravel.dockPlan(here.layout, there.layout) != DockPlan.NONE
+            || !EdgeStackPolicy.stack(here.layout, Edge.BOTTOM)
+                .equals(EdgeStackPolicy.stack(there.layout, Edge.BOTTOM))
+            || SeamTravel.homeBarWearer(here.layout, there.layout) != null;
+    }
+
+    /**
+     * Whether the crossing runs between two kinds of page, whose ends cross with the wall
+     * ({@link Answers#endShare}).
+     */
+    public boolean endsBlend() {
+        return mRun.other != null && mRun.endsBlend;
+    }
+
+    /** Whether the crossing runs between two pages of one kind: two Home pages. */
+    public boolean oneKind() {
+        return mRun.other != null && mRun.oneKind;
+    }
+
+    /** The committed end the crossing was begun from, as a page; null while none runs. */
+    @Nullable
+    public PageRef committedEnd() {
+        return mRun.other == null ? null : mRun.committedEnd;
+    }
+
+    /** The other end the crossing was begun for, as a page; null while none runs. */
+    @Nullable
+    public PageRef otherEnd() {
+        return mRun.other == null ? null : mRun.otherEnd;
+    }
+
+    /**
+     * Whether both ends stand the bar alike, in one outline, so it stays put across the crossing
+     * and nothing but its glass and ink changes. The top stack's scene
+     * ({@code TopStackScene#shared}) is told the same through its ends' outline keys, so the two
+     * agree on which bar is one slab.
+     */
+    public boolean barStill() {
+        return mRun.other != null && mRun.barStill;
+    }
+
+    /**
+     * Whether the riding bar wears the other end's look ({@link #rideBar}): across the seam the
+     * Terminal's, which is the other end when the crossing began on Home; between two Home pages
+     * the page that wears the bar, when that is the other one.
+     */
+    public boolean barRideWearsOther() {
+        if (mRun.other == null) return false;
+        if (mRun.oneKind) return mRun.barEnd != null && mRun.barEnd.equals(mRun.otherEnd);
+        return mRun.committed == PageKind.HOME;
+    }
+
+    /**
+     * Whether the status bar wears the other half's dress on this frame, the {@code seamTravel}
+     * the bar's dress reads ({@link SeamDress#wearsHome}): the Terminal's while a bar that rides
+     * with its page slides across the seam ({@link #sliding}). Never on a slide between two Home
+     * pages, where the bar is Home's on both ends, and never for a bar both ends stand alike
+     * ({@link #barStill}): that one stays put in the committed page's look and its glass blends
+     * with the wall.
+     */
+    public boolean barDressedAcross() {
+        return sliding() && !mRun.oneKind && !mRun.barStill;
+    }
+
+    /**
+     * The settle's first half: everything the crossing moved is put down but the stack's dress,
+     * which it keeps through the page's commit ({@link #end}). Says what the settle has left to
+     * do; at rest, nothing.
+     */
+    @NonNull
+    public Landing land() {
+        return land(null);
+    }
+
+    /**
+     * The same, for a wall that landed on {@code landed}'s half: landed where the stack stood the
+     * other half's rows, the keyboard the dock's foot answered to is held past the landing
+     * ({@link #footKeyboardUp}) until the live keyboard comes to agree with it.
+     */
+    @NonNull
+    public Landing land(@Nullable PageKind landed) {
+        Run run = mRun;
+        mLandedFootKeyboard = landed != null && run.other == landed && !run.landed
+            && rowsHoldFoot(run) ? run.otherKeyboardUp : null;
+        mLandedFootReads = 0;
+        return landDress();
+    }
+
+    @NonNull
+    private Landing landDress() {
+        Landing landing = mLanding;
+        landing.bandsMoved = !Float.isNaN(mRun.bandProgress);
+        landing.laidOut = mRun.layout != null;
+        landing.barTravelled = mRun.barPage != null;
+        landing.dressedFor = mRun.stackDressPage;
+        landing.dressDiffered = mRun.dressDiffers;
+        landing.shapeDiffered = mRun.shapeDiffers;
+        mRun = mRun.landed();
+        return landing;
+    }
+
+    /**
+     * Whether the landing's re-dress would move the bar from where the last moving frame drew it:
+     * the Margin that frame drew ({@code drawnMarginDp}, {@link #barMarginDp} of its share) apart
+     * from the Margin of the page the wall landed on ({@code landedMarginDp}, what the re-dress
+     * lays it out at). Pure, so the landing's "nothing changes" is tested without the activity.
+     */
+    public static boolean landingMovesBar(float drawnMarginDp, int landedMarginDp) {
+        return Math.abs(drawnMarginDp - landedMarginDp) > 1e-3f;
+    }
+
+    /** The settle's second half, after the page's commit: the stack's dress lets go. */
+    public void end() {
+        mRun = new Run();
+    }
+
+    // ---- What the chrome reads of a crossing between frames ----
+
+    /**
+     * The in-app keyboard the dock's foot under the gesture pill answers to on this frame
+     * ({@code DockSpec#footExists}), given the keyboard as it is now ({@code liveKeyboardUp}):
+     * the keyboard of the half whose rows the stack stands, as that half rests, from the frame
+     * the stack stands them; the live one otherwise. Only a slide in stands the other half's
+     * rows on the way, so only there does the foot follow the arriving half's keyboard before the
+     * landing; elsewhere the live keyboard answers, and the keyboard rises or sinks on the seam's
+     * curve ({@link Answers#keyboardReveal}).
+     */
+    public boolean footKeyboardUp(boolean liveKeyboardUp) {
+        Run run = mRun;
+        if (run.other != null && !run.landed && rowsHoldFoot(run)) return run.otherKeyboardUp;
+        // Landed where the other half's rows stood: the settle's first passes run before the
+        // live keyboard has caught up with the landed page (the Terminal's still reads up for a
+        // pass on Home), so the travelled answer holds until it agrees, for a few passes at most.
+        Boolean held = mLandedFootKeyboard;
+        if (held == null) return liveKeyboardUp;
+        if (held == liveKeyboardUp || ++mLandedFootReads > LANDED_FOOT_READS) {
+            mLandedFootKeyboard = null;
+            return liveKeyboardUp;
+        }
+        return held;
+    }
+
+    /**
+     * The most geometry passes after a landing the travelled foot keyboard holds against a live
+     * keyboard that has not come round to it: the fail-safe, so a keyboard whose change never
+     * lands cannot keep a foot under it.
+     */
+    static final int LANDED_FOOT_READS = 4;
+
+    /** The keyboard the foot held through the landing, until the live one agrees; null none. */
+    @Nullable private Boolean mLandedFootKeyboard;
+    private int mLandedFootReads;
+
+    /**
+     * Whether the foot answers to the other half's keyboard on this run's frame: the stack stands
+     * that half's rows (a slide in), and the committed half keeps no keyboard of its own up.
+     */
+    private static boolean rowsHoldFoot(@NonNull Run run) {
+        return run.dockShown && !run.committedKeyboardUp;
+    }
+
+    /** The other half's page the crossing was begun for; null while none runs. */
+    @Nullable
+    public PageKind other() {
+        return mRun.other;
+    }
+
+    /**
+     * Whether the wall is sliding across the seam: a crossing has begun and has not landed. This
+     * is what the status bar's dress reads ({@link SeamDress#wearsHome}): the Terminal's while
+     * the wall slides, its own half's from the moment it lands. A landed crossing still names its
+     * {@link #other} page through the page's commit, but only for the stack, which keeps the dress
+     * it travelled in; the status bar does not, so the commit dresses it for the page it lands on
+     * and every pass after the settle finds it in that same dress.
+     */
+    public boolean sliding() {
+        return mRun.other != null && !mRun.landed;
+    }
+
+    /** The other half's layout as the crossing read it; null while none runs and once landed. */
+    @Nullable
+    public PlaceLayout otherLayout() {
+        return mRun.otherLayout;
+    }
+
+    /**
+     * The arrangement the chrome stands in while the seam stands the other half's dock rows or the
+     * Terminal's bar: the committed layout with those slots taken from the other half's. Null
+     * whenever the chrome stands in the committed layout itself.
+     */
+    @Nullable
+    public PlaceLayout layout() {
+        return mRun.layout;
+    }
+
+    /**
+     * The page whose half the stack wears while the seam stands the other half's rows
+     * ({@link SeamDress#stackPage}); null while it wears the committed page's, always at rest.
+     */
+    @Nullable
+    public PageKind stackDressPage() {
+        return mRun.stackDressPage;
+    }
+
+    /**
+     * Whether the stack wears a dress apart from the frame's, which stays {@code committed}'s:
+     * mid-slide, once it stands the rows of a half that shapes it differently.
+     */
+    public boolean stackDressedApart(@NonNull PageKind committed) {
+        return mRun.shapeDiffers && mRun.stackDressPage != null
+            && SeamTravel.crosses(mRun.stackDressPage, committed);
+    }
+
+    /** The committed half's Dock design as the crossing read it; null while none holds one. */
+    @Nullable
+    public DockStyle committedDesign() {
+        return mRun.committedDesign;
+    }
+
+    /**
+     * The Dock design of the half whose dock rows the stack stands on this frame: the other
+     * half's from the frame the crossing stands its rows ({@link #layout}), the committed half's
+     * before that. It is the design the rows are laid out in (Lens beads' fit and side inset), so
+     * the rows a slide brings in wear their own half's geometry from their first frame rather than
+     * the committed half's until the settle. The slab and the beads themselves keep
+     * {@link #committedDesign} and their melt. Null while no crossing holds the designs.
+     */
+    @Nullable
+    public DockStyle rowsDesign() {
+        return mRun.dockShown ? mRun.otherDesign : mRun.committedDesign;
+    }
+
+    /** The committed half's Search field as the crossing read it, while it holds a design. */
+    public boolean committedSearchField() {
+        return mRun.committedSearchField;
+    }
+
+    /**
+     * The Dock design the stack's slab wears on this frame: the half's whose dress the stack
+     * wears ({@link #stackDressPage}). It changes halves only on a slide in's first frame,
+     * where none of the stack shows, and its design (Tray, Beads, Strip or Peek) goes with its
+     * dress there, so the dock a slide brings in rises looking as it rests. Null while no
+     * crossing holds the designs.
+     */
+    @Nullable
+    public DockStyle stackDesign() {
+        return stackWearsOther() ? mRun.otherDesign : mRun.committedDesign;
+    }
+
+    /** The Search field the stack carries on this frame, read as {@link #stackDesign} is. */
+    public boolean stackSearchField() {
+        return stackWearsOther() ? mRun.otherSearchField : mRun.committedSearchField;
+    }
+
+    /**
+     * Whether the stack wears another Dock design or Search field than the committed half's on
+     * this frame: dressed for the other half ({@link #stackDesign}) whose dock differs.
+     */
+    public boolean stackDesignApart() {
+        return stackWearsOther() && (mRun.otherDesign != mRun.committedDesign
+            || mRun.otherSearchField != mRun.committedSearchField);
+    }
+
+    /** Whether the stack is dressed for the other half on this frame, mid-slide. */
+    private boolean stackWearsOther() {
+        return mRun.dressDiffers && mRun.otherDesign != null && mRun.committed != null
+            && mRun.stackDressPage != null && SeamTravel.crosses(mRun.stackDressPage,
+                mRun.committed);
+    }
+
+    /**
+     * How much of the Search field the dock carries, from {@code here} on the committed half
+     * toward the other half's as the slide eases the bands; {@code here} while nothing eases.
+     */
+    public float searchFieldShare(float here) {
+        if (Float.isNaN(mRun.bandProgress) || mRun.otherDesign == null) return here;
+        float there = mRun.otherSearchField ? 1f : 0f;
+        return here + (there - here) * mRun.bandProgress;
+    }
+
+    /**
+     * How much of a band only {@code design} carries the dock is laid out with, from {@code here}
+     * on the committed half toward the other half's as the slide eases the bands; {@code here}
+     * while nothing eases.
+     */
+    public float designShare(@NonNull DockStyle design, float here) {
+        DockStyle other = mRun.otherDesign;
+        if (Float.isNaN(mRun.bandProgress) || other == null) return here;
+        float there = other == design ? 1f : 0f;
+        return here + (there - here) * mRun.bandProgress;
+    }
+
+    private static float clamp01(float value) {
+        return value < 0f ? 0f : value > 1f ? 1f : value;
+    }
+}

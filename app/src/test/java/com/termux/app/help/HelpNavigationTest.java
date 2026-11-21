@@ -6,23 +6,23 @@ import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /** Where the reader is, and where Back takes them. */
 public class HelpNavigationTest {
 
     private HelpNavigation opened() {
         HelpNavigation nav = new HelpNavigation();
-        nav.open(PaneWallPage.TERMINAL);
+        nav.open(PageKind.TERMINAL);
         return nav;
     }
 
     @Test public void everyInvocationStartsAtHelpHome() {
         HelpNavigation nav = opened();
         assertEquals(HelpNavigation.Screen.HOME, nav.screen());
-        assertEquals(PaneWallPage.TERMINAL, nav.place());
+        assertEquals(PageKind.TERMINAL, nav.place());
         assertEquals(1, nav.depth());
         assertNull(nav.id());
         assertEquals("", nav.query());
@@ -31,13 +31,13 @@ public class HelpNavigationTest {
 
     @Test public void aLearnMoreLinkOpensItsTopicAndBackLeavesHelp() {
         HelpNavigation nav = new HelpNavigation();
-        nav.openTopic(PaneWallPage.DISPLAY, "scale");
+        nav.openTopic(PageKind.DISPLAY, "scale");
         assertEquals(HelpNavigation.Screen.TOPIC, nav.screen());
         assertEquals("scale", nav.id());
-        assertEquals(PaneWallPage.DISPLAY, nav.place());
+        assertEquals(PageKind.DISPLAY, nav.place());
         assertFalse("Close returns to the source", nav.back());
         // The Home control is the way to help home from a linked topic.
-        nav.openTopic(PaneWallPage.DISPLAY, "scale");
+        nav.openTopic(PageKind.DISPLAY, "scale");
         nav.home();
         assertEquals(HelpNavigation.Screen.HOME, nav.screen());
         assertEquals(1, nav.depth());
@@ -48,7 +48,7 @@ public class HelpNavigationTest {
         nav.search();
         nav.setQuery("paste");
         assertEquals("paste", nav.query());
-        nav.open(PaneWallPage.TERMINAL);
+        nav.open(PageKind.TERMINAL);
         assertEquals(HelpNavigation.Screen.HOME, nav.screen());
         assertEquals("", nav.query());
     }
@@ -158,7 +158,7 @@ public class HelpNavigationTest {
         nav.practiceStart();
         // Help closed for the lesson, so the next invocation starts clean; End practice still knows.
         HelpNavigation after = new HelpNavigation();
-        after.open(PaneWallPage.TERMINAL);
+        after.open(PageKind.TERMINAL);
         assertEquals(HelpNavigation.Screen.HOME, after.screen());
         HelpNavigation.Frame restored = nav.practiceEnd();
         assertEquals("keyboard", restored.id);
@@ -178,6 +178,6 @@ public class HelpNavigationTest {
         nav.setQuery("display");
         nav.topic("scale");
         nav.explore("scale");
-        assertEquals(PaneWallPage.TERMINAL, nav.place());
+        assertEquals(PageKind.TERMINAL, nav.place());
     }
 }

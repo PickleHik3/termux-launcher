@@ -4,7 +4,7 @@ import androidx.annotation.NonNull;
 import java.util.HashMap;
 
 /**
- * The {@link Class} that implements special buttons for {@link ExtraKeysView}.
+ * The {@link Class} that implements special buttons of the extra keys.
  */
 public class SpecialButton {
 

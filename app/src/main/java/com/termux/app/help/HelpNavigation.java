@@ -4,11 +4,11 @@ import android.os.Bundle;
 
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * Where the reader is in help, and where Back takes them. One invocation is one stack of frames:
@@ -53,7 +53,7 @@ public final class HelpNavigation {
     }
 
     private final List<Frame> stack = new ArrayList<>();
-    private PaneWallPage place = PaneWallPage.TERMINAL;
+    private PageKind place = PageKind.TERMINAL;
     private String query = "";
     private boolean textEntryActive;
     private Frame practiceFrame;
@@ -61,7 +61,7 @@ public final class HelpNavigation {
     // ---- opening ------------------------------------------------------------------------------
 
     /** A fresh invocation for a place: help home, and no search carried over from last time. */
-    public void open(PaneWallPage place) {
+    public void open(PageKind place) {
         reset(place);
         stack.add(new Frame(Screen.HOME, null));
     }
@@ -70,7 +70,7 @@ public final class HelpNavigation {
      * A Learn-more link: the topic itself, with nothing under it. Back leaves help and returns the
      * reader to what they were doing; the Home control is what leads to help home.
      */
-    public void openTopic(PaneWallPage place, String topicId) {
+    public void openTopic(PageKind place, String topicId) {
         reset(place);
         stack.add(new Frame(Screen.TOPIC, topicId));
     }
@@ -182,7 +182,7 @@ public final class HelpNavigation {
     // ---- queries ------------------------------------------------------------------------------
 
     /** The place help was invoked from; it never changes within an invocation. */
-    public PaneWallPage place() { return place; }
+    public PageKind place() { return place; }
 
     /** The frame on top, which is what the panel draws. */
     public Frame frame() { return top(); }
@@ -246,7 +246,7 @@ public final class HelpNavigation {
      */
     public boolean restoreState(@Nullable Bundle state) {
         if (state == null) return false;
-        PaneWallPage saved = place(state.getString(KEY_PLACE));
+        PageKind saved = place(state.getString(KEY_PLACE));
         reset(saved);
         query = state.getString(KEY_QUERY, "");
         ArrayList<Bundle> frames = state.getParcelableArrayList(KEY_FRAMES);
@@ -269,10 +269,12 @@ public final class HelpNavigation {
         return true;
     }
 
-    private static PaneWallPage place(@Nullable String name) {
-        if (name == null) return PaneWallPage.TERMINAL;
-        for (PaneWallPage page : PaneWallPage.values()) if (page.name().equals(name)) return page;
-        return PaneWallPage.TERMINAL;
+    private static PageKind place(@Nullable String name) {
+        if (name == null) return PageKind.TERMINAL;
+        // Old intents and saved states name Home "WIDGETS".
+        if ("WIDGETS".equals(name)) return PageKind.HOME;
+        for (PageKind page : PageKind.values()) if (page.name().equals(name)) return page;
+        return PageKind.TERMINAL;
     }
 
     @Nullable
@@ -287,8 +289,8 @@ public final class HelpNavigation {
         return stack.get(stack.size() - 1);
     }
 
-    private void reset(PaneWallPage place) {
-        this.place = place == null ? PaneWallPage.TERMINAL : place;
+    private void reset(PageKind place) {
+        this.place = place == null ? PageKind.TERMINAL : place;
         this.query = "";
         this.textEntryActive = false;
         this.practiceFrame = null;

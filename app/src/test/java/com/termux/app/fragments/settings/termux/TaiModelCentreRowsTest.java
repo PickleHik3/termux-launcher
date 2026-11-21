@@ -251,6 +251,15 @@ public class TaiModelCentreRowsTest {
     }
 
     @Test
+    public void aChatModelNamedAfterItsIdReadsAsWords() {
+        assertEquals("MobileMoE S SFT (MNN)", TaiModelCentreFragment.centreName("mobilemoe-s-sft-mnn", "mobilemoe-s-sft-mnn", null, false));
+        assertEquals("MobileMoE S SFT (MNN)", TaiModelCentreFragment.readableName("mobilemoe-s-sft-mnn", ""));
+        assertEquals("MobileMoE S SFT", TaiModelCentreFragment.readableName("mobilemoe-s-sft", "MobileMoE S SFT"));
+        assertEquals("Qwen3 0.6b", TaiModelCentreFragment.readableName("qwen3-0.6b", null));
+        assertEquals("MobileMoE S SFT (MNN)", new TaiFunctionLabels(context, null).modelName("mobilemoe-s-sft-mnn"));
+    }
+
+    @Test
     public void speechModelsReadAsEngineThenPlainName() {
         assertEquals("Whisper Base · English",
             TaiModelCentreFragment.centreName("whisper-acft-base-en", "Whisper ACFT Base (English)", null, true));
@@ -292,6 +301,22 @@ public class TaiModelCentreRowsTest {
         assertEquals("sana", images.get(0).id);
         assertEquals("sd", images.get(1).id);
         assertTrue(TaiModelCentreRows.imageModels(Arrays.asList(chat)).isEmpty());
+    }
+
+    @Test
+    public void depthModelsFormTheirOwnGroupAndOtherModelsStayOut() {
+        com.termux.ai.TaiModelSpec chat = new com.termux.ai.TaiModelSpec("qwen", "Qwen", "Imported local model", "imported",
+            "/models/qwen/config.json", "x", GB, new java.util.LinkedHashSet<>(Arrays.asList(com.termux.ai.TaiModelSpec.CAPABILITY_TEXT_CHAT)), false, null,
+            com.termux.ai.TaiModelSpec.BACKEND_MNN_LLM, com.termux.ai.TaiModelSpec.FORMAT_MNN, null, null, 4096, 0, null);
+        com.termux.ai.TaiModelSpec depth = new com.termux.ai.TaiModelSpec("depth-anything-v2-small", "Depth Anything V2 Small",
+            "Depth for photo wallpapers", "catalog", "/models/depth/m.tflite", "x", GB,
+            new java.util.LinkedHashSet<>(Arrays.asList(com.termux.ai.TaiModelSpec.CAPABILITY_DEPTH_ESTIMATION)), false, null,
+            com.termux.ai.TaiModelSpec.BACKEND_LITERT_LM, com.termux.ai.TaiModelSpec.FORMAT_LITERTLM, null, null, 128, 0, null);
+        java.util.List<com.termux.ai.TaiModelSpec> found = TaiModelCentreRows.depthModels(
+            Arrays.asList(chat, depth, image("sana", "Sana", "sana")));
+        assertEquals(1, found.size());
+        assertEquals("depth-anything-v2-small", found.get(0).id);
+        assertTrue(TaiModelCentreRows.depthModels(Arrays.asList(chat)).isEmpty());
     }
 
     @Test

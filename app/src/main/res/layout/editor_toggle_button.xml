@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One on/off button of the editor's toggle groups (TileGrid), carrying
+     Widget.Termux.Editor.ToggleButton. Inflated so the style applies. -->
+<com.google.android.material.button.MaterialButton
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    style="@style/Widget.Termux.Editor.ToggleButton"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:checkable="true" />

@@ -41,6 +41,8 @@ public class SuggestionBarAppDiscoveryTest {
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         shadowPackageManager = shadowOf(context.getPackageManager());
         suggestionBarView = new SuggestionBarView(context, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        suggestionBarView.setDockIconSizePx(Math.round(24f * suggestionBarView.getResources().getDisplayMetrics().density));
         suggestionBarView.setMaxButtonCount(1);
         appDataProvider = LauncherAppDataProvider.getInstance(context);
         appDataProvider.invalidate();
@@ -49,10 +51,7 @@ public class SuggestionBarAppDiscoveryTest {
     }
 
     /**
-     * renderButtons() refuses to render until hasStableRenderBounds() is satisfied, and its
-     * deferred retry is dropped for a view that is not attached to a window. A bare
-     * {@code new SuggestionBarView(...)} therefore renders nothing at all, so every child-count
-     * assertion below needs the bar to be laid out at a realistic dock size first.
+     * The bar is laid out at a realistic dock size before every child-count assertion below.
      */
     private void layOutBar() {
         int widthPx = 1080;
@@ -61,7 +60,7 @@ public class SuggestionBarAppDiscoveryTest {
             View.MeasureSpec.makeMeasureSpec(widthPx, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(heightPx, View.MeasureSpec.EXACTLY));
         suggestionBarView.layout(0, 0, widthPx, heightPx);
-        assertTrue("suggestion bar must report stable render bounds before rendering",
+        assertTrue("suggestion bar must be laid out before rendering",
             suggestionBarView.isLaidOut() && suggestionBarView.getWidth() == widthPx);
     }
 

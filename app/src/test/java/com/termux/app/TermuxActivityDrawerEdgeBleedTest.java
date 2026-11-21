@@ -47,7 +47,8 @@ public class TermuxActivityDrawerEdgeBleedTest {
             .build());
 
         assertEquals(-80, margins.topMargin);
-        assertEquals(-48, margins.bottomMargin);
+        assertEquals("the band under the pill is the sheets layer's, not the host's margin",
+            0, margins.bottomMargin);
     }
 
     @Test

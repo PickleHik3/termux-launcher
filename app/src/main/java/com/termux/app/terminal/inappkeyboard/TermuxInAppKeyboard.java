@@ -21,6 +21,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.notice.AppNotice;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.terminal.DeckLook;
 import com.termux.app.terminal.TerminalClipboard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
@@ -63,7 +64,13 @@ public final class TermuxInAppKeyboard {
         /** A person asked, through {@code keyboard.show} on a key, a chord or the palette. */
         TOOL,
         /** Something on screen took text focus and the keyboard was opened for it. */
-        FOCUS
+        FOCUS,
+        /**
+         * A field that needs typing opened (a rename, the find strip, a sheet's field, a Home
+         * float): the person asked for the field, not for this keyboard, so a hardware keyboard
+         * serves it just as well and the setting keeps this one down.
+         */
+        TEXT_ENTRY
     }
 
     public enum HideReason {
@@ -173,6 +180,8 @@ public final class TermuxInAppKeyboard {
     private boolean mPlaceKeepsSystemImeWhileVisible;
     /** Whether the place actually has it right now — what was last applied to the window. */
     private boolean mPlaceHoldsSystemIme;
+    /** Up for the wall's travel, not yet landed: the IME stays where it was till the landing. */
+    private boolean mShownForTravel;
     private float mHeightScale = 1f;
     /**
      * The extra row-height multiplier a floating keyboard carries, from the card's grip and the
@@ -253,8 +262,7 @@ public final class TermuxInAppKeyboard {
     }
 
     private static LayoutModifier.LayoutOptions buildLayoutOptions(String extraKeysStoredValue) {
-        return new LayoutModifier.LayoutOptions(true, false, true,
-            InAppKeyboardExtraKeys.resolve(extraKeysStoredValue));
+        return InAppKeyboardLayoutSource.textLayoutOptions(extraKeysStoredValue);
     }
 
     public boolean isEnabled() {
@@ -266,16 +274,27 @@ public final class TermuxInAppKeyboard {
         mHardwareKeyboardConnected = Objects.requireNonNull(detector, "detector");
     }
 
+    /**
+     * Whether this keyboard is standing aside for a physical one right now: the setting asks it to
+     * stay away while one is attached, and one is. A person asking for it still raises it.
+     */
+    public boolean yieldsToHardwareKeyboard() {
+        return mEnabled && shouldHideForHardwareKeyboard();
+    }
+
     /** Whether the setting asks this keyboard to stay away while a hardware keyboard is attached. */
     private boolean shouldHideForHardwareKeyboard() {
         return mPreferences.isSoftKeyboardEnabledOnlyIfNoHardware()
             && mHardwareKeyboardConnected.getAsBoolean();
     }
 
-    /** Taps, focus and first enable are the app's doing; the rest are a person asking. */
+    /**
+     * Taps, focus, first enable and a field opening are the app's doing; the rest are a person
+     * asking for the keyboard itself.
+     */
     private static boolean isAutomaticShow(@Nullable ShowReason reason) {
         return reason == ShowReason.FIRST_ENABLE || reason == ShowReason.TERMINAL_TAP
-            || reason == ShowReason.FOCUS;
+            || reason == ShowReason.FOCUS || reason == ShowReason.TEXT_ENTRY;
     }
 
     /** Puts down a keyboard that an automatic show raised once the setting and hardware say so. */
@@ -315,8 +334,13 @@ public final class TermuxInAppKeyboard {
         reloadLayoutRing(false);
         mSelectedLayoutId = mActiveTextLayoutId;
         if (state != null) {
-            mSelectedLayoutId = normalizeLayoutId(
+            String saved = normalizeLayoutId(
                 state.getString(STATE_SELECTED_LAYOUT, mActiveTextLayoutId));
+            // The modal pads are not ring entries; every text layout answers to the ring.
+            mSelectedLayoutId = LAYOUT_NUMERIC.equals(saved) || LAYOUT_GREEK_MATH.equals(saved)
+                ? saved
+                : InAppKeyboardLayoutSource.restoredTextLayoutId(mLayoutRing, saved,
+                    mActiveTextLayoutId);
             if (mEnabled && state.containsKey(STATE_VISIBLE))
                 mVisible = state.getBoolean(STATE_VISIBLE);
             else if (mEnabled)
@@ -340,6 +364,9 @@ public final class TermuxInAppKeyboard {
         } else {
             setContainerVisible(false);
         }
+        // Down, the keyboard is still laid out: put the container there now, not at the first hide.
+        if (mEnabled && !mVisible)
+            setContainerVisible(false);
     }
 
     public void onStart() {
@@ -529,6 +556,7 @@ public final class TermuxInAppKeyboard {
                 applyKeyMarginScale(mPreferences.getInAppKeyboardKeyMarginScale());
                 applyKeyCornerRadiusDp(mPreferences.getInAppKeyboardKeyCornerRadiusDp());
                 applyKeyOpacity(mPreferences.getInAppKeyboardKeyOpacity());
+                applyTextScale();
                 // The gap slider is global and lands on the next resume, like the rows above.
                 if (mForm == PlaceLayout.KeyboardForm.SPLIT)
                     applyKeyboardForm();
@@ -552,6 +580,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
+            mShownForTravel = false;
             // Shown, this keyboard is the one typing: the place gives the IME back — unless the
             // place keeps it while this keyboard is up, in which case the suppression below is a
             // no-op.
@@ -584,6 +613,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
+            if (!wasVisible) mShownForTravel = true;
             showInternal();
             if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
         } finally {
@@ -619,6 +649,7 @@ public final class TermuxInAppKeyboard {
             boolean wasVisible = mVisible;
             mLastHideReason = Objects.requireNonNull(reason, "reason");
             mVisible = false;
+            mShownForTravel = false;
             resetInputPipeline();
             // The panel stands over the keys, so it goes down with them; the next show is the keys.
             mHost.hideClipboardPanel();
@@ -857,6 +888,16 @@ public final class TermuxInAppKeyboard {
         applyKeyMarginScale(keyMarginScale, false);
     }
 
+    /**
+     * The key legends at the shared Text size. Only the legends move, never the keys, so this
+     * asks the keyboard for one measure and nothing of the geometry around it; the same size
+     * again asks for nothing.
+     */
+    public void applyTextScale() {
+        if (mKeyboardView != null)
+            mKeyboardView.setLabelScale(mPreferences.getTextSizeScale());
+    }
+
     private void applyKeyMarginScale(float keyMarginScale, boolean livePreview) {
         float clamped = TermuxAppSharedPreferences.clampInAppKeyboardKeyMarginScale(
             keyMarginScale);
@@ -1046,7 +1087,7 @@ public final class TermuxInAppKeyboard {
         if (!mEnabled || mDestroyed)
             return false;
         if (mLayoutRing.size() < 2) {
-            AppNotice.show(requireContainer().getContext(),
+            AppNotice.show(requireContainer().getContext(), R.drawable.ic_rl_keyboard,
                 requireContainer().getContext().getString(R.string.keyboard_layout_ring_single),
                 false);
             return false;
@@ -1076,7 +1117,7 @@ public final class TermuxInAppKeyboard {
         mPreferences.setInAppKeyboardActiveLayout(layoutId);
         selectLayout(layoutId);
         if (announce && moved) {
-            AppNotice.show(requireContainer().getContext(),
+            AppNotice.show(requireContainer().getContext(), R.drawable.ic_rl_keyboard,
                 LauncherKeyboardLayouts.labelFor(
                     requireContainer().getResources(), layoutId), false);
         }
@@ -1264,12 +1305,47 @@ public final class TermuxInAppKeyboard {
      * visibility. Cheap to call on every pass: it acts only when the answer changes.
      */
     private void syncPlaceSystemIme() {
-        boolean holds = mPlaceOwnsSystemIme && !mExternalTextInputActive
-            && (mPlaceKeepsSystemImeWhileVisible || !mVisible);
+        boolean holds = placeHoldsSystemIme(mPlaceHoldsSystemIme, mShownForTravel,
+            mPlaceOwnsSystemIme, mExternalTextInputActive, mPlaceKeepsSystemImeWhileVisible,
+            mVisible);
         if (mPlaceHoldsSystemIme == holds) return;
         mPlaceHoldsSystemIme = holds;
         if (holds) releaseSystemImeToPlace();
         else suppressSystemIme();
+    }
+
+    /**
+     * Whether the place holds the system IME, from what it {@code held}: the place that owns it
+     * holds it while this keyboard is down, or up for something else. A keyboard the travel brought
+     * up ({@code shownForTravel}) changes nothing until the wall has landed
+     * ({@link #landTravelShow}): the hand-over sets the window's IME flags, which relayouts the
+     * whole window, and neither the slide's frames nor the landed frame can afford it.
+     */
+    static boolean placeHoldsSystemIme(boolean held, boolean shownForTravel, boolean owns,
+                                       boolean externalInput, boolean keptWhileVisible,
+                                       boolean visible) {
+        if (shownForTravel) return held;
+        return owns && !externalInput && (keptWhileVisible || !visible);
+    }
+
+    /**
+     * The wall has landed with the keyboard a travel brought up: who holds the IME is settled now,
+     * after the landed frame (TermuxActivity#settlePlaceChrome).
+     */
+    public void landTravelShow() {
+        if (!mShownForTravel) return;
+        mShownForTravel = false;
+        syncPlaceSystemIme();
+    }
+
+    private volatile boolean mTextFieldHoldsFocus;
+
+    /**
+     * Whether a text field on screen is being typed into with this keyboard. While it is, the
+     * suppression of the system IME leaves focus where it is instead of handing it to the terminal.
+     */
+    public void setTextFieldHoldsFocus(boolean holds) {
+        mTextFieldHoldsFocus = holds;
     }
 
     /** Applies strict activity-wide system-IME suppression while embedded mode is enabled. */
@@ -1314,7 +1390,9 @@ public final class TermuxInAppKeyboard {
                     };
                     terminalView.setOnFocusChangeListener(mSystemImeFocusListener);
                 }
-                terminalView.requestFocus();
+                // A text field of the place that is typed into with this keyboard (the Assistant's)
+                // keeps the focus it has: taking it back would end the typing it was shown for.
+                if (!mTextFieldHoldsFocus) terminalView.requestFocus();
             } finally {
                 Trace.endSection();
             }
@@ -1425,6 +1503,8 @@ public final class TermuxInAppKeyboard {
         destroyKeyPopup();
         mKeyboardView = null;
         mKeyEventHandler = null;
+        // Off, the container is put away as it always was (the hide above ran while it was on).
+        setContainerVisible(false);
 
         TerminalView terminalView = mHost.getTerminalView();
         if (terminalView != null)
@@ -1443,18 +1523,44 @@ public final class TermuxInAppKeyboard {
         }
         Trace.beginSection("Keyboard.showInternal");
         try {
-            ensureKeyboardView();
+            traced("Keyboard.ensureView", this::ensureKeyboardView);
             // Hiding keeps the renderer alive, so a theme or wallpaper change that arrived while
             // the keyboard was off screen is applied on the way back on.
-            refreshMaterialPaletteIfSignatureMoved();
-            setContainerVisible(true);
-            watchClipboard();
-            watchScreenshots();
-            mHost.requestAccessoryGeometrySync();
-            recheckLayout();
+            traced("Keyboard.refreshPalette", this::refreshMaterialPaletteIfSignatureMoved);
+            traced("Keyboard.setContainerVisible", () -> setContainerVisible(true));
+            traced("Keyboard.watch", () -> {
+                watchClipboard();
+                watchScreenshots();
+            });
+            traced("Keyboard.geometrySync", mHost::requestAccessoryGeometrySync);
+            traced("Keyboard.recheckLayout", this::recheckLayout);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** Runs {@code step} inside a trace section, so a trace shows which part of a show is slow. */
+    private static void traced(@NonNull String section, @NonNull Runnable step) {
+        Trace.beginSection(section);
+        try {
+            step.run();
+        } finally {
+            Trace.endSection();
+        }
+    }
+
+    /**
+     * While the keyboard is put away, measures it for the bounds it will be shown at, so the
+     * show a swipe starts with lays nothing out from scratch. The keyboard stays GONE: it takes
+     * no room, touches, insets or focus, and every other view lays out as without it.
+     */
+    public void prewarm() {
+        if (!mEnabled || mDestroyed || mVisible || mExternalTextInputActive || mHost == null
+            || mHost.getKeyboardContainer() == null) {
+            return;
+        }
+        ensureKeyboardView();
+        mHost.prewarmKeyboardMeasure();
     }
 
     private void ensureKeyboardView() {
@@ -1475,6 +1581,7 @@ public final class TermuxInAppKeyboard {
         // Nerd Font icons (the space bar's swipe glyphs, tool keys) stay in the bundled symbols
         // font whatever face the user picked for labels; a picked font rarely has them.
         configBuilder.symbolFont = bundledSymbolsLabelFont();
+        configBuilder.symbolIcons = new KeyboardSymbolIcons(requireContainer().getContext());
         mAppliedConfigSignature = configPreferenceSignature();
         mKeyboardView = new Keyboard2View(requireContainer().getContext(),
             configBuilder.build(), recordedPalette());
@@ -1483,6 +1590,7 @@ public final class TermuxInAppKeyboard {
             requireContainer().getContext());
         mKeyboardView.setHeightScale(effectiveHeightScale());
         mKeyboardView.setKeyMarginScale(mKeyMarginScale);
+        mKeyboardView.setLabelScale(mPreferences.getTextSizeScale());
         mKeyboardView.setKeyCornerRadiusOverride(radiusDpToPx(mKeyCornerRadiusDp));
         mKeyboardView.setKeyOpacity(mKeyOpacity < 0 ? -1f : mKeyOpacity / 100f);
         mTapCorrection.setLayoutId(tapLayoutKey(mSelectedLayoutId));
@@ -1575,6 +1683,44 @@ public final class TermuxInAppKeyboard {
         if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
+    /** The palettes a crossing blends between ({@link #beginGlassBlend}); null while none runs. */
+    @Nullable private juloo.keyboard2.Theme.Palette mBlendFrom;
+    @Nullable private juloo.keyboard2.Theme.Palette mBlendTo;
+
+    /**
+     * A look-only crossing begins: the legends drift from the palette the page being left wears to
+     * the one the arriving page will ({@link #setGlassBlend}), each built from the faces and tone
+     * rest kept for that page, so nothing is measured. Both palettes come from the memo of glass
+     * palettes, built at most once each.
+     */
+    public void beginGlassBlend(@NonNull int[] fromFaces, int fromTone, @NonNull int[] toFaces,
+                                int toTone) {
+        if (mDestroyed || mKeyboardView == null) return;
+        mBlendFrom = createPalette(fromFaces, fromTone);
+        mBlendTo = createPalette(toFaces, toTone);
+    }
+
+    /**
+     * The legends {@code share} of the way from the leaving page's inks to the arriving page's.
+     * Called at the crossing's look steps, never per frame; the keys repaint and nothing is laid
+     * out, and a step that moves no colour paints nothing.
+     */
+    public void setGlassBlend(float share) {
+        juloo.keyboard2.Theme.Palette from = mBlendFrom;
+        juloo.keyboard2.Theme.Palette to = mBlendTo;
+        if (from == null || to == null || mDestroyed || mKeyboardView == null) return;
+        juloo.keyboard2.Theme.Palette next = juloo.keyboard2.Theme.Palette.blend(from, to, share);
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next)) return;
+        mKeyboardView.setPaletteColors(next);
+        mAppliedPalette = next;
+    }
+
+    /** The blend is over; the landing's apply chooses the legends for the page it lands on. */
+    public void endGlassBlend() {
+        mBlendFrom = null;
+        mBlendTo = null;
+    }
+
     /** The last palette handed to the view, for {@link #setGlassFace} to compare against. */
     @Nullable private juloo.keyboard2.Theme.Palette mAppliedPalette;
 
@@ -1593,7 +1739,8 @@ public final class TermuxInAppKeyboard {
             && a.lockedModifierColor == b.lockedModifierColor
             && a.borderColor == b.borderColor
             && a.keyGradientTopOverlay == b.keyGradientTopOverlay
-            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay;
+            && a.keyGradientBottomOverlay == b.keyGradientBottomOverlay
+            && a.deck == b.deck && a.deckKey == b.deckKey && a.deckLit == b.deckLit;
     }
 
     /** {@link #createPalette()} for the view, remembered as the one it draws. */
@@ -1603,16 +1750,109 @@ public final class TermuxInAppKeyboard {
         return mAppliedPalette;
     }
 
+    /** Glass palettes already built, by everything they were built from. */
+    private final InAppKeyboardPaletteFactory.GlassMemo mGlassMemo =
+        new InAppKeyboardPaletteFactory.GlassMemo(4);
+
     private juloo.keyboard2.Theme.Palette createPalette() {
+        return createPalette(mGlassFaces, mGlassTone);
+    }
+
+    private juloo.keyboard2.Theme.Palette createPalette(@NonNull int[] glassFaces, int glassTone) {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
-        juloo.keyboard2.Theme.Palette palette =
-            InAppKeyboardPaletteFactory.createGlass(context, theme,
-                com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
-                mGlassTone);
-        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(context,
+        // Every chrome apply with the keyboard up asks for the palette (the legend inks, the
+        // faces, the glass base), and building it cost several ms an apply: it is built once per
+        // distinct set of inputs. "Keyboard.palette.glass.build" in a trace is a miss.
+        android.os.Trace.beginSection("Keyboard.palette.glass");
+        juloo.keyboard2.Theme.Palette palette;
+        try {
+            InAppKeyboardPaletteFactory.GlassInputs inputs =
+                InAppKeyboardPaletteFactory.glassInputs(context, theme,
+                    com.termux.app.chrome.GlassLook.of(mPreferences), glassFaces, mKeyOpacity,
+                    glassTone);
+            palette = mGlassMemo.get(inputs);
+            if (palette == null) {
+                android.os.Trace.beginSection("Keyboard.palette.glass.build");
+                try {
+                    palette = InAppKeyboardPaletteFactory.createGlass(inputs);
+                } finally {
+                    android.os.Trace.endSection();
+                }
+                mGlassMemo.put(inputs, palette);
+            }
+        } finally {
+            android.os.Trace.endSection();
+        }
+        android.os.Trace.beginSection("Keyboard.palette.scheme");
+        InAppKeyboardColorScheme scheme = parsedColorScheme(context,
             mPreferences.getInAppKeyboardColorScheme());
-        return scheme.shouldApplyImportedPalette(theme) ? scheme.applyToPalette(palette) : palette;
+        android.os.Trace.endSection();
+        if (scheme.shouldApplyImportedPalette(theme))
+            palette = scheme.applyToPalette(palette);
+        // After the scheme: while a terminal effect is on, the deck's colours win over its keys'.
+        DeckLook deck = mDeckLook;
+        return deck == null ? palette : palette.withDeck(deck.bed, deck.bedTop, deck.key,
+            deck.keyTop, deck.keyFoot, deck.lit, deck.litInk, deck.litFoot);
+    }
+
+    /**
+     * The glass the keyboard draws on, from the palette it builds ({@link #createPalette()}): the
+     * theme's glass under the Look, with the colour scheme's or the deck's bed over it. What a sheet
+     * over the keyboard takes for its own glass, so the two always match.
+     */
+    @androidx.annotation.ColorInt
+    public int glassBaseColor(@NonNull Context fallback) {
+        // Not laid into the window yet: the dock's glass, which the keyboard's starts from.
+        if (mHost.getKeyboardContainer() == null)
+            return InAppKeyboardPaletteFactory.resolveDockGlassBaseColor(fallback);
+        Context context = requireContainer().getContext();
+        int base = InAppKeyboardPaletteFactory.resolveGlassBase(context,
+            com.termux.app.chrome.GlassLook.of(mPreferences));
+        int bed = createPalette().keyboardBackground;
+        return android.graphics.Color.alpha(bed) == 0 ? base
+            : androidx.core.graphics.ColorUtils.compositeColors(bed, base);
+    }
+
+    /** The colour scheme last parsed, the JSON and the Material defaults it was parsed from. */
+    @Nullable private InAppKeyboardColorScheme mParsedScheme;
+    @Nullable private String mParsedSchemeJson;
+    @Nullable private int[] mParsedSchemeDefaults;
+
+    /**
+     * The colour scheme for {@code json}, parsed again only when the JSON or the theme's Material
+     * defaults it seeds from moved ({@link InAppKeyboardColorScheme#sameSource}): every chrome
+     * apply with the keyboard up asks for the palette, and a parse per apply cost the swipe.
+     */
+    @NonNull
+    private InAppKeyboardColorScheme parsedColorScheme(@NonNull Context context,
+                                                      @Nullable String json) {
+        int[] defaults = InAppKeyboardPaletteFactory.defaultEditorSwatches(context);
+        InAppKeyboardColorScheme held = mParsedScheme;
+        if (held != null && InAppKeyboardColorScheme.sameSource(mParsedSchemeJson,
+                mParsedSchemeDefaults, json, defaults)) return held;
+        InAppKeyboardColorScheme scheme = InAppKeyboardColorScheme.fromJson(defaults, json);
+        mParsedScheme = scheme;
+        mParsedSchemeJson = json;
+        mParsedSchemeDefaults = defaults;
+        return scheme;
+    }
+
+    /** The deck look the keyboard wears while a terminal effect is on; null for none. */
+    @Nullable private DeckLook mDeckLook;
+
+    /**
+     * Dresses the keyboard as the CRT's accessory (an opaque bed, push-button keys, lights in
+     * the effect's palette) while {@code look} is non-null; null restores the Look's palette.
+     */
+    public void setDeckLook(@Nullable DeckLook look) {
+        if (java.util.Objects.equals(look, mDeckLook))
+            return;
+        mDeckLook = look;
+        if (mDestroyed || mKeyboardView == null)
+            return;
+        mKeyboardView.setPalette(recordedPalette());
+        if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
     /** Immutable-Config inputs; a change forces a renderer rebuild on preference reload. */
@@ -1759,7 +1999,7 @@ public final class TermuxInAppKeyboard {
         mLayoutRing = LauncherKeyboardLayouts.parseSelection(resources,
             mPreferences.getInAppKeyboardLayouts());
         String stored = mPreferences.getInAppKeyboardActiveLayout();
-        String active = mLayoutRing.contains(stored) ? stored : mLayoutRing.get(0);
+        String active = InAppKeyboardLayoutSource.activeId(mLayoutRing, stored);
         if (active.equals(mActiveTextLayoutId))
             return;
         mActiveTextLayoutId = active;
@@ -2133,13 +2373,11 @@ public final class TermuxInAppKeyboard {
     }
 
     private KeyboardData loadBundledLayout(int resourceId) {
-        KeyboardData keyboard = KeyboardData.load(requireContainer().getResources(), resourceId);
-        if (keyboard == null) {
+        KeyboardData keyboard = InAppKeyboardLayoutSource.loadBundled(
+            requireContainer().getResources(), resourceId, mLayoutOptions);
+        if (keyboard == null)
             mHost.debugLog("Failed to load bundled in-app keyboard layout " + resourceId);
-            return null;
-        }
-        return LayoutModifier.modify(keyboard, mLayoutOptions,
-            requireContainer().getResources());
+        return keyboard;
     }
 
     /** Any modal pad, any catalogued text layout, or — for anything else — where the ring is. */
