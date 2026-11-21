@@ -553,8 +553,11 @@ public final class ShellNotifications {
                 String nowName = nowPgid > 0 ? TerminalSession.programNameOf(nowPgid) : null;
                 MAIN.post(() -> {
                     try {
+                        // Re-read on main: the worker's reading may be stale by the time this runs.
+                        int mainPgid = session != null && session.isRunning()
+                            ? session.getForegroundProcessGroup() : -1;
                         if (session != null && !cleaned.isEmpty()
-                            && TerminalReplyGuard.shouldSend(capturedPgid, capturedName, nowPgid, nowName)) {
+                            && TerminalReplyGuard.shouldSendNow(capturedPgid, capturedName, nowPgid, nowName, mainPgid)) {
                             byte[] bytes = cleaned.getBytes(StandardCharsets.UTF_8);
                             session.write(bytes, 0, bytes.length);
                         } else {
