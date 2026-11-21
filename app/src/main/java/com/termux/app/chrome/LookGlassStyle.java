@@ -51,7 +51,6 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @NonNull private final ChromeRenderer mChrome;
     @NonNull private final Host mHost;
     private boolean mWorn;
-    private boolean mDrawerWanted;
     @Nullable private Bitmap mFrame;
     @Nullable private Bitmap mClearFrame;
 
@@ -77,27 +76,13 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     public void setWorn(boolean worn) {
         if (mWorn == worn) return;
         mWorn = worn;
-        dropFramesIfUnworn();
-    }
-
-    /**
-     * The open drawer's section switch wears this glass too. Kept apart from {@link #setWorn},
-     * which the widgets page owns, so neither lets go of the frame the other still draws.
-     */
-    public void setDrawerWanted(boolean wanted) {
-        if (mDrawerWanted == wanted) return;
-        mDrawerWanted = wanted;
-        dropFramesIfUnworn();
-    }
-
-    private void dropFramesIfUnworn() {
-        if (worn()) return;
+        if (mWorn) return;
         mFrame = null;
         mClearFrame = null;
     }
 
     private boolean worn() {
-        return mWorn || mDrawerWanted;
+        return mWorn;
     }
 
     public boolean isWorn() {

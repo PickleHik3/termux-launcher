@@ -3171,10 +3171,10 @@ public final class AppDrawerContentView extends FrameLayout
 
     // ---------------------------------------------------------------- section switch glass
 
-    /** Hands out the Look's glass for the section switch; told whether the switch wants it. */
+    /** Hands out the card's glass for the section switch; told whether the switch wants it. */
     public interface SwitchGlassSource {
-        /** The Look's glass style, held for the switch while {@code wanted}, or null. */
-        @Nullable com.termux.app.chrome.LookGlassStyle style(boolean wanted);
+        /** The card's glass style, held for the switch while {@code wanted}, or null. */
+        @Nullable com.termux.app.chrome.DrawerCardGlassStyle style(boolean wanted);
     }
 
     @Nullable private SwitchGlassSource mSwitchGlassSource;
@@ -3183,7 +3183,6 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private Object mSwitchGlassKey;
     private boolean mSwitchGlassWanted;
     private boolean mDrawerOpenForGlass;
-    private boolean mPlaneMoving = true;
 
     public void setSwitchGlassSource(@Nullable SwitchGlassSource source) {
         mSwitchGlassSource = source;
@@ -3192,20 +3191,12 @@ public final class AppDrawerContentView extends FrameLayout
     /** The drawer opened or closed: the glass is built for an open Default drawer and dropped after. */
     public void setDrawerOpenForGlass(boolean open) {
         mDrawerOpenForGlass = open;
-        if (!open) mPlaneMoving = true;
         applySwitchGlass();
     }
 
     /** The Look, the frame or the scheme may have moved: dress again if what it answers changed. */
     public void refreshSwitchGlass() {
         if (mSwitchGlassWanted) applySwitchGlass();
-    }
-
-    /** The plane started or stopped moving; the glass is re-aimed once, when it comes to rest. */
-    public void setPlaneMovingForGlass(boolean moving) {
-        if (mPlaneMoving == moving) return;
-        mPlaneMoving = moving;
-        if (!moving && mSwitchGlass != null) mSwitchGlass.invalidateGlassPosition();
     }
 
     /**
@@ -3223,7 +3214,7 @@ public final class AppDrawerContentView extends FrameLayout
             releaseSwitchGlass();
             return;
         }
-        com.termux.app.chrome.LookGlassStyle look = source.style(true);
+        com.termux.app.chrome.DrawerCardGlassStyle look = source.style(true);
         mSwitchGlassWanted = true;
         if (look == null) {
             releaseSwitchGlass();

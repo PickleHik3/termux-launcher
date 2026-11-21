@@ -2185,6 +2185,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && (frame == mInAppKeyboardBackdropBitmap || frame == mUnderKeyboardBackdropBitmap
                     || frame == mFrameGutterBackdropBitmap
                     || (mLookGlass != null && mLookGlass.holds(frame))
+                    || (mDrawerCardGlass != null && mDrawerCardGlass.holds(frame))
                     || isSharedWallpaperBlurFrameInUse(frame));
         }
 
@@ -2193,6 +2194,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneGlassClearFrame = null;
             mWallBehindFrame = null;
             if (mLookGlass != null) mLookGlass.onCacheCleared();
+            if (mDrawerCardGlass != null) mDrawerCardGlass.onCacheCleared();
         }
 
         @Override public boolean isActivityVisible() {
@@ -4624,6 +4626,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mLookGlass;
     }
 
+    /** The open drawer card's own glass the section switch wears; see {@link #drawerCardGlassStyle}. */
+    @Nullable private com.termux.app.chrome.DrawerCardGlassStyle mDrawerCardGlass;
+
+    /**
+     * The drawer card's surface as a pane style: the dock's blur radius (the card's frost holds
+     * that entry), the sheets' refraction and the sheets' tint, none of Global's Look.
+     */
+    @NonNull
+    private com.termux.app.chrome.DrawerCardGlassStyle drawerCardGlassStyle() {
+        if (mDrawerCardGlass == null) {
+            mDrawerCardGlass = new com.termux.app.chrome.DrawerCardGlassStyle(this, mChrome,
+                new com.termux.app.chrome.DrawerCardGlassStyle.Host() {
+                    @Override public TermuxAppSharedPreferences preferences() { return mPreferences; }
+                    @Override public View wallpaperFrame() {
+                        return findViewById(R.id.activity_termux_root_view);
+                    }
+                    @Override public boolean wallpaperPassthrough() {
+                        return shouldUseWallpaperPassthroughMode();
+                    }
+                    @Override public int cardBlurDp() { return getEffectiveExtraKeysBlurRadius(); }
+                    @Override public int glassBaseColor() {
+                        return com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory
+                            .resolveDockGlassBaseColor(TermuxActivity.this);
+                    }
+                    // The sheets element, as WallpaperFrostPainter.sheets() answers it.
+                    @Override public com.termux.app.chrome.GlassRefraction.Look refraction() {
+                        return com.termux.app.chrome.ElementGlass.refraction(mPreferences, null,
+                            stackLookPage(), mFancierGlassLook);
+                    }
+                    @Override public com.termux.app.chrome.WallpaperParallax parallax() {
+                        return mWallpaperParallax;
+                    }
+                });
+        }
+        return mDrawerCardGlass;
+    }
+
     /**
      * The shared pre-blurred wallpaper frame the panes draw, remembered so the blur cache never
      * recycles a bitmap a pane is still painting from (the panes hold it in a custom view rather
@@ -4703,7 +4742,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (gutterBody != null && shouldUseWallpaperPassthroughMode())
             applyFrameGutterGlass(gutterBody, isTerminalPaneGlassActive() && hasDockedFrameCard());
         Trace.endSection();
-        // The open drawer's section switch wears the same Look's glass and frame.
+        // The open drawer's section switch wears the card's own glass and frame.
         if (mSheets.appDrawerControllerIfBuilt() != null)
             mSheets.appDrawerControllerIfBuilt().onGlassChanged();
         if (mPaneController == null) return;
@@ -20508,10 +20547,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return TermuxActivity.this.restingPage();
         }
 
-        @Nullable @Override public com.termux.app.chrome.LookGlassStyle drawerSwitchGlass(boolean wanted) {
-            com.termux.app.chrome.LookGlassStyle look = lookGlassStyle();
-            look.setDrawerWanted(wanted);
-            return wanted ? look : null;
+        @Nullable @Override public com.termux.app.chrome.DrawerCardGlassStyle drawerSwitchGlass(boolean wanted) {
+            com.termux.app.chrome.DrawerCardGlassStyle card = drawerCardGlassStyle();
+            card.setWanted(wanted);
+            return wanted ? card : null;
         }
 
         @Override public int sheetsBandPx() {

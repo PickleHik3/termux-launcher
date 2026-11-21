@@ -130,11 +130,11 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         default void onDrawerOpenSettled(boolean open, boolean userDriven) {}
 
         /**
-         * The Look's glass for the section switch's refracting slab, held (its blur frame asked
-         * for) while {@code wanted}; null where there is none. Released with {@code false}.
+         * The card's own glass for the section switch's refracting slab, held (its blur frame
+         * asked for) while {@code wanted}; null where there is none. Released with {@code false}.
          */
         @Nullable
-        default com.termux.app.chrome.LookGlassStyle drawerSwitchGlass(boolean wanted) {
+        default com.termux.app.chrome.DrawerCardGlassStyle drawerSwitchGlass(boolean wanted) {
             return null;
         }
 
@@ -928,11 +928,6 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      */
     @VisibleForTesting
     void applyBackdropRest() {
-        AppDrawerContentView content = mContent;
-        if (content != null) {
-            content.setPlaneMovingForGlass(
-                !isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
-        }
         com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
         if (backdrop == null) return;
         backdrop.setMoving(!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
