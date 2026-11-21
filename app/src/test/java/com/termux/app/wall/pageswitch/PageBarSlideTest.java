@@ -16,12 +16,12 @@ import java.util.List;
 public class PageBarSlideTest {
 
     private static final float SLOP = 8f;
-    /** Inside the pill (top 4, bottom 52). */
-    private static final float Y = 28f;
+    /** Inside the touch row (top 0, bottom 48). */
+    private static final float Y = 24f;
 
     private PageBarLayout mLayout;
 
-    /** Slot width 53 on a 420 px pane (24.5 left): slot i spans 24.5 + 53 i. */
+    /** Slot width 40 on a 420 px pane (70 left): slot i spans 70 + 40 i. */
     private float xOf(int slot) {
         return mLayout.restCenterX(slot);
     }
@@ -87,7 +87,7 @@ public class PageBarSlideTest {
         PageBarSlide s = plain();
         s.down(xOf(1), Y);
         s.move(xOf(2), Y);
-        assertEquals(Result.CANCEL, s.move(xOf(2), 4f - 33f));
+        assertEquals(Result.CANCEL, s.move(xOf(2), 0f - 33f));
         assertEquals(State.IDLE, s.state());
         assertEquals(Result.NONE, s.move(xOf(3), Y));
         assertEquals(Result.NONE, s.up(xOf(3), Y));
@@ -96,19 +96,19 @@ public class PageBarSlideTest {
     @Test public void leavingBelowCancelsExceptOnTheKeyEntry() {
         PageBarSlide s = plain();
         s.down(xOf(1), Y);
-        assertEquals(Result.CANCEL, s.move(xOf(1), 52f + 33f));
+        assertEquals(Result.CANCEL, s.move(xOf(1), 48f + 33f));
 
         PageBarSlide key = slide(PageBarModelTest.wall("HTHD", 1), 8, true);
         key.down(xOf(1), Y);
-        assertEquals(Result.NONE, key.move(xOf(2), 52f + 200f));
-        assertEquals(Result.CANCEL, key.move(xOf(2), 4f - 33f));
+        assertEquals(Result.NONE, key.move(xOf(2), 48f + 200f));
+        assertEquals(Result.CANCEL, key.move(xOf(2), 0f - 33f));
     }
 
     @Test public void justInsideTheBandKeepsSliding() {
         PageBarSlide s = plain();
         s.down(xOf(1), Y);
-        assertEquals(Result.NONE, s.move(xOf(2), 4f - 31f));
-        assertEquals(Result.COMMIT, s.up(xOf(2), 4f - 31f));
+        assertEquals(Result.NONE, s.move(xOf(2), 0f - 31f));
+        assertEquals(Result.COMMIT, s.up(xOf(2), 0f - 31f));
     }
 
     @Test public void cancelEndsATouchOnce() {
@@ -123,7 +123,7 @@ public class PageBarSlideTest {
     @Test public void focusChangedFiresOnSlotChangesOnly() {
         PageBarSlide s = plain();
         s.down(xOf(0), Y);
-        s.move(xOf(0) + 20f, Y);
+        s.move(xOf(0) + 15f, Y);
         assertFalse(s.focusChanged());
         s.move(xOf(1), Y);
         assertTrue(s.focusChanged());
