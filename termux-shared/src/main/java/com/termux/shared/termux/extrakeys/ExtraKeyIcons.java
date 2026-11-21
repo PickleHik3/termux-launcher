@@ -44,6 +44,44 @@ public final class ExtraKeyIcons {
     public static final int KEY_END = 0x10FF1B;
     public static final int PAGE_UP = 0x10FF1C;
     public static final int PAGE_DOWN = 0x10FF1D;
+    public static final int DOCK = 0x10FF1E;
+    public static final int ZOOM_IN = 0x10FF1F;
+    public static final int ZOOM_OUT = 0x10FF20;
+    public static final int LINK = 0x10FF21;
+    public static final int SELECT = 0x10FF22;
+    public static final int SELECT_ALL = 0x10FF23;
+    public static final int QUICK_SELECT = 0x10FF24;
+    public static final int FIND = 0x10FF25;
+    public static final int SHARE = 0x10FF26;
+    public static final int RESET = 0x10FF27;
+    public static final int EDIT = 0x10FF28;
+    public static final int FLOAT_WINDOW = 0x10FF29;
+    public static final int ADD = 0x10FF2A;
+    public static final int CLONE = 0x10FF2B;
+    public static final int NEXT = 0x10FF2C;
+    public static final int PREVIOUS = 0x10FF2D;
+    public static final int CLOSE = 0x10FF2E;
+    public static final int SWITCH_INDEX = 0x10FF2F;
+    public static final int LOAD = 0x10FF30;
+    public static final int SAVE = 0x10FF31;
+    public static final int LAYOUT = 0x10FF32;
+    public static final int ROTATE = 0x10FF33;
+    public static final int EQUALIZE = 0x10FF34;
+    public static final int CONSUME = 0x10FF35;
+    public static final int EXPEL = 0x10FF36;
+    public static final int MOVE_WINDOW = 0x10FF37;
+    public static final int CLIPBOARD = 0x10FF38;
+    public static final int COPY = 0x10FF39;
+    public static final int WALLPAPER = 0x10FF3A;
+    public static final int CURSOR_TRAIL = 0x10FF3B;
+    public static final int APPEARANCE = 0x10FF3C;
+    public static final int FONT = 0x10FF3D;
+    public static final int SETTINGS = 0x10FF3E;
+    public static final int HELP = 0x10FF3F;
+    public static final int MINIMAL = 0x10FF40;
+    public static final int KEY_INSPECTOR = 0x10FF41;
+    public static final int GO_PAGE = 0x10FF42;
+    // Append only: stored rows carry these numbers.
 
     /** Every code point above; the app registers a drawable for each. */
     public static final int[] ALL = {
@@ -51,6 +89,10 @@ public final class ExtraKeyIcons {
         SESSIONS, PASTE, WINDOW_ADD, WINDOW_CLOSE, COMMAND, ARROW_LEFT, ARROW_RIGHT, ARROW_UP,
         ARROW_DOWN, ENTER, TAB, BACKSPACE, DELETE_FORWARD, MENU, SCROLL, KEY_HOME, KEY_END,
         PAGE_UP, PAGE_DOWN,
+        DOCK, ZOOM_IN, ZOOM_OUT, LINK, SELECT, SELECT_ALL, QUICK_SELECT, FIND, SHARE, RESET, EDIT,
+        FLOAT_WINDOW, ADD, CLONE, NEXT, PREVIOUS, CLOSE, SWITCH_INDEX, LOAD, SAVE, LAYOUT, ROTATE,
+        EQUALIZE, CONSUME, EXPEL, MOVE_WINDOW, CLIPBOARD, COPY, WALLPAPER, CURSOR_TRAIL, APPEARANCE,
+        FONT, SETTINGS, HELP, MINIMAL, KEY_INSPECTOR, GO_PAGE,
     };
 
     /** The one-character label that draws {@code codePoint}'s icon. */
@@ -77,6 +119,9 @@ public final class ExtraKeyIcons {
         {"tool:session.browser", SESSIONS, "󰉹"},
         {"tool:clipboard.paste", PASTE, "󰆒"},
         {"tool:app.command_palette", COMMAND, ""},
+        {"tool:session.new", ADD, "\uDB81\uDF5C"},
+        {"tool:pane.split_vertical", SPLIT, "\uDB82\uDFCC"},
+        {"tool:app.open_settings", SETTINGS, "\uf013"},
         {"KEYBOARD", KEYBOARD, "󰥻", "⌨"},
         {"LEFT", ARROW_LEFT, "←"},
         {"RIGHT", ARROW_RIGHT, "→"},

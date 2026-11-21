@@ -36,6 +36,27 @@ public class ExtraKeyIconRegistryTest {
         assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.COMMAND),
             ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE));
         assertNotNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_VOICE_DICTATE));
-        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_TERMINAL_RESET));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_MOVE_TO_EDGE));
+    }
+
+    @Test public void launcherActionsWearTheirIconAndArgumentRowsKeepText() {
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.DOCK),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.EDIT),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RENAME_PROMPT));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_KEYBOARD_SHOW));
+        // The prompt jumps would duplicate the arrow keys; they stay text.
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(
+            LauncherToolRegistry.TOOL_TERMINAL_JUMP_NEXT_PROMPT));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_RESIZE));
+        // A row that picks one value is told apart by it, except the wall's places.
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(
+            LauncherToolRegistry.TOOL_PANE_LAYOUT, "grid"));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.LAYOUT),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_PANE_LAYOUT, null));
+        assertEquals(ExtraKeyIcons.string(ExtraKeyIcons.DISPLAY),
+            ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_GO, "display"));
+        assertNull(ExtraKeyActionLabels.defaultCapGlyph(LauncherToolRegistry.TOOL_WALL_GO, "left"));
     }
 }

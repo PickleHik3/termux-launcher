@@ -233,7 +233,7 @@ public final class SheetsController {
         mWindowsRestoredNoticeOwed = false;
         View content = activity.findViewById(android.R.id.content);
         Runnable show = () -> com.termux.app.notice.AppNotice.show(activity,
-            R.string.notice_windows_restored);
+            R.drawable.ic_rl_restore, activity.getString(R.string.notice_windows_restored), false);
         if (content != null) content.post(show);
         else show.run();
     }
