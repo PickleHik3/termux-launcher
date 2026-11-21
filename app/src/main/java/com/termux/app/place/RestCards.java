@@ -9,6 +9,7 @@ import com.termux.app.dock.DockGeometry;
 import com.termux.app.dock.DockHostBounds;
 import com.termux.app.dock.DockLayout;
 import com.termux.app.dock.DockPlacement;
+import com.termux.app.dock.DockSpec;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.PeekGlassGeometry;
 import com.termux.app.dock.UnderKeyboardBand;
@@ -19,6 +20,7 @@ import com.termux.app.place.ChromeShape.EdgeKind;
 import com.termux.app.place.ChromeShape.PieceId;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
+import com.termux.app.terminal.inappkeyboard.FloatingKeyboardGeometry;
 import com.termux.app.wall.PageRef;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.LayoutStyle;
@@ -54,19 +56,42 @@ import java.util.List;
  *       {@link DockLayout} height (apps: its bar, Search field, Wall strip and page ticks).</li>
  *   <li>The Docked shape model's thicknesses: the bands' heights above, the status bar's
  *       the top status bar's thickness (a plain input on {@link Rest}), the keyboard's laid-out height.</li>
- *   <li>The lane slack and the flush padding: slack is read from the two layouts' rests; flush
- *       padding is whatever the pass carries (the fixtures stand none).</li>
+ *   <li>The lane slack: read from the two layouts' rests, plus the Terminal's rest flush padding
+ *       over the pass's ({@link Rest#restFlushPaddingPx}, {@code StackLanes#flushSlackPx}).</li>
  * </ul>
  *
- * <p>Not cards here: the floating-form keyboard (its rest rectangle is the activity's) and the
- * foot under the gesture pill (it needs the system inset, which a pass does not carry).
+ * <p>The foot under the gesture pill ({@link CardId#FOOT}) is the kept navigation band
+ * ({@link Rest#keptBandPx}) wherever a card reaches through it: the dock's host while it owns
+ * the foot ({@code DockSpec#footExists}), or the Docked keyboard while it wears the band as its
+ * own ({@link BottomInsets#keyboardWearsFoot}). The card above it stops at the band's top. A
+ * Peek card already runs past the screen's bottom and carries the band itself.
+ *
+ * <p>The keyboard's card in each form: Docked, a slice of the column (one piece, or the split
+ * keyboard's two halves under one host); Floating, a capsule inset by the host's side margin
+ * ({@code ChromePolicy#keyboardHostSideMarginPx}); the floating form, its own frame where
+ * {@link FloatingKeyboardGeometry} parks it in its room ({@link Rest#floatingKeyboardRoom}).
+ *
+ * <p>The A–Z bar: {@link #azPlacement} says where the layout stands it and {@link #carrierOf}
+ * which card carries it. Off the dock (an edge strip on the top or a side) it is not a card here:
+ * its host stands in the content column's own edge stack, whose bounds no pass carries.
  */
 public final class RestCards {
 
-    public enum CardId { STATUS, DOCK, PEEK, UNDER, KEYBOARD }
+    public enum CardId { STATUS, DOCK, PEEK, UNDER, KEYBOARD, FOOT }
 
     /** The views that carry cards or are laid out around them. */
-    public enum StackView { CONTAINER, HOST, KEYBOARD_COLUMN, UNDER, STATUS_BAR }
+    public enum StackView { CONTAINER, HOST, KEYBOARD_COLUMN, UNDER, STATUS_BAR, FLOATING_KEYBOARD }
+
+    /** Where the layout stands the A–Z bar (ResolvedArrangement's azRowOnDock, azBarEdge, azTab). */
+    public enum AzPlacement {
+        /** A row of the dock's stack: the dock's, the bands under the keyboard's or Peek's card. */
+        DOCK_ROW,
+        /** A bar of its own on the top or a side, in the content column's edge stack. */
+        EDGE,
+        /** The pull tab: on screen, but no band and no glass at rest. */
+        TAB,
+        HIDDEN
+    }
 
     /** One rest, as the activity's geometry pass fills it. */
     public static final class Rest {
@@ -84,10 +109,25 @@ public final class RestCards {
         public boolean keyboardGlassShared = true;
         /** A bottom status bar is a band of the dock's plank, not a bar with a sheet of its own. */
         public boolean statusOnDockPlank = false;
+        /** The navigation band the content keeps clear at the screen's bottom (BottomInsets#keptPx). */
+        public int keptBandPx = 0;
+        /** The Terminal's flush padding at its own rest, as the activity last noted it. */
+        public int restFlushPaddingPx = 0;
+        /** The user's chin under the keyboard's keys (Settings), px. */
+        public int keyboardChinPx = 0;
+        /** The floating-form keyboard's room (its frame's parent), screen px; null while none. */
+        @Nullable public Box floatingKeyboardRoom;
+        /** The floating frame's height and its width share, floor and parked fractions. */
+        public int floatingKeyboardHeightPx = 0;
+        public float floatingKeyboardWidthScale = 1f;
+        public int floatingKeyboardMinWidthPx = 0;
+        public float floatingKeyboardX = FloatingKeyboardGeometry.DEFAULT_X_FRACTION;
+        public float floatingKeyboardY = FloatingKeyboardGeometry.DEFAULT_Y_FRACTION;
 
         /**
-         * @param measuredKeyboardPx the keyboard as the stack lays it out while it is down: 0 for
-         *                           a floating-form keyboard, which its own frame lays out
+         * @param measuredKeyboardPx the keyboard as the stack lays it out while it is down, its
+         *                           foot included: 0 for a floating-form keyboard, which its own
+         *                           frame lays out
          */
         public Rest(@NonNull StackLayout.Input pass, @NonNull PageRef page, int screenWidthPx,
                     int screenHeightPx, float density, int measuredExtraKeysRowPx,
@@ -146,7 +186,8 @@ public final class RestCards {
     }
 
     @NonNull private final PageRef mPage;
-    @NonNull private final List<Card> mCards = new ArrayList<>(4);
+    @NonNull private final AzPlacement mAz;
+    @NonNull private final List<Card> mCards = new ArrayList<>(6);
     @NonNull private final Box[] mLaidOut = new Box[StackView.values().length];
 
     /** The rest's answer. */
@@ -155,7 +196,7 @@ public final class RestCards {
         return new RestCards(rest);
     }
 
-    /** The cards in a stable order: STATUS, DOCK or PEEK, UNDER, KEYBOARD. */
+    /** The cards in a stable order: STATUS, DOCK or PEEK, a foot it wears, UNDER, KEYBOARD, its foot. */
     @NonNull
     public List<Card> cards() {
         return Collections.unmodifiableList(mCards);
@@ -178,6 +219,28 @@ public final class RestCards {
         return mPage;
     }
 
+    /** Where the layout stands the A–Z bar. */
+    @NonNull
+    public AzPlacement azPlacement() {
+        return mAz;
+    }
+
+    /** The card that carries {@code piece}, null when none does (hidden, a tab, off the stack). */
+    @Nullable
+    public Card carrierOf(@NonNull PieceId piece) {
+        for (Card card : mCards) if (card.pieces.contains(piece)) return card;
+        return null;
+    }
+
+    /** {@link AzPlacement} for {@code layout}, as PlaceChromePolicy reads it. */
+    @NonNull
+    static AzPlacement azPlacementOf(@NonNull PlaceLayout layout) {
+        if (PlaceChromePolicy.azTabShown(layout)) return AzPlacement.TAB;
+        if (PlaceChromePolicy.azRowOnDock(layout)) return AzPlacement.DOCK_ROW;
+        if (PlaceChromePolicy.azRowShown(layout)) return AzPlacement.EDGE;
+        return AzPlacement.HIDDEN;
+    }
+
     // ---- The answer ------------------------------------------------------------------------
 
     private RestCards(@NonNull Rest rest) {
@@ -195,13 +258,33 @@ public final class RestCards {
         final DockLayout dock = r.dock;
         final float cornersPx = cornersPx(half, density);
 
+        mAz = azPlacementOf(layout);
+        final KeyboardForm form = layout.keyboardForm;
+        final boolean capsule = floating || form == KeyboardForm.FLOATING;
+
+        // The bands under the keyboard and whether the dock's glass stands as the Peek card.
+        final List<Element> under = EdgeStackPolicy.underKeyboard(layout);
+        final boolean peekStands = DockPlacement.peekCardStandsOn(pass.dock.rows.kind,
+            DockSurfaceSpec.forStyle(half.design).peek, pass.toolbarShown, layout, false, up,
+            pass.imeLiftPx > 0, dock.promptFieldBandPx > 0);
+        final boolean floats = DockPlacement.floats(floating, floating && peekStands);
+
+        // The kept band at the screen's bottom and who wears it: the dock's host while it owns
+        // the foot, the Docked keyboard while it is laid out with nothing under it.
+        final int kept = Math.max(0, rest.keptBandPx);
+        final boolean dockFoot = DockSpec.footExists(pass.toolbarShown, floats, up, false, kept);
+        final boolean keyboardLaidOutInColumn = form != KeyboardForm.FLOATING
+            && (up ? pass.keyboardHeightPx > 0 : rest.measuredKeyboardPx > 0);
+        final boolean keyboardFoot = BottomInsets.keyboardWearsFoot(capsule,
+            form == KeyboardForm.FLOATING, false, r.bandsUnderKeyboard, keyboardLaidOutInColumn);
         // The container: on the screen's bottom, as tall as the stack, the keyboard laid out
-        // while it is down, and the band both sides' rests need.
-        final BottomInsets insets = BottomInsets.forKept(0, 0, false, r.bottomMarginPx,
-            r.flushBottomInsetPx);
+        // while it is down, the kept band and the band both sides' rests need.
+        final BottomInsets insets = BottomInsets.forKept(0, kept, dockFoot, r.bottomMarginPx,
+            r.flushBottomInsetPx, keyboardFoot);
         final int kbDown = up ? 0
             : BottomInsets.keyboardKeysPx(rest.measuredKeyboardPx, insets.keyboardFootPx);
-        final int slack = laneSlackPx(rest);
+        final int slack = laneSlackPx(rest) + StackLanes.flushSlackPx(rest.restFlushPaddingPx,
+            r.flushPaddingPx);
         final int containerH = StackScene.containerHeightPx(
             r.stackHeightPx + insets.containerExtraPx(), kbDown, slack);
         final float containerBottom = h - insets.stackMarginPx;
@@ -212,32 +295,29 @@ public final class RestCards {
         // The container is drawn lower by the keyboard's share while the keyboard is down.
         final float shift = StackScene.keyboardTranslationPx(0f, kbDown);
 
-        // The keyboard's column on the container's bottom, with the bands under the keyboard.
+        // The keyboard's column on the container's bottom, with the bands under the keyboard;
+        // the keyboard's host holds its foot under its keys.
         final int keyboardLaid = up ? pass.keyboardHeightPx : kbDown;
-        final List<Element> under = EdgeStackPolicy.underKeyboard(layout);
+        final int keyboardFootPx = keyboardLaid > 0 ? insets.keyboardFootPx : 0;
         int underRows = 0;
         if (r.bandsUnderKeyboard) for (Element e : under) underRows += bandPx(e, dock, pass);
         final int underBlock = r.bandsUnderKeyboard
             ? r.underKeyboardTopMarginPx + underRows + r.underKeyboardBottomMarginPx : 0;
         final float columnBottom = containerBottom - insets.stackPaddingPx
             - insets.keyboardColumnMarginPx;
-        final float columnTop = columnBottom - (keyboardLaid + underBlock);
-        if (containerLaidOut && keyboardLaid + underBlock > 0)
+        final float columnTop = columnBottom - (keyboardLaid + keyboardFootPx + underBlock);
+        if (containerLaidOut && keyboardLaid + keyboardFootPx + underBlock > 0)
             mLaidOut[StackView.KEYBOARD_COLUMN.ordinal()] = new Box(0f, columnTop, w, columnBottom);
 
         // The glass host: pinned to the container's top and above the keyboard's column, or to
-        // the container's bottom while it is one surface with the Docked keyboard.
-        final boolean peekStands = DockPlacement.peekCardStandsOn(pass.dock.rows.kind,
-            DockSurfaceSpec.forStyle(half.design).peek, pass.toolbarShown, layout, false, up,
-            pass.imeLiftPx > 0, dock.promptFieldBandPx > 0);
-        final boolean floats = DockPlacement.floats(floating, floating && peekStands);
+        // the container's bottom while it is one surface with the Docked keyboard or owns the foot.
         final int sideMargin = DockHostBounds.sideMarginPx(floats, dock.horizontalInsetPx);
         final float hostTop = containerTop + DockHostBounds.topInsetPx(
             rest.statusOnDockPlank ? 0 : r.statusBandPx, dock.slabTopInsetPx, slack);
         final boolean unified = !r.bandsUnderKeyboard
             && ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(pass.toolbarShown, up,
                 floating, rest.keyboardGlassShared);
-        final float hostBottom = unified ? containerBottom : columnTop;
+        final float hostBottom = unified || insets.dockFootPx > 0 ? containerBottom : columnTop;
         final boolean hostLaidOut = containerLaidOut && pass.toolbarShown && hostBottom > hostTop;
         if (hostLaidOut)
             mLaidOut[StackView.HOST.ordinal()] =
@@ -254,22 +334,34 @@ public final class RestCards {
         final LayoutStyle style = floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED;
         final boolean statusOnTop = EdgeStackPolicy.stack(layout, Edge.TOP)
             .contains(Element.STATUS);
-        final boolean wantsShape = statusOnTop || hostLaidOut && !peekStands && !floats;
+        final boolean keyboardCard = containerLaidOut && up && keyboardLaid > 0
+            && form != KeyboardForm.FLOATING && !unified;
+        final boolean wantsShape = statusOnTop || hostLaidOut && !peekStands && !floats
+            || keyboardCard && !floating;
         final ChromeShape shape = wantsShape ? shapeOf(rest, r, dock, half, layout, style,
             cornersPx) : null;
+        // The foot's top: where the band the card above it stops at starts. The host is drawn
+        // moved by the container's share and cut at the container's laid-out bottom.
+        final float footTop = h - kept;
 
         // STATUS: the bar along the top edge.
         if (statusOnTop) addStatus(rest, shape, floating, w, h, density);
         // DOCK or PEEK: the host's glass.
         if (hostLaidOut) {
+            float drawnBottom = Math.min(hostBottom + shift, containerBottom);
+            boolean hostFoot = kept > 0 && drawnBottom >= h && !peekStands
+                && (insets.dockFootPx > 0 || unified && keyboardFootPx > 0);
+            float cardBottom = hostFoot ? footTop : drawnBottom;
             if (peekStands) {
                 addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h, shift, density);
             } else if (floats) {
-                addFloatingDock(layout, pass, rest, dock, hostTop, hostBottom, sideMargin, w,
+                addFloatingDock(layout, pass, rest, dock, hostTop, cardBottom, sideMargin, w,
                     shift, cornersPx, unified);
             } else {
-                addDockedDock(layout, pass, rest, shape, hostTop, hostBottom, w, shift, unified);
+                addDockedDock(layout, pass, rest, shape, hostTop, cardBottom, w, shift, unified,
+                    hostFoot);
             }
+            if (hostFoot) addFoot(StackView.HOST, sideMargin, footTop, w - sideMargin, h);
         }
         // UNDER: the bands under the keyboard wear the dock's sheet unless the Peek card does.
         if (underLaidOut && UnderKeyboardBand.wearsSheet(r.bandsUnderKeyboard, pass.toolbarShown,
@@ -277,10 +369,15 @@ public final class RestCards {
             addUnder(under, dock, underTop, underBottom, floating, w);
         }
         // KEYBOARD: the docked-form keyboard, unless the dock's glass carries it.
-        if (containerLaidOut && up && keyboardLaid > 0
-                && layout.keyboardForm != KeyboardForm.FLOATING && !unified) {
-            addKeyboard(r, dock, columnTop, keyboardLaid, floating, w, cornersPx, density);
+        if (keyboardCard) {
+            boolean keyboardFootDrawn = kept > 0 && keyboardFootPx > 0;
+            addKeyboard(rest, shape, form, half, columnTop, keyboardLaid,
+                keyboardFootDrawn ? footTop : columnTop + keyboardLaid + keyboardFootPx,
+                keyboardFootDrawn, floating, w, cornersPx, density);
+            if (keyboardFootDrawn) addFoot(StackView.KEYBOARD_COLUMN, 0f, footTop, w, h);
         }
+        // KEYBOARD: the floating-form keyboard, its own frame parked in its room.
+        if (up && form == KeyboardForm.FLOATING) addFloatingKeyboard(rest, cornersPx);
     }
 
     // ---- Cards -----------------------------------------------------------------------------
@@ -300,9 +397,9 @@ public final class RestCards {
 
     private void addFloatingDock(@NonNull PlaceLayout layout, @NonNull StackLayout.Input pass,
                                  @NonNull Rest rest, @NonNull DockLayout dock, float hostTop,
-                                 float hostBottom, int sideMargin, int w, float shift,
+                                 float drawnBottom, int sideMargin, int w, float shift,
                                  float cornersPx, boolean unified) {
-        Box box = new Box(sideMargin, hostTop + shift, w - sideMargin, hostBottom + shift);
+        Box box = new Box(sideMargin, hostTop + shift, w - sideMargin, drawnBottom);
         float radius = Math.min(cornersPx, box.height() / 2f);
         mCards.add(new Card(CardId.DOCK, StackView.HOST, box,
             new Corners(radius, radius, radius, radius), EdgeKind.RIM, EdgeKind.RIM,
@@ -311,14 +408,16 @@ public final class RestCards {
 
     private void addDockedDock(@NonNull PlaceLayout layout, @NonNull StackLayout.Input pass,
                                @NonNull Rest rest, @Nullable ChromeShape shape, float hostTop,
-                               float hostBottom, int w, float shift, boolean unified) {
+                               float drawnBottom, int w, float shift, boolean unified,
+                               boolean footBelow) {
         List<PieceId> ids = dockPieces(layout, rest, unified);
-        Box box = new Box(0f, hostTop + shift, w, hostBottom + shift);
+        Box box = new Box(0f, hostTop + shift, w, drawnBottom);
         LiveChromeShape.Clip clip = shape == null ? null : LiveChromeShape.outlineOf(shape, ids);
         Corners corners = clip == null ? Corners.SQUARE : new Corners(clip.topLeft,
             clip.topRight, clip.bottomRight, clip.bottomLeft);
         mCards.add(new Card(CardId.DOCK, StackView.HOST, box, corners,
-            outerKind(shape, ids, Edge.TOP), outerKind(shape, ids, Edge.BOTTOM),
+            outerKind(shape, ids, Edge.TOP),
+            footBelow ? EdgeKind.JOIN : outerKind(shape, ids, Edge.BOTTOM),
             outerKind(shape, ids, Edge.LEFT), outerKind(shape, ids, Edge.RIGHT), ids));
     }
 
@@ -398,26 +497,77 @@ public final class RestCards {
             side, side, side, pieces));
     }
 
-    private void addKeyboard(@NonNull StackLayout.Result r, @NonNull DockLayout dock,
-                             float columnTop, int keyboardPx, boolean floating, int w,
-                             float cornersPx, float density) {
-        List<PieceId> ids = Collections.singletonList(PieceId.KEYBOARD);
-        Box column = new Box(0f, columnTop, w, columnTop + keyboardPx);
+    /**
+     * The keyboard in the stack's column: its host, inset by the host's own margins (the side gap
+     * and the keyboard gap a capsule keeps, the chin under a capsule), down to {@code bottom}.
+     * Docked it is a slice of the frame whose edges are the shape model's; Floating a capsule
+     * with a rim all round. A split keyboard is one host across its two halves.
+     */
+    private void addKeyboard(@NonNull Rest rest, @Nullable ChromeShape shape,
+                             @NonNull KeyboardForm form, @NonNull DockGeometry.Half half,
+                             float columnTop, int keyboardPx, float bottom, boolean footBelow,
+                             boolean floating, int w, float cornersPx, float density) {
+        List<PieceId> ids = form == KeyboardForm.SPLIT
+            ? java.util.Arrays.asList(PieceId.KEYBOARD_LEFT, PieceId.KEYBOARD_RIGHT)
+            : Collections.singletonList(PieceId.KEYBOARD);
+        int side = ChromePolicy.keyboardHostSideMarginPx(false,
+            TermuxAppSharedPreferences.clampSurfaceHorizontalInset(half.marginDp), floating,
+            density);
+        int top = ChromePolicy.keyboardHostTopMarginPx(floating, false, density);
         if (floating) {
-            // The Floating keyboard is a capsule in its column: Margin in from the sides, the
-            // gap above it, the user's chin (none here) under it.
-            int margin = dock.horizontalInsetPx;
-            Box box = new Box(margin, columnTop + UnderKeyboardBand.keyboardGapPx(density),
-                w - margin, columnTop + keyboardPx);
+            int chin = ChromePolicy.keyboardChinBottomMarginPx(true, 0, rest.keyboardChinPx);
+            Box box = new Box(side, columnTop + top, w - side,
+                Math.min(bottom, columnTop + keyboardPx) - chin);
             float radius = Math.min(cornersPx, box.height() / 2f);
             mCards.add(new Card(CardId.KEYBOARD, StackView.KEYBOARD_COLUMN, box,
                 new Corners(radius, radius, radius, radius), EdgeKind.RIM, EdgeKind.RIM,
                 EdgeKind.RIM, EdgeKind.RIM, ids));
         } else {
-            EdgeKind bottom = r.bandsUnderKeyboard ? EdgeKind.JOIN : EdgeKind.SCREEN;
-            mCards.add(new Card(CardId.KEYBOARD, StackView.KEYBOARD_COLUMN, column,
-                Corners.SQUARE, EdgeKind.JOIN, bottom, EdgeKind.SCREEN, EdgeKind.SCREEN, ids));
+            Box box = new Box(side, columnTop + top, w - side, bottom);
+            LiveChromeShape.Clip clip = shape == null ? null : LiveChromeShape.outlineOf(shape, ids);
+            Corners corners = clip == null ? Corners.SQUARE : new Corners(clip.topLeft,
+                clip.topRight, clip.bottomRight, clip.bottomLeft);
+            mCards.add(new Card(CardId.KEYBOARD, StackView.KEYBOARD_COLUMN, box, corners,
+                outerKind(shape, ids, Edge.TOP),
+                footBelow ? EdgeKind.JOIN : outerKind(shape, ids, Edge.BOTTOM),
+                outerKind(shape, ids, Edge.LEFT), outerKind(shape, ids, Edge.RIGHT), ids));
         }
+    }
+
+    /**
+     * The foot under the gesture pill: the kept band, worn by the card above it ({@code view}),
+     * joined to it at its top and on the screen's edge everywhere else.
+     */
+    private void addFoot(@NonNull StackView view, float left, float top, float right, int h) {
+        mCards.add(new Card(CardId.FOOT, view, new Box(left, top, right, h), Corners.SQUARE,
+            EdgeKind.JOIN, EdgeKind.SCREEN, EdgeKind.SCREEN, EdgeKind.SCREEN,
+            Collections.<PieceId>emptyList()));
+    }
+
+    /**
+     * The floating-form keyboard: its frame at its width share of the room, parked at its
+     * fractions of the room's travel ({@link FloatingKeyboardGeometry}, as the controller puts
+     * it), a card over the content with Corners clamped to half its short side and a rim all round.
+     */
+    private void addFloatingKeyboard(@NonNull Rest rest, float cornersPx) {
+        Box room = rest.floatingKeyboardRoom;
+        if (room == null || rest.floatingKeyboardHeightPx <= 0) return;
+        int roomW = Math.round(room.width());
+        int roomH = Math.round(room.height());
+        int frameW = FloatingKeyboardGeometry.frameWidthPx(roomW, rest.floatingKeyboardWidthScale,
+            rest.floatingKeyboardMinWidthPx);
+        int frameH = rest.floatingKeyboardHeightPx;
+        if (frameW <= 0) return;
+        float left = room.left + FloatingKeyboardGeometry.positionPx(rest.floatingKeyboardX,
+            FloatingKeyboardGeometry.travelPx(roomW, frameW));
+        float top = room.top + FloatingKeyboardGeometry.positionPx(rest.floatingKeyboardY,
+            FloatingKeyboardGeometry.travelPx(roomH, frameH));
+        Box box = new Box(left, top, left + frameW, top + frameH);
+        mLaidOut[StackView.FLOATING_KEYBOARD.ordinal()] = box;
+        float radius = Math.max(0f, Math.min(cornersPx, Math.min(box.width(), box.height()) / 2f));
+        mCards.add(new Card(CardId.KEYBOARD, StackView.FLOATING_KEYBOARD, box,
+            new Corners(radius, radius, radius, radius), EdgeKind.RIM, EdgeKind.RIM,
+            EdgeKind.RIM, EdgeKind.RIM, Collections.singletonList(PieceId.KEYBOARD)));
     }
 
     // ---- Pieces and the shape model --------------------------------------------------------

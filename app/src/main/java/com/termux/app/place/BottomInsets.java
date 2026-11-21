@@ -97,6 +97,19 @@ public final class BottomInsets {
         return keyboardFoot && kept > 0 ? kept : 0;
     }
 
+    /**
+     * Whether the keyboard wears the kept band as its own foot: it is laid out in the stack's
+     * column ({@code laidOut}: shown, or down and still laid out) as a Docked slice (not a
+     * {@code capsule}, not in its floating frame), no bands stand under it and the system keyboard
+     * is away. The one question the dress phase and the stack pass both ask.
+     */
+    public static boolean keyboardWearsFoot(boolean capsule, boolean floatingForm,
+                                            boolean imeVisible, boolean underBandsShown,
+                                            boolean laidOut) {
+        if (capsule || floatingForm || imeVisible || underBandsShown) return false;
+        return laidOut;
+    }
+
     /** The keyboard's keys, without its foot, of a laid-out height. */
     public static int keyboardKeysPx(int laidOutPx, int footPx) {
         return Math.max(0, laidOutPx - Math.max(0, footPx));
