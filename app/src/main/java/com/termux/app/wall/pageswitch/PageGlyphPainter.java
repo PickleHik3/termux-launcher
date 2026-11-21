@@ -17,17 +17,15 @@ import com.termux.app.page.PageKind;
 /**
  * Draws a page glyph: its Roundline outline ({@link PageGlyphSlots}) stroked in one colour and,
  * in the Home and Terminal glyphs, the page number in that colour, bold, centred in the glyph's
- * number box by its ink and sized to fit the box (a single digit stands the box's height, two
- * digits its width). The current page's glyph also lays its interior in its colour at
- * {@link #ACTIVE_FILL_ALPHA}: the one rule for telling it apart, on the page bar, in the key's
- * pop-up and wherever else a glyph is drawn. Numbers above 99 draw as "99+".
+ * number box by its ink. Every number 1..99 in every kind stands one cap height, the largest at
+ * which the widest of them fits the smallest box, so a 1 beside a 12 and a house beside a
+ * terminal read alike. The current page is told apart by colour alone, outline and number in the
+ * caller's accent: an interior wash read as a smudge on mid-tone glass. Numbers above 99 draw as
+ * "99+".
  *
  * <p>The paths and every number's ink metrics are built once, here; drawing allocates nothing.
  */
 public final class PageGlyphPainter {
-
-    /** The current page's interior wash, as a share of its colour's alpha. */
-    static final float ACTIVE_FILL_ALPHA = 0.22f;
 
     private static final int MAX_NUMBER = 99;
     private static final String OVERFLOW = "99+";
@@ -35,7 +33,7 @@ public final class PageGlyphPainter {
     private static final float REFERENCE_SIZE = 100f;
 
     private final Path[] mOutline = new Path[PageKind.values().length];
-    /** Each outline's contours filled and joined: what the active wash and the glow's clip cover. */
+    /** Each outline's contours filled and joined: what the glow's clip and a stack's back card cover. */
     private final Path[] mInterior = new Path[PageKind.values().length];
     /** Each kind's filled marks, null where it has none. */
     private final Path[] mDot = new Path[PageKind.values().length];
@@ -51,6 +49,9 @@ public final class PageGlyphPainter {
     private final float mCapTop;
     private final float mCapHeight;
     private final float[] mLayout = new float[3];
+    /** The one text size of the numbers 1..99, in units; "99+" shrinks from it to fit. */
+    private final float mNumberSize;
+    private final float mMinBoxW;
 
     public PageGlyphPainter() {
         for (PageKind kind : PageKind.values()) {
@@ -83,6 +84,17 @@ public final class PageGlyphPainter {
         mText.getTextBounds("0123456789", 0, 10, bounds);
         mCapTop = bounds.top / REFERENCE_SIZE;
         mCapHeight = Math.max(1e-3f, bounds.height() / REFERENCE_SIZE);
+        float widest = 0f;
+        for (int n = 1; n <= MAX_NUMBER; n++) widest = Math.max(widest, mInkWidth[n]);
+        float boxW = Float.MAX_VALUE;
+        float boxH = Float.MAX_VALUE;
+        for (PageKind kind : PageKind.values()) {
+            float[] box = PageGlyphSlots.box(kind);
+            boxW = Math.min(boxW, box[2] - box[0]);
+            boxH = Math.min(boxH, box[3] - box[1]);
+        }
+        mMinBoxW = boxW;
+        mNumberSize = Math.min(boxH / mCapHeight, boxW / widest);
     }
 
     /** Every contour of {@code data} filled on its own, then joined, whichever way it winds. */
@@ -100,17 +112,11 @@ public final class PageGlyphPainter {
     /** Draws {@code kind}'s glyph in the square at ({@code left}, {@code top}) of side {@code size}. */
     public void draw(@NonNull Canvas canvas, @NonNull PageKind kind, int number,
                      float left, float top, float size, int color) {
-        draw(canvas, kind, number, left, top, size, color, false);
-    }
-
-    /** {@link #draw}, as the current page's glyph when {@code active}. */
-    public void draw(@NonNull Canvas canvas, @NonNull PageKind kind, int number,
-                     float left, float top, float size, int color, boolean active) {
         int save = canvas.save();
         canvas.translate(left, top);
         float unit = size / PageGlyphSlots.VIEWPORT;
         canvas.scale(unit, unit);
-        drawUnits(canvas, kind, number, color, active, PageGlyphSlots.STROKE);
+        drawUnits(canvas, kind, number, color, PageGlyphSlots.STROKE);
         canvas.restoreToCount(save);
     }
 
@@ -119,11 +125,7 @@ public final class PageGlyphPainter {
      * wide (a caller that scales the canvas further keeps the stroke's on-screen width this way).
      */
     void drawUnits(@NonNull Canvas canvas, @NonNull PageKind kind, int number, int color,
-                   boolean active, float stroke) {
-        if (active) {
-            mFill.setColor(scaleAlpha(color, ACTIVE_FILL_ALPHA));
-            canvas.drawPath(mInterior[kind.ordinal()], mFill);
-        }
+                   float stroke) {
         drawOutline(canvas, kind, color, stroke);
         if (!numberLayout(kind, number, mLayout)) return;
         mText.setTextSize(mLayout[2]);
@@ -132,7 +134,7 @@ public final class PageGlyphPainter {
         canvas.drawText(mNumbers[index], mLayout[0], mLayout[1], mText);
     }
 
-    /** The outline and its filled marks alone, no number and no wash, in the viewport's units. */
+    /** The outline and its filled marks alone, no number, in the viewport's units. */
     void drawOutline(@NonNull Canvas canvas, @NonNull PageKind kind, int color, float stroke) {
         int k = kind.ordinal();
         mStroke.setColor(color);
@@ -162,15 +164,18 @@ public final class PageGlyphPainter {
      */
     boolean numberLayout(@NonNull PageKind kind, int number, @NonNull float[] out) {
         if (number <= 0 || !PageGlyphSlots.showsNumber(kind)) return false;
+        placeNumber(kind, number, out);
+        return true;
+    }
+
+    /** {@link #numberLayout} in {@code kind}'s box, whether or not the kind shows a number. */
+    void placeNumber(@NonNull PageKind kind, int number, @NonNull float[] out) {
         int index = number > MAX_NUMBER ? 0 : number;
         float[] box = PageGlyphSlots.box(kind);
-        float boxW = box[2] - box[0];
-        float boxH = box[3] - box[1];
-        float size = Math.min(boxH / mCapHeight, boxW / mInkWidth[index]);
+        float size = Math.min(mNumberSize, mMinBoxW / mInkWidth[index]);
         out[0] = (box[0] + box[2]) / 2f - (mInkLeft[index] + mInkWidth[index] / 2f) * size;
         out[1] = (box[1] + box[3]) / 2f - (mCapTop + mCapHeight / 2f) * size;
         out[2] = size;
-        return true;
     }
 
     /** The paint the numbers are drawn with, for measuring them. */

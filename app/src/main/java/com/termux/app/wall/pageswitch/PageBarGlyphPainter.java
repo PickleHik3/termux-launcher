@@ -11,8 +11,7 @@ import com.termux.app.page.PageKind;
 
 /**
  * Draws the page bar's glyphs, centred on a point, {@code size} the side of the glyph's 24-unit
- * viewport: the Roundline outlines and numbers of {@link PageGlyphPainter}, the current page's
- * with its wash. A folded stack (several windows of one kind) draws its front glyph smaller,
+ * viewport: the Roundline outlines and numbers of {@link PageGlyphPainter}. A folded stack (several windows of one kind) draws its front glyph smaller,
  * moved down and left, and behind it a card: the glyph's silhouette stroked, moved up and right,
  * kept {@link #CLEAR} units clear of the front's stroke and inside so no stroke crosses another.
  *
@@ -38,12 +37,12 @@ public final class PageBarGlyphPainter {
     private final PageGlyphPainter mGlyphs = new PageGlyphPainter();
     private final Path[] mClear = new Path[PageKind.values().length];
 
-    /** {@code kind}'s glyph in {@code ink}, as the current page's when {@code current}, centred on ({@code cx}, {@code cy}). */
+    /** {@code kind}'s glyph in {@code ink}, centred on ({@code cx}, {@code cy}). */
     public void draw(@NonNull Canvas canvas, @NonNull PageKind kind, int number, float cx,
-                     float cy, float size, int ink, boolean current) {
+                     float cy, float size, int ink) {
         int save = canvas.save();
         place(canvas, cx, cy, size);
-        mGlyphs.drawUnits(canvas, kind, number, ink, current, PageGlyphSlots.STROKE);
+        mGlyphs.drawUnits(canvas, kind, number, ink, PageGlyphSlots.STROKE);
         canvas.restoreToCount(save);
     }
 
@@ -53,7 +52,7 @@ public final class PageBarGlyphPainter {
      * then the front glyph with {@code count} as its number.
      */
     public void drawStack(@NonNull Canvas canvas, @NonNull PageKind kind, int count, float cx,
-                          float cy, float size, int ink, boolean current, int plateInk) {
+                          float cy, float size, int ink, int plateInk) {
         float stroke = PageGlyphSlots.STROKE / STACK_SCALE;
         int save = canvas.save();
         place(canvas, cx, cy, size);
@@ -65,7 +64,7 @@ public final class PageBarGlyphPainter {
             stroke);
         canvas.restoreToCount(back);
         front(canvas);
-        mGlyphs.drawUnits(canvas, kind, count, ink, current, stroke);
+        mGlyphs.drawUnits(canvas, kind, count, ink, stroke);
         canvas.restoreToCount(save);
     }
 
