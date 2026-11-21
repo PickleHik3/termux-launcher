@@ -100,6 +100,10 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
      * <p>This is how an in-activity overlay — the command palette — types from the in-app
      * keyboard without the system IME: the keyboard's own pipeline stays intact and the
      * overlay only decides, per value, whether the terminal ever sees it.
+     *
+     * <p>The keyboard's own keys ({@link FieldKeys#isKeyboardOwned}) are not offered from the
+     * keyboard's keys: they act on the keyboard whatever has it. A text field edits by
+     * {@link FieldKeys}' rule, through {@link FieldEditor} unless it is a real {@code EditText}.
      */
     public interface KeyValueInterceptor {
 
@@ -219,7 +223,10 @@ public final class TerminalKeyEventHandler implements Config.IKeyEventHandler {
         KeyValueInterceptor interceptor = mInterceptor;
         if (offerToBindings(value, modifiers, interceptor))
             return;
-        if (interceptor != null && interceptor.interceptKeyValue(value,
+        // The keyboard's own keys (settings, the clipboard pane, layout switches, hide, …) act
+        // here whatever has the keyboard, so no field can swallow them (FieldKeys).
+        if (interceptor != null && !FieldKeys.isKeyboardOwned(value)
+            && interceptor.interceptKeyValue(value,
             modifiers.isCtrl(), modifiers.isAlt(), modifiers.isShift()))
             return;
         switch (value.getKind()) {

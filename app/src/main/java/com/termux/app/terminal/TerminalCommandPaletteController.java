@@ -215,7 +215,21 @@ public final class TerminalCommandPaletteController
     private final LauncherUsageStatsStore mAppUsageStats;
     private final Handler mHandler = new Handler(Looper.getMainLooper());
     private final float mDensity;
-    private final ClipboardText mClipboardSource;
+    /** The in-app keyboard's editing keys on the query (FieldKeys' rule). */
+    private final com.termux.app.terminal.inappkeyboard.FieldEditor mFieldEditor;
+    private final com.termux.app.terminal.inappkeyboard.FieldEditor.Field mQueryField =
+        new com.termux.app.terminal.inappkeyboard.FieldEditor.Field() {
+            @NonNull @Override public String fieldText() { return mQuery; }
+
+            @Override public void replaceFieldText(@NonNull String text) {
+                if (text.equals(mQuery)) return;
+                mQuery = text;
+                mQueryCursor = text.length();
+                onQueryChanged();
+            }
+
+            @Override public void insertFieldText(@NonNull String text) { appendText(text); }
+        };
 
     /**
      * The dock plank's 170/17 pair is tuned for a plank that tilts continuously under a finger; a
@@ -376,7 +390,7 @@ public final class TerminalCommandPaletteController
         mAppProvider = LauncherAppDataProvider.getInstance(activity);
         mAppUsageStats = LauncherUsageStatsStore.getInstance(activity);
         mDensity = activity.getResources().getDisplayMetrics().density;
-        mClipboardSource = clipboardSource;
+        mFieldEditor = new com.termux.app.terminal.inappkeyboard.FieldEditor(clipboardSource);
     }
 
     public boolean isOpen() {
@@ -540,6 +554,7 @@ public final class TerminalCommandPaletteController
         mMode = Mode.LIST;
         mQuery = "";
         mQueryCursor = 0;
+        mFieldEditor.reset();
         mCrumb = "";
         mPendingEntry = null;
         mCaptureStroke = "";
@@ -1483,6 +1498,9 @@ public final class TerminalCommandPaletteController
                                      boolean shift) {
         if (!mOpen) return false;
         if (mMode == Mode.CAPTURE) return interceptCaptureKeyValue(value, ctrl, alt, shift);
+        // Edits, chords and tool keys follow the one field rule (FieldKeys); the keyboard's own
+        // keys never get here. What is left is the query's and the list's.
+        if (mFieldEditor.handle(mQueryField, value, ctrl, alt, shift)) return true;
         switch (value.getKind()) {
             case Char:
                 if (!ctrl && !alt) appendText(String.valueOf(value.getChar()));
@@ -1494,8 +1512,6 @@ public final class TerminalCommandPaletteController
                 switch (value.getEditing()) {
                     case SPACE_BAR: appendText(" "); break;
                     case BACKSPACE: backspace(); break;
-                    case PASTE:
-                    case PASTE_PLAIN: pasteClipboard(); break;
                     default: break;
                 }
                 return true;
@@ -1582,11 +1598,6 @@ public final class TerminalCommandPaletteController
         }
     }
 
-    /** Inserts the clipboard text, sanitized for the single-line query, at the cursor. */
-    private void pasteClipboard() {
-        String text = mClipboardSource.read();
-        if (text != null && !text.isEmpty()) appendText(PasteText.sanitizeSingleLine(text));
-    }
 
     private void appendText(@NonNull String text) {
         if (text.isEmpty()) return;

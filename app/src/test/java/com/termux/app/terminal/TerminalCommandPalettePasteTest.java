@@ -48,22 +48,52 @@ public class TerminalCommandPalettePasteTest {
         assertEquals("one twoone two", palette.query());
     }
 
-    /** Copy, cut and select-all in the query stay unhandled: swallowed, and the query untouched. */
+    /**
+     * The field rule in the query: copy and cut take the whole query, select all makes the next
+     * letter replace it, Ctrl+Z and Ctrl+Y undo and redo, and an unmapped chord or a tool key does
+     * nothing.
+     */
     @Test
-    public void copyCutAndSelectAllAreSwallowedWithoutEffect() {
+    public void editKeysAndCtrlChordsActOnTheQuery() {
         TermuxActivity activity = laidOutActivity();
+        java.util.List<String> copied = new java.util.ArrayList<>();
         TerminalCommandPaletteController palette =
-            new TerminalCommandPaletteController(hostOver(activity), () -> "never read");
+            new TerminalCommandPaletteController(hostOver(activity), new ClipboardText() {
+                @Override public String read() { return "pq"; }
+                @Override public void write(String text) { copied.add(text); }
+            });
         palette.show();
         palette.interceptKeyValue(KeyValue.makeCharKey('g'), false, false, false);
 
         assertTrue(palette.interceptKeyValue(
             KeyValue.getKeyByName("copy"), false, false, false));
-        assertTrue(palette.interceptKeyValue(
-            KeyValue.getKeyByName("cut"), false, false, false));
+        assertEquals("g", copied.get(0));
         assertTrue(palette.interceptKeyValue(
             KeyValue.getKeyByName("selectAll"), false, false, false));
-        assertEquals("g", palette.query());
+        palette.interceptKeyValue(KeyValue.makeCharKey('s'), false, false, false);
+        assertEquals("s", palette.query());
+
+        assertTrue(palette.interceptKeyValue(KeyValue.makeCharKey('x'), true, false, false));
+        assertEquals("", palette.query());
+        assertEquals("s", copied.get(1));
+        palette.interceptKeyValue(KeyValue.makeCharKey('v'), true, false, false);
+        assertEquals("pq", palette.query());
+        palette.interceptKeyValue(KeyValue.makeCharKey('z'), true, false, false);
+        assertEquals("", palette.query());
+        palette.interceptKeyValue(KeyValue.makeCharKey('y'), true, false, false);
+        assertEquals("pq", palette.query());
+        palette.interceptKeyValue(KeyValue.getKeyByName("cut"), false, false, false);
+        palette.interceptKeyValue(KeyValue.getKeyByName("undo"), false, false, false);
+        assertEquals("pq", palette.query());
+        palette.interceptKeyValue(KeyValue.getKeyByName("redo"), false, false, false);
+        assertEquals("", palette.query());
+        palette.interceptKeyValue(KeyValue.getKeyByName("undo"), false, false, false);
+
+        assertTrue(palette.interceptKeyValue(KeyValue.makeCharKey('q'), true, false, false));
+        assertTrue(palette.interceptKeyValue(
+            KeyValue.makeLauncherToolKey("window.next", "»", 0), false, false, false));
+        assertEquals("pq", palette.query());
+        assertTrue(palette.isOpen());
     }
 
     private static TermuxActivity laidOutActivity() {

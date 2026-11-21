@@ -10,6 +10,7 @@ import android.widget.EditText;
 import androidx.annotation.NonNull;
 
 import com.termux.app.terminal.ClipboardText;
+import com.termux.app.terminal.inappkeyboard.FieldKeys;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 
 import juloo.keyboard2.KeyValue;
@@ -47,20 +48,30 @@ final class AssistantFieldKeys implements TerminalKeyEventHandler.KeyValueInterc
                                      boolean shift) {
         // Nothing focused: still swallowed, so nothing reaches the terminal behind the page.
         if (target.get() == null) return true;
+        // The one field rule (FieldKeys): edit keys and Ctrl chords act on the field's own text,
+        // tool keys do nothing; the keyboard's own keys never get here.
+        switch (FieldKeys.classify(value, ctrl, alt)) {
+            case EDITING:
+            case CHORD:
+                edit(FieldKeys.editFor(value, ctrl, alt, shift));
+                return true;
+            case TOOL:
+            case KEYBOARD_OWNED:
+                return true;
+            default:
+                break;
+        }
         switch (value.getKind()) {
             case Char:
-                if (!ctrl && !alt) insert(String.valueOf(value.getChar()));
+                insert(String.valueOf(value.getChar()));
                 return true;
             case String:
-                if (!ctrl && !alt) insert(value.getString());
+                insert(value.getString());
                 return true;
             case Editing:
                 switch (value.getEditing()) {
                     case SPACE_BAR: insert(" "); break;
                     case BACKSPACE: backspace(); break;
-                    case PASTE:
-                    case PASTE_PLAIN: paste(); break;
-                    case SELECT_ALL: Selection.selectAll(editable()); break;
                     default: break;
                 }
                 return true;
@@ -95,6 +106,45 @@ final class AssistantFieldKeys implements TerminalKeyEventHandler.KeyValueInterc
             case KeyEvent.KEYCODE_ENTER:
             case KeyEvent.KEYCODE_NUMPAD_ENTER: enter(shift); break;
             default: break;
+        }
+    }
+
+    /**
+     * The editing actions on a real {@code EditText}: copy and cut take the selection (through the
+     * launcher's clipboard, so they join the keyboard's history), paste replaces it, and undo and
+     * redo are the field's own.
+     */
+    private void edit(@NonNull FieldKeys.Edit action) {
+        EditText field = target.get();
+        if (field == null) return;
+        Editable e = field.getText();
+        switch (action) {
+            case COPY:
+                if (low(e) < high(e)) clipboard.write(e.subSequence(low(e), high(e)).toString());
+                break;
+            case CUT:
+                if (low(e) < high(e)) {
+                    int start = low(e);
+                    clipboard.write(e.subSequence(start, high(e)).toString());
+                    e.delete(start, high(e));
+                    Selection.setSelection(e, start);
+                }
+                break;
+            case PASTE:
+            case PASTE_PLAIN:
+                paste();
+                break;
+            case SELECT_ALL:
+                Selection.selectAll(e);
+                break;
+            case UNDO:
+                field.onTextContextMenuItem(android.R.id.undo);
+                break;
+            case REDO:
+                field.onTextContextMenuItem(android.R.id.redo);
+                break;
+            default:
+                break;
         }
     }
 

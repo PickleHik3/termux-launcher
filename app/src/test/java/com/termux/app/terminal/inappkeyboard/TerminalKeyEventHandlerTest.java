@@ -756,6 +756,183 @@ public class TerminalKeyEventHandlerTest {
         assertTrue(mTerminal.codePointCalls.isEmpty());
     }
 
+    /**
+     * Whatever field has the keyboard, the keyboard's own keys act on the keyboard and never reach
+     * the field: the interceptor here takes everything it is offered, as every field's does.
+     */
+    @Test
+    public void keyboardOwnedEventsPassAFieldThatTakesEverythingAndTheActionKeyDoesNot() {
+        List<KeyValue> offered = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            offered.add(value);
+            return true;
+        });
+        for (KeyValue.Event event : KeyValue.Event.values()) {
+            int hostActions = mHost.totalActions();
+            int logs = mHost.logs.size();
+            offered.clear();
+            mHandler.key_up(event(event), Pointers.Modifiers.EMPTY);
+            if (event == KeyValue.Event.ACTION) {
+                assertEquals(1, offered.size());
+            } else {
+                assertTrue(event + " is not the field's", offered.isEmpty());
+                assertTrue(event + " acts on the keyboard",
+                    mHost.totalActions() + mHost.logs.size() > hostActions + logs);
+            }
+        }
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mTerminal.codePoints.isEmpty());
+    }
+
+    @Test
+    public void inlineRenameFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.rename.InlineRenameController rename =
+            new com.termux.app.terminal.rename.InlineRenameController(clip);
+        rename.begin("ab", 40, new com.termux.app.terminal.rename.InlineRenameController.Host() {
+            @Override public void onDraftChanged(
+                com.termux.app.terminal.rename.InlineRenameModel model) {}
+            @Override public void onRenameEnded(boolean committed, String committedName) {}
+        });
+        assertFieldFollowsTheRule(rename, () -> rename.model().text(), clip, true);
+    }
+
+    @Test
+    public void folderRenameFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.launcher.folder.FolderRenameController rename =
+            new com.termux.app.launcher.folder.FolderRenameController(clip);
+        rename.begin(1L, "f", "ab", new com.termux.app.launcher.folder.FolderRenameController.Host() {
+            @Override public com.termux.app.launcher.data.LauncherConfigRepository.MutationResult
+                commit(long revision, String folderId, String title) {
+                return com.termux.app.launcher.data.LauncherConfigRepository.MutationResult.APPLIED;
+            }
+            @Override public void onDraftChanged(com.termux.app.launcher.folder.FolderRenameModel m) {}
+            @Override public void onRenameEnded(boolean committed) {}
+        });
+        assertFieldFollowsTheRule(rename, () -> rename.model().text(), clip, true);
+    }
+
+    @Test
+    public void dictationEditorFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.inappkeyboard.voice.VoiceEditController edit =
+            new com.termux.app.terminal.inappkeyboard.voice.VoiceEditController(clip);
+        edit.begin("ab", 2, new com.termux.app.terminal.inappkeyboard.voice.VoiceEditController.Host() {
+            @Override public void onDraftChanged(
+                com.termux.app.terminal.inappkeyboard.voice.VoiceEditModel model) {}
+            @Override public int offsetOnAdjacentLine(int caretUtf16, int direction) { return -1; }
+            @Override public void onEditEnded(String text) {}
+        });
+        assertFieldFollowsTheRule(edit, () -> edit.model().text(), clip, true);
+    }
+
+    @Test
+    public void drawerSearchFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.launcher.drawer.AppDrawerSearchController search =
+            new com.termux.app.launcher.drawer.AppDrawerSearchController(clip);
+        search.setHost(new com.termux.app.launcher.drawer.AppDrawerSearchController.Host() {
+            @Override public boolean isSearchActive() { return true; }
+            @Override public void onSearchCommitRequested() {}
+            @Override public void onSearchDismissRequested() {}
+        });
+        search.replaceQuery("ab", 2);
+        assertFieldFollowsTheRule(search, search::query, clip, true);
+    }
+
+    /** Find keeps its own Ctrl+V (a block selection on the matches); the paste key still pastes. */
+    @Test
+    public void findFollowsTheFieldRuleAndKeepsItsOwnCtrlV() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.find.TerminalFindController find =
+            new com.termux.app.terminal.find.TerminalFindController(clip);
+        find.begin(Arrays.asList(new com.termux.app.terminal.find.TerminalFindModel.Line(0, "ab pq")),
+            new com.termux.app.terminal.find.TerminalFindController.Host() {
+                @Override public void onFindChanged(
+                    com.termux.app.terminal.find.TerminalFindModel model) {}
+                @Override public void onFindEnded(String yankedText) {}
+            });
+        find.handleCodePoint('a', false);
+        find.handleCodePoint('b', false);
+        assertFieldFollowsTheRule(find, () -> find.model().query(), clip, false);
+
+        mHandler.key_up(KeyValue.makeCharKey('v'), mods(KeyValue.Modifier.CTRL));
+        assertTrue("Ctrl+V left the query for the copy mode",
+            find.model().mode() != com.termux.app.terminal.find.TerminalFindModel.Mode.TYPING);
+        assertTrue(mTerminal.codePoints.isEmpty());
+    }
+
+    /**
+     * One field holding "ab", installed in the keyboard: the keyboard's own keys reach the host,
+     * the edit keys and Ctrl chords act on the field's text, an unmapped chord and a tool key do
+     * nothing, and nothing at all reaches the terminal.
+     */
+    private void assertFieldFollowsTheRule(TerminalKeyEventHandler.KeyValueInterceptor field,
+                                           java.util.function.Supplier<String> text,
+                                           FieldEditorTest.Clip clip, boolean ctrlVPastes) {
+        mHandler.setKeyValueInterceptor(field);
+
+        up("config");
+        up("switch_clipboard");
+        up("switch_forward");
+        assertEquals("the settings key opens settings", 1, mHost.settings);
+        assertEquals("the clipboard pane opens", 1, mHost.clipboardPanels);
+        assertEquals("the layout switches", 1, mHost.nextLayouts);
+        assertEquals("ab", text.get());
+
+        up("copy");
+        assertEquals("ab", clip.last());
+        up("selectAll");
+        mHandler.key_up(KeyValue.makeCharKey('n'), Pointers.Modifiers.EMPTY);
+        assertEquals("select all, then a letter, replaces the text", "n", text.get());
+
+        ctrl('a');
+        ctrl('x');
+        assertEquals("", text.get());
+        assertEquals("n", clip.last());
+        clip.text = "pq";
+        if (ctrlVPastes) ctrl('v');
+        else up("paste");
+        assertEquals("pq", text.get());
+        ctrl('z');
+        assertEquals("", text.get());
+        ctrl('y');
+        assertEquals("pq", text.get());
+        up("undo");
+        assertEquals("", text.get());
+        up("redo");
+        assertEquals("pq", text.get());
+        up("cut");
+        assertEquals("", text.get());
+        up("pasteAsPlainText");
+        assertEquals("pq", text.get());
+        ctrl('c');
+        assertEquals("pq", clip.last());
+
+        int written = clip.written.size();
+        ctrl('q');
+        mHandler.key_up(KeyValue.makeLauncherToolKey("app.command_palette", "⌘", 0),
+            Pointers.Modifiers.EMPTY);
+        assertEquals("pq", text.get());
+        assertEquals(written, clip.written.size());
+        assertTrue("a tool key does nothing", mHost.launcherTools.isEmpty());
+
+        assertTrue("nothing reaches the shell", mTerminal.codePoints.isEmpty());
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mTerminal.writes.isEmpty());
+        assertEquals(0, mHost.pastes + mHost.clipboardPastes + mHost.copies + mHost.cuts
+            + mHost.selectAlls);
+    }
+
+    private void up(String name) {
+        mHandler.key_up(KeyValue.getKeyByName(name), Pointers.Modifiers.EMPTY);
+    }
+
+    private void ctrl(char c) {
+        mHandler.key_up(KeyValue.makeCharKey(c), mods(KeyValue.Modifier.CTRL));
+    }
+
     private static final class KeyCall {
 
         private final int keyCode;

@@ -188,4 +188,38 @@ public class AssistantFieldKeysTest {
         assertTrue(press(KeyValue.keyeventKey("f", KeyEvent.KEYCODE_F5, 0)));
         assertTrue(press(KeyValue.getKeyByName("esc")));
     }
+
+    /** The field rule on a real EditText: edit keys and Ctrl chords act on the selection. */
+    @Test
+    public void editKeysAndCtrlChordsActOnTheFieldsSelection() {
+        List<String> copied = new ArrayList<>();
+        AssistantFieldKeys keys = new AssistantFieldKeys(composer::field, f -> composer.submit(),
+            new com.termux.app.terminal.ClipboardText() {
+                @Override public String read() { return "pq"; }
+                @Override public void write(@NonNull String text) { copied.add(text); }
+            });
+        composer.setText("hello world");
+        composer.field().setSelection(0, 5);
+
+        assertTrue(keys.interceptKeyValue(KeyValue.getKeyByName("copy"), false, false, false));
+        assertEquals("hello", copied.get(0));
+        assertTrue(keys.interceptKeyValue(KeyValue.makeCharKey('x'), true, false, false));
+        assertEquals(" world", composer.text());
+        assertEquals("hello", copied.get(1));
+
+        assertTrue(keys.interceptKeyValue(KeyValue.makeCharKey('a'), true, false, false));
+        assertEquals(0, composer.field().getSelectionStart());
+        assertEquals(6, composer.field().getSelectionEnd());
+        assertTrue(keys.interceptKeyValue(KeyValue.makeCharKey('c'), true, false, false));
+        assertEquals(" world", copied.get(2));
+        assertTrue(keys.interceptKeyValue(KeyValue.makeCharKey('v'), true, false, false));
+        assertEquals("pq", composer.text());
+
+        // An unmapped chord and a tool key change nothing.
+        assertTrue(keys.interceptKeyValue(KeyValue.makeCharKey('q'), true, false, false));
+        assertTrue(keys.interceptKeyValue(
+            KeyValue.makeLauncherToolKey("window.next", "»", 0), false, false, false));
+        assertEquals("pq", composer.text());
+        assertEquals(3, copied.size());
+    }
 }
