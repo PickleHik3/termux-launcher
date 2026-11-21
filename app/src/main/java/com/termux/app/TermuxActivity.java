@@ -28620,8 +28620,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Logger.logWarn(LOG_TAG, "Add to Home failed for " + entry.appRef.stableId());
             return;
         }
-        android.widget.Toast.makeText(this, getString(R.string.home_app_added, page + 1),
-            android.widget.Toast.LENGTH_SHORT).show();
+        com.termux.app.notice.AppNotice.confirm(this, R.drawable.ic_rl_home,
+            getString(R.string.home_app_added, page + 1));
     }
 
     /**

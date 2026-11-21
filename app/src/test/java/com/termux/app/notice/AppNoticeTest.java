@@ -357,4 +357,29 @@ public class AppNoticeTest {
         assertEquals(View.VISIBLE, mark.getVisibility());
         assertEquals(1, mark.getText().length());
     }
+
+    @Test
+    public void anErrorWithAnIconOfItsOwnReachesThePill() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        AppNotice.show(activity, AppNoticeItem.Kind.ERROR, R.drawable.ic_rl_file,
+            "Could not open", null, false);
+        AppNoticeHostView host = AppNotice.hostFor(activity);
+        assertNotNull(host);
+        assertEquals("Could not open", String.valueOf(host.activeItem().title));
+        assertEquals(AppNoticeItem.Kind.ERROR, host.activeItem().kind);
+        assertEquals(R.drawable.ic_rl_file, host.activeItem().resolvedIcon());
+        assertEquals(AppNoticeHostView.HOLD_SHORT_MS, host.activeItem().durationMs);
+    }
+
+    @Test
+    public void withNoActivityUpTheNoticeFallsBackToAStockToast() {
+        // The settings pages and the widgets raise notices with whatever context they hold; with
+        // no window of ours to draw into, the words still reach the user.
+        Application app = androidx.test.core.app.ApplicationProvider.getApplicationContext();
+        AppNotice.install(app);
+        AppNotice.show(app, AppNoticeItem.Kind.ERROR, R.drawable.ic_rl_file, "Fallback words",
+            null, true);
+        assertEquals("Fallback words",
+            org.robolectric.shadows.ShadowToast.getTextOfLatestToast());
+    }
 }
