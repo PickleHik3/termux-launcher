@@ -299,6 +299,14 @@ fails when the catalogue has gone stale.
   near. Space between two keys of a row and anything past the bottom margin still start nothing,
   and `getKeyAtPosition`, which the popup, `hasKeyAt` and key painting read, is unchanged.
 
+- Palette blend (local addition, 2026-11-17): `Theme.Palette.blend(from, to, t)` returns the palette
+  `t` of the way between two palettes, every colour blended channel by channel in ARGB and
+  everything else (geometry, dimming, indicator, deck) taken from `from`; exactly `from` at 0 and
+  `to` at 1. `Keyboard2View.setPaletteColors(palette)` is `setPalette` without `requestLayout`, for a
+  palette that differs only in colours. The launcher blends the legends' ink between two page looks
+  as a crossing moves (ADR 0029 section 8), so they drift pale to dark with no flip and no layout.
+  Upstream has no such state.
+
 ## Refresh procedure
 
 1. Record the new upstream commit and copy the selected sources, all layout

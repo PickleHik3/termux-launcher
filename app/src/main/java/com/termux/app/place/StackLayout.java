@@ -9,8 +9,8 @@ import com.termux.app.dock.DockPlacement;
 import com.termux.app.dock.DockRows;
 import com.termux.app.dock.DockSurfaceSpec;
 import com.termux.app.dock.UnderKeyboardBand;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Stack layout (ADR 0011): the whole bottom stack as a pure function of one snapshot. The dock's
@@ -218,7 +218,7 @@ public final class StackLayout {
 
         Base(@NonNull DockLayout dock, @NonNull DockGeometry.Half half,
              @NonNull PlaceLayout arrangement, boolean toolbarShown, boolean keyboardShown,
-             int imeLiftPx, @NonNull PaneWallPage rowsPage) {
+             int imeLiftPx, @NonNull PageKind rowsPage) {
             // On Home the card stands on the keyboard too (D11), so Floating's gap goes with it.
             // Read for the page whose rows the stack stands, as the activity dresses the dock.
             boolean peekCardStands = DockPlacement.peekCardStandsOn(rowsPage,
@@ -242,6 +242,17 @@ public final class StackLayout {
     }
 
     /** The stack's height: its rows, the terminal's padding and the keyboard. */
+    /**
+     * The flush padding a pass stands the stack with. While a crossing is live it is the arriving
+     * place's rest value ({@code restFlushPx}): the live reading comes off the terminal's
+     * geometry, which a crossing has pre-sized and displaced, and differs from the rest's by a few
+     * px, so the container's height would change on the landing frame. At rest, the live reading.
+     */
+    public static int flushPx(boolean crossing, int restFlushPx, @NonNull FlushRule live,
+                              int contentPx, int marginPx) {
+        return crossing ? Math.max(0, restFlushPx) : live.paddingPx(contentPx, marginPx);
+    }
+
     public static int stackHeightPx(int dockContentHeightPx, int flushPaddingPx,
                                     int keyboardHeightPx) {
         return Math.max(0, dockContentHeightPx)
@@ -327,6 +338,18 @@ public final class StackLayout {
     }
 
     /**
+     * {@code page}'s dock rows at rest with its own extra-keys row, nothing squeezed, 0 while its
+     * dock is away: the band the side stands over the keyboard. The taller of the two sides' is the
+     * band the stack lays out once ({@link StackLanes#slackPx}).
+     */
+    public static int restRowsPx(@NonNull RestInput in) {
+        return in.toolbarShown
+            ? DockGeometry.compute(in.dock.restOf(in.page))
+                .combinedHeight(in.toolbarHeightPx, in.extraKeysRowEnabled)
+            : 0;
+    }
+
+    /**
      * The room {@code page}'s chrome leaves the content at rest, built from the stack's parts the
      * way {@link #layout} builds them: its own dock rows in its own Style, its own status band,
      * the terminal's padding, the keyboard when it is up and the margin under all of that. Home's
@@ -365,6 +388,17 @@ public final class StackLayout {
             statusBandPx > 0);
         return KeyboardOverlayPolicy.homeGridDockReservePx(in.page.isHome() && stackShown,
             dockContentPx, base.edgeGapPx);
+    }
+
+    /**
+     * The edge gap {@code page}'s dock keeps above the pane's bottom at rest, built the way
+     * {@link #layout} builds {@link Result#stackEdgeGapPx}: the page bar's pill stands that far up
+     * when no dock rows stand under it.
+     */
+    public static int restGridEdgeGapPx(@NonNull RestInput in, @NonNull DockLayout rest) {
+        DockGeometry.Half half = in.dock.half(in.page);
+        return new Base(rest, half, half.layout, in.toolbarShown, in.keyboardShown,
+            in.imeLiftPx, in.page.kind).edgeGapPx;
     }
 
     /** Whether {@code layout} stands the status bar along the bottom, a band of the stack. */

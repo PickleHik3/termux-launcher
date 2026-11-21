@@ -6,7 +6,7 @@ import static com.termux.app.place.CrossingTest.REVISION;
 import static com.termux.app.place.CrossingTest.ROW;
 import static com.termux.app.place.CrossingTest.STEP;
 import static com.termux.app.place.CrossingTest.WIDTH;
-import static com.termux.app.place.CrossingTest.WORKSPACE_REST;
+import static com.termux.app.place.CrossingTest.TERMINAL_REST;
 import static com.termux.app.place.CrossingTest.across;
 import static com.termux.app.place.CrossingTest.half;
 import static org.junit.Assert.assertEquals;
@@ -26,11 +26,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.SuggestionBarView;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceChromeTravel.Frame;
 import com.termux.app.place.PlaceChromeTravel.Rest;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -91,9 +90,18 @@ public class CrossingViewsTest {
     /** The activity's side: its views by id, and what the adapter hands it, recorded. */
     private static final class FakeHost implements CrossingViews.Host {
         final SparseArray<View> views = new SparseArray<>();
+        /** The stack's one writer, over these views. */
+        final com.termux.app.StackRenderer renderer = new com.termux.app.StackRenderer(
+            new com.termux.app.StackRenderer.Views() {
+                @Nullable @Override public View view(int id) { return views.get(id); }
+                @Override public int keyboardDesiredHeightPx() { return 0; }
+                @Override public boolean underKeyboardBandsShown() { return false; }
+                @Override public boolean keyboardShown() { return false; }
+            });
+        @NonNull @Override public com.termux.app.StackRenderer stackRenderer() { return renderer; }
         float dockPx = Float.NaN, keyboardPx = Float.NaN, barX = Float.NaN;
-        int coverPx = -1, preSizePx = -1;
-        final List<PaneWallPage> preRolls = new ArrayList<>();
+        int coverPx = -1;
+        final List<PageKind> preRolls = new ArrayList<>();
 
         @Nullable @Override public View hotView(int id) { return views.get(id); }
         @Override public void translateStack(float dock, float keyboard) {
@@ -102,15 +110,7 @@ public class CrossingViewsTest {
         }
         @Override public void rideStatusX(float px) { barX = px; }
         @Override public void coverWindowInFront(int px) { coverPx = px; }
-        @Override public void preRollKeyboard(@NonNull PaneWallPage target) { preRolls.add(target); }
-        @Override public boolean extraKeysRowOnScreen() { return true; }
-        @Override public int terminalFlushPaddingPx() { return 12; }
-        @Nullable @Override public SuggestionBarView dockRow() { return null; }
-        @Override public void syncDockBeadsWithMorph() {}
-        @Override public void onDockRowContentChanged() {}
-        @Nullable @Override public StackPicture stackPicture(@Nullable View stack) { return null; }
-        @Override public int wallWidthPx() { return WIDTH; }
-        @Override public void applyTerminalPreSize(int px) { preSizePx = px; }
+        @Override public void preRollKeyboard(@NonNull PageKind target) { preRolls.add(target); }
     }
 
     /** The layers a sink or a fold moves, and the views the alphas fade. */
@@ -154,40 +154,42 @@ public class CrossingViewsTest {
     /** The crossing over the adapter, driven as the activity's travel pass applies a frame. */
     private final class Drive {
         final CrossingViews views = new CrossingViews(mActivity, mHost);
-        final Crossing crossing = new Crossing(views, views, views, views, views);
-        final PaneWallPage committed;
+        final Crossing crossing = new Crossing(views, views, views, views);
+        final PageKind committed;
         final SeamCrossing.Endpoint here, there;
         final PlaceChromeTravel.States states;
 
-        Drive(@NonNull PaneWallPage from) {
-            views.attach(crossing);
+        Drive(@NonNull PageKind from) {
             committed = from;
             here = half(from, false);
             there = half(across(from), false);
-            states = place -> new Rest(false, false, true);
+            // The Terminal keeps its keyboard up, Home has none: the keyboard travels with the way.
+            states = place -> new Rest(place == PageKind.TERMINAL, false, true);
+        }
+
+        /** The status bar rides with the page or the stack travels: what a frame puts away from rest. */
+        boolean somethingMoved() {
+            return (mHost.barX != 0f && !Float.isNaN(mHost.barX))
+                || (mHost.dockPx != 0f && !Float.isNaN(mHost.dockPx));
         }
 
         void step(float fraction) {
-            float offset = committed == PaneWallPage.WIDGETS ? -fraction * WIDTH : fraction * WIDTH;
-            Frame frame = PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states, committed);
-            PaneWallPage other = SeamTravel.otherHalfPage(frame, committed);
+            float offset = committed == PageKind.HOME ? -fraction * WIDTH : fraction * WIDTH;
+            Frame frame = PlaceChromeTravel.at(ROW, committed, offset, WIDTH, states);
+            PageKind other = SeamTravel.otherHalfPage(frame, committed);
             if (other != null && other != crossing.seam().other()) {
-                boolean fromHome = committed == PaneWallPage.WIDGETS;
+                boolean fromHome = committed == PageKind.HOME;
                 crossing.begin(here, there, SeamCrossing.Stage.of(false, () -> false, true),
-                    fromHome ? HOME_REST : WORKSPACE_REST, fromHome ? WORKSPACE_REST : HOME_REST,
+                    fromHome ? HOME_REST : TERMINAL_REST, fromHome ? TERMINAL_REST : HOME_REST,
                     REVISION);
             }
             SeamCrossing.Answers answers = crossing.frame(frame, true, false, false);
             if (answers.relayout()) crossing.seam().standLayout();
-            float translation = crossing.stack(answers, answers.dockReveal(), 0, 200, 150);
+            float translation = crossing.stack(answers, answers.dockReveal(), 300, 200, 150);
             if (crossing.holdsContent()) crossing.coverAt(translation);
             crossing.rideBar(frame, true, WIDTH);
             crossing.fade(frame.statusReveal, frame.dockReveal);
         }
-    }
-
-    private float layerSink(int id) {
-        return mHost.views.get(id).getTranslationY();
     }
 
     /** Every view the frames moved is back where it is laid out, as the settle finds it. */
@@ -207,17 +209,16 @@ public class CrossingViewsTest {
 
     @Test
     public void aCrossingEitherWayLandsWithEveryViewAtRest() {
-        for (PaneWallPage from : BOTH) {
+        for (PageKind from : BOTH) {
             setUp();
             Drive drive = new Drive(from);
-            boolean folded = false;
+            boolean moved = false;
             for (float f = STEP; f < 1f; f += STEP) {
                 drive.step(f);
-                // Home stands the window's rows less the extra keys: the rows fold with the way.
-                if (layerSink(R.id.accessory_row_stack) != 0f) folded = true;
+                if (drive.somethingMoved()) moved = true;
             }
             drive.step(1f);
-            assertTrue(from + ": the rows sank with the fold on the way", folded);
+            assertTrue(from + ": the frames moved nothing on the way", moved);
             drive.crossing.land(PageRef.of(across(from)), REVISION);
             assertAtRest(from + " landed across");
             drive.crossing.end();
@@ -227,11 +228,11 @@ public class CrossingViewsTest {
 
     @Test
     public void aCrossingAbandonedMidwayLandsBackWithEveryViewAtRest() {
-        for (PaneWallPage from : BOTH) {
+        for (PageKind from : BOTH) {
             setUp();
             Drive drive = new Drive(from);
             for (float f = STEP; f <= 0.5f; f += STEP) drive.step(f);
-            assertTrue(from + ": the rows sank mid-way", layerSink(R.id.accessory_row_stack) != 0f);
+            assertTrue(from + ": the frames moved nothing mid-way", drive.somethingMoved());
             // A finger that turns back: the frames retrace to where the wall left.
             for (float f = 0.5f; f > 0f; f -= STEP) drive.step(f);
             drive.step(0f);
@@ -244,13 +245,12 @@ public class CrossingViewsTest {
 
     @Test
     public void aFrameRepeatedAtTheSameOffsetWritesNoView() {
-        for (PaneWallPage from : BOTH) {
+        for (PageKind from : BOTH) {
             setUp();
             Drive drive = new Drive(from);
             for (float f = STEP; f <= 0.3f; f += STEP) drive.step(f);
             drive.step(0.3f);
-            assertTrue(from + ": the frame moved something",
-                layerSink(R.id.accessory_row_stack) != 0f);
+            assertTrue(from + ": the frame moved something", drive.somethingMoved());
             mWrites.count = 0;
             drive.step(0.3f);
             assertEquals(from + ": views written by a repeated frame", 0, mWrites.count);

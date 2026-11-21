@@ -68,7 +68,7 @@ public class ResolvedArrangementTest {
                 PlaceLayoutStore store = dressed(style, design);
                 for (boolean home : new boolean[]{true, false}) {
                     for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                        String cell = style + " " + design + (home ? " Home " : " Workspace ")
+                        String cell = style + " " + design + (home ? " Home " : " Terminal ")
                             + orientation;
                         ResolvedArrangement a =
                             ResolvedArrangement.resolve(store, orientation, pageOf(home));
@@ -81,7 +81,7 @@ public class ResolvedArrangementTest {
                         assertEquals(cell, style == LayoutStyle.FLOATING, a.floating());
                         assertEquals(cell, design, a.design());
 
-                        // The extra keys are the Workspace's under every design and Style, and
+                        // The extra keys are the Terminal's under every design and Style, and
                         // Home never wears them.
                         assertEquals(cell, !home, a.extraKeysShown());
                         // The pinned apps and the index stand on both halves.
@@ -120,40 +120,40 @@ public class ResolvedArrangementTest {
     }
 
     @Test
-    public void aDesignPickedOnHomeIsTheWorkspacesToo() {
+    public void aDesignPickedOnHomeIsTheTerminalsToo() {
         PlaceLayoutStore store = dressed(LayoutStyle.DOCKED, DockStyle.GLASS_TRAY);
         store.forVariant(KindFixtures.HOME_PAGE).setDockStyle(DockStyle.LENS_BEADS);
         ResolvedArrangement home =
             ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.HOME);
-        ResolvedArrangement workspace =
+        ResolvedArrangement terminal =
             ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.TERMINAL);
         assertEquals(KindFixtures.HOME_PAGE, home.variant());
         assertEquals(DockStyle.LENS_BEADS, home.design());
         assertFalse(home.frameRunsToBottom());
         assertFalse("the Home layout has no extra keys", home.extraKeysShown());
-        assertEquals(LayoutVariant.NORMAL, workspace.variant());
+        assertEquals(LayoutVariant.NORMAL, terminal.variant());
         assertEquals("one dock design for every page (ADR 0023 §1)", DockStyle.LENS_BEADS,
-            workspace.design());
-        assertTrue(workspace.extraKeysShown());
+            terminal.design());
+        assertTrue(terminal.extraKeysShown());
         // One Style across the wall (#84).
-        assertEquals(home.floating(), workspace.floating());
+        assertEquals(home.floating(), terminal.floating());
     }
 
     @Test
     public void standingAnotherLayoutKeepsTheDressAndAnswersForThatLayout() {
         PlaceLayoutStore store = dressed(LayoutStyle.FLOATING, DockStyle.WALL_STRIP);
-        ResolvedArrangement workspace =
+        ResolvedArrangement terminal =
             ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.TERMINAL);
-        assertSame(workspace, workspace.standing(workspace.layout()));
+        assertSame(terminal, terminal.standing(terminal.layout()));
         PlaceLayout seam = ResolvedArrangement.resolve(store, PlaceOrientation.PORTRAIT, PageRef.HOME)
             .layout();
-        ResolvedArrangement standing = workspace.standing(seam);
+        ResolvedArrangement standing = terminal.standing(seam);
         assertSame(seam, standing.layout());
-        assertEquals(workspace.layoutStyle(), standing.layoutStyle());
-        assertEquals(workspace.design(), standing.design());
-        assertEquals(workspace.home(), standing.home());
+        assertEquals(terminal.layoutStyle(), standing.layoutStyle());
+        assertEquals(terminal.design(), standing.design());
+        assertEquals(terminal.home(), standing.home());
         assertFalse("Home's layout leaves the extra keys out", standing.extraKeysShown());
-        assertNotEquals(workspace, standing);
+        assertNotEquals(terminal, standing);
         assertPredicatesArePlaceChromePolicys("standing", standing);
     }
 

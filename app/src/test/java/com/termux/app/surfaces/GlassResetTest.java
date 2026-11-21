@@ -8,10 +8,10 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.fragments.settings.termux.AppearanceSettingsStore;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -53,7 +53,7 @@ public class GlassResetTest {
 
     @Test
     public void resetClearsTheGridKeepsLayoutsAndAppliesThePreset() {
-        // The user's glass: a Base value, an element on a kind, and the accent.
+        // The user's glass: a Global value, an element on a kind, and the accent.
         store.edit()
             .putInt(LookGrid.key(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE), 3)
             .putInt(LookGrid.key(LookGrid.Property.FROST, LookGrid.Element.DOCK,

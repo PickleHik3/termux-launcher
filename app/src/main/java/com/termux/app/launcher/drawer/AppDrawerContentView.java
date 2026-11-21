@@ -529,7 +529,7 @@ public final class AppDrawerContentView extends FrameLayout
             LayoutParams.MATCH_PARENT));
         // Chrome stays last for its ordinary elevation/shadow language. Content safety does not
         // depend on that ordering: each scrolling surface clips at the top margin below the pill.
-        mPill.bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(mPill);
         applyViewType();
     }
 
@@ -708,8 +708,9 @@ public final class AppDrawerContentView extends FrameLayout
         void onListScrollIdle();
 
         /**
-         * The finger began dragging a list (past touch slop): the user is browsing, not typing,
-         * so the search keyboard goes. Never sent for a tap, a scrub, or the search field.
+         * The finger began dragging a list (past touch slop) or touched the A–Z strip: the user is
+         * browsing, not typing, so the search keyboard goes. Never sent for a tap on a cell or the
+         * search field.
          */
         default void onListDragStarted() {}
     }
@@ -773,7 +774,9 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
-            stopPresentationMotion();
+            // The drawer is closing, not torn down: what it shows stays until it is gone
+            // (resetDrawerFx), or Back blanks the card to "Nothing here yet" for the whole close.
+            stopPresentationMotion(true);
             stopOverpullSpring();
             mPolicy.disarm();
             // A scrub left in flight is a finger's worth of state on a surface that has stopped
@@ -923,6 +926,11 @@ public final class AppDrawerContentView extends FrameLayout
      * gate. The vertical grid has no motion of its own here.
      */
     private void stopPresentationMotion() {
+        stopPresentationMotion(false);
+    }
+
+    /** @param keepContent a closing drawer: the categories keep their tiles until it is gone */
+    private void stopPresentationMotion(boolean keepContent) {
         switch (mViewType) {
             case HORIZONTAL:
                 cancelNestedClose();
@@ -930,7 +938,8 @@ public final class AppDrawerContentView extends FrameLayout
                 break;
             case CATEGORIES:
                 cancelNestedClose();
-                mCategoryView.reset();
+                if (keepContent) mCategoryView.stopForClose();
+                else mCategoryView.reset();
                 break;
             case VERTICAL:
                 break;
@@ -1624,8 +1633,17 @@ public final class AppDrawerContentView extends FrameLayout
         return mColumnWidthPx;
     }
 
+    /** This touch on the strip has already sent the keyboard its cue; cleared when it ends. */
+    private boolean mScrubSentKeyboard;
+
     @Override
     public void onScrubLetterChanged(char letter) {
+        // The first letter of a touch on the strip is browsing: the keyboard goes the way a list
+        // drag sends it (the controller keeps one that was up before the drawer opened).
+        if (!mScrubSentKeyboard) {
+            mScrubSentKeyboard = true;
+            notifyListDragStarted();
+        }
         mScrubLetter = letter;
         int position = mSectionIndex.firstPositionForLetter(letter);
         if (position >= 0 && position < mAdapter.getItemCount()) {
@@ -1650,6 +1668,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public void onScrubEnded() {
+        mScrubSentKeyboard = false;
         // The letter is kept until the fade reaches zero, so the cells that were dim fade back
         // rather than snapping. The scroll position is kept too: where the letter put the grid is
         // where the user asked for it to be.
@@ -2536,6 +2555,15 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull
     public AppDrawerCategoryView getCategoryView() {
         return mCategoryView;
+    }
+
+    /**
+     * The plane's visible bottom in this view's coordinates while the keyboard's reveal moves the
+     * card's bottom; {@code +∞} when nothing cuts the content. The A–Z strip spaces its letters
+     * over what is above it, per frame, by redraw alone.
+     */
+    public void setRopeVisibleBottomPx(float bottomPx) {
+        mColumn.setVisibleBottomPx(bottomPx);
     }
 
     /** @return the A-Z column, whose touch stream and geometry the drawer's tests drive directly */

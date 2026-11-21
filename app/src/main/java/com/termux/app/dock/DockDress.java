@@ -95,12 +95,12 @@ final class DockDress {
      */
     @NonNull
     com.termux.app.dock.DockGeometry.Snapshot dockSnapshot(
-            @NonNull PlaceLayout arrangement, @NonNull com.termux.app.wall.PaneWallPage rowsPage) {
+            @NonNull PlaceLayout arrangement, @NonNull com.termux.app.page.PageKind rowsPage) {
         PlaceOrientation orientation = mHost.currentPlaceOrientation();
         DisplayMetrics metrics = mHost.displayMetrics();
         return com.termux.app.dock.DockGeometry.Snapshot.builder(
-                dockHalf(com.termux.app.wall.PaneWallPage.WIDGETS, orientation, arrangement),
-                dockHalf(com.termux.app.wall.PaneWallPage.TERMINAL, orientation, arrangement))
+                dockHalf(com.termux.app.page.PageKind.HOME, orientation, arrangement),
+                dockHalf(com.termux.app.page.PageKind.TERMINAL, orientation, arrangement))
             .preferencesAvailable(mHost.hasPreferences())
             .rows(mHost.arrangedPageOf(rowsPage))
             .arrangement(arrangement)
@@ -126,7 +126,7 @@ final class DockDress {
      */
     @NonNull
     com.termux.app.dock.DockGeometry.Half dockHalf(
-            @NonNull com.termux.app.wall.PaneWallPage page, @NonNull PlaceOrientation orientation,
+            @NonNull com.termux.app.page.PageKind page, @NonNull PlaceOrientation orientation,
             @NonNull PlaceLayout fallbackLayout) {
         return dockHalf(mHost.arrangedPageOf(page), orientation, fallbackLayout);
     }
@@ -161,7 +161,7 @@ final class DockDress {
         // The same facts as last time: the same half, so a pass per frame of a crossing builds
         // no halves (docs/agents/performance.md rule 3) and the memo matches it by identity.
         com.termux.app.dock.DockGeometry.Half last = otherHome ? mDockOtherHomeHalf
-            : home ? mDockHomeHalf : mDockWorkspaceHalf;
+            : home ? mDockHomeHalf : mDockTerminalHalf;
         if (last != null && last.arrangement == arrangement
             && Float.compare(last.dockHeightScale, scale) == 0
             && last.marginDp == shape.marginDp && last.cornersDp == shape.cornersDp
@@ -179,7 +179,7 @@ final class DockDress {
                 .build();
         if (otherHome) mDockOtherHomeHalf = half;
         else if (home) mDockHomeHalf = half;
-        else mDockWorkspaceHalf = half;
+        else mDockTerminalHalf = half;
         return half;
     }
 
@@ -187,7 +187,7 @@ final class DockDress {
     @Nullable private com.termux.app.dock.DockGeometry.Half mDockHomeHalf;
     /** The other Home end's half of a crossing between two Home pages, as last built. */
     @Nullable private com.termux.app.dock.DockGeometry.Half mDockOtherHomeHalf;
-    @Nullable private com.termux.app.dock.DockGeometry.Half mDockWorkspaceHalf;
+    @Nullable private com.termux.app.dock.DockGeometry.Half mDockTerminalHalf;
 
     /**
      * The width the dock's rows span: the content root's, between the display cutouts it pads.
@@ -234,7 +234,7 @@ final class DockDress {
     /** The slab the dock wears on {@code page}: its Dock design's. */
     @NonNull
     private com.termux.app.dock.DockSurfaceSpec dockSurfaceSpec(
-            @NonNull com.termux.app.wall.PaneWallPage page) {
+            @NonNull com.termux.app.page.PageKind page) {
         return com.termux.app.dock.DockSurfaceSpec.forStyle(wornDockDesign(page));
     }
 
@@ -244,7 +244,7 @@ final class DockDress {
      */
     @NonNull
     com.termux.app.dock.DockStyle wornDockDesign(
-            @NonNull com.termux.app.wall.PaneWallPage page) {
+            @NonNull com.termux.app.page.PageKind page) {
         ResolvedArrangement arranged = mHost.arrangementOf(page);
         return com.termux.app.dock.WornDockDesign.of(arranged.design(), arranged.layout());
     }
@@ -255,10 +255,10 @@ final class DockDress {
      * the same, as it is between Home and a window on one layout: the swipe never re-dresses the
      * dock there.
      */
-    void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.wall.PaneWallPage from,
-                                                    @NonNull com.termux.app.wall.PaneWallPage to) {
+    void restyleDockSurfaceForPageIfChanged(@NonNull com.termux.app.page.PageKind from,
+                                                    @NonNull com.termux.app.page.PageKind to) {
         if (!mHost.hasPreferences() || mHost.chrome() == null) return;
-        // A pictured dip dressed the slab for this page on its first frame: it already wears it.
+        // A slide in dressed the slab for this page on its first frame: it already wears it.
         boolean travelled = mHost.dockDesignTravelledTo() == to;
         if (travelled) mHost.setDockDesignTravelledTo(null);
         boolean sameDress = !travelled && dockSurfaceSpec(from).equals(dockSurfaceSpec(to))
@@ -292,7 +292,7 @@ final class DockDress {
     /** What a dock dress reads that a commit can move, as it stands now (CommitDockDress). */
     @NonNull
     private com.termux.app.dock.CommitDockDress.Inputs commitDockDressInputs() {
-        com.termux.app.wall.PaneWallPage rowsPage = mHost.stackDressPage();
+        com.termux.app.page.PageKind rowsPage = mHost.stackDressPage();
         boolean drawerTile = mHost.hasPreferences() && mHost.arrangementOf(rowsPage).drawerTile();
         return new com.termux.app.dock.CommitDockDress.Inputs(mHost.lastWallPage(), rowsPage,
             committedDockDesign(), mHost.committedSearchField(), drawerTile, mHost.arrangementRevision(),
@@ -333,7 +333,7 @@ final class DockDress {
             mHost.chrome().ledger().markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
             mHost.updateAppLauncherBarHeight();
             mHost.setTerminalToolbarHeight(true);
-            // The Wall strip's row, laid out by the pass above, takes the Workspace's windows.
+            // The Wall strip's row, laid out by the pass above, takes the Terminal's windows.
             mHost.syncWallStripFeed();
             mHost.chrome().requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -346,7 +346,7 @@ final class DockDress {
 
     /**
      * The store pinned to the layout the committed page's dock is dressed by, where its Drawer
-     * tile is kept: Home's layout on Home, the Workspace's (normal or minimal) on a window.
+     * tile is kept: Home's layout on Home, the Terminal's (normal or minimal) on a window.
      */
     @Nullable
     PlaceLayoutStore committedDockStore() {
@@ -355,7 +355,7 @@ final class DockDress {
 
     /** The store pinned to the layout {@code page}'s dock is dressed by. */
     @Nullable
-    PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.wall.PaneWallPage page) {
+    PlaceLayoutStore dockStoreOf(@NonNull com.termux.app.page.PageKind page) {
         PlaceLayoutStore store = mHost.placeLayoutStore();
         // A layout's dock is its own: each page wears its kind's layout (ADR 0020 §1).
         return store == null ? null : store.forVariant(mHost.layoutOf(page));
@@ -415,7 +415,7 @@ final class DockDress {
         float wallFrom = mHost.appliedWallStripReveal();
         if ((from == target && wallFrom == wallTarget) || mHost.isReducedMotionEnabled()) return false;
         View stack = mHost.findViewById(R.id.accessory_stack_container);
-        View rowHost = mHost.findViewById(R.id.apps_bar_row_host);
+        View rowHost = mHost.findViewById(appsRow(SideRowViews.Part.BOTTOM_HOST));
         if (stack == null || rowHost == null || !mHost.dockRows().stackShown()
             || !mHost.dockRows().isRowOnScreen(Element.APPS) || stack.getHeight() <= 0
             || rowHost.getParent() != mHost.findViewById(R.id.accessory_row_stack)) return false;
@@ -527,6 +527,8 @@ final class DockDress {
     @Nullable private PlaceLayout mAppliedDockArrangement;
     /** The store revision the applied dock was measured at. */
     private int mAppliedDockRevision = Integer.MIN_VALUE;
+    /** The layout the apps row was last handed: its own side's (LaneDress). */
+    @Nullable private DockLayout mAppliedAppsLayout;
     private int mAppliedAzRowChinPaddingPx = Integer.MIN_VALUE;
     private int mAppliedAzRowCrownPaddingPx = Integer.MIN_VALUE;
 
@@ -541,7 +543,7 @@ final class DockDress {
         if (!shown.apps && bar != null) bar.cancelActiveDockDrag();
         // Back on the dock, the row's ticks say again whether anything shows in their band.
         if (shown.pageBand == com.termux.app.dock.DockRows.PageBand.TICKS && bar != null)
-            bar.publishPageIndicator();
+            bar.publishPageTicks();
     }
 
     /** True when this layout moved the dock. Package-visible for the arrangement tests. */
@@ -565,27 +567,32 @@ final class DockDress {
         // The dock's chin is the dock's row's; a bar standing elsewhere carries the one its own
         // host was sized for, and must not have it taken away because the dock has no row. The
         // pull tab's letters on the bottom edge are such a bar: they keep their own chin.
+        // Each row wears its own side's layout at rest (LaneDress), so a page change alone
+        // redresses no lane row.
+        DockLayout azLayout = mHost.dockRows().dressFor(Element.AZ, layout);
         if (mHost.azScrubRowView() != null && mHost.azBarEdge() == PlaceLayout.Edge.BOTTOM
             && mHost.azScrubRowView() != mHost.azTabRowView()) {
-            moved |= layout.azRowChinPaddingPx != mAppliedAzRowChinPaddingPx;
-            mAppliedAzRowChinPaddingPx = layout.azRowChinPaddingPx;
-            mHost.azScrubRowView().setChinPaddingPx(layout.azRowChinPaddingPx);
-            moved |= layout.azRowCrownPaddingPx != mAppliedAzRowCrownPaddingPx;
-            mAppliedAzRowCrownPaddingPx = layout.azRowCrownPaddingPx;
-            mHost.azScrubRowView().setCrownPaddingPx(layout.azRowCrownPaddingPx);
+            moved |= azLayout.azRowChinPaddingPx != mAppliedAzRowChinPaddingPx;
+            mAppliedAzRowChinPaddingPx = azLayout.azRowChinPaddingPx;
+            mHost.azScrubRowView().setChinPaddingPx(azLayout.azRowChinPaddingPx);
+            moved |= azLayout.azRowCrownPaddingPx != mAppliedAzRowCrownPaddingPx;
+            mAppliedAzRowCrownPaddingPx = azLayout.azRowCrownPaddingPx;
+            mHost.azScrubRowView().setCrownPaddingPx(azLayout.azRowCrownPaddingPx);
         }
-        moved |= mHost.updateViewBottomMargin(R.id.apps_bar_viewpager, 0);
+        moved |= mHost.updateViewBottomMargin(appsRow(SideRowViews.Part.ROW), 0);
         moved |= applyDockRowHorizontalInsets(layout);
         moved |= mHost.syncPromptLineField(layout);
         moved |= mHost.syncWallStripRow(layout);
         // The row is told its sizes here and nowhere else: its band, the icon one slot draws and
         // the rail's, in one hand-over.
-        DockLayout applied = mAppliedDockLayout;
+        DockLayout applied = mAppliedAppsLayout;
+        DockLayout appsLayout = mHost.dockRows().dressFor(Element.APPS, layout);
         if (mHost.dockRow() != null) {
-            moved |= applied == null || layout.appsRowBandHintPx != applied.appsRowBandHintPx
-                || layout.slotIconPx != applied.slotIconPx;
-            mHost.dockRow().setDockLayout(layout);
+            moved |= applied == null || appsLayout.appsRowBandHintPx != applied.appsRowBandHintPx
+                || appsLayout.slotIconPx != applied.slotIconPx;
+            mHost.dockRow().setDockLayout(appsLayout);
         }
+        mAppliedAppsLayout = appsLayout;
         mAppliedDockLayout = layout;
         mAppliedDockArrangement = arrangement;
         mAppliedDockRevision = dockStoreRevision();
@@ -609,35 +616,49 @@ final class DockDress {
      * @param layout the dock being applied — not one computed afresh off the stored arrangement,
      *               which the row's air now depends on through its place in the stack
      */
+    /** Home's apps row's {@code part}, through its side. */
+    private static int appsRow(@NonNull SideRowViews.Part part) {
+        return SideRowViews.id(Element.APPS, part);
+    }
+
     boolean applyDockRowHorizontalInsets(@NonNull DockLayout layout) {
         int surfaceInset = layout.horizontalInsetPx;
         int contentInset = layout.capsule ? layout.capsuleContentInsetPx : surfaceInset;
-        int extraKeysInset = layout.capsule ? layout.capsuleExtraKeysInsetPx : surfaceInset;
+        // A lane row wears its own side's layout (LaneDress), not the front's.
+        DockLayout appsLayout = mHost.dockRows().dressFor(Element.APPS, layout);
+        DockLayout azLayout = mHost.dockRows().dressFor(Element.AZ, layout);
+        DockLayout keysLayout = mHost.dockRows().dressFor(Element.EXTRA_KEYS, layout);
+        int azContentInset = azLayout.capsule ? azLayout.capsuleContentInsetPx
+            : azLayout.horizontalInsetPx;
+        int extraKeysInset = keysLayout.capsule ? keysLayout.capsuleExtraKeysInsetPx
+            : keysLayout.horizontalInsetPx;
         // The band the ticks stand in is that side's air rather than a band added to it: the
         // pager keeps whatever is left of the air there, which is nothing while the strip fills
         // it. Which side that is follows the row's place in the bottom stack.
         boolean ticksLeadDockRow = com.termux.app.launcher.paging.PageTickStrip.ticksLeadRow(
             PlaceLayout.Edge.BOTTOM, mHost.appsRowNextToCanvas());
         int appsTopPadding = ticksLeadDockRow
-            ? layout.appsRowPaddingBesideTicksPx() : layout.appsTopPaddingPx;
+            ? appsLayout.appsRowPaddingBesideTicksPx() : appsLayout.appsTopPaddingPx;
         int appsBottomPadding = ticksLeadDockRow
-            ? layout.appsBottomPaddingPx : layout.appsRowPaddingBesideTicksPx();
+            ? appsLayout.appsBottomPaddingPx : appsLayout.appsRowPaddingBesideTicksPx();
         // The apps row's inset, trimmed from the content inset so its space-between icons line up
         // with the A–Z row's letters, and narrowed under Lens beads so the end beads stand clear
         // of the screen's edges (DockLayoutPolicy.appsRowSideInsetPx); the Search field's capsule
         // under the beads is as wide as this.
-        int appsContentInset = layout.appsRowSideInsetPx();
+        int appsContentInset = appsLayout.appsRowSideInsetPx();
         // What a bead covers in those narrower slots is in the slot's icon itself
         // (DockLayout#slotIconPx), which applyDockLayout hands the row.
 
         // The find strip is dock furniture: it spans exactly the dock's own width, whichever style
         // is set, so it reads as the bar's top edge rather than as a floating panel.
         boolean moved = updateViewHorizontalMargins(R.id.terminal_find_bar_host, surfaceInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_viewpager, appsContentInset);
+        moved |= updateViewHorizontalMargins(appsRow(SideRowViews.Part.ROW), appsContentInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_indicator_band, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.apps_bar_az_row, contentInset);
-        moved |= updateViewHorizontalMargins(R.id.terminal_toolbar_view_pager, extraKeysInset);
-        moved |= mHost.updateViewPadding(mHost.findViewById(R.id.apps_bar_viewpager), 0,
+        moved |= updateViewHorizontalMargins(SideRowViews.id(Element.AZ, SideRowViews.Part.ROW),
+            azContentInset);
+        moved |= updateViewHorizontalMargins(
+            SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.ROW), extraKeysInset);
+        moved |= mHost.updateViewPadding(mHost.findViewById(appsRow(SideRowViews.Part.ROW)), 0,
             appsTopPadding, 0, appsBottomPadding);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_underlay, surfaceInset);
         moved |= updateViewHorizontalMargins(R.id.apps_bar_az_fx_overlay, surfaceInset);
@@ -646,7 +667,8 @@ final class DockDress {
         // the bar is inset from the dock edges, so the off-screen page's edge (the "❮" button)
         // peeked into the visible page. Its pages sit side by side, so hard-clip the bar to its
         // own rectangular bounds via clipToOutline.
-        View toolbarPager = mHost.findViewById(R.id.terminal_toolbar_view_pager);
+        View toolbarPager = mHost.findViewById(
+            SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.ROW));
         if (toolbarPager instanceof ViewGroup) {
             ((ViewGroup) toolbarPager).setClipChildren(true);
             ((ViewGroup) toolbarPager).setClipToPadding(true);

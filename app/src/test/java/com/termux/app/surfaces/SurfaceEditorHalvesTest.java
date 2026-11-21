@@ -9,6 +9,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
@@ -16,7 +17,6 @@ import com.termux.app.place.PlaceOrientation;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.cards.ElementRows.Item;
 import com.termux.app.surfaces.cards.ElementsList;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -35,8 +35,8 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * The frame shows the half its half line names: sliding to the Workspace brings the live wall to
- * the Workspace (the Terminal card is then the terminal's tap), sliding back brings Home; and a
+ * The frame shows the half its half line names: sliding to the Terminal brings the live wall to
+ * the Terminal (the Terminal card is then the terminal's tap), sliding back brings Home; and a
  * card's Visible switch reads the state the frame draws.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -45,7 +45,7 @@ public class SurfaceEditorHalvesTest {
 
     private TermuxAppSharedPreferences preferences;
     private PlaceLayoutStore places;
-    private final List<PaneWallPage> wallMoves = new ArrayList<>();
+    private final List<PageKind> wallMoves = new ArrayList<>();
     private boolean keyboardShown = true;
 
     @Before
@@ -61,22 +61,22 @@ public class SurfaceEditorHalvesTest {
 
     @Test
     public void slidingTheHalvesMovesTheLiveWallBothWays() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
+        SurfaceEditorController editor = open(PageKind.HOME);
+        assertEquals(PageKind.HOME, editor.screen());
         wallMoves.clear();
 
-        switchHalf(editor, PaneWallPage.TERMINAL);
-        assertEquals(PaneWallPage.TERMINAL, editor.screen());
-        assertEquals("the wall slides to the Workspace", PaneWallPage.TERMINAL, last());
+        switchHalf(editor, PageKind.TERMINAL);
+        assertEquals(PageKind.TERMINAL, editor.screen());
+        assertEquals("the wall slides to the Terminal", PageKind.TERMINAL, last());
 
-        switchHalf(editor, PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, last());
+        switchHalf(editor, PageKind.HOME);
+        assertEquals(PageKind.HOME, last());
     }
 
     @Test
-    public void theTerminalCardStandsOnTheWorkspace() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        switchHalf(editor, PaneWallPage.TERMINAL);
+    public void theTerminalCardStandsOnTheTerminal() {
+        SurfaceEditorController editor = open(PageKind.HOME);
+        switchHalf(editor, PageKind.TERMINAL);
         editor.present(EditorCard.TERMINAL, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(EditorCard.TERMINAL, editor.shownCard());
@@ -85,7 +85,7 @@ public class SurfaceEditorHalvesTest {
     @Test
     public void theKeyboardsVisibleSwitchReadsWhatTheFrameDraws() {
         keyboardShown = true;
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(PageKind.TERMINAL);
         editor.present(EditorCard.KEYBOARD, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals("the frame draws the keyboard: Visible is on", 1,
@@ -99,13 +99,13 @@ public class SurfaceEditorHalvesTest {
     @Test
     public void aDockHiddenOnItsCardComesBackFromTheElementsList() {
         LayoutEditorController layout = layoutEditor();
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, layout);
+        SurfaceEditorController editor = open(PageKind.TERMINAL, layout);
         editor.present(EditorCard.DOCK, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         model(editor).onValue(Row.VISIBLE, 0, false);
         assertFalse(layout.isShown(Element.APPS));
 
-        editor.present(EditorCard.WORKSPACE, null, null);
+        editor.present(EditorCard.TERMINAL, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         ElementsList.Host elements = elements(editor);
         assertFalse("the Elements list reads the dock hidden", elements.shown(Item.APPS_ROW));
@@ -120,8 +120,8 @@ public class SurfaceEditorHalvesTest {
     @Test
     public void theElementsListAndTheStatusCardsEyeWriteOneValue() {
         LayoutEditorController layout = layoutEditor();
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, layout);
-        assertEquals("the screen's card stands at peek", EditorCard.WORKSPACE, editor.shownCard());
+        SurfaceEditorController editor = open(PageKind.TERMINAL, layout);
+        assertEquals("the screen's card stands at peek", EditorCard.TERMINAL, editor.shownCard());
         ElementsList.Host elements = elements(editor);
         assertTrue(elements.shown(Item.STATUS_BAR));
         elements.setShown(Item.STATUS_BAR, false);
@@ -139,7 +139,7 @@ public class SurfaceEditorHalvesTest {
     @Test
     public void theDocksTilesAndTheElementsListWriteOneValue() {
         LayoutEditorController layout = layoutEditor();
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL, layout);
+        SurfaceEditorController editor = open(PageKind.TERMINAL, layout);
         ElementsList.Host elements = elements(editor);
         boolean search = layout.searchField();
         assertEquals(search, elements.shown(Item.SEARCH_FIELD));
@@ -153,12 +153,9 @@ public class SurfaceEditorHalvesTest {
 
     @Test
     public void theSlidersGlyphOpensTheElementsCard() {
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL);
+        SurfaceEditorController editor = open(PageKind.TERMINAL);
         ElementsList.Host elements = elements(editor);
-        elements.open(Item.TERMINAL);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals(EditorCard.TERMINAL, editor.shownCard());
-        editor.present(EditorCard.WORKSPACE, null, null);
+        editor.present(EditorCard.TERMINAL, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         elements(editor).open(Item.SEARCH_FIELD);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -174,24 +171,24 @@ public class SurfaceEditorHalvesTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private PaneWallPage last() {
+    private PageKind last() {
         return wallMoves.isEmpty() ? null : wallMoves.get(wallMoves.size() - 1);
     }
 
     /** A door to {@code half}'s page while the editor is up (the swipe retired, ADR 0015 §6). */
-    private static void switchHalf(SurfaceEditorController editor, PaneWallPage half) {
+    private static void switchHalf(SurfaceEditorController editor, PageKind half) {
         ReflectionHelpers.callInstanceMethod(editor, "showPage",
-            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PaneWallPage.class,
-                half == PaneWallPage.WIDGETS ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL),
+            org.robolectric.util.ReflectionHelpers.ClassParameter.from(PageKind.class,
+                half == PageKind.HOME ? PageKind.HOME : PageKind.TERMINAL),
             org.robolectric.util.ReflectionHelpers.ClassParameter.from(boolean.class, true));
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    private SurfaceEditorController open(PaneWallPage place) {
+    private SurfaceEditorController open(PageKind place) {
         return open(place, layoutEditor());
     }
 
-    private SurfaceEditorController open(PaneWallPage place, LayoutEditorController layout) {
+    private SurfaceEditorController open(PageKind place, LayoutEditorController layout) {
         EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
             switch (method) {
                 case "layoutEditor": return layout;
@@ -215,7 +212,7 @@ public class SurfaceEditorHalvesTest {
                 switch (method.getName()) {
                     case "context": return context;
                     case "places": return places;
-                    case "placeOnScreen": return PaneWallPage.TERMINAL;
+                    case "placeOnScreen": return PageKind.TERMINAL;
                     case "placeOrientation": return PlaceOrientation.PORTRAIT;
                     case "extraKeySlots": return new ArrayList<>();
                     case "extraKeyCount":
@@ -223,10 +220,10 @@ public class SurfaceEditorHalvesTest {
                     case "measuredKeyboardHeightDp":
                         return -1;
                     case "holdPaneWallOnPlace":
-                        if ((Boolean) args[1]) wallMoves.add((PaneWallPage) args[0]);
+                        if ((Boolean) args[1]) wallMoves.add((PageKind) args[0]);
                         return null;
                     case "slidePaneWallToPlace":
-                        wallMoves.add((PaneWallPage) args[0]);
+                        wallMoves.add((PageKind) args[0]);
                         return null;
                     case "hashCode": return System.identityHashCode(proxy);
                     case "equals": return proxy == args[0];

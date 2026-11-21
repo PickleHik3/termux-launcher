@@ -136,7 +136,7 @@ public final class StatusRowLayout extends LinearLayout {
         mHeightSpec = heightMeasureSpec;
         mHaveSpecs = true;
         measureRow(widthMeasureSpec, heightMeasureSpec);
-        View strip = findViewById(R.id.terminal_status_place_content);
+        View strip = stripSlot();
         TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         boolean horizontal = getOrientation() == HORIZONTAL;
         if (!horizontal || strip == null || bar == null || bar.getVisibility() != VISIBLE) {
@@ -157,6 +157,9 @@ public final class StatusRowLayout extends LinearLayout {
         // widths do not show yet.
         int end = StatusRowFitPolicy.chipsEndPaddingPx(gap, readingsLeadPx(strip, bar, mTight));
         changed |= bar.setTrailingGapPx(end);
+        // Home's float chips stand in the same slot and stop at the same place.
+        TerminalWindowBar homeBar = findViewById(R.id.terminal_home_float_bar);
+        if (homeBar != null) changed |= homeBar.setTrailingGapPx(end);
         if (changed) measureRow(widthMeasureSpec, heightMeasureSpec);
     }
 
@@ -172,7 +175,7 @@ public final class StatusRowLayout extends LinearLayout {
             mStripMinPx = stripMinPx();
             // A plain row is laid out as a linear layout unless that would squeeze the strip
             // below what shows one whole chip: then the flow below takes over, once.
-            View strip = findViewById(R.id.terminal_status_place_content);
+            View strip = stripSlot();
             mFlowing = mStripMinPx > 0 && strip != null && strip.getVisibility() != GONE
                 && getOrientation() == HORIZONTAL
                 && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
@@ -305,6 +308,20 @@ public final class StatusRowLayout extends LinearLayout {
             badgeLead, badgeWidth, barChrome, bar.frontChipWidthPx());
     }
 
+    /**
+     * The row's child that holds the place strip: the strip itself, or the slot it shares with
+     * Home's float chips. What the row measures, flows and stands the readings after.
+     */
+    @Nullable
+    private View stripSlot() {
+        View view = findViewById(R.id.terminal_status_place_content);
+        while (view != null && view.getParent() != this) {
+            ViewParent parent = view.getParent();
+            view = parent instanceof View ? (View) parent : null;
+        }
+        return view;
+    }
+
     /** Whether the row is laid out around a keep-out rather than as a plain linear layout. */
     private boolean keepOutApplies(int widthMeasureSpec) {
         return getOrientation() == HORIZONTAL && !mKeepOut.isNone()
@@ -365,8 +382,9 @@ public final class StatusRowLayout extends LinearLayout {
             weights[i] = weightOf(child);
         }
         int[] minWidths = new int[n];
+        View slot = stripSlot();
         for (int i = 0; i < n; i++) {
-            if (children[i].getId() == R.id.terminal_status_place_content) minWidths[i] = mStripMinPx;
+            if (children[i] == slot) minWidths[i] = mStripMinPx;
         }
         StatusRowKeepOut.flow(marginLeft, widths, marginRight, weights, minWidths, start, end,
             mKeepOut.gapStartPx, mKeepOut.gapEndPx, outLeft, outWidth);

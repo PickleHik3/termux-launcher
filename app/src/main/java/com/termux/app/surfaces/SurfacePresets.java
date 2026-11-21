@@ -8,8 +8,8 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.SeamDress;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.FrostStops;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -29,15 +29,15 @@ import java.util.Set;
  * The editor's presets: complete looks, as data.
  *
  * <p>A preset is a versioned, ordered map of key → value over the keys the editor owns. A glass
- * cell is named by its grid key (ADR 0017): Base as {@code look.<property>}, a detached surface
+ * cell is named by its grid key (ADR 0017): Global as {@code look.<property>}, a detached surface
  * as {@code look.<property>.<element>}, Frost as its stop; every other value by its preference
  * key. The semantics are the theme-export format's: a key that is absent is not "unchanged" but
- * "the default shape of that cell" — applying a preset first reattaches every surface to Base, so
- * an absent per-surface key means that cell follows Base, and a present one is a detached
+ * "the default shape of that cell" — applying a preset first reattaches every surface to Global, so
+ * an absent per-surface key means that cell follows Global, and a present one is a detached
  * override. Unknown keys are ignored on read, so a preset written by a newer build degrades
  * instead of failing.
  *
- * <p>The Base blur/opacity/grain triple of a preset is computed from its material point via
+ * <p>The Global blur/opacity/grain triple of a preset is computed from its material point via
  * {@link SurfaceMaterials}, so a freshly applied preset shows its material selected rather than
  * "Custom". A preset whose look sits off every curve (Mist) names its triple in its extras, which
  * win over the computed one.
@@ -115,7 +115,7 @@ public final class SurfacePresets {
         // handed in (face clarity 100), the lensing grows with the surface (size lens 100), and there is no
         // grain. Its dim term ships at 0: the dim shifts the terminal pane's even-out ink vote (ChromeInk
         // bandPolarity) and turned its text dark.
-        // Glass 20 (blur 7, grain 0), opacity 10 on every surface (the terminal follows Base, no detached
+        // Glass 20 (blur 7, grain 0), opacity 10 on every surface (the terminal follows Global, no detached
         // override), its own colour (Tint 0). Its face is
         // nearly the wallpaper itself, so the edge has to carry the glass: the deepest bend of the
         // Looks (27 over an edge of 18, one and a half bands, Depth 90), Haze Clear's sharp edge
@@ -261,7 +261,7 @@ public final class SurfacePresets {
     }
 
     /**
-     * Each Look's Base blur and grain before format 5 moved them onto the Glass curve; Solid's did
+     * Each Look's Global blur and grain before format 5 moved them onto the Glass curve; Solid's did
      * not move.
      */
     private static final Map<String, int[]> BLUR_GRAIN_BEFORE_FORMAT_5 = blurGrainBeforeFormat5();
@@ -338,7 +338,7 @@ public final class SurfacePresets {
     }
 
     /**
-     * Material point, the Base triple and the six Fancier Glass keys; the default glass
+     * Material point, the Global triple and the six Fancier Glass keys; the default glass
      * tint, rim and motion; then the extras, whose puts replace any of those in place. The dock
      * style is deliberately absent — a Look never changes Style — and so are corners and margins,
      * which are Layout's ({@link #isLayoutOwned}).
@@ -384,7 +384,7 @@ public final class SurfacePresets {
             TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY);
     }
 
-    /** A shipped Look's Base numbers the editor shows: its Frost stop, opacity and tint. */
+    /** A shipped Look's Global numbers the editor shows: its Frost stop, opacity and tint. */
     public static final class ShippedLook {
         public final int frostStop;
         public final int opacity;
@@ -412,50 +412,6 @@ public final class SurfacePresets {
             intOf(preset.values.get(cellKey(null, SurfaceProperty.TINT))));
     }
 
-    // ------------------------------------------------------------- shipped per kind (ADR 0018 §3)
-
-    /**
-     * The Look stop {@code element} ships with on {@code kind}, where the kind's focus asks for
-     * its own: the keyboard stands off the widgets on Home pages (Mist) and barely covers the
-     * screen on Display pages (Clear). -1 where it ships the property's own values, as on the
-     * Terminal page and for every other element.
-     */
-    static int shippedStop(@Nullable LookGrid.Element element, @Nullable LookGrid.Kind kind) {
-        if (element != LookGrid.Element.KEYBOARD || kind == null) return -1;
-        switch (kind) {
-            case HOME: return AppearanceLooks.stopForPresetId("frost");
-            case DISPLAY: return AppearanceLooks.stopForPresetId("minimal");
-            case TERMINAL:
-            default:
-                return -1;
-        }
-    }
-
-    /** The shipped Look {@code element} wears on {@code kind}, or null where it has none apart. */
-    @Nullable
-    public static ShippedLook shippedLook(@Nullable LookGrid.Element element,
-                                          @Nullable LookGrid.Kind kind) {
-        int stop = shippedStop(element, kind);
-        return stop < 0 ? null : shippedLook(stop);
-    }
-
-    /**
-     * The look grid's shipped step for a kind: the Frost stop, opacity and tint of the Look the
-     * element ships with there ({@link #shippedLook(LookGrid.Element, LookGrid.Kind)}, the one
-     * owner of those numbers); null for everything else, which ships the property's own value.
-     * Grain follows the Frost stop, as the grid's shipped grain always does.
-     */
-    public static final LookGrid.ShippedLooks SHIPPED_BY_KIND = (property, element, kind) -> {
-        ShippedLook look = shippedLook(element, kind);
-        if (look == null) return null;
-        switch (property) {
-            case FROST: return look.frostStop;
-            case OPACITY: return look.opacity;
-            case TINT: return look.tint;
-            default: return null;
-        }
-    };
-
     /** The Looks as they ship on dark glass; {@link #presets(boolean)} for the glass on screen. */
     @NonNull
     public static List<Preset> presets() {
@@ -465,7 +421,7 @@ public final class SurfacePresets {
     // --------------------------------------------------------------- Mist on light glass
 
     /**
-     * Mist's Base opacity where its glass is light, the white Obsidian ink: sixty of white over the
+     * Mist's Global opacity where its glass is light, the white Obsidian ink: sixty of white over the
      * wallpaper reads as milk (pass 2, 2026-10-17). Every other value of Mist, and every other
      * Look, is the same on either glass.
      */
@@ -557,21 +513,21 @@ public final class SurfacePresets {
 
     /**
      * Whether a property is Layout's rather than a look's: the corner radius and the side gap,
-     * at Base and on every surface.
+     * at Global and on every surface.
      */
     public static boolean isLayoutOwned(@NonNull SurfaceProperty property) {
         return property == SurfaceProperty.CORNER_RADIUS || property == SurfaceProperty.SIDE_GAP;
     }
 
     /**
-     * Whether a look key is Layout's: Base corners and side gap, the terminal's own corners and
+     * Whether a look key is Layout's: Global corners and side gap, the terminal's own corners and
      * margin (its pane gap), and any per-surface corner or side-gap override (a dock's horizontal
      * inset, say). A look never writes or tests these.
      */
     public static boolean isLayoutOwned(@NonNull String key) {
         switch (key) {
-            case TERMUX_APP.KEY_SURFACE_BASE_CORNER_RADIUS:
-            case TERMUX_APP.KEY_SURFACE_BASE_SIDE_GAP:
+            case TERMUX_APP.KEY_SURFACE_GLOBAL_CORNER_RADIUS:
+            case TERMUX_APP.KEY_SURFACE_GLOBAL_SIDE_GAP:
             case TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS:
             case TERMUX_APP.KEY_TERMINAL_PANE_GAP:
                 return true;
@@ -620,15 +576,15 @@ public final class SurfacePresets {
     }
 
     /**
-     * The live look in the preset format: the material point, the Base numbers, the terminal's
+     * The live look in the preset format: the material point, the Global numbers, the terminal's
      * border, and every per-surface cell that is currently detached — named cells being exactly
      * what {@link #apply} re-detaches, and what {@link #matches} tests against. Corners and margins
      * are left out: they are Layout's ({@link #isLayoutOwned}).
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs) {
-        Map<String, Object> look = captureLook(prefs, PaneWallPage.TERMINAL);
-        Map<String, Object> home = captureLook(prefs, PaneWallPage.WIDGETS);
+        Map<String, Object> look = captureLook(prefs, PageKind.TERMINAL);
+        Map<String, Object> home = captureLook(prefs, PageKind.HOME);
         if (!halfCells(home).equals(halfCells(look))) {
             look.put(KEY_HOME_LOOK, Boolean.TRUE);
             for (Map.Entry<String, Object> entry : halfCells(home).entrySet())
@@ -643,7 +599,7 @@ public final class SurfacePresets {
      */
     @NonNull
     public static Map<String, Object> captureLook(@NonNull TermuxAppSharedPreferences prefs,
-                                                  @NonNull PaneWallPage half) {
+                                                  @NonNull PageKind half) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, prefs.getSurfaceMaterial(pageOf(half)));
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, prefs.getSurfaceMaterialIntensity(pageOf(half)));
@@ -681,20 +637,20 @@ public final class SurfacePresets {
 
     // ------------------------------------------------------------------ the two halves (ADR 0013)
     //
-    // A look carries the Workspace's values under the plain keys. Where Home's differ it also
-    // carries Home's per-half cells (its material point, Base numbers and detached surface
+    // A look carries the Terminal's values under the plain keys. Where Home's differ it also
+    // carries Home's per-half cells (its material point, Global numbers and detached surface
     // values) under each key's "_home" twin, with KEY_HOME_LOOK marking that Home's cells are all
-    // named: a per-half cell without its twin then follows Home's Base. A look without the marker
+    // named: a per-half cell without its twin then follows Home's Global. A look without the marker
     // (every shipped Look, and a look saved from one half) is one look for both halves. A build
     // before the halves ignores the twins and the marker as unknown keys.
 
     /** The preset format's suffix for Home's twin of a key; the format predates the page keys. */
     static final String HOME_TWIN_SUFFIX = "_home";
 
-    /** Marks a look that names Home's per-half cells apart from the Workspace's. */
+    /** Marks a look that names Home's per-half cells apart from the Terminal's. */
     static final String KEY_HOME_LOOK = "surface_look_home";
 
-    /** Whether a look holds Home's values apart from the Workspace's. */
+    /** Whether a look holds Home's values apart from the Terminal's. */
     public static boolean hasHomeLook(@NonNull Preset preset) {
         return Boolean.TRUE.equals(preset.values.get(KEY_HOME_LOOK));
     }
@@ -703,22 +659,22 @@ public final class SurfacePresets {
      * The page id a screen kind's look values are read and written under: the wall for Home's, the
      * Terminal page for any other, and "no page" (all) for none.
      */
-    static int pageOf(@Nullable PaneWallPage screen) {
+    static int pageOf(@Nullable PageKind screen) {
         return screen == null ? TermuxAppSharedPreferences.PAGE_ALL
             : SeamDress.lookPageId(screen, TermuxAppSharedPreferences.terminalPageId());
     }
 
     /**
      * Whether a plain look key is one a half holds its own value for: the material point, a
-     * per-half Base number, or a per-half surface cell.
+     * per-half Global number, or a per-half surface cell.
      */
     static boolean isHalfKey(@NonNull String key) {
         if (TERMUX_APP.KEY_SURFACE_MATERIAL.equals(key)
             || TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY.equals(key))
             return true;
-        SurfaceProperty base = baseOfKey(key);
-        if (base != null)
-            return TermuxAppSharedPreferences.isPerPageProperty(base);
+        SurfaceProperty global = globalOfKey(key);
+        if (global != null)
+            return TermuxAppSharedPreferences.isPerPageProperty(global);
         SurfaceEditorRows.Row cell = rowOfKey(key);
         return cell != null && TermuxAppSharedPreferences.isPerPage(cell.slot, cell.property);
     }
@@ -751,12 +707,14 @@ public final class SurfacePresets {
 
     /**
      * One half's look out of {@code preset}, under the plain keys: the look itself for the
-     * Workspace or for a look without Home's own; for Home, the shared keys with Home's per-half
-     * cells in place of the Workspace's.
+     * Terminal or for a look without Home's own; for Home, the shared keys with Home's per-half
+     * cells in place of the Terminal's.
      */
     @NonNull
-    static Preset halfOf(@NonNull Preset preset, @NonNull PaneWallPage half) {
-        boolean home = half == PaneWallPage.WIDGETS && hasHomeLook(preset);
+    static Preset halfOf(@NonNull Preset preset, @NonNull PageKind half) {
+        // The chrome wears one look on every page (ADR 0031): a stored look's Home twins are
+        // not read, whichever half asks.
+        boolean home = false;
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         for (Map.Entry<String, Object> entry : preset.values.entrySet()) {
             String key = entry.getKey();
@@ -776,7 +734,7 @@ public final class SurfacePresets {
 
     /**
      * The values only Custom saves and no Look names: the key caps (Key corners, once set, and
-     * the cap opacity Keys moves), the wallpaper's dim and Soft wallpaper, and where Base's and
+     * the cap opacity Keys moves), the wallpaper's dim and Soft wallpaper, and where Global's and
      * each surface's Glass slider stood (only those stored; an absent one is forgotten on apply,
      * as a Look forgets it). Saved with Custom so its stop comes back whole. A Look leaves the
      * caps' corners, dim and Soft wallpaper where they are; Keys and the Glass positions choosing
@@ -807,7 +765,7 @@ public final class SurfacePresets {
             look.put(TermuxAppSharedPreferences.surfaceGlassPositionKey(slot), position);
     }
 
-    /** The surface (null for Base) whose Glass slider position a key stores, if it is one. */
+    /** The surface (null for Global) whose Glass slider position a key stores, if it is one. */
     @Nullable
     private static GlassPositionKey glassPositionKey(@NonNull String key) {
         if (key.equals(TermuxAppSharedPreferences.surfaceGlassPositionKey(null)))
@@ -819,7 +777,7 @@ public final class SurfacePresets {
         return null;
     }
 
-    /** A Glass slider position key's surface; {@link #slot} null for Base. */
+    /** A Glass slider position key's surface; {@link #slot} null for Global. */
     private static final class GlassPositionKey {
         @Nullable final SurfaceSlot slot;
 
@@ -830,22 +788,22 @@ public final class SurfacePresets {
 
     // ------------------------------------------------------------------------- grid cells
 
-    /** The element column a surface's property is held in, or null (Base, or a Where-level property). */
+    /** The element column a surface's property is held in, or null (Global, or a Where-level property). */
     @Nullable
     private static LookGrid.Element elementOf(@Nullable SurfaceSlot slot,
                                               @NonNull SurfaceProperty property) {
         return slot != null && property.grid.perElement ? slot.element : null;
     }
 
-    /** The grid key a look names a cell by: Base for a null surface, the surface's own cell else. */
+    /** The grid key a look names a cell by: Global for a null surface, the surface's own cell else. */
     @NonNull
     static String cellKey(@Nullable SurfaceSlot slot, @NonNull SurfaceProperty property) {
         return LookGrid.key(property.grid, elementOf(slot, property), LookGrid.NO_PAGE);
     }
 
-    /** The property a grid key names at Base, or null for any other key. */
+    /** The property a grid key names at Global, or null for any other key. */
     @Nullable
-    private static SurfaceProperty baseOfKey(@NonNull String key) {
+    private static SurfaceProperty globalOfKey(@NonNull String key) {
         LookGrid.Key cell = LookGrid.parse(key);
         return cell == null || cell.element != null || cell.page >= 0 || cell.kind != null ? null
             : propertyOf(cell.property);
@@ -871,79 +829,48 @@ public final class SurfacePresets {
         return null;
     }
 
-    /** A surface's (null for Base) value as the grid resolves it on a page, in the grid's unit. */
+    /**
+     * A surface's (null for Global) value as the grid resolves it, in the grid's unit; the same on
+     * every page (ADR 0031), whatever {@code pageId}.
+     */
     private static int cellValue(@NonNull TermuxAppSharedPreferences prefs,
                                  @Nullable SurfaceSlot slot, @NonNull SurfaceProperty property,
                                  int pageId) {
-        LookGrid.Element element = elementOf(slot, property);
-        return prefs.lookGrid().value(property.grid, element,
-            element == null ? LookGrid.NO_PAGE : gridPage(pageId));
-    }
-
-    private static int gridPage(int pageId) {
-        return pageId >= 0 ? pageId : LookGrid.NO_PAGE;
+        return prefs.lookGrid().value(property.grid, elementOf(slot, property));
     }
 
     /**
-     * Writes a look's number into a cell: Base for a null surface, else the surface's own cell on
-     * that page; PAGE_ALL (or none) is everywhere and also drops the surface's page values, so the
-     * number shows on every page. A surface without the property is left alone.
+     * Writes a look's number into a cell: Global for a null surface, else the surface's own cell
+     * (the same on every page, ADR 0031). A surface without the property is left alone.
      */
     private static void writeCell(@NonNull TermuxAppSharedPreferences prefs,
                                   @Nullable SurfaceSlot slot, @NonNull SurfaceProperty property,
                                   int pageId, int value) {
         LookGrid grid = prefs.lookGrid();
         if (slot == null) {
-            grid.write(property.grid, null, LookGrid.NO_PAGE, value);
+            grid.write(property.grid, null, value);
             return;
         }
         LookGrid.Element element = elementOf(slot, property);
         if (element == null || !TermuxAppSharedPreferences.hasSurfaceProperty(slot, property))
             return;
-        grid.write(property.grid, element, gridPage(pageId), value);
-        if (pageId == TermuxAppSharedPreferences.PAGE_ALL)
-            clearElementPages(grid, property.grid, element);
+        grid.write(property.grid, element, value);
     }
 
-    /** Puts a surface's cell back on Base on that page; PAGE_ALL also clears every page's own. */
+    /** Puts a surface's cell back on Global. */
     private static void clearCell(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property,
                                   int pageId) {
         LookGrid.Element element = elementOf(slot, property);
         if (element == null || !TermuxAppSharedPreferences.hasSurfaceProperty(slot, property))
             return;
-        LookGrid grid = prefs.lookGrid();
-        grid.clear(property.grid, element, gridPage(pageId));
-        if (pageId == TermuxAppSharedPreferences.PAGE_ALL)
-            clearElementPages(grid, property.grid, element);
-    }
-
-    private static void clearElementPages(@NonNull LookGrid grid,
-                                          @NonNull LookGrid.Property property,
-                                          @NonNull LookGrid.Element element) {
-        for (String stored : grid.gridKeys()) {
-            LookGrid.Key key = LookGrid.parse(stored);
-            if (key != null && key.property == property && key.element == element
-                    && (key.page >= 0 || key.kind != null))
-                grid.store().remove(stored);
-        }
-    }
-
-    /**
-     * Gives the Terminal page (the Workspace) its own number for a surface's cell, which wins over
-     * the wall's; nothing where no Terminal page is known.
-     */
-    private static void writeWorkspaceCell(@NonNull TermuxAppSharedPreferences prefs,
-                                           @NonNull SurfaceSlot slot,
-                                           @NonNull SurfaceProperty property, int value) {
-        if (!TermuxAppSharedPreferences.hasTerminalPage()) return;
-        writeCell(prefs, slot, property, TermuxAppSharedPreferences.terminalPageId(), value);
+        prefs.lookGrid().clear(property.grid, element);
     }
 
     /**
      * The grid key and value a stored look's old cell name stands for, {@code _home} twins carried
      * across and a blur's dp as its Frost stop; null for every other key. The old names are the
-     * table the upgrade reads ({@code LookGridMigration}): {@link SurfaceProperty#baseKey} and
+     * table the upgrade reads ({@code LookGridMigration}): {@link SurfaceProperty#globalKey} and
      * {@link TermuxAppSharedPreferences#surfaceOverrideKey}. Their one use here is a look saved
      * before the grid.
      */
@@ -955,7 +882,7 @@ public final class SurfacePresets {
         for (SurfaceProperty property : SurfaceProperty.values()) {
             if (isLayoutOwned(property)) continue;
             SurfaceSlot named = null;
-            boolean found = property.baseKey.equals(old);
+            boolean found = property.globalKey.equals(old);
             if (!found) {
                 for (SurfaceSlot slot : SurfaceSlot.values()) {
                     if (old.equals(TermuxAppSharedPreferences.surfaceOverrideKey(slot, property))) {
@@ -1068,8 +995,8 @@ public final class SurfacePresets {
                 if (!look.containsKey(key)) look.put(key, 0);
             if (format < 5) {
                 // The tint strength came later still; before it every look wore the full tint.
-                if (!look.containsKey(TERMUX_APP.KEY_SURFACE_BASE_TINT))
-                    look.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, LEGACY_TINT_STRENGTH);
+                if (!look.containsKey(TERMUX_APP.KEY_SURFACE_GLOBAL_TINT))
+                    look.put(TERMUX_APP.KEY_SURFACE_GLOBAL_TINT, LEGACY_TINT_STRENGTH);
                 fromLegacy(look);
             }
             // Format 6 stretched the Tint scale; a look older than it has its amounts scaled.
@@ -1078,19 +1005,19 @@ public final class SurfacePresets {
             // A look saved before the grid names its cells by the old keys; they read as grid cells.
             toGridKeys(look);
             if (!look.containsKey(cellKey(null, SurfaceProperty.TINT)))
-                look.put(cellKey(null, SurfaceProperty.TINT), TERMUX_APP.DEFAULT_SURFACE_BASE_TINT);
+                look.put(cellKey(null, SurfaceProperty.TINT), TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT);
         }
         return look;
     }
 
     /**
-     * A look's Tint amounts, the base and every per-surface cell it names, from format 5's scale
+     * A look's Tint amounts, Global and every per-surface cell it names, from format 5's scale
      * to format 6's, in place: each amount draws the colour it drew
      * ({@link com.termux.app.chrome.GlassLook#amountForLegacyPercent}), so 100, the Material blend
      * then, is 35.
      */
     static void rescaleTintAmounts(@NonNull Map<String, Object> look) {
-        rescaleTintAmount(look, TERMUX_APP.KEY_SURFACE_BASE_TINT);
+        rescaleTintAmount(look, TERMUX_APP.KEY_SURFACE_GLOBAL_TINT);
         for (SurfaceSlot slot : SurfaceSlot.values())
             rescaleTintAmount(look,
                 TermuxAppSharedPreferences.surfaceOverrideKey(slot, SurfaceProperty.TINT));
@@ -1108,16 +1035,16 @@ public final class SurfacePresets {
     /**
      * A look stored before format 5 in format 5's terms, in place, so it applies as it looked.
      *
-     * <p>Tint: a {@code material} look becomes {@code scheme}, and its strengths (the base and
+     * <p>Tint: a {@code material} look becomes {@code scheme}, and its strengths (Global and
      * every per-surface cell) are its amounts, since the Material blend at strength s is the
      * scheme ink at amount s. Any other family wore its own colour and becomes amount 0 wherever a
      * tint is named; only the desaturation a strength under 100 gave a scheme or Obsidian look is
      * lost, a few levels at most.</p>
      *
-     * <p>Blur and grain: the Base pair where the look names both, and each surface's pair where
+     * <p>Blur and grain: the Global pair where the look names both, and each surface's pair where
      * either is named, move to the nearest Glass position's pair ({@link GlassControls#snapped});
      * a pair with no blur (Solid's) stays. A surface naming one of the two takes both, as the
-     * Glass slider writes them, the other read from the look's Base (or its default).</p>
+     * Glass slider writes them, the other read from the look's Global (or its default).</p>
      */
     static void fromLegacy(@NonNull Map<String, Object> look) {
         boolean material = TERMUX_APP.GLASS_TINT_MATERIAL.equals(
@@ -1125,22 +1052,22 @@ public final class SurfacePresets {
         if (material)
             look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_SCHEME);
         if (!material) {
-            if (look.containsKey(TERMUX_APP.KEY_SURFACE_BASE_TINT))
-                look.put(TERMUX_APP.KEY_SURFACE_BASE_TINT, 0);
+            if (look.containsKey(TERMUX_APP.KEY_SURFACE_GLOBAL_TINT))
+                look.put(TERMUX_APP.KEY_SURFACE_GLOBAL_TINT, 0);
             for (SurfaceSlot slot : SurfaceSlot.values()) {
                 String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot,
                     SurfaceProperty.TINT);
                 if (key != null && look.containsKey(key)) look.put(key, 0);
             }
         }
-        Object baseBlur = look.get(TERMUX_APP.KEY_SURFACE_BASE_BLUR);
-        Object baseGrain = look.get(TERMUX_APP.KEY_SURFACE_BASE_GRAIN);
-        int blur = baseBlur != null ? intOf(baseBlur) : TERMUX_APP.DEFAULT_SURFACE_BASE_BLUR;
-        int grain = baseGrain != null ? intOf(baseGrain) : TERMUX_APP.DEFAULT_SURFACE_BASE_GRAIN;
-        if (baseBlur != null && baseGrain != null) {
+        Object globalBlur = look.get(TERMUX_APP.KEY_SURFACE_GLOBAL_BLUR);
+        Object globalGrain = look.get(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN);
+        int blur = globalBlur != null ? intOf(globalBlur) : TERMUX_APP.DEFAULT_SURFACE_GLOBAL_BLUR;
+        int grain = globalGrain != null ? intOf(globalGrain) : TERMUX_APP.DEFAULT_SURFACE_GLOBAL_GRAIN;
+        if (globalBlur != null && globalGrain != null) {
             int[] pair = GlassControls.snapped(blur, grain);
-            look.put(TERMUX_APP.KEY_SURFACE_BASE_BLUR, pair[0]);
-            look.put(TERMUX_APP.KEY_SURFACE_BASE_GRAIN, pair[1]);
+            look.put(TERMUX_APP.KEY_SURFACE_GLOBAL_BLUR, pair[0]);
+            look.put(TERMUX_APP.KEY_SURFACE_GLOBAL_GRAIN, pair[1]);
         }
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             String blurKey = TermuxAppSharedPreferences.surfaceOverrideKey(slot,
@@ -1167,7 +1094,7 @@ public final class SurfacePresets {
     }
 
     /**
-     * Applies a preset in full: every surface back on Base first — a preset is a complete look,
+     * Applies a preset in full: every surface back on Global first — a preset is a complete look,
      * so it overwrites detached overrides rather than working around them — then each named value,
      * with per-surface keys landing as fresh detaches. Corners and margins are not touched, links
      * included: they are Layout's, and a stored look that still names them is not obeyed. The
@@ -1214,9 +1141,9 @@ public final class SurfacePresets {
     /**
      * The user's saved Custom ({@link #custom}) put back whole, as one editor: what a Look would
      * leave behind is cleared first (Keys back to the theme's, every Glass position forgotten),
-     * then the saved look applies as {@link #apply} applies one — every surface back on Base, each
+     * then the saved look applies as {@link #apply} applies one — every surface back on Global, each
      * cell it names detached again, its Keys and Glass positions where it saved them — and, where
-     * it leaves the keyboard's blur on Base, that raw key goes back to "follow". A blob saved
+     * it leaves the keyboard's blur on Global, that raw key goes back to "follow". A blob saved
      * before Keys or the Glass positions were part of it reads them as the theme's and forgotten.
      * The caller owns offering the Undo.
      */
@@ -1244,12 +1171,12 @@ public final class SurfacePresets {
      * (the glass ink, rim, motion, hue, vibrancy and edge) are one for the wall, as a Look's are.
      */
     public static void applyCustom(@NonNull TermuxAppSharedPreferences prefs,
-                                   @NonNull Preset custom, @NonNull PaneWallPage half) {
+                                   @NonNull Preset custom, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
         forgetSurfaceExtras(into);
-        applyAtHalf(into, halfOf(custom, half), half);
+        applyHalf(into, halfOf(custom, half), half, false, true);
         keyboardBlurFollowsWhereLinked(into);
         if (batch != null)
             batch.applyToStore();
@@ -1257,16 +1184,16 @@ public final class SurfacePresets {
 
     /** One half's live look as a Custom, under the plain keys ({@link #captureLook}). */
     @NonNull
-    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull PaneWallPage half) {
+    static Preset customOf(@NonNull TermuxAppSharedPreferences prefs, @NonNull PageKind half) {
         return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom,
             captureLook(prefs, half));
     }
 
     /**
      * The per-surface glass values outside the preset format, as every Look has them: the
-     * keyboard's Keys back to the theme's (-1), every Glass slider position forgotten (Base's and
+     * keyboard's Keys back to the theme's (-1), every Glass slider position forgotten (Global's and
      * each surface's, so each reads back from the glass it now draws), and, where the Look left the
-     * keyboard's blur on Base, its raw key back to "follow", as the shared Glass writes it
+     * keyboard's blur on Global, its raw key back to "follow", as the shared Glass writes it
      * ({@link GlobalGlass#write}).
      */
     static void resetSurfaceExtras(@NonNull TermuxAppSharedPreferences prefs) {
@@ -1282,7 +1209,7 @@ public final class SurfacePresets {
             prefs.setSurfaceGlassPosition(slot, -1);
     }
 
-    /** The keyboard's raw blur key back to "follow" while its blur is on Base. */
+    /** The keyboard's raw blur key back to "follow" while its blur is on Global. */
     private static void keyboardBlurFollowsWhereLinked(@NonNull TermuxAppSharedPreferences prefs) {
         if (prefs.isSurfaceInheriting(SurfaceSlot.KEYBOARD, SurfaceProperty.BLUR))
             prefs.setInAppKeyboardBlurRadiusRaw(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BLUR_RADIUS);
@@ -1298,48 +1225,19 @@ public final class SurfacePresets {
     /** {@link #apply}, one setter and one {@code apply()} at a time: the reference it must match. */
     @VisibleForTesting
     static void applyEach(@NonNull TermuxAppSharedPreferences prefs, @NonNull Preset preset) {
-        // The Workspace's look lands on both halves; Home's own, where the look names it, then
-        // lands on Home's per-half cells alone.
-        applyHalf(prefs, halfOf(preset, PaneWallPage.TERMINAL), null, false);
-        if (!hasHomeLook(preset))
-            return;
-        // The halves are pages now (ADR 0015 6): Home's values are the wall's, and what the
-        // Workspace showed under this look goes to the Terminal page's overrides where a page may
-        // hold it. Note the Workspace's numbers, put Home's on the wall, then override the numbers
-        // that moved.
-        SurfaceSlot[] slots = SurfaceSlot.values();
-        SurfaceProperty[] properties = SurfaceProperty.values();
-        int[][] workspace = new int[slots.length][properties.length];
-        for (SurfaceSlot slot : slots)
-            for (SurfaceProperty property : properties)
-                workspace[slot.ordinal()][property.ordinal()] =
-                    cellValue(prefs, slot, property, pageOf(PaneWallPage.TERMINAL));
-        String workspaceMaterial = prefs.getSurfaceMaterial(pageOf(PaneWallPage.TERMINAL));
-        int workspaceIntensity = prefs.getSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL));
-        applyHalf(prefs, halfOf(preset, PaneWallPage.WIDGETS), PaneWallPage.WIDGETS, true);
-        if (!workspaceMaterial.equals(prefs.getSurfaceMaterial(pageOf(PaneWallPage.TERMINAL))))
-            prefs.setSurfaceMaterial(pageOf(PaneWallPage.TERMINAL), workspaceMaterial);
-        if (workspaceIntensity != prefs.getSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL)))
-            prefs.setSurfaceMaterialIntensity(pageOf(PaneWallPage.TERMINAL), workspaceIntensity);
-        for (SurfaceSlot slot : slots) {
-            for (SurfaceProperty property : properties) {
-                if (!TermuxAppSharedPreferences.isPerPage(slot, property)) continue;
-                int want = workspace[slot.ordinal()][property.ordinal()];
-                if (cellValue(prefs, slot, property, pageOf(PaneWallPage.TERMINAL)) != want)
-                    writeWorkspaceCell(prefs, slot, property, want);
-            }
-        }
+        // The chrome wears one look on every page (ADR 0031): the look lands once, everywhere.
+        applyHalf(prefs, halfOf(preset, PageKind.TERMINAL), null, false);
     }
 
     /**
      * A Look chosen on one half of the wall, as {@link #applyLook} chooses one for both: its
-     * per-half cells (material point, Base numbers, the dock's, status bar's and keyboard's own
+     * per-half cells (material point, Global numbers, the dock's, status bar's and keyboard's own
      * values) land on {@code half} alone. The values a Look sets that are not held per half (the
      * glass ink, rim, motion, hue, vibrancy and edge, the terminal's own cells) have one value for
      * the whole wall and are written for both, as is the reset of the per-surface extras.
      */
     public static void applyLook(@NonNull TermuxAppSharedPreferences prefs,
-                                 @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                 @NonNull Preset preset, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
@@ -1351,268 +1249,25 @@ public final class SurfacePresets {
     }
 
     /**
-     * A Look picked on the Global (Customization) card: {@link #applyLook(TermuxAppSharedPreferences,
-     * Preset, PaneWallPage)} after clearing the cells read before Base ({@link #clearBeneathLook}),
-     * in the same one editor, so every surface on every page wears it (developer, 2026-11-03).
+     * A Look picked on the Global card: {@link #applyLook(TermuxAppSharedPreferences, Preset,
+     * PageKind)} in one editor. A surface's own Opacity and Blur stay (own stays, appearance-one-
+     * look spec §1): every surface that follows Global wears the Look.
      */
     public static void applyGlobalLook(@NonNull TermuxAppSharedPreferences prefs,
-                                       @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                       @NonNull Preset preset, @NonNull PageKind half) {
         SharedPreferences store = prefs.getSharedPreferences();
         Batch batch = store == null ? null : new Batch(store);
         TermuxAppSharedPreferences into = batch == null ? prefs : writingInto(prefs, batch);
-        clearBeneathLook(into.lookGrid());
-        applyAtHalf(into, halfOf(preset, half), half);
+        applyHalf(into, halfOf(preset, half), half, false, true);
         resetSurfaceExtras(into);
         if (batch != null)
             batch.applyToStore();
     }
 
-    /** The glass numbers a Look stands for, which a Look resets beneath it. */
-    private static final LookGrid.Property[] LOOK_PROPERTIES = {LookGrid.Property.FROST,
-        LookGrid.Property.OPACITY, LookGrid.Property.GRAIN, LookGrid.Property.TINT};
-
-    /**
-     * Whether a Global Look would clear anything ({@link #clearBeneathLook}): a Home or Workspace
-     * look, or an element's own value, on any of a Look's numbers.
-     */
-    static boolean holdsCellsBeneathLook(@NonNull LookGrid grid) {
-        for (LookGrid.Property property : LOOK_PROPERTIES) {
-            if (!property.perElement) continue;
-            for (LookGrid.Kind kind : LookGrid.Kind.values())
-                if (grid.has(property, null, kind)) return true;
-            for (LookGrid.Element element : LookGrid.Element.values()) {
-                if (grid.has(property, element, (LookGrid.Kind) null)) return true;
-                for (LookGrid.Kind kind : LookGrid.Kind.values())
-                    if (grid.has(property, element, kind)) return true;
-            }
-        }
-        return false;
-    }
-
-    /** Every kind and element, held once: the clears below run on each step of a drag. */
-    private static final LookGrid.Kind[] KINDS = LookGrid.Kind.values();
-    private static final LookGrid.Element[] ELEMENTS = LookGrid.Element.values();
-
-    /**
-     * Before a Global Look: the Home and Workspace looks (all glass on each kind) and every
-     * element's own value, everywhere and on each kind, go, for each of a Look's numbers.
-     */
-    static void clearBeneathLook(@NonNull LookGrid grid) {
-        for (LookGrid.Property property : LOOK_PROPERTIES)
-            clearBeneathGlobal(grid, property);
-    }
-
-    /**
-     * Before a Global value of {@code property} (a Look's number, or a slider on the Global card):
-     * the Home and Workspace values (all glass on each kind) and every element's own value,
-     * everywhere and on each kind, go, so every surface follows Base again. Margin has only the
-     * kind values; Vibrancy nothing beneath Base.
-     */
-    static void clearBeneathGlobal(@NonNull LookGrid grid, @NonNull LookGrid.Property property) {
-        if (property.perKind)
-            for (LookGrid.Kind kind : KINDS)
-                clearIfHeld(grid, property, null, kind);
-        if (!property.perElement) return;
-        for (LookGrid.Element element : ELEMENTS) {
-            clearIfHeld(grid, property, element, null);
-            for (LookGrid.Kind kind : KINDS)
-                clearIfHeld(grid, property, element, kind);
-        }
-    }
-
-    /**
-     * Before a Look on a page card (Home, Workspace) for {@code kinds}: each element's own value
-     * on those kinds goes, and an element's everywhere value stops reaching them. That value
-     * moves to the element's cell on every other kind that holds none, so those kinds look as
-     * they did.
-     */
-    static void clearBeneathKindLook(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds) {
-        for (LookGrid.Property property : LOOK_PROPERTIES)
-            clearBeneathKind(grid, kinds, property);
-    }
-
-    /**
-     * {@link #clearBeneathKindLook} for one property: what a page card's slider of
-     * {@code property} resets on {@code kinds} before its value lands there.
-     */
-    static void clearBeneathKind(@NonNull LookGrid grid, @NonNull List<LookGrid.Kind> kinds,
-                                 @NonNull LookGrid.Property property) {
-        if (!property.perElement) return;
-        for (LookGrid.Element element : ELEMENTS) {
-            for (int i = 0; i < kinds.size(); i++)
-                clearIfHeld(grid, property, element, kinds.get(i));
-            if (!grid.has(property, element, (LookGrid.Kind) null)) continue;
-            int everywhere = grid.store().getInt(
-                LookGrid.key(property, element, (LookGrid.Kind) null), property.shipped);
-            for (LookGrid.Kind other : KINDS)
-                if (!kinds.contains(other) && !grid.has(property, element, other))
-                    grid.write(property, element, other, everywhere);
-            grid.clear(property, element, (LookGrid.Kind) null);
-        }
-    }
-
-    /**
-     * Last change wins (developer, 2026-11-04): a slider on the Global card or a page card (Home,
-     * Workspace) resets the values set beneath it for its one property, at the levels it covers,
-     * so they follow it ({@link #clearBeneathGlobal}, {@link #clearBeneathKind}). An element
-     * card's slider resets nothing: it holds its own value. For a property with no element column
-     * (Margin) an element card edits all glass at its level, so it resets as that level's card.
-     */
-    static void clearBeneathSlider(@NonNull LookGrid grid, @NonNull EditorChips chips,
-                                   @NonNull LookGrid.Property property) {
-        if (!slidersResetBeneath(chips, property)) return;
-        if (chips.onKind()) clearBeneathKind(grid, chips.appliesTo.kinds, property);
-        else clearBeneathGlobal(grid, property);
-    }
-
-    /**
-     * Whether a slider of {@code property} moved at {@code chips} resets what is beneath it
-     * ({@link #clearBeneathSlider}): all glass at the chips' level, which an element card edits
-     * for a property with no element column.
-     */
-    static boolean slidersResetBeneath(@NonNull EditorChips chips,
-                                       @NonNull LookGrid.Property property) {
-        return chips.element == null || !property.perElement;
-    }
-
-    /** Clears a cell the grid holds; an absent cell is left alone (no write, no seed bookkeeping). */
-    private static void clearIfHeld(@NonNull LookGrid grid, @NonNull LookGrid.Property property,
-                                    @Nullable LookGrid.Element element,
-                                    @Nullable LookGrid.Kind kind) {
-        if (grid.has(property, element, kind)) grid.clear(property, element, kind);
-    }
-
-    /**
-     * A Look put on one page (the editor's scope chip on the page side, ADR 0015 §6): each surface
-     * cell a page may hold (the blur, opacity, grain and tint of the dock, status bar and keyboard)
-     * gets the Look's number as that page's {@code @id} override. Base, the links, the material,
-     * and every value held once for the wall stay as they are, so a Look on one page never
-     * reaches the others. Old half keys read Home's values ({@link #halfOf}).
-     */
-    public static void applyLookAtPage(@NonNull TermuxAppSharedPreferences prefs,
-                                       @NonNull Preset preset, int pageId) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || pageId < 0)
-            return;
-        Preset look = halfOf(preset, PaneWallPage.WIDGETS);
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (isPageCell(slot, property))
-                    writeCell(prefs, slot, property, pageId,
-                        lookCellValue(prefs, look, slot, property));
-            }
-        }
-    }
-
-    /** The keys a page may hold its own value of, as surface cells: what a page-scoped Look writes. */
-    private static boolean isPageCell(@NonNull SurfaceSlot slot,
-                                      @NonNull SurfaceProperty property) {
-        if (isLayoutOwned(property) || !TermuxAppSharedPreferences.isPerPage(slot, property))
-            return false;
-        String key = TermuxAppSharedPreferences.surfaceOverrideKey(slot, property);
-        return key != null && com.termux.app.look.PageLook.isDetachable(key);
-    }
-
-    /** A page's value of a surface cell: its own {@code @id} override, else the wall's. */
-    private static int pageCellValue(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull SharedPreferences store, int pageId,
-                                     @NonNull SurfaceSlot slot, @NonNull SurfaceProperty property) {
-        if (prefs.lookGrid().has(property.grid, slot.element, pageId))
-            return cellValue(prefs, slot, property, pageId);
-        return cellValue(prefs, slot, property, pageOf(PaneWallPage.WIDGETS));
-    }
-
-    /**
-     * Whether page {@code pageId} holds a value of its own for any surface cell a Look writes: a
-     * page that holds none follows Base, and wears the wall's stop.
-     */
-    public static boolean holdsPageLook(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || pageId < 0)
-            return false;
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!isPageCell(slot, property))
-                    continue;
-                if (prefs.lookGrid().has(property.grid, slot.element, pageId))
-                    return true;
-            }
-        }
-        return false;
-    }
-
-    /**
-     * Whether page {@code pageId} wears {@code preset} in the cells a page may hold: each cell, the
-     * page's own value or else the wall's, is the number the Look gives it ({@link
-     * #applyLookAtPage} writes exactly these). The values held once for the wall never decide it.
-     */
-    public static boolean wornAtPage(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull Preset preset, int pageId) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || pageId < 0)
-            return false;
-        Preset look = halfOf(preset, PaneWallPage.WIDGETS);
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (!isPageCell(slot, property))
-                    continue;
-                if (pageCellValue(prefs, store, pageId, slot, property)
-                        != lookCellValue(prefs, look, slot, property))
-                    return false;
-            }
-        }
-        return true;
-    }
-
-    /**
-     * Page {@code pageId}'s look as a Custom: every cell a page may hold, as the page shows it,
-     * under the plain keys. {@link #applyLookAtPage} puts it back on that page (or another).
-     */
-    @NonNull
-    public static Preset customAtPage(@NonNull TermuxAppSharedPreferences prefs, int pageId) {
-        Map<String, Object> values = new java.util.LinkedHashMap<>();
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store != null && pageId >= 0) {
-            for (SurfaceSlot slot : SurfaceSlot.values()) {
-                for (SurfaceProperty property : SurfaceProperty.values()) {
-                    if (!isPageCell(slot, property))
-                        continue;
-                    values.put(cellKey(slot, property),
-                        pageCellValue(prefs, store, pageId, slot, property));
-                }
-            }
-        }
-        return new Preset(CUSTOM_ID, R.string.termux_surface_preset_custom, values);
-    }
-
-    /**
-     * A look at one half's scope. Home is the wall: {@link #applyHalf}. The Workspace is the
-     * Terminal page, which a Look reaches only through its own surface values: each per-half
-     * cell's resolved number lands as the page's override, and Base, the inherit links, the
-     * material point and the intensity stay the wall's. Values held once for the wall are written
-     * as ever.
-     */
+    /** A look, the same on every page (ADR 0031): {@link #applyHalf} for the wall. */
     private static void applyAtHalf(@NonNull TermuxAppSharedPreferences prefs,
-                                    @NonNull Preset look, @NonNull PaneWallPage half) {
-        if (half != PaneWallPage.TERMINAL || !TermuxAppSharedPreferences.hasTerminalPage()) {
-            applyHalf(prefs, look, half, false);
-            return;
-        }
-        for (SurfaceSlot slot : SurfaceSlot.values()) {
-            for (SurfaceProperty property : SurfaceProperty.values()) {
-                if (isLayoutOwned(property)
-                        || !TermuxAppSharedPreferences.isPerPage(slot, property))
-                    continue;
-                writeWorkspaceCell(prefs, slot, property,
-                    lookCellValue(prefs, look, slot, property));
-            }
-        }
-        for (Map.Entry<String, Object> entry : look.values.entrySet()) {
-            String key = entry.getKey();
-            if (isLayoutOwned(key) || (isHalfKey(key) && !isMaterialKey(key)))
-                continue;
-            applyOne(prefs, key, entry.getValue(), half);
-        }
+                                    @NonNull Preset look, @NonNull PageKind half) {
+        applyHalf(prefs, look, half, false, false);
     }
 
     /** The material point and its intensity: held per page as strings and numbers of their own. */
@@ -1623,35 +1278,43 @@ public final class SurfacePresets {
 
     /**
      * The number a look gives a surface's property, in the grid's unit (a blur as its Frost stop):
-     * its own cell, else the look's Base, else the wall's Base as it is.
+     * its own cell, else the look's Global, else the wall's Global as it is.
      */
     private static int lookCellValue(@NonNull TermuxAppSharedPreferences prefs,
                                      @NonNull Preset look, @NonNull SurfaceSlot slot,
                                      @NonNull SurfaceProperty property) {
         Object own = look.values.get(cellKey(slot, property));
         if (own != null) return intOf(own);
-        Object base = look.values.get(cellKey(null, property));
-        return base != null ? intOf(base)
-            : cellValue(prefs, null, property, pageOf(PaneWallPage.WIDGETS));
-    }
-
-    /** Whether the Workspace's worn values are read as the Terminal page's own; see {@link #wornOn}. */
-    private static boolean pageScoped(@NonNull PaneWallPage half) {
-        return half == PaneWallPage.TERMINAL && TermuxAppSharedPreferences.hasTerminalPage();
+        Object global = look.values.get(cellKey(null, property));
+        return global != null ? intOf(global)
+            : cellValue(prefs, null, property, pageOf(PageKind.HOME));
     }
 
     /**
-     * Every cell back on Base and each named value written, for one half or (null) both. With
+     * Every cell back on Global and each named value written, for one half or (null) both. With
      * {@code cellsOnly} only the per-half cells are touched; otherwise a half write still writes
-     * the values with no half for both, and leaves the terminal's cells (the Workspace's alone)
-     * to a Workspace or both-halves write.
+     * the values with no half for both, and leaves the terminal's cells (the Terminal's alone)
+     * to a Terminal or both-halves write.
      */
     private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
-                                  @NonNull Preset preset, @Nullable PaneWallPage half,
+                                  @NonNull Preset preset, @Nullable PageKind half,
                                   boolean cellsOnly) {
+        applyHalf(prefs, preset, half, cellsOnly, false);
+    }
+
+    /**
+     * {@link #applyHalf(TermuxAppSharedPreferences, Preset, PageKind, boolean)}; with
+     * {@code keepOwn} (a Look picked on Global) the status bar's, the dock's and the keyboard's
+     * own Opacity and Blur stay (own stays, appearance-one-look spec §1).
+     */
+    private static void applyHalf(@NonNull TermuxAppSharedPreferences prefs,
+                                  @NonNull Preset preset, @Nullable PageKind half,
+                                  boolean cellsOnly, boolean keepOwn) {
         for (SurfaceSlot slot : SurfaceSlot.values()) {
             for (SurfaceProperty property : SurfaceProperty.values()) {
                 if (isLayoutOwned(property) || !touchesCell(slot, property, half, cellsOnly))
+                    continue;
+                if (keepOwn && GlobalGlass.ownsStay(slot) && ownable(property))
                     continue;
                 clearCell(prefs, slot, property, pageOf(half));
             }
@@ -1664,13 +1327,19 @@ public final class SurfacePresets {
         }
     }
 
+    /** The properties a surface may own: Opacity, and Blur with the grain it brings. */
+    private static boolean ownable(@NonNull SurfaceProperty property) {
+        return property == SurfaceProperty.OPACITY || property == SurfaceProperty.BLUR
+            || property == SurfaceProperty.GRAIN;
+    }
+
     /** Whether a write for {@code half} touches a surface cell; see {@link #applyHalf}. */
     private static boolean touchesCell(@NonNull SurfaceSlot slot,
                                        @NonNull SurfaceProperty property,
-                                       @Nullable PaneWallPage half, boolean cellsOnly) {
+                                       @Nullable PageKind half, boolean cellsOnly) {
         if (TermuxAppSharedPreferences.isPerPage(slot, property))
             return true;
-        return !cellsOnly && half != PaneWallPage.WIDGETS;
+        return !cellsOnly && half != PageKind.HOME;
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
@@ -1679,7 +1348,7 @@ public final class SurfacePresets {
     }
 
     private static void applyOne(@NonNull TermuxAppSharedPreferences prefs, @NonNull String key,
-                                 @NonNull Object value, @Nullable PaneWallPage half) {
+                                 @NonNull Object value, @Nullable PageKind half) {
         switch (key) {
             // Style is never part of a Look: a stored look from before this rule may still carry
             // the key, and it is ignored on apply and in matches().
@@ -1749,14 +1418,14 @@ public final class SurfacePresets {
                 SoftWallpaper.set(prefs, Boolean.TRUE.equals(value));
                 return;
         }
-        SurfaceProperty baseProperty = baseOfKey(key);
-        if (baseProperty != null) {
-            writeCell(prefs, null, baseProperty, pageOf(half), intOf(value));
+        SurfaceProperty globalProperty = globalOfKey(key);
+        if (globalProperty != null) {
+            writeCell(prefs, null, globalProperty, pageOf(half), intOf(value));
             return;
         }
         SurfaceEditorRows.Row cell = rowOfKey(key);
         if (cell != null) {
-            if (half != PaneWallPage.WIDGETS || TermuxAppSharedPreferences.isPerPage(cell.slot,
+            if (half != PageKind.HOME || TermuxAppSharedPreferences.isPerPage(cell.slot,
                     cell.property))
                 writeCell(prefs, cell.slot, cell.property, pageOf(half), intOf(value));
             return;
@@ -1781,18 +1450,18 @@ public final class SurfacePresets {
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
                                   @NonNull Preset preset) {
-        return matches(prefs, preset, PaneWallPage.TERMINAL);
+        return matches(prefs, preset, PageKind.TERMINAL);
     }
 
     /**
      * Whether one half of the wall wears exactly this preset, as {@link #matches(
-     * TermuxAppSharedPreferences, Preset)} asks it of the Workspace: the stop the Look slider
+     * TermuxAppSharedPreferences, Preset)} asks it of the Terminal: the stop the Look slider
      * shows on that half. Values not held per half are compared as they are for both.
      */
     public static boolean matches(@NonNull TermuxAppSharedPreferences prefs,
-                                  @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                  @NonNull Preset preset, @NonNull PageKind half) {
         Preset look = halfOf(preset, half);
-        boolean scoped = pageScoped(half);
+        boolean scoped = false;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property))
                 continue;
@@ -1819,17 +1488,17 @@ public final class SurfacePresets {
 
     /**
      * Whether one screen wears this preset in what it holds itself: {@link #matches(
-     * TermuxAppSharedPreferences, Preset, PaneWallPage)} asked of that half's own values only — its
-     * per-half cells and numbers, and on the Workspace the terminal's cells, which are the
-     * Workspace's alone. The values held once for the wall (the glass ink, rim, motion, hue,
+     * TermuxAppSharedPreferences, Preset, PageKind)} asked of that half's own values only — its
+     * per-half cells and numbers, and on the Terminal the terminal's cells, which are the
+     * Terminal's alone. The values held once for the wall (the glass ink, rim, motion, hue,
      * vibrancy and edge) are left out: a Look picked on the other screen writes them for both,
      * and must not move this screen off its own Look (editor-redesign §1: each screen stores its
      * own Look and glass; the two meet only through the Match rows).
      */
     public static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
-                                 @NonNull Preset preset, @NonNull PaneWallPage half) {
+                                 @NonNull Preset preset, @NonNull PageKind half) {
         Preset look = halfOf(preset, half);
-        boolean scoped = pageScoped(half);
+        boolean scoped = false;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property) || !touchesCell(row.slot, row.property, half, false))
                 continue;
@@ -1856,7 +1525,7 @@ public final class SurfacePresets {
     }
 
     /** Whether a plain preset key is one {@code half} holds itself; see {@link #wornOn}. */
-    private static boolean isOwnKey(@NonNull String key, @NonNull PaneWallPage half) {
+    private static boolean isOwnKey(@NonNull String key, @NonNull PageKind half) {
         if (isHalfKey(key))
             return true;
         SurfaceEditorRows.Row cell = rowOfKey(key);
@@ -1866,7 +1535,7 @@ public final class SurfacePresets {
     /** The live value behind a preset key, or null for a key this build does not know. */
     @Nullable
     private static Object currentOne(@NonNull TermuxAppSharedPreferences prefs,
-                                     @NonNull String key, @NonNull PaneWallPage half) {
+                                     @NonNull String key, @NonNull PageKind half) {
         switch (key) {
             case TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE:
                 return null;
@@ -1913,9 +1582,9 @@ public final class SurfacePresets {
             case SoftWallpaper.KEY_WALLPAPER_SOFT:
                 return SoftWallpaper.isOn(prefs);
         }
-        SurfaceProperty baseProperty = baseOfKey(key);
-        if (baseProperty != null)
-            return cellValue(prefs, null, baseProperty, pageOf(half));
+        SurfaceProperty globalProperty = globalOfKey(key);
+        if (globalProperty != null)
+            return cellValue(prefs, null, globalProperty, pageOf(half));
         SurfaceEditorRows.Row cell = rowOfKey(key);
         if (cell != null)
             return cellValue(prefs, cell.slot, cell.property, pageOf(half));

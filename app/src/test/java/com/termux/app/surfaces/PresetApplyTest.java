@@ -9,11 +9,10 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.chrome.ElementGlass;
+import com.termux.app.page.PageKind;
 import com.termux.app.surfaces.EditorRows.Row;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.WallPages;
 import com.termux.shared.termux.settings.preferences.LookGrid;
-import com.termux.shared.termux.settings.preferences.LookGridKindSeed;
 import com.termux.shared.termux.settings.preferences.PageLookKeys;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -32,10 +31,10 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * A Look picked on the Look slider shows: what the Home page, the Workspace page and a Display
+ * A Look picked on the Look slider shows: what the Home page, the Terminal page and a Display
  * page resolve to for every glass element, as the renderers read it ({@link ElementGlass}), on a
  * store shaped like a real install after the kind seed (509b634db). A Look resets the cells read
- * before its own (developer, 2026-11-03): the Global card's clears the Home and Workspace looks
+ * before its own (developer, 2026-11-03): the Global card's clears the Home and Terminal looks
  * and every element value; a page card's clears the element values reaching its kinds.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -52,15 +51,10 @@ public class PresetApplyTest {
         SharedPreferences store = context.getSharedPreferences("preset-apply",
             Context.MODE_PRIVATE);
         store.edit().clear().commit();
-        LookGrid.install(page -> page == HOME_PAGE ? LookGrid.Kind.HOME
-                : page == TERMINAL_PAGE ? LookGrid.Kind.TERMINAL
-                : page == DISPLAY_PAGE ? LookGrid.Kind.DISPLAY : null,
-            SurfacePresets.SHIPPED_BY_KIND);
         TermuxAppSharedPreferences prefs = new TermuxAppSharedPreferences(context, store, null);
         store.edit().putInt(PageLookKeys.KEY_TERMINAL_PAGE_ID, TERMINAL_PAGE).commit();
         TermuxAppSharedPreferences.setTerminalPageId(TERMINAL_PAGE);
         SurfacePresets.applyLook(prefs, SurfacePresets.presets(prefs).get(1));
-        LookGridKindSeed.run(new LookGrid.PrefsStore(store), SurfacePresets.SHIPPED_BY_KIND);
         return prefs;
     }
 
@@ -72,19 +66,13 @@ public class PresetApplyTest {
         SharedPreferences store = RuntimeEnvironment.getApplication().getSharedPreferences(
             "preset-apply", Context.MODE_PRIVATE);
         store.edit().clear().commit();
-        LookGrid.install(page -> page == HOME_PAGE ? LookGrid.Kind.HOME
-                : page == TERMINAL_PAGE ? LookGrid.Kind.TERMINAL
-                : page == DISPLAY_PAGE ? LookGrid.Kind.DISPLAY : null,
-            SurfacePresets.SHIPPED_BY_KIND);
         store.edit().putInt(PageLookKeys.KEY_TERMINAL_PAGE_ID, TERMINAL_PAGE).commit();
         TermuxAppSharedPreferences.setTerminalPageId(TERMINAL_PAGE);
         SurfacePresets.applyLook(prefs, SurfacePresets.presets(prefs).get(1));
-        LookGridKindSeed.run(new LookGrid.PrefsStore(store), SurfacePresets.SHIPPED_BY_KIND);
     }
 
     @After
     public void forget() {
-        LookGrid.install(null, null);
         TermuxAppSharedPreferences.setTerminalPageId(-1);
     }
 
@@ -100,7 +88,7 @@ public class PresetApplyTest {
         EditorTestHarness harness = null;
         for (int stop : looks()) {
             if (harness == null) {
-                harness = harnessFor(prefs, PaneWallPage.WIDGETS, HOME_PAGE);
+                harness = harnessFor(prefs, PageKind.HOME, HOME_PAGE);
             } else {
                 harness.editor.endSession();
                 ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
@@ -108,61 +96,8 @@ public class PresetApplyTest {
                     harness.editor.isOpen());
                 reinstall(prefs);
             }
-            tap(present(harness, EditorCard.APPEARANCE, PaneWallPage.WIDGETS), stop);
+            tap(present(harness, EditorCard.APPEARANCE, PageKind.HOME), stop);
             expectEverywhere(prefs, stop, PAGES, "Customization", wrong);
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
-    }
-
-    @Test
-    public void customizationLookShowsAfterTheWorkspaceAndHomeHeldTheirOwn() {
-        List<String> wrong = new ArrayList<>();
-        for (int stop : looks()) {
-            TermuxAppSharedPreferences prefs = install();
-            int other = stop == looks()[0] ? looks()[1] : looks()[0];
-            tap(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE), other);
-            tap(open(prefs, EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE), other);
-            tap(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), stop);
-            expectEverywhere(prefs, stop, PAGES, "Customization after screens", wrong);
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
-    }
-
-    @Test
-    public void workspaceLookShowsOnTheWorkspacePages() {
-        List<String> wrong = new ArrayList<>();
-        // One editor; each cell ends its session, puts the install back to a fresh one and
-        // opens the card again, so every cell starts as a fresh install with the card just
-        // opened.
-        TermuxAppSharedPreferences prefs = install();
-        EditorTestHarness harness = null;
-        for (int stop : looks()) {
-            if (harness == null) {
-                harness = harnessFor(prefs, PaneWallPage.TERMINAL, TERMINAL_PAGE);
-            } else {
-                harness.editor.endSession();
-                ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-                org.junit.Assert.assertFalse("the editor is closed before the next cell",
-                    harness.editor.isOpen());
-                reinstall(prefs);
-            }
-            tap(present(harness, EditorCard.WORKSPACE, PaneWallPage.TERMINAL), stop);
-            expectEverywhere(prefs, stop, new int[] {TERMINAL_PAGE, DISPLAY_PAGE}, "Workspace",
-                wrong);
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
-    }
-
-    @Test
-    public void workspaceLookShowsAfterACustomizationLook() {
-        List<String> wrong = new ArrayList<>();
-        for (int stop : looks()) {
-            TermuxAppSharedPreferences prefs = install();
-            int other = stop == looks()[0] ? looks()[1] : looks()[0];
-            tap(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), other);
-            tap(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE), stop);
-            expectEverywhere(prefs, stop, new int[] {TERMINAL_PAGE, DISPLAY_PAGE},
-                "Workspace after Customization", wrong);
         }
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
     }
@@ -171,222 +106,116 @@ public class PresetApplyTest {
     public void theSliderAwayAndBackLandsEachTime() {
         TermuxAppSharedPreferences prefs = install();
         List<String> wrong = new ArrayList<>();
-        for (EditorCard card : new EditorCard[] {EditorCard.APPEARANCE, EditorCard.WORKSPACE}) {
-            boolean workspace = card == EditorCard.WORKSPACE;
-            SurfaceEditorController editor = open(prefs, card,
-                workspace ? PaneWallPage.TERMINAL : PaneWallPage.WIDGETS,
-                workspace ? TERMINAL_PAGE : HOME_PAGE);
-            int[] pages = workspace ? new int[] {TERMINAL_PAGE, DISPLAY_PAGE} : PAGES;
-            for (int stop : new int[] {looks()[3], looks()[0], looks()[3], looks()[2]}) {
-                tap(editor, stop);
-                expectEverywhere(prefs, stop, pages, card + " to " + stop, wrong);
-            }
+        SurfaceEditorController editor = open(prefs, EditorCard.APPEARANCE, PageKind.HOME,
+            HOME_PAGE);
+        for (int stop : new int[] {looks()[3], looks()[0], looks()[3], looks()[2]}) {
+            tap(editor, stop);
+            expectEverywhere(prefs, stop, PAGES, "Global to " + stop, wrong);
         }
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
     }
 
     @Test
-    public void customizationLookShowsAfterAnElementCardHeldItsOwn() {
-        List<String> wrong = new ArrayList<>();
-        for (EditorChips.AppliesTo where : EditorChips.appliesToOptions(EditorCard.DOCK)) {
-            TermuxAppSharedPreferences prefs = install();
-            dockOpacity(prefs, where, 23);
-            int stop = looks()[3];
-            tap(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), stop);
-            expectEverywhere(prefs, stop, PAGES, "Customization after Dock " + where, wrong);
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
-    }
-
-    @Test
-    public void workspaceLookShowsAfterAnElementCardHeldItsOwn() {
-        List<String> wrong = new ArrayList<>();
-        for (EditorChips.AppliesTo where : EditorChips.appliesToOptions(EditorCard.DOCK)) {
-            TermuxAppSharedPreferences prefs = install();
-            dockOpacity(prefs, where, 23);
-            int stop = looks()[3];
-            tap(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE), stop);
-            expectEverywhere(prefs, stop, new int[] {TERMINAL_PAGE, DISPLAY_PAGE},
-                "Workspace after Dock " + where, wrong);
-            if (where == EditorChips.AppliesTo.GLOBAL || where == EditorChips.AppliesTo.HOME) {
-                int home = prefs.lookGrid().value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
-                    HOME_PAGE);
-                if (home != 23)
-                    wrong.add("Dock " + where + " left Home pages: dock opacity " + home);
-            }
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
+    public void aGlobalLookLeavesTheDocksOwnOpacity() {
+        TermuxAppSharedPreferences prefs = install();
+        dockOpacity(prefs, 23);
+        int stop = looks()[3];
+        tap(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), stop);
+        // Own stays (appearance-one-look spec §1); the rest of the dock wears the Look.
+        LookGrid grid = prefs.lookGrid();
+        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(grid.value(LookGrid.Property.FROST, null),
+            grid.value(LookGrid.Property.FROST, LookGrid.Element.DOCK));
     }
 
     // ------------------------------------------------- a slider on Global or a page card
 
+    /** Own stays (appearance-one-look spec §1): a Global slider leaves a surface's own value. */
     @Test
-    public void aGlobalSliderResetsTheDetachedValuesOfItsPropertyOnly() {
+    public void aGlobalSliderLeavesASurfacesOwnValue() {
         TermuxAppSharedPreferences prefs = install();
-        dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
-        dockOpacity(prefs, EditorChips.AppliesTo.WORKSPACE, 29);
+        dockOpacity(prefs, 23);
         LookGrid grid = prefs.lookGrid();
-        grid.write(LookGrid.Property.FROST, LookGrid.Element.DOCK, (LookGrid.Kind) null, 2);
+        grid.write(LookGrid.Property.FROST, LookGrid.Element.DOCK, 2);
 
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.OPACITY,
+        slide(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), Row.OPACITY,
             61);
 
-        List<String> wrong = new ArrayList<>();
-        for (int page : PAGES) {
-            int dock = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, page);
-            int status = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, page);
-            if (dock != status)
-                wrong.add("dock opacity on page " + page + " = " + dock + ", status " + status);
-        }
-        assertTrue(String.join("\n", wrong), wrong.isEmpty());
-        assertTrue("Frost was not moved: the dock keeps its own",
-            grid.has(LookGrid.Property.FROST, LookGrid.Element.DOCK, (LookGrid.Kind) null));
-    }
-
-    @Test
-    public void aGlobalCornersMoveResetsADetachedCornerRadius() {
-        TermuxAppSharedPreferences prefs = install();
-        LookGrid grid = prefs.lookGrid();
-        grid.write(LookGrid.Property.CORNERS, LookGrid.Element.DOCK, (LookGrid.Kind) null, 30);
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.CORNERS,
-            12);
-        for (int page : PAGES)
-            assertEquals("dock corners on page " + page, 12,
-                grid.value(LookGrid.Property.CORNERS, LookGrid.Element.DOCK, page));
+        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals("the status bar follows Global", 61,
+            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
+        assertTrue(grid.has(LookGrid.Property.FROST, LookGrid.Element.DOCK));
     }
 
     @Test
     public void aSurfaceMovedAfterGlobalDetachesThatSurfaceOnly() {
         TermuxAppSharedPreferences prefs = install();
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.OPACITY,
-            61);
+        SurfaceEditorController first = open(prefs, EditorCard.APPEARANCE, PageKind.HOME,
+            HOME_PAGE);
+        slide(first, Row.OPACITY, 61);
+        first.done();
         LookGrid grid = prefs.lookGrid();
-        int status = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, HOME_PAGE);
-        dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
+        int status = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS);
+        dockOpacity(prefs, 23);
         for (int page : PAGES) {
             assertEquals("dock on page " + page, 23,
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, page));
+                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
             assertEquals("status on page " + page, status,
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, page));
+                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
         }
-    }
-
-    @Test
-    public void aWorkspaceSliderLeavesTheHomePagesAlone() {
-        TermuxAppSharedPreferences prefs = install();
-        dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
-        LookGrid grid = prefs.lookGrid();
-        int homeStatus = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, HOME_PAGE);
-
-        slide(open(prefs, EditorCard.WORKSPACE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
-            Row.OPACITY, 61);
-
-        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, HOME_PAGE));
-        assertEquals(homeStatus,
-            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, HOME_PAGE));
-        for (int page : new int[] {TERMINAL_PAGE, DISPLAY_PAGE})
-            assertEquals("the dock follows the Workspace on page " + page,
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, page),
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, page));
-    }
-
-    @Test
-    public void aHomeSliderResetsHomeAndLeavesTheWorkspacePagesAlone() {
-        TermuxAppSharedPreferences prefs = install();
-        dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
-        LookGrid grid = prefs.lookGrid();
-        int terminalStatus = grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS,
-            TERMINAL_PAGE);
-
-        slide(open(prefs, EditorCard.HOME, PaneWallPage.WIDGETS, HOME_PAGE), Row.OPACITY, 61);
-
-        for (int page : new int[] {TERMINAL_PAGE, DISPLAY_PAGE})
-            assertEquals("dock on page " + page, 23,
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, page));
-        assertEquals(terminalStatus,
-            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, TERMINAL_PAGE));
-        assertEquals("the dock follows Home on Home pages",
-            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS, HOME_PAGE),
-            grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, HOME_PAGE));
     }
 
     @Test
     public void marginIsOneNumberForEveryPage() {
         TermuxAppSharedPreferences prefs = install();
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS, HOME_PAGE), Row.MARGIN, 10);
+        slide(open(prefs, EditorCard.APPEARANCE, PageKind.HOME, HOME_PAGE), Row.MARGIN, 10);
         assertMargins(prefs, 10, "Customization on Home");
 
-        // Where standing on a page still writes Base: no page holds a Margin of its own.
-        slide(open(prefs, EditorCard.APPEARANCE, PaneWallPage.TERMINAL, TERMINAL_PAGE),
+        // Where standing on a page still writes Global: no page holds a Margin of its own.
+        slide(open(prefs, EditorCard.APPEARANCE, PageKind.TERMINAL, TERMINAL_PAGE),
             Row.MARGIN, 20);
-        assertMargins(prefs, 20, "Customization on the Workspace");
-        LookGrid grid = prefs.lookGrid();
-        for (LookGrid.Kind kind : LookGrid.Kind.values())
-            org.junit.Assert.assertFalse(kind + " holds no Margin",
-                grid.has(LookGrid.Property.MARGIN, null, kind));
+        assertMargins(prefs, 20, "Customization on the Terminal");
     }
 
     @Test
     public void discardPutsTheMarginBack() {
         TermuxAppSharedPreferences prefs = install();
-        SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
+        SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PageKind.HOME,
             HOME_PAGE);
-        int base = prefs.getBaseMarginDp();
+        int margin = prefs.getGlobalMarginDp();
         slide(global, Row.MARGIN, 6);
         assertMargins(prefs, 6, "Customization");
         ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertMargins(prefs, base, "after Discard");
-    }
-
-    @Test
-    public void discardKeepsASeededCellTheSeeds() {
-        TermuxAppSharedPreferences prefs = install();
-        LookGrid grid = prefs.lookGrid();
-        String seeded = null;
-        for (String key : grid.gridKeys())
-            if (grid.isSeeded(key)) { seeded = key; break; }
-        org.junit.Assume.assumeNotNull(seeded);
-        SurfaceEditorController global = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
-            HOME_PAGE);
-        LookGrid.Key cell = LookGrid.parse(seeded);
-        Row row = cell.property == LookGrid.Property.FROST ? Row.FROST
-            : cell.property == LookGrid.Property.TINT ? Row.TINT : Row.OPACITY;
-        slide(global, row, 40);
-        assertFalse("the reset took the seeded cell", grid.isSeeded(seeded));
-        ReflectionHelpers.callInstanceMethod(global, "revertToEntry");
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertTrue("the seeded cell is back", grid.has(cell));
-        assertTrue("and it is the seed's again", grid.isSeeded(seeded));
+        assertMargins(prefs, margin, "after Discard");
     }
 
     private static void assertMargins(TermuxAppSharedPreferences prefs, int margin, String what) {
         assertEquals(what + ": Home pages", margin, prefs.getLayoutMarginDp(true));
-        assertEquals(what + ": Workspace pages", margin, prefs.getLayoutMarginDp(false));
+        assertEquals(what + ": Terminal pages", margin, prefs.getLayoutMarginDp(false));
         // What the dress shapes each kind's pages by.
         assertEquals(what + ": Home's shape", margin,
             com.termux.app.place.WallShape.read(prefs, true).marginDp);
-        assertEquals(what + ": the Workspace's shape", margin,
+        assertEquals(what + ": the Terminal's shape", margin,
             com.termux.app.place.WallShape.read(prefs, false).marginDp);
     }
 
+    /** The row arrow's reset is undone by Discard like any change. */
     @Test
-    public void discardPutsTheResetValuesBack() {
+    public void discardPutsAResetOwnValueBack() {
         TermuxAppSharedPreferences prefs = install();
-        dockOpacity(prefs, EditorChips.AppliesTo.GLOBAL, 23);
+        dockOpacity(prefs, 23);
         LookGrid grid = prefs.lookGrid();
-        SurfaceEditorController editor = open(prefs, EditorCard.APPEARANCE, PaneWallPage.WIDGETS,
+        SurfaceEditorController editor = open(prefs, EditorCard.DOCK, PageKind.HOME,
             HOME_PAGE);
-        slide(editor, Row.OPACITY, 61);
-        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK,
-            (LookGrid.Kind) null));
+        EditorCardSheet.Model model = ReflectionHelpers.getField(editor, "mModel");
+        model.resetRow(Row.OPACITY);
+        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
 
         ReflectionHelpers.callInstanceMethod(editor, "revertToEntry");
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
-        for (int page : PAGES)
-            assertEquals("dock on page " + page, 23,
-                grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK, page));
+        assertEquals(23, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
     }
 
     /** A slider moved by a drag of two steps, then let go. */
@@ -398,17 +227,15 @@ public class PresetApplyTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    private static void dockOpacity(TermuxAppSharedPreferences prefs, EditorChips.AppliesTo where,
-                                    int value) {
-        SurfaceEditorController editor = open(prefs, EditorCard.DOCK, PaneWallPage.WIDGETS,
+    private static void dockOpacity(TermuxAppSharedPreferences prefs, int value) {
+        SurfaceEditorController editor = open(prefs, EditorCard.DOCK, PageKind.HOME,
             HOME_PAGE);
         EditorCardSheet.Model model = ReflectionHelpers.getField(editor, "mModel");
-        ReflectionHelpers.callInstanceMethod(model, "pickAppliesTo",
-            ReflectionHelpers.ClassParameter.from(int.class,
-                EditorChips.appliesToOptions(EditorCard.DOCK).indexOf(where)));
         model.onValue(Row.OPACITY, value, false);
         model.onReleased(Row.OPACITY);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        // The edit is the draft's until Done: the store holds it from here, as a person's Done does.
+        editor.done();
     }
 
     // ---------------------------------------------------------------------------- the checks
@@ -423,7 +250,7 @@ public class PresetApplyTest {
         for (LookGrid.Element element : ELEMENTS)
             for (int page : pages)
                 for (int i = 0; i < properties.length; i++) {
-                    LookGrid.Resolved resolved = grid.resolve(properties[i], element, page);
+                    LookGrid.Resolved resolved = grid.resolve(properties[i], element);
                     int want = properties[i].clamp(look[i]);
                     if (resolved.value != want)
                         wrong.add(what + " stop " + stop + ": " + element.key + " on page "
@@ -441,16 +268,16 @@ public class PresetApplyTest {
     }
 
     private static SurfaceEditorController open(TermuxAppSharedPreferences prefs, EditorCard card,
-                                                PaneWallPage place, int pageInFront) {
+                                                PageKind place, int pageInFront) {
         return present(harnessFor(prefs, place, pageInFront), card, place);
     }
 
     /** An editor over a new activity, whose host answers {@code place} and {@code pageInFront}. */
     private static EditorTestHarness harnessFor(TermuxAppSharedPreferences prefs,
-                                                PaneWallPage place, int pageInFront) {
+                                                PageKind place, int pageInFront) {
         List<WallPages.Page> pages = Arrays.asList(
-            new WallPages.Page(HOME_PAGE, WallPages.PageKind.HOME, "Home 1", null),
-            new WallPages.Page(TERMINAL_PAGE, WallPages.PageKind.TERMINAL, "Terminal", null));
+            new WallPages.Page(HOME_PAGE, PageKind.HOME, "Home 1", null),
+            new WallPages.Page(TERMINAL_PAGE, PageKind.TERMINAL, "Terminal", null));
         EditorTestHarness harness = new EditorTestHarness(prefs, (method, args) -> {
             switch (method) {
                 case "pageOnScreen": return place;
@@ -464,7 +291,7 @@ public class PresetApplyTest {
 
     /** {@code card} opened on {@code harness}'s editor, on {@code place}. */
     private static SurfaceEditorController present(EditorTestHarness harness, EditorCard card,
-                                                   PaneWallPage place) {
+                                                   PageKind place) {
         harness.editor.present(card, place, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         assertEquals(card, harness.editor.shownCard());

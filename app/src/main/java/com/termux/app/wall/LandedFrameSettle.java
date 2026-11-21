@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
 /**
  * The place settle a slide's landing leaves for just after its landed frame.
@@ -19,7 +20,7 @@ import androidx.annotation.Nullable;
  */
 public final class LandedFrameSettle {
 
-    @Nullable private PaneWallPage mPending;
+    @Nullable private PageKind mPending;
 
     /**
      * Whether a settle is left for after its frame: only one a slide's own last frame reports
@@ -31,8 +32,8 @@ public final class LandedFrameSettle {
      * reads the attachment the settle makes.
      */
     public static boolean defers(boolean endsSlide, boolean windowDraws,
-                                 @NonNull PaneWallPage page) {
-        return endsSlide && windowDraws && page != PaneWallPage.DISPLAY;
+                                 @NonNull PageKind page) {
+        return endsSlide && windowDraws && page != PageKind.DISPLAY;
     }
 
     /**
@@ -40,16 +41,16 @@ public final class LandedFrameSettle {
      * for the caller to run first, so two landings never collapse into one.
      */
     @Nullable
-    public PaneWallPage hold(@NonNull PaneWallPage page) {
-        PaneWallPage earlier = mPending;
+    public PageKind hold(@NonNull PageKind page) {
+        PageKind earlier = mPending;
         mPending = page;
         return earlier;
     }
 
     /** The settle waiting, which the caller runs now; null when none waits. */
     @Nullable
-    public PaneWallPage take() {
-        PaneWallPage page = mPending;
+    public PageKind take() {
+        PageKind page = mPending;
         mPending = null;
         return page;
     }

@@ -189,7 +189,7 @@ public final class TerminalCommandPaletteController
     /** The Home palette's fallback strip: the terminal defaults are all terminal-only there. */
     private static final String[][] HOME_KEYCAPS = {
         {CommandPaletteHomeSet.TOOL_OPEN_TERMINAL_HERE, "❯", "term"},
-        {CommandPaletteHomeSet.TOOL_GO_TO_WORKSPACE, "→", "work"},
+        {CommandPaletteHomeSet.TOOL_GO_TO_TERMINAL, "→", "work"},
         {CommandPaletteHomeSet.TOOL_ADD_WIDGET, "＋", "widget"},
         {LauncherToolRegistry.TOOL_APPEARANCE_SET_WALLPAPER, "◩", "wall"},
         {LauncherToolRegistry.TOOL_APP_OPEN_SETTINGS, "⚙", "set"},
@@ -248,17 +248,17 @@ public final class TerminalCommandPaletteController
     private long mLastFrameTimeNanos;
     /** True while {@link #doFrame} runs: a kick from inside it continues the loop and keeps its clock. */
     private boolean mInFrame;
-    /** Where the open glass ends in the Workspace; on Home, the lowest it may end. */
+    /** Where the open glass ends in the Terminal; on Home, the lowest it may end. */
     private float mAnchorY;
     /**
      * On Home, the middle the glass grows about and the highest its top may rise, both in host
-     * coordinates ({@link CommandPaletteHomeOverlay#glassBottomPx}); NaN in the Workspace, whose
+     * coordinates ({@link CommandPaletteHomeOverlay#glassBottomPx}); NaN in the Terminal, whose
      * glass ends at {@link #mAnchorY} and grows upward.
      */
     private float mHomeCenterY = Float.NaN;
     private float mHomeHighestTop = Float.NaN;
     /**
-     * The tallest the glass may grow: unbounded in the Workspace, and on Home the room above the
+     * The tallest the glass may grow: unbounded in the Terminal, and on Home the room above the
      * dock ({@link CommandPaletteHomeOverlay#availableHeightPx}).
      */
     private float mMaxHeightPx = Float.MAX_VALUE;
@@ -657,7 +657,7 @@ public final class TerminalCommandPaletteController
         View blur = mPaletteHost.findView(R.id.command_palette_blur);
         if (mHost == null || mGlass == null || blur == null) return false;
         mBackdrop = blur instanceof ImageView
-            ? new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur) : null;
+            ? new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "palette") : null;
         mGlass.setClipToOutline(true);
         mGlass.setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -802,7 +802,7 @@ public final class TerminalCommandPaletteController
         float hostWidth = mHost.getWidth();
         float openLeft = dp(SIDE_INSET);
         float openRight = hostWidth - dp(SIDE_INSET);
-        // On Home the glass is centred and grows about its middle; in the Workspace it ends at the
+        // On Home the glass is centred and grows about its middle; in the Terminal it ends at the
         // anchor and grows upward. Arithmetic on the animated height only: nothing is laid out.
         float openBottom = Float.isNaN(mHomeCenterY) ? mAnchorY
             : CommandPaletteHomeOverlay.glassBottomPx(mHeight.value, mHomeCenterY,
@@ -868,6 +868,7 @@ public final class TerminalCommandPaletteController
             resolveHomeAnchor(top, bottom);
             return;
         }
+        bottom = terminalRoomBottomPx(top, bottom, bottomStackTop());
         mMaxHeightPx = Float.MAX_VALUE;
         mHomeCenterY = Float.NaN;
         mHomeHighestTop = Float.NaN;
@@ -879,6 +880,16 @@ public final class TerminalCommandPaletteController
         // Below that sits the in-app keyboard, whose keys are how the palette is typed into: if
         // the overlay ate those taps, every keystroke would register as a dismissing outside tap.
         mModalBounds.set(0f, top, mHost.getWidth(), bottom);
+    }
+
+    /**
+     * The bottom of the terminal's room for the palette: the terminal's column fills the window
+     * and the bottom stack (dock rows and the in-app keyboard) stands over its foot, so the room
+     * ends at the stack's top. A keyboard that is down stands below the screen and takes nothing.
+     */
+    static float terminalRoomBottomPx(float roomTopPx, float roomBottomPx, float stackTopPx) {
+        return roomBottomPx
+            - CommandPaletteHomeOverlay.stackHeightPx(roomTopPx, roomBottomPx, stackTopPx);
     }
 
     /**
@@ -1976,7 +1987,10 @@ public final class TerminalCommandPaletteController
         mStats.recordRun(CommandPaletteActionStats.keyFor(entry));
         rememberPick();
         playTick();
+        // The drawer's card is up over the keyboard from its first frame; a reversed sprout would
+        // shrink the palette down across the keys under it (CommandPaletteShape.dismissesInPlace).
         collapse();
+        if (CommandPaletteShape.dismissesInPlace(entry.toolName)) dismissImmediately();
         // Home's own rows need the wall, which the dispatcher does not reach.
         if (CommandPaletteHomeSet.runHostAction(entry, mHomeHost)) return;
         JSONObject result = TerminalActionDispatcher.getInstance().execute(entry.toolName,
@@ -1991,7 +2005,7 @@ public final class TerminalCommandPaletteController
         // A window's jump row on Home switches to that window, then goes to it.
         if (mContext == CommandPaletteContext.HOME
             && CommandPaletteHomeSet.CATEGORY_WINDOWS.equals(entry.category))
-            mHomeHost.goToWorkspace();
+            mHomeHost.goToTerminal();
     }
 
     /**

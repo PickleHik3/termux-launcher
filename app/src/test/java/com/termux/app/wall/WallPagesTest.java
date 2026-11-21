@@ -1,13 +1,14 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.Error;
-import com.termux.app.wall.WallPages.PageKind;
 import com.termux.app.wall.WallPages.Result;
 import com.termux.app.wall.WallPages.Stop;
 
@@ -439,7 +440,7 @@ public class WallPagesTest {
     }
 
     @Test
-    public void aTripThroughTerminalOnlyFromTheWorkspaceStaysOnTheWorkspace() {
+    public void aTripThroughTerminalOnlyFromTheTerminalStaysOnTheTerminal() {
         WallPages p = ok(ok(three().setHome(2)).setHome(3));
         WallPages back = ok(ok(p.detachHomes()).attachDetached());
         assertEquals(3, back.home().id);
@@ -457,7 +458,7 @@ public class WallPagesTest {
     }
 
     @Test
-    public void startInHomeAfterTheWorkspaceReturnsToTheRememberedHomePage() {
+    public void startInHomeAfterTheTerminalReturnsToTheRememberedHomePage() {
         WallPages p = ok(three().setHome(2));
         WallPages ws = ok(p.chooseStartIn("workspace"));
         assertEquals(2, ws.lastHomePageId());
@@ -514,7 +515,7 @@ public class WallPagesTest {
     public void parallaxRowReadsTheStopsInAnyOrder() {
         WallPages p = three();
         for (int w = 0; w < 3; w++) {
-            assertEquals(WallParallax.rowIndex(PaneWallPage.TERMINAL, w, 2, 3),
+            assertEquals(WallParallax.rowIndex(PageKind.TERMINAL, w, 2, 3),
                 WallParallax.rowIndex(p, Stop.window(3, w), 3));
         }
         assertEquals(WallParallax.rowCount(2, 3), WallParallax.rowCount(p, 3));

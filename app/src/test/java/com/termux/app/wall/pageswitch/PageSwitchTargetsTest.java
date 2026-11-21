@@ -2,7 +2,7 @@ package com.termux.app.wall.pageswitch;
 
 import static org.junit.Assert.assertEquals;
 
-import com.termux.app.wall.pageswitch.PageSwitchModel.Action;
+import com.termux.app.wall.pageswitch.PageBarModel.Action;
 
 import org.junit.Test;
 
@@ -21,7 +21,7 @@ public class PageSwitchTargetsTest {
 
     private static List<String> run(Action action, int pageId, int index) {
         Recorder rec = new Recorder();
-        PageSwitchTargets.carryOut(new PageSwitchModel.Target(action, pageId, index), rec);
+        PageSwitchTargets.carryOut(new PageBarModel.Target(action, pageId, index), rec);
         return rec.calls;
     }
 

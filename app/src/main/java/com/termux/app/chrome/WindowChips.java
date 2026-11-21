@@ -3,14 +3,14 @@ package com.termux.app.chrome;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
- * The window chips (ADR 0009, "The window chips"): one ordered list of the Workspace's row in row
+ * The window chips (ADR 0009, "The window chips"): one ordered list of the Terminal's row in row
  * order, the display window's chip at its place among the terminal windows' like any window's
  * (ADR 0008, amended 2026-10-19), then the Home floats in the order they were opened, each marked
  * minimised or not. Every surface that shows window chips adapts this list ({@link Surface}): the
@@ -31,12 +31,11 @@ public final class WindowChips<W> {
     /** A surface that shows the chips, each counting its own index. */
     public enum Surface {
         /**
-         * The status bar and its window column: every chip, the same on both halves of the wall
-         * (#90), a minimised float's among them (#91); a window's tap on Home slides the
-         * Workspace in, a float's in the Workspace travels Home.
+         * The status bar and its window column: the Terminal's own windows only. Floats are
+         * Home's content and have chips of their own there ({@link HomeFloatChips}).
          */
         BAR,
-        /** The Wall strip's tiles: every chip; a window's tap slides the Workspace in. */
+        /** The Wall strip's tiles: every chip; a window's tap slides the Terminal in. */
         WALL_STRIP
     }
 
@@ -77,7 +76,7 @@ public final class WindowChips<W> {
             SHOW_WINDOW,
             /**
              * Bring the float {@link #window} back on its Home page, focused: the wall travels
-             * Home first when the chip was tapped in the Workspace ({@link #travel}).
+             * Home first when the chip was tapped in the Terminal ({@link #travel}).
              */
             RESTORE_FLOAT,
             /** Close the row's window at {@link #row}: the display window's stops the display. */
@@ -92,8 +91,8 @@ public final class WindowChips<W> {
         /** The float, for a float's meaning; null otherwise. */
         @Nullable public final W window;
         /**
-         * Whether the wall travels first: to the Workspace for a window's chip tapped on Home,
-         * Home for a float's chip tapped in the Workspace.
+         * Whether the wall travels first: to the Terminal for a window's chip tapped on Home,
+         * Home for a float's chip tapped in the Terminal.
          */
         public final boolean travel;
 
@@ -112,7 +111,7 @@ public final class WindowChips<W> {
 
     private static final Meaning<?> NOTHING = new Meaning<>(Meaning.Action.NONE, -1, null, false);
 
-    private final PaneWallPage mPlace;
+    private final PageKind mPlace;
     private final boolean mRowShown;
     private final int mRowCount;
     private final int mRowCurrent;
@@ -129,7 +128,7 @@ public final class WindowChips<W> {
      * session is current) there is no row, and only the floats are chips. Floats follow with
      * {@link #addFloat}.
      */
-    public WindowChips(@Nullable PaneWallPage place, boolean rowShown, @NonNull List<W> rowWindows,
+    public WindowChips(@Nullable PageKind place, boolean rowShown, @NonNull List<W> rowWindows,
                        int rowCurrent) {
         mPlace = place;
         mRowShown = rowShown;
@@ -165,22 +164,19 @@ public final class WindowChips<W> {
         return Collections.unmodifiableList(mChips);
     }
 
+    /**
+     * How many chips {@code surface} shows: the bar the row's windows only, the Wall strip every
+     * chip, the floats after the windows.
+     */
+    public int count(@NonNull Surface surface) {
+        return surface == Surface.BAR ? mRowCount : mChips.size();
+    }
+
     /** How many chips are the row's windows; the floats follow. */
     public int rowCount() {
         return mRowCount;
     }
 
-    /**
-     * The bar's chip for the float {@code window}, minimised or not, or -1 when it is no float's:
-     * where minimise's flight lands.
-     */
-    public int barChipOf(@NonNull W window) {
-        for (int i = mRowCount; i < mChips.size(); i++) {
-            Chip<W> chip = mChips.get(i);
-            if (chip.kind == Kind.HOME_FLOAT && window.equals(chip.window)) return i;
-        }
-        return -1;
-    }
 
     /**
      * The chip {@code surface} selects, or -1: on the bar the row's window in front, held to the
@@ -199,26 +195,26 @@ public final class WindowChips<W> {
 
     /**
      * Whether a window's chip tapped on the bar from {@code place} first travels the wall to the
-     * Workspace's window row: from every place but the row itself (Home pages, Assistant, the
+     * Terminal's window row: from every place but the row itself (Home pages, Assistant, the
      * display), however far. Only a terminal window in front switches in place.
      */
-    public static boolean barWindowTravels(@Nullable PaneWallPage place) {
-        return place != PaneWallPage.TERMINAL;
+    public static boolean barWindowTravels(@Nullable PageKind place) {
+        return place != PageKind.TERMINAL;
     }
 
     /**
      * Whether a float's chip tapped from {@code place} first travels the wall Home: from every
      * place but a Home page.
      */
-    public static boolean floatTravels(@Nullable PaneWallPage place) {
-        return place != PaneWallPage.WIDGETS;
+    public static boolean floatTravels(@Nullable PageKind place) {
+        return place != PageKind.HOME;
     }
 
     /**
      * What a tap on {@code surface}'s chip at {@code index} means: a window's brings it in front,
-     * the Workspace sliding in when the chip is on Home's dock or on the bar seen from any place but the window row; a
+     * the Terminal sliding in when the chip is on Home's dock or on the bar seen from any place but the window row; a
      * float's brings it back on its Home page, the wall travelling Home first when the chip was
-     * tapped in the Workspace.
+     * tapped in the Terminal.
      */
     @NonNull
     public Meaning<W> tap(@NonNull Surface surface, int index) {
@@ -248,9 +244,8 @@ public final class WindowChips<W> {
 
     @Nullable
     private Chip<W> chipAt(@NonNull Surface surface, int index) {
-        if (index < 0) return null;
-        List<Chip<W>> chips = chips();
-        return index < chips.size() ? chips.get(index) : null;
+        if (index < 0 || index >= count(surface)) return null;
+        return mChips.get(index);
     }
 
     @SuppressWarnings("unchecked")

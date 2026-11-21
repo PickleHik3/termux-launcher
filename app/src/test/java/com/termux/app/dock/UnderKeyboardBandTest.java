@@ -8,13 +8,13 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * The bands under the keyboard. Floating they are a card: the Corners radius, the dock's side inset
@@ -121,7 +121,7 @@ public class UnderKeyboardBandTest {
     /** The rule the activity dresses the under-keyboard stack by, for {@code layout} on Home at rest. */
     private static boolean sheetWorn(PlaceLayout layout, boolean peek) {
         boolean bands = !EdgeStackPolicy.underKeyboard(layout).isEmpty();
-        boolean card = DockPlacement.peekCardStandsOn(PaneWallPage.WIDGETS, peek, true, layout,
+        boolean card = DockPlacement.peekCardStandsOn(PageKind.HOME, peek, true, layout,
             false, false, false, false);
         return UnderKeyboardBand.wearsSheet(bands, true, card);
     }
@@ -131,7 +131,7 @@ public class UnderKeyboardBandTest {
         assertFalse("the apps row stands under the keyboard",
             EdgeStackPolicy.underKeyboard(TABLET_LANDSCAPE_HOME).isEmpty());
         assertTrue("the card stands for the row under the keyboard",
-            DockPlacement.peekCardStandsOn(PaneWallPage.WIDGETS, true, true,
+            DockPlacement.peekCardStandsOn(PageKind.HOME, true, true,
                 TABLET_LANDSCAPE_HOME, false, false, false, false));
         assertFalse("no sheet over the card's top", sheetWorn(TABLET_LANDSCAPE_HOME, true));
         assertTrue("any other dock type keeps the sheet", sheetWorn(TABLET_LANDSCAPE_HOME, false));

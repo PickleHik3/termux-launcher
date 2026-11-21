@@ -56,6 +56,64 @@ float never rebuilds its layer mid-swipe. The rest and layers switch and each pi
 test go; each layer keeps its own refresh trigger. Soft edges of translucent content may differ
 from one blurred composite at rest, as 0021 §2b already accepted while moving.
 
+Amendment, 2026-11-18. The pages layer behind a pane's or surface's glass is frozen at rest too:
+it is held, moved by the pages' travel, and never swapped for live pages when the wall starts or
+stops. Only the first capture of a surface (start-up) draws the pages live until it lands. It is
+taken again when the content behind it changes:
+
+- The wall reports a content generation: any invalidation under its pages (not while it moves,
+  when the pages move by their poses and the layer follows them).
+- A surface retakes its layer at most once per 250 ms (`PageLayerRefresh.REFRESH_INTERVAL_MS`),
+  and a change inside the interval is taken as soon as it ends, so the last change is always
+  seen. Nothing changed means nothing is captured: no work at rest.
+- The new picture replaces the old one when its capture lands; the old one is drawn until then,
+  so no frame has an empty layer. A surface holds one picture and has one in flight, both counted
+  against its pages budget (below).
+- A layer left off where it was taken (pages that moved by a shift) is retaken once the wall
+  rests, so the next swipe starts from a layer that matches.
+
+Whole-page slots, same day. Each page is held whole and untransformed, in a slot of its own (its
+own bounds and the blur's reach around them, at a quarter scale), and the wall's decor in one
+more. Where a page stands is its pose's matrix, drawn over the slot whenever the layer is drawn,
+so a transition that turns pages (Carousel, Depth, Stack, a sink) redraws a handful of bitmaps
+and neither captures again nor falls back to live pages at its first frame; a slide is still the
+layer's translation alone, and a fade only changes the slots' alphas. A new capture is for a new
+content or a different set of pages, and happens at rest.
+
+One pool, 2026-11-18 (replaces a budget of 4.4 MiB an atlas and twice that a surface, 79 MiB in the
+worst case). The pages layers of every surface in the window share one pool, `GlassPagePool`, sized
+by the phone's RAM and read once per process (`ActivityManager.getMemoryInfo` and
+`isLowRamDevice`). Pages are always frozen on the wall in a crossing, on every phone; the tier sets
+only how sharply:
+
+| RAM | Pages captured at | Pool | Arithmetic (nine slots: three surfaces, three 1080 x 2400 pages, 16 px gutter) |
+|---|---|---|---|
+| more than 4 GiB and not a low-RAM device | a quarter | 6 MiB = 6,291,456 B | 278 x 608 x 4 = 676,096 B a slot, 9 slots 6,084,864 B |
+| 4 GiB or less, or a low-RAM device | an eighth | 2 MiB = 2,097,152 B | 139 x 304 x 4 = 169,024 B a slot, 9 slots 1,521,216 B |
+
+The live blur node keeps its own quarter scale; only the pages layer follows the tier. The worst
+case in all is eight blur layers and the pool, 8 x 1,152,000 + 6,291,456 = 15,507,456 B
+(`LiveBackdropBudgetTest`).
+
+- **Priority.** While the wall moves, surfaces whose rect overlaps the wall are served the pool
+  first (`GlassPagePool.order`). A capture counts its atlas against the pool from its start; the
+  held picture of the same surface stays beside it while both fit, else it goes first. A surface
+  the pool has no room for that frame keeps the picture it last held, without recording again; one
+  holding none draws live.
+- **Trim.** At `TRIM_MEMORY_RUNNING_LOW` and above, which includes the UI hiding and the process
+  moving to the background, every surface lets go of its pages pictures and the pool is empty. The
+  next crossing takes one capture per surface at its start and rides it through.
+- **The effect runs live.** A slot is captured without the blur, colours or frost. Those are the
+  page node's render effect, set where the frozen atlas is drawn, so the blur runs every frame on
+  the moving picture and a change of radius, tint or frost reaches the frozen layer at once. Only
+  the pages' content is a still, at most one refresh old. The refraction shader is drawn over the
+  picture at draw time and is never recorded into a capture.
+- **Live blur off** holds no pages layer at all (the surfaces draw their stored frame); the
+  setting stays the low-memory path.
+
+A surface with more than three pages near it, or whose pages do not fit the pool, keeps the pages
+live.
+
 ## 4. Kinds change only on a policy event
 
 A surface asks for a kind. The service grants it from the Live blur policy and the slot budget at
@@ -129,6 +187,7 @@ sampler becomes this store. The status bar and window bar get no correction in t
 - A float's glass and the dock's draw the same layers at rest and moving, so the first frame of a
   swipe and the landed frame are the same picture.
 - Users lose the "One layer" setting; the default behaviour (All layers) stays.
-- Memory is bounded as before: at most 8 live surfaces, about 8.8 MiB, by priority.
+- Memory is bounded: at most 8 live surfaces by priority, each a blur layer and, beneath the
+  wall, a pages layer (`LiveBackdrop.BUDGET_BYTES`, the worst case; see the 2026-11-18 amendment).
 - Glass that must be on screen the frame it is asked for (the keyboard) draws what the service
   already holds; if the stored frame is not resident, it shows its frost or tint for a frame or two.

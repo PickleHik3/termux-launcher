@@ -7,8 +7,8 @@ import androidx.annotation.Nullable;
  * Settings › Home › Page indicator: the page glyphs under the Home grid, or none. Glyphs show even
  * with one Home page, since they name the other pages too. The stored value stays {@code dots}.
  *
- * <p>The band under the grid stays whichever is chosen: it is part of the grid's height,
- * so turning the glyphs off never resizes every widget on every page.
+ * <p>Off gives the band back: the grid takes the height the glyphs stood in, so changing the
+ * setting resizes the Home grid ({@code PageBarBand}).
  */
 public enum HomePageIndicator {
     GLYPHS("dots"),

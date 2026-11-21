@@ -192,6 +192,9 @@ public final class AppDrawerPlaneView extends FrameLayout {
         invalidate();
     }
 
+    /** See {@link #setContentGate}; open unless an open is waiting for its picture. */
+    private float mContentGate = 1f;
+
     /**
      * The only per-frame entry point: the plane rectangle and its corner radius, in host
      * coordinates. No allocation, no layout — a bounds update, an outline invalidation and a draw.
@@ -204,16 +207,31 @@ public final class AppDrawerPlaneView extends FrameLayout {
         // subpixel and the seam shows as a lighter line.
         mSlabBounds.set((int) Math.floor(frame.left), (int) Math.floor(frame.top),
             (int) Math.ceil(frame.right), (int) Math.ceil(frame.bottom));
-        float contentAlpha = AppDrawerTransitionGeometry.ramp(progress,
-            CONTENT_FADE_START, CONTENT_FADE_END);
+        applyContentAlpha();
+        invalidateOutline();
+        invalidate();
+    }
+
+    /**
+     * The content's share of the card's material, 0..1 ({@link AppDrawerContentGate}): the content
+     * never shows before the glass picture under it is up.
+     */
+    public void setContentGate(float gate) {
+        float g = Math.max(0f, Math.min(1f, gate));
+        if (g == mContentGate) return;
+        mContentGate = g;
+        applyContentAlpha();
+    }
+
+    private void applyContentAlpha() {
+        float contentAlpha = AppDrawerTransitionGeometry.ramp(mProgress,
+            CONTENT_FADE_START, CONTENT_FADE_END) * mContentGate;
         mContent.setAlpha(contentAlpha);
         // An alpha-0 view still receives touches. Left VISIBLE, a closed drawer's full-screen grid
         // sits invisible over the terminal and eats every tap — silently, which is what makes it the
         // worst regression on this surface. The flip is the second of the two guards; the first is
         // the controller clearing setInteractive(false) on close.
         mContent.setVisibility(contentAlpha <= 0.01f ? INVISIBLE : VISIBLE);
-        invalidateOutline();
-        invalidate();
     }
 
     @Override

@@ -6,7 +6,7 @@ import com.termux.app.launcher.home.HomePageTransition;
 
 /**
  * Settings' Page transition on the wall: the one effect that turns Home's pages also turns the
- * wall's — across the seam between Home and the Workspace, and between the Workspace's windows,
+ * wall's — across the seam between Home and the Terminal, and between the Terminal's windows,
  * the display window's among them. Each page is posed by where its slide puts it, a function of
  * that one number, so a drag, the spring back, a committed slide and a window's arrival all draw
  * the same curve as Home does ({@link HomePageTransition#transform}).

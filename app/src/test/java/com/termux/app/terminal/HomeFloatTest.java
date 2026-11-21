@@ -293,7 +293,7 @@ public class HomeFloatTest {
     }
 
     @Test
-    public void closingTheFocusedFloatLeavesTheWorkspaceAlone() {
+    public void closingTheFocusedFloatLeavesTheTerminalAlone() {
         TerminalSession rowShell = terminal();
         TerminalPaneController.Window row = mController.newWindow(rowShell);
         mController.showWindow(row);
@@ -434,7 +434,7 @@ public class HomeFloatTest {
         assertArrayEquals("no Home pages: every window loads tiled",
             new boolean[]{false, false, false, false},
             HomeFloatPolicy.restoredAsFloats(mixed, false));
-        assertArrayEquals("floats only: floats only, and the Workspace is empty",
+        assertArrayEquals("floats only: floats only, and the Terminal is empty",
             new boolean[]{true, true, true},
             HomeFloatPolicy.restoredAsFloats(new boolean[]{true, true, true}, true));
         assertArrayEquals("floats only without Home pages: all in the row",

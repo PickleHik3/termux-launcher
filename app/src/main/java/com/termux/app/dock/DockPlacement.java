@@ -2,12 +2,12 @@ package com.termux.app.dock;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.wall.PaneWallPolicy;
 
 import java.util.List;
@@ -71,7 +71,7 @@ public final class DockPlacement {
      * wears the answer the settle on Home commits, and the dock does not change look as it lands.
      * The one answer the travel and the settle both read, and the one Stack layout places by.
      */
-    public static boolean peekCardStandsOn(@NonNull PaneWallPage rowsPage, boolean peekWorn,
+    public static boolean peekCardStandsOn(@NonNull PageKind rowsPage, boolean peekWorn,
                                            boolean dockShown, @NonNull PlaceLayout layout,
                                            boolean sheetStandsDownOnFrame, boolean keyboardShown,
                                            boolean imeLifted, boolean searchFieldShown) {

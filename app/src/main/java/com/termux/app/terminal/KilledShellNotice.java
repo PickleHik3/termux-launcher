@@ -1,7 +1,7 @@
 package com.termux.app.terminal;
 
 /**
- * What the Workspace does with a pane whose shell was killed by a signal the launcher did not
+ * What the Terminal does with a pane whose shell was killed by a signal the launcher did not
  * send. Android 12 and later stop an app's child processes past a limit (the phantom-process
  * killer, 32 by default) oldest first, and the oldest is the login shell: a Linux desktop on the
  * display was enough to take every terminal window with it, without a word (reported 2026-10-27).

@@ -3,7 +3,7 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 /**
@@ -15,25 +15,37 @@ public enum ExtraKeysTarget {
         TermuxPropertyConstants.KEY_TERMINAL_TOOLBAR_HEIGHT_SCALE_FACTOR,
         null),
     TERMINAL(TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL, TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL2,
-        TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL_HEIGHT, PaneWallPage.TERMINAL),
+        TermuxPropertyConstants.KEY_EXTRA_KEYS_TERMINAL_HEIGHT, PageKind.TERMINAL),
     DISPLAY(TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY, TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY2,
-        TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY_HEIGHT, PaneWallPage.DISPLAY),
+        TermuxPropertyConstants.KEY_EXTRA_KEYS_DISPLAY_HEIGHT, PageKind.DISPLAY),
     HOME(TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME, TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME2,
-        TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME_HEIGHT, PaneWallPage.WIDGETS),
+        TermuxPropertyConstants.KEY_EXTRA_KEYS_HOME_HEIGHT, PageKind.HOME),
     ASSISTANT(TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT, TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT2,
-        TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT_HEIGHT, PaneWallPage.ASSISTANT);
+        TermuxPropertyConstants.KEY_EXTRA_KEYS_ASSISTANT_HEIGHT, PageKind.ASSISTANT);
 
     private final String mPage1Key;
     private final String mPage2Key;
     private final String mHeightKey;
-    @Nullable private final PaneWallPage mMarkingPlace;
+    @Nullable private final PageKind mMarkingPlace;
 
     ExtraKeysTarget(@NonNull String page1Key, @NonNull String page2Key, @NonNull String heightKey,
-                    @Nullable PaneWallPage markingPlace) {
+                    @Nullable PageKind markingPlace) {
         mPage1Key = page1Key;
         mPage2Key = page2Key;
         mHeightKey = heightKey;
         mMarkingPlace = markingPlace;
+    }
+
+    /** The target a page's own extra keys go to. */
+    @NonNull
+    public static ExtraKeysTarget forPage(@NonNull PageKind kind) {
+        switch (kind) {
+            case HOME: return HOME;
+            case DISPLAY: return DISPLAY;
+            case ASSISTANT: return ASSISTANT;
+            case TERMINAL:
+            default: return TERMINAL;
+        }
     }
 
     /** The two page lines, in order. */
@@ -60,7 +72,7 @@ public enum ExtraKeysTarget {
 
     /** The place the keys of this target are judged against when marking keys that do not act there; none for Global. */
     @Nullable
-    public PaneWallPage markingPlace() {
+    public PageKind markingPlace() {
         return mMarkingPlace;
     }
 }

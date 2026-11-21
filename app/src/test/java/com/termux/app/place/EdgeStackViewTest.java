@@ -285,7 +285,7 @@ public class EdgeStackViewTest {
         assertTrue(with.top.overlayFollowing(with.band, 0));
         assertFalse("asking again changes nothing", with.top.overlayFollowing(with.band, 0));
         with.layOut();
-        assertEquals("the Workspace: the bar takes its row and the canvas starts under it",
+        assertEquals("the Terminal: the bar takes its row and the canvas starts under it",
             BAR_PX, with.bandBounds()[0]);
         assertEquals(COLUMN_HEIGHT, with.bandBounds()[1]);
         assertEquals(0f, with.top.getTranslationZ(), 0f);
@@ -300,5 +300,119 @@ public class EdgeStackViewTest {
             assertEquals(edge + " left", 0, stack.getPaddingLeft());
             assertEquals(edge + " right", 0, stack.getPaddingRight());
         }
+    }
+
+    // ---- side lanes: both sides' rows in one band ----
+
+    private View row(int heightPx) {
+        View row = new View(mActivity);
+        row.setMinimumHeight(heightPx);
+        return row;
+    }
+
+    private void layOut(EdgeStackView stack) {
+        stack.measure(View.MeasureSpec.makeMeasureSpec(1080, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
+        stack.layout(0, 0, stack.getMeasuredWidth(), stack.getMeasuredHeight());
+    }
+
+    @Test public void aStackWithNoLaneLaysOutAsAColumnOfItsRows() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View apps = row(100);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys, apps));
+        layOut(stack);
+        assertEquals(198, stack.getMeasuredHeight());
+        assertEquals(0, apps.getTop());
+        assertEquals(100, keys.getTop());
+    }
+
+    @Test public void theBandIsTheTallerSidesAndTheFrontsRowsStandOnItsFloor() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View apps = row(100);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys, apps));
+        stack.setLane(keys, StackLanes.TERMINAL);
+        // Home in front: the shared apps row stands on the band's floor under the keys' room.
+        stack.setFrontLane(StackLanes.HOME);
+        layOut(stack);
+        assertEquals("the union of both sides' rests", 198, stack.getMeasuredHeight());
+        assertEquals(98, apps.getTop());
+        assertEquals(198, apps.getBottom());
+        assertEquals("the Terminal's lane stands over the apps row", 100, keys.getTop());
+        // The Terminal in front: the apps row stands on the extra keys, as before lanes.
+        stack.setFrontLane(StackLanes.TERMINAL);
+        layOut(stack);
+        assertEquals(198, stack.getMeasuredHeight());
+        assertEquals(0, apps.getTop());
+        assertEquals(100, keys.getTop());
+    }
+
+    @Test public void bothLanesShareOneBand() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View homeRow = row(60);
+        View keys = row(98);
+        View shared = row(50);
+        stack.setStack(Arrays.asList(shared, keys, homeRow));
+        stack.setLane(homeRow, StackLanes.HOME);
+        stack.setLane(keys, StackLanes.TERMINAL);
+        layOut(stack);
+        assertEquals("shared rows plus the taller lane", 148, stack.getMeasuredHeight());
+        assertEquals("the shared row on the floor", 98, shared.getTop());
+        assertEquals("the Terminal's row stacked on it", 0, keys.getTop());
+        assertEquals("Home's row stacked on the same floor, in the same band", 38,
+            homeRow.getTop());
+        assertEquals(98, homeRow.getBottom());
+    }
+
+    @Test public void aRowGoneFromTheLaneLeavesTheColumn() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View apps = row(100);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys, apps));
+        stack.setLane(keys, StackLanes.TERMINAL);
+        keys.setVisibility(View.GONE);
+        layOut(stack);
+        assertEquals(100, stack.getMeasuredHeight());
+        assertEquals(0, apps.getTop());
+    }
+
+    @Test public void aLaneChangesOnlyWhenItIsSet() {
+        EdgeStackView stack = stack(Edge.BOTTOM);
+        View keys = row(98);
+        stack.setStack(Arrays.asList(keys));
+        assertEquals(StackLanes.STACK, stack.getLane(keys));
+        assertTrue(stack.setLane(keys, StackLanes.TERMINAL));
+        assertFalse(stack.setLane(keys, StackLanes.TERMINAL));
+        assertTrue(stack.setLane(keys, StackLanes.STACK));
+        assertEquals(StackLanes.STACK, stack.getLane(keys));
+    }
+
+    /**
+     * Pong 11-18: a landing that reorders the bottom stack (Home's apps row over the keyboard, the
+     * Terminal's under it) took the apps row out of the window and put it back, so it drew no
+     * icons until its layout settled again. A bar already in this stack changes place without
+     * leaving the window.
+     */
+    @Test public void reorderingABarItAlreadyHoldsKeepsItAttached() {
+        android.widget.FrameLayout root = new android.widget.FrameLayout(mActivity);
+        mActivity.setContentView(root);
+        EdgeStackView stack = stack(Edge.TOP);
+        root.addView(stack);
+        List<View> bars = bars(3);
+        final int[] detaches = new int[1];
+        for (View bar : bars) {
+            bar.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+                @Override public void onViewAttachedToWindow(View v) {}
+                @Override public void onViewDetachedFromWindow(View v) { detaches[0]++; }
+            });
+        }
+        stack.setStack(bars);
+        assertTrue(bars.get(0).isAttachedToWindow());
+        List<View> reordered = Arrays.asList(bars.get(2), bars.get(0), bars.get(1));
+        assertTrue(stack.setStack(reordered));
+        assertEquals(reordered, children(stack));
+        assertEquals("no bar left the window", 0, detaches[0]);
+        for (View bar : bars) assertSame(stack, bar.getParent());
     }
 }

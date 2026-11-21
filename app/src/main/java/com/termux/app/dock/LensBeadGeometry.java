@@ -431,7 +431,7 @@ public final class LensBeadGeometry {
 
     /**
      * The share of Home's slide over which the beads melt into the slab, counted from the
-     * Workspace's side: from Home's share 1 down to this they swell, below it they cover the slab
+     * Terminal's side: from Home's share 1 down to this they swell, below it they cover the slab
      * whole, so the hand-over to the slab at share 0 changes nothing the clip lets through.
      */
     public static final float MELT_COVERED_SHARE = 0.15f;
@@ -457,7 +457,7 @@ public final class LensBeadGeometry {
 
     /**
      * The beads' radius while a slide across the seam carries Home's dock away or back:
-     * {@code homeShare} is Home's share of the slide (1 resting on Home, 0 on the Workspace).
+     * {@code homeShare} is Home's share of the slide (1 resting on Home, 0 on the Terminal).
      * At 1 the beads are their own size; toward {@link #MELT_COVERED_SHARE} they swell on a
      * smooth step to {@code coverPx}, where, clipped to the slab, they are the slab; below it
      * they stay there.

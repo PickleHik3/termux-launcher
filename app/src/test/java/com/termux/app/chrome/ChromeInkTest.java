@@ -737,4 +737,149 @@ public class ChromeInkTest {
         assertTrue(Math.abs(android.graphics.Color.red(a) - android.graphics.Color.red(b)) > 10);
         assertEquals(android.graphics.Color.rgb(0, 0, 0), ChromeInk.areaWeightedMean(top, areas, 0));
     }
+
+    /** A crossing votes on nothing: the polarity it began with is the one it ends with. */
+    @Test
+    public void aCrossingCastsNoVote() {
+        com.termux.app.glass.LegibilityStore store = new com.termux.app.glass.LegibilityStore();
+        ink.attachLegibility(store);
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+
+        store.beginCrossing();
+        wallpaper.other = 0xFFDDDDDD;
+        Rect moved = new Rect(0, 400, 1080, 500);
+        for (int i = 0; i < 3; i++) {
+            ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, moved, LIGHT_INK, NIGHT_INK,
+                OnGlass.TARGET_BODY_TEXT);
+            moved = new Rect(0, 400 + i + 1, 1080, 500);
+        }
+        assertEquals("a crossing's resolves moved no vote", ChromeInk.Polarity.PALE_INK,
+            ink.polarity());
+
+        store.endCrossing();
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 600, 1080, 700), LIGHT_INK,
+            NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+        assertEquals("at rest the vote counts as before", ChromeInk.Polarity.DARK_INK,
+            ink.polarity());
+    }
+
+    /** A crossing reads the wallpaper for nothing: bands answer from the sample they hold. */
+    @Test
+    public void aCrossingTakesNoWallpaperSample() {
+        com.termux.app.glass.LegibilityStore store = new com.termux.app.glass.LegibilityStore();
+        ink.attachLegibility(store);
+        final int[] reads = {0};
+        ink.backdrops().setSampler(new GlassBackdropCache.Sampler() {
+            @Override public int sampleWallpaper(@NonNull Rect screenRect) {
+                reads[0]++;
+                store.noteSample();
+                return STATUS_GLASS;
+            }
+        });
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, STATUS_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_BODY_TEXT);
+        int atRest = reads[0];
+        assertTrue(atRest > 0);
+
+        store.beginCrossing();
+        for (int i = 0; i < 4; i++) {
+            ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 300 + i, 1080, 400),
+                LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+            ink.onGlass(GlassBackdropCache.Band.AZ_STRIP, AZ_RECT, LIGHT_INK, NIGHT_INK,
+                OnGlass.TARGET_LARGE_TEXT);
+        }
+        assertEquals(0, store.sampledInCrossing());
+        assertEquals("nothing was read in the crossing", atRest, reads[0]);
+    }
+
+    // ------------------------------------------------------------------ Home's own polarity
+
+    private int homeRects;
+    private int widgetNotices;
+
+    /** One band's vote, read off a rect nobody asked about before so the sample is fresh. */
+    private void voteStatus(boolean onHome, int glass) {
+        ink.setFrontHome(() -> onHome);
+        wallpaper.other = glass;
+        ink.onGlass(GlassBackdropCache.Band.STATUS_BAR, new Rect(0, 1000 + homeRects++, 1080, 1100),
+            LIGHT_INK, NIGHT_INK, OnGlass.TARGET_BODY_TEXT);
+    }
+
+    /** The Terminal in front votes dark glass; Home's cards keep what Home voted. */
+    @Test
+    public void homesWidgetPolarityIgnoresTheTerminalsVotes() {
+        voteStatus(true, 0xFFDDDDDD);
+        voteStatus(false, 0xFF202020);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.widgetPolarity());
+    }
+
+    /** Landing on Home with the same values changes nothing, whatever the chrome-wide votes hold. */
+    @Test
+    public void landingOnHomeWithTheSameVotesKeepsTheAnswer() {
+        ink.setOnWidgetPolarityChanged(() -> widgetNotices++);
+        voteStatus(true, 0xFFDDDDDD);
+        ink.onGlass(GlassBackdropCache.Band.AZ_STRIP, AZ_RECT, LIGHT_INK, NIGHT_INK,
+            OnGlass.TARGET_LARGE_TEXT);
+        voteStatus(false, 0xFF202020);
+        widgetNotices = 0;
+        voteStatus(true, 0xFFDDDDDD);
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.widgetPolarity());
+        assertEquals(0, widgetNotices);
+    }
+
+    /** A Home vote that moves the mean flips the answer and says so once. */
+    @Test
+    public void aHomeVoteThatFlipsHomesAnswerRunsTheListenerOnce() {
+        voteStatus(true, 0xFFDDDDDD);
+        ink.setOnWidgetPolarityChanged(() -> widgetNotices++);
+        voteStatus(true, 0xFF202020);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+        assertEquals(1, widgetNotices);
+        voteStatus(true, 0xFF202020);
+        assertEquals(1, widgetNotices);
+    }
+
+    /** A mode re-read keeps Home's answer; a redress drops it. */
+    @Test
+    public void invalidateKeepsHomesAnswerAndRedressDropsIt() {
+        voteStatus(true, 0xFF202020);
+        ink.invalidate();
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.widgetPolarity());
+        ink.resetForRedress();
+        assertEquals(ink.polarity(), ink.widgetPolarity());
+        assertEquals(ChromeInk.Polarity.DARK_INK, ink.widgetPolarity());
+    }
+
+    /** With no Home vote yet the chrome-wide answer stands. */
+    @Test
+    public void withoutAHomeVoteTheWidgetsFollowTheChrome() {
+        voteStatus(false, 0xFF202020);
+        assertEquals(ChromeInk.Polarity.PALE_INK, ink.polarity());
+        assertEquals(ink.polarity(), ink.widgetPolarity());
+    }
+
+    // ------------------------------------------------------------------ a widget's ground
+
+    /**
+     * A Home widget asked while the Terminal is in front stands on Home's ground, not the
+     * Terminal's dim under its laid-out rect: a Bare clock dressed then kept a pale ink on Home's
+     * bright wallpaper until the next Look change.
+     */
+    @Test
+    public void aWidgetStandsOnHomesGroundWhicheverPageIsInFront() {
+        int bright = 0xFFF4773A;
+        wallpaper.other = bright;
+        Rect clock = new Rect(200, 250, 1050, 660);
+        surfaces.homeGround = Color.TRANSPARENT;
+        surfaces.frontGround = Color.TRANSPARENT;
+        int onHome = ink.widgetWallpaper(clock);
+        surfaces.frontGround = 0x80000000;
+        assertEquals("the Terminal's dim in front", onHome, ink.widgetWallpaper(clock));
+        assertEquals(bright, onHome);
+        surfaces.homeGround = 0x80000000;
+        assertNotEquals("Home's own ground still counts", bright, ink.widgetWallpaper(clock));
+    }
 }

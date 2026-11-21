@@ -1,7 +1,7 @@
 # The Linux display
 
 The launcher can show a Linux desktop or any X11 app in a **display window**: a window of the
-Workspace, in the row with your terminal windows, that shows one X display whole. The display's own window
+Terminal, in the row with your terminal windows, that shows one X display whole. The display's own window
 manager arranges the apps inside it. The display server runs in your shell like any other command,
 so everything you know from Termux:X11 (its flags, its preferences, `pkill termux-x11`) works the
 same way. This page is the short route from installing the pieces to running a desktop in a proot.
@@ -47,7 +47,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
 
 ## Every day
 
-- **Get to it** like any window: drag along the Workspace from a window's border, or tap its chip
+- **Get to it** like any window: drag along the Terminal from a window's border, or tap its chip
   in the status bar. Hold its chip and drag it to move the display window to another place in the
   row, as you would any window. Opening a Linux app or **Display** again brings it in front, and
   moves it into the session you are in if another session's row holds it. In the sessions drawer,
@@ -83,7 +83,7 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   docked); it switches the orientation the phone is in, and each orientation keeps its own. If an
   older version left the display making room in portrait without you choosing it, the update
   puts it back to floating once; the same button switches it back.
-  Settings → Linux apps → Input → Keyboard over the window switches both orientations
+  Settings → Linux apps → Input → Keyboard behavior (Overlay or Resize display) sets both orientations
   at once.
 - **The controls.** Hold a corner of the display and its buttons drop out of it, as they do on a
   terminal pane: power starts or stops the display, and the cog opens its settings. A
@@ -129,8 +129,9 @@ edition that package can't be installed beside the launcher's, and isn't needed.
   terminal window or on Home; only the picture is put away.
 - **Options.** **Settings → Linux apps** holds them: its own rows, then four pages. A
   running display picks a change up at once.
-  - On the page itself: **Show Linux apps in drawer**, **Set up Linux apps**, **Hidden Linux
-    apps** and **Window manager**.
+  - On the page itself, under **Apps**: **Set up Linux apps** and **Per-app settings**; under
+    **Desktop**: **Start with**; and under **Advanced**: **Graphics acceleration** and
+    **Window manager**.
   - **Input**: **Touch**, **Use Android keyboard**, **Keyboard pops up** and **Share the clipboard**.
   - **Resolution and scaling**: **Resolution**, **Scale**, **Fixed size** or **Custom size**,
     **Scaling** (filtering) and **Display density**.
@@ -235,7 +236,7 @@ asking, which pins the keyboard until you put it down again.
 
 The launcher runs one PulseAudio server for everything: terminal sessions, Linux apps from the
 drawer and proot distros. It needs `pulseaudio`, which "Set up Linux apps" installs
-(`pkg install pulseaudio` does too), and two switches under **Settings › Terminal › Linux apps ›
+(`pkg install pulseaudio` does too), and two switches under **Settings › General ›
 Audio** control it, both on by default.
 
 - **Sound.** The server starts with your first terminal or Linux app and keeps running when you
@@ -337,7 +338,7 @@ Two things make this work:
   Windows fill the display to its rounded corners, as on any rounded desktop, so a terminal that
   wants its first and last cells clear of the arcs pads its own window (`window_padding_width` in
   kitty, `window.padding` in alacritty).
-- **Show Linux apps in drawer**, in **Settings → Linux apps**, can be switched off if
+- **Show Linux apps in drawer**, in **Settings → Apps**, can be switched off if
   you would rather start apps from a shell.
 
 When an app is started from the drawer, the launcher exports the GPU settings from the table

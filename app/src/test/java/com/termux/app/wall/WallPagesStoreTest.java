@@ -1,5 +1,6 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
@@ -10,8 +11,8 @@ import android.os.Build;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.Page;
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -249,11 +250,11 @@ public class WallPagesStoreTest {
     public void anAssistantPageRoundTripsThroughMemoryStorage() {
         WallPagesStore.MemoryStorage storage = new WallPagesStore.MemoryStorage();
         WallPages value = WallPagesMigration.seed("home", 0, "home", 2)
-            .add(WallPages.PageKind.ASSISTANT, 1, null).pages;
+            .add(PageKind.ASSISTANT, 1, null).pages;
         new WallPagesStore(storage).replace(value);
         WallPages again = new WallPagesStore(storage).current();
         assertEquals(value, again);
-        assertEquals(WallPages.PageKind.ASSISTANT, again.assistant().kind);
+        assertEquals(PageKind.ASSISTANT, again.assistant().kind);
         assertEquals("Assistant", again.displayName(again.assistant(), null));
     }
 }

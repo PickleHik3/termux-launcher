@@ -260,9 +260,9 @@ public class SheetsControllerTest {
 
     @Test
     public void thePaletteIsGivenCornersThatFollowDockedOrFloating() {
-        // No store: the Sheets element's Corners as shipped, on the resting page.
-        int shipped = com.termux.app.chrome.ElementGlass.of(null,
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, 0).cornersDp;
+        // No store: Global's Corners as shipped (the sheets hold none of their own).
+        int shipped = com.termux.app.chrome.SheetGlass.of(
+            (com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences) null).cornersDp;
         assertEquals(shipped, mSheets.commandPaletteCornersDp());
         // Where they follow the Style (CommandPaletteShape.openRadiusDp): square Docked, the
         // rounded-surface token Floating.
@@ -360,7 +360,6 @@ public class SheetsControllerTest {
         }
         @Nullable @Override public com.termux.app.launcher.drawer.AppDrawerController.AppDrawerDockChoreographyTarget dockChoreographyTarget() { return null; }
         @Nullable @Override public com.termux.terminal.TerminalSession currentSession() { return null; }
-        @Override public void setHomeSheetDecorNavStripAlpha(float alpha) { }
         @Override public void prepareWallpaperDoor() { }
         @Override public void releasePreparedWallpaper() { }
         @Override public boolean shouldUseWallpaperPassthroughMode() { return false; }

@@ -10,11 +10,11 @@ import com.termux.app.surfaces.EditorRows.Spec;
 import java.util.List;
 
 /**
- * The Customization card's rows (appearance-cards overhaul §2, Customization): Appearance, the
- * defaults every surface wears (the block with Vibrancy, and Tint as strength alone); Colours
- * (Mode, Contrast, Accent swatches, Dynamic colour); More options (Full screen, Show
- * wallpaper); Links (Menus and dialogs, TUI app themes). Layout, the whole app's elements list
- * (written to Home and the Workspace, {@link LayoutOverride}).
+ * The Global card's rows (appearance-one-look spec §3, Global): Look, the glass every surface
+ * wears unless it holds its own Opacity or Blur; Fine-tune, the rest of the glass, closed until
+ * opened; Shape, with the one Icon size that sizes Home's icons and the dock's; Colours; Screen,
+ * with Text size and Page transition. Where each row lives is the spec's; Status position, Dock type
+ * and the Layout list are on their own cards.
  */
 public final class GlobalCard {
 
@@ -24,18 +24,17 @@ public final class GlobalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN,
-                Row.TINT, Row.CORNERS, Row.MARGIN, Row.RIM, Row.VIBRANCY, Row.GLASS_EDGE,
-                Row.DEPTH);
+            .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT)
+            .tier(3, Row.SECTION_FINE_TUNE, Row.GRAIN, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
+                Row.VIBRANCY);
         // Out for a setting the user can change: the way to it stands under them.
-        if (offers.refractionLink) rows.tier(1, Row.LINK_GLASS_REFRACTION);
+        if (offers.refractionLink) rows.tier(3, Row.LINK_GLASS_REFRACTION);
         return rows
-            .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.TINT_HUE,
-                Row.WALLPAPER_COLOURS)
-            // The status bar's position and the dock's type are one value for every page.
-            .tier(3, Row.SECTION_LAYOUT, Row.STATUS_POSITION, Row.DOCK_TYPE, Row.ELEMENTS)
-            .tier(3, Row.SECTION_MORE_OPTIONS, Row.STYLE, Row.FULL_SCREEN, Row.SHOW_WALLPAPER)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_SHEETS, Row.TOOL_COLOURS)
+            .tier(3, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN, Row.HOME_ICON_SIZE)
+            .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY, Row.TINT_HUE,
+                Row.WALLPAPER_COLOURS, Row.TOOL_COLOURS)
+            .tier(3, Row.SECTION_SCREEN, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.TEXT_SIZE,
+                Row.PAGE_TRANSITION)
             .build();
     }
 

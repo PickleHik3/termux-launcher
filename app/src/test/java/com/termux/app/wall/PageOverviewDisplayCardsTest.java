@@ -1,11 +1,12 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 
-import com.termux.app.wall.WallPages.PageKind;
 import java.util.Arrays;
 import java.util.List;
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /** The page overview lists every Display page of the wall, where it stands (#193). */
 public class PageOverviewDisplayCardsTest {
@@ -40,8 +41,8 @@ public class PageOverviewDisplayCardsTest {
         assertEquals(PageOverviewPolicy.NONE, PageOverviewPolicy.dropTarget(1, 0, strip));
         assertEquals("the Terminal card before the Display card", 1,
             PageOverviewPolicy.dropTarget(2, 1, strip));
-        assertEquals(PaneWallPage.DISPLAY, PageOverviewPolicy.wallPosition(1, strip, 0).kind);
-        assertEquals(PaneWallPage.WIDGETS, PageOverviewPolicy.wallPosition(0, strip, 0).kind);
+        assertEquals(PageKind.DISPLAY, PageOverviewPolicy.wallPosition(1, strip, 0).kind);
+        assertEquals(PageKind.HOME, PageOverviewPolicy.wallPosition(0, strip, 0).kind);
     }
 
     @Test public void noTerminalCardWithoutTheTerminalPage() {

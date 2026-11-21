@@ -126,7 +126,7 @@ public final class GlassSurfaceFactory {
     private int dockTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         return preferences != null ? preferences.getDockTintStrength(mSurfaces.stackLookPage())
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     /**
@@ -187,27 +187,11 @@ public final class GlassSurfaceFactory {
         return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, tintStrengthPercent);
     }
 
-    /**
-     * The dock's glass as page {@code lookPage}'s look dresses it, whatever page the stack wears
-     * now: its opacity, tint and grain. A crossing between halves apart only in look builds the
-     * arriving end's once, as it begins, and blends to it with the wall; the landing's re-dress
-     * then builds the same glass.
-     */
-    @NonNull
-    public Drawable dockSurfaceOf(int lookPage, float sliceStart, float sliceEnd,
-                                  boolean withFoot) {
-        TermuxAppSharedPreferences preferences = mSurfaces.preferences();
-        if (preferences == null) return dockSurface(1f, sliceStart, sliceEnd, withFoot);
-        return surface(preferences.getAppBarOpacity(lookPage) / 100f, sliceStart, sliceEnd,
-            withFoot, preferences.getDockGlassGrain(lookPage),
-            preferences.getDockTintStrength(lookPage));
-    }
-
     /** The status bar's tint strength, percent. */
     public int statusTintStrength() {
         TermuxAppSharedPreferences preferences = mSurfaces.preferences();
         return preferences != null ? preferences.getStatusBarTintStrength(mSurfaces.statusLookPage())
-            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_TINT;
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT;
     }
 
     @NonNull
@@ -353,20 +337,6 @@ public final class GlassSurfaceFactory {
     }
 
     /**
-     * The glass a band's surface is continued by below it, on a strip no content stands on (the
-     * one under the navigation pill): the same tint, slice and grain, and the band's veil so the
-     * two read as one sheet, but no rim and no measurement under the band's name.
-     */
-    @NonNull
-    public Drawable continuationSurface(float barAlpha, float sliceStart, float sliceEnd,
-                                        boolean withFoot, int grain,
-                                        @Nullable GlassBackdropCache.Band veilOf,
-                                        int tintStrengthPercent) {
-        return surface(barAlpha, sliceStart, sliceEnd, withFoot, grain, 0f, ChromeEdgeRule.NONE,
-            null, veilOf, tintStrengthPercent);
-    }
-
-    /**
      * @param glassBand the band whose glass this surface <em>is</em> — it reports its opacity, its
      *     foot and its slice under this name, and a measurement of that band is a measurement of
      *     this material. Null for a surface nothing is measured against.
@@ -440,7 +410,7 @@ public final class GlassSurfaceFactory {
      * The veil {@code band}'s glass is drawn with, for a surface that lays its own tint rather than
      * going through {@link #surface}: {@link Color#TRANSPARENT} for no band, or none needed.
      */
-    int bandVeil(@Nullable GlassBackdropCache.Band band) {
+    public int bandVeil(@Nullable GlassBackdropCache.Band band) {
         return band != null && mInk != null ? mInk.bandVeil(band) : Color.TRANSPARENT;
     }
 
@@ -540,6 +510,15 @@ public final class GlassSurfaceFactory {
     public static boolean frostDrawsEdge(@Nullable android.widget.ImageView frost) {
         if (frost == null || frost.getVisibility() != android.view.View.VISIBLE) return false;
         SharedFrameDrawable shared = SharedFrameDrawable.of(frost.getDrawable());
+        return shared != null && shared.refracts();
+    }
+
+    /** As {@link #frostDrawsEdge(android.widget.ImageView)}, for the frost a bar's glass view holds. */
+    public static boolean frostDrawsEdge(@Nullable BarGlassView bar) {
+        if (bar == null || bar.getVisibility() != android.view.View.VISIBLE || !bar.frostShown()) {
+            return false;
+        }
+        SharedFrameDrawable shared = SharedFrameDrawable.of(bar.getFrost());
         return shared != null && shared.refracts();
     }
 

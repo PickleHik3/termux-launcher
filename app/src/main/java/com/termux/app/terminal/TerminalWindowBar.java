@@ -538,7 +538,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private static final float AUTO_SCROLL_STEP_DP = 6f;
 
     @Nullable private OnWindowChipMovedListener mMoveListener;
-    /** How many chips, from the first, stand for the Workspace's windows and so can be moved. */
+    /** How many chips, from the first, stand for the Terminal's windows and so can be moved. */
     private int mMovableChipCount;
     /** The long press that lifts {@link #mPendingLiftIndex}, armed at DOWN on a movable chip. */
     @Nullable private Runnable mPendingLift;
@@ -674,16 +674,16 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * Whether the selected chip's window is on screen on {@code page}: on the Workspace and the
+     * Whether the selected chip's window is on screen on {@code page}: on the Terminal and the
      * Display it is; on Home and the Assistant the chip stands for a window to go to.
      */
-    public static boolean selectedChipOnScreen(@Nullable com.termux.app.wall.PaneWallPage page) {
-        return page == com.termux.app.wall.PaneWallPage.TERMINAL
-            || page == com.termux.app.wall.PaneWallPage.DISPLAY;
+    public static boolean selectedChipOnScreen(@Nullable com.termux.app.page.PageKind page) {
+        return page == com.termux.app.page.PageKind.TERMINAL
+            || page == com.termux.app.page.PageKind.DISPLAY;
     }
 
     /**
-     * Whether a tap on the selected chip offers its ×: on the Workspace, where that window is on
+     * Whether a tap on the selected chip offers its ×: on the Terminal, where that window is on
      * screen. On Home the same chip stands for the window in front of the row, which a tap brings
      * on screen instead (the selected chip could not be reached from Home at all, #90).
      */
@@ -1032,6 +1032,8 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         chip.setPressed(false);
         chip.setScaleX(LIFT_SCALE);
         chip.setScaleY(LIFT_SCALE);
+        // Over its neighbours by draw order; the lift is the chip's shadow.
+        mTabs.setDrawnLast(chip);
         chip.setTranslationZ(dpF(LIFT_ELEVATION_DP));
         com.termux.app.haptics.Haptics.tick(this, android.view.HapticFeedbackConstants.LONG_PRESS);
         if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
@@ -1168,6 +1170,7 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     private void resetChipTransforms() {
+        mTabs.setDrawnLast(null);
         for (int i = 0; i < mTabs.getChildCount(); i++) {
             View child = mTabs.getChildAt(i);
             child.setTranslationX(0f);
@@ -1961,9 +1964,9 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     }
 
     /**
-     * How many chips, counted from the first, stand for the Workspace's windows and may be dragged
+     * How many chips, counted from the first, stand for the Terminal's windows and may be dragged
      * to reorder them. The chips after them — the display's, the Home floats' — and every chip of
-     * a place whose row is not the Workspace's (Home, Display) pass 0 and never lift.
+     * a place whose row is not the Terminal's (Home, Display) pass 0 and never lift.
      */
     public void setMovableChipCount(int count) {
         mMovableChipCount = Math.max(0, count);
@@ -2526,6 +2529,26 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         private float mCloseFraction;
         /** How far the chips after the segment are currently pushed, so an offset never doubles. */
         private int mAppliedShiftPx;
+
+        /** The chip drawn over its neighbours (the lifted one, until it has settled), or null. */
+        @Nullable private View mDrawnLast;
+
+        /** Draws {@code chip} after the others, whatever its place in the row. */
+        void setDrawnLast(@Nullable View chip) {
+            if (mDrawnLast == chip) return;
+            mDrawnLast = chip;
+            // Only while a chip is out of its place: the row draws in plain child order at rest.
+            setChildrenDrawingOrderEnabled(chip != null);
+            invalidate();
+        }
+
+        @Override
+        protected int getChildDrawingOrder(int childCount, int drawingPosition) {
+            int at = mDrawnLast == null ? -1 : indexOfChild(mDrawnLast);
+            if (at < 0 || at >= childCount) return drawingPosition;
+            if (drawingPosition < at) return drawingPosition;
+            return drawingPosition == childCount - 1 ? at : drawingPosition + 1;
+        }
 
         SelectionStrip(@NonNull Context context) {
             super(context);

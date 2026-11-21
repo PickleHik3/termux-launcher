@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * Edit pages' rules over the wall's {@link WallPages}: what the page overview reads of the page
@@ -114,7 +115,7 @@ public final class PageOverviewPages {
         int n = 0;
         for (WallPages.Page page : pages.pages()) {
             if (page.id == terminal.id) return n;
-            if (page.kind == WallPages.PageKind.HOME) n++;
+            if (page.kind == PageKind.HOME) n++;
         }
         return n;
     }
@@ -180,7 +181,7 @@ public final class PageOverviewPages {
     public int detachedHomePages() {
         int n = 0;
         for (WallPages.Page page : wallPages().detached()) {
-            if (page.kind == WallPages.PageKind.HOME) n++;
+            if (page.kind == PageKind.HOME) n++;
         }
         return n;
     }
@@ -207,14 +208,14 @@ public final class PageOverviewPages {
         // A temporary page (a drawer launch's) is not listed: it goes with its display.
         for (WallPages.Page page : pages.listedPages()) {
             if (terminal != null && page.id == terminal.id) afterTerminal = true;
-            if (page.kind == WallPages.PageKind.HOME) homes++;
-            if (page.kind == WallPages.PageKind.ASSISTANT) {
+            if (page.kind == PageKind.HOME) homes++;
+            if (page.kind == PageKind.ASSISTANT) {
                 out.add(new PageOverviewView.DisplayPage(page.id,
                     PageCardMenuPolicy.cardName(page.name, assistantName), homes,
                     afterTerminal, true));
                 continue;
             }
-            if (page.kind != WallPages.PageKind.DISPLAY) continue;
+            if (page.kind != PageKind.DISPLAY) continue;
             String appName = page.binding == null ? null : launcher.displayAppName(page.binding);
             out.add(new PageOverviewView.DisplayPage(page.id,
                 PageCardMenuPolicy.cardName(page.name,
@@ -252,7 +253,7 @@ public final class PageOverviewPages {
     public int addBoundDisplay(@NonNull String app) {
         final int after = launcher.pageAfterCurrent();
         WallPages.Result added = store.edit(pages ->
-            pages.add(WallPages.PageKind.DISPLAY,
+            pages.add(PageKind.DISPLAY,
                 pages.page(after) != null ? after : WallPages.END, app));
         if (!added.ok() || added.page == null) return -1;
         launcher.refreshDisplayCards();
@@ -262,10 +263,10 @@ public final class PageOverviewPages {
 
     /** The overview card kind for a wall position of {@code page}'s kind. */
     @NonNull
-    public static PageOverviewPolicy.Kind cardKind(@NonNull PaneWallPage page) {
-        if (page == PaneWallPage.WIDGETS) return PageOverviewPolicy.Kind.HOME_PAGE;
-        return page == PaneWallPage.DISPLAY ? PageOverviewPolicy.Kind.DISPLAY
-            : page == PaneWallPage.ASSISTANT ? PageOverviewPolicy.Kind.ASSISTANT
+    public static PageOverviewPolicy.Kind cardKind(@NonNull PageKind page) {
+        if (page == PageKind.HOME) return PageOverviewPolicy.Kind.HOME_PAGE;
+        return page == PageKind.DISPLAY ? PageOverviewPolicy.Kind.DISPLAY
+            : page == PageKind.ASSISTANT ? PageOverviewPolicy.Kind.ASSISTANT
             : PageOverviewPolicy.Kind.TERMINAL;
     }
 }

@@ -133,9 +133,8 @@ public final class LowMemoryPreset {
         for (SurfacePresets.Preset look : SurfacePresets.presets()) {
             if (SOLID_LOOK_ID.equals(look.id)) SurfacePresets.apply(prefs, look);
         }
-        // What the editor's Terminal Opacity slider writes: the terminal's own cell, and the copy
+        // What the editor's Terminal Opacity slider writes: the terminal's own key, and the copy
         // wallpaper mode restores from. The other surfaces keep Solid's opacity.
-        prefs.detachSurfaceValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY, TERMINAL_OPACITY_PERCENT);
         prefs.setTerminalBackgroundOpacity(TERMINAL_OPACITY_PERCENT);
         prefs.setTerminalCursorTrailEnabled(false);
         // Solid's defaults already set the classic glass motion.

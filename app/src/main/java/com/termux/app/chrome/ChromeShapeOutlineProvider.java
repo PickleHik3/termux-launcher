@@ -93,18 +93,12 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
     public void getOutline(@NonNull View view, @NonNull Outline outline) {
         LiveChromeShape.Clip clip = mClip;
         int[] rect = mRect;
-        cardRect(clip, view.getWidth(), view.getHeight(), rect);
-        rect[0] -= mHorizontalGrowPx;
-        rect[2] += mHorizontalGrowPx;
-        if (clip == null) {
-            outline.setRect(rect[0], rect[1], rect[2], rect[3]);
-            return;
-        }
-        // A round rect has one radius, so a card square on a side (an edge card's screen side) is
-        // grown by that radius past the square side: the view's bounds cut the excess off.
-        if (clip.perCorner && android.os.Build.VERSION.SDK_INT >= 33) {
+        if (clip != null && clip.perCorner && android.os.Build.VERSION.SDK_INT >= 33) {
             // A screen corner raised some corners past the others: each at its own radius, which
             // only a path outline can say (and clip to, from Android 13).
+            cardRect(clip, view.getWidth(), view.getHeight(), rect);
+            rect[0] -= mHorizontalGrowPx;
+            rect[2] += mHorizontalGrowPx;
             android.graphics.Path path = new android.graphics.Path();
             path.addRoundRect(rect[0], rect[1], rect[2], rect[3], new float[] {
                 clip.topLeft, clip.topLeft, clip.topRight, clip.topRight,
@@ -113,6 +107,37 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
             outline.setPath(path);
             return;
         }
+        float r = roundRect(clip, view.getWidth(), view.getHeight(), mHorizontalGrowPx, rect);
+        if (clip == null) {
+            outline.setRect(rect[0], rect[1], rect[2], rect[3]);
+            return;
+        }
+        outline.setRoundRect(rect[0], rect[1], rect[2], rect[3], r);
+    }
+
+    /**
+     * The round rect {@link #getOutline} gives a view {@code width} by {@code height}, as a
+     * {@link RoundCut}: where a blend from this outline starts or ends. A clip with corners of
+     * their own answers at its largest radius.
+     */
+    public void cut(int width, int height, @NonNull float[] out) {
+        int[] rect = mRect;
+        float r = roundRect(mClip, width, height, mHorizontalGrowPx, rect);
+        RoundCut.set(out, rect[0], rect[1], rect[2], rect[3], r);
+    }
+
+    /**
+     * The card's round rect over a view {@code width} by {@code height} into {@code rect}, and its
+     * radius (0 with no clip). A round rect has one radius, so a card square on a side (an edge
+     * card's screen side) is grown by that radius past the square side: the view's bounds cut the
+     * excess off.
+     */
+    private static float roundRect(@Nullable LiveChromeShape.Clip clip, int width, int height,
+                                   int growPx, @NonNull int[] rect) {
+        cardRect(clip, width, height, rect);
+        rect[0] -= growPx;
+        rect[2] += growPx;
+        if (clip == null) return 0f;
         float r = clip.radius;
         int grow = Math.round(r);
         if (r > 0f) {
@@ -121,7 +146,7 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
             if (clip.topLeft == 0f && clip.bottomLeft == 0f) rect[0] -= grow;
             else if (clip.topRight == 0f && clip.bottomRight == 0f) rect[2] += grow;
         }
-        outline.setRoundRect(rect[0], rect[1], rect[2], rect[3], r);
+        return r;
     }
 
     private static boolean sameClip(@Nullable LiveChromeShape.Clip a,

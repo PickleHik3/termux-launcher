@@ -154,7 +154,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         if (mOpen)
             return;
         View root = mHost.findView(R.id.terminal_root_container);
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null)
             return;
         mOpen = true;
@@ -193,8 +193,9 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
             Gravity.BOTTOM);
         mLayer.addView(mSheet, params);
-        content.addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR)
+            .addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         showSection(mIndex, false);
     }
 
@@ -301,7 +302,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
     }
 
     private void layout(boolean animate) {
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         SetupSheetView sheet = mSheet;
         View root = mRoot;
         if (content == null || sheet == null || root == null || mSuspended)
@@ -596,7 +597,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             return;
         }
         View root = mHost.findView(R.id.terminal_root_container);
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         if (root == null || content == null)
             return;
         mOpen = true;
@@ -609,8 +610,9 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
         mCards = sheet;
         mLayer.addView(sheet, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM));
-        content.addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR)
+            .addView(mLayer, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         List<SetupCards.Card> shown = SetupCardSystem.cards(mHost.context());
         // Saved now, not on close, so a process kill cannot bring the sheet back.
         SetupCards.Stored stored = SetupCardSystem.stored(mHost.context());
@@ -624,7 +626,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     /** The sheet is 78% of the window; the launcher root stays at rest beneath it. */
     private void layoutCards() {
-        FrameLayout content = mHost.findView(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.windowRoot(mHost::findView);
         SetupCardSheet sheet = mCards;
         View root = mRoot;
         if (content == null || sheet == null || root == null)

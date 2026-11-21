@@ -2,9 +2,9 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * When an open keyboard floats over the place instead of shrinking it, and what that does to the
@@ -29,30 +29,30 @@ public final class KeyboardOverlayPolicy {
     private KeyboardOverlayPolicy() {}
 
     /** Whether an open keyboard floats over the place on screen rather than shrinking it. */
-    public static boolean overlays(@NonNull PaneWallPage place, @NonNull PlaceLayout layout) {
+    public static boolean overlays(@NonNull PageKind place, @NonNull PlaceLayout layout) {
         if (layout.keyboardForm == KeyboardForm.FLOATING) return true;
-        if (place == PaneWallPage.WIDGETS) return true;
-        return place == PaneWallPage.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
+        if (place == PageKind.HOME) return true;
+        return place == PageKind.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
     }
 
     /**
      * The place a keyboard question is asked of, derived from what is in front now: the display's
-     * place is the Workspace with a display window in front of it, so a committed
-     * {@link PaneWallPage#DISPLAY} stands only while that window is the one in front. Whatever
+     * place is the Terminal with a display window in front of it, so a committed
+     * {@link PageKind#DISPLAY} stands only while that window is the one in front. Whatever
      * left it unrecorded (a window closed, another window brought forward, the display gone), the
      * answer is the terminal's again, and the stored Overlay/Resize choice, which is the display's
      * alone, is not read. Only a stale display is demoted: arriving at one is the settle's to
      * commit, never a pass mid-slide.
      */
     @NonNull
-    public static PaneWallPage keyboardPlace(@NonNull PaneWallPage committed,
+    public static PageKind keyboardPlace(@NonNull PageKind committed,
                                              boolean displayWindowInFront) {
-        return committed == PaneWallPage.DISPLAY && !displayWindowInFront
-            ? PaneWallPage.TERMINAL : committed;
+        return committed == PageKind.DISPLAY && !displayWindowInFront
+            ? PageKind.TERMINAL : committed;
     }
 
-    /** {@link #overlays(PaneWallPage, PlaceLayout)} for the place {@link #keyboardPlace} derives. */
-    public static boolean overlays(@NonNull PaneWallPage committed, boolean displayWindowInFront,
+    /** {@link #overlays(PageKind, PlaceLayout)} for the place {@link #keyboardPlace} derives. */
+    public static boolean overlays(@NonNull PageKind committed, boolean displayWindowInFront,
                                    @NonNull PlaceLayout layout) {
         return overlays(keyboardPlace(committed, displayWindowInFront), layout);
     }
@@ -81,10 +81,10 @@ public final class KeyboardOverlayPolicy {
     /**
      * Whether a move from {@code from} to {@code to} changes whether the keyboard floats, and so
      * the room the content keeps: the pass that settles the move has to lay the content out again
-     * even when no slide held it, as when the display window goes off the Workspace and a
+     * even when no slide held it, as when the display window goes off the Terminal and a
      * terminal window takes its place.
      */
-    public static boolean changesBetween(@NonNull PaneWallPage from, @NonNull PaneWallPage to,
+    public static boolean changesBetween(@NonNull PageKind from, @NonNull PageKind to,
                                          @NonNull PlaceLayout layout) {
         return overlays(from, layout) != overlays(to, layout);
     }
@@ -159,7 +159,7 @@ public final class KeyboardOverlayPolicy {
      * where the content reaches under the whole stack ({@link #overlapPx}) and the dock floats over
      * the grid, the dock's rows ({@code dockRestPx}, what the dock's layout reports for them, a
      * bottom status band included) and the edge gap under them; the grid's rows end above it.
-     * Zero on the Workspace half, whose content already ends at the stack's top, and zero with no
+     * Zero on the Terminal half, whose content already ends at the stack's top, and zero with no
      * dock rows on screen.
      *
      * <p>The rest height, not the stack's: a keyboard, the system's or the in-app one, still floats

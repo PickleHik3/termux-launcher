@@ -124,6 +124,11 @@ final class DeviceControlRoutes {
     @NonNull
     static JSONObject motionLogDump() throws JSONException {
         List<String> lines = MotionLog.dump();
+        List<String> counters = MotionLog.counterLines();
+        if (!counters.isEmpty()) {
+            lines.add(MotionLog.COUNTERS_HEADER);
+            lines.addAll(counters);
+        }
         return ok().put("enabled", MotionLog.enabled).put("count", lines.size())
             .put("invariants", MotionLog.invariantCount()).put("lines", new org.json.JSONArray(lines));
     }
@@ -141,8 +146,33 @@ final class DeviceControlRoutes {
         Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         if (preferences == null) return error(503, "unavailable", "The launcher's settings are not ready");
-        return LookCommand.handle(preferences.lookGrid(), arguments,
+        return LookCommand.handle(preferences.lookGrid(), terminalBackground(preferences), arguments,
             () -> TerminalActionDispatcher.getInstance().redressChrome());
+    }
+
+    /** The Terminal's Background, over its own preferences. */
+    @NonNull
+    private static LookCommand.TerminalBackground terminalBackground(
+            @NonNull TermuxAppSharedPreferences preferences) {
+        return new LookCommand.TerminalBackground() {
+            @Override
+            public int get(@NonNull LookCommand.Setting setting) {
+                switch (setting) {
+                    case OPACITY: return preferences.getTerminalBackgroundOpacity();
+                    case BLUR: return preferences.getTerminalGlassBlurRadius();
+                    default: return preferences.getTerminalWallpaperDim();
+                }
+            }
+
+            @Override
+            public void set(@NonNull LookCommand.Setting setting, int value) {
+                switch (setting) {
+                    case OPACITY: preferences.setTerminalBackgroundOpacity(value); break;
+                    case BLUR: preferences.setTerminalGlassBlurRadius(value); break;
+                    default: preferences.setTerminalWallpaperDim(value);
+                }
+            }
+        };
     }
 
     // ----------------------------------------------------------------------------------- layout

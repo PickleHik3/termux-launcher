@@ -1,7 +1,7 @@
 package com.termux.app.help;
 
 import com.termux.R;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -95,7 +95,7 @@ public final class HelpTopics {
         /** The id {@code HelpTargets} measures this topic's control under, or null. */
         public final String targetId;
         /** The places whose layout has that control; empty when the topic has no control. */
-        public final List<PaneWallPage> places;
+        public final List<PageKind> places;
         /** The gesture a demonstration would trace, or null when none is implemented. */
         public final HelpGesture gesture;
         /** A lesson from {@link #LESSON_IDS}, or null when there is nothing to practise. */
@@ -130,7 +130,7 @@ public final class HelpTopics {
         }
 
         /** Whether this topic's control exists on that place at all. */
-        public boolean onPlace(PaneWallPage place) {
+        public boolean onPlace(PageKind place) {
             return targetId != null && places.contains(place);
         }
 
@@ -139,7 +139,7 @@ public final class HelpTopics {
 
     private static final List<Entry> ALL = build();
     private static final Map<String, Entry> BY_ID = index(ALL);
-    private static final Map<PaneWallPage, List<Entry>> BY_PLACE = byPlace(ALL);
+    private static final Map<PageKind, List<Entry>> BY_PLACE = byPlace(ALL);
 
     /** Every topic, in catalogue order: group by group, as the guide lists them. */
     public static List<Entry> all() { return ALL; }
@@ -155,7 +155,7 @@ public final class HelpTopics {
     }
 
     /** The topic explaining the control measured under this id on this place, or null. */
-    public static Entry forTarget(PaneWallPage place, String targetId) {
+    public static Entry forTarget(PageKind place, String targetId) {
         if (targetId == null) return null;
         for (Entry entry : forPlace(place)) if (targetId.equals(entry.targetId)) return entry;
         return null;
@@ -164,7 +164,7 @@ public final class HelpTopics {
     // ---- per-place views ---------------------------------------------------------------------
 
     /** The topics whose control exists on this place, in catalogue order. */
-    public static List<Entry> forPlace(PaneWallPage place) {
+    public static List<Entry> forPlace(PageKind place) {
         List<Entry> entries = BY_PLACE.get(place);
         return entries == null ? Collections.<Entry>emptyList() : entries;
     }
@@ -173,17 +173,17 @@ public final class HelpTopics {
      * A topic by its own id or by the target id it is bound to, on this place. The explorer names
      * controls by target id; a list names topics by their own, and one lookup answers both.
      */
-    public static Entry entry(PaneWallPage place, String id) {
+    public static Entry entry(PageKind place, String id) {
         Entry byId = entry(id);
         if (byId != null && (byId.targetId == null || byId.onPlace(place))) return byId;
         return forTarget(place, id);
     }
 
     /** How many topics the place has a control for — the count colours are spread over. */
-    public static int sizeFor(PaneWallPage place) { return forPlace(place).size(); }
+    public static int sizeFor(PageKind place) { return forPlace(place).size(); }
 
     /** A control's place in its place's catalogue, so its colour never moves. */
-    public static int identityIndex(PaneWallPage place, String id) {
+    public static int identityIndex(PageKind place, String id) {
         Entry entry = entry(place, id);
         int index = entry == null ? -1 : forPlace(place).indexOf(entry);
         return index < 0 ? 0 : index;
@@ -207,8 +207,8 @@ public final class HelpTopics {
                 R.string.help_topic_places_summary, R.string.help_topic_places_action)
             .steps(R.string.help_topic_places_step1)
             .wayBack(R.string.help_topic_places_back)
-            .target("border", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS,
-                PaneWallPage.ASSISTANT)
+            .target("border", PageKind.TERMINAL, PageKind.DISPLAY, PageKind.HOME,
+                PageKind.ASSISTANT)
             .gesture(HelpGesture.HOLD_DRAG)
             .lesson(LESSON_PAGE_SWIPE)
             .related("status", "corners", "keyboard_swipe").terms("place", "border_drag")
@@ -219,8 +219,8 @@ public final class HelpTopics {
             .steps(R.string.help_topic_corners_step1, R.string.help_topic_corners_step2)
             .wayBack(R.string.help_topic_corners_back)
             .reveal(R.string.help_topic_corners_reveal)
-            .target("corners", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS,
-                PaneWallPage.ASSISTANT)
+            .target("corners", PageKind.TERMINAL, PageKind.DISPLAY, PageKind.HOME,
+                PageKind.ASSISTANT)
             .lesson(LESSON_FIND_HELP)
             .related("palette", "layout_editor", "appearance_editor", "move_panes")
             .terms("pane", "corner_tab")
@@ -248,8 +248,8 @@ public final class HelpTopics {
                 R.string.help_topic_status_step3)
             .wayBack(R.string.help_topic_status_back)
             .reveal(R.string.help_topic_status_reveal)
-            .target("status", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY, PaneWallPage.WIDGETS,
-                PaneWallPage.ASSISTANT)
+            .target("status", PageKind.TERMINAL, PageKind.DISPLAY, PageKind.HOME,
+                PageKind.ASSISTANT)
             .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_STATUS_SWIPE)
             .related("places", "windows", "pinned_notifications")
@@ -259,7 +259,7 @@ public final class HelpTopics {
         b.add(topic("stats", Group.FIND_YOUR_WAY, R.string.help_topic_stats_title,
                 R.string.help_topic_stats_purpose, R.string.help_topic_stats_action)
             .reveal(R.string.help_topic_stats_reveal)
-            .target("stats", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY)
+            .target("stats", PageKind.TERMINAL, PageKind.DISPLAY)
             .related("status", "fix_stats")
             .aliases(R.string.help_topic_stats_aliases)
             .doc("Status_Bar.md"));
@@ -269,7 +269,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_pinned_step1, R.string.help_topic_pinned_step2,
                 R.string.help_topic_pinned_step3)
             .reveal(R.string.help_topic_pinned_reveal)
-            .target("pinned", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY)
+            .target("pinned", PageKind.TERMINAL, PageKind.DISPLAY)
             .related("status", "stats").terms("pinned_notification")
             .aliases(R.string.help_topic_pinned_aliases)
             .doc("Notifications.md"));
@@ -281,7 +281,7 @@ public final class HelpTopics {
                 R.string.help_topic_dock_step3)
             .wayBack(R.string.help_topic_dock_back)
             .reveal(R.string.help_topic_dock_reveal)
-            .target("dock", PaneWallPage.TERMINAL)
+            .target("dock", PageKind.TERMINAL)
             .gesture(HelpGesture.DRAG_DOWN)
             .lesson(LESSON_FIND_APPS)
             .related("az", "organize_apps", "fix_dock").terms("dock", "app_drawer")
@@ -291,7 +291,7 @@ public final class HelpTopics {
                 R.string.help_topic_az_purpose, R.string.help_topic_az_action)
             .steps(R.string.help_topic_az_step1)
             .reveal(R.string.help_topic_az_reveal)
-            .target("az", PaneWallPage.TERMINAL)
+            .target("az", PageKind.TERMINAL)
             .gesture(HelpGesture.SCRUB)
             .related("dock", "organize_apps").terms("app_drawer")
             .aliases(R.string.help_topic_az_aliases)
@@ -307,7 +307,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_widget_step1, R.string.help_topic_widget_step2,
                 R.string.help_topic_widget_step3)
             .reveal(R.string.help_topic_widget_reveal)
-            .target("widget", PaneWallPage.WIDGETS)
+            .target("widget", PageKind.HOME)
             .related("pages", "places")
             .aliases(R.string.help_topic_widget_aliases)
             .doc("Widgets.md"));
@@ -315,7 +315,7 @@ public final class HelpTopics {
                 R.string.help_topic_pages_summary, R.string.help_topic_empty_action)
             .steps(R.string.help_topic_pages_step1, R.string.help_topic_pages_step2)
             .reveal(R.string.help_topic_empty_reveal)
-            .target("empty", PaneWallPage.WIDGETS)
+            .target("empty", PageKind.HOME)
             .related("widget")
             .aliases(R.string.help_topic_pages_aliases)
             .doc("Layout_And_Full_Screen.md"));
@@ -346,7 +346,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_hierarchy_step1, R.string.help_topic_hierarchy_step2,
                 R.string.help_topic_hierarchy_step3)
             .reveal(R.string.help_topic_sessions_reveal)
-            .target("sessions", PaneWallPage.TERMINAL)
+            .target("sessions", PageKind.TERMINAL)
             .related("windows", "panes", "workspaces").terms("session", "window", "pane")
             .aliases(R.string.help_topic_hierarchy_aliases)
             .doc("Learn_The_Launcher.md"));
@@ -368,9 +368,9 @@ public final class HelpTopics {
                 R.string.help_topic_kswipe_summary, R.string.help_topic_kswipe_action)
             .steps(R.string.help_topic_kswipe_step1, R.string.help_topic_kswipe_step2)
             .wayBack(R.string.help_topic_kswipe_back)
-            .target("keyboard_grabber", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY,
-                PaneWallPage.WIDGETS,
-                PaneWallPage.ASSISTANT)
+            .target("keyboard_grabber", PageKind.TERMINAL, PageKind.DISPLAY,
+                PageKind.HOME,
+                PageKind.ASSISTANT)
             .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_KEYBOARD)
             .related("keyboard", "keyboard_layouts", "fix_keyboard")
@@ -396,7 +396,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_keys_step1, R.string.help_topic_keys_step2,
                 R.string.help_topic_keys_step3)
             .reveal(R.string.help_topic_keys_reveal)
-            .target("keys", PaneWallPage.TERMINAL)
+            .target("keys", PageKind.TERMINAL)
             .related("keyboard", "shortcuts", "fix_dock").terms("extra_keys")
             .aliases(R.string.help_topic_keys_aliases)
             .doc("Keyboard.md"));
@@ -404,7 +404,7 @@ public final class HelpTopics {
                 R.string.help_topic_shortcuts_purpose, R.string.help_topic_prefix_action)
             .steps(R.string.help_topic_shortcuts_action, R.string.help_topic_shortcuts_step2)
             .reveal(R.string.help_topic_prefix_reveal)
-            .target("prefix", PaneWallPage.TERMINAL)
+            .target("prefix", PageKind.TERMINAL)
             .related("keys", "panes", "fix_shortcuts")
             .aliases(R.string.help_topic_shortcuts_aliases)
             .doc("Keyboard.md"));
@@ -412,7 +412,7 @@ public final class HelpTopics {
                 R.string.help_topic_space_summary, R.string.help_topic_space_action)
             .steps(R.string.help_topic_space_step1, R.string.help_topic_space_step2)
             .reveal(R.string.help_topic_space_reveal)
-            .target("space", PaneWallPage.TERMINAL)
+            .target("space", PageKind.TERMINAL)
             .gesture(HelpGesture.SWIPE_UP)
             .lesson(LESSON_FIND_ACTION)
             .related("palette", "windows", "hierarchy").terms("command_palette")
@@ -422,7 +422,7 @@ public final class HelpTopics {
                 R.string.help_topic_settings_purpose, R.string.help_topic_settings_action)
             .steps(R.string.help_topic_settings_step1)
             .reveal(R.string.help_topic_settings_reveal)
-            .target("settings", PaneWallPage.TERMINAL, PaneWallPage.DISPLAY)
+            .target("settings", PageKind.TERMINAL, PageKind.DISPLAY)
             .related("palette", "layout_editor", "themes")
             .aliases(R.string.help_topic_settings_aliases)
             .doc("Launcher_Settings.md"));
@@ -445,7 +445,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_panes_step1, R.string.help_topic_panes_step2,
                 R.string.help_topic_panes_step3)
             .reveal(R.string.help_topic_divider_reveal)
-            .target("divider", PaneWallPage.TERMINAL)
+            .target("divider", PageKind.TERMINAL)
             .related("move_panes", "float_pane", "hierarchy").terms("pane", "window")
             .aliases(R.string.help_topic_panes_aliases)
             .doc("Panes_Windows_And_Sessions.md"));
@@ -466,7 +466,7 @@ public final class HelpTopics {
             .steps(R.string.help_topic_windows_step1, R.string.help_topic_windows_step2,
                 R.string.help_topic_windows_step3)
             .reveal(R.string.help_topic_windows_reveal)
-            .target("windows", PaneWallPage.TERMINAL)
+            .target("windows", PageKind.TERMINAL)
             .related("hierarchy", "workspaces", "panes").terms("window", "session")
             .aliases(R.string.help_topic_windows_aliases)
             .doc("Panes_Windows_And_Sessions.md#sessions"));
@@ -518,14 +518,14 @@ public final class HelpTopics {
         b.add(topic("scale", Group.DISPLAY, R.string.help_scale_title,
                 R.string.help_topic_scale_purpose, R.string.help_topic_scale_action)
             .reveal(R.string.help_topic_scale_reveal)
-            .target("scale", PaneWallPage.DISPLAY)
+            .target("scale", PageKind.DISPLAY)
             .related("display_apps", "touchpad")
             .aliases(R.string.help_topic_scale_aliases)
             .doc("X11_Display.md#every-day"));
         b.add(topic("display_apps", Group.DISPLAY, R.string.help_display_apps_title,
                 R.string.help_topic_display_apps_purpose, R.string.help_topic_display_apps_action)
             .reveal(R.string.help_topic_display_apps_reveal)
-            .target("windows", PaneWallPage.DISPLAY)
+            .target("windows", PageKind.DISPLAY)
             .related("gui_apps", "display_keys", "scale")
             .aliases(R.string.help_topic_display_apps_aliases)
             .doc("X11_Display.md#apps-on-the-display"));
@@ -546,7 +546,7 @@ public final class HelpTopics {
                 R.string.help_topic_touchpad_purpose, R.string.help_topic_touchpad_action)
             .steps(R.string.help_pad_one, R.string.help_pad_two, R.string.help_pad_three)
             .reveal(R.string.help_topic_touchpad_reveal)
-            .target("touchpad", PaneWallPage.DISPLAY)
+            .target("touchpad", PageKind.DISPLAY)
             .related("mouse_mode", "display_apps").terms("mouse_mode")
             .aliases(R.string.help_topic_touchpad_aliases)
             .doc("X11_Display.md#every-day"));
@@ -613,9 +613,9 @@ public final class HelpTopics {
         return Collections.unmodifiableMap(map);
     }
 
-    private static Map<PaneWallPage, List<Entry>> byPlace(List<Entry> entries) {
-        Map<PaneWallPage, List<Entry>> map = new EnumMap<>(PaneWallPage.class);
-        for (PaneWallPage place : PaneWallPage.values()) {
+    private static Map<PageKind, List<Entry>> byPlace(List<Entry> entries) {
+        Map<PageKind, List<Entry>> map = new EnumMap<>(PageKind.class);
+        for (PageKind place : PageKind.values()) {
             List<Entry> out = new ArrayList<>();
             for (Entry entry : entries) if (entry.onPlace(place)) out.add(entry);
             map.put(place, Collections.unmodifiableList(out));
@@ -631,7 +631,7 @@ public final class HelpTopics {
         private final int summaryRes;
         private final int actionRes;
         private final List<Integer> stepsRes = new ArrayList<>();
-        private final List<PaneWallPage> places = new ArrayList<>();
+        private final List<PageKind> places = new ArrayList<>();
         private final List<String> relatedIds = new ArrayList<>();
         private final List<String> termIds = new ArrayList<>();
         private int wayBackRes;
@@ -658,7 +658,7 @@ public final class HelpTopics {
         }
         Builder wayBack(int res) { wayBackRes = res; return this; }
         Builder reveal(int res) { revealRes = res; return this; }
-        Builder target(String targetId, PaneWallPage... on) {
+        Builder target(String targetId, PageKind... on) {
             this.targetId = targetId;
             places.addAll(Arrays.asList(on));
             return this;

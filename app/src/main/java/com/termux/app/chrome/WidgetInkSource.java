@@ -4,6 +4,7 @@ import android.graphics.Rect;
 
 import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 /**
  * What a Home widget asks the chrome ink engine, through the Look it is fed
@@ -26,6 +27,15 @@ public interface WidgetInkSource {
     @NonNull OnGlass.Resolution widgetInk(@NonNull Rect rootRect, @ColorInt int body,
                                           @ColorInt int veilColor, @ColorInt int textInk,
                                           @ColorInt int graphicInk);
+
+    /**
+     * {@link ChromeInk#widgetEvenOutMatrix}: the correction the card's glass is drawn through, as
+     * last answered by {@link #widgetInk}; null for none.
+     */
+    @Nullable
+    default android.graphics.ColorMatrix widgetEvenOut(@NonNull Rect rootRect) {
+        return null;
+    }
 
     /** {@link ChromeInk#widgetWallpaper}. */
     @ColorInt int widgetWallpaper(@NonNull Rect rootRect);

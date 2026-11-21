@@ -768,15 +768,15 @@ public final class OnGlass {
     }
 
     /**
-     * How much more opaque a widget's glass body is than the Look's Base, as a fraction of full
+     * How much more opaque a widget's glass body is than the Look's Global, as a fraction of full
      * opacity: the thicker material a body of text stands on (research note §4.4.1). Fixed, so
-     * the body follows Base's Opacity with no knob of its own.
+     * the body follows Global's Opacity with no knob of its own.
      */
     public static final float WIDGET_BODY_LIFT = 0.15f;
 
     /**
      * The alpha of the layer a widget lays over the Look's slab, tinted at {@code tintAlpha255},
-     * so the two together are Base's opacity plus {@link #WIDGET_BODY_LIFT}: {@code l} with
+     * so the two together are Global's opacity plus {@link #WIDGET_BODY_LIFT}: {@code l} with
      * {@code 1 - (1 - a)(1 - l) = a + lift}, held to opaque. 0 over an opaque tint.
      */
     public static int widgetLiftAlpha255(int tintAlpha255) {

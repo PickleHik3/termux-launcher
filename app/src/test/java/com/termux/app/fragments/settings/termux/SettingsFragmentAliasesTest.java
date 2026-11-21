@@ -64,14 +64,50 @@ public class SettingsFragmentAliasesTest {
     }
 
     @Test
-    public void lookKeepsTheThemeAndLosesWhatMovedOut() {
-        PreferenceScreen look = screen(launch(TermuxStylePreferencesFragment.class));
-        assertNotNull("the Appearance editor is Look's top row", look.findPreference("appearance_surface"));
-        assertNotNull(look.findPreference("theme_mode"));
-        assertNull("the terminal font is Terminal's", look.findPreference("terminal_fonts"));
-        assertNull("the keyboard's look is Keyboard's", look.findPreference("customize_keyboard_surface"));
-        assertNull("the wallpaper's scroll is Home's", look.findPreference("wallpaper_parallax"));
-        assertNull("Lazy mode is General's", look.findPreference("lazy_mode"));
+    public void theOldLookPageIsOnlyTheTuiAppThemesPageNow() {
+        PreferenceScreen tui = screen(launch(TuiAppThemesPreferencesFragment.class));
+        assertEquals("the one row of the page", 1, tui.getPreferenceCount());
+        assertNotNull(tui.findPreference("theme_templates_enabled"));
+        for (String key : new String[] {"theme_mode", "terminal_dynamic_colors_enabled", "widgets_on_glass",
+            "app_launcher_bw_icons", "app_launcher_icon_pack_package", "terminal_fonts"}) {
+            assertNull(key + " is the editor's", tui.findPreference(key));
+        }
+    }
+
+    @Test
+    public void everyPageThatLostRowsKeepsOneAppearanceRow() {
+        assertNotNull(screen(launch(HomePreferencesFragment.class)).findPreference("home_layout_editor"));
+        assertNotNull(screen(launch(StatusBarPreferencesFragment.class)).findPreference("status_layout_editor"));
+        assertNotNull(screen(launch(TerminalTextPreferencesFragment.class))
+            .findPreference("terminal_text_layout_editor"));
+        assertNotNull(screen(launch(TerminalWindowsPreferencesFragment.class))
+            .findPreference("terminal_windows_layout_editor"));
+        assertNotNull(screen(launch(TermuxFontsPreferencesFragment.class)).findPreference("fonts_layout_editor"));
+        assertNotNull(screen(launch(KeyboardPreferencesFragment.class)).findPreference("customize_keyboard_surface"));
+    }
+
+    @Test
+    public void homeKeepsWhatItDoesAndLosesHowItLooks() {
+        PreferenceScreen home = screen(launch(HomePreferencesFragment.class));
+        for (String key : new String[] {"app_launcher_home_icon_scale", "app_launcher_home_label_size",
+            "app_launcher_home_label_two_lines", "app_launcher_home_label_shadow",
+            "app_launcher_home_folder_density", "app_launcher_builtin_widget_style",
+            "app_launcher_home_page_indicator", "wallpaper_parallax"}) {
+            assertNull(key + " is the Home card's", home.findPreference(key));
+        }
+        for (String key : new String[] {"app_launcher_home_palette_gesture", "app_launcher_widget_pane_enabled",
+            "home_edit_pages", "app_launcher_home_layout_locked"}) {
+            assertNotNull(key, home.findPreference(key));
+        }
+    }
+
+    @Test
+    public void keyboardHasNoSizePageAnyMore() {
+        PreferenceScreen keyboard = screen(launch(KeyboardPreferencesFragment.class));
+        assertNull(keyboard.findPreference("keyboard_sub_size"));
+        assertEquals("the old name opens Keyboard", KeyboardPreferencesFragment.class.getName(),
+            com.termux.app.fragments.settings.SettingsTree.canonical(
+                "com.termux.app.fragments.settings.termux.KeyboardSizePreferencesFragment"));
     }
 
     @Test
@@ -128,8 +164,7 @@ public class SettingsFragmentAliasesTest {
     public void homeHoldsItsRowsWithTheirKeys() {
         PreferenceScreen home = screen(launch(HomePreferencesFragment.class));
         assertEquals("home_layout_editor", home.getPreference(0).getKey());
-        for (String key : new String[] {"app_launcher_home_palette_gesture", "app_launcher_widget_pane_enabled",
-            "app_launcher_builtin_widget_style", "wallpaper_parallax"}) {
+        for (String key : new String[] {"app_launcher_home_palette_gesture", "app_launcher_widget_pane_enabled"}) {
             assertNotNull(key, home.findPreference(key));
         }
         assertNull("Start in stands beside Use as on General now",
@@ -161,11 +196,11 @@ public class SettingsFragmentAliasesTest {
     @Test
     public void linuxAppsIsTheOldDisplaySectionWithItsAppsOnTop() {
         PreferenceScreen linux = screen(launch(X11DisplayPreferencesFragment.class));
-        assertNotNull(linux.findPreference("x11_drawer_apps"));
+        assertNull("the drawer switch is on Apps now", linux.findPreference("x11_drawer_apps"));
         assertNotNull(linux.findPreference("x11_window_manager"));
         assertNotNull(linux.findPreference("x11_sub_input"));
         assertNull("its rows are on this page now", linux.findPreference("x11_sub_linux_apps"));
         assertNotNull("the apps come first",
-            ((androidx.preference.PreferenceGroup) linux.getPreference(0)).findPreference("x11_drawer_apps"));
+            ((androidx.preference.PreferenceGroup) linux.getPreference(0)).findPreference("x11_gui_apps_setup"));
     }
 }

@@ -11,11 +11,11 @@ import com.termux.app.AzScrubRowView;
 import com.termux.app.launcher.widget.WidgetCellRect;
 import com.termux.app.launcher.widget.WidgetGridMetrics;
 import com.termux.app.launcher.widget.WidgetGridView;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.TerminalWindowBar;
 import com.termux.app.wall.BorderDrag;
 import com.termux.app.wall.BorderGrabber;
 import com.termux.app.wall.PaneWallLayout;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.x11.DisplayScaleRailView;
 import com.termux.app.x11.DisplayTouchpadView;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
@@ -83,13 +83,13 @@ public final class HelpTargets {
     public HelpTargets(ViewFinder finder, View overlay) {
         this.finder = finder; this.overlay = overlay; this.context = overlay.getContext();
     }
-    public Snapshot measure(PaneWallPage place) {
+    public Snapshot measure(PageKind place) {
         Rect wall = rect(finder.findHelpView(R.id.terminal_pane_wall));
         if (wall == null) wall = new Rect(0, 0, overlay.getWidth(), overlay.getHeight());
         Snapshot s = new Snapshot(wall);
         View root = finder.findHelpView(android.R.id.content);
         View bar = finder.findHelpView(R.id.terminal_window_bar);
-        if (place != PaneWallPage.WIDGETS) {
+        if (place != PageKind.HOME) {
             if (bar instanceof TerminalWindowBar) {
                 TerminalWindowBar windows = (TerminalWindowBar) bar;
                 // The chips and the + are one box and one hint: the + is the chip strip's own
@@ -114,13 +114,13 @@ public final class HelpTargets {
         // Launcher settings live on a keyboard corner rather than in the chrome, so the places
         // that carry the keyboard point at the cog itself: the box is the glyph, which is the
         // thing the user swipes off. The Widgets page keeps its keyboard down, so it has no cog.
-        if (place != PaneWallPage.WIDGETS) add(s, "settings", keyCornerRect(SETTINGS_KEY), 0);
+        if (place != PageKind.HOME) add(s, "settings", keyCornerRect(SETTINGS_KEY), 0);
         // The page's own border and the pill on its bottom edge are on every place, because the
         // wall draws them round every page alike.
         pageBorder(s, wall);
         keyboardGrabber(s, wall);
-        if (place != PaneWallPage.TERMINAL) add(s, "corners", wallCorner(wall), 0);
-        if (place == PaneWallPage.TERMINAL) {
+        if (place != PageKind.TERMINAL) add(s, "corners", wallCorner(wall), 0);
+        if (place == PageKind.TERMINAL) {
             add(s, "sessions", finder.findHelpView(R.id.terminal_sessions_indicator));
             if (finder.paneCount() > 1) {
                 View divider = tagged(root);
@@ -128,7 +128,11 @@ public final class HelpTargets {
             }
             // A dock that is a rail down one side reads off its own measured rect: whoever draws
             // help asks which edge of the wall it is past, so nothing here has to say.
-            add(s, "dock", firstShown(R.id.apps_bar_viewpager, R.id.place_apps_bar_host));
+            add(s, "dock", firstShown(
+                com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.ROW),
+                com.termux.app.dock.SideRowViews.id(com.termux.app.place.Element.APPS,
+                    com.termux.app.dock.SideRowViews.Part.EDGE_HOST)));
             add(s, "az", firstOfType(root, AzScrubRowView.class));
             paneCorner(s);
             // The row as one box, for the topic that is about the row; every cap is measured
@@ -141,9 +145,9 @@ public final class HelpTargets {
             // space bar with its swipes. Each is measured on the keys it is about.
             add(s, "prefix", union(keyRect("ctrl"), keyRect("alt")), 0);
             add(s, "space", keyRect("space"), 0);
-        } else if (place == PaneWallPage.ASSISTANT) {
+        } else if (place == PageKind.ASSISTANT) {
             // The Assistant page has no controls of its own to point at yet (ADR 0022).
-        } else if (place == PaneWallPage.DISPLAY) {
+        } else if (place == PageKind.DISPLAY) {
             DisplayScaleRailView rail = firstOfType(root, DisplayScaleRailView.class);
             if (rail != null && rail.isRailShown()) add(s, "scale", localRect(rail, rail.helpBounds()),
                 radius(rail));

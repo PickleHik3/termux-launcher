@@ -206,33 +206,34 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Nullable private Runnable mOnStill;
     /** The copies land, and the swap's timers run, on the main thread. */
     private final Handler mStillHandler = new Handler(Looper.getMainLooper());
-    private final Runnable mSwapBackstop = this::finishSwap;
+    private final Runnable mSwapBackstop = () -> finishSwap(true);
     private final Runnable mExpireStill = this::expireStill;
     private int mSwapFramesLeft;
-    private final Runnable mCoverBackstop = this::finishCover;
+    private final Runnable mCoverBackstop = () -> finishCover(true);
+    /** The waits on the X server's surface and on the frame's size: named Holds (ADR 0028 s8). */
+    @Nullable private com.termux.app.window.Hold mCoverHold;
+    @Nullable private com.termux.app.window.Hold mSwapHold;
+    @Nullable private com.termux.app.window.Hold mNextLayoutHold;
     /** Bumped by every cover and every cancel: a commit callback of an older one does nothing. */
     private int mCoverToken;
     private int mCoverFramesLeft;
-    private final android.view.Choreographer.FrameCallback mCoverFrame =
-        new android.view.Choreographer.FrameCallback() {
-            @Override public void doFrame(long frameTimeNanos) {
-                if (--mCoverFramesLeft > 0) {
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
-                } else {
-                    finishCover();
-                }
-            }
-        };
-    private final android.view.Choreographer.FrameCallback mSwapFrame =
-        new android.view.Choreographer.FrameCallback() {
-            @Override public void doFrame(long frameTimeNanos) {
-                if (--mSwapFramesLeft > 0) {
-                    android.view.Choreographer.getInstance().postFrameCallback(this);
-                } else {
-                    finishSwap();
-                }
-            }
-        };
+    /**
+     * The window's frame pipeline, which steps the swap and cover holds once per frame; without
+     * one they end by their timers ({@link #mSwapBackstop}, {@link #mCoverBackstop}).
+     */
+    @Nullable private com.termux.app.window.FramePipeline mFrames;
+    /** One frame of the cover's wait: false once it is over. */
+    private final java.util.function.BooleanSupplier mCoverFrame = () -> {
+        if (--mCoverFramesLeft > 0) return true;
+        finishCover(false);
+        return false;
+    };
+    /** One frame of the swap's wait: false once it is over. */
+    private final java.util.function.BooleanSupplier mSwapFrame = () -> {
+        if (--mSwapFramesLeft > 0) return true;
+        finishSwap(false);
+        return false;
+    };
     /** Told the surface is back, so the stand-in can wait out the frames X takes to fill it. */
     private final android.view.SurfaceHolder.Callback mStillSurfaceCallback =
         new android.view.SurfaceHolder.Callback() {
@@ -261,6 +262,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // page is measured whether or not a display can run on it.
         com.termux.x11.LorieHost.primePrefs(getContext());
         mDisplay = findViewById(R.id.x11_display_view);
+        applyDisplaySurfaceZOrder(mDisplay);
         mGlass = findViewById(R.id.x11_pane_glass);
         mCornerMask = findViewById(R.id.x11_pane_corner_mask);
         mEmptyState = findViewById(R.id.x11_pane_empty);
@@ -654,6 +656,11 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mRail != null) mRail.dismiss();
     }
 
+    /** The window's frame pipeline, which steps the still's waits; set once the frame is built. */
+    public void setFramePipeline(@Nullable com.termux.app.window.FramePipeline frames) {
+        mFrames = frames;
+    }
+
     public void setHost(@Nullable Host host) {
         mHost = host;
     }
@@ -906,6 +913,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     /**
+     * Keeps the display's surface above the wallpaper scene's. Both are plain SurfaceViews, and
+     * two siblings at the same Z have no fixed order in the compositor: when the scene closes and
+     * reopens its low-resolution pass or resizes (its gate refreshes every second), the order can
+     * flip and the desktop vanishes behind the scene for a moment. Media overlay sits above every
+     * plain SurfaceView and still below the window, so the glass, the bars, the dock and the
+     * keyboard (all window content) draw over the display as before. Set before the surface exists.
+     */
+    static void applyDisplaySurfaceZOrder(@Nullable android.view.SurfaceView display) {
+        if (display != null) display.setZOrderMediaOverlay(true);
+    }
+
+    /**
      * The visibility the display view carries for the page's current state. Held down, too,
      * while the still copy stands in for it and the page takes the wall's layer and tilt.
      */
@@ -1014,11 +1033,16 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         beginHostResize(width, height);
         if (mFrozenWidth < 0) return;
         final int heldHeight = getHeight();
+        final boolean[] moved = new boolean[1];
         final Runnable release = new Runnable() {
             @Override
             public void run() {
                 // Only its own hold: one that was taken over or finished meanwhile is not this.
                 if (mNextLayoutRelease != this) return;
+                // The height settled after a move, or the backstop ran out with none.
+                if (mNextLayoutHold != null) {
+                    mNextLayoutHold.release(moved[0] ? com.termux.app.window.Hold.SIGNAL : com.termux.app.window.Hold.BACKSTOP, null);
+                }
                 finishHostResize();
             }
         };
@@ -1028,6 +1052,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             int now = b - t;
             if (now == last[0]) return;
             last[0] = now;
+            moved[0] = true;
             // A docked keyboard moves the height once; the wait is for a height that takes more
             // than one pass to land (the pad's host, the accessory stack, the overlay decision),
             // each its own layout. Every one that moves it starts the wait again, so the release
@@ -1038,6 +1063,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         };
         mNextLayoutRelease = release;
         mNextLayoutFollower = follower;
+        mNextLayoutHold = com.termux.app.window.Hold.take("x11-next-layout", NEXT_LAYOUT_BACKSTOP_MS);
         addOnLayoutChangeListener(follower);
         postDelayed(release, NEXT_LAYOUT_BACKSTOP_MS);
     }
@@ -1053,6 +1079,9 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private static final long NEXT_LAYOUT_SETTLE_MS = 48L;
 
     private void dropNextLayoutHold() {
+        // A hold its owner ends landed; one the settle or the backstop ended already says so.
+        if (mNextLayoutHold != null) mNextLayoutHold.landing();
+        mNextLayoutHold = null;
         if (mNextLayoutRelease != null) removeCallbacks(mNextLayoutRelease);
         if (mNextLayoutFollower != null) removeOnLayoutChangeListener(mNextLayoutFollower);
         mNextLayoutRelease = null;
@@ -1282,6 +1311,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
                 // or by the backstop whatever happens, so a surface that never comes back cannot
                 // leave a frozen picture on the home screen.
                 applyDisplaySurfaceVisibility();
+                if (mSwapHold != null) mSwapHold.landing();
+                mSwapHold = com.termux.app.window.Hold.take("x11-swap", SurfaceStandIn.SWAP_BACKSTOP_MS);
                 mStillHandler.removeCallbacks(mSwapBackstop);
                 mStillHandler.postDelayed(mSwapBackstop, SurfaceStandIn.SWAP_BACKSTOP_MS);
                 if (isSurfaceLive()) startSwapFrames();
@@ -1402,16 +1433,18 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     }
 
     private void startSwapFrames() {
-        android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
-        choreographer.removeFrameCallback(mSwapFrame);
         mSwapFramesLeft = SurfaceStandIn.SWAP_FRAMES;
-        choreographer.postFrameCallback(mSwapFrame);
+        if (mFrames != null && mSwapHold != null) mFrames.stepHold(mSwapHold, mSwapFrame);
     }
 
     /** The surface drew, or the backstop ran out: the stand-in comes down. */
-    private void finishSwap() {
-        if (mStill.swapped()) hideStandIn();
-        else cancelSwap();
+    private void finishSwap(boolean backstop) {
+        if (mStill.swapped()) {
+            if (mSwapHold != null) mSwapHold.release(backstop ? com.termux.app.window.Hold.BACKSTOP : com.termux.app.window.Hold.SIGNAL, null);
+            hideStandIn();
+        } else {
+            cancelSwap();
+        }
     }
 
     /**
@@ -1422,6 +1455,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private void startCover() {
         cancelCover();
         final int token = mCoverToken;
+        mCoverHold = com.termux.app.window.Hold.take("x11-cover", SurfaceStandIn.COVER_BACKSTOP_MS);
         mStillHandler.postDelayed(mCoverBackstop, SurfaceStandIn.COVER_BACKSTOP_MS);
         if (android.os.Build.VERSION.SDK_INT >= 29 && isAttachedToWindow()) {
             getViewTreeObserver().registerFrameCommitCallback(() ->
@@ -1435,13 +1469,14 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     private void postCoverFrames(int frames) {
         mCoverFramesLeft = frames;
-        android.view.Choreographer choreographer = android.view.Choreographer.getInstance();
-        choreographer.removeFrameCallback(mCoverFrame);
-        choreographer.postFrameCallback(mCoverFrame);
+        if (mFrames != null && mCoverHold != null) mFrames.stepHold(mCoverHold, mCoverFrame);
     }
 
     /** A frame with the stand-in has reached the screen, or the backstop ran out. */
-    private void finishCover() {
+    private void finishCover(boolean backstop) {
+        if (mCoverHold != null && mStill.covered()) {
+            mCoverHold.release(backstop ? com.termux.app.window.Hold.BACKSTOP : com.termux.app.window.Hold.SIGNAL, null);
+        }
         cancelCover();
         if (!mStill.covered()) return;
         applyDisplaySurfaceVisibility();
@@ -1454,16 +1489,19 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /** A commit callback already registered cannot be taken back; the token makes it a no-op. */
     private void cancelCover() {
+        // A cover that is cancelled or replaced ended by its owner; one that finished says how.
+        if (mCoverHold != null) mCoverHold.landing();
+        mCoverHold = null;
         mCoverToken++;
         mStillHandler.removeCallbacks(mCoverBackstop);
-        android.view.Choreographer.getInstance().removeFrameCallback(mCoverFrame);
         mCoverFramesLeft = 0;
     }
 
     private void cancelSwap() {
+        if (mSwapHold != null) mSwapHold.landing();
+        mSwapHold = null;
         cancelCover();
         mStillHandler.removeCallbacks(mSwapBackstop);
-        android.view.Choreographer.getInstance().removeFrameCallback(mSwapFrame);
         mSwapFramesLeft = 0;
     }
 
@@ -1601,17 +1639,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         }
     }
 
-    /**
-     * The wall moved this page, or the wallpaper panned under it: the slab and the corner arcs
-     * re-aim at whatever is behind them now. Per frame of a slide, so nothing here but invalidates.
-     */
-    public void onWallMoved() {
-        if (mGlass != null) mGlass.invalidateGlassPosition();
-        if (mEmptyGlass != null) mEmptyGlass.invalidateGlassPosition();
-        if (mCornerMask != null) mCornerMask.invalidateGlassPosition();
-        if (mControls != null && mControls.hasPaneGlass()) mControls.invalidate();
-    }
-
     /** How much of the page's rim the wall's slide leaves showing; see PaneWallPolicy#outlineAlpha. */
     public void setOutlineTravelAlpha(float alpha) {
         mRim.setTravelAlpha(alpha);
@@ -1619,7 +1646,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     /**
      * Feed the empty state's panel, so the text group stays readable over a busy wallpaper: the
-     * Base Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
+     * Global Look's blur, grain and radius at the group's rect (while the Look wears a slab), under
      * a frosted-card scrim of the surface colour that gives the panel contrast of its own - the
      * slab's tint alone can be all but clear. The scrim shows whenever the page is see-through,
      * slab or no slab; an opaque page has its own ground and wears neither.

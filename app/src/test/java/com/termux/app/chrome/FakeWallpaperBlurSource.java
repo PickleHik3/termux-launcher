@@ -117,4 +117,12 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
     public int glassVibrancyPercent() {
         return vibrancyPercent;
     }
+
+    /** Whether frames are published as HARDWARE twins; off unless a test sets it. */
+    boolean hardwareFrames;
+
+    @Override
+    public boolean publishesHardwareFrames() {
+        return hardwareFrames;
+    }
 }

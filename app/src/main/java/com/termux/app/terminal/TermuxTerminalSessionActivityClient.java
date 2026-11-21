@@ -263,12 +263,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
         android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mLazyModeListener);
         mLazyModeStore = store;
     }
 
     private void unwatchLazyMode() {
-        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        if (mLazyModeStore != null) com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mLazyModeStore, mLazyModeListener);
         mLazyModeStore = null;
         mLazyModeEnabled = null;
     }
@@ -343,7 +343,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // until a resize or a stop jogs it. A plain post always runs.
         boolean pumpFrames = isLazyModeEnabled() && changedView.isAttachedToWindow();
         if (pumpFrames) {
-            changedView.postOnAnimation(redraw);
+            com.termux.app.window.FirstLayout.nextFrame(changedView, redraw);
         } else {
             mUiHandler.post(redraw);
         }
@@ -1139,11 +1139,11 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     /**
      * Whether the service keeps running once it holds no shell: Home stays on screen after the
-     * Workspace's last shell, so the activity must outlive it, and the activity finishes when its
-     * service stops. See {@link TerminalHost#staysWhenWorkspaceEmpty()}.
+     * Terminal's last shell, so the activity must outlive it, and the activity finishes when its
+     * service stops. See {@link TerminalHost#staysWhenTerminalEmpty()}.
      */
     public boolean keepsServiceWhenEmpty() {
-        return mHost.staysWhenWorkspaceEmpty();
+        return mHost.staysWhenTerminalEmpty();
     }
 
     public void removeFinishedSession(TerminalSession finishedSession) {
@@ -1157,7 +1157,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            // The home screen does not close with its last shell: the Workspace is simply empty.
+            // The home screen does not close with its last shell: the Terminal is simply empty.
             mHost.rebuildDrawerSessions();
         } else {
             if (index >= size) {
@@ -1285,8 +1285,8 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // that ink, and judging the ink again there flips it (see decidedInk).
                 com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
                 com.termux.app.chrome.ChromeInk.Polarity leaning = decidedInk(band, ground);
-                // The glass floors follow the Debugging switch, read before the build.
-                MaterialTerminalColorScheme.setGlassFloors(mHost.preferences().isGlassEvenOutEnabled());
+                // The glass floors are on while the panes are evened out, set before the build.
+                MaterialTerminalColorScheme.setGlassFloors(true);
                 props = MaterialTerminalColorScheme.create(mContext, level, ground, leaning,
                     band != null);
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);

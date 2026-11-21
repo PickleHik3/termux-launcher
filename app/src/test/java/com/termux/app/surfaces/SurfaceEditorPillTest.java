@@ -9,10 +9,10 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -30,7 +30,7 @@ import java.util.List;
 import android.app.Application;
 
 /**
- * The header pill's Home and Workspace slide the live wall to their page inside the mini UI, as a
+ * The header pill's Home and Terminal slide the live wall to their page inside the mini UI, as a
  * swipe would, and Customization wears the same halo as the page cards.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -39,7 +39,7 @@ public class SurfaceEditorPillTest {
 
     private TermuxAppSharedPreferences preferences;
     private PlaceLayoutStore places;
-    private final List<PaneWallPage> wallMoves = new ArrayList<>();
+    private final List<PageKind> wallMoves = new ArrayList<>();
 
     @Before
     public void setUp() {
@@ -54,51 +54,51 @@ public class SurfaceEditorPillTest {
     }
 
     @Test
-    public void workspaceOnThePillSlidesTheWallToTheWorkspaceAndHomeBack() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
+    public void terminalOnThePillSlidesTheWallToTheTerminalAndHomeBack() {
+        SurfaceEditorController editor = open(PageKind.HOME);
+        assertEquals(PageKind.HOME, editor.screen());
         wallMoves.clear();
 
-        pill(editor, EditorCard.WORKSPACE);
-        assertEquals("the wall slides to the Workspace", PaneWallPage.TERMINAL, last());
-        assertEquals(PaneWallPage.TERMINAL, editor.screen());
-        assertEquals(EditorCard.WORKSPACE, editor.shownCard());
+        pill(editor, EditorCard.TERMINAL);
+        assertEquals("the wall slides to the Terminal", PageKind.TERMINAL, last());
+        assertEquals(PageKind.TERMINAL, editor.screen());
+        assertEquals(EditorCard.TERMINAL, editor.shownCard());
 
         pill(editor, EditorCard.HOME);
-        assertEquals("the wall slides back to Home", PaneWallPage.WIDGETS, last());
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
+        assertEquals("the wall slides back to Home", PageKind.HOME, last());
+        assertEquals(PageKind.HOME, editor.screen());
         assertEquals(EditorCard.HOME, editor.shownCard());
     }
 
     @Test
-    public void homeOnThePillFromAWorkspaceEntrySlidesToHome() {
-        SurfaceEditorController editor = open(PaneWallPage.TERMINAL);
+    public void homeOnThePillFromATerminalEntrySlidesToHome() {
+        SurfaceEditorController editor = open(PageKind.TERMINAL);
         wallMoves.clear();
         pill(editor, EditorCard.HOME);
-        assertEquals(PaneWallPage.WIDGETS, last());
+        assertEquals(PageKind.HOME, last());
         assertEquals(EditorCard.HOME, editor.shownCard());
     }
 
     @Test
     public void customizationStaysOnTheShownPage() {
-        SurfaceEditorController editor = open(PaneWallPage.WIDGETS);
+        SurfaceEditorController editor = open(PageKind.HOME);
         wallMoves.clear();
         pill(editor, EditorCard.APPEARANCE);
         assertEquals(EditorCard.APPEARANCE, editor.shownCard());
-        assertEquals(PaneWallPage.WIDGETS, editor.screen());
+        assertEquals(PageKind.HOME, editor.screen());
         assertTrue("the wall stays where it stands",
-            wallMoves.isEmpty() || last() == PaneWallPage.WIDGETS);
+            wallMoves.isEmpty() || last() == PageKind.HOME);
     }
 
     @Test
     public void thePillAsksForThePageTheCardStandsOn() {
-        assertEquals(PaneWallPage.TERMINAL,
-            SurfaceEditorController.pillPlace(EditorCard.WORKSPACE, PaneWallPage.WIDGETS));
-        assertEquals(PaneWallPage.WIDGETS,
-            SurfaceEditorController.pillPlace(EditorCard.HOME, PaneWallPage.TERMINAL));
-        assertNull(SurfaceEditorController.pillPlace(EditorCard.HOME, PaneWallPage.WIDGETS));
-        assertNull(SurfaceEditorController.pillPlace(EditorCard.WORKSPACE, PaneWallPage.TERMINAL));
-        assertNull(SurfaceEditorController.pillPlace(EditorCard.APPEARANCE, PaneWallPage.WIDGETS));
+        assertEquals(PageKind.TERMINAL,
+            SurfaceEditorController.pillPlace(EditorCard.TERMINAL, PageKind.HOME));
+        assertEquals(PageKind.HOME,
+            SurfaceEditorController.pillPlace(EditorCard.HOME, PageKind.TERMINAL));
+        assertNull(SurfaceEditorController.pillPlace(EditorCard.HOME, PageKind.HOME));
+        assertNull(SurfaceEditorController.pillPlace(EditorCard.TERMINAL, PageKind.TERMINAL));
+        assertNull(SurfaceEditorController.pillPlace(EditorCard.APPEARANCE, PageKind.HOME));
     }
 
     @Test
@@ -108,7 +108,7 @@ public class SurfaceEditorPillTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private PaneWallPage last() {
+    private PageKind last() {
         return wallMoves.isEmpty() ? null : wallMoves.get(wallMoves.size() - 1);
     }
 
@@ -121,7 +121,7 @@ public class SurfaceEditorPillTest {
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    private SurfaceEditorController open(PaneWallPage place) {
+    private SurfaceEditorController open(PageKind place) {
         LayoutEditorController layout = layoutEditor();
         EditorTestHarness harness = new EditorTestHarness(preferences, (method, args) -> {
             switch (method) {
@@ -145,7 +145,7 @@ public class SurfaceEditorPillTest {
                 switch (method.getName()) {
                     case "context": return context;
                     case "places": return places;
-                    case "placeOnScreen": return PaneWallPage.TERMINAL;
+                    case "placeOnScreen": return PageKind.TERMINAL;
                     case "placeOrientation": return PlaceOrientation.PORTRAIT;
                     case "extraKeySlots": return new ArrayList<>();
                     case "extraKeyCount":
@@ -153,10 +153,10 @@ public class SurfaceEditorPillTest {
                     case "measuredKeyboardHeightDp":
                         return -1;
                     case "holdPaneWallOnPlace":
-                        if ((Boolean) args[1]) wallMoves.add((PaneWallPage) args[0]);
+                        if ((Boolean) args[1]) wallMoves.add((PageKind) args[0]);
                         return null;
                     case "slidePaneWallToPlace":
-                        wallMoves.add((PaneWallPage) args[0]);
+                        wallMoves.add((PageKind) args[0]);
                         return null;
                     case "hashCode": return System.identityHashCode(proxy);
                     case "equals": return proxy == args[0];

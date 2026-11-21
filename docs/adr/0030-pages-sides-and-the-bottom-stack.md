@@ -117,6 +117,30 @@ Pages move behind the contract in this order: Assistant (the smallest, proves th
 Display, then Terminal on a proven contract. Each kind starts with a split plan the developer checks.
 The Workspace side's rows do not wait on Terminal.
 
+## Amendment, 2026-11-17 (decided with the developer while building [#260](https://github.com/PickleHik3/termux-launcher/issues/260))
+
+1. **A row both ends show in the same place is the stack's.** *(Replaced by the 2026-11-18 amendment: same place now means the same edge and the same side of the keyboard.)* When both ends of a crossing show
+   a row on the same edge (pong pins the apps row under the keyboard on the Terminal as well as on
+   Home), it belongs to the stack like the slab and the keyboard and stays put. A row only one end
+   shows goes with that end's side. The stack's writer decides per crossing from both ends'
+   layouts (`SideRows`).
+2. **Per-page row layouts stay, within a side.** Between pages of one side whose layouts differ,
+   the landing may move rows to their new edges as before, and the landing guard counts nothing
+   for that case. A Home and Workspace landing still writes nothing to a row.
+
+The status bar standing among the bottom rows keeps its behaviour until the top stack
+([#267](https://github.com/PickleHik3/termux-launcher/issues/267)) takes it.
+
+## Amendment, 2026-11-18 (the developer, on [#260](https://github.com/PickleHik3/termux-launcher/issues/260); replaces point 1 above and the earlier D4-A, which lives in the work notes, not this tree)
+
+A row is the stack's only when both ends of a crossing show it in the same place: the same edge
+and, along the bottom, the same side of the keyboard (over or under it). Otherwise it belongs to
+its side and travels sideways with it: a row only one end shows goes with that end's side, and a
+row both ends show in different places goes with the side that owns it. The extra-keys bar is
+always the Workspace's and the status bar stays the stack's. Nothing re-parents at the page change
+or the settle. A row under the keyboard on one side may appear there once the keyboard has moved,
+rather than slide.
+
 ## Considered options
 
 - **A hidden second row host promoted at the landing.** Rejected, as in 0023: a second copy dressed

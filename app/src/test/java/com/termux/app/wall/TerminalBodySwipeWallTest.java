@@ -23,6 +23,7 @@ import org.robolectric.annotation.Config;
 import java.util.ArrayList;
 import java.util.List;
 import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /**
  * A sideways swipe on a terminal window's text pages the wall's row exactly as the border slide
@@ -34,7 +35,19 @@ import android.app.Application;
 public class TerminalBodySwipeWallTest {
 
     /** A row of three Home pages and some windows, whose terminal gives the swipe away or not. */
-    private static final class Host implements PaneWallController.Host {
+    private static final class Host implements WallFacts, WallHome {
+        final WallTerminal terminal = new WallTerminal() {
+            @Override public int count() { return innerCount(PageKind.TERMINAL); }
+            @Override public int index() { return innerIndex(PageKind.TERMINAL); }
+            @Override public void show(int index) { showInnerPage(PageKind.TERMINAL, index); }
+            @Override public void step(int steps, float fromPx) { onInnerStep(PageKind.TERMINAL, steps, fromPx); }
+        };
+        @Override public int count() { return innerCount(PageKind.HOME); }
+        @Override public int index() { return innerIndex(PageKind.HOME); }
+        @Override public void show(int index) { showInnerPage(PageKind.HOME, index); }
+        @Override public void bindRun(int first, int last) { }
+        @Override public int pressPage() { return 0; }
+        @Override public float shiftFraction() { return 0f; }
         boolean yields = true;
         int homePage;
         int windows = 3;
@@ -43,18 +56,18 @@ public class TerminalBodySwipeWallTest {
 
         @Override public boolean reducedMotion() { return false; }
         @Override public boolean isPlankTiltEnabled() { return true; }
-        @Override public int innerCount(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? 3 : page == PaneWallPage.TERMINAL ? windows : 1;
+        public int innerCount(PageKind page) {
+            return page == PageKind.HOME ? 3 : page == PageKind.TERMINAL ? windows : 1;
         }
-        @Override public int innerIndex(PaneWallPage page) {
-            return page == PaneWallPage.WIDGETS ? homePage
-                : page == PaneWallPage.TERMINAL ? current : 0;
+        public int innerIndex(PageKind page) {
+            return page == PageKind.HOME ? homePage
+                : page == PageKind.TERMINAL ? current : 0;
         }
-        @Override public void showInnerPage(PaneWallPage page, int index) {
-            if (page == PaneWallPage.WIDGETS) homePage = index;
-            if (page == PaneWallPage.TERMINAL) current = index;
+        public void showInnerPage(PageKind page, int index) {
+            if (page == PageKind.HOME) homePage = index;
+            if (page == PageKind.TERMINAL) current = index;
         }
-        @Override public void onInnerStep(PaneWallPage page, int steps, float fromPx) {
+        public void onInnerStep(PageKind page, int steps, float fromPx) {
             stepped = steps;
             current += steps;
         }
@@ -98,6 +111,8 @@ public class TerminalBodySwipeWallTest {
             ViewGroup.LayoutParams.MATCH_PARENT));
         wall.addView(page);
         row = new PaneWallController(wall, host);
+        row.setTerminal(host.terminal);
+        row.setHome(host);
         row.attachTerminalPage(page);
         row.attachWidgetsPage(LayoutInflater.from(activity));
         ViewGroup.MarginLayoutParams margins = (ViewGroup.MarginLayoutParams) page.getLayoutParams();
@@ -121,7 +136,7 @@ public class TerminalBodySwipeWallTest {
         row.homeSeam().drag(-800f);
         row.homeSeam().end(0f);
         idle();
-        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+        assertEquals(PageKind.TERMINAL, row.currentPage());
         assertEquals(0, host.current);
         host.homePage = 0;
     }
@@ -153,7 +168,7 @@ public class TerminalBodySwipeWallTest {
         int seen = terminal.actions.size();
         lift(-45f, 2f);
         assertEquals("nothing reaches the terminal after the claim", seen, terminal.actions.size());
-        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+        assertEquals(PageKind.TERMINAL, row.currentPage());
         assertEquals("one window on", 1, host.stepped);
         assertEquals(1, host.current);
     }
@@ -162,8 +177,8 @@ public class TerminalBodySwipeWallTest {
         dragOnTheText(45f, 0f);
         assertTrue(wall.isDragging());
         lift(45f, 0f);
-        assertEquals(PaneWallPage.WIDGETS, row.currentPage());
-        assertEquals("no step inside the Workspace", 0, host.stepped);
+        assertEquals(PageKind.HOME, row.currentPage());
+        assertEquals("no step inside the Terminal", 0, host.stepped);
         assertEquals("Home arrives on its last page, the one beside the seam", 2, host.homePage);
     }
 
@@ -174,7 +189,7 @@ public class TerminalBodySwipeWallTest {
         assertEquals(0, terminal.count(MotionEvent.ACTION_CANCEL));
         assertEquals("every move reached the terminal", 20, terminal.count(MotionEvent.ACTION_MOVE));
         assertEquals(1, terminal.count(MotionEvent.ACTION_UP));
-        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+        assertEquals(PageKind.TERMINAL, row.currentPage());
         assertEquals(0, host.current);
     }
 
@@ -183,7 +198,7 @@ public class TerminalBodySwipeWallTest {
         assertFalse(wall.isDragging());
         lift(25f, 20f);
         assertEquals(0, terminal.count(MotionEvent.ACTION_CANCEL));
-        assertEquals(PaneWallPage.TERMINAL, row.currentPage());
+        assertEquals(PageKind.TERMINAL, row.currentPage());
     }
 
     @Test public void aTerminalThatKeepsTheSwipeGetsIt() {

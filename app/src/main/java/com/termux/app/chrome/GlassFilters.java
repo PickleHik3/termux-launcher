@@ -168,4 +168,34 @@ public final class GlassFilters {
         frost.postConcat(vibrancy);
         return frost;
     }
+
+    /**
+     * The colour matrix {@code filter} applies, when it is one of this class's frost filters
+     * (plain, Clear or evened out); null for any other filter. A copy: the caller may change it.
+     */
+    @Nullable
+    public static synchronized ColorMatrix matrixOf(@Nullable ColorFilter filter) {
+        if (filter == null) return null;
+        if (filter == sFrostFilter) return frostMatrix(FROST_OFFSET);
+        if (filter == sFrostFilterClear) return frostMatrix(CLEAR_OFFSET);
+        for (Evened evened : sEvened) {
+            if (evened.filter == filter) return new ColorMatrix(evened.matrix);
+        }
+        return null;
+    }
+
+    /**
+     * {@code from} at {@code share} 0, {@code to} at 1, each entry blended straight and the share
+     * clamped: a glass crossing between two pages' frosts draws the one between.
+     */
+    @NonNull
+    public static ColorMatrixColorFilter blend(@NonNull ColorMatrix from, @NonNull ColorMatrix to,
+                                               float share) {
+        float w = share <= 0f ? 0f : share >= 1f ? 1f : share;
+        float[] a = from.getArray();
+        float[] b = to.getArray();
+        float[] out = new float[a.length];
+        for (int i = 0; i < a.length; i++) out[i] = a[i] + (b[i] - a[i]) * w;
+        return new ColorMatrixColorFilter(out);
+    }
 }

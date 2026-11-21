@@ -6,8 +6,8 @@ import android.content.SharedPreferences;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.Page;
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -68,7 +68,7 @@ public final class WallPagesStore {
 
         @Override public void watch(@NonNull final Runnable changed) {
             watcher = (p, key) -> { if (KEY_STATE.equals(key)) changed.run(); };
-            prefs.registerOnSharedPreferenceChangeListener(watcher);
+            com.termux.shared.settings.preferences.PreferenceDraft.listen(prefs, watcher);
         }
     }
 

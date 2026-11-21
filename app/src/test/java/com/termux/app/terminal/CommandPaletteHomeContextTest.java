@@ -35,7 +35,7 @@ public class CommandPaletteHomeContextTest {
 
     private static final List<String> HOME_SECTION = Arrays.asList(
         CommandPaletteHomeSet.TOOL_OPEN_TERMINAL_HERE,
-        CommandPaletteHomeSet.TOOL_GO_TO_WORKSPACE,
+        CommandPaletteHomeSet.TOOL_GO_TO_TERMINAL,
         LauncherToolRegistry.TOOL_WINDOW_NEW,
         CommandPaletteHomeSet.TOOL_MINIMISE_FLOATS,
         CommandPaletteHomeSet.TOOL_RESTORE_FLOATS,
@@ -161,7 +161,7 @@ public class CommandPaletteHomeContextTest {
         List<String> calls = new ArrayList<>();
         CommandPaletteHomeHost host = new CommandPaletteHomeHost() {
             @Override public void openTerminalHere() { calls.add("terminal"); }
-            @Override public void goToWorkspace() { calls.add("workspace"); }
+            @Override public void goToTerminal() { calls.add("workspace"); }
             @Override public void minimiseAllFloats() { calls.add("minimise"); }
             @Override public void restoreFloats() { calls.add("restore"); }
             @Override public void addWidget() { calls.add("widget"); }

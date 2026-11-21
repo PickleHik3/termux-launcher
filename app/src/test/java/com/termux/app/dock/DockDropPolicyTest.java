@@ -188,4 +188,17 @@ public class DockDropPolicyTest {
         assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 0f, 0f, COMMIT_PX, DENSITY, 2, 3));
         assertEquals(0, DockDropPolicy.secondFingerTurn(-300f, 0f, 0f, COMMIT_PX, DENSITY, 0, 1));
     }
+
+    /** A carried icon is always somewhere: over the row for a drop, or Home's; never neither. */
+    @Test
+    public void aCarriedIconIsOverTheRowUntilItIsHomes() {
+        float top = 2187f, bottom = 2313f, density = 2.75f;
+        // The finger near the row's top edge after the lift sank the row by 12 px (emulator).
+        assertTrue(DockDropPolicy.carriedOverRow(2182f, top, bottom, density));
+        for (float y = top - 400f; y <= bottom + 400f; y += 1f) {
+            boolean row = DockDropPolicy.carriedOverRow(y, top, bottom, density);
+            boolean home = DockDropPolicy.handsOverToHome(500f, y, 0f, top, 1080f, bottom, density);
+            assertTrue("y=" + y, row != home);
+        }
+    }
 }

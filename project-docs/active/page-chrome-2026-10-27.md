@@ -81,7 +81,7 @@ slab). The root keeps no tint.
   chrome. Retargeting stays as 0012 §5.
 - The keyboard travels with the kind that has it open (0012 §4).
 - Existing tests carry over with Home and Workspace as two endpoints (SeamCrossingTest,
-  CrossingTest, DockGeometrySeamTest, DockMorphTest, SeamTravelTest, StackLayoutTest), plus
+  CrossingTest, DockGeometrySeamTest, SeamTravelTest, StackLayoutTest), plus
   Home ↔ Home (own layout) and Terminal ↔ Display cases.
 
 ## Order

@@ -436,6 +436,22 @@ public class PaneGlassBackdropViewTest {
         assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, true));
     }
 
+    /**
+     * A frame held in GPU memory (HardwareFrame) never reaches a software canvas through the
+     * paint: that canvas takes the plain draw, which reads the frame's software copy. On the GPU
+     * the paint draws it as before.
+     */
+    @Test
+    public void aSoftwareCanvasDrawsAHardwareFrameFromItsCopy() {
+        assertTrue(PaneGlassBackdropView.drawsPlainOnSoftware(false, false, true));
+        assertTrue(PaneGlassBackdropView.drawsPlainOnSoftware(true, false, true));
+        assertFalse(PaneGlassBackdropView.drawsPlainOnSoftware(false, true, true));
+        assertFalse(PaneGlassBackdropView.drawsOnPaint(false, false, true));
+        assertFalse(PaneGlassBackdropView.drawsOnPaint(true, false, false));
+        assertTrue(PaneGlassBackdropView.drawsOnPaint(false, false, false));
+        assertTrue(PaneGlassBackdropView.drawsOnPaint(true, true, true));
+    }
+
     private static void moveSlab(FrameLayout paneFrame, PaneGlassBackdropView backdrop, int dx) {
         paneFrame.layout(40 + dx, 100, 1040 + dx, 1900);
         backdrop.layout(0, 0, 1000, 1800 - dx);   // a resize too, so onLayout runs
@@ -483,5 +499,25 @@ public class PaneGlassBackdropViewTest {
         backdrop.setVeilHeld(true);
         backdrop.setVeilHeld(false);
         assertEquals(atRest, source.veilAsks);
+    }
+
+    /** A widget's slab has no veil source: the matrix set by hand survives the dress pass. */
+    @Test
+    public void aHandSetEvenOutSurvivesNoVeilSource() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        PaneGlassBackdropView backdrop = new PaneGlassBackdropView(activity);
+        ColorFilter plain = backdrop.frameFilterForTest();
+        ColorMatrix matrix = new ColorMatrix();
+        matrix.setScale(0.8f, 0.8f, 0.8f, 1f);
+
+        backdrop.setEvenOut(matrix);
+        ColorFilter evened = backdrop.frameFilterForTest();
+        assertTrue(evened != plain);
+
+        backdrop.setVeilSource(null);
+        assertSame(evened, backdrop.frameFilterForTest());
+
+        backdrop.setEvenOut(null);
+        assertSame(plain, backdrop.frameFilterForTest());
     }
 }

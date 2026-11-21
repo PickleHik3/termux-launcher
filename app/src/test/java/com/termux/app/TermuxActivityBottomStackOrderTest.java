@@ -638,7 +638,7 @@ public class TermuxActivityBottomStackOrderTest {
         View pager = activity.findViewById(R.id.apps_bar_viewpager);
         assertTrue("the ticks stand over the icons",
             host.indexOfChild(ticks) < host.indexOfChild(pager));
-        // Updated for #93 with a reason: the Workspace dock now wears the layout's Dock design, the
+        // Updated for #93 with a reason: the Terminal dock now wears the layout's Dock design, the
         // Glass tray by default, whose dashes float above the slab, so the icons keep the full air
         // on the ticks' side and the band stands outside the glass.
         assertEquals("the dashes float above the slab, so the icons keep the air on that side",

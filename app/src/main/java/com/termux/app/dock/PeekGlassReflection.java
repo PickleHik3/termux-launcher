@@ -141,6 +141,14 @@ public final class PeekGlassReflection {
 
         /** Whether a page swipe or a page switch draws the icons away from their places now. */
         boolean iconsMoving();
+
+        /**
+         * The translationX the row's hosts carry now, from the row's parent up to the row stack:
+         * the lane's slide in a page crossing, which the reflection draws in, read at draw time.
+         */
+        default float laneTx() {
+            return 0f;
+        }
     }
 
     private final float mDensity;
@@ -161,6 +169,11 @@ public final class PeekGlassReflection {
     private final float mRippleKy;
     private final float mSpecularThicknessPx;
 
+    /**
+     * How much of the reflection shows: 1 at Home's rest, Home's share across a crossing. Its
+     * views' own alpha, so a fade records nothing again.
+     */
+    private float mFade = 1f;
     @Nullable private PeekReflectionView mHostView;
     @Nullable private PeekReflectionView mStripView;
 
@@ -281,6 +294,42 @@ public final class PeekGlassReflection {
         }
     }
 
+    /** Shows {@code fade} of the reflection (0..1) through its views' alpha. */
+    public void setFade(float fade) {
+        float f = fade <= 0f ? 0f : fade >= 1f ? 1f : fade;
+        if (f == mFade) return;
+        mFade = f;
+        for (PeekReflectionView view : new PeekReflectionView[] {mHostView, mStripView}) {
+            if (view != null && view.getAlpha() != f) view.setAlpha(f);
+        }
+    }
+
+    /**
+     * Moves the reflection on the host by {@code dy} from where it was last aimed: the rows have
+     * moved that far over the host since (the host shifted across a crossing), and the mirror
+     * stays under the icons. Its view's own translation, so nothing is recorded again.
+     */
+    public void setDrawnOffsetY(float dy) {
+        if (dy == mDrawnOffsetY) return;
+        mDrawnOffsetY = dy;
+        if (mHostView != null && mHostView.getTranslationY() != dy) mHostView.setTranslationY(dy);
+    }
+
+    private float mDrawnOffsetY;
+
+    /** DIAG(reflection): the host view's state; revert before merge. */
+    public String diagState() {
+        PeekReflectionView v = mHostView;
+        return "shown=" + mShown + " live=" + mLive + " alpha=" + mAlpha + " fade=" + mFade
+            + (v == null ? " view=none" : " vis=" + v.getVisibility() + " ty=" + v.getTranslationY()
+            + " a=" + v.getAlpha() + " parent=" + (v.getParent() != null) + " h=" + v.getHeight());
+    }
+
+    /** The fade last set ({@link #setFade}). */
+    public float fade() {
+        return mFade;
+    }
+
     /** Nothing reflected, the views put away, and every drawing let go. */
     public void clear() {
         mShown = false;
@@ -339,7 +388,9 @@ public final class PeekGlassReflection {
         PeekGlassGeometry.Card card = mCard;
         if (!mShown || card == null) return;
         int save = canvas.save();
-        canvas.translate(-originX, -originY);
+        Row row = mRow;
+        canvas.translate(PeekGlassGeometry.rowDrawX(-originX, row == null ? 0f : row.laneTx()),
+            -originY);
         if (mLive) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) Live.draw(canvas, mNode);
         } else if (!mStillSuspended) {
@@ -362,6 +413,9 @@ public final class PeekGlassReflection {
             if (view == null) continue;
             int visibility = show ? View.VISIBLE : View.GONE;
             if (view.getVisibility() != visibility) view.setVisibility(visibility);
+            if (view.getAlpha() != mFade) view.setAlpha(mFade);
+            if (view == mHostView && view.getTranslationY() != mDrawnOffsetY)
+                view.setTranslationY(mDrawnOffsetY);
             if (show) dress(view);
         }
     }
@@ -449,6 +503,11 @@ public final class PeekGlassReflection {
         dropDrawings();
         syncViews();
         requestStillCapture();
+    }
+
+    /** The row's lane host moved across: the reflection is drawn again where the row now stands. */
+    public void onLaneMoved() {
+        if (mShown) invalidateViews();
     }
 
     private void invalidateViews() {

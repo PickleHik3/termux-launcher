@@ -82,6 +82,17 @@ public final class SurfaceLongPressRoute {
             return !(right > left && bottom > top);
         }
 
+        /**
+         * This box less the band {@code px} tall along its top: the stack container's own top is
+         * laid out at the taller side's rows (the lane slack), and that band is empty air over the
+         * page, not the dock. Never past the bottom.
+         */
+        @NonNull
+        public Box belowTop(float px) {
+            if (!(px > 0f)) return this;
+            return new Box(left, Math.min(bottom, top + px), right, bottom);
+        }
+
         public boolean contains(float x, float y) {
             return !isEmpty() && x >= left && x < right && y >= top && y < bottom;
         }

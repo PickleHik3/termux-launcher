@@ -123,11 +123,46 @@ public final class PromptLineFieldView extends View {
      * only when they moved, so a caller may ask on every scheme pass.
      */
     public void refreshTheme() {
+        // A crossing is drifting the inks between two pages' (beginInkBlend).
+        if (mBlendFrom != null) return;
         PromptLineInk ink = resolveInk().onFace(mGlassFace);
         if (ink.sameAs(mInk)) return;
         mInk = ink;
         mPressedWell = SchemeTone.toneShift(mInk.well, PRESSED_TONE_LIFT);
         invalidate();
+    }
+
+    @Nullable private PromptLineInk mBlendFrom;
+    @Nullable private PromptLineInk mBlendTo;
+
+    /**
+     * A look-only crossing begins: the prompt's inks at each end are chosen on the face rest kept
+     * for that page, and {@link #setInkBlend} drifts between them, so nothing flips and nothing
+     * is measured.
+     */
+    public void beginInkBlend(int faceFrom, int faceTo) {
+        PromptLineInk base = resolveInk();
+        mBlendFrom = base.onFace(faceFrom);
+        mBlendTo = base.onFace(faceTo);
+    }
+
+    /** The inks {@code share} of the way from the leaving page's to the arriving page's. */
+    public void setInkBlend(float share) {
+        PromptLineInk from = mBlendFrom;
+        PromptLineInk to = mBlendTo;
+        if (from == null || to == null) return;
+        PromptLineInk ink = PromptLineInk.blend(from, to, share);
+        if (ink.sameAs(mInk)) return;
+        mInk = ink;
+        invalidate();
+    }
+
+    /** The blend is over; the landing's face chooses the inks for the page it lands on. */
+    public void endInkBlend() {
+        if (mBlendFrom == null) return;
+        mBlendFrom = null;
+        mBlendTo = null;
+        refreshTheme();
     }
 
     /**

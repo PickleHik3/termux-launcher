@@ -7,12 +7,12 @@ import com.termux.app.dock.DockGeometry.Half;
 import com.termux.app.dock.DockGeometry.Snapshot;
 import com.termux.app.dock.DockLayoutPolicy;
 import com.termux.app.dock.DockStyle;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -219,8 +219,8 @@ public final class LayoutFixtures {
 
     /** The wall place a page stands for. */
     @NonNull
-    public static PaneWallPage place(@NonNull PageRef page) {
-        return page.isHome() ? PaneWallPage.WIDGETS : PaneWallPage.TERMINAL;
+    public static PageKind place(@NonNull PageRef page) {
+        return page.isHome() ? PageKind.HOME : PageKind.TERMINAL;
     }
 
     /** Pong: dock rows under the docked keyboard, extra keys above it, status bar on top. */

@@ -534,13 +534,13 @@ public class ExtraKeysPageViewTest {
     public void thePageSwitcherCapIsBuiltWithTheCurrentGlyphAndNeverItsLabel() throws Exception {
         com.termux.app.wall.pageswitch.PageGlyphSource.install(() ->
             new com.termux.app.wall.pageswitch.PageGlyphSource.Glyph(
-                com.termux.app.wall.pageswitch.PageSwitchModel.Kind.HOME, 2));
+                com.termux.app.page.PageKind.HOME, 2));
         try {
             ExtraKeysPageView page = new ExtraKeysPageView(context);
             page.setKeys(info("[['ESC', 'tool:app.page_switcher']]"));
             layout(page, 500, 40);
             ExtraKeyCapView switcher = (ExtraKeyCapView) page.getChildAt(1);
-            assertEquals(com.termux.app.wall.pageswitch.PageSwitchModel.Kind.HOME,
+            assertEquals(com.termux.app.page.PageKind.HOME,
                 switcher.pageGlyphKind());
             assertEquals(2, switcher.pageGlyphNumber());
             assertEquals("", switcher.getText().toString());

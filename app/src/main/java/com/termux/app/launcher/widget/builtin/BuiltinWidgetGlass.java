@@ -15,7 +15,7 @@ import java.util.Map;
 /**
  * The Glass switch every built-in widget's settings carry, per widget: Page by default, which
  * follows "Widgets on glass" (on unless switched off); off is the solid card; on, the widget
- * wears the Look's glass — Base's blur, opacity, tint, grain, rim and Fancier Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
+ * wears the Look's glass — Global's blur, opacity, tint, grain, rim and Fancier Glass, from the shared blur frames, drawn by the same slab a terminal pane wears
  * ({@code PaneGlass} over {@code LookGlassStyle}). A detached terminal, keyboard, status bar or
  * dock never reaches it. Where the glass cannot be shown or the system asks for contrast
  * ({@link #solidFallback}) the widget wears its solid card.
@@ -42,7 +42,7 @@ public final class BuiltinWidgetGlass {
      * The built-in widgets among {@code records} whose own Glass choice is On or Off, each put
      * back to following the page (the choice left out, as Page is stored), so the Home card's
      * "Glass widgets" switch shows on every widget. Bare stays: it is a look of its own, not a
-     * glass setting. What each widget held lands in {@code cleared}, by its id, for an Undo.
+     * glass setting. What each widget held lands in {@code cleared}, by its id.
      *
      * @return the records to write, changed
      */
@@ -60,31 +60,6 @@ public final class BuiltinWidgetGlass {
                 continue;
             config.remove(CONFIG_KEY);
             cleared.put(record.appWidgetId, choice);
-            out.add(record.withSizeOptions(config));
-        }
-        return out;
-    }
-
-    /**
-     * {@link #followPage}'s Undo: each widget named in {@code choices} that still follows the
-     * page gets its own choice back. A widget given a choice since is left with it.
-     *
-     * @return the records to write, changed
-     */
-    @NonNull
-    public static List<LauncherWidgetRecord> withChoices(
-            @NonNull Collection<LauncherWidgetRecord> records,
-            @NonNull Map<Integer, String> choices) {
-        List<LauncherWidgetRecord> out = new ArrayList<>();
-        for (LauncherWidgetRecord record : records) {
-            String choice = choices.get(record.appWidgetId);
-            if (choice == null || !record.isBuiltin())
-                continue;
-            Bundle config = record.sizeOptions();
-            String now = config.getString(CONFIG_KEY);
-            if (now != null && !now.isEmpty())
-                continue;
-            config.putString(CONFIG_KEY, choice);
             out.add(record.withSizeOptions(config));
         }
         return out;

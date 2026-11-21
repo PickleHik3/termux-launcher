@@ -164,13 +164,13 @@ public class SurfacePresetsBatchTest {
         return looks;
     }
 
-    /** A fresh store with some detached cells, a non-default Base and Style, the same each time. */
+    /** A fresh store with some detached cells, a non-default Global and Style, the same each time. */
     private SharedPreferences seededStore() {
         SharedPreferences store = context.getSharedPreferences(
             "surface-presets-batch-" + (stores++), Context.MODE_PRIVATE);
         store.edit().clear().commit();
         TermuxAppSharedPreferences prefs = new TermuxAppSharedPreferences(context, store, null);
-        prefs.setSurfaceBaseValue(SurfaceProperty.BLUR, 25);
+        prefs.setSurfaceGlobalValue(SurfaceProperty.BLUR, 25);
         prefs.detachSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.GRAIN, 77);
         prefs.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY, 40);
         prefs.setAppLauncherDockStyle(TERMUX_APP.APP_LAUNCHER_DOCK_STYLE_ROUNDED);

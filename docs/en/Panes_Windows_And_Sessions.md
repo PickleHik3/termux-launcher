@@ -8,21 +8,21 @@ saving the whole set to load again later.
 
 ```text
 Session
-└── Window   (a page of the Workspace, or a Home float)
+└── Window   (a page of the Terminal, or a Home float)
     ├── Pane   (one shell)
     ├── Pane
     └── Floating pane
 ```
 
 - A **pane** is one shell. Panes split in either direction, as deep as you like.
-- A **window** is one set of panes. The **Workspace**, to the right of Home, shows the windows one
+- A **window** is one set of panes. The **Terminal**, to the right of Home, shows the windows one
   at a time in a row; a window can also float over a Home page as a
   [Home float](#home-floats).
 - A **session** holds windows. The numbered badge in the status bar is the current session.
 
 Switching away from a pane, window or session leaves its shells running. Closing one ends them.
 
-All of this needs **Settings → Terminal → Windows & panes → Split-pane controls** ("Enable window
+All of this needs **Multiplexer** on the Terminal card ("Enable window
 splitting and tmux-style pane shortcuts."), on by default. Turning it off returns to single-pane
 Termux behaviour, closes the extra panes and disables pane and window actions, so finish or save
 work in those shells first.
@@ -44,7 +44,7 @@ goes to the shell when there is no pane that way. The full list is in
 
 ## Windows
 
-The Workspace is one row: the current session's windows in order, the
+The Terminal is one row: the current session's windows in order, the
 [display window](X11_Display.md) among them while a display is up. The display window joins the end
 of the row when it opens and is a window like the others from then on. A new window opens right
 after the one you are on, the display window included. Switching session swaps the row; opening a
@@ -82,7 +82,7 @@ status bar in [Status bar](Status_Bar.md).
 ### Columns: consume and expel
 
 Borrowed from the Niri window manager, where each window of a row is a *column* that can hold
-several panes. Here the column is simply a window of the Workspace's row, and two actions move
+several panes. Here the column is simply a window of the Terminal's row, and two actions move
 panes between windows:
 
 - **Consume next window into this pane** (`Ctrl+Alt+,`) pulls the window to the right of the one
@@ -92,7 +92,7 @@ panes between windows:
   instead. At the end of the row there is nothing to pull, and nothing happens.
 - **Expel pane to its own window** (`Ctrl+Alt+.`) pushes your focused pane out into a new window
   of its own, right after the one you are on. The focus goes with it: the new window becomes the
-  current one and the Workspace slides to it, as when a window is made. `pane.expel to=left` puts
+  current one and the Terminal slides to it, as when a window is made. `pane.expel to=left` puts
   the new window right before instead. A window with one pane has nothing to expel, and nothing
   happens.
 
@@ -131,7 +131,7 @@ with the full-width row, and the row's shell drops into the lower cell.
   you lift your finger, with a light tick. Holding a corner does not resize; it only shows the tab.
 - `Ctrl+Alt+Shift+Arrow` grows the focused pane in that direction; repeat to keep going.
 - **Equalize pane dividers** in the palette resets every divider in the window to equal shares.
-- **Settings → Terminal → Windows & panes → Focus active pane** ("Enlarge the active pane and
+- **Focus grows** on the Terminal card ("Enlarge the active pane and
   shrink the others.") gives the pane you tap the larger share.
 
 Text size is separate from pane size. Pinch inside a pane, or run **Increase font size** /
@@ -161,13 +161,13 @@ window by hand (dragging or key-resizing a divider, **Rotate pane layout**, **Mo
 hands it back to manual control; **Equalize pane dividers** does not. Under `dwindle` the dividers
 you drag stay where you put them.
 
-**Settings → Terminal → Windows & panes → Automatic tiling** ("Split the current pane when
+**Automatic tiling** on the Terminal card ("Split the current pane when
 opening a new one.") starts every new window under `dwindle`. The lone pane's corner tab switches
 it too.
 
 ## Home floats
 
-A terminal opened from Home floats over the Home page instead of taking you to the Workspace. Open
+A terminal opened from Home floats over the Home page instead of taking you to the Terminal. Open
 one with **Terminal** in a Home page's long-press menu, **New float here** on the Terminal entry,
 or **Open terminal here** in the command palette on Home. It is a window of the current session,
 so the window chips, the sessions drawer and the shortcuts all see it.
@@ -178,22 +178,22 @@ so the window chips, the sessions drawer and the shortcuts all see it.
 - Drag its **titlebar** to move it and its bottom-right corner to resize it. Each float remembers
   its size and spot in each orientation, across a restart too (see [After a restart](#after-a-restart)).
 - The titlebar carries no readings; your CPU and memory use are in the status bar, which stands
-  on Home as it does in the Workspace.
+  on Home as it does in the Terminal.
 - The titlebar's buttons: **Minimise** tucks the float into its window chip in the status bar,
   **Maximise** fills the room and becomes **Restore size**, and **Close** closes it and its shell.
-  Long press the titlebar's handle for its menu: **Dock** moves the float into the Workspace as a
+  Long press the titlebar's handle for its menu: **Dock** moves the float into the Terminal as a
   window right after the current one and takes you there.
 - A float that fills the room makes way for the keyboard as a tiled pane does: it shortens to the
   room above the keyboard and grows back when it closes. A float you made smaller keeps its size
   and lifts so the cursor's line stays above the keyboard, never past the top of the room, and
   settles back when it closes. A tap on the page outside any float puts the keyboard away, as does
   minimising or closing the focused float.
-- Home wears the same status bar as the Workspace. A minimised float waits there as a dimmed
-  window chip with a dot, from every page and from the Workspace too; tap it to go to its page and
+- Home wears the same status bar as the Terminal. A minimised float waits there as a dimmed
+  window chip with a dot, from every page and from the Terminal too; tap it to go to its page and
   bring the float back. If you hide the status bar, reach a minimised float from the command
   palette or the app drawer.
 
-A float does not keep the Workspace open. The status bar's chips are the same on both halves, so
+A float does not keep the Terminal open. The status bar's chips are the same on both halves, so
 tapping a window's chip on Home slides you to that window.
 
 ## Floating panes
@@ -239,7 +239,7 @@ up to 8 characters.
 
 Cloning starts a fresh shell in the current pane's folder. It does not copy the running program,
 the shell's state, the scrollback or the layout. Ending the last session, or closing the last
-window or Home float, leaves the Workspace empty: the launcher stays on Home (from the Workspace,
+window or Home float, leaves the Terminal empty: the launcher stays on Home (from the Terminal,
 Home's last page slides in), and the Terminal entry opens a fresh window.
 
 ## Saved sessions
@@ -248,7 +248,7 @@ Saved sessions keep the sessions, windows, pane layout and split sizes, floating
 titles and each pane's folder, so you can rebuild them later. A Home float is saved with its page
 and shape, and loads back as a float on that page (minimised if it was); a page that no longer
 exists lands it on the last Home page. Sessions saved with only Home floats load back as those
-floats alone, with the Workspace empty.
+floats alone, with the Terminal empty.
 
 - **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
   Tick **Also save what is running** to record the program in each busy pane. Saving over a name
@@ -275,9 +275,9 @@ comes back attached to the same shells, scrollback and running programs included
 stops the whole app in the background, the next launch rebuilds the windows, their split panes
 and the floats on their pages, each pane a fresh shell in the folder it was in, and says "Windows
 restored from before the restart". Programs that were running are not started again, and the
-scrollback is gone. **Start in** still decides whether Home or the Workspace shows first. If you
+scrollback is gone. **Start in** still decides whether Home or the Terminal shows first. If you
 closed every window and float, or chose **Exit** in the notification, the launcher starts the same
-way: an empty Workspace, with Home showing and no shell (with Start in set to Terminal, one
+way: an empty Terminal, with Home showing and no shell (with Start in set to Terminal, one
 fresh window). Saved sessions are separate and stay as you saved them.
 
 ## Let programs open panes

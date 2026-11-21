@@ -39,7 +39,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_SCALE = "displayScale";
     private static final String KEY_RESOLUTION_EXACT = "displayResolutionExact";
     private static final String KEY_RESOLUTION_CUSTOM = "displayResolutionCustom";
-    private static final String KEY_SOUND_STATUS = "launcher_sound_status";
 
     /**
      * The overview is this class, Terminal › Linux apps (the old Display section, with its Linux
@@ -68,25 +67,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 com.termux.app.x11.GuiAppsSetupGuide.preferences(context),
                 com.termux.app.AppEdition.of(context.getPackageName())));
         }
-        updateSoundStatus();
-    }
-
-    /**
-     * The line under the sound switches: the user's own setup in use (decision 7), or the server
-     * left down after it kept stopping (decision 3). Hidden when there is nothing to say.
-     */
-    private void updateSoundStatus() {
-        Preference row = findPreference(KEY_SOUND_STATUS);
-        Context context = getContext();
-        if (row == null || context == null) return;
-        com.termux.app.sound.LauncherSound.Status status =
-            com.termux.app.sound.LauncherSound.get(context).status();
-        int text = status == com.termux.app.sound.LauncherSound.Status.USER_SETUP
-            ? R.string.settings_launcher_sound_user_setup
-            : status == com.termux.app.sound.LauncherSound.Status.GAVE_UP
-                ? R.string.settings_launcher_sound_gave_up : 0;
-        if (text != 0) row.setSummary(text);
-        if (row.isVisible() != (text != 0)) row.setVisible(text != 0);
     }
 
     @Override
@@ -103,18 +83,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         Preference dpiRow = findPreference("x11_display_dpi");
         if (dpiRow instanceof com.termux.app.fragments.settings.SliderPreference)
             ((com.termux.app.fragments.settings.SliderPreference) dpiRow).setValueSuffix(" dpi");
-        Preference sound = findPreference(
-            TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_SOUND);
-        if (sound != null) {
-            // Off hides the line at once; on, the server decides afresh, so the line waits for it.
-            sound.setOnPreferenceChangeListener((preference, value) -> {
-                if (Boolean.FALSE.equals(value)) {
-                    Preference row = findPreference(KEY_SOUND_STATUS);
-                    if (row != null && row.isVisible()) row.setVisible(false);
-                }
-                return true;
-            });
-        }
         ListPreference mode = findPreference(KEY_RESOLUTION_MODE);
         if (mode != null) {
             applyResolutionRows(mode.getValue());
@@ -364,19 +332,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                     // picks the change up without having to be left and come back to.
                     notifyDisplay(key);
                     break;
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
-                    launcher.setX11DrawerAppsEnabled(value);
-                    com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context)
-                        .refreshAsync(null, null);
-                    break;
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_SOUND:
-                    launcher.setLauncherSoundEnabled(value);
-                    com.termux.app.sound.LauncherSound.get(context).onSettingsChanged();
-                    break;
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS:
-                    launcher.setLauncherMediaControlsEnabled(value);
-                    com.termux.app.sound.LauncherSound.get(context).onSettingsChanged();
-                    break;
                 default:
                     break;
             }
@@ -399,12 +354,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                     return launcher.isX11AndroidKeyboardEnabled();
                 case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_KEYBOARD_FOLLOWS_TEXT:
                     return launcher.isX11KeyboardFollowsTextEnabled();
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS:
-                    return launcher.isX11DrawerAppsEnabled();
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_SOUND:
-                    return launcher.isLauncherSoundEnabled();
-                case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHER_MEDIA_CONTROLS:
-                    return launcher.isLauncherMediaControlsEnabled();
                 default:
                     return defValue;
             }

@@ -69,7 +69,7 @@ More in [Keyboard](Keyboard.md).
 
 ## Pane or window actions are unavailable
 
-Open **Settings → Terminal → Windows & panes → Split-pane controls**. Native pane and window actions are
+Open **Appearance → Terminal → Multiplexer**. Native pane and window actions are
 disabled in single-pane compatibility behaviour.
 
 Remember that some actions have structural safeguards:
@@ -113,7 +113,7 @@ important. Deleting a saved workspace removes its JSON definition but does not c
 
 ## App search does not start
 
-Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Dock →
+Search is designed for an idle shell prompt. Confirm the current prefix under **Settings → Apps →
 App search → App search prefix**; `%` is the default. If the prefix conflicts with shell input,
 choose a different single character.
 
@@ -156,7 +156,7 @@ Open **Settings → Appearance** and test against the real home screen.
 - Live wallpapers can limit or disable dock blur.
 - GPU blur requires Android 12 or later; older Android versions use a simpler surface.
 - Without **Wallpaper access** (Settings → General → Permissions & services) the glass bars render flat.
-- **Wallpaper colors**, in the Appearance editor, changes the generated palette, while the
+- **Wallpaper colours**, on the Global card, changes the generated palette, while the
   opacity controls decide how much wallpaper remains visible.
 - Full-screen TUIs may need a resize after font or surface geometry changes.
 
@@ -332,9 +332,9 @@ More in [The Linux display](X11_Display.md).
 ## Linux apps from a distro do not show or do not open
 
 - **No Linux apps in the drawer at all.** Either nothing is installed yet (use **Settings
-  → Linux apps → Set up Linux apps**), or **Show Linux apps in drawer** is off. Check too that the
+  → Linux apps → Set up Linux apps**), or **Show Linux apps in drawer** (Settings → Apps) is off. Check too that the
   distro was installed by `proot-distro` 5.x.
-- **One app is missing.** Look in **Hidden Linux apps** first. Otherwise the app has no menu entry
+- **One app is missing.** Look in **Per-app settings** first. Otherwise the app has no menu entry
   of its own: command-line programs usually have none. Write the entry yourself; see
   [Writing an entry yourself](Linux_Apps_From_A_Distro.md#writing-an-entry-yourself).
 - **An app opens and closes again, or nothing happens.** Most often a fresh distro missing fonts;
@@ -352,7 +352,7 @@ Android 12 and later stop an app's background programs once all apps together ru
 of them (Android calls them phantom processes). A desktop session with its helpers is enough: the
 display closes, the desktop quits, and terminal panes end with `[Process completed (signal 9)]`.
 The launcher notices such a stop and shows **Android stopped your Linux apps** at the top of
-Settings and on the long-press sheets of Home and the Workspace, until the limit is lifted or you
+Settings and on the long-press sheets of Home and the Terminal, until the limit is lifted or you
 dismiss it. Lift the limit one of these ways, then start your shells and apps again:
 
 - **Android 14 or later:** open **Developer options** and turn on **Disable child process

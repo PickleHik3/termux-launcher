@@ -111,8 +111,6 @@ public final class SheetsController {
 
         /** The session in front; null when there is none. */
         @Nullable com.termux.terminal.TerminalSession currentSession();
-        /** The decor strip under the pill, faded as a sheet's card covers it (the dock's overlay). */
-        void setHomeSheetDecorNavStripAlpha(float alpha);
         /** The wallpaper door a row may open, made ready on arm and let go when the sheet is gone. */
         void prepareWallpaperDoor();
         void releasePreparedWallpaper();
@@ -485,8 +483,13 @@ public final class SheetsController {
                 mDrawerRaisedKeyboardClaimed = false;
             } else if (!wasUp) {
                 mHost.raiseDisplayFrameKeyboard();
-                mDrawerRaisedKeyboard = true;
-                mDrawerRaisedKeyboardClaimed = false;
+                // Up before the drawer was pulled, it stays the Terminal's: the close leaves it.
+                if (com.termux.app.x11.DisplayKeyboardRoute.drawerOwnsRaise(wasUp,
+                        mAppDrawerController != null
+                            && mAppDrawerController.keyboardWasUpAtPull())) {
+                    mDrawerRaisedKeyboard = true;
+                    mDrawerRaisedKeyboardClaimed = false;
+                }
             }
             // Raised after the pull, the keyboard was not among the bands the drawer measured;
             // it measures them again so the reveal can bring it up through the plane.
@@ -772,8 +775,9 @@ public final class SheetsController {
     }
 
     /**
-     * The drawer's host bleeds under the system bars and the cutout: negative margins of the
-     * insets' own size (see the activity's insets listener).
+     * The drawer's host bleeds under the status bar and the cutout: a negative top margin of the
+     * insets' own size (see the activity's insets listener). Its bottom is the screen's edge
+     * already, with the band under the pill from {@link #bottomBandPx}.
      */
     public void applyAppDrawerEdgeBleed(@NonNull androidx.core.view.WindowInsetsCompat insetsCompat) {
         View host = mHost.activity().findViewById(R.id.app_drawer_host);
@@ -784,15 +788,32 @@ public final class SheetsController {
             insetsCompat.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars()
                 | androidx.core.view.WindowInsetsCompat.Type.displayCutout());
         int barTop = edges.top;
-        int barBottom = edges.bottom;
         android.view.ViewGroup.MarginLayoutParams margins = (android.view.ViewGroup.MarginLayoutParams) layoutParams;
-        if (margins.topMargin == -barTop && margins.bottomMargin == -barBottom) return;
+        if (margins.topMargin == -barTop && margins.bottomMargin == 0) return;
         margins.topMargin = -barTop;
-        margins.bottomMargin = -barBottom;
+        margins.bottomMargin = 0;
         host.setLayoutParams(margins);
     }
 
     // ================================================================== the actions sheets
+
+    /** The band under the pill the sheets layer reaches through ({@link #applyBottomBand}). */
+    private int mBottomBandPx;
+
+    /**
+     * The one owner's band ({@link com.termux.app.place.BottomInsets#sheetsBandPx}): kept here,
+     * handed to the actions sheets built or yet to be, and read by the drawer's host.
+     */
+    public void applyBottomBand(int bandPx) {
+        mBottomBandPx = bandPx;
+        if (mTerminalActionsSheet != null) mTerminalActionsSheet.setBottomBandPx(bandPx);
+        if (mHomeActionsSheet != null) mHomeActionsSheet.setBottomBandPx(bandPx);
+    }
+
+    /** The band the sheets layer reaches through under the pill; 0 while the system keyboard is up. */
+    public int bottomBandPx() {
+        return mBottomBandPx;
+    }
 
     @Nullable private com.termux.app.launcher.home.HomeActionsSheet mTerminalActionsSheet;
     @Nullable private com.termux.app.launcher.home.HomeActionsSheet mHomeActionsSheet;
@@ -821,16 +842,13 @@ public final class SheetsController {
             return true;
         }
         Activity activity = mHost.activity();
-        android.view.ViewGroup content = activity.findViewById(android.R.id.content);
+        android.view.ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.SHEETS);
         if (content == null) return false;
         if (mTerminalActionsSheet == null) {
             mTerminalActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(activity,
                 new com.termux.app.launcher.home.HomeActionsSheet.Listener() {
                     @Override public void onHomeAction(
                             @NonNull com.termux.app.launcher.home.HomeActionsSheetPolicy.Item item) { }
-                    @Override public void onNavBandCovered(float covered) {
-                        mHost.setHomeSheetDecorNavStripAlpha(1f - covered);
-                    }
                     @Override public void onSheetClosed() {
                         TerminalView terminalView = mHost.terminalView();
                         if (terminalView != null) terminalView.onContextMenuClosed(null);
@@ -846,10 +864,11 @@ public final class SheetsController {
                         mHost.releasePreparedWallpaper();
                     }
                 });
+            mTerminalActionsSheet.setBottomBandPx(mBottomBandPx);
             content.addView(mTerminalActionsSheet, new android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         }
-        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Workspace.
+        // One door to the wallpaper, the Look and the Layout: the editor, at rest on the Terminal.
         // Style stands only when the companion is installed: a row that opens the Appearance
         // settings under the name of a plugin the device does not have is a broken promise.
         mTerminalActionsSheet.openRows(activity.getString(R.string.terminal_actions_title),
@@ -863,7 +882,7 @@ public final class SheetsController {
 
     public void showHomeActionsSheet(float rawX, float rawY) {
         Activity activity = mHost.activity();
-        android.view.ViewGroup content = activity.findViewById(android.R.id.content);
+        android.view.ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.SHEETS);
         if (content == null) return;
         if (mHomeActionsSheet == null) {
             mHomeActionsSheet = new com.termux.app.launcher.home.HomeActionsSheet(activity,
@@ -880,10 +899,6 @@ public final class SheetsController {
                     @Override public void onSheetGone() {
                         mHost.releasePreparedWallpaper();
                     }
-                    // The card runs under the pill; the strip above it fades as the card arrives.
-                    @Override public void onNavBandCovered(float covered) {
-                        mHost.setHomeSheetDecorNavStripAlpha(1f - covered);
-                    }
                     @Override public void onLayoutLockChanged(boolean locked) {
                         com.termux.app.launcher.home.HomeSettings.setLayoutLocked(
                             activity, locked);
@@ -891,6 +906,7 @@ public final class SheetsController {
                         if (pane != null) pane.setLayoutLocked(locked);
                     }
                 });
+            mHomeActionsSheet.setBottomBandPx(mBottomBandPx);
             content.addView(mHomeActionsSheet, new android.view.ViewGroup.LayoutParams(
                 android.view.ViewGroup.LayoutParams.MATCH_PARENT, android.view.ViewGroup.LayoutParams.MATCH_PARENT));
         }
@@ -992,26 +1008,26 @@ public final class SheetsController {
             preferences == null ? null : preferences.getSharedPreferences();
         if (store != null && mPaletteTileStore != store) {
             if (mPaletteTileStore != null)
-                mPaletteTileStore.unregisterOnSharedPreferenceChangeListener(mPaletteTileKnob);
-            store.registerOnSharedPreferenceChangeListener(mPaletteTileKnob);
+                com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mPaletteTileStore, mPaletteTileKnob);
+            com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mPaletteTileKnob);
             mPaletteTileStore = store;
         }
         boolean on = store == null
             ? com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON
-            : store.getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
+            : com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getBoolean(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_BUTTON,
                 com.termux.app.surfaces.cards.DockCard.DEFAULT_COMMAND_PALETTE_BUTTON);
         // Its column is one for every layout; absent, the row's last.
         int column = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
-            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
+            : com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getInt(com.termux.app.surfaces.cards.DockCard.KEY_COMMAND_PALETTE_COLUMN,
                 com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
         bar.setPaletteTile(on, column,
             on ? () -> getCommandPaletteController().openFromField(null, true) : null);
         // New float terminal: the same float the Terminal entry's New float here opens.
-        boolean floatOn = store != null && store.getBoolean(
+        boolean floatOn = store != null && com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getBoolean(
             com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_BUTTON,
             com.termux.app.surfaces.cards.DockCard.DEFAULT_FLOAT_TERMINAL_BUTTON);
         int floatColumn = store == null ? com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN
-            : store.getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
+            : com.termux.shared.settings.preferences.SharedPreferencesPreview.readsFor(store).getInt(com.termux.app.surfaces.cards.DockCard.KEY_FLOAT_TERMINAL_COLUMN,
                 com.termux.app.dock.PaletteTilePolicy.DEFAULT_COLUMN);
         bar.setFloatTile(floatOn, floatColumn, floatOn ? mHost::openHomeFloatHere : null);
     }
@@ -1029,13 +1045,11 @@ public final class SheetsController {
     }
 
     /**
-     * The Menus and dialogs surface's Corners on the resting page, as stored (dp; -1 follows the
-     * style), and whether the style is Floating: what the command palette's corners follow.
+     * Global's Corners, as stored (dp; -1 follows the style): what the command palette's corners
+     * follow. The sheets hold no corners of their own.
      */
     public int commandPaletteCornersDp() {
-        return com.termux.app.chrome.ElementGlass.of(mHost.preferences(),
-            com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mHost.restingPage())
-            .cornersDp;
+        return com.termux.app.chrome.SheetGlass.of(mHost.preferences()).cornersDp;
     }
 
     /**
@@ -1046,14 +1060,12 @@ public final class SheetsController {
     public android.graphics.drawable.Drawable buildTerminalSheetSurface() {
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
             mHost.preferences();
-        // The Sheets element's glass (ADR 0017), no longer the dock's.
-        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.ElementGlass.of(preferences, com.termux.shared.termux.settings.preferences.LookGrid.Element.SHEETS, mHost.restingPage());
+        // Global's glass at the sheets' opacity floor (ADR 0031).
+        com.termux.app.chrome.ElementGlass sheets = com.termux.app.chrome.SheetGlass.of(preferences);
         float barAlpha = preferences != null ? sheets.tintAlpha() : 0.5f;
         int grain = preferences != null ? sheets.grainPercent
             : com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-        // Modifier: floored well above the Sheets opacity. A sheet has body text over a live blur,
-        // and at a bar's tint the terminal behind it reads straight through the words.
-        return mHost.chromeGlass().forElement(sheets).surface(com.termux.app.chrome.LowOpacityGlass.floored(barAlpha, 0.92f), 0f, 1f, false, grain,
+        return mHost.chromeGlass().forElement(sheets).surface(barAlpha, 0f, 1f, false, grain,
             mHost.dpToPx(com.termux.app.terminal.TerminalSheetController.cornerRadiusDp()), !sheets.rimOff(),
             null, sheets.tintPercent);
     }

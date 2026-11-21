@@ -2,6 +2,7 @@ package com.termux.app.wall.pageswitch;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
 /**
  * What the page switcher key's cap draws, asked for by the cap itself as it is built or bound, so a
@@ -13,10 +14,10 @@ public final class PageGlyphSource {
 
     /** One glyph and its number. */
     public static final class Glyph {
-        @NonNull public final PageSwitchModel.Kind kind;
+        @NonNull public final PageKind kind;
         public final int number;
 
-        public Glyph(@NonNull PageSwitchModel.Kind kind, int number) {
+        public Glyph(@NonNull PageKind kind, int number) {
             this.kind = kind;
             this.number = number;
         }
@@ -27,7 +28,7 @@ public final class PageGlyphSource {
         @NonNull Glyph current();
     }
 
-    private static final Glyph FALLBACK = new Glyph(PageSwitchModel.Kind.TERMINAL, 1);
+    private static final Glyph FALLBACK = new Glyph(PageKind.TERMINAL, 1);
 
     @Nullable private static volatile Provider sProvider;
 

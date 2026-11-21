@@ -3561,6 +3561,22 @@ public final class TerminalView extends View {
     }
 
     private static volatile MotionSink sMotionSink;
+
+    /**
+     * Where a pane's size changes and draws are reported for the crossing counters: installed by
+     * the app while the motion log is on, null otherwise. Passes only values already at hand.
+     */
+    public interface CrossingProbe {
+        void onResize(String pane, String from, String to, String cause);
+
+        void onDraw(String pane, long durationNanos);
+    }
+
+    private static volatile CrossingProbe sCrossingProbe;
+
+    public static void setCrossingProbe(@Nullable CrossingProbe probe) {
+        sCrossingProbe = probe;
+    }
     /** True while the motion log is on; the app keeps it in step with its switch. */
     public static volatile boolean sMotionLogEnabled;
 
@@ -3584,6 +3600,9 @@ public final class TerminalView extends View {
         if (sMotionLogEnabled) {
             motionLog("pty-resize", "from=" + from + " to=" + newColumns + "x" + newRows
                 + " cause=" + cause + " returnHold=" + CAUSE_RETURN_HOLD.equals(cause));
+            CrossingProbe probe = sCrossingProbe;
+            if (probe != null) probe.onResize(mTermSession.mHandle, from,
+                newColumns + "x" + newRows, cause);
         }
     }
 
@@ -4095,6 +4114,10 @@ public final class TerminalView extends View {
             renderTextSelection();
             long drawEndNanos = SystemClock.elapsedRealtimeNanos();
             mRenderMetrics.recordDraw(drawStartNanos, drawEndNanos, mFrameBudgetNanos);
+            if (sMotionLogEnabled && mTermSession != null) {
+                CrossingProbe probe = sCrossingProbe;
+                if (probe != null) probe.onDraw(mTermSession.mHandle, drawEndNanos - drawStartNanos);
+            }
         }
     }
 

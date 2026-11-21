@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
  * The wall keys' one source (ADR 0016 section 7): a wall key (Home, Terminal, Display) is on the
@@ -21,11 +22,11 @@ public final class WallKeys {
      * there is no Home page, so no Home kind, whatever the list still holds of it.
      */
     @NonNull
-    public static List<PaneWallPage> kinds(@NonNull WallPages pages, @NonNull UseAs useAs) {
-        List<PaneWallPage> out = new ArrayList<>(3);
+    public static List<PageKind> kinds(@NonNull WallPages pages, @NonNull UseAs useAs) {
+        List<PageKind> out = new ArrayList<>(3);
         for (WallPages.Page page : pages.pages()) {
-            PaneWallPage kind = PaneWallPolicy.kindOf(page.kind);
-            if (kind == PaneWallPage.WIDGETS && !useAs.showsHomePage()) continue;
+            PageKind kind = page.kind;
+            if (kind == PageKind.HOME && !useAs.showsHomePage()) continue;
             if (!out.contains(kind)) out.add(kind);
         }
         return Collections.unmodifiableList(out);

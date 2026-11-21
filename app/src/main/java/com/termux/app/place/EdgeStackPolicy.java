@@ -449,7 +449,7 @@ public final class EdgeStackPolicy {
     /**
      * Where a side stack's bands start below its top, while the canvas reaches up under the status
      * bar ({@link #topOverlapPx}): by exactly that overlap, so a side column (a dock rail in
-     * landscape on Home) starts at the bar's edge, as it does on the Workspace where the bar takes
+     * landscape on Home) starts at the bar's edge, as it does on the Terminal where the bar takes
      * its own row, and never stands under the bar's chips. 0 for an empty side and wherever the
      * bar does not overlay.
      */
@@ -464,7 +464,7 @@ public final class EdgeStackPolicy {
      * bottom stack (as on a Home page): by exactly that reach — the bottom
      * stack and the margin under it, {@code KeyboardOverlayPolicy.overlapPx} — so a side column
      * (the A&#8211;Z rail in landscape on Home) ends above the dock with the frame's own gap, as
-     * it does on the Workspace, where the dock takes its own row below the canvas and every side
+     * it does on the Terminal, where the dock takes its own row below the canvas and every side
      * column stops above it. The dock keeps the whole width either way. 0 for an empty side and
      * wherever the dock does not overlay.
      *

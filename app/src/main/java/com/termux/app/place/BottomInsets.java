@@ -26,10 +26,19 @@ public final class BottomInsets {
     public final int keyboardColumnMarginPx;
     /** The dock surface's foot: how far it runs below the rows' bottom. */
     public final int dockFootPx;
+    /**
+     * The keyboard's foot: the kept band the in-app keyboard's own host reaches down by, below its
+     * keys, while it is laid out in the stack's column as a Docked slice (shown, or down and still
+     * laid out). A keyboard that wears its own material then reaches the screen's bottom itself.
+     * The foot is inside the keyboard's measured height; the stack's own numbers (its height, the
+     * rooms, the keyboard's translation) all count the keys alone ({@link #keyboardKeysPx}).
+     */
+    public final int keyboardFootPx;
 
     private BottomInsets(int rootPaddingPx, int keptPx, int stackMarginPx,
                          int stackExtraHeightPx, int stackPaddingPx, int keyboardColumnMarginPx,
-                         int dockFootPx) {
+                         int dockFootPx, int keyboardFootPx) {
+        this.keyboardFootPx = keyboardFootPx;
         this.rootPaddingPx = rootPaddingPx;
         this.keptPx = keptPx;
         this.stackMarginPx = stackMarginPx;
@@ -54,6 +63,16 @@ public final class BottomInsets {
     }
 
     /**
+     * The band at the screen's bottom the sheets layer reaches through, under the gesture pill:
+     * the kept band {@code keptPx}. A surface in the layer runs its glass through it and keeps its
+     * content above it. 0 while the system keyboard is up, when the layer stops at the root's
+     * padding.
+     */
+    public static int sheetsBandPx(int keptPx) {
+        return Math.max(0, keptPx);
+    }
+
+    /**
      * The stack's placement for the fit, the stack pass's own margin and flush padding, and the
      * dock owning the foot or not ({@code DockSpec#foot}).
      */
@@ -66,10 +85,53 @@ public final class BottomInsets {
     /** {@link #of} for a root padding and a kept band already worked out from the insets. */
     public static BottomInsets forKept(int root, int kept, boolean dockFoot,
                                        int stackPassMarginPx, int flushPaddingPx) {
+        return forKept(root, kept, dockFoot, stackPassMarginPx, flushPaddingPx, false);
+    }
+
+    /**
+     * The foot the keyboard's own host wears for a kept band: the whole band while the keyboard is
+     * laid out in the column as a Docked slice ({@code keyboardFoot}), else none. The dress phase
+     * asks this with the stack pass's inputs, so both put the same band in the same place.
+     */
+    public static int keyboardFootPx(int kept, boolean keyboardFoot) {
+        return keyboardFoot && kept > 0 ? kept : 0;
+    }
+
+    /** The keyboard's keys, without its foot, of a laid-out height. */
+    public static int keyboardKeysPx(int laidOutPx, int footPx) {
+        return Math.max(0, laidOutPx - Math.max(0, footPx));
+    }
+
+    /**
+     * {@link #forKept(int, int, boolean, int, int)} with the keyboard wearing the band as its own
+     * foot ({@code keyboardFoot}, {@link #keyboardFootPx(int, boolean)}). The band leaves the
+     * column's margin for the keyboard's host, so the keys stand where they did.
+     */
+    public static BottomInsets forKept(int root, int kept, boolean dockFoot,
+                                       int stackPassMarginPx, int flushPaddingPx,
+                                       boolean keyboardFoot) {
         int flush = Math.max(0, flushPaddingPx);
         int margin = Math.max(0, stackPassMarginPx);
-        if (!dockFoot || kept <= 0) return new BottomInsets(root, kept, margin + kept, 0, flush, 0, 0);
-        return new BottomInsets(root, kept, margin, kept, 0, flush + kept, flush + kept);
+        if (kept <= 0) return new BottomInsets(root, kept, margin, 0, flush, 0, 0, 0);
+        int foot = keyboardFootPx(kept, keyboardFoot);
+        // The kept band is laid out the same with or without the foot, so the foot changing hands
+        // at a landing moves no layout number: the container is the band taller and stands on the
+        // screen's edge, the column one band up. Only the foot's surface (and where the flush
+        // remainder sits) is the foot's. With the keyboard's own foot the band is inside its host
+        // instead of under its column.
+        if (!dockFoot) return new BottomInsets(root, kept, margin, kept - foot, flush,
+            kept - foot, 0, foot);
+        return new BottomInsets(root, kept, margin, kept - foot, 0, flush + kept - foot,
+            flush + kept, foot);
+    }
+
+    /**
+     * The band the container is laid out taller by than the stack and the keyboard's keys: the
+     * kept band, whoever draws it. The container's height is the same with or without the
+     * keyboard's foot.
+     */
+    public int containerExtraPx() {
+        return stackExtraHeightPx + keyboardFootPx;
     }
 
     /**
@@ -106,8 +168,30 @@ public final class BottomInsets {
         return Math.round(Math.max(Math.max(0f, keyboardSharePx), slidPast));
     }
 
-    /** Where the rows' bottom stands above the screen's bottom edge: the parity number. */
+    /**
+     * {@link #keyboardTravelHiddenPx(float, float, int, int)} for a keyboard that wears a foot
+     * ({@code footPx}) below its {@code keysPx}: the cut also eats the foot in proportion to the
+     * share of the keys that has slid ({@code keyboardSharePx / keysPx}), so no top row shows in
+     * the band under the pill at rest or on a crossing; at no share nothing is cut, and at the
+     * keys' whole share the whole keyboard, foot included, is.
+     */
+    public static int keyboardTravelHiddenPx(float travelPx, float keyboardSharePx,
+                                             int belowKeyboardPx, int stackPaddingPx, int footPx,
+                                             int keysPx) {
+        float share = Math.max(0f, keyboardSharePx);
+        float withFoot = share;
+        if (footPx > 0 && keysPx > 0) withFoot += footPx * Math.min(1f, share / keysPx);
+        float slidPast = Math.max(0f, travelPx) - Math.max(0, belowKeyboardPx)
+            - Math.max(0, stackPaddingPx);
+        return Math.round(Math.max(withFoot, slidPast));
+    }
+
+    /**
+     * Where the rows' bottom stands above the screen's bottom edge: the parity number. The
+     * keyboard's foot stands under the keys, so it counts as much as the margin it replaced.
+     */
     public int rowsBottomFromScreenBottomPx() {
-        return rootPaddingPx + stackMarginPx + stackPaddingPx + keyboardColumnMarginPx;
+        return rootPaddingPx + stackMarginPx + stackPaddingPx + keyboardColumnMarginPx
+            + keyboardFootPx;
     }
 }

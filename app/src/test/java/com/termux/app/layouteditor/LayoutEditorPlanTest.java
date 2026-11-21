@@ -1,5 +1,6 @@
 package com.termux.app.layouteditor;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.LayoutVariant;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
@@ -21,7 +22,6 @@ import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -62,14 +62,14 @@ public class LayoutEditorPlanTest {
     }
 
     private LayoutEditorPlan enterOnTerminalInPortrait() {
-        return LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        return DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
     }
 
     @Test
     public void theEditorOpensOnThePhonesOwnOrientationAndTheLivePlaceFollows() {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
 
-        assertEquals(PaneWallPage.TERMINAL, plan.place());
+        assertEquals(PageKind.TERMINAL, plan.place());
         assertEquals(PORTRAIT, plan.shownOrientation());
         assertEquals(PORTRAIT, plan.deviceOrientation());
         assertTrue("what is shown is what the phone is in", plan.liveFollows());
@@ -233,8 +233,8 @@ public class LayoutEditorPlanTest {
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
         plan.drop(Bar.EXTRA_KEYS, null);
 
-        plan.showPlace(PaneWallPage.WIDGETS);
-        assertEquals(PaneWallPage.WIDGETS, plan.place());
+        plan.showPlace(PageKind.HOME);
+        assertEquals(PageKind.HOME, plan.place());
         assertEquals(LayoutEditorPlan.Drop.LIVE, plan.drop(Bar.STATUS_BAR, Edge.BOTTOM));
         assertEquals("bottom", prefs.getString("layout.portrait.status_edge", null));
 
@@ -277,13 +277,18 @@ public class LayoutEditorPlanTest {
      */
     @Test
     public void theKeyboardPutAwayFollowsLiveOnEitherOrientation() {
+        // The switch is a launcher preference: the editor's preference draft holds it.
+        com.termux.shared.settings.preferences.PreferenceDraft draft =
+            com.termux.shared.settings.preferences.PreferenceDraft.begin(
+                RuntimeEnvironment.getApplication().getSharedPreferences(
+                    "layout-editor-plan-test", Context.MODE_PRIVATE));
         LayoutEditorPlan plan = enterOnTerminalInPortrait();
         plan.showOrientation(LANDSCAPE);
 
         assertEquals("shared by both orientations",
             LayoutEditorPlan.Drop.LIVE, plan.setKeyboardShown(false));
         assertFalse(places.isKeyboardShown());
-        assertTrue("as unsaved as a moved bar", plan.isDirty());
+        assertTrue("as unsaved as a moved bar", draft.isDirty());
         assertTrue(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
 
         assertEquals(LayoutEditorPlan.Drop.LIVE,
@@ -291,6 +296,10 @@ public class LayoutEditorPlanTest {
         assertTrue(places.isKeyboardShown());
         assertFalse(plan.trayItems().contains(LayoutEditorPlan.TrayItem.KEYBOARD));
         assertFalse(plan.isDirty());
+
+        plan.setKeyboardShown(false);
+        draft.discard();
+        assertTrue("Discard brings the keyboard back", places.isKeyboardShown());
     }
 
     /** A tray chip brings a hidden bar back to the edge it was put away from. */
@@ -337,7 +346,7 @@ public class LayoutEditorPlanTest {
     /** The grid's corner handle writes both counts, for the orientation on the toggle. */
     @Test
     public void theGridHandleWritesTheOrientationOnTheToggleAlone() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.WIDGETS, LANDSCAPE);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.HOME, LANDSCAPE);
 
         plan.setWidgetGrid(6, 3);
         assertEquals(6, places.widgetColumns(LANDSCAPE));
@@ -454,7 +463,7 @@ public class LayoutEditorPlanTest {
     public void anEditorOpenedInMinimalModeEditsTheMinimalLayout() {
         places.setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
         places.setMinimal(true);
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         assertEquals(LayoutVariant.MINIMAL, plan.variant());
         // The layout canvas draws the minimal layout: the seed, with everything put away.
         assertTrue(plan.shownLayout().slot(com.termux.app.place.Element.APPS).hidden);
@@ -477,10 +486,16 @@ public class LayoutEditorPlanTest {
 
     @Test
     public void anEditorOpenedOutsideMinimalModeEditsTheNormalLayoutAndLeavesMinimalBe() {
-        LayoutEditorPlan plan = LayoutEditorPlan.enter(places, PaneWallPage.TERMINAL, PORTRAIT);
+        LayoutEditorPlan plan = DraftedSession.enter(places, PageKind.TERMINAL, PORTRAIT);
         assertEquals(LayoutVariant.NORMAL, plan.variant());
-        places.forVariant(LayoutVariant.MINIMAL).setAppsRow(PORTRAIT, RowPlacement.BOTTOM);
+        // Written from outside the session (launcherctl): straight to the file, past the draft.
+        places.layouts().update(com.termux.app.place.layout.LayoutKind.TERMINAL_MINIMAL,
+            k -> k.with(PORTRAIT, com.termux.app.place.Element.APPS.storageKey(), "top"));
         assertFalse("the minimal layout is not this session's to lose", plan.isDirty());
+        plan.revert();
+        assertEquals("and Undo leaves it", Edge.TOP,
+            places.forVariant(LayoutVariant.MINIMAL).slot(PORTRAIT,
+                com.termux.app.place.Element.APPS).edge);
     }
 
     /**

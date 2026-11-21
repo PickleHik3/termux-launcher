@@ -66,7 +66,6 @@ public class DockTravelIconTest {
 
     @Test
     public void theTravelLayoutSharesItsRowAsHomeDoes() {
-        assertEquals(SeamTravel.DockPlan.DIP, SeamTravel.dockPlan(WINDOW, HOME));
         PlaceLayout travel = SeamTravel.withDockOf(WINDOW, HOME);
         assertEquals(EdgeStackPolicy.stack(HOME, Edge.BOTTOM),
             EdgeStackPolicy.stack(travel, Edge.BOTTOM));

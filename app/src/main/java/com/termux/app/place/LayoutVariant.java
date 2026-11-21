@@ -2,9 +2,9 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
-import com.termux.app.wall.WallPages.PageKind;
 
 import java.util.concurrent.ConcurrentHashMap;
+import com.termux.app.page.PageKind;
 
 /**
  * Which of the launcher's saved arrangements a layout belongs to. The shared layout has two, the
@@ -28,14 +28,14 @@ public final class LayoutVariant {
     public static final LayoutVariant HOME = new LayoutVariant("HOME", "home.", -1, PageKind.HOME);
     /**
      * The retired Display layout's key scope (ADR 0020 §4, retired by ADR 0025): no page wears it;
-     * its keys route to the Workspace's document.
+     * its keys route to the Terminal's document.
      */
     public static final LayoutVariant DISPLAY =
         new LayoutVariant("DISPLAY", "display.", -1, PageKind.DISPLAY);
 
     /**
      * The retired Assistant layout's key scope (ADR 0022, retired by ADR 0025): no page wears it;
-     * its keys route to the Workspace's document.
+     * its keys route to the Terminal's document.
      */
     public static final LayoutVariant ASSISTANT =
         new LayoutVariant("ASSISTANT", "assistant.", -1, PageKind.ASSISTANT);
@@ -72,7 +72,7 @@ public final class LayoutVariant {
         return FIXED.clone();
     }
 
-    /** The Workspace variant the launcher stands in while minimal mode is {@code minimal}. */
+    /** The Terminal variant the launcher stands in while minimal mode is {@code minimal}. */
     @NonNull
     public static LayoutVariant of(boolean minimal) {
         return minimal ? MINIMAL : NORMAL;
@@ -80,7 +80,7 @@ public final class LayoutVariant {
 
     /**
      * The layout a page of {@code kind} wears (ADR 0020 §1, ADR 0025): Home's on a Home page, the
-     * Workspace's ({@link #NORMAL}, or {@link #MINIMAL} while {@code minimal}) on every other
+     * Terminal's ({@link #NORMAL}, or {@link #MINIMAL} while {@code minimal}) on every other
      * page: Terminal, Display and Assistant pages wear one layout.
      */
     @NonNull
@@ -170,7 +170,7 @@ public final class LayoutVariant {
      * Whether the Layout editor offers this element on this variant, and whether it may ever be
      * shown there: whether a page on it wears the element, as the dress answers ({@link
      * com.termux.app.chrome.DressResolver#wornOn}). The Home layout keeps the status bar and the
-     * dock's rows (the pinned apps and the A–Z index); the extra keys are the Workspace's alone.
+     * dock's rows (the pinned apps and the A–Z index); the extra keys are the Terminal's alone.
      * The keyboard is not an element with a slot and is offered on every variant.
      */
     public boolean offers(@NonNull Element element) {

@@ -14,6 +14,17 @@ public class PageTickStripTest {
     private static final float DENSITY = 2.75f;
 
     @Test
+    public void capsulesOverTheWallpaperTakeItsGround() {
+        // Above the slab (Tray, Strip, Peek's card) or on a dock of beads: the bare wallpaper.
+        assertTrue(PageTickStrip.standsOnWallpaper(true, true, false));
+        assertTrue(PageTickStrip.standsOnWallpaper(true, false, true));
+        // In the slab's own air: the dock surface.
+        assertFalse(PageTickStrip.standsOnWallpaper(true, false, false));
+        // Off the dock the host's surface stands, whatever the dock's style.
+        assertFalse(PageTickStrip.standsOnWallpaper(false, true, true));
+    }
+
+    @Test
     public void theTickNearestThePageIsTheLongOne() {
         float[] lengths = PageTickStrip.lengthsPx(3, 1f, DENSITY);
         assertEquals(3, lengths.length);
@@ -124,9 +135,26 @@ public class PageTickStripTest {
         // Continuous across a swipe: halfway between two pages they share the difference.
         assertEquals(PageTickStrip.alphaFor(0.5f),
             (PageTickStrip.alphaFor(0f) + PageTickStrip.alphaFor(1f)) * 0.5f, 0.0001f);
+    }
 
-        // The most-used page's own tint sleeps while it is not the page being shown.
-        assertEquals(1f, PageTickStrip.dynamicDampFor(1f), 0.0001f);
-        assertTrue(PageTickStrip.dynamicDampFor(0f) < 1f);
+    @Test
+    public void theCapsulesAreTheMocksNumbers() {
+        assertEquals(28f, PageTickStrip.ACTIVE_LENGTH_DP, 0f);
+        assertEquals(10f, PageTickStrip.INACTIVE_LENGTH_DP, 0f);
+        assertEquals(5f, PageTickStrip.THICKNESS_DP, 0f);
+        assertEquals(6f, PageTickStrip.GAP_DP, 0f);
+        assertEquals("a full cap", 2.5f, PageTickStrip.CORNER_RADIUS_DP, 0f);
+        assertEquals("the band the dock reserves is unchanged", 9f, PageTickStrip.BAND_DP, 0f);
+        assertEquals(0.5f, PageTickStrip.INACTIVE_ALPHA, 0f);
+    }
+
+    @Test
+    public void whileTheBarSlidesTheCurrentCapsuleKeepsFortyFivePercentAndTheOthersAQuarter() {
+        float activeRest = PageTickStrip.alphaFor(1f);
+        float otherRest = PageTickStrip.alphaFor(0f);
+        assertEquals(0.45f, activeRest * PageTickStrip.dimFactor(1f), 0.0001f);
+        assertEquals(0.25f, otherRest * PageTickStrip.dimFactor(0f), 0.0001f);
+        float mid = PageTickStrip.dimFactor(0.5f);
+        assertTrue(mid < PageTickStrip.dimFactor(0f) && mid > PageTickStrip.dimFactor(1f));
     }
 }

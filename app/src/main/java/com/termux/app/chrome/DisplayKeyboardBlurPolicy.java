@@ -22,6 +22,16 @@ public final class DisplayKeyboardBlurPolicy {
     public static final int MIN_SDK = 31;
 
     /**
+     * Whether the glass service may grant the Compositor kind (the compositor's blur under the
+     * keyboard's bed) now: Android 12 or later, Android's window blur switch on, battery saver off,
+     * and the layer not given up in this process. Each input moving is a policy event.
+     */
+    public static boolean compositorAvailable(int sdk, boolean crossWindowBlurEnabled,
+                                              boolean powerSave, boolean layerFailed) {
+        return sdk >= MIN_SDK && crossWindowBlurEnabled && !powerSave && !layerFailed;
+    }
+
+    /**
      * The blur radius, in pixels, the compositor draws under the keyboard's bed; 0 for none.
      *
      * @param sdk                    {@code Build.VERSION.SDK_INT}

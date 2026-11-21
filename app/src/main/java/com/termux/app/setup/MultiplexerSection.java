@@ -8,7 +8,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.R;
 
-/** Section 3: several terminals in one workspace. Writes nothing until Finish. */
+/** Section 3: several terminals in one terminal. Writes nothing until Finish. */
 final class MultiplexerSection implements SetupSection {
 
     @Override

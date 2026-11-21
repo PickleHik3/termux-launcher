@@ -3262,31 +3262,34 @@ public class LauncherCtlApiServer {
             "\n" +
             "With Settings > Debugging > Motion log on, the launcher notes page changes and\n" +
             "resizes, one line each with its uptime in milliseconds. dump prints the last 2,000\n" +
-            "lines; clear empties them.\n" +
+            "lines, then a --- counters --- line and the counter table (every hold and guard with\n" +
+            "its count, first and last time and last detail, kept past the 2,000); clear empties\n" +
+            "both.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    look) cat <<'EOF'\n" +
             "launcherctl look - the glass look\n" +
             "\n" +
             "Usage:\n" +
-            "  launcherctl look get PROPERTY [--element E] [--page ID | --kind K]\n" +
-            "  launcherctl look set PROPERTY VALUE [--element E] [--page ID | --kind K]\n" +
-            "  launcherctl look reset [PROPERTY] [--element E] [--page ID | --kind K]\n" +
+            "  launcherctl look get PROPERTY [--element E]\n" +
+            "  launcherctl look set PROPERTY VALUE [--element E]\n" +
+            "  launcherctl look reset [PROPERTY] [--element E]\n" +
             "\n" +
-            "Properties: frost opacity tint colour corners depth edge grain rim vibrancy margin.\n" +
-            "Elements: status dock keyboard terminal widgets sheets. Without --element a value\n" +
-            "applies to all glass; without --page or --kind, everywhere. --kind takes home,\n" +
-            "terminal or display: every page of that kind. Vibrancy and margin are for all glass,\n" +
-            "everywhere.\n" +
-            "Values: a number; frost takes a stop 0-7 or a blur such as 12dp; colour takes primary,\n" +
-            "secondary or tertiary; rim takes off, hairline or bright; corners takes dp or auto.\n" +
-            "get prints the value and where it is set; reset puts back what the cell followed.\n" +
+            "Without --element a value is Global's: blur opacity tint colour corners depth edge\n" +
+            "grain rim vibrancy margin.\n" +
+            "Elements: status, dock and keyboard each own an opacity and a blur (a blur brings its\n" +
+            "grain); background is the Terminal's Background: opacity, blur and dim.\n" +
+            "Values: a number; blur takes a stop 0-7 or a size such as 12dp (the Terminal's blur is\n" +
+            "a size in dp); colour takes primary, secondary or tertiary; rim takes off, hairline or\n" +
+            "bright; corners takes dp or auto.\n" +
+            "get prints the value and whether it is the element's own or Global's; reset puts an\n" +
+            "element back on Global (the Terminal's Background back to its shipped numbers).\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl look set opacity 60 --element dock\n" +
             "  launcherctl look get opacity --element dock\n" +
-            "  launcherctl look set opacity 60 --element keyboard --kind home\n" +
             "  launcherctl look reset --element dock\n" +
+            "  launcherctl look set dim 30 --element background\n" +
             "EOF\n" +
             "      ;;\n" +
             "    volume) cat <<'EOF'\n" +
@@ -3793,26 +3796,20 @@ public class LauncherCtlApiServer {
             "  usage='usage: launcherctl look get|set|reset ... (see launcherctl look --help)'\n" +
             "  op=\"${1:-}\"\n" +
             "  case \"$op\" in get|set|reset) shift ;; *) echo \"$usage\" >&2; exit 2 ;; esac\n" +
-            "  prop='' val='' elem='' page='' kind='' have_val=0\n" +
+            "  prop='' val='' elem='' have_val=0\n" +
             "  while [ \"$#\" -gt 0 ]; do\n" +
             "    case \"$1\" in\n" +
             "      --element) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; elem=\"$2\"; shift 2 ;;\n" +
-            "      --page) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; page=\"$2\"; shift 2 ;;\n" +
-            "      --kind) [ \"$#\" -ge 2 ] || { echo \"$usage\" >&2; exit 2; }; kind=\"$2\"; shift 2 ;;\n" +
+            "      --page|--kind) echo 'launcherctl look: the look is the same on every page: leave out --page and --kind' >&2; exit 2 ;;\n" +
             "      -*) echo \"launcherctl look: unknown option $1\" >&2; exit 2 ;;\n" +
             "      *) if [ -z \"$prop\" ]; then prop=\"$1\"; elif [ \"$have_val\" -eq 0 ] && [ \"$op\" = set ]; then val=\"$1\"; have_val=1; else echo \"$usage\" >&2; exit 2; fi; shift ;;\n" +
             "    esac\n" +
             "  done\n" +
-            "  case \"$page\" in *[!0-9]*) echo 'launcherctl look: --page takes a page number' >&2; exit 2 ;; esac\n" +
-            "  case \"$kind\" in ''|home|terminal|display) ;; *) echo 'launcherctl look: --kind takes home, terminal or display' >&2; exit 2 ;; esac\n" +
-            "  [ -z \"$page\" ] || [ -z \"$kind\" ] || { echo 'launcherctl look: give --page or --kind, not both' >&2; exit 2; }\n" +
             "  [ \"$op\" = reset ] || [ -n \"$prop\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
             "  [ \"$op\" != set ] || [ \"$have_val\" -eq 1 ] || { echo \"$usage\" >&2; exit 2; }\n" +
             "  body=\"{\\\"op\\\":\\\"$op\\\",\\\"property\\\":$(printf '%s' \"$prop\" | json_str)\"\n" +
             "  [ \"$op\" != set ] || body=\"$body,\\\"value\\\":$(printf '%s' \"$val\" | json_str)\"\n" +
             "  [ -z \"$elem\" ] || body=\"$body,\\\"element\\\":$(printf '%s' \"$elem\" | json_str)\"\n" +
-            "  [ -z \"$page\" ] || body=\"$body,\\\"page\\\":$page\"\n" +
-            "  [ -z \"$kind\" ] || body=\"$body,\\\"kind\\\":\\\"$kind\\\"\"\n" +
             "  api POST /v1/look \"$body}\"\n" +
             "}\n" +
             "volume_cmd() {\n" +

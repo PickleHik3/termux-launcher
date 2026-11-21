@@ -11,8 +11,8 @@ import android.view.View;
 import androidx.core.graphics.ColorUtils;
 
 import com.termux.app.chrome.OnGlass;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.io.ExtraKeyEligibility;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
@@ -72,7 +72,7 @@ public class HomePillInkTest {
     public void theStarterKeysAreLiveOnHome() {
         for (String key : new String[] {"tool:app.command_palette", "tool:app.open_app_drawer", "tool:app.open_settings"}) {
             // Keys that act on Home are never drawn dead; the pill dims only what the bar dims.
-            assertTrue(key, ExtraKeyEligibility.isUsable(key, PaneWallPage.WIDGETS));
+            assertTrue(key, ExtraKeyEligibility.isUsable(key, PageKind.HOME));
         }
     }
 

@@ -77,6 +77,15 @@ public final class PeekGlassGeometry {
     }
 
     /**
+     * Where the reflection's row is drawn across: the layout offset of the row in the host plus the
+     * translationX the row's lane hosts carry now (a page crossing slides them), so the reflection
+     * stands under the row where the row stands.
+     */
+    public static float rowDrawX(float layoutDx, float laneTx) {
+        return layoutDx + laneTx;
+    }
+
+    /**
      * How strongly the reflection shows at its top edge for the Reflection knob's {@code value}:
      * 0 is off, {@link #REFLECTION_MAX} is {@link #REFLECTION_MAX_ALPHA}.
      */
@@ -140,7 +149,7 @@ public final class PeekGlassGeometry {
         float radius = cornerRadiusPx(right - left, density);
         float axis = mirrorAxisY(icons);
         // The screen's edge as the host is drawn, never above the icons' lower edges. A host laid
-        // out taller than the screen shows of it (a crossing's tail: the Workspace's keyboard room
+        // out taller than the screen shows of it (a crossing's tail: the Terminal's keyboard room
         // still laid out, the stack slid down by the travel) ends at the screen's edge too, so the
         // reflection fades over what shows rather than over room below the screen.
         float screenBottom = Math.max(axis, screenBottomPx);
@@ -250,6 +259,18 @@ public final class PeekGlassGeometry {
     }
 
     /** One card, in the glass host's coordinates. */
+    /**
+     * {@code card}'s cut ({@link com.termux.app.chrome.RoundCut}) with the rows moved
+     * {@code rowsMovedPx} over the host since it was cut: the top, the icons' centre line, moves
+     * with them; the sides and the radius stay; the bottom stays past the screen's edge, never
+     * nearer the top than the radius.
+     */
+    public static void cut(@NonNull Card card, float rowsMovedPx, @NonNull float[] out) {
+        float top = card.top + rowsMovedPx;
+        com.termux.app.chrome.RoundCut.set(out, card.left, top, card.right,
+            Math.max(card.bottom, top + card.radiusPx), card.radiusPx);
+    }
+
     public static final class Card {
         public final float left;
         /** The card's top edge: the icons' centre line. */

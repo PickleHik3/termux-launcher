@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.place.PlaceLayout.Edge;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 
 /**
@@ -55,16 +56,19 @@ public class EdgeStackView extends LinearLayout {
     /** The draw pass's own buffer for {@link #separatorCenters}, so a frame allocates nothing. */
     @Nullable private int[] mSeparatorScratch;
 
-    /** The band a fold across the seam shuts ({@link #holdOutside}), null while none runs. */
-    @Nullable private View mFoldRow;
-    private float mFoldSinkPx;
-    /** How far {@link #mFoldRow} is cut at its own bottom: its hidden part. */
-    private float mFoldCutPx;
-    /** The bands outside the fold, drawn back where they are laid out; reused fold to fold. */
-    @NonNull private final java.util.ArrayList<View> mFoldHeld = new java.util.ArrayList<>(2);
-    /** The first gap, counted from the first child, whose hairline goes back with them. */
-    private int mFoldGapFrom = Integer.MAX_VALUE;
-    @NonNull private final android.graphics.Rect mFoldClip = new android.graphics.Rect();
+
+    /**
+     * The rows that stand in one side's lane ({@link StackLanes#HOME} or {@link StackLanes#TERMINAL});
+     * a row not here is the shared stack's. Set by the activity's edge walk, read by the layout.
+     */
+    @NonNull private final IdentityHashMap<View, Integer> mLanes = new IdentityHashMap<>(4);
+    /** The side standing in front: the shared rows stand as that side's rest has them. */
+    private int mFrontLane = StackLanes.TERMINAL;
+    /** Whether the last measure laid the rows out by lane (a visible row of a lane stands here). */
+    private boolean mLaned;
+    @NonNull private int[] mLaneHeight = new int[4];
+    @NonNull private int[] mLaneOf = new int[4];
+    @NonNull private int[] mLaneTop = new int[4];
 
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
@@ -111,17 +115,135 @@ public class EdgeStackView extends LinearLayout {
         boolean reversed = mEdge == Edge.BOTTOM || mEdge == Edge.RIGHT;
         int count = outermostFirst.size();
         boolean moved = false;
+        boolean reordered = false;
         for (int position = 0; position < count; position++) {
             View bar = outermostFirst.get(reversed ? count - 1 - position : position);
             if (bar == null) continue;
             ViewGroup parent = bar.getParent() instanceof ViewGroup
                 ? (ViewGroup) bar.getParent() : null;
             if (parent == this && indexOfChild(bar) == position) continue;
-            if (parent != null) parent.removeView(bar);
-            addView(bar, Math.min(position, getChildCount()));
+            if (parent == this) {
+                // A bar this stack already holds changes place without leaving the window: a
+                // removeView/addView pair detaches it, and a bar re-attached mid-landing (the apps
+                // row) draws nothing until its layout settles again.
+                detachViewFromParent(bar);
+                attachViewToParent(bar, Math.min(position, getChildCount()), bar.getLayoutParams());
+                reordered = true;
+            } else {
+                if (parent != null) parent.removeView(bar);
+                addView(bar, Math.min(position, getChildCount()));
+            }
             moved = true;
         }
+        if (reordered) {
+            requestLayout();
+            invalidate();
+        }
         return moved;
+    }
+
+    /**
+     * Puts {@code bar} in {@code lane}'s side lane, or back in the shared stack
+     * ({@link StackLanes#STACK}). Lanes lay out along the bottom edge only.
+     *
+     * @return whether the lane changed
+     */
+    public boolean setLane(@NonNull View bar, int lane) {
+        int was = getLane(bar);
+        if (was == lane) return false;
+        if (lane == StackLanes.STACK) mLanes.remove(bar);
+        else mLanes.put(bar, lane);
+        requestLayout();
+        return true;
+    }
+
+    /** {@code bar}'s lane: {@link StackLanes#STACK} for a row that is not in a side's lane. */
+    public int getLane(@NonNull View bar) {
+        Integer lane = mLanes.get(bar);
+        return lane == null ? StackLanes.STACK : lane;
+    }
+
+    /**
+     * The side standing in front ({@link StackLanes#HOME} or {@link StackLanes#TERMINAL}): the
+     * shared rows stand on the rows that side shows. Changes only when the front page does.
+     */
+    public void setFrontLane(int lane) {
+        if (lane == mFrontLane) return;
+        mFrontLane = lane;
+        if (!mLanes.isEmpty()) requestLayout();
+    }
+
+    public int getFrontLane() {
+        return mFrontLane;
+    }
+
+    /** Whether a visible row of a side's lane stands in this stack, so it lays out by lane. */
+    private boolean lanesStand() {
+        if (mEdge != Edge.BOTTOM || mLanes.isEmpty()) return false;
+        for (int index = 0; index < getChildCount(); index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() != GONE && mLanes.containsKey(child)) return true;
+        }
+        return false;
+    }
+
+    /** Whether {@code child} is in the lane the front side stands: the shared rows and its own. */
+    private boolean inFront(@NonNull View child) {
+        if (!mLaned) return true;
+        int lane = getLane(child);
+        return lane == StackLanes.STACK || lane == mFrontLane;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        mLaned = lanesStand();
+        if (!mLaned) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
+        int count = getChildCount();
+        if (mLaneHeight.length < count) {
+            mLaneHeight = new int[count];
+            mLaneOf = new int[count];
+            mLaneTop = new int[count];
+        }
+        int widest = 0;
+        for (int index = 0; index < count; index++) {
+            View child = getChildAt(index);
+            mLaneOf[index] = getLane(child);
+            if (child.getVisibility() == GONE) {
+                mLaneHeight[index] = 0;
+                continue;
+            }
+            measureChildWithMargins(child, widthMeasureSpec, 0,
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), 0);
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) child.getLayoutParams();
+            mLaneHeight[index] = child.getMeasuredHeight() + params.topMargin + params.bottomMargin;
+            widest = Math.max(widest, child.getMeasuredWidth() + params.leftMargin
+                + params.rightMargin);
+        }
+        int band = StackLanes.layoutBand(mLaneHeight, mLaneOf, count, mFrontLane, mLaneTop);
+        setMeasuredDimension(
+            resolveSizeAndState(Math.max(widest + getPaddingLeft() + getPaddingRight(),
+                getSuggestedMinimumWidth()), widthMeasureSpec, 0),
+            resolveSizeAndState(Math.max(band + getPaddingTop() + getPaddingBottom(),
+                getSuggestedMinimumHeight()), heightMeasureSpec, 0));
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        if (!mLaned) {
+            super.onLayout(changed, left, top, right, bottom);
+            return;
+        }
+        for (int index = 0; index < getChildCount(); index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() == GONE) continue;
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) child.getLayoutParams();
+            int x = getPaddingLeft() + params.leftMargin;
+            int y = getPaddingTop() + mLaneTop[index] + params.topMargin;
+            child.layout(x, y, x + child.getMeasuredWidth(), y + child.getMeasuredHeight());
+        }
     }
 
     /**
@@ -183,59 +305,6 @@ public class EdgeStackView extends LinearLayout {
         invalidate();
     }
 
-    /**
-     * A fold across the seam (#94) on a bottom stack the caller draws {@code sinkPx} lower than it
-     * lays it out, cut at its own bottom: the bands outside {@code fold} — between it and the
-     * screen's edge — are drawn back up by the sink, so they stand where they are laid out, and so
-     * are the hairlines in the gaps beside them; {@code fold} itself is cut at its laid-out bottom
-     * less the sink, so it shuts into its outer edge instead of over them. Where {@code fold} is
-     * the outermost band there is nothing to hold and nothing here changes. Null or 0 puts
-     * everything back. Transforms and a clip only: nothing is laid out again.
-     */
-    public void holdOutside(@Nullable View fold, float sinkPx) {
-        holdOutside(fold, sinkPx, sinkPx);
-    }
-
-    /**
-     * {@link #holdOutside(View, float)} where the bands outside {@code fold} are drawn back up by
-     * {@code holdPx} and {@code fold} is cut by {@code cutPx}, which differ where the fold's rows
-     * travel more than the fold's hidden part (SeamTravel.foldRowsSinkPx): the fold still shuts by
-     * its own hidden part, and the bands outside it go down by the rest.
-     */
-    public void holdOutside(@Nullable View fold, float holdPx, float cutPx) {
-        int index = fold != null && mEdge == Edge.BOTTOM ? indexOfChild(fold) : -1;
-        boolean inside = index >= 0 && index < getChildCount() - 1;
-        float hold = inside ? holdPx : 0f;
-        float cut = inside ? Math.max(0f, cutPx) : 0f;
-        View row = hold != 0f || cut > 0f ? fold : null;
-        if (row == null) {
-            hold = 0f;
-            cut = 0f;
-        }
-        if (row == mFoldRow && hold == mFoldSinkPx && cut == mFoldCutPx) return;
-        if (mFoldRow != null && mFoldRow != row) mFoldRow.setClipBounds(null);
-        for (View held : mFoldHeld) held.setTranslationY(0f);
-        mFoldHeld.clear();
-        mFoldRow = row;
-        mFoldSinkPx = hold;
-        mFoldCutPx = cut;
-        mFoldGapFrom = Integer.MAX_VALUE;
-        if (row != null) {
-            for (int i = index + 1; i < getChildCount(); i++) {
-                View child = getChildAt(i);
-                mFoldHeld.add(child);
-                if (child.getTranslationY() != -hold) child.setTranslationY(-hold);
-            }
-            int width = Math.max(1, row.getWidth());
-            // Generous above and to the sides, as the stack's own clip is: only the bottom is cut.
-            mFoldClip.set(-width,
-                -Math.max(row.getHeight(), getResources().getDisplayMetrics().heightPixels),
-                2 * width, Math.max(0, row.getHeight() - Math.round(cut)));
-            row.setClipBounds(mFoldClip);
-        }
-        invalidate();
-    }
-
     @Override
     protected void dispatchDraw(@NonNull Canvas canvas) {
         super.dispatchDraw(canvas);
@@ -259,9 +328,8 @@ public class EdgeStackView extends LinearLayout {
         if (mSeparatorScratch == null || mSeparatorScratch.length < mSeparatorCount)
             mSeparatorScratch = new int[mSeparatorCount];
         int count = fillSeparatorCenters(mSeparatorScratch);
-        int held = Math.round(mFoldSinkPx);
         for (int at = 0; at < count; at++) {
-            int gap = mSeparatorScratch[at] - (at >= mFoldGapFrom ? held : 0);
+            int gap = mSeparatorScratch[at];
             int from = gap - (mSeparatorThicknessPx / 2);
             int to = from + mSeparatorThicknessPx;
             if (column) {
@@ -302,15 +370,11 @@ public class EdgeStackView extends LinearLayout {
         int wanted = Math.min(out.length, Math.max(0, mSeparatorCount));
         View previous = null;
         int drawn = 0;
-        int foldIndex = mFoldRow != null ? indexOfChild(mFoldRow) : -1;
-        mFoldGapFrom = Integer.MAX_VALUE;
         for (int index = 0; index < getChildCount() && drawn < wanted; index++) {
             View child = getChildAt(index);
-            if (child.getVisibility() == GONE) continue;
+            if (child.getVisibility() == GONE || !inFront(child)) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
-                if (foldIndex >= 0 && index > foldIndex && mFoldGapFrom == Integer.MAX_VALUE)
-                    mFoldGapFrom = drawn;
                 int center = (contentEnd(previous, column) + contentStart(child, column)) / 2;
                 center = clearOfAirMarks(center, previous, column, true);
                 out[drawn++] = clearOfAirMarks(center, child, column, false);

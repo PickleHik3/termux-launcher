@@ -8,19 +8,16 @@ import com.termux.app.chrome.DressResolver;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.fragments.settings.LayoutChooserModel;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
-import com.termux.app.place.PlaceArrangeSnapshot;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 
 import java.util.ArrayList;
-import java.util.EnumMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * One Layout editor session, as decisions rather than views: which orientation the layout canvas is
@@ -36,14 +33,14 @@ import java.util.Map;
  * <p>There are no rows under the canvas (spec §3.5): what used to be a row is a handle on the
  * canvas — the dock's height, the keyboard's height and chin, Home's grid — the tray, which puts
  * any element away and brings it back, and the keyboard's type chips. Each writes the orientation
- * on the toggle through the store's own setters, the same way a drop does, so the snapshot and the
- * dirty check see every one of them.
+ * on the toggle through the store's own setters, the same way a drop does, so the session's draft
+ * and the dirty check see every one of them.
  *
  * <p>One layout dresses both halves (ADR 0009), so a write there lands on every window and on
  * Home. Only while Home holds a Home layout does a Home page wear one of its own: the session
  * edits the layout of the page it stands on, as its dress says, and the Home filter ({@link
- * #showHome}) moves it between a Home page and its window, each layout's arrangement at entry
- * kept for Undo. The session knows which place it is on, because that is what the layout
+ * #showHome}) moves it between a Home page and its window, both layouts' writes in the
+ * session's draft. The session knows which place it is on, because that is what the layout
  * canvas draws — Home's grid, the terminal's text, the display's screen — and what decides the
  * handles worth offering: the grid's only on Home. Which elements the tray and a drop offer, and
  * whether the dock's design is picked here, are the edited layout's page's {@link Dress}.
@@ -80,28 +77,14 @@ public final class LayoutEditorPlan {
      * the session opened on, until the Home filter moves it. A second door ({@link #showPlace})
      * moves the picture and leaves it.
      */
-    @NonNull private PaneWallPage mDressedPage;
+    @NonNull private PageKind mDressedPage;
     /** The place the layout canvas draws and the live place behind the card; never a write target. */
-    @NonNull private PaneWallPage mPlace;
+    @NonNull private PageKind mPlace;
     /**
      * The window the Home filter hands back to when it is turned off: the window the editor was
      * opened over, or the terminal when it was opened over Home.
      */
-    @NonNull private PaneWallPage mWindowPlace;
-    /**
-     * The arrangement of every variant as the editor found it; what Discard and ↺ put back. All
-     * the session may touch are taken at open (never the Minimal layout from a normal-mode
-     * session, nor the normal one from a Minimal-mode session), the one the session opened on
-     * first: a card writes the layout
-     * the half on screen wears, and a write must never land on a layout the session has no entry
-     * for, or Discard would leave it behind. A carried session keeps the entries it brought; the
-     * sizes the Home and normal layouts share (linked, #84) come from the entry already kept for
-     * the other ({@link #enterVariant}).
-     */
-    @NonNull private final Map<LayoutVariant, PlaceArrangeSnapshot> mEntries =
-        new java.util.LinkedHashMap<>();
-    @NonNull private final Map<LayoutVariant, String> mEntrySignatures =
-        new java.util.LinkedHashMap<>();
+    @NonNull private PageKind mWindowPlace;
     @NonNull private PlaceOrientation mDeviceOrientation;
     @NonNull private PlaceOrientation mShownOrientation;
     /**
@@ -109,9 +92,8 @@ public final class LayoutEditorPlan {
      * session first reached it: the flags Discard puts back too (ADR 0015 §3).
      */
 
-    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PaneWallPage place,
-                             @NonNull PlaceOrientation deviceOrientation,
-                             @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
+    private LayoutEditorPlan(@NonNull PlaceLayoutStore places, @NonNull PageKind place,
+                             @NonNull PlaceOrientation deviceOrientation) {
         mRoot = places;
         mDresses = DressResolver.of(places);
         mDressedPage = place;
@@ -119,25 +101,11 @@ public final class LayoutEditorPlan {
         mVariant = variant;
         mPlaces = places.forVariant(variant);
         mPlace = place;
-        mWindowPlace = place == PaneWallPage.WIDGETS ? PaneWallPage.TERMINAL : place;
+        mWindowPlace = place == PageKind.HOME ? PageKind.TERMINAL : place;
         mDeviceOrientation = deviceOrientation;
         // The editor opens on what the user is looking at; the toggle is how the other one is asked
         // for.
         mShownOrientation = deviceOrientation;
-        // A session carried over an activity relaunch keeps the arrangements it opened on, every
-        // variant it had reached; the one being edited now is taken fresh if it had not.
-        if (carriedEntries != null) {
-            for (PlaceArrangeSnapshot entry : carriedEntries)
-                keepEntry(entry);
-        }
-        enterVariant(variant);
-        enterVariant(dockLayout());
-        // What the session may touch: the layout the page wears and the Workspace layout the
-        // launcher stands in. A session opened in normal mode never snapshots (so never reverts)
-        // Minimal; one opened in Minimal edits Minimal alone. The page's own layout flag is
-        // remembered so Discard puts it back (ADR 0015 §3).
-        LayoutVariant workspace = LayoutVariant.of(places.isMinimal());
-        enterVariant(workspace);
     }
 
     /**
@@ -181,76 +149,30 @@ public final class LayoutEditorPlan {
 
     /** The kind of the page being dressed. */
     @NonNull
-    public com.termux.app.wall.WallPages.PageKind pageKind() {
-        return DressResolver.kindOf(mDressedPage);
+    public com.termux.app.page.PageKind pageKind() {
+        return DressResolver.dressKindOf(mDressedPage);
     }
 
 
 
 
-
-    private void keepEntry(@NonNull PlaceArrangeSnapshot entry) {
-        mEntries.put(entry.variant(), entry);
-        mEntrySignatures.put(entry.variant(), entry.signature());
-    }
-
-    /**
-     * Takes the variant's arrangement as it stands, the first time the session reaches it. Its
-     * sizes may already have been edited through a layout it shares them with (the Home and
-     * normal layouts, {@link PlaceLayoutStore#sizesLinked}), so those come from that layout's
-     * entry: both entries then hold the sizes as the session found them.
-     */
-    private void enterVariant(@NonNull LayoutVariant variant) {
-        if (mEntries.containsKey(variant))
-            return;
-        PlaceArrangeSnapshot entry = PlaceArrangeSnapshot.capture(mRoot, variant);
-        for (PlaceArrangeSnapshot kept : mEntries.values()) {
-            if (PlaceLayoutStore.sizesLinked(variant, kept.variant())) {
-                entry = entry.withSizesOf(kept);
-                break;
-            }
-        }
-        keepEntry(entry);
-    }
 
     /**
      * Opens a session over one page, showing the orientation the phone is in, on the layout that
-     * page is arranged by: the Home layout on a Home page, and on a window the Workspace layout
+     * page is arranged by: the Home layout on a Home page, and on a window the Terminal layout
      * the launcher is standing in, the minimal one while minimal mode is on.
      */
     @NonNull
     public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
-                                         @NonNull PaneWallPage place,
+                                         @NonNull PageKind place,
                                          @NonNull PlaceOrientation deviceOrientation) {
-        return new LayoutEditorPlan(places, place, deviceOrientation, null);
-    }
-
-    /**
-     * {@link #enter(PlaceLayoutStore, PaneWallPage, PlaceOrientation)} continuing a session whose
-     * arrangements at open were {@code carriedEntries} (an activity relaunch), so its Undo and its
-     * unsaved state are the same, for every variant it had reached.
-     */
-    @NonNull
-    public static LayoutEditorPlan enter(@NonNull PlaceLayoutStore places,
-                                         @NonNull PaneWallPage place,
-                                         @NonNull PlaceOrientation deviceOrientation,
-                                         @Nullable List<PlaceArrangeSnapshot> carriedEntries) {
-        return new LayoutEditorPlan(places, place, deviceOrientation, carriedEntries);
+        return new LayoutEditorPlan(places, place, deviceOrientation);
     }
 
     /** What the page whose layout is being edited wears, as the store stands now. */
     @NonNull
     private Dress dress() {
         return mDresses.dressOf(mDressedPage);
-    }
-
-    /**
-     * The arrangements as the editor found them, every variant the session has reached, to carry
-     * the session over a relaunch.
-     */
-    @NonNull
-    public List<PlaceArrangeSnapshot> entries() {
-        return new ArrayList<>(mEntries.values());
     }
 
     /** Which layout the session is editing, which the card says so it is never a surprise. */
@@ -260,7 +182,7 @@ public final class LayoutEditorPlan {
     }
 
     @NonNull
-    public PaneWallPage place() {
+    public PageKind place() {
         return mPlace;
     }
 
@@ -296,7 +218,7 @@ public final class LayoutEditorPlan {
     /*
      * Layout has no rows (spec §3.5): every size is a handle on the canvas and every on/off is the
      * tray. These are what those write, for the orientation on the toggle, through the store's own
-     * setters and clamps, so the snapshot and the dirty check see them like any drop.
+     * setters and clamps, so the draft and the dirty check see them like any drop.
      */
 
     /** The dock's height in the shown orientation, as a multiple of its unscaled height. */
@@ -398,7 +320,7 @@ public final class LayoutEditorPlan {
      */
     @NonNull
     public Drop setKeyboardShown(boolean shown) {
-        boolean home = mDressedPage == PaneWallPage.WIDGETS;
+        boolean home = mDressedPage == PageKind.HOME;
         if ((home ? mRoot.isHomeKeyboardAlwaysOn() : mPlaces.isKeyboardShown()) == shown)
             return Drop.NONE;
         if (home)
@@ -412,13 +334,12 @@ public final class LayoutEditorPlan {
 
     /**
      * Shows or puts away {@code element} on {@code variant}'s layout, in both orientations,
-     * whichever page the session is on: Customization's whole-app list. The variant is entered
-     * first, so Undo, Discard and the unsaved question cover it as they cover the edited one.
+     * whichever page the session is on: Customization's whole-app list. Written into the
+     * session's draft like every other write, so Undo, Discard and the unsaved question cover it.
      */
     @NonNull
     public Drop setShownOnLayout(@NonNull LayoutVariant variant, @NonNull Element element,
                                  boolean shown) {
-        enterVariant(variant);
         PlaceLayoutStore layout = mRoot.forVariant(variant);
         boolean wrote = false;
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
@@ -433,11 +354,10 @@ public final class LayoutEditorPlan {
 
     /**
      * The keyboard element on {@code variant}'s layout: Home's always-on on the Home layout, the
-     * keyboard switch elsewhere ({@link #setKeyboardShown}), entered first as above.
+     * keyboard switch elsewhere ({@link #setKeyboardShown}), as above.
      */
     @NonNull
     public Drop setKeyboardShownOnLayout(@NonNull LayoutVariant variant, boolean shown) {
-        enterVariant(variant);
         if (variant.isHomeKind()) {
             if (mRoot.isHomeKeyboardAlwaysOn() == shown)
                 return Drop.NONE;
@@ -581,35 +501,33 @@ public final class LayoutEditorPlan {
      * starting a session over, so what Discard puts back is still the arrangement the user first
      * opened the editor on. It changes the picture and the rows offered, never what is written.
      */
-    public void showPlace(@NonNull PaneWallPage place) {
+    public void showPlace(@NonNull PageKind place) {
         mPlace = place;
-        if (place != PaneWallPage.WIDGETS)
+        if (place != PageKind.HOME)
             mWindowPlace = place;
     }
 
     /** Whether the Home filter is on: the canvas is drawing a Home page. */
     public boolean showsHome() {
-        return mPlace == PaneWallPage.WIDGETS;
+        return mPlace == PageKind.HOME;
     }
 
     /**
      * The Home filter, beside the Portrait / Landscape toggle: on, the canvas shows a Home page and
      * every write lands on the Home layout; off, it shows the window the editor was opened over
-     * (the terminal when that was Home) and writes the Workspace's layout, the normal one or the
-     * minimal one as minimal mode says. The orientation stays as it was. Each layout's arrangement
-     * at entry is kept, so Undo and the unsaved question cover both.
+     * (the terminal when that was Home) and writes the Terminal's layout, the normal one or the
+     * minimal one as minimal mode says. The orientation stays as it was. Both layouts' writes are
+     * in the session's draft, so Undo and the unsaved question cover both.
      *
      * @return the place the canvas now shows, which the live wall is to stand on
      */
     @NonNull
-    public PaneWallPage showHome(boolean home) {
-        PaneWallPage place = home ? PaneWallPage.WIDGETS : mWindowPlace;
+    public PageKind showHome(boolean home) {
+        PageKind place = home ? PageKind.HOME : mWindowPlace;
         mPlace = place;
         mDressedPage = place;
         mVariant = dress().layout();
         mPlaces = mRoot.forVariant(mVariant);
-        enterVariant(mVariant);
-        enterVariant(dockLayout());
         return place;
     }
 
@@ -689,29 +607,43 @@ public final class LayoutEditorPlan {
     }
 
     /**
-     * Whether anything has moved since the editor opened, in any layout the session has reached
-     * — the unsaved-changes question.
+     * Whether the Appearance editor's draft over the layouts shows an arrangement the file does
+     * not, in any layout: the unsaved-changes question. The arrangement is compared as each layout
+     * resolves it, the draft's against the file's, so a value set back to what it read at open
+     * (written out where the file had none) is no change; any other field the draft holds is
+     * compared as stored. What a place remembers (its keyboard left up, the status bar's rest) is
+     * written past the draft, so it never counts.
      */
     public boolean isDirty() {
-        for (Map.Entry<LayoutVariant, String> entry : mEntrySignatures.entrySet()) {
-            if (!entry.getValue().equals(
-                    PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
+        com.termux.app.place.layout.LayoutStore documents = mRoot.layouts();
+        if (documents == null || !documents.isDraftDirty())
+            return false;
+        if (documents.isDraftDirtyOutside(com.termux.app.place.PlaceArrangeSnapshot.FIELDS))
+            return true;
+        // The session's side first: a layout read for the first time is seeded there, and the
+        // reading of the store alone then finds it seeded.
+        String[] drafted = new String[DRAFTED_LAYOUTS.length];
+        for (int i = 0; i < drafted.length; i++)
+            drafted[i] = com.termux.app.place.PlaceArrangeSnapshot.capture(mRoot, DRAFTED_LAYOUTS[i])
+                .signature();
+        PlaceLayoutStore stored = mRoot.storedReading();
+        for (int i = 0; i < drafted.length; i++) {
+            if (!drafted[i].equals(com.termux.app.place.PlaceArrangeSnapshot.capture(stored,
+                    DRAFTED_LAYOUTS[i]).signature()))
                 return true;
         }
         return false;
     }
 
-    /**
-     * Puts every layout back the way the editor found it, and Home's own-layout switch; a layout
-     * nothing moved is left unwritten.
-     */
+    /** The layouts a session can write: one per live document (ADR 0020, 0025). */
+    private static final LayoutVariant[] DRAFTED_LAYOUTS =
+        {LayoutVariant.NORMAL, LayoutVariant.MINIMAL, LayoutVariant.HOME};
+
+    /** Undo: the draft's edits go, and every layout reads the file again. */
     public void revert() {
-        for (Map.Entry<LayoutVariant, PlaceArrangeSnapshot> entry : mEntries.entrySet()) {
-            String atOpen = mEntrySignatures.get(entry.getKey());
-            if (atOpen == null || !atOpen.equals(
-                    PlaceArrangeSnapshot.capture(mRoot, entry.getKey()).signature()))
-                entry.getValue().restore(mRoot);
-        }
+        com.termux.app.place.layout.LayoutStore documents = mRoot.layouts();
+        if (documents != null)
+            documents.resetDraft();
     }
 
     // ------------------------------------------------------------------------- Dock card

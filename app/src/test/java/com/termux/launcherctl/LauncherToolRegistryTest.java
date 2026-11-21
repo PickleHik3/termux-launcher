@@ -110,6 +110,16 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void openingTheAppDrawer_narratesItself() {
+        // The drawer coming up is the read-out: an "App drawer" pill over its search field for
+        // the length of the hint was clutter over the thing it named (pong, 2026-11-20).
+        LauncherToolRegistry.ToolMetadata tool =
+            registry.getTool(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
+        assertNotNull(tool);
+        assertTrue(tool.selfEvident);
+    }
+
+    @Test
     public void consumeAndExpel_arePlainPaneRowsOnNiriKeys() {
         String[][] tools = {{"pane.consume", "from", "ctrl+alt+,"}, {"pane.expel", "to", "ctrl+alt+."}};
         for (String[] spec : tools) {

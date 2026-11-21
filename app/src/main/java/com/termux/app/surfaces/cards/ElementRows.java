@@ -5,8 +5,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 
-import com.termux.app.wall.PaneWallPage;
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.surfaces.EditorCard;
 import com.termux.app.surfaces.EditorRows.Row;
@@ -44,7 +44,9 @@ public final class ElementRows {
         COMMAND_PALETTE_BUTTON,
         /** The dock's New float terminal tile ({@link DockCard#KEY_FLOAT_TERMINAL_BUTTON}). */
         FLOAT_TERMINAL_BUTTON,
-        /** No eye: the terminal and the widgets cannot be hidden. */
+        /** The page bar on Home: {@code app_launcher_home_page_indicator} "dots" or "off". */
+        PAGE_BAR,
+        /** No eye. */
         NONE
     }
 
@@ -52,6 +54,8 @@ public final class ElementRows {
     public enum Item {
         STATUS_BAR(R.string.editor_elements_status_bar, R.drawable.ic_editor_status_bar,
             EditorCard.STATUS, Element.STATUS, null, Visibility.ELEMENT),
+        PAGE_BAR(R.string.editor_elements_page_bar, R.drawable.ic_ms_more_horiz,
+            EditorCard.HOME, null, null, Visibility.PAGE_BAR),
         APPS_ROW(R.string.editor_elements_apps_row, R.drawable.ic_symbol_apps,
             EditorCard.DOCK, Element.APPS, null, Visibility.ELEMENT),
         AZ(R.string.editor_elements_az, R.drawable.ic_ms_sort_by_alpha,
@@ -67,12 +71,7 @@ public final class ElementRows {
         COMMAND_PALETTE(R.string.editor_elements_command_palette, R.drawable.ic_symbol_terminal,
             EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.COMMAND_PALETTE_BUTTON),
         FLOAT_TERMINAL(R.string.editor_elements_float_terminal, R.drawable.ic_status_bar_add_window,
-            EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.FLOAT_TERMINAL_BUTTON),
-        TERMINAL(R.string.editor_elements_terminal, R.drawable.ic_symbol_terminal,
-            EditorCard.TERMINAL, null, Row.PANE_BORDERS, Visibility.NONE),
-        /** The widgets: their own card (the widgets' glass on Home). */
-        WIDGETS(R.string.editor_elements_widgets, R.drawable.ic_ms_widgets,
-            EditorCard.WIDGETS, null, null, Visibility.NONE);
+            EditorCard.DOCK, null, Row.DOCK_OPTIONS, Visibility.FLOAT_TERMINAL_BUTTON);
 
         @StringRes public final int nameRes;
         @DrawableRes public final int glyphRes;
@@ -97,6 +96,11 @@ public final class ElementRows {
             this.visibility = visibility;
         }
 
+        /** Whether the row opens a card: the page bar's settings are the row's own switch. */
+        public boolean opensCard() {
+            return visibility != Visibility.PAGE_BAR;
+        }
+
         /** Whether the row carries an eye. */
         public boolean hasEye() {
             return visibility != Visibility.NONE;
@@ -119,42 +123,34 @@ public final class ElementRows {
         }
     }
 
-    /** The rows both screens list, top to bottom. */
-    private static final List<Item> SHARED = Collections.unmodifiableList(java.util.Arrays.asList(
+    /** The rows both page cards list, top to bottom (Home adds the page bar). */
+    private static final List<Item> ROWS = Collections.unmodifiableList(java.util.Arrays.asList(
         Item.STATUS_BAR, Item.APPS_ROW, Item.AZ, Item.EXTRA_KEYS, Item.KEYBOARD,
         Item.COMMAND_PALETTE, Item.FLOAT_TERMINAL));
 
-    /**
-     * The rows {@code screen}'s card lists, top to bottom: the shared ones, then the screen's own
-     * content (the Workspace's terminal, Home's widgets), which has no eye.
-     */
-    @NonNull
-    public static List<Item> rows(@NonNull PaneWallPage screen) {
-        List<Item> out = new ArrayList<>(SHARED);
-        out.add(screen == PaneWallPage.WIDGETS ? Item.WIDGETS : Item.TERMINAL);
-        return Collections.unmodifiableList(out);
+    /** Home's rows: the page bar stands under the status bar, above the dock's bars it sits over. */
+    private static final List<Item> HOME_ROWS;
+    static {
+        List<Item> rows = new ArrayList<>(ROWS);
+        rows.add(rows.indexOf(Item.APPS_ROW), Item.PAGE_BAR);
+        HOME_ROWS = Collections.unmodifiableList(rows);
     }
 
     /**
-     * Customization's list, for the whole app: the shared rows, then the terminal and the
-     * widgets (no switch; › opens their cards).
+     * The rows {@code screen}'s card lists, top to bottom: the same list on Home and the
+     * Terminal, but for Home's page bar, each written to its own page's layout. A row the page never wears is left out
+     * by the editor's host ({@code offers}).
      */
     @NonNull
-    public static List<Item> wholeApp() {
-        List<Item> out = new ArrayList<>(SHARED);
-        // The Search field and the Drawer icon are every page's (ADR 0023 §1): only here.
-        out.add(out.indexOf(Item.COMMAND_PALETTE), Item.SEARCH_FIELD);
-        out.add(out.indexOf(Item.COMMAND_PALETTE), Item.DRAWER_ICON);
-        out.add(Item.TERMINAL);
-        out.add(Item.WIDGETS);
-        return Collections.unmodifiableList(out);
+    public static List<Item> rows(@NonNull PageKind screen) {
+        return screen == PageKind.HOME ? HOME_ROWS : ROWS;
     }
 
-    /** The screen card that holds the list: Home's on Home, the Workspace's on the Workspace. */
+    /** The page card that holds the list: Home's on Home, the Terminal's on the Terminal's. */
     @Nullable
-    public static PaneWallPage screenOf(@NonNull EditorCard card) {
-        if (card == EditorCard.HOME) return PaneWallPage.WIDGETS;
-        if (card == EditorCard.WORKSPACE) return PaneWallPage.TERMINAL;
+    public static PageKind screenOf(@NonNull EditorCard card) {
+        if (card == EditorCard.HOME) return PageKind.HOME;
+        if (card == EditorCard.TERMINAL) return PageKind.TERMINAL;
         return null;
     }
 }

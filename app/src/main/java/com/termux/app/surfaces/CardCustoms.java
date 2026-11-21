@@ -10,7 +10,7 @@ import org.json.JSONException;
 import org.json.JSONObject;
 
 /**
- * The Custom look of each card whose Look chips write grid cells (Home, Workspace and the element
+ * The Custom look of each card whose Look chips write grid cells (Home, Terminal and the element
  * cards): the Frost stop, Opacity and Tint the user left there, by card, in one JSON object under
  * one preference key. Written when the chips leave a Custom for a Look; read when Custom is
  * tapped again. The Customization card's own Custom is the saved preset

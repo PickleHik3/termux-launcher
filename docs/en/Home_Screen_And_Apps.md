@@ -4,44 +4,52 @@ This page covers Home and launching apps: app icons on Home, the pinned apps row
 index, the app drawer, the Terminal entry, searching from the shell prompt and making the launcher your home app.
 Widgets have their own page, [Widgets](Widgets.md).
 
-Most of these settings are on **Settings → Dock** and **Settings → Home**.
+Most of these settings are on **Settings → Apps** and **Settings → Home**.
 
-## Home and the Workspace
+## Home and the Terminal
 
 The launcher is one row of pages. That row is the wall, and **Edit pages** sets its order. Two Display pages may be neighbours. The extra keys row shows a go-to key for each page kind the wall has. **Home** comes first: your widget pages, which you swipe through
-anywhere on the page, as on any home screen. The **Workspace** follows: your terminal windows, then
+anywhere on the page, as on any home screen. The **Terminal** follows: your terminal windows, then
 any [Linux display](X11_Display.md). Swiping left past the last Home page reaches the first window;
 dragging right from the first window's border comes back. The home button always lands on the
 page you marked as Home (Home page 1 until you choose another, see Start in below), and coming
 back from another app shows the page you left.
 
-Home wears the same chrome as the Workspace: the same status bar (with the same window chips), the
-same dock and the same look. Only the extra keys are the Workspace's alone; they fold away as you
+Home wears the same chrome as the Terminal: the same status bar (with the same window chips), the
+same dock and the same look. Only the extra keys are the Terminal's alone; they fold away as you
 swipe to Home while the bar and dock stand still. Home has no borders. The dock floats over the
 widgets rather than taking room from them: on the bottom edge it rides up with the keyboard and settles back when
 the keyboard closes. Drop it **Under the keyboard** in Appearance to keep it below instead.
-The Workspace also has the extra keys, borders and corner tabs.
+The Terminal also has the extra keys, borders and corner tabs.
 
-One layout dresses Home and the Workspace. If you want Home laid out differently, open Appearance →
+One layout dresses Home and the Terminal. If you want Home laid out differently, open Appearance →
 **Layout** and set the **Layout** line to **Home's own**; Home then keeps its own choice of which
 rows show, their order and edge, and its own Dock design, Search field and Drawer tile, and the
-row's house segment previews it. The sizes stay shared with the Workspace (the apps row's and the
+row's house segment previews it. The sizes stay shared with the Terminal (the apps row's and the
 Strip row's heights, the keyboard's height and chin) and so do Style, Corners and Margin, so
 nothing resizes on the swipe. It starts as **One layout**. On Home, Margin is the space around the widgets, around the terminals floating
 over Home and around the dock, all at once. Minimal mode affects only windows; Home ignores it. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 **Settings → Home → Start in** says where the launcher opens after a restart and where the Home
-button takes you: **Home** (the default) or **Terminal**, which opens the Workspace with one fresh
+button takes you: **Home** (the default) or **Terminal**, which opens the Terminal with one fresh
 shell window and sends the Home button to its first window.
 
 (Older versions had a usage mode and three places, Widgets, Terminal and Display, on a pane wall.
-Home and the Workspace replace them.)
+Home and the Terminal replace them.)
 
-### Page switcher
+### Page bar
 
-The glyph row under the Home grid, and the optional page switcher key on the extra-keys bar,
-switch pages: tap to open the panel and tap a page, or touch and slide and let go on one.
+The pill above the dock holds one glyph per page, in the order you swipe through them; the page
+you are on is in the accent. Tap a glyph to go there, or slide along the pill: the page under your
+finger grows into a bubble with its name, and letting go takes you there. Slide back to where you
+started, or off the pill, to stay put. When there are more pages than fit, neighbouring pages of
+one kind share one stacked glyph with a count; slide over it to pick one. The small capsules under
+the pill show the dock's pages when it has more than one.
+
+The optional page switcher key on the extra-keys bar pops the same bar up above the keys for one
+use. To hide the bar, turn off Page bar in the Home card's Layout list in the Appearance editor;
+Home's grid then takes its room. The bar also steps aside while a keyboard is up on Home.
 
 ## App icons on Home
 
@@ -70,8 +78,8 @@ Folders on a Home page work like the dock's. While a page is in edit mode (hold 
 an icon and rest it on another icon for a moment: the icon under it swells, and letting go there
 makes a folder of the two, named after the app you dropped. Rest an icon on a folder the same way
 to add it. Let go before the swell and the icon moves as it always does. Nothing merges with a
-widget, and a folder holds up to 16 apps (Settings › Home › Folders › Max folder size changes
-that, and Folder density how tightly an open folder lays its apps out).
+widget, and a folder holds up to 16 apps (the Home card's **Folders** rows change that, and how
+tightly an open folder lays its apps out).
 
 - A folder takes one cell and shows up to four of its apps in a small grid, with its name under
   it.
@@ -113,7 +121,7 @@ removed.
 **Terminal** is the launcher's own entry in the app drawer, beside the Linux apps, and it is pinned
 to the dock.
 
-- **Tap** it to go to the Workspace at the window you left, or to a new window if none is open.
+- **Tap** it to go to the Terminal at the window you left, or to a new window if none is open.
 - **Hold** it and choose **New float here** to open a terminal floating over the Home page you are
   on. **Terminal** in a Home page's long-press menu does the same. See
   [Home floats](Panes_Windows_And_Sessions.md#home-floats).
@@ -130,8 +138,8 @@ The apps row in the dock holds the apps you pin.
 - **Drag one app onto another** to make a folder. Tap a folder to open it; its popup can rename the
   folder.
 
-The full list is also under **Settings → Dock → Pinned apps** ("Choose and reorder dock
-apps."). **Settings → Dock → Most-used apps page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
+The full list is also under **Settings → Apps → Pinned apps** ("Choose and reorder dock
+apps."). **Settings → Apps → Most-used apps page** adds a page ranked by how often you launch apps from the launcher; it is off by default.
 
 The apps row can stand on any edge, or be hidden, in Appearance → **Layout**. In landscape it is a
 rail on the left by default. See [Layout and full screen](Layout_And_Full_Screen.md).
@@ -174,7 +182,7 @@ Beside your Android apps, the drawer lists the **Terminal** entry and, under **L
 Linux apps installed in Termux or in a distro, with a **Display** entry that opens the bare Linux
 display. See [The Linux display](X11_Display.md#apps-on-the-display).
 
-**Settings → Dock → Drawer layout** opens the drawer's own page:
+**Settings → Apps → Drawer layout** opens the drawer's own page:
 
 - **Grid**: **Vertical**, **Horizontal pages** or **Categories**.
 - **Open keyboard automatically**: the keyboard comes up when the drawer opens.
@@ -206,9 +214,9 @@ At an idle prompt, type the app-search prefix and a query:
 The matches replace the normal dock content; tap one to launch it. Clear the query to get the dock
 back.
 
-- **Settings → Dock → App search → App search prefix** changes the `%` if it clashes with your
+- **Settings → Apps → App search → App search prefix** changes the `%` if it clashes with your
   shell.
-- **Settings → Dock → App search → Reset usage ranking** clears the learned ranking without
+- **Settings → Apps → App search → Reset usage ranking** clears the learned ranking without
   changing your pinned apps.
 
 The command palette lists installed apps too. Swipe up on the space bar, or on Home swipe up from
@@ -231,4 +239,4 @@ shortcut, and you can search by it. For the file format, see
 - **Settings → General → Show in Recents when not the default launcher** keeps the launcher in
   Recents while another home app is active.
 - **Settings → Home → Start in** chooses whether a restart and the Home button open Home or the
-  Workspace.
+  Terminal.

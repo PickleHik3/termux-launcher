@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- The Workspace card's glyph (appearance-cards overhaul §2): a window outline, its title bar
+<!-- The Terminal card's glyph (appearance-cards overhaul §2): a window outline, its title bar
      drawn, with ">_" inside; the Terminal card keeps the bare prompt. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"

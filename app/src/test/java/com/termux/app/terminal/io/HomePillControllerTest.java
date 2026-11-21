@@ -12,8 +12,8 @@ import android.os.Build;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.extrakeys.HomePillSpot;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 
@@ -58,9 +58,9 @@ public class HomePillControllerTest {
     public void eachCoveringFactHidesIt() {
         java.util.List<java.util.function.Consumer<FakeHost>> covers = java.util.Arrays.asList(
             h -> h.switchOn = false,
-            h -> h.place = PaneWallPage.TERMINAL,
-            h -> h.place = PaneWallPage.DISPLAY,
-            h -> h.place = PaneWallPage.ASSISTANT,
+            h -> h.place = PageKind.TERMINAL,
+            h -> h.place = PageKind.DISPLAY,
+            h -> h.place = PageKind.ASSISTANT,
             h -> h.target = ExtraKeysTarget.TERMINAL,
             h -> h.target = ExtraKeysTarget.GLOBAL,
             h -> h.target = null,
@@ -275,7 +275,7 @@ public class HomePillControllerTest {
     public void aFlightHoldsTheShownPillThoughHomeIsGone() {
         controller.refresh();
         assertTrue(host.shown);
-        host.place = PaneWallPage.TERMINAL;
+        host.place = PageKind.TERMINAL;
         host.target = ExtraKeysTarget.TERMINAL;
         controller.holdForFlight(true);
         int keysFed = host.setKeysCalls;
@@ -290,10 +290,10 @@ public class HomePillControllerTest {
 
     @Test
     public void holdingAPillThatIsNotShownDoesNothing() {
-        host.place = PaneWallPage.TERMINAL;
+        host.place = PageKind.TERMINAL;
         controller.refresh();
         controller.holdForFlight(true);
-        host.place = PaneWallPage.WIDGETS;
+        host.place = PageKind.HOME;
         host.target = ExtraKeysTarget.HOME;
         controller.refresh();
         assertTrue("no hold was taken, so Home shows it", host.shown);
@@ -362,7 +362,7 @@ public class HomePillControllerTest {
 
     private static final class FakeHost implements HomePillController.Host {
         boolean switchOn = true;
-        PaneWallPage place = PaneWallPage.WIDGETS;
+        PageKind place = PageKind.HOME;
         ExtraKeysTarget target = ExtraKeysTarget.HOME;
         boolean keyboardUp;
         boolean drawer;
@@ -405,7 +405,7 @@ public class HomePillControllerTest {
         }
 
         @Override public boolean switchOn() { return switchOn; }
-        @NonNull @Override public PaneWallPage settledPlace() { return place; }
+        @NonNull @Override public PageKind settledPlace() { return place; }
         @Nullable @Override public ExtraKeysTarget keyTarget() { return target; }
         @Override public boolean keyboardUp() { return keyboardUp; }
         @Override public boolean appDrawerOpen() { return drawer; }

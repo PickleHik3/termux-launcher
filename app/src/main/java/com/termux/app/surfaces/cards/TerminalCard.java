@@ -31,10 +31,12 @@ import java.util.Collections;
 import java.util.List;
 
 /**
- * The Terminal card (editor-redesign §2, Terminal; no eye, the terminal cannot be hidden): the
- * glass and shape strip under its Glass header (Text size is the terminal's and the keyboard
- * labels', {@code text_size_percent}), Contrast as words, Cursor trail and Screen effect as preview
- * tiles (Screen effect only where its shader runs), and the Font chip.
+ * The Terminal card (appearance-one-look spec §3, Terminal; the old Workspace card merged into it; no
+ * eye, the terminal cannot be hidden): Text (the terminal's Font size, Contrast as words, the
+ * Font link), Background (the panes' Opacity and Blur and the Wallpaper dim of the Terminal's
+ * pages, none of which follows Global), Panes, Effects (Cursor trail and Screen effect as
+ * preview tiles, Screen effect only where its shader runs), and Layout, the rows the Terminal's
+ * pages show with Minimal layout.
  *
  * <p>{@link #rows} is the card's table and the pure policy below it maps stored values to the
  * tiles, so JVM tests hold both; {@link #view} builds the card's own rows over a {@link Host}.</p>
@@ -47,16 +49,21 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.TEXT_SIZE, Row.CONTRAST, Row.PANE_BORDERS, Row.CURSOR_TRAIL);
+            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
+                Row.LINK_FONT)
+            // The Terminal's Background (ADR 0031 §4): never Global's, no preset, no reset arrow.
+            .tier(3, Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
+                Row.WALLPAPER_DIM)
+            .tier(3, Row.SECTION_PANES, Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER,
+                Row.AUTO_TILING, Row.FOCUS_GROWS)
+            .tier(3, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL);
+        // Screen events and Composite signal stand only while a Screen effect is on (shown).
         if (offers.terminalEffect)
-            rows.tier(1, Row.EFFECT);
-        rows.tier(1, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
-                Row.FOCUS_GROWS)
-            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS);
-        com.termux.app.surfaces.GlassRows.appearance(rows, offers, 3)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_FONT);
+            rows.tier(3, Row.EFFECT, Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL);
+        rows.tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL);
         // Under Terminal only the Home card, Edit pages' usual door, is gone: Pages is here.
-        if (!offers.homeShown && !offers.overviewUp) rows.tier(3, Row.LINK_PAGES);
+        if (!offers.homeShown && !offers.overviewUp)
+            rows.tier(3, Row.SECTION_LINKS, Row.LINK_PAGES);
         return rows.build();
     }
 
@@ -128,7 +135,6 @@ public final class TerminalCard {
     public static CardRowView view(@NonNull Context context, @NonNull Row row, int widthPx,
                                    @NonNull Host host) {
         switch (row) {
-            case GLASS_SECTION: return StatusBarCard.glassHeader(context, false);
             case CONTRAST: return contrast(context, widthPx, host);
             case CURSOR_TRAIL: return trails(context, host);
             case EFFECT: return effects(context, host);

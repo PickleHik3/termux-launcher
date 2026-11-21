@@ -23,11 +23,10 @@ final class SelectionRingShape {
 
     /**
      * Whether {@code card} is shown by the halo round the whole mini UI: a page card (Home,
-     * Workspace) or Customization, the three cards of the header's pill.
+     * Terminal) or Global, the three cards of the header's pill.
      */
     static boolean wearsHalo(@Nullable EditorCard card) {
-        return card == EditorCard.HOME || card == EditorCard.WORKSPACE
-            || card == EditorCard.APPEARANCE;
+        return card != null && (card.isPageCard() || card == EditorCard.APPEARANCE);
     }
 
     /**

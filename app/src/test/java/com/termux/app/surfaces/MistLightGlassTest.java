@@ -39,7 +39,7 @@ import java.util.Map;
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class MistLightGlassTest {
 
-    /** A Look names Base's opacity by its grid key (ADR 0017, W4b), not the preference key. */
+    /** A Look names Global's opacity by its grid key (ADR 0017, W4b), not the preference key. */
     private static final String OPACITY_KEY =
         SurfacePresets.cellKey(null, SurfaceProperty.OPACITY);
 
@@ -71,7 +71,7 @@ public class MistLightGlassTest {
     }
 
     private int opacity() {
-        return preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY);
+        return preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY);
     }
 
     @Test
@@ -186,9 +186,4 @@ public class MistLightGlassTest {
         }
     }
 
-    /** The grid's page kinds are process-wide: none leaks into the next test class. */
-    @org.junit.After
-    public void resetLookGridPageKinds() {
-        com.termux.shared.termux.settings.preferences.LookGrid.install(null, null);
-    }
 }

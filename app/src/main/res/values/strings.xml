@@ -86,8 +86,6 @@
     <string name="settings_layout_miniature_keys">Extra keys</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
-    <string name="settings_appearance_surface_title">Wallpaper, look and layout</string>
-    <string name="settings_appearance_surface_summary">Edit them live on your home screen</string>
     <string name="settings_destination_terminal">Terminal</string>
     <string name="settings_destination_status_bar">Status bar</string>
     <string name="settings_destination_notifications">Notifications</string>
@@ -98,7 +96,6 @@
     <string name="settings_destination_advanced_diagnostics_summary">Logs and troubleshooting</string>
     <string name="settings_destination_about_support">About &amp; help</string>
     <string name="settings_destination_about_support_summary">Guides and app information</string>
-    <string name="settings_terminal_display_header">Terminal display</string>
     <string name="settings_full_screen_title">Full screen</string>
     <string name="settings_adjust_keyboard_title">Keyboard resize workaround</string>
     <string name="settings_adjust_keyboard_summary">Try if the Android keyboard covers terminal content. Turn off if it causes gaps or jumpy resizing.</string>
@@ -127,13 +124,10 @@
     <string name="settings_clipboard_cleanup_summary">Trim trailing spaces and single-line paste newlines.</string>
     <string name="settings_sessions_panes_header">Sessions and panes</string>
     <string name="settings_split_pane_controls_title">Split-pane controls</string>
-    <string name="settings_split_pane_controls_summary">Enable window splitting and tmux-style pane shortcuts.</string>
     <string name="settings_show_key_hints_title">Shortcut hints</string>
     <string name="settings_show_key_hints_summary">Show pane shortcuts while holding Ctrl+Alt. Off lights the ? key instead.</string>
     <string name="settings_pane_dwindle_default_title">Automatic tiling</string>
-    <string name="settings_pane_dwindle_default_summary">Split the current pane when opening a new one.</string>
     <string name="settings_pane_focus_grows_title">Focus active pane</string>
-    <string name="settings_pane_focus_grows_summary">Enlarge the active pane and shrink the others.</string>
     <string name="settings_pane_agent_api_title">Let programs and agents control panes</string>
     <string name="settings_pane_agent_api_summary">Programs you run can open, switch and close panes on their own.</string>
     <string name="settings_terminal_body_swipe_title">Swipe on the terminal to switch windows</string>
@@ -144,18 +138,12 @@
     <string name="settings_clock_alignment_center">Center</string>
     <string name="settings_clock_alignment_right">Right</string>
     <string name="settings_use_12_hour_title">12-hour time</string>
-    <string name="settings_use_12_hour_summary">Show AM and PM.</string>
     <string name="settings_cpu_usage_title">CPU usage</string>
     <string name="settings_memory_usage_title">Memory usage</string>
-    <string name="settings_memory_usage_summary"></string>
     <string name="settings_battery_title">Battery</string>
-    <string name="settings_battery_summary">Show how much charge is left.</string>
     <string name="settings_status_media_title">Media</string>
-    <string name="settings_status_media_summary">Show what\'s playing in the status bar.</string>
     <string name="settings_weather_title">Weather</string>
-    <string name="settings_weather_summary">Uses your device location, which needs location permission, or the location set below.</string>
     <string name="settings_weather_fahrenheit_title">Fahrenheit</string>
-    <string name="settings_weather_fahrenheit_summary">Show °F instead of °C.</string>
     <string name="settings_weather_location_title">Location</string>
     <string name="settings_weather_location_summary_device">Uses your device location</string>
     <string name="settings_status_cutout_header">Camera cutout</string>
@@ -176,17 +164,13 @@
     <string name="settings_weather_location_no_results">No locations found</string>
     <string name="settings_weather_location_network_error">Can\'t reach the location search. Check your connection.</string>
     <string name="settings_weather_location_use_device">Use device location</string>
-    <string name="settings_theme_header">Theme</string>
     <string name="settings_color_mode_title">App theme</string>
     <string name="settings_widgets_on_glass_title">Widgets on glass</string>
     <string name="settings_widgets_on_glass_summary">Widgets wear the Look\'s glass. A widget\'s own Glass setting overrides it.</string>
     <string name="settings_wallpaper_colors_title">Wallpaper colors</string>
     <string name="settings_wallpaper_colors_summary">Match the launcher and terminal to the wallpaper.</string>
-    <string name="settings_wallpaper_colors_hint">Overrides manual terminal colors. Turn off, or apply a Termux:Styling scheme, to use your own. Single tokens in ~/.termux/launcher-theme.properties still apply on top.</string>
-    <string name="settings_wallpaper_colors_hint_chrome_unsupported">Overrides manual terminal colors. Applying a Termux:Styling scheme turns it off. Launcher chrome needs Android 11 or newer to follow a scheme.</string>
     <string name="settings_terminal_contrast_title">Terminal contrast</string>
     <string name="settings_terminal_contrast_summary">%1$s</string>
-    <string name="settings_terminal_contrast_disabled">Available when wallpaper colors are on</string>
     <string name="settings_theme_templates_title">Tools that follow the terminal colours</string>
     <string name="settings_theme_templates_summary_none">Starship, Helix and other tools can pick up the terminal palette.</string>
     <string name="settings_theme_templates_setup_message">To finish, copy the command, paste it in the terminal and press Enter.</string>
@@ -200,20 +184,8 @@
         <item quantity="one">%1$s and %2$d more</item>
         <item quantity="other">%1$s and %2$d more</item>
     </plurals>
-    <string-array name="terminal_contrast_entries">
-        <item>Softer · pastel</item>
-        <item>Default · system</item>
-        <item>Harder · punchy</item>
-    </string-array>
-    <string-array name="terminal_contrast_values">
-        <item>softer</item>
-        <item>default</item>
-        <item>harder</item>
-    </string-array>
     <string name="settings_wallpaper_title">Wallpaper</string>
     <string name="settings_wallpaper_parallax_title">Wallpaper scrolls with pages</string>
-    <string name="settings_wallpaper_parallax_summary">The wallpaper pans a little as the pages and windows of the wall slide. Needs a wallpaper set through the launcher\'s picker; off in landscape and with animations off</string>
-    <string name="settings_icon_appearance_header">Icon appearance</string>
     <string name="settings_icon_appearance_title">Monochrome icons</string>
     <string name="settings_icon_pack_title">Icon pack</string>
     <string name="settings_pinned_icon_pack_title">Pinned-app icon pack</string>
@@ -373,12 +345,12 @@
     <string name="settings_use_as_custom">Custom</string>
     <string name="settings_start_in_title">Start in</string>
     <string name="settings_start_in_home">Home</string>
-    <string name="settings_start_in_workspace">Terminal</string>
+    <string name="settings_start_in_terminal">Terminal</string>
     <string name="settings_start_in_display">Display</string>
     <string name="settings_start_in_assistant">Assistant</string>
     <string-array name="settings_start_in_entries" translatable="false">
         <item>@string/settings_start_in_home</item>
-        <item>@string/settings_start_in_workspace</item>
+        <item>@string/settings_start_in_terminal</item>
         <item>@string/settings_start_in_display</item>
     </string-array>
     <string-array name="settings_start_in_values" translatable="false">
@@ -489,9 +461,9 @@
     <string name="settings_x11_keyboard_follows_text_title">Auto keyboard</string>
     <string name="settings_x11_keyboard_follows_text_summary">Automatic Keyboard show &amp; hide when you tap text input field</string>
     <string name="settings_x11_keyboard_follows_text_needs_setup">Set up Linux apps first</string>
-    <string name="settings_x11_keyboard_over_display_title">Keyboard over the window</string>
-    <string name="settings_x11_keyboard_over_display_overlay">Covers the app</string>
-    <string name="settings_x11_keyboard_over_display_resize">Shrinks the app</string>
+    <string name="settings_x11_keyboard_over_display_title">Keyboard behavior</string>
+    <string name="settings_x11_keyboard_over_display_overlay">Overlay</string>
+    <string name="settings_x11_keyboard_over_display_resize">Resize display</string>
     <string name="settings_x11_keyboard_over_display_differs">Portrait: %1$s · Landscape: %2$s</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
@@ -536,6 +508,10 @@
     <string name="page_switch_terminal">Terminal</string>
     <string name="page_switch_assistant">Assistant</string>
     <string name="page_switch_display">Display</string>
+    <plurals name="page_bar_folded">
+        <item quantity="one">%1$s, %2$d page</item>
+        <item quantity="other">%1$s, %2$d pages</item>
+    </plurals>
     <string name="launcher_media_next">Next</string>
     <string name="launcher_media_previous">Previous</string>
     <string name="termux_x11_app_display_failed">The display did not start, so the app could not open.</string>
@@ -606,7 +582,7 @@
     <string name="settings_x11_gpu_outcome_skipped">Not tried on this chip</string>
     <string name="settings_x11_gpu_outcome_unavailable">Not available to install here</string>
     <string name="settings_x11_gpu_not_measured">Not measured yet</string>
-    <string name="settings_x11_apps_title">Apps</string>
+    <string name="settings_x11_apps_title">Per-app settings</string>
     <string name="settings_x11_apps_summary">Choose graphics, touch and scale for each app.</string>
     <string name="settings_x11_apps_loading">Loading your Linux apps…</string>
     <string name="settings_x11_apps_empty">No Linux apps installed yet.</string>
@@ -752,10 +728,8 @@
     <string name="whats_new_none">The notes for this version are not bundled with the app.</string>
     <string name="settings_version_build_title">Version and build</string>
     <string name="settings_diagnostics_header">Diagnostics</string>
-    <string name="settings_glass_even_out_title">Even out glass</string>
     <string name="settings_motion_log_title">Motion log</string>
     <string name="settings_motion_log_summary">Records page changes and resizes for bug reports.</string>
-    <string name="settings_glass_even_out_summary">Narrows a glass terminal pane\'s wallpaper to the range its text can read on. Turn off to compare with the plain glass.</string>
     <string name="settings_log_terminal_keys_title">Log keyboard input</string>
     <string name="settings_log_terminal_keys_summary">Typed input may include passwords and other sensitive text. Leave off unless you are debugging, and review logs before sharing.</string>
     <string name="settings_plugin_error_alerts_title">Plugin error alerts</string>
@@ -1237,6 +1211,7 @@
 
             <!-- Split panes Category -->
                 <string name="termux_window_bar_content_description">Terminal windows</string>
+                <string name="termux_home_float_bar_content_description">Terminals on this Home page</string>
                 <string name="termux_window_tab_content_description">Window %1$d of %2$d: %3$s</string>
                 <string name="termux_window_tab_busy_content_description">working</string>
                 <string name="termux_window_tab_attention_content_description">waiting for you</string>
@@ -1301,7 +1276,6 @@
                     <item quantity="one">AI model unloads in %d minute</item>
                     <item quantity="other">AI model unloads in %d minutes</item>
                 </plurals>
-                <string name="termux_status_widget_cpu_summary">Tap the widget for cores, load and top processes.</string>
                 <string name="termux_top_pane_clock_style_flip">Flip</string>
                 <string name="termux_top_pane_clock_style_lcd">LCD</string>
                 <string name="termux_top_pane_clock_style_minimal">Minimal</string>
@@ -1397,6 +1371,7 @@
                 <string name="settings_keyboard_layouts_title">Layouts</string>
                 <string name="settings_keyboard_layouts_summary">Choose the layouts the keyboard cycles through</string>
                 <string name="settings_keyboard_layout_main">Launcher layout (layout.xml, else QWERTY)</string>
+                <string name="settings_keyboard_layout_main_short">Launcher layout</string>
                 <string name="settings_keyboard_layouts_instructions">The keyboard cycles through these in order. Bind a key to “Cycle keyboard layout”, put a switch_forward key in your layout.xml, or pick one from the command palette.</string>
                 <string name="settings_keyboard_layouts_in_cycle">In the cycle</string>
                 <string name="settings_keyboard_layouts_available">All layouts</string>
@@ -2247,7 +2222,7 @@
                 <!-- Only rendered once a surface has taken a value of its own; tapping it puts
                      the row back on the shared layer. -->
                 <string name="termux_surface_tuning_link_detached">↺</string>
-                <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Base again.</string>
+                <string name="termux_surface_tuning_link_detached_description">%1$s has its own value. Tap to follow Global again.</string>
                 <!-- The keyboard's shape, under the Layout editor's Keyboard heading. -->
                 <string name="termux_surface_editor_place_keyboard_type">Type</string>
                 <!-- One shape for the two chips on the status row: the sessions indicator and the
@@ -2375,15 +2350,11 @@
     <string name="palette_category_session">Session</string>
     <string name="palette_category_window">Window</string>
     <string name="palette_category_pane">Pane</string>
-    <string name="settings_keyboard_shapes_header">Floating and split</string>
     <string name="settings_keyboard_form_title">Keyboard type</string>
-    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Workspace.</string>
+    <string name="settings_keyboard_form_summary">Docked, floating or split, on Home and in the Terminal.</string>
     <string name="settings_keyboard_floating_width_title">Floating keyboard width</string>
-    <string name="settings_keyboard_floating_width_summary">Percent of the screen width. Set separately for portrait and landscape.</string>
     <string name="settings_keyboard_floating_height_title">Floating keyboard height</string>
-    <string name="settings_keyboard_floating_height_summary">Percent of the normal keyboard height. Set separately for portrait and landscape, or drag the bottom-left corner.</string>
     <string name="settings_keyboard_split_gap_title">Split keyboard gap</string>
-    <string name="settings_keyboard_split_gap_summary">Percent of the keyboard width between the two halves. Set separately for portrait and landscape.</string>
     <string name="palette_category_terminal">Terminal</string>
     <string name="palette_category_clipboard">Clipboard</string>
     <string name="palette_category_appearance">Appearance</string>
@@ -2422,8 +2393,8 @@
     <string name="palette_category_windows">Windows</string>
     <string name="palette_home_open_terminal">Open terminal here</string>
     <string name="palette_home_open_terminal_hint">A terminal floating over this page</string>
-    <string name="palette_home_go_to_workspace">Go to Workspace</string>
-    <string name="palette_home_go_to_workspace_hint">Slide over to your windows</string>
+    <string name="palette_home_go_to_terminal">Go to Terminal</string>
+    <string name="palette_home_go_to_terminal_hint">Slide over to your windows</string>
     <string name="palette_home_new_window">New window</string>
     <!-- The dock's Search field and the Wall strip's tiles. -->
     <string name="dock_prompt_line_hint">Search apps, commands, settings</string>
@@ -2656,7 +2627,7 @@
     <string name="tool_desc_appearance_surface_editor">Tune the dock, keyboard, status bar, and terminal surfaces.</string>
     <string name="tool_desc_app_open_settings">Open the launcher settings screen.</string>
     <string name="tool_app_open_help">Help</string>
-    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Workspace.</string>
+    <string name="tool_desc_app_open_help">Open help for where you are: Home or the Terminal.</string>
     <string name="tool_desc_app_open_look_and_feel">Open the look and feel settings.</string>
     <string name="tool_desc_app_open_apps_bar">Open the apps bar settings.</string>
     <string name="tool_desc_app_command_palette">Open the searchable command palette.</string>
@@ -2920,13 +2891,6 @@
     <string name="termux_fonts_weight_apply">Apply</string>
     <string name="termux_fonts_weight_reset">Family default</string>
     <string name="termux_fonts_size_title">Font size</string>
-    <string name="termux_fonts_size_summary">%1$d dp</string>
-    <string name="termux_fonts_size_dialog_title">Font size (%1$d–%2$d)</string>
-    <string name="termux_fonts_size_reset">Default</string>
-    <string name="termux_fonts_size_unit">dp</string>
-    <string name="termux_fonts_size_decrease">Decrease font size</string>
-    <string name="termux_fonts_size_increase">Increase font size</string>
-    <string name="termux_fonts_size_out_of_range">Between %1$d and %2$d</string>
     <string name="termux_fonts_families_title">Families</string>
     <string name="termux_fonts_meta_installed">Installed</string>
     <!-- Count of real faces a family ships. A leading space in a resource value is stripped, so the
@@ -3048,7 +3012,7 @@
     <string name="help_topic_az_purpose">The A–Z index picks an app by its first letter.</string>
     <string name="help_topic_az_action">Slide along it, then drag up to the app you want.</string>
     <string name="help_topic_az_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
-    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Workspace.</string>
+    <string name="help_topic_status_purpose">The status bar starts with your session number, then your windows, and shows whether you are on Home or in the Terminal.</string>
     <string name="help_topic_status_action">Swipe down from the page\'s top border, or drag the bar down, to expand it.</string>
     <string name="help_topic_status_reveal">In the Layout editor, tap the eye-off button, then tap it to bring it back.</string>
     <string name="help_topic_stats_purpose">The status widgets show how the phone is doing.</string>
@@ -3094,7 +3058,7 @@
     <string name="help_show_gesture">Show gesture</string>
     <string name="help_try_it">Try it</string>
     <string name="help_settings_title">Help</string>
-    <string name="help_settings_summary">Open help for where you are: Home or the Workspace.</string>
+    <string name="help_settings_summary">Open help for where you are: Home or the Terminal.</string>
     <string name="help_topic_stats_title">Status widgets</string>
     <string name="help_topic_corners_title">Pane corners</string>
     <string name="help_topic_keys_title">Extra keys</string>
@@ -3303,7 +3267,7 @@
     <string name="help_topic_pinned_reveal">A card appears when a notification matches one of your rules.</string>
     <string name="help_topic_pinned_aliases">pinned notification, essential notifications, notification card, card, mute, dismiss, rule</string>
     <string name="help_topic_kswipe_title">Keyboard swipe</string>
-    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Workspace.</string>
+    <string name="help_topic_kswipe_summary">One swipe opens or closes the keyboard on Home and in the Terminal.</string>
     <string name="help_topic_kswipe_action">Swipe up from the bottom border to open the keyboard, and down to put it away.</string>
     <string name="help_topic_kswipe_step1">It turns a keyboard that was switched off back on.</string>
     <string name="help_topic_kswipe_step2">The small pill on the border marks where to start.</string>
@@ -3473,7 +3437,7 @@
     <string name="help_practice_start">Start</string>
     <string name="help_lesson_find_help_title">Find help</string>
     <string name="help_lesson_find_help_summary">Open help from a page\'s corner tab.</string>
-    <string name="help_lesson_border_drag_title">Reach the Workspace</string>
+    <string name="help_lesson_border_drag_title">Reach the Terminal</string>
     <string name="help_lesson_border_drag_summary">Swipe left on an empty spot of Home to reach your first window, then swipe right along its bottom border to come back.</string>
     <string name="help_lesson_status_swipe_title">Open the status bar</string>
     <string name="help_lesson_status_swipe_summary">Swipe down from the top border to open the status bar.</string>
@@ -3608,7 +3572,7 @@
     <string name="setup_home_choice">Home screen</string>
     <string name="setup_home_choice_summary">Apps, widgets and the terminal.</string>
     <string name="setup_terminal_choice">Terminal only</string>
-    <string name="setup_terminal_choice_summary">Starts in the workspace. No Home page.</string>
+    <string name="setup_terminal_choice_summary">Starts in the Terminal. No Home page.</string>
     <string name="setup_review_title">Review setup</string>
     <string name="setup_review_note">You can change these settings later.</string>
     <string name="setup_group_use">Use</string>
@@ -3617,13 +3581,12 @@
     <string name="setup_value_home_screen">Home screen</string>
     <string name="setup_value_terminal">Terminal</string>
     <string name="setup_value_unchanged">Unchanged</string>
-    <string name="setup_value_workspace">Workspace</string>
     <string name="setup_section_panes">Multiplexer</string>
     <string name="setup_section_desktop">Linux apps</string>
     <string name="setup_section_ai">On-device AI</string>
     <string name="setup_section_power">Power</string>
     <string name="setup_panes_title">Panes</string>
-    <string name="setup_panes_description">Several terminals in one workspace.</string>
+    <string name="setup_panes_description">Several terminals on one page.</string>
     <string name="setup_panes_multiplexer">Multiplexer</string>
     <string name="setup_panes_status">Status strip shown</string>
     <string name="setup_panes_status_help">The strip above the panes with the clock and status.</string>

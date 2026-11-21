@@ -23,7 +23,7 @@ import androidx.core.view.WindowInsetsCompat;
 import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 import com.termux.app.ReducedMotion;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.shared.logger.Logger;
 
 import java.util.ArrayList;
@@ -37,7 +37,7 @@ import java.util.function.Consumer;
  * editor when the Appearance card's Wallpaper row asks for it.
  *
  * <p><b>One page.</b> There are no tabs and no mode: every door opens the editor, on the object
- * it names ({@link #open(EditorCard, PaneWallPage)}), or with no card up. The picker is not a
+ * it names ({@link #open(EditorCard, PageKind)}), or with no card up. The picker is not a
  * door of its own: the Appearance card's Wallpaper › Change raises it as a sheet over the editor: the editor's session, its frame and its Undo
  * stay where they are underneath, and Back puts the picker down. Done on the picker applies its
  * choice and goes back to the card it came from: the picker stays up, busy, until the new
@@ -195,7 +195,7 @@ public final class AppearanceSurfaceController {
          * place on screen for null); {@code onSettled} runs once the frame has settled. Already
          * presented, it raises that card (or puts the card down for null).
          */
-        void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
+        void present(@Nullable EditorCard card, @Nullable PageKind place,
                      @Nullable Runnable onSettled);
 
         /**
@@ -203,7 +203,7 @@ public final class AppearanceSurfaceController {
          * from the first frame, {@code onSettled} run once the frame's first pass has placed them.
          * A relaunch reopening its carried session. Animated like {@link #present} by default.
          */
-        default void presentInPlace(@Nullable EditorCard card, @Nullable PaneWallPage place,
+        default void presentInPlace(@Nullable EditorCard card, @Nullable PageKind place,
                                     @Nullable Runnable onSettled) {
             present(card, place, onSettled);
         }
@@ -293,7 +293,7 @@ public final class AppearanceSurfaceController {
     public interface Host {
         @NonNull Context context();
 
-        /** {@code android.R.id.content}; null before it exists. */
+        /** The window root the editor's host and backdrop stand in; null before it exists. */
         @Nullable ViewGroup content();
 
         /**
@@ -396,6 +396,8 @@ public final class AppearanceSurfaceController {
     /** The apply answered; the picker stays up, busy, until {@link WallpaperApplyHold} says. */
     private boolean mHolding;
     private long mApplyFinishedAt;
+    /** The wait for the new colours, named so a device log says how each one ended. */
+    @Nullable private com.termux.app.window.Hold mColoursHold;
     /** The latest system colours callback since the apply began; {@link WallpaperApplyHold#NONE}. */
     private long mColoursAt = WallpaperApplyHold.NONE;
     private int mHoldSeq;
@@ -427,7 +429,7 @@ public final class AppearanceSurfaceController {
 
     // -------------------------------------------------------------------------------------- open
 
-    /** {@link #open(EditorCard, PaneWallPage)} with no card and no place. */
+    /** {@link #open(EditorCard, PageKind)} with no card and no place. */
     public void open() {
         open(null, null);
     }
@@ -437,7 +439,7 @@ public final class AppearanceSurfaceController {
      * that names no card reopens the one the person left up within Settings' window. Open
      * already, it puts the picker down and raises that card.
      */
-    public void open(@Nullable EditorCard card, @Nullable PaneWallPage place) {
+    public void open(@Nullable EditorCard card, @Nullable PageKind place) {
         if (mOpen) {
             if (mEditor.isPresented()) {
                 if (mWallpaperShown) hideWallpaper();
@@ -585,7 +587,7 @@ public final class AppearanceSurfaceController {
      * Presents the editor once its wallpaper and the launcher's container are ready, trying up to
      * {@code attempts} times before the surface closes.
      */
-    private void presentEditor(@Nullable EditorCard card, @Nullable PaneWallPage place,
+    private void presentEditor(@Nullable EditorCard card, @Nullable PageKind place,
                                boolean thenWallpaper, int attempts) {
         final int token = mToken;
         final Runnable gaveUp = () -> {
@@ -622,7 +624,7 @@ public final class AppearanceSurfaceController {
      * picker ready, the card sheet and the bar stay unseen under it until it covers them
      * ({@link WallpaperDoorMotion#veilsChrome}).
      */
-    private void presentNow(@Nullable EditorCard card, @Nullable PaneWallPage place,
+    private void presentNow(@Nullable EditorCard card, @Nullable PageKind place,
                             boolean thenWallpaper, @NonNull Runnable gaveUp) {
         boolean inPlace = mInPlace;
         boolean veil = !inPlace && WallpaperDoorMotion.veilsChrome(thenWallpaper, mOverviewReady,
@@ -977,6 +979,10 @@ public final class AppearanceSurfaceController {
         mCommitting = true;
         mHolding = true;
         mApplyFinishedAt = mHost.uptime();
+        com.termux.app.window.Hold hold = com.termux.app.window.Hold.take("wallpaper-colours",
+            WallpaperApplyHold.CEILING_MS, com.termux.app.window.Hold.NO_FRAME_LIMIT, mHost::uptime);
+        mColoursHold = hold;
+        hold.onRelease(this::endHold);
         overview.holdBusy(true);
         scheduleHoldCheck();
     }
@@ -984,9 +990,17 @@ public final class AppearanceSurfaceController {
     /** Ends the hold when its time is up, else looks again when it would be. */
     private void scheduleHoldCheck() {
         final int seq = ++mHoldSeq;
+        com.termux.app.window.Hold hold = mColoursHold;
         long wait = WallpaperApplyHold.remainingMs(mApplyFinishedAt, mColoursAt, mHost.uptime());
+        if (hold == null || !hold.pollBackstop()) {
+            // The ceiling passed: the hold released itself (and ended the picker's wait).
+            if (hold == null) endHold();
+            return;
+        }
         if (wait <= 0) {
-            endHold();
+            // The rule's own end: no colours came, or the relaunch they announced did not.
+            if (mColoursAt == WallpaperApplyHold.NONE) hold.release("quiet", null);
+            else hold.landing();
             return;
         }
         mMain.postDelayed(() -> {
@@ -1006,6 +1020,13 @@ public final class AppearanceSurfaceController {
     }
 
     private void resetHold() {
+        com.termux.app.window.Hold hold = mColoursHold;
+        mColoursHold = null;
+        if (hold != null) {
+            // Let go without ending the picker's wait: a relaunch or a close carries on from here.
+            hold.onRelease(() -> {});
+            hold.release("abandoned", null);
+        }
         mHoldSeq++;
         mHolding = false;
         mApplying = false;
@@ -1095,8 +1116,9 @@ public final class AppearanceSurfaceController {
         view = new SurfaceHostView(mHost.context());
         view.setId(R.id.appearance_surface_host);
         view.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
-        content.addView(view, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
-            ViewGroup.LayoutParams.MATCH_PARENT));
+        com.termux.app.window.WindowLayers.hostIn(content, com.termux.app.window.WindowLayer.EDITOR).addView(view,
+            new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+                ViewGroup.LayoutParams.MATCH_PARENT));
         final FrameLayout host = view;
         ViewCompat.setOnApplyWindowInsetsListener(host, (v, insets) -> {
             padPages(host, insets);
@@ -1120,15 +1142,14 @@ public final class AppearanceSurfaceController {
             ((SurfaceHostView) view).mPassThrough = false;
         view.setClickable(takes);
         view.setFocusable(takes);
+        // The card sheet and the editor bar stand in the panel host, ahead of this host in the editor
+        // layer, so the picker draws over them by child order while it takes touches.
         if (takes)
-            view.bringToFront();
-        // Draw order goes by Z before child order: the card sheet and the editor bar have
-        // elevation, so bringToFront alone leaves them over the picker and its Choose photo.
-        view.setTranslationZ(takes ? siblingsTopZ(view) + 1f : 0f);
+            com.termux.app.window.WindowLayers.raiseWithin(view);
     }
 
     /**
-     * The host keeps its Z over the card sheet and the bar but takes no touch: each goes to what
+     * The host keeps its place over the card sheet and the bar but takes no touch: each goes to what
      * lies under it, the picker on its way down answering none.
      */
     private void letTouchesThrough() {
@@ -1139,19 +1160,6 @@ public final class AppearanceSurfaceController {
         view.setFocusable(false);
         if (view instanceof SurfaceHostView)
             ((SurfaceHostView) view).mPassThrough = true;
-    }
-
-    /** The highest Z among the host's siblings (the editor's sheet and bar). */
-    private static float siblingsTopZ(@NonNull View view) {
-        float top = 0f;
-        if (view.getParent() instanceof ViewGroup) {
-            ViewGroup parent = (ViewGroup) view.getParent();
-            for (int i = 0; i < parent.getChildCount(); i++) {
-                View child = parent.getChildAt(i);
-                if (child != view) top = Math.max(top, child.getZ());
-            }
-        }
-        return top;
     }
 
     private void addPage(@NonNull View root) {

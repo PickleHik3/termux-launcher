@@ -17,10 +17,10 @@ import java.util.Arrays;
 import java.util.List;
 
 /**
- * The Look's glass ({@link LookGlassSpec}: Base's blur, opacity, grain, tint and corners) as a
+ * The Look's glass ({@link LookGlassSpec}: Global's blur, opacity, grain, tint and corners) as a
  * {@link PaneSurfaceStyle}, so a Home widget is dressed by {@link com.termux.app.terminal.PaneGlass}
  * exactly as a terminal pane is, from the same shared blur frames, film grain, rim, Fancier Glass
- * look and wallpaper pan. Only the numbers differ: these are Base's, never a detached surface's.
+ * look and wallpaper pan. Only the numbers differ: these are Global's, never a detached surface's.
  *
  * <p>One per activity. It asks the blur cache for a frame only while a widget wears it
  * ({@link #setWorn}), so a Home with no glass widget holds no frame for them; the frame it handed
@@ -128,11 +128,11 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     // ----- WidgetInkSource ---------------------------------------------------------------------
 
     @Override @NonNull public ChromeInk.Polarity widgetPolarity() {
-        return mChrome.ink().polarity();
+        return mChrome.ink().widgetPolarity();
     }
 
     /**
-     * Ready when the Look's glass needs no frame (no blur), or when the frame at Base's blur is
+     * Ready when the Look's glass needs no frame (no blur), or when the frame at Global's blur is
      * resident. Never asks for one: the wearers' own pass does that.
      */
     @Override public boolean widgetFrameReady() {
@@ -145,7 +145,12 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @Override @NonNull public OnGlass.Resolution widgetInk(@NonNull Rect rootRect, int body,
                                                            int veilColor, int textInk,
                                                            int graphicInk) {
-        return mChrome.ink().widget(rootRect, body, veilColor, textInk, graphicInk);
+        return mChrome.ink().widget(rootRect, body, veilColor, textInk, graphicInk,
+            spec().opacityPercent);
+    }
+
+    @Override @Nullable public android.graphics.ColorMatrix widgetEvenOut(@NonNull Rect rootRect) {
+        return mChrome.ink().widgetEvenOutMatrix(rootRect);
     }
 
     @Override public int widgetWallpaper(@NonNull Rect rootRect) {

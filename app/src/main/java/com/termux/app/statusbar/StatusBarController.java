@@ -79,7 +79,7 @@ public final class StatusBarController {
         /** The model's clip for these pieces. */
         @Nullable com.termux.app.chrome.LiveChromeShape.Clip chromeClipOf( @NonNull com.termux.app.place.ChromeShape.PieceId... ids);
         /** The dress {@code page} wears. */
-        @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.wall.PaneWallPage page);
+        @NonNull com.termux.app.chrome.Dress dressOf(@NonNull com.termux.app.page.PageKind page);
         /** Corners, the one Floating radius, px, as {@code surface} wears it. */
         float layoutCornersPx(@NonNull com.termux.app.place.SeamDress.Surface surface);
         /** The page id whose look {@code surface} wears, and the Terminal's. */
@@ -131,6 +131,8 @@ public final class StatusBarController {
         @NonNull com.termux.app.chrome.ChromeEdgeRule.TopLead statusStripLead();
         /** A riding frame moved the chrome (the crossing's travel flag). */
         void markChromeTravelMoved();
+        /** The top stack's writer: the bar's ride, the strip and the chips' slide. */
+        @NonNull TopStackRenderer topStack();
 
         // -------------------------------------------------------------- widgets and cards
 
@@ -607,6 +609,37 @@ public final class StatusBarController {
         return mStatusBarFoldDragging;
     }
 
+    /**
+     * The top border's swipe drives the bar's own fold: the drag the bar takes across itself, and
+     * the landing its release runs, from the other side of the line.
+     */
+    private final com.termux.app.wall.WallStatusFold mWallStatusFold =
+        new com.termux.app.wall.WallStatusFold() {
+            @Override public boolean isEnabled() {
+                return isBorderStatusSwipeAvailable();
+            }
+            @Override public void onSwipe(boolean expand) {
+                if (isBorderStatusSwipeAvailable()) setTopStatusBarCollapsed(!expand, true);
+            }
+            @Override public int onFoldBegin(boolean expanding) {
+                return beginBorderStatusFold(expanding);
+            }
+            @Override public void onFoldProgress(float towardOpenPx) {
+                if (isStatusBarFoldDragging()) dragTopStatusBar(towardOpenPx);
+            }
+            @Override public void onFoldEnd(boolean expanded, float towardOpenVelocityPxPerSec) {
+                // Whoever took the fold over since has landed it; otherwise the landing is
+                // this release's, and it returns the lease the drag took.
+                if (!isStatusBarFoldDragging()) return;
+                setTopStatusBarCollapsed(!expanded, true, towardOpenVelocityPxPerSec);
+            }
+        };
+
+    /** The status bar as the wall's fold seam. */
+    @NonNull public com.termux.app.wall.WallStatusFold wallStatusFold() {
+        return mWallStatusFold;
+    }
+
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mStatusBarSurfaceOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
 
@@ -616,13 +649,13 @@ public final class StatusBarController {
     }
 
     /**
-     * Whether the status bar wears anything different on Home than on the Workspace: the shape
+     * Whether the status bar wears anything different on Home than on the Terminal: the shape
      * (Style, Corners, Margin) or the look values (ADR 0013).
      */
     public boolean statusDressDiffersAcrossHalves() {
         if (mHost.preferences() == null) return false;
-        return !mHost.dressOf(com.termux.app.wall.PaneWallPage.WIDGETS).shape().equals(
-                mHost.dressOf(com.termux.app.wall.PaneWallPage.TERMINAL).shape())
+        return !mHost.dressOf(com.termux.app.page.PageKind.HOME).shape().equals(
+                mHost.dressOf(com.termux.app.page.PageKind.TERMINAL).shape())
             || !com.termux.app.place.HalfLook.read(mHost.preferences(), TermuxAppSharedPreferences.PAGE_WALL)
                 .statusEquals(com.termux.app.place.HalfLook.read(mHost.preferences(),
                     mHost.terminalLookPageId()));
@@ -819,17 +852,21 @@ public final class StatusBarController {
                 }
             }
 
-            com.termux.app.terminal.TerminalWindowBar windows =
-                mHost.findViewById(R.id.terminal_window_bar);
-            if (windows != null) {
-                windows.setSurfaceStyle(capsule,
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+            // The Terminal's window chips and Home's float chips wear one style.
+            for (int id : new int[] {R.id.terminal_window_bar, R.id.terminal_home_float_bar}) {
+                com.termux.app.terminal.TerminalWindowBar windows = mHost.findViewById(id);
+                if (windows != null) {
+                    windows.setSurfaceStyle(capsule,
+                        resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+                }
             }
-            com.termux.app.statusbar.StatusBarWindowColumn windowColumn =
-                mHost.findViewById(R.id.terminal_status_window_column);
-            if (windowColumn != null) {
-                windowColumn.setChipRadiusPx(
-                    resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+            for (int id : new int[] {R.id.terminal_status_window_column,
+                    R.id.terminal_home_float_column}) {
+                com.termux.app.statusbar.StatusBarWindowColumn windowColumn = mHost.findViewById(id);
+                if (windowColumn != null) {
+                    windowColumn.setChipRadiusPx(
+                        resolveStatusIndicatorCornerRadiusPx(targetThickness, capsule));
+                }
             }
 
             View statusWidgets = mHost.findViewById(R.id.terminal_status_widgets);
@@ -981,7 +1018,7 @@ public final class StatusBarController {
      * The shape the status row's two chips wear: the sessions indicator and the window pills.
      *
      * <p>They are content inside the status surface rather than surfaces of their own, so they are
-     * not part of the Base cascade and have their own knob. Until it is touched they follow the bar
+     * not part of the Global cascade and have their own knob. Until it is touched they follow the bar
      * — square while Docked, the capsule's radius while Floating — which is what they always did.
      * Once it is set, that shape holds in both styles, clamped so a chip can never round past half
      * of its own height.
@@ -1189,15 +1226,12 @@ public final class StatusBarController {
         setTopStatusBarCollapsed(isStatusBarCompact(), false);
     }
 
-    /** Where the status bar was last drawn from its rest as it travels with the Workspace's page. */
-    private float mStatusTravelXPx;
-
     /**
-     * The status bar drawn where the Workspace's page stands (SeamTravel.workspaceScreenXPx) on
-     * any frame the crossing says it rides (SeamCrossing.rideBar), with the strip behind the system
-     * bar when it continues the bar's glass: a translation, and the bar dressed for that page
-     * rather than the one the wall has committed to, so its chips do not change while it is on
-     * screen. Whether it rides.
+     * The status bar's travel for this frame: whether the crossing rides it (SeamCrossing.rideBar)
+     * and, handed to the top stack's writer with the wall's progress, where it stands
+     * (SeamTravel.terminalScreenXPx) with the strip behind the system bar when that continues the
+     * bar's glass; the bar is dressed for that page rather than the one the wall has committed to,
+     * so its chips do not change while it is on screen. Whether it rides.
      */
     public boolean syncStatusTravel(@NonNull com.termux.app.place.PlaceChromeTravel.Frame frame,
                                      @NonNull com.termux.app.place.SeamCrossing.Answers seam) {
@@ -1209,19 +1243,28 @@ public final class StatusBarController {
             mHost.paneWallController() == null ? 0 : mHost.paneWallController().wall().getWidth());
         if (rides) {
             mHost.markChromeTravelMoved();
-            // The bar carries its place content with it: the strip does not also pan inside it.
+            // The place content's slide is the top stack's (TopStackRenderer); nothing else pans it.
             View strip = mHost.hotView(R.id.terminal_status_place_content);
             if (strip != null) {
-                if (strip.getTranslationX() != 0f) strip.setTranslationX(0f);
                 if (strip.getTranslationY() != 0f) strip.setTranslationY(0f);
                 if (strip.getAlpha() != 1f) strip.setAlpha(1f);
-                if (strip.getClipBounds() != null) strip.setClipBounds(null);
             }
         }
         if (seam.barRedressed()) mHost.syncPlaceBar();
-        // The strip behind the system bar stands with the bar on every riding frame, whatever
-        // pass of this frame dressed or showed it.
-        if (rides) syncStatusStripTravel();
+        // The top stack's writer takes the frame's share: the bar rides at the Terminal's page,
+        // with the strip behind the system bar and the chips standing where the scene puts them.
+        com.termux.app.place.SeamCrossing crossing = mHost.crossing().seam();
+        com.termux.app.wall.PageRef committed = crossing.committedEnd();
+        int widthPx = mHost.paneWallController() == null ? 0
+            : mHost.paneWallController().wall().getWidth();
+        TopStackRenderer top = mHost.topStack();
+        top.setWidth(widthPx);
+        if (committed != null) {
+            top.setProgress(com.termux.app.place.SeamTravel.otherEndProgress(frame, committed),
+                com.termux.app.place.SeamTravel.otherEndFraction(frame, committed));
+        }
+        top.setRide(rides ? crossing.barScreenXPx(frame, widthPx) : Float.NaN,
+            crossing.barRideWearsOther());
         return rides;
     }
 
@@ -1282,50 +1325,35 @@ public final class StatusBarController {
         else if (view.getScaleX() != 1f) view.setScaleX(1f);
     }
 
-    /**
-     * The status bar, and the strip behind the system bar while it continues the bar's glass, at
-     * {@code x} from their rest. Their glass samples the wallpaper where it is drawn, and a
-     * transform alone redraws nothing, so the bar's backdrop is re-aimed with the move.
-     */
-    public void applyStatusTravelX(float x) {
-        boolean moved = x != mStatusTravelXPx;
-        mStatusTravelXPx = x;
-        if (moved) {
-            View host = mHost.hotView(R.id.terminal_window_bar_host);
-            if (host != null) host.setTranslationX(x);
-        }
-        // The strip follows on every call, moved or not: one shown since the last move (dressed
-        // for the Workspace as the ride began) must not stand at its rest while the bar arrives.
-        syncStatusStripTravel();
-        if (!moved) return;
-        View backdrop = mHost.hotView(R.id.terminal_window_bar_wallpaper_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-        View sideBackdrop = mHost.hotView(R.id.terminal_window_bar_wallpaper_backdrop_side);
-        if (sideBackdrop != null && sideBackdrop.getVisibility() == View.VISIBLE)
-            sideBackdrop.invalidate();
-    }
-
-    /**
-     * The strip behind the system bar where the bar stands now: with it while the strip is the
-     * bar's own glass running up under the system bar (the lead it was last dressed for, not one
-     * read live mid-crossing, which can still answer for the half the bar left), at rest
-     * otherwise (StatusStripRide). Its backdrop samples where it is drawn, so it is re-aimed.
-     */
-    public void syncStatusStripTravel() {
-        View strip = mHost.hotView(R.id.terminal_status_bar_background);
-        if (strip == null) return;
-        float stripX = com.termux.app.place.StatusStripRide.stripX(mStatusTravelXPx,
-            strip.getVisibility() == View.VISIBLE,
-            mHost.statusStripLead() == com.termux.app.chrome.ChromeEdgeRule.TopLead.WINDOW_BAR);
-        if (strip.getTranslationX() == stripX) return;
-        strip.setTranslationX(stripX);
-        View backdrop = mHost.hotView(R.id.terminal_status_bar_wallpaper_backdrop);
-        if (backdrop != null && backdrop.getVisibility() == View.VISIBLE) backdrop.invalidate();
-    }
-
     /** {@link StatusBarWidgets#syncStatusBarInk}. */
     public void syncStatusBarInk() {
         mWidgets.syncStatusBarInk();
+    }
+
+    /** Once the host's top-stack renderer exists: its blended inks are written through the bar's views. */
+    public void bindTopStackInks() {
+        mWidgets.bindTopStackInks();
+    }
+
+    /** {@link StatusBarWidgets#probeStatusInks}: the arriving end over its own ground, recording nothing. */
+    public boolean probeStatusInks(@NonNull int[] out, int pageGround) {
+        return mWidgets.probeStatusInks(out, pageGround);
+    }
+
+    /** {@link StatusBarWidgets#resolveStatusInks}: a crossing's ends, measured once at begin. */
+    public boolean resolveStatusInks(@NonNull int[] out) {
+        return mWidgets.resolveStatusInks(out);
+    }
+
+    /** The band the last {@link #resolveStatusInks} measured; null before the first. */
+    @Nullable
+    public com.termux.app.chrome.OnGlass.Resolution resolvedStatusBand() {
+        return mWidgets.resolvedBand();
+    }
+
+    /** {@link StatusBarWidgets#applySessionsBand}: the Terminal end's band, for a crossing. */
+    public void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {
+        mWidgets.applySessionsBand(band);
     }
 
     /** {@link StatusBarWidgets#updateStatusWidgets}. */

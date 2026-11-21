@@ -12,7 +12,6 @@ import com.termux.app.surfaces.cards.HomeCard;
 import com.termux.app.surfaces.cards.KeyboardCard;
 import com.termux.app.surfaces.cards.StatusBarCard;
 import com.termux.app.surfaces.cards.TerminalCard;
-import com.termux.app.surfaces.cards.WorkspaceCard;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 
@@ -100,9 +99,30 @@ public final class EditorRows {
             R.drawable.ic_symbol_dock_peek_glass),
         TEXT_SIZE(Kind.SLIDER, R.string.appearance_row_text_size, R.drawable.ic_editor_text_size),
         CONTRAST(Kind.SEGMENTS, R.string.appearance_row_contrast, R.drawable.ic_editor_contrast),
+        /** One switch on the Global and Terminal cards: each item corrects itself to the wallpaper behind it. */
+        ADAPTIVE_LEGIBILITY(Kind.SWITCH, R.string.appearance_row_adaptive_legibility,
+            R.drawable.ic_editor_contrast),
         CURSOR_TRAIL(Kind.MENU, R.string.appearance_row_cursor_trail, R.drawable.ic_symbol_tune),
         EFFECT(Kind.MENU, R.string.appearance_row_effect, R.drawable.ic_symbol_tune),
         SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_split_gap, R.drawable.ic_editor_margin),
+        /** The terminal's own font size, in dp (the stored value is pixels, {@code fontsize}). */
+        FONT_SIZE(Kind.SLIDER, R.string.appearance_row_terminal_font_size,
+            R.drawable.ic_editor_text_size),
+        /** Screen events, shown while a Screen effect is on. */
+        SCREEN_EVENTS(Kind.SWITCH, R.string.settings_terminal_screen_events_title,
+            R.drawable.ic_symbol_tune),
+        /** Composite signal, shown while a Screen effect is on. */
+        COMPOSITE_SIGNAL(Kind.SWITCH, R.string.settings_terminal_retro_composite_title,
+            R.drawable.ic_symbol_tune),
+        /** The floating keyboard's width, % of the screen; shown while it floats. */
+        KEYBOARD_WIDTH(Kind.SLIDER, R.string.appearance_row_keyboard_width,
+            R.drawable.ic_ms_width),
+        /** The floating keyboard's height, % of the docked one's; shown while it floats. */
+        KEYBOARD_FLOAT_HEIGHT(Kind.SLIDER, R.string.appearance_row_keyboard_float_height,
+            R.drawable.ic_editor_height),
+        /** The split keyboard's gap, % of its width; shown while it is split. */
+        KEYBOARD_SPLIT_GAP(Kind.SLIDER, R.string.appearance_row_keyboard_split_gap,
+            R.drawable.ic_ms_space_bar),
         LABEL_SIZE(Kind.SEGMENTS, R.string.appearance_row_label_size, R.drawable.ic_editor_text_size),
         GLASS_WIDGETS(Kind.SWITCH, R.string.appearance_row_glass_widgets, R.drawable.ic_symbol_stacks),
         TWO_LINE(Kind.SWITCH, R.string.appearance_row_two_line, R.drawable.ic_editor_text_size),
@@ -111,13 +131,18 @@ public final class EditorRows {
         PAGE_TRANSITION(Kind.SEGMENTS, R.string.appearance_row_page_transition,
             R.drawable.ic_ed_transition_slide),
         NUMERALS(Kind.SEGMENTS, R.string.appearance_row_numerals, R.drawable.ic_editor_text_size),
-        PAGE_DOTS(Kind.SWITCH, R.string.appearance_row_page_dots, R.drawable.ic_editor_grain),
+        /**
+         * The black dim over the wallpaper on the Terminal's pages, Display and Assistant pages
+         * included (the Terminal card's Background); Home's pages have none.
+         */
         WALLPAPER_DIM(Kind.SLIDER, R.string.appearance_row_wallpaper_dim,
             R.drawable.ic_symbol_wallpaper),
+        /** The terminal panes' Opacity, its own key, never Global's (the Terminal's Background). */
+        TERMINAL_OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
+        /** The terminal panes' Blur in dp, its own key, never Global's (the Terminal's Background). */
+        TERMINAL_BLUR(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         WALLPAPER_SCROLL(Kind.SWITCH, R.string.appearance_row_wallpaper_scroll,
             R.drawable.ic_symbol_wallpaper),
-        /** A screen's card to the card both screens share (the palette's). */
-        LINK_GLOBAL(Kind.LINK, R.string.appearance_row_global, R.drawable.ic_symbol_palette),
         CLOCK_12H(Kind.SWITCH, R.string.appearance_row_clock_12h, R.drawable.ic_editor_clock),
         CLOCK_FACE(Kind.MENU, R.string.appearance_row_clock_face, R.drawable.ic_editor_clock),
         KEYBOARD_THEME(Kind.LINK, R.string.appearance_row_keyboard_theme, R.drawable.ic_editor_dark_mode),
@@ -150,10 +175,6 @@ public final class EditorRows {
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
         GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_symbol_terminal),
-        /** The Home card's way to the Widgets card. */
-        LINK_WIDGETS(Kind.LINK, R.string.editor_element_widgets, R.drawable.ic_symbol_stacks),
-        /** The Appearance card's way to the Sheets card. */
-        LINK_SHEETS(Kind.LINK, R.string.editor_element_sheets, R.drawable.ic_symbol_grid_view),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */
         LINK_GLASS_REFRACTION(Kind.LINK, R.string.settings_performance_glass_refraction_title,
@@ -196,7 +217,7 @@ public final class EditorRows {
         /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
         DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
             R.drawable.ic_ed_monochrome),
-        // The Keyboard, Home, Global and Workspace cards' own rows (editor-redesign §2), drawn by
+        // The Keyboard, Home, Global and Terminal cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
         /** The air under the keyboard's last key row (the layout's chin), in dp. */
@@ -230,14 +251,26 @@ public final class EditorRows {
         SECTION_GLASS_MATERIAL(Kind.MENU, R.string.editor_section_glass_material, 0),
         // The overhaul's sections (appearance-cards-overhaul §2): [card name] · More options ·
         // Layout · Appearance · Links, plus Colours (Customization) and Clock & Weather (Status
-        // bar). A card's first section is named for the card where it is not one of these; the
-        // headings above stay only as EditorSectionStore keys of earlier builds, no card lists them.
+        // bar). A card's first section is named for the card where it is not one of these. Of
+        // the headings above, Global lists Look and Shape again (spec §3); the rest stay only as
+        // EditorSectionStore keys of earlier builds.
         SECTION_MORE_OPTIONS(Kind.MENU, R.string.editor_section_more_options, 0),
         SECTION_LAYOUT(Kind.MENU, R.string.editor_section_layout, 0),
         SECTION_APPEARANCE(Kind.MENU, R.string.editor_section_appearance, 0),
         SECTION_LINKS(Kind.MENU, R.string.editor_section_links, 0),
         SECTION_COLOURS(Kind.MENU, R.string.editor_section_colours, 0),
         SECTION_CLOCK_WEATHER(Kind.MENU, R.string.editor_section_clock_weather, 0),
+        // The six cards' sections (appearance-one-look spec §3): Global's Look (SECTION_LOOK),
+        // Fine-tune, Shape and Screen; Home's Widgets; the Terminal's Text, Panes and Effects;
+        // the Dock's Bars.
+        SECTION_FINE_TUNE(Kind.MENU, R.string.editor_section_fine_tune, 0),
+        SECTION_SCREEN(Kind.MENU, R.string.editor_section_screen, 0),
+        SECTION_WIDGETS(Kind.MENU, R.string.editor_section_widgets, 0),
+        SECTION_TEXT(Kind.MENU, R.string.editor_section_text, 0),
+        SECTION_PANES(Kind.MENU, R.string.editor_section_panes, 0),
+        SECTION_EFFECTS(Kind.MENU, R.string.editor_section_effects, 0),
+        SECTION_BACKGROUND(Kind.MENU, R.string.editor_section_background, 0),
+        SECTION_BARS(Kind.MENU, R.string.editor_section_bars, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
         /**
@@ -388,14 +421,10 @@ public final class EditorRows {
     private static List<Spec> listed(@NonNull EditorCard card, @NonNull Offers offers) {
         switch (card) {
             case HOME: return HomeCard.rows(offers);
-            case WORKSPACE: return WorkspaceCard.rows(offers);
             case STATUS: return StatusBarCard.rows(offers);
             case TERMINAL: return TerminalCard.rows(offers);
             case DOCK: return DockCard.rows(offers);
             case KEYBOARD: return KeyboardCard.rows(offers);
-            case WIDGETS:
-            case SHEETS:
-                return GlassRows.appearance(new CardRows(), offers, 1).build();
             case APPEARANCE:
             default:
                 return GlobalCard.rows(offers);
@@ -538,7 +567,7 @@ public final class EditorRows {
      */
     public static int pageFor(@NonNull EditorCard card, @NonNull Row row) {
         int none = TermuxAppSharedPreferences.PAGE_ALL;
-        if (card == EditorCard.HOME || card == EditorCard.WORKSPACE || card == EditorCard.APPEARANCE)
+        if (card == EditorCard.HOME || card == EditorCard.APPEARANCE)
             return row == Row.LOOK || row.property() != null
                 ? TermuxAppSharedPreferences.PAGE_WALL : none;
         SurfaceProperty property = row.property();
@@ -548,12 +577,4 @@ public final class EditorRows {
             ? TermuxAppSharedPreferences.PAGE_WALL : none;
     }
 
-    /**
-     * Whether a slider row carries the "set here" dot: the surface's own value for one of its
-     * glass numbers, where Reset would take it back to the Look.
-     */
-    public static boolean marksOwnValue(@NonNull EditorCard card, @NonNull Row row) {
-        return card.slot != null && row.property() != null
-            && TermuxAppSharedPreferences.hasSurfaceProperty(card.slot, row.property());
-    }
 }

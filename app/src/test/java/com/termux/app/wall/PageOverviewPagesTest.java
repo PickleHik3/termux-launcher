@@ -10,8 +10,8 @@ import static org.junit.Assert.assertTrue;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.WallPages.Page;
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.junit.Test;
 
@@ -98,7 +98,7 @@ public class PageOverviewPagesTest {
         WallPages before = store.current();
         rules(store).chooseHome(PageOverviewPolicy.Kind.TERMINAL, 0);
         assertNotNull(launcher.choice);
-        assertEquals(WallRow.START_IN_WORKSPACE, launcher.choice.startIn);
+        assertEquals(WallRow.START_IN_TERMINAL, launcher.choice.startIn);
         assertSame(before, store.current());
     }
 
@@ -308,13 +308,13 @@ public class PageOverviewPagesTest {
     @Test
     public void eachWallPositionKindHasItsCardKind() {
         assertEquals(PageOverviewPolicy.Kind.HOME_PAGE,
-            PageOverviewPages.cardKind(PaneWallPage.WIDGETS));
+            PageOverviewPages.cardKind(PageKind.HOME));
         assertEquals(PageOverviewPolicy.Kind.TERMINAL,
-            PageOverviewPages.cardKind(PaneWallPage.TERMINAL));
+            PageOverviewPages.cardKind(PageKind.TERMINAL));
         assertEquals(PageOverviewPolicy.Kind.DISPLAY,
-            PageOverviewPages.cardKind(PaneWallPage.DISPLAY));
+            PageOverviewPages.cardKind(PageKind.DISPLAY));
         assertEquals(PageOverviewPolicy.Kind.ASSISTANT,
-            PageOverviewPages.cardKind(PaneWallPage.ASSISTANT));
+            PageOverviewPages.cardKind(PageKind.ASSISTANT));
     }
 
     private static void assertDisplay(@NonNull PageOverviewView.DisplayPage page, int id,

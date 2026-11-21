@@ -639,14 +639,14 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         folderDensity = density;
     }
 
-    /** The page glyphs under the grid: what the wall has pages for and where the user is. */
-    public void setPageGlyphs(@Nullable com.termux.app.wall.pageswitch.PageSwitchModel model) {
-        pane.setPageGlyphs(model);
+    /** The page bar under the grid: what the wall has pages for and where the user is. */
+    public void setPageBar(@Nullable com.termux.app.wall.pageswitch.PageBarModel model) {
+        pane.setPageBar(model);
     }
 
-    /** Where a touch on the glyph row goes. */
-    public void setPageSwitchEntry(@Nullable com.termux.app.wall.pageswitch.PageGlyphRowView.Entry entry) {
-        pane.setPageSwitchEntry(entry);
+    /** Where a touch on the page bar goes. */
+    public void setPageBarEntry(@Nullable com.termux.app.wall.pageswitch.PageBarView.Entry entry) {
+        pane.setPageBarEntry(entry);
     }
 
     /** The glyphs under the grid, or none (Settings › Home › Page indicator). */
@@ -1678,6 +1678,8 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
             if (cell == null) return;
             cell.setTranslationX(translationX);
             cell.setTranslationY(translationY);
+            // The carried cell draws over its neighbours by child order; the 8 dp lift is its shadow.
+            com.termux.app.window.WindowLayers.raiseWithin(cell);
             cell.setTranslationZ(dp(8));
         }
         placeCarried(rawX, rawY);
@@ -3191,31 +3193,29 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
     }
 
     /**
-     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off goes
-     * back to following it ({@link com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass#followPage}),
-     * and the page draws again.
-     *
-     * @return what each cleared widget held, by id, for the editor's Undo
+     * The Home card's "Glass widgets" switch moved: every built-in widget's own On or Off is shown
+     * following it, in the Appearance editor's draft
+     * ({@link LauncherWidgetRepository#draftGlassFollowsPage}), and the page draws again.
      */
-    @NonNull
-    public java.util.Map<Integer, String> clearBuiltinGlassChoices() {
-        java.util.Map<Integer, String> cleared = new java.util.LinkedHashMap<>();
-        java.util.List<LauncherWidgetRecord> changed =
-            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.followPage(
-                widgets.repository().records(), cleared);
-        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+    public void draftBuiltinGlassFollowsPage() {
+        if (widgets.repository().draftGlassFollowsPage())
             render();
-        return cleared;
     }
 
-    /** The editor's Undo of {@link #clearBuiltinGlassChoices}. */
-    public void restoreBuiltinGlassChoices(@NonNull java.util.Map<Integer, String> choices) {
-        if (choices.isEmpty())
-            return;
-        java.util.List<LauncherWidgetRecord> changed =
-            com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass.withChoices(
-                widgets.repository().records(), choices);
-        if (!changed.isEmpty() && widgets.repository().putRecords(changed))
+    /** Whether the editor's glass draft shows a widget other than the store holds it. */
+    public boolean isBuiltinGlassDraftDirty() {
+        return widgets.repository().isGlassDraftDirty();
+    }
+
+    /** The editor's Done: the glass draft is written, once. */
+    public void commitBuiltinGlassDraft() {
+        if (widgets.repository().commitGlassDraft())
+            render();
+    }
+
+    /** The editor's Discard or Undo: the glass draft goes and the widgets show the store again. */
+    public void discardBuiltinGlassDraft() {
+        if (widgets.repository().discardGlassDraft())
             render();
     }
 

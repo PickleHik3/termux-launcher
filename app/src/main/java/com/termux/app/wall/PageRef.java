@@ -2,10 +2,11 @@ package com.termux.app.wall;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.termux.app.page.PageKind;
 
 /**
  * One page of the wall as a crossing and the chrome name it (#173, spec #167 E): its kind, as a
- * {@link PaneWallPage}, and its {@link WallPages} page id, -1 where the launcher has not said
+ * {@link PageKind}, and its {@link WallPages} page id, -1 where the launcher has not said
  * which page of that kind it is. A value: two refs to the same kind and id are equal.
  *
  * <p>A crossing's two endpoints, a resolved arrangement and the dock's rows are named by it, so
@@ -15,39 +16,39 @@ import androidx.annotation.Nullable;
 public final class PageRef {
 
     /** Home's page, with no id said. */
-    @NonNull public static final PageRef HOME = new PageRef(PaneWallPage.WIDGETS, -1);
+    @NonNull public static final PageRef HOME = new PageRef(PageKind.HOME, -1);
     /** The Terminal page, with no id said. */
-    @NonNull public static final PageRef TERMINAL = new PageRef(PaneWallPage.TERMINAL, -1);
+    @NonNull public static final PageRef TERMINAL = new PageRef(PageKind.TERMINAL, -1);
     /** The Assistant page (ADR 0022): a kind of its own, never read as a window's. */
-    @NonNull public static final PageRef ASSISTANT = new PageRef(PaneWallPage.ASSISTANT, -1);
+    @NonNull public static final PageRef ASSISTANT = new PageRef(PageKind.ASSISTANT, -1);
 
-    @NonNull public final PaneWallPage kind;
+    @NonNull public final PageKind kind;
     /** The page's {@link WallPages} id; -1 while unknown. */
     public final int id;
 
-    private PageRef(@NonNull PaneWallPage kind, int id) {
+    private PageRef(@NonNull PageKind kind, int id) {
         this.kind = kind;
         this.id = id < 0 ? -1 : id;
     }
 
     @NonNull
-    public static PageRef of(@NonNull PaneWallPage kind) {
+    public static PageRef of(@NonNull PageKind kind) {
         return of(kind, -1);
     }
 
     @NonNull
-    public static PageRef of(@NonNull PaneWallPage kind, int id) {
+    public static PageRef of(@NonNull PageKind kind, int id) {
         if (id < 0) {
-            if (kind == PaneWallPage.WIDGETS) return HOME;
-            if (kind == PaneWallPage.TERMINAL) return TERMINAL;
-            if (kind == PaneWallPage.ASSISTANT) return ASSISTANT;
+            if (kind == PageKind.HOME) return HOME;
+            if (kind == PageKind.TERMINAL) return TERMINAL;
+            if (kind == PageKind.ASSISTANT) return ASSISTANT;
         }
         return new PageRef(kind, id);
     }
 
     /** Whether this is a Home page; a window's page (the Terminal's, a display's) otherwise. */
     public boolean isHome() {
-        return kind == PaneWallPage.WIDGETS;
+        return kind == PageKind.HOME;
     }
 
     @Override

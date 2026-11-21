@@ -62,10 +62,12 @@ public class SettingsSearchIndexTest {
         SettingsSearchIndex index = index();
         assertFirst(index, "lazy mode", PAGES + "PerformancePreferencesFragment", "lazy_mode");
         assertFirst(index, "low-memory preset", PAGES + "PerformancePreferencesFragment", "low_memory_preset");
-        assertFirst(index, "12-hour", PAGES + "StatusBarPreferencesFragment", "top_pane_clock_am_pm");
-        assertFirst(index, "wallpaper scrolls", PAGES + "HomePreferencesFragment", "wallpaper_parallax");
+        assertFirst(index, "keep clear of the camera", PAGES + "StatusBarPreferencesFragment",
+            "status_bar_cutout_mode");
+        assertFirst(index, "tools that follow", PAGES + "TuiAppThemesPreferencesFragment",
+            "theme_templates_enabled");
         assertFirst(index, "start in", PAGES + "GeneralPreferencesFragment", "app_launcher_start_in");
-        assertFirst(index, "keyboard over the window", PAGES + "X11DisplayInputPreferencesFragment",
+        assertFirst(index, "keyboard behavior", PAGES + "X11DisplayInputPreferencesFragment",
             "x11_keyboard_over_display");
         assertFirst(index, "linux apps", PAGES + "X11DisplayPreferencesFragment", null);
         assertFirst(index, "keyboard theme", PAGES + "KeyboardColorSchemeFragment", null);
@@ -96,13 +98,37 @@ public class SettingsSearchIndexTest {
             {"app theme", "theme_mode"},
             {"wallpaper colors", "terminal_dynamic_colors_enabled"},
             {"terminal contrast", "terminal_contrast_level"},
-            {"tools that follow", "theme_templates_enabled"},
             {"widgets on glass", "widgets_on_glass"},
             {"monochrome icons", "app_launcher_bw_icons"},
             {"icon pack", "app_launcher_icon_pack_package"},
             {"pinned-app icon pack", "app_launcher_pinned_icon_pack_package"},
         };
         for (String[] row : rows) assertHit(index, row[0], door, row[1]);
+        // The rows the editor's cards hold since #289: Settings keeps one home per setting.
+        String[][] moved = {
+            {"icon size", "app_launcher_home_icon_scale"},
+            {"label size", "app_launcher_home_label_size"},
+            {"two-line labels", "app_launcher_home_label_two_lines"},
+            {"label shadow", "app_launcher_home_label_shadow"},
+            {"folder density", "app_launcher_home_folder_density"},
+            {"widget numerals", "app_launcher_builtin_widget_style"},
+            {"page bar", "app_launcher_home_page_indicator"},
+            {"wallpaper scrolls", "wallpaper_parallax"},
+            {"12-hour time", "top_pane_clock_am_pm"},
+            {"cpu usage", "status_widget_cpu"},
+            {"memory usage", "status_widget_ram"},
+            {"battery", "status_widget_battery"},
+            {"fahrenheit", "status_widget_weather_fahrenheit"},
+            {"cursor trail", "terminal_cursor_trail_style"},
+            {"split-pane controls", "split_pane_controls"},
+            {"automatic tiling", "pane_dwindle_default"},
+            {"focus active pane", "pane_focus_grows"},
+            {"font size", "fonts_size"},
+            {"floating keyboard width", "in_app_keyboard_floating_width"},
+            {"floating keyboard height", "in_app_keyboard_floating_height"},
+            {"split keyboard gap", "in_app_keyboard_split_gap"},
+        };
+        for (String[] row : moved) assertHit(index, row[0], door, row[1]);
         assertHit(index, "wallpaper", door, "use_system_wallpaper");
         assertHit(index, "appearance", door, null);
     }

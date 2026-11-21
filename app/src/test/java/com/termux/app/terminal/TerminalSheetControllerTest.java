@@ -307,7 +307,7 @@ public class TerminalSheetControllerTest {
     }
 
     /**
-     * A workspace prompt or the search bar rises out of the terminal's own bottom edge: it spans the
+     * A terminal prompt or the search bar rises out of the terminal's own bottom edge: it spans the
      * terminal's frame, sits on that edge, and the plane is cut off there so the panel is clipped by
      * it on the way in and out instead of sliding across the dock.
      */

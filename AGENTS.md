@@ -81,7 +81,8 @@ Before calling a change done, say which of these applied:
 - **Editions.** Anything touching applicationId, bootstrap, manifest or signing needs a decision
   per edition.
 - **The system IME.** Every path that shows it calls `TermuxActivity.onSystemImeRequested()`
-  first, or the `mAcceptSystemImeInsets` gate drops its insets.
+  first: that takes the `system-ime` Hold (`SystemImeRide`), and only an owned keyboard's insets
+  move the layout. A request whose keyboard never shows backs off at the Hold's 1.5 s backstop.
 
 ## Where code lives
 
@@ -168,8 +169,10 @@ Raise these if you think they are wrong; do not silently undo them.
 - The Sessions sidebar is legacy: no Sessions tab in the editor, no dot tab badges.
 - The Appearance editor commits only on Done. Its card sheet is always present at peek, half or
   full (no ✕); Back above peek collapses to peek, at peek it goes through the unsaved-changes
-  dialog; dirtiness compares against the entry snapshot. Views raised over the editor need a Z
-  above the sheet's elevation; `bringToFront` alone draws under.
+  dialog; dirtiness compares the draft against the store. A view's place in Z is its window layer
+  (ground, pages, chrome, sheets, editor, notices, back to front; `WindowLayer`): runtime views
+  join their layer's host through `WindowLayers`, never the window decor or the content view;
+  elevation only draws a shadow and `bringToFront` is not used.
 - The editor collapses the status pane on entry, so a status-pane control draws its own preview.
 - A stored `-1` corner radius means "follow the style", resolved only in
   `resolveAutoCornerRadiusDp`. Never give `DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS` or
@@ -178,7 +181,10 @@ Raise these if you think they are wrong; do not silently undo them.
   holding only `log_level` is a fresh install). The one sanctioned way to drop carried-over
   appearance is the reset number, `AppearanceReset.NUMBER`: a build that raises it puts everything
   the Appearance editor owns back to a new install's once, on the first start. Raised to 1 for the
-  2.0 pre-release; raised again only on the developer's say (releasing.md).
+  2.0 pre-release, which also carries the one-look model (ADR 0031): that reset deletes every
+  per-kind and per-page look key, the sheets' and widgets' looks, surfaces' own values beyond
+  Opacity and Blur and the per-page wallpaper dim, converting none. Raised again only on the
+  developer's say (releasing.md).
 - `SettingsLayoutUtils.applyItemLayout` overwrites every preference's layout; a preference with
   its own layout goes on the exemption list.
 - Pane inner padding favours rows; change the rule only in `PaneShape` (`verticalInsetPx`,

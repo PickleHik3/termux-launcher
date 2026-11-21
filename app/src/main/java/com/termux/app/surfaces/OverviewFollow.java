@@ -6,13 +6,13 @@ import com.termux.app.wall.PageOverviewPolicy;
 
 /**
  * What the surface editor does when the Edit pages overview centres a card over it: a Home card
- * keeps Home's card, and a card of any Workspace page (a terminal, a Display page, the Assistant
- * page) gets the Workspace's, the one look they all wear (ADR 0025). The fold to the handle is
+ * keeps Home's card, and a card of any Terminal page (a terminal, a Display page, the Assistant
+ * page) gets the Terminal's, whose Layout they all wear (ADR 0025). The fold to the handle is
  * left for a card the editor has nothing for.
  */
 public enum OverviewFollow {
     HOME(EditorCard.HOME),
-    WORKSPACE(EditorCard.WORKSPACE),
+    TERMINAL(EditorCard.TERMINAL),
     FOLD(null);
 
     /** The card the editor shows for this choice, null when the sheet folds. */
@@ -28,7 +28,7 @@ public enum OverviewFollow {
             case HOME_PAGE: return HOME;
             case TERMINAL:
             case DISPLAY:
-            case ASSISTANT: return WORKSPACE;
+            case ASSISTANT: return TERMINAL;
             default: return FOLD;
         }
     }

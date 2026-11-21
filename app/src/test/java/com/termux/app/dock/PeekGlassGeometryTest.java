@@ -149,8 +149,8 @@ public class PeekGlassGeometryTest {
 
     @Test
     public void aHostSlidDownPastTheScreenFadesTheReflectionOverWhatShows() {
-        // Pong, the tail of a Workspace -> Home2 crossing (PEEKBAND-DBG): the host still laid out
-        // 967 px tall with the Workspace's keyboard room, its bottom on the screen's edge as laid
+        // Pong, the tail of a Terminal -> Home2 crossing (PEEKBAND-DBG): the host still laid out
+        // 967 px tall with the Terminal's keyboard room, its bottom on the screen's edge as laid
         // out, the stack slid 654 px down so the row stands where it rests. At rest the host is
         // 313 px tall, flush with the screen's edge.
         int screenH = 2412;
@@ -440,5 +440,30 @@ public class PeekGlassGeometryTest {
         assertFalse(PeekGlassGeometry.travelRecutsOnly(five, wider, true));
         assertFalse(PeekGlassGeometry.travelRecutsOnly(null, five, true));
         assertFalse(PeekGlassGeometry.travelRecutsOnly(five, null, true));
+    }
+
+    @Test public void theReflectionStandsWhereTheLaneCarriesTheRow() {
+        org.junit.Assert.assertEquals(40f, PeekGlassGeometry.rowDrawX(40f, 0f), 0f);
+        org.junit.Assert.assertEquals(-947.3f, PeekGlassGeometry.rowDrawX(40f, -987.3f), 0.001f);
+    }
+
+    @Test
+    public void theCutsTopFollowsTheRowsOverTheHost() {
+        PeekGlassGeometry.Card card = new PeekGlassGeometry.Card(32f, 95f, 1048f, 760f, 60f,
+            700f, 150f, 300f);
+        float[] cut = new float[com.termux.app.chrome.RoundCut.SIZE];
+
+        PeekGlassGeometry.cut(card, 0f, cut);
+        org.junit.Assert.assertArrayEquals("as cut", new float[] {32f, 95f, 1048f, 760f, 60f},
+            cut, 0f);
+
+        // Mid-crossing the host sinks with the keyboard: the rows stand 134 px higher over it,
+        // and the card's top stays on the icons' centre line with them.
+        PeekGlassGeometry.cut(card, -134f, cut);
+        org.junit.Assert.assertArrayEquals(new float[] {32f, -39f, 1048f, 760f, 60f}, cut, 0f);
+
+        // Rows far below: the bottom stays a radius under the top.
+        PeekGlassGeometry.cut(card, 700f, cut);
+        org.junit.Assert.assertArrayEquals(new float[] {32f, 795f, 1048f, 855f, 60f}, cut, 0f);
     }
 }

@@ -7,8 +7,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.TermuxActivity;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.SeamDress;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * Every door into the Appearance editor from outside the launcher's window (appearance-and-
@@ -73,20 +73,20 @@ public final class AppearanceEditorEntry {
     }
 
     /**
-     * Where the terminal sheet's Appearance opens the editor: on the Workspace half, with the
-     * Workspace card up ({@link EditorDoor#TERMINAL_SHEET_APPEARANCE}). The page on screen is kept
-     * when it stands on the Workspace (a terminal or the display window), so the frame does not
+     * Where the terminal sheet's Appearance opens the editor: on the Terminal half, with the
+     * Terminal card up ({@link EditorDoor#TERMINAL_SHEET_APPEARANCE}). The page on screen is kept
+     * when it stands on the Terminal (a terminal or the display window), so the frame does not
      * slide; anything else lands on the terminal.
      *
      * <pre>
-     *   openAppearanceSurface(EditorCard.WORKSPACE.key,
+     *   openAppearanceSurface(EditorCard.TERMINAL.key,
      *       AppearanceEditorEntry.terminalMenuPlace(currentWallPlace()), null);
      * </pre>
      */
     @NonNull
-    public static PaneWallPage terminalMenuPlace(@Nullable PaneWallPage onScreen) {
-        return onScreen != null && onScreen != PaneWallPage.WIDGETS
-            ? onScreen : PaneWallPage.TERMINAL;
+    public static PageKind terminalMenuPlace(@Nullable PageKind onScreen) {
+        return onScreen != null && onScreen != PageKind.HOME
+            ? onScreen : PageKind.TERMINAL;
     }
 
     /** The card an intent's section names, or null for none. */

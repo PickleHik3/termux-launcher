@@ -32,7 +32,7 @@ import android.app.Application;
 
 /**
  * The card header (appearance-cards overhaul §1): main cards wear the Customization | Home |
- * Workspace pill and the phone glyph; element cards ←, the name and the Show switch where the
+ * Terminal pill and the phone glyph; element cards ←, the name and the Show switch where the
  * object can be hidden (Status bar, Dock, Keyboard). Both end in ⋮, whose Reset asks nothing.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -57,7 +57,7 @@ public class EditorCardHeaderTest {
                     f.show(card);
                 String at = card + " at " + scale;
                 boolean main = EditorCardSheet.isMainCard(card);
-                // Main cards: the Customization | Home | Workspace pill and the phone glyph.
+                // Main cards: the Customization | Home | Terminal pill and the phone glyph.
                 assertEquals(at + ": the pill", main, f.sheet.mainPill().getVisibility() == View.VISIBLE);
                 assertEquals(at + ": the phone glyph", main, f.sheet.phoneGlyph().getVisibility() == View.VISIBLE);
                 assertFalse(at + ": the glyph is no button", f.sheet.phoneGlyph().isClickable());
@@ -87,7 +87,7 @@ public class EditorCardHeaderTest {
     public void thePillOpensTheOtherMainCard() {
         Fixture f = new Fixture(EditorCard.HOME, 1f);
         f.sheet.mainPill().getChildAt(2).performClick();
-        assertEquals(EditorCard.WORKSPACE, f.opened);
+        assertEquals(EditorCard.TERMINAL, f.opened);
     }
 
     @Test

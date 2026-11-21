@@ -4,9 +4,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.io.ExtraKeySetResolver.Resolved;
 import com.termux.app.terminal.io.ExtraKeySetResolver.Source;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import org.junit.Test;
@@ -29,20 +29,20 @@ public class ExtraKeySetResolverTest {
 
     @Test
     public void targetFollowsTheSettledPlace() {
-        assertEquals(ExtraKeysTarget.DISPLAY, ExtraKeySetResolver.targetFor(PaneWallPage.DISPLAY, false, false));
-        assertEquals(ExtraKeysTarget.DISPLAY, ExtraKeySetResolver.targetFor(PaneWallPage.DISPLAY, true, false));
-        assertEquals(ExtraKeysTarget.TERMINAL, ExtraKeySetResolver.targetFor(PaneWallPage.TERMINAL, false, false));
-        assertEquals(ExtraKeysTarget.TERMINAL, ExtraKeySetResolver.targetFor(PaneWallPage.TERMINAL, true, true));
-        assertEquals(ExtraKeysTarget.ASSISTANT, ExtraKeySetResolver.targetFor(PaneWallPage.ASSISTANT, false, false));
-        assertEquals(ExtraKeysTarget.ASSISTANT, ExtraKeySetResolver.targetFor(PaneWallPage.ASSISTANT, true, false));
+        assertEquals(ExtraKeysTarget.DISPLAY, ExtraKeySetResolver.targetFor(PageKind.DISPLAY, false, false));
+        assertEquals(ExtraKeysTarget.DISPLAY, ExtraKeySetResolver.targetFor(PageKind.DISPLAY, true, false));
+        assertEquals(ExtraKeysTarget.TERMINAL, ExtraKeySetResolver.targetFor(PageKind.TERMINAL, false, false));
+        assertEquals(ExtraKeysTarget.TERMINAL, ExtraKeySetResolver.targetFor(PageKind.TERMINAL, true, true));
+        assertEquals(ExtraKeysTarget.ASSISTANT, ExtraKeySetResolver.targetFor(PageKind.ASSISTANT, false, false));
+        assertEquals(ExtraKeysTarget.ASSISTANT, ExtraKeySetResolver.targetFor(PageKind.ASSISTANT, true, false));
     }
 
     @Test
     public void homeIsHomeUnlessAFloatHasTheFocus() {
-        assertEquals(ExtraKeysTarget.HOME, ExtraKeySetResolver.targetFor(PaneWallPage.WIDGETS, false, false));
-        assertEquals(ExtraKeysTarget.HOME, ExtraKeySetResolver.targetFor(PaneWallPage.WIDGETS, false, true));
-        assertEquals(ExtraKeysTarget.TERMINAL, ExtraKeySetResolver.targetFor(PaneWallPage.WIDGETS, true, false));
-        assertEquals(ExtraKeysTarget.DISPLAY, ExtraKeySetResolver.targetFor(PaneWallPage.WIDGETS, true, true));
+        assertEquals(ExtraKeysTarget.HOME, ExtraKeySetResolver.targetFor(PageKind.HOME, false, false));
+        assertEquals(ExtraKeysTarget.HOME, ExtraKeySetResolver.targetFor(PageKind.HOME, false, true));
+        assertEquals(ExtraKeysTarget.TERMINAL, ExtraKeySetResolver.targetFor(PageKind.HOME, true, false));
+        assertEquals(ExtraKeysTarget.DISPLAY, ExtraKeySetResolver.targetFor(PageKind.HOME, true, true));
     }
 
     @Test
@@ -178,9 +178,9 @@ public class ExtraKeySetResolverTest {
         assertEquals("extra-keys-home2", ExtraKeysTarget.HOME.pageKeys()[1]);
         assertEquals("extra-keys-home-height", ExtraKeysTarget.HOME.heightKey());
         assertNull(ExtraKeysTarget.GLOBAL.markingPlace());
-        assertEquals(PaneWallPage.TERMINAL, ExtraKeysTarget.TERMINAL.markingPlace());
-        assertEquals(PaneWallPage.DISPLAY, ExtraKeysTarget.DISPLAY.markingPlace());
-        assertEquals(PaneWallPage.WIDGETS, ExtraKeysTarget.HOME.markingPlace());
-        assertEquals(PaneWallPage.ASSISTANT, ExtraKeysTarget.ASSISTANT.markingPlace());
+        assertEquals(PageKind.TERMINAL, ExtraKeysTarget.TERMINAL.markingPlace());
+        assertEquals(PageKind.DISPLAY, ExtraKeysTarget.DISPLAY.markingPlace());
+        assertEquals(PageKind.HOME, ExtraKeysTarget.HOME.markingPlace());
+        assertEquals(PageKind.ASSISTANT, ExtraKeysTarget.ASSISTANT.markingPlace());
     }
 }

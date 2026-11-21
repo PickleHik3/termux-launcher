@@ -128,7 +128,7 @@ lessons in three chapters:
 2. Swipe down on the dock's apps row to open the app drawer (on a side rail, swipe right on a left
    rail or left on a right rail).
 
-**The Workspace**
+**The Terminal**
 
 3. Swipe down from the window's bottom border to put the keyboard away, then up to bring it back.
 4. Pull down from the window's top border to open the status bar, then swipe up to fold it.

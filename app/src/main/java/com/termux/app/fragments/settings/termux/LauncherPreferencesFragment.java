@@ -64,8 +64,11 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         configurePermissionActions(context);
         updatePermissionSummaries(context);
         updateDrawerLayoutSummary();
-        Preference linuxApps = findPreference("linux_apps_in_drawer");
-        if (linuxApps != null && !com.termux.app.x11.X11ServerSupport.isAvailable(context)) linuxApps.setVisible(false);
+        Preference linuxApps = findPreference(TermuxPreferenceConstants.TERMUX_APP.KEY_X11_DRAWER_APPS);
+        if (linuxApps != null) {
+            if (!com.termux.app.x11.X11ServerSupport.isAvailable(context)) linuxApps.setVisible(false);
+            linuxApps.setPreferenceDataStore(new DrawerAppsDataStore(context));
+        }
 
         Preference lockMethodPreference = findPreference("app_launcher_az_lock_method");
         if (lockMethodPreference != null) {
@@ -102,6 +105,31 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
                     .show();
                 return true;
             });
+        }
+    }
+
+    /** Show Linux apps in drawer: the launcher's own key, and the drawer re-reads its list on a change. */
+    private static final class DrawerAppsDataStore extends androidx.preference.PreferenceDataStore {
+        private final Context context;
+
+        DrawerAppsDataStore(@NonNull Context context) {
+            this.context = context.getApplicationContext();
+        }
+
+        @Override
+        public void putBoolean(String key, boolean value) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences launcher =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+            if (launcher == null) return;
+            launcher.setX11DrawerAppsEnabled(value);
+            com.termux.app.launcher.data.LauncherAppDataProvider.getInstance(context).refreshAsync(null, null);
+        }
+
+        @Override
+        public boolean getBoolean(String key, boolean defValue) {
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences launcher =
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(context);
+            return launcher == null ? defValue : launcher.isX11DrawerAppsEnabled();
         }
     }
 

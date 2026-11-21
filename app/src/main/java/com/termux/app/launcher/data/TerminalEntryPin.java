@@ -14,7 +14,7 @@ import java.util.List;
 
 /**
  * Pins the Terminal entry to the dock once, the first time a build with the entry runs (ADR 0008):
- * the way back to the Workspace from Home. Once, and only once: a user who takes it off the dock
+ * the way back to the Terminal from Home. Once, and only once: a user who takes it off the dock
  * keeps it off, and one who already pinned it, or put it in a folder, is not given a second.
  */
 public final class TerminalEntryPin {

@@ -27,7 +27,7 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 /**
- * Leaving Home's Lens beads (a settle onto the Workspace, whose dock is the plain slab) gives the
+ * Leaving Home's Lens beads (a settle onto the Terminal, whose dock is the plain slab) gives the
  * dock back every piece of its slab: the host's outline clip and rim, its slab-only children, no
  * bead clip or sideways cut, no shelf beads, and no swipe's moving beads kept for the next time.
  * And the glass host's own resize re-runs the accessory render, so a settle that moves the slab's
@@ -60,8 +60,8 @@ public class DockBeadsLeaveTest {
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(activity, false);
         assertNotNull(preferences);
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
-        // The Workspace: its dock is the plain slab whatever Home's style is.
-        ReflectionHelpers.setField(activity, "mLastWallPage", com.termux.app.wall.PaneWallPage.TERMINAL);
+        // The Terminal: its dock is the plain slab whatever Home's style is.
+        ReflectionHelpers.setField(activity, "mLastWallPage", com.termux.app.page.PageKind.TERMINAL);
 
         DockSurfaceHostLayout host = activity.findViewById(R.id.accessory_surface_host);
         DockShelfView shelf = activity.findViewById(R.id.accessory_shelf_fx);

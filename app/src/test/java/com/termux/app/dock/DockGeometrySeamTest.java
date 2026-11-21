@@ -47,7 +47,7 @@ public class DockGeometrySeamTest {
     private static final PlaceLayout HOME_BARE = new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN,
         false, Edge.BOTTOM, RowPlacement.HIDDEN, PlaceLayout.KeyboardMode.RESIZE,
         PlaceLayout.KeyboardForm.DOCKED, 4, 5);
-    /** The Workspace's layout as Home wears it on One layout: without the extra keys. */
+    /** The Terminal's layout as Home wears it on One layout: without the extra keys. */
     private static final PlaceLayout HOME_ON_ONE_LAYOUT = WINDOW_APPS.withSlot(Element.EXTRA_KEYS,
         WINDOW_APPS.slot(Element.EXTRA_KEYS).withHidden(true));
 
@@ -62,8 +62,8 @@ public class DockGeometrySeamTest {
             .searchField(searchField).build();
     }
 
-    private static Snapshot.Builder device(Half home, Half workspace, float density, int slots) {
-        return Snapshot.builder(home, workspace)
+    private static Snapshot.Builder device(Half home, Half terminal, float density, int slots) {
+        return Snapshot.builder(home, terminal)
             .density(density)
             .widthPx(Math.round(WIDTH_DP * density))
             .baseToolbarHeightPx(DockLayoutPolicy.baseToolbarHeightPx(density))
@@ -99,11 +99,11 @@ public class DockGeometrySeamTest {
                         for (DockStyle design : new DockStyle[] {DockStyle.GLASS_TRAY,
                                 DockStyle.LENS_BEADS}) {
                             String at = at(density, capsule, scale, slots) + " " + design;
-                            Half workspace = half(WINDOW_APPS, capsule, scale, design, false);
-                            // Home wears the Workspace's dress; only what it leaves out differs.
+                            Half terminal = half(WINDOW_APPS, capsule, scale, design, false);
+                            // Home wears the Terminal's dress; only what it leaves out differs.
                             Half home = Half.builder(HOME_ON_ONE_LAYOUT).floating(capsule)
                                 .dockHeightScale(scale).design(design).build();
-                            Snapshot.Builder device = device(home, workspace, density, slots);
+                            Snapshot.Builder device = device(home, terminal, density, slots);
                             DockLayout window = rest(device, PageRef.TERMINAL);
                             DockLayout onHome = rest(device, PageRef.HOME);
                             assertTrue(at, window.appsRowUsableWidthPx > 0);
@@ -119,21 +119,21 @@ public class DockGeometrySeamTest {
             for (boolean capsule : STYLES)
                 for (float scale : sizes(capsule))
                     for (int slots : SLOTS)
-                        for (boolean workspaceBeads : new boolean[] {true, false}) {
+                        for (boolean terminalBeads : new boolean[] {true, false}) {
                             String at = at(density, capsule, scale, slots)
-                                + (workspaceBeads ? " workspace beads" : " home beads");
-                            // The Workspace on Beads and Home on Tray with a Search field, and
+                                + (terminalBeads ? " terminal beads" : " home beads");
+                            // The Terminal on Beads and Home on Tray with a Search field, and
                             // the other way round; Home a size up, as a Home layout may keep it.
-                            Half workspace = half(WINDOW_APPS, capsule, scale,
-                                workspaceBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
+                            Half terminal = half(WINDOW_APPS, capsule, scale,
+                                terminalBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
                                 false);
                             Half home = half(HOME, capsule,
                                 Math.min(DockLayoutPolicy.maxUsefulScale(capsule), scale + 0.23f),
-                                workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
+                                terminalBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
                                 true);
-                            Snapshot.Builder device = device(home, workspace, density, slots);
+                            Snapshot.Builder device = device(home, terminal, density, slots);
                             DockLayout homeRest = rest(device, PageRef.HOME);
-                            DockLayout workspaceRest = rest(device, PageRef.TERMINAL);
+                            DockLayout terminalRest = rest(device, PageRef.TERMINAL);
 
                             // From a window toward Home: Home's rows, the field easing in.
                             PlaceLayout towardHome = SeamTravel.withDockOf(WINDOW_APPS, HOME);
@@ -144,7 +144,7 @@ public class DockGeometrySeamTest {
                                     frame);
                                 if (p == 1f) assertSameField(at, homeRest, frame);
                             }
-                            // From Home toward a window: the Workspace's rows, the field easing
+                            // From Home toward a window: the Terminal's rows, the field easing
                             // out.
                             PlaceLayout towardWindow = SeamTravel.withDockOf(HOME, WINDOW_APPS);
                             for (float p : new float[] {0.25f, 0.5f, 0.75f, 1f}) {
@@ -152,8 +152,8 @@ public class DockGeometrySeamTest {
                                     .rows(PageRef.TERMINAL).arrangement(towardWindow)
                                     .fieldReveal(1f - p).build());
                                 assertShowsItsOwnHalf(at + " toward a window at " + p,
-                                    workspaceRest, frame);
-                                if (p == 1f) assertSameField(at, workspaceRest, frame);
+                                    terminalRest, frame);
+                                if (p == 1f) assertSameField(at, terminalRest, frame);
                             }
                         }
     }
@@ -180,17 +180,17 @@ public class DockGeometrySeamTest {
             for (boolean capsule : STYLES)
                 for (float scale : sizes(capsule))
                     for (int slots : SLOTS)
-                        for (boolean workspaceBeads : new boolean[] {true, false}) {
+                        for (boolean terminalBeads : new boolean[] {true, false}) {
                             String at = at(density, capsule, scale, slots)
-                                + (workspaceBeads ? " workspace beads" : " home beads");
-                            Half workspace = half(WINDOW_KEYS, capsule,
+                                + (terminalBeads ? " terminal beads" : " home beads");
+                            Half terminal = half(WINDOW_KEYS, capsule,
                                 DockLayoutPolicy.minUsefulScale(),
-                                workspaceBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
+                                terminalBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
                                 false);
                             Half home = half(HOME, capsule, scale,
-                                workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
+                                terminalBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
                                 false);
-                            Snapshot.Builder device = device(home, workspace, density, slots);
+                            Snapshot.Builder device = device(home, terminal, density, slots);
                             DockLayout homeRest = rest(device, PageRef.HOME);
                             DockLayout window = rest(device, PageRef.TERMINAL);
                             assertSameRow(at + " in the window", homeRest, window);
@@ -205,26 +205,26 @@ public class DockGeometrySeamTest {
     }
 
     @Test
-    public void aRowHomePutsAwayKeepsTheWorkspacesIcon() {
-        // The other way round: the Workspace shows the row, Home's layout puts it away.
+    public void aRowHomePutsAwayKeepsTheTerminalsIcon() {
+        // The other way round: the Terminal shows the row, Home's layout puts it away.
         for (float density : DENSITIES)
             for (boolean capsule : STYLES)
                 for (float scale : sizes(capsule))
                     for (int slots : SLOTS)
-                        for (boolean workspaceBeads : new boolean[] {true, false}) {
+                        for (boolean terminalBeads : new boolean[] {true, false}) {
                             String at = at(density, capsule, scale, slots)
-                                + (workspaceBeads ? " workspace beads" : " home beads");
-                            Half workspace = half(WINDOW_APPS, capsule, scale,
-                                workspaceBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
+                                + (terminalBeads ? " terminal beads" : " home beads");
+                            Half terminal = half(WINDOW_APPS, capsule, scale,
+                                terminalBeads ? DockStyle.LENS_BEADS : DockStyle.GLASS_TRAY,
                                 false);
                             Half home = half(HOME_BARE, capsule,
                                 DockLayoutPolicy.minUsefulScale(),
-                                workspaceBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
+                                terminalBeads ? DockStyle.GLASS_TRAY : DockStyle.LENS_BEADS,
                                 true);
-                            Snapshot.Builder device = device(home, workspace, density, slots);
-                            DockLayout workspaceRest = rest(device, PageRef.TERMINAL);
+                            Snapshot.Builder device = device(home, terminal, density, slots);
+                            DockLayout terminalRest = rest(device, PageRef.TERMINAL);
                             DockLayout onHome = rest(device, PageRef.HOME);
-                            assertSameRow(at + " on Home", workspaceRest, onHome);
+                            assertSameRow(at + " on Home", terminalRest, onHome);
                             // Its band stays Home's: none.
                             assertEquals(at, 0, onHome.appsRowBandPx);
                             assertEquals(at, 0, onHome.appsBarHeightPx);
@@ -233,7 +233,7 @@ public class DockGeometrySeamTest {
                                 .rows(PageRef.TERMINAL)
                                 .arrangement(SeamTravel.withDockOf(HOME_BARE, WINDOW_APPS))
                                 .build());
-                            assertSameRow(at + " sliding in", workspaceRest, sliding);
+                            assertSameRow(at + " sliding in", terminalRest, sliding);
                         }
     }
 
@@ -246,11 +246,11 @@ public class DockGeometrySeamTest {
                 for (float scale : sizes(capsule))
                     for (int slots : SLOTS) {
                         String at = at(density, capsule, scale, slots);
-                        Half workspace = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
+                        Half terminal = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
                             false);
                         Half home = half(HOME, capsule, scale, DockStyle.GLASS_TRAY, true);
                         for (PageRef side : new PageRef[] {PageRef.HOME, PageRef.TERMINAL}) {
-                            Snapshot rest = device(home, workspace, density, slots).build()
+                            Snapshot rest = device(home, terminal, density, slots).build()
                                 .restOf(side);
                             DockLayout loose = DockGeometry.compute(rest);
                             for (int squeezePx : new int[] {1, 24, 400}) {
@@ -283,11 +283,11 @@ public class DockGeometrySeamTest {
                             String at = at(density, capsule, scale, slots) + " window "
                                 + designs[0] + " home " + designs[1];
                             // Halves that differ: their designs, Home a size up with a field.
-                            Half workspace = half(WINDOW_APPS, capsule, scale, designs[0], false);
+                            Half terminal = half(WINDOW_APPS, capsule, scale, designs[0], false);
                             Half home = half(HOME, capsule,
                                 Math.min(DockLayoutPolicy.maxUsefulScale(capsule), scale + 0.23f),
                                 designs[1], true);
-                            Snapshot.Builder device = device(home, workspace, density, slots);
+                            Snapshot.Builder device = device(home, terminal, density, slots);
                             assertEachFrameHoldsItsHalf(at + " toward Home", device,
                                 PageRef.TERMINAL);
                             assertEachFrameHoldsItsHalf(at + " toward a window", device,
@@ -350,11 +350,11 @@ public class DockGeometrySeamTest {
                 for (float scale : sizes(capsule))
                     for (int slots : SLOTS) {
                         String at = at(density, capsule, scale, slots) + " one layout";
-                        Half workspace = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
+                        Half terminal = half(WINDOW_APPS, capsule, scale, DockStyle.LENS_BEADS,
                             false);
                         Half home = Half.builder(HOME_ON_ONE_LAYOUT).floating(capsule)
                             .dockHeightScale(scale).design(DockStyle.LENS_BEADS).build();
-                        Snapshot base = device(home, workspace, density, slots).build();
+                        Snapshot base = device(home, terminal, density, slots).build();
                         int width = DockGeometry.compute(base.restOf(PageRef.TERMINAL))
                             .appsRowUsableWidthPx;
                         PlaceLayout seam = SeamTravel.withDockOf(WINDOW_APPS, HOME_ON_ONE_LAYOUT);
@@ -372,19 +372,19 @@ public class DockGeometrySeamTest {
 
     @Test
     public void anEqualSnapshotIsAnsweredWithTheSameLayout() {
-        Half workspace = half(WINDOW_APPS, false, 2.18f, DockStyle.LENS_BEADS, false);
+        Half terminal = half(WINDOW_APPS, false, 2.18f, DockStyle.LENS_BEADS, false);
         Half home = half(HOME, false, 2.18f, DockStyle.GLASS_TRAY, true);
         DockGeometry geometry = new DockGeometry();
-        DockLayout first = geometry.layout(device(home, workspace, 2.625f, 7).build());
+        DockLayout first = geometry.layout(device(home, terminal, 2.625f, 7).build());
         DockLayout again = geometry.layout(device(home.toBuilder().build(),
-            workspace.toBuilder().build(), 2.625f, 7).build());
+            terminal.toBuilder().build(), 2.625f, 7).build());
         assertSame(first, again);
-        DockLayout squeezed = geometry.layout(device(home, workspace, 2.625f, 7).squeezePx(40)
+        DockLayout squeezed = geometry.layout(device(home, terminal, 2.625f, 7).squeezePx(40)
             .build());
         assertNotSame(first, squeezed);
         // The pass asks for its squeezed and unsqueezed stack in turn: both stay remembered.
-        assertSame(first, geometry.layout(device(home, workspace, 2.625f, 7).build()));
-        assertSame(squeezed, geometry.layout(device(home, workspace, 2.625f, 7).squeezePx(40)
+        assertSame(first, geometry.layout(device(home, terminal, 2.625f, 7).build()));
+        assertSame(squeezed, geometry.layout(device(home, terminal, 2.625f, 7).squeezePx(40)
             .build()));
     }
 }

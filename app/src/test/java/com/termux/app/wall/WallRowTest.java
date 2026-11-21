@@ -1,10 +1,12 @@
 package com.termux.app.wall;
 
+import com.termux.app.look.WallPagesMigration;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /**
  * The row's arithmetic (ADR 0008): the seam out of Home, steps between windows, where a new
@@ -23,10 +25,10 @@ public class WallRowTest {
     }
 
     @Test
-    public void theWorkspaceIsOnTheRowOnlyWhileTheCurrentSessionHasAWindow() {
-        assertTrue(WallRow.hasWorkspace(true, 1));
-        assertFalse("the last window closed: the Workspace is gone", WallRow.hasWorkspace(true, 0));
-        assertTrue("not bound yet: assumed", WallRow.hasWorkspace(false, 0));
+    public void theTerminalIsOnTheRowOnlyWhileTheCurrentSessionHasAWindow() {
+        assertTrue(WallRow.hasTerminal(true, 1));
+        assertFalse("the last window closed: the Terminal is gone", WallRow.hasTerminal(true, 0));
+        assertTrue("not bound yet: assumed", WallRow.hasTerminal(false, 0));
     }
 
     @Test
@@ -65,38 +67,38 @@ public class WallRowTest {
 
     @Test
     public void startInDecidesTheColdStartPage() {
-        assertEquals(PaneWallPage.WIDGETS, WallRow.coldStart(WallRow.START_IN_HOME));
-        assertEquals(PaneWallPage.TERMINAL, WallRow.coldStart(WallRow.START_IN_WORKSPACE));
-        assertEquals("the display window is one of the Workspace's", PaneWallPage.TERMINAL,
+        assertEquals(PageKind.HOME, WallRow.coldStart(WallRow.START_IN_HOME));
+        assertEquals(PageKind.TERMINAL, WallRow.coldStart(WallRow.START_IN_TERMINAL));
+        assertEquals("the display window is one of the Terminal's", PageKind.TERMINAL,
             WallRow.coldStart(WallRow.START_IN_DISPLAY));
-        assertEquals("unset is Home", PaneWallPage.WIDGETS, WallRow.coldStart(null));
-        assertEquals(PaneWallPage.WIDGETS, WallRow.coldStart("TERMINAL"));
+        assertEquals("unset is Home", PageKind.HOME, WallRow.coldStart(null));
+        assertEquals(PageKind.HOME, WallRow.coldStart("TERMINAL"));
     }
 
     @Test
     public void theOpeningPageIsTheSavedHalfElseStartIn() {
         // A cold start: Start in decides, Home when unset.
-        assertEquals(PaneWallPage.WIDGETS, WallRow.openingKind(null, WallRow.START_IN_HOME));
-        assertEquals(PaneWallPage.TERMINAL, WallRow.openingKind(null, WallRow.START_IN_WORKSPACE));
-        assertEquals(PaneWallPage.WIDGETS, WallRow.openingKind(null, null));
+        assertEquals(PageKind.HOME, WallRow.openingKind(null, WallRow.START_IN_HOME));
+        assertEquals(PageKind.TERMINAL, WallRow.openingKind(null, WallRow.START_IN_TERMINAL));
+        assertEquals(PageKind.HOME, WallRow.openingKind(null, null));
         // A recreation: the half it saved, whatever Start in says.
-        assertEquals(PaneWallPage.WIDGETS,
-            WallRow.openingKind(WallRow.HALF_HOME, WallRow.START_IN_WORKSPACE));
-        assertEquals(PaneWallPage.TERMINAL,
-            WallRow.openingKind(WallRow.HALF_WORKSPACE, WallRow.START_IN_HOME));
-        assertEquals("a half this version does not know opens Home", PaneWallPage.WIDGETS,
-            WallRow.openingKind("display", WallRow.START_IN_WORKSPACE));
+        assertEquals(PageKind.HOME,
+            WallRow.openingKind(WallRow.HALF_HOME, WallRow.START_IN_TERMINAL));
+        assertEquals(PageKind.TERMINAL,
+            WallRow.openingKind(WallRow.HALF_TERMINAL, WallRow.START_IN_HOME));
+        assertEquals("a half this version does not know opens Home", PageKind.HOME,
+            WallRow.openingKind("display", WallRow.START_IN_TERMINAL));
         // It agrees with where the restore lands, half for half.
         assertEquals(WallRow.restore(WallRow.HALF_HOME, 0, 1, 0).kind,
             WallRow.openingKind(WallRow.HALF_HOME, null));
-        assertEquals(WallRow.restore(WallRow.HALF_WORKSPACE, 0, 1, 1).kind,
-            WallRow.openingKind(WallRow.HALF_WORKSPACE, null));
+        assertEquals(WallRow.restore(WallRow.HALF_TERMINAL, 0, 1, 1).kind,
+            WallRow.openingKind(WallRow.HALF_TERMINAL, null));
     }
 
     @Test
     public void theSavedPositionIsTheHalfAndTheIndexWithinIt() {
-        assertEquals(WallRow.HALF_HOME, WallRow.halfOf(PaneWallPage.WIDGETS));
-        assertEquals(WallRow.HALF_WORKSPACE, WallRow.halfOf(PaneWallPage.TERMINAL));
+        assertEquals(WallRow.HALF_HOME, WallRow.halfOf(PageKind.HOME));
+        assertEquals(WallRow.HALF_TERMINAL, WallRow.halfOf(PageKind.TERMINAL));
         assertEquals(1, WallRow.savedIndex(WallRow.homePage(1)));
         assertEquals("a window's place in the row, the display window's included", 2,
             WallRow.savedIndex(WallRow.window(2)));
@@ -107,11 +109,11 @@ public class WallRowTest {
         assertEquals(WallRow.homePage(1), WallRow.restore(WallRow.HALF_HOME, 1, 3, 2));
         assertEquals("a Home page that went is the last one", WallRow.homePage(1),
             WallRow.restore(WallRow.HALF_HOME, 4, 2, 2));
-        assertEquals(WallRow.window(1), WallRow.restore(WallRow.HALF_WORKSPACE, 1, 3, 2));
+        assertEquals(WallRow.window(1), WallRow.restore(WallRow.HALF_TERMINAL, 1, 3, 2));
         assertEquals("the display window, not back yet: the last window", WallRow.window(1),
-            WallRow.restore(WallRow.HALF_WORKSPACE, 2, 3, 2));
-        assertEquals("an empty Workspace: Home page 1", WallRow.homePage(0),
-            WallRow.restore(WallRow.HALF_WORKSPACE, 0, 3, 0));
+            WallRow.restore(WallRow.HALF_TERMINAL, 2, 3, 2));
+        assertEquals("an empty Terminal: Home page 1", WallRow.homePage(0),
+            WallRow.restore(WallRow.HALF_TERMINAL, 0, 3, 0));
     }
 
     /**

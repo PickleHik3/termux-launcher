@@ -282,10 +282,17 @@ public final class ElementsList {
             RowKit.dp(context, RowKit.GLYPH_DP), RowKit.dp(context, RowKit.GLYPH_DP));
         chevronParams.setMarginStart(RowKit.dp(context, 8));
         row.addView(chevron, chevronParams);
+        if (!item.opensCard()) {
+            // The page bar has no card of its own: its › keeps its room, unseen, and a tap on the
+            // row does nothing.
+            chevron.setVisibility(View.INVISIBLE);
+        }
 
         Views views = new Views(row, glyph, title, toggle, summary);
-        row.setContentDescription(context.getString(R.string.editor_elements_open, name));
-        row.setOnClickListener(v -> mHost.open(item));
+        if (item.opensCard()) {
+            row.setContentDescription(context.getString(R.string.editor_elements_open, name));
+            row.setOnClickListener(v -> mHost.open(item));
+        }
         toggle.setOnCheckedChangeListener((button, checked) -> {
             if (mRestating)
                 return;
@@ -301,6 +308,8 @@ public final class ElementsList {
      */
     @Nullable
     static CharSequence opensLine(@NonNull Context context, @NonNull Item item) {
+        if (!item.opensCard())
+            return null;
         String card = context.getString(item.card.titleRes);
         if (card.equals(context.getString(item.nameRes)))
             return null;

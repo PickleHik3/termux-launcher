@@ -101,6 +101,14 @@ public final class DockLayout {
     public final int appsRowStripBandPx;
 
     /**
+     * The empty air at the foot of {@link #appsRowStripBandPx} under the capsules, so they keep
+     * {@link com.termux.app.launcher.paging.PageTickStrip#SURFACE_AIR_DP} from the slab that starts
+     * under the band. Part of the band, not added to it; the strip draws its capsules centred in
+     * the band less this. Zero wherever no slab edge stands under the strip.
+     */
+    public final int appsRowStripAirPx;
+
+    /**
      * The air on the side of the icons the ticks stand on, which is {@link #appsTopPaddingPx} for
      * every row but one standing alone: that one keeps its sliver on the other side and the
      * strip's own band here, so its plank is as short as the two sides can make it.
@@ -274,6 +282,7 @@ public final class DockLayout {
         this.appsRowBandHintPx = Math.max(0, b.appsRowBandHintPx);
         this.appsRowIconPx = Math.max(0, b.appsRowIconPx);
         this.appsRowStripBandPx = Math.max(0, b.appsRowStripBandPx);
+        this.appsRowStripAirPx = Math.max(0, b.appsRowStripAirPx);
         this.appsRowTickSideAirPx = Math.max(0, b.appsRowTickSideAirPx);
         this.appsRowUsableWidthPx = Math.max(0, b.appsRowUsableWidthPx);
         this.slotIconPx = Math.max(0, b.slotIconPx);
@@ -403,6 +412,7 @@ public final class DockLayout {
         int appsRowBandHintPx;
         int appsRowIconPx;
         int appsRowStripBandPx;
+        int appsRowStripAirPx;
         int appsRowTickSideAirPx;
         int appsRowUsableWidthPx;
         int slotIconPx;

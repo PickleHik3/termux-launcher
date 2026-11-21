@@ -7,6 +7,8 @@ import android.util.Log;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.window.CrossingWindow;
+import com.termux.app.window.Counters;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.view.TerminalView;
 
@@ -41,6 +43,27 @@ public final class MotionLog {
 
     private static final ArrayDeque<String> BUFFER = new ArrayDeque<>();
 
+    /** Delimits the counter table after the ring in a dump. */
+    public static final String COUNTERS_HEADER = "--- counters ---";
+
+    /** Hands the terminal's resizes and draws to the crossing window (CrossingWindow). */
+    private static final TerminalView.CrossingProbe CROSSING_PROBE = new TerminalView.CrossingProbe() {
+        @Override public void onResize(String pane, String from, String to, String cause) {
+            CrossingWindow.shared().resized(SystemClock.uptimeMillis(), shortId(pane), from, to, cause);
+        }
+
+        @Override public void onDraw(String pane, long durationNanos) {
+            CrossingWindow window = CrossingWindow.shared();
+            long now = SystemClock.uptimeMillis();
+            // Only a slow draw names its pane; a fast one builds nothing.
+            window.drew(now, durationNanos > CrossingWindow.SLOW_DRAW_NANOS ? shortId(pane) : "", durationNanos);
+        }
+    };
+
+    private static String shortId(String handle) {
+        return handle.length() > 8 ? handle.substring(0, 8) : handle;
+    }
+
     private MotionLog() {
     }
 
@@ -74,7 +97,10 @@ public final class MotionLog {
             BUFFER.addLast(line);
         }
         Log.d(TAG, line);
-        if (INVARIANT.equals(event)) return;
+        if (INVARIANT.equals(event)) {
+            countInvariant(kv);
+            return;
+        }
         List<MotionInvariants.Violation> broken;
         synchronized (BUFFER) {
             if (sInvariants == null) sInvariants = new MotionInvariants();
@@ -84,6 +110,22 @@ public final class MotionLog {
             sInvariantCount.incrementAndGet();
             record(uptimeMs, INVARIANT, v.toString());
         }
+    }
+
+    /** An invariant is tallied by its name (the first word) in the table the ring's rollover spares. */
+    private static void countInvariant(@Nullable String kv) {
+        String text = kv == null ? "" : kv;
+        int space = text.indexOf(' ');
+        Counters.count(space < 0 ? text : text.substring(0, space), space < 0 ? "" : text.substring(space + 1));
+    }
+
+    /**
+     * The counter table (holds, guards, invariants), one line per name. It outlives the ring and
+     * is reset by {@link #clear}; the dump ends with it under {@link #COUNTERS_HEADER}.
+     */
+    @NonNull
+    public static List<String> counterLines() {
+        return Counters.lines();
     }
 
     /** Lets a crossing's window close when no event follows its settle; posted once per settle. */
@@ -128,13 +170,16 @@ public final class MotionLog {
             sInvariants = null;
             sInvariantCount.set(0);
         }
+        Counters.clear();
     }
 
     /** Turns the log on or off, here and in the terminal view's own events. */
     public static void setEnabled(boolean on) {
         enabled = on;
+        Counters.enable(on, on ? MotionLog::log : null);
         TerminalView.sMotionLogEnabled = on;
         TerminalView.setMotionSink(on ? MotionLog::log : null);
+        TerminalView.setCrossingProbe(on ? CROSSING_PROBE : null);
     }
 
     /** Applies the stored switch; called once as the activity starts. */

@@ -7,7 +7,7 @@ import java.util.List;
 import java.util.Locale;
 
 /**
- * Reordering the Workspace's row: by dragging a window's chip along the window bar, and by name
+ * Reordering the Terminal's row: by dragging a window's chip along the window bar, and by name
  * ({@code window.move}). Arithmetic only — the bar measures its chips and moves its views, the
  * activity moves the windows; this decides where everything goes.
  *

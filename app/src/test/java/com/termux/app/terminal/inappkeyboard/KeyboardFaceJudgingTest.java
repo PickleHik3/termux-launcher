@@ -13,8 +13,8 @@ public class KeyboardFaceJudgingTest {
     }
 
     /**
-     * Home2 to the Workspace on pong: the keyboard rose in Home's put-away palette (function chips
-     * at alpha 0x60, judged on no faces) and took the Workspace's (0xe1) only at landing. The
+     * Home2 to the Terminal on pong: the keyboard rose in Home's put-away palette (function chips
+     * at alpha 0x60, judged on no faces) and took the Terminal's (0xe1) only at landing. The
      * crossing judges the rising keyboard once, then keeps those inks while the band stays put.
      */
     @Test public void aCrossingJudgesTheKeyboardOnce() {
@@ -23,7 +23,7 @@ public class KeyboardFaceJudgingTest {
     }
 
     /**
-     * Home2 to the Workspace on pong (RISEINK-DBG): the crossing's first frame measured the band
+     * Home2 to the Terminal on pong (RISEINK-DBG): the crossing's first frame measured the band
      * on the layout of the page it left, below the screen ([21,2360][1059,3003], rows off a
      * stand-in, a veil bought), and the function chips rose at alpha 0xCA; the landing measured
      * [21,1690][1059,2333] and raised them to 0xE1, a darkening at landing. A layout that moves

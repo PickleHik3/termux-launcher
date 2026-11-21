@@ -80,3 +80,64 @@ above the dock's line in both).
 ## Status
 
 Built on branch feat/page-glyph-switcher; device checks owed in `project-docs/device-checks.md`.
+
+## Page bar (decided 2026-11-20, replaces the glyph row and the panel)
+
+Grilled with the developer on 2026-11-20 against the mock "Page bar — glyph directions"
+(artboard "As decided 2026-11-20"). Built on branch feat/page-bar (#298); device checks owed in
+`project-docs/device-checks.md`. What the code has today is above; this section
+says what replaces it.
+
+- **One switcher.** Home's four-glyph row and the per-page panel both go. In their place is one
+  pill above the dock: the page bar. It is the resting indicator and the scrubber.
+- **One glyph per page, in the wall's own order** (`WallPages`), not grouped by kind as
+  `PageSwitchModel.ROW` does now. Equal slots.
+- **Current page:** its glyph in the accent. No text capsule at rest.
+- **Display:** a glyph only while a display is running; no mark inside the monitor.
+- **Tap** a glyph: go to that page. **Slide** along the pill: the glyph under the finger lifts at
+  2x into a separate round bubble above the pill, with the page's name over it; its two neighbours
+  grow to 1.25x and the row shifts aside, as drawn; the current page's accent fades until release
+  or cancel. The pill's outline never changes (no bulge: outlines stay convex). The page changes
+  **on release only**; sliding back to the start cancels.
+- **Finger to page** is read from the rest slots by one pure policy, since the drawn glyphs move.
+- **Bubble label:** the page's or window's own name when it has one, else kind and number
+  ("Home 1", "Terminal 2"). One line, ellipsized.
+- **When pages do not fit:** neighbouring pages of one kind fold into one stacked glyph with a
+  count; sliding over it steps through them in the bubble. Windows fold first. No scrolling, no
+  shrinking.
+- **Where:** Home only. The Terminal's opt-in page switcher key pops the same bar up over the
+  keyboard for one use.
+- **Dock pages:** the tick strip (`PageTickStripView`) is replaced by the mock's capsules under
+  the pill: the current dock page wide and in the accent, the others small and neutral, all dimmed
+  while sliding. The most-used page has no colour of its own.
+- **Setting:** the existing Home page indicator setting keeps its key; its default now means the
+  page bar, and it can still be turned off.
+- **Ink:** glyphs and capsules take the legibility ink for the pill's ground (#297), not fixed
+  colours.
+- **Screen readers:** every glyph is a labelled button (today's row is hidden from them).
+
+Open while building: which page moves `WallPages` permits (so which interleavings the fold rule
+must handle), the pill's height against Home's grid, and its place under each dock style.
+
+Round two (decided 2026-11-21, built on feat/page-bar):
+
+- **Filled glyphs.** The bar's glyphs are filled shapes (`PageBarGlyphPainter`), the number and the
+  Terminal's chevron cut out so the ground shows through. The current page is filled in the
+  accent, the others in the ink; where the accent and the ink are close (CIELAB distance under
+  25, `PageBarInk`) the others draw at half alpha, so the current glyph is the only solid one.
+  The page switcher key's cap keeps the outline glyphs.
+- **Stack.** A fold draws the front glyph with its count and two plates behind it, each layer cut
+  apart from the one in front by a 1.5-unit gap, so it reads as a stack of cards.
+- **Width.** On Home the pill hugs its glyphs, centred on the window's centre and kept inside the
+  pane. The bar the page switcher key pops up on a workspace page spans the width with equal
+  slots, on an opaque card (it stands over the terminal's text).
+- **Place and room** (`PageBarBand`): the band is the air above the pill and the pill, plus 12dp
+  under it while dock rows stand below; with no dock rows the pill's bottom stands on the dock's
+  own bottom line (its edge gap). With the page bar hidden the band is nothing: Home's grid gets
+  the height. While the in-app keyboard or the system keyboard is up on Home the pill hides and the
+  band keeps its height.
+- **Dock capsules** keep 6dp of air above the dock's own surface on every dock kind
+  (`PageTickStrip.SURFACE_AIR_DP`); the dock is 4dp taller where they show.
+- **Setting.** The page bar's switch is a row of the Home card's Layout list (between Status bar
+  and Apps row), writing the same stored value as before (`app_launcher_home_page_indicator`,
+  `dots` or `off`); the switch under More options is gone.

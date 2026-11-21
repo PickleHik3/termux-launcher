@@ -55,8 +55,9 @@ import java.util.List;
  *
  * <p><b>Value inside</b> ({@link #setInsetValue}, a one-line slider row since 2026-11-04): the
  * track thickens to M3 Expressive's 40dp "M" track and prints its value at its end side, in
- * on-primary where the fill runs under it and on-surface-variant over the inactive track. The
- * stop indicator gives way to the value. Drawn in {@link #onDraw} alone: a drag lays nothing out.</p>
+ * on-primary where the fill runs under it and on-surface-variant over the inactive track. When
+ * the handle reaches the value it moves inside the fill, before the handle
+ * ({@link #insetValueEnd}). The stop indicator gives way to the value. Drawn in {@link #onDraw} alone: a drag lays nothing out.</p>
  *
  * <p>The API is the subset of Material's {@code Slider} the panel used: value, range, step,
  * listeners of the same shape, and a {@link LabelFormatter} as the legend's source. Accessibility
@@ -183,6 +184,8 @@ public final class LegendSlider extends View {
     /** The value's words as last formatted, and the value they were formatted at. */
     @NonNull private String mInsetText = "";
     private float mInsetTextValue = Float.NaN;
+    /** {@link #mInsetText}'s width in {@link #mInsetPaint}, measured when the text changes. */
+    private float mInsetTextWidth;
     /** A touch on the handle drags at once ({@link #setHandleGrabs}). */
     private boolean mHandleGrabs = true;
     /** A touch anywhere on the track's band drags at once ({@link #setTrackGrabs}). */
@@ -526,6 +529,7 @@ public final class LegendSlider extends View {
         probe.setTextAppearance(large);
         mInsetPaint.set(probe.getPaint());
         mInsetPaint.setFontFeatureSettings("tnum");
+        mInsetTextValue = Float.NaN;
         mBaseTextSizePx = mTextPaint.getTextSize();
         Paint.FontMetrics base = mTextPaint.getFontMetrics();
         mBaseBandPx = base.descent - base.ascent;
@@ -729,7 +733,8 @@ public final class LegendSlider extends View {
         canvas.restore();
         // The value is drawn unmirrored, so its words read the right way round, under the handle.
         if (inset)
-            drawInsetValue(canvas, width, top, bottom, Math.max(0f, activeEnd), enabled);
+            drawInsetValue(canvas, width, top, bottom, Math.max(0f, activeEnd), inactiveStart,
+                enabled);
         canvas.save();
         if (mirrored())
             canvas.scale(-1f, 1f, width / 2f, height / 2f);
@@ -742,18 +747,35 @@ public final class LegendSlider extends View {
     }
 
     /**
-     * The value at the track's end side, {@link #mInsetPadPx} in from it: on-primary over the
-     * fill (start edge to {@code fillEnd}, from the start side) and on-surface-variant past it.
-     * Formats only when the value moved.
+     * Where the inset value ends, measured from the start edge: at the track's end side,
+     * {@code pad} in from it, unless the handle (with its gaps, {@code handleStart} to
+     * {@code handleEnd}) would stand within {@code pad} of the text there; then inside the fill,
+     * {@code pad} before the handle's gap, where it prints in the fill's on-colour. A fill too
+     * short to hold the text keeps it at the end (only a track narrower than its own value).
+     */
+    static float insetValueEnd(float width, float textWidth, float pad, float handleStart,
+                               float handleEnd) {
+        float atEnd = width - pad;
+        if (handleEnd + pad <= atEnd - textWidth)
+            return atEnd;
+        float inFill = handleStart - pad;
+        return inFill - textWidth >= pad ? inFill : atEnd;
+    }
+
+    /**
+     * The value at the track's end side, or inside the fill while the handle is there
+     * ({@link #insetValueEnd}): on-primary over the fill (start edge to {@code fillEnd}, from the
+     * start side) and on-surface-variant past it. Formats and measures only when the value moved.
      */
     private void drawInsetValue(@NonNull Canvas canvas, float width, float top, float bottom,
-                                float fillEnd, boolean enabled) {
+                                float fillEnd, float inactiveStart, boolean enabled) {
         LabelFormatter inset = mInset;
         if (inset == null)
             return;
         if (mInsetTextValue != mValue) {
             mInsetTextValue = mValue;
             mInsetText = inset.getFormattedValue(mValue);
+            mInsetTextWidth = mInsetPaint.measureText(mInsetText);
         }
         String text = mInsetText;
         if (text.isEmpty())
@@ -761,7 +783,8 @@ public final class LegendSlider extends View {
         boolean rtl = mirrored();
         Paint.FontMetrics metrics = mInsetPaint.getFontMetrics();
         float baseline = (top + bottom) / 2f - (metrics.ascent + metrics.descent) / 2f;
-        float x = rtl ? mInsetPadPx : width - mInsetPadPx;
+        float end = insetValueEnd(width, mInsetTextWidth, mInsetPadPx, fillEnd, inactiveStart);
+        float x = rtl ? width - end : end;
         mInsetPaint.setTextAlign(rtl ? Paint.Align.LEFT : Paint.Align.RIGHT);
         float fillLeft = rtl ? width - fillEnd : 0f;
         float fillRight = rtl ? width : fillEnd;

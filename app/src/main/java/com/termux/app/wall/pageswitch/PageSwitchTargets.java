@@ -18,7 +18,7 @@ public final class PageSwitchTargets {
     private PageSwitchTargets() {
     }
 
-    public static void carryOut(@NonNull PageSwitchModel.Target target, @NonNull Navigator nav) {
+    public static void carryOut(@NonNull PageBarModel.Target target, @NonNull Navigator nav) {
         switch (target.action) {
             case GO_PAGE:
                 nav.goToPage(target.pageId);

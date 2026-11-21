@@ -25,6 +25,7 @@ import com.termux.app.chrome.GlassMotionLight;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.LiveGlassEffect;
 import com.termux.app.chrome.LivePicture;
+import com.termux.app.chrome.SlabAim;
 import com.termux.app.chrome.WallpaperParallax;
 import com.termux.app.chrome.scene.LiveSceneFrame;
 
@@ -166,6 +167,12 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * copied in, so every slab samples the frame at the same offset the backdrop draws it at.
      */
     @Nullable private WallpaperParallax mParallax;
+    /**
+     * Registers this slab with the window's glass service while attached: the glass commit draws it
+     * again on any frame its page moved or the wallpaper panned, so no owner pushes a re-aim for
+     * a wall slide, a sink, a tilt or the wallpaper's offset.
+     */
+    @NonNull private final SlabAim mSlabAim = new SlabAim(this);
     /** The parallax the matrix was last aimed for, in px. */
     private float mLastParallax;
     /** The shader the aim was last written for; a rebind of the paint needs its own matrix. */
@@ -487,6 +494,21 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (refreshVeil()) invalidate();
     }
 
+    /**
+     * Sets the even-out matrix of a slab with no veil source (a Home widget's card): the frame is
+     * drawn through it ahead of the frost. Re-dressed only when the numbers moved. While a veil
+     * source is set, that source owns the matrix and this is overwritten on its next refresh.
+     */
+    public void setEvenOut(@Nullable android.graphics.ColorMatrix matrix) {
+        if (java.util.Arrays.equals(matrix == null ? null : matrix.getArray(),
+                mEvenOut == null ? null : mEvenOut.getArray())) {
+            return;
+        }
+        mEvenOut = matrix;
+        applyFrameFilter(mFilterKeptBrightness);
+        invalidate();
+    }
+
     /** The veil this slab is drawn with right now, for tests and the departure card. */
     public int veilColor() {
         return mVeilColor;
@@ -550,6 +572,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             evenOut = mVeilSource.paneGlassEvenOut(mVeilRect, this);
         } else {
             mVeilRect.setEmpty();
+            // No source: a matrix set by hand (setEvenOut) stands.
+            if (mVeilSource == null) evenOut = mEvenOut;
         }
         boolean evenOutMoved = !java.util.Arrays.equals(
             evenOut == null ? null : evenOut.getArray(), mEvenOut == null ? null : mEvenOut.getArray());
@@ -926,6 +950,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        mSlabAim.attach();
         if (mVeilSource == null) return;
         mVeilSource.paneGlassPark(this, false);
         // Asked again only when its rect or the generation moved; else the kept answer stands.
@@ -935,6 +960,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        mSlabAim.detach();
         // The pane stops counting but keeps its answer for its return (onAttachedToWindow).
         if (mVeilSource != null) mVeilSource.paneGlassPark(this, true);
         // A slab that comes back starts from rest, never from the bend it left with.
@@ -953,8 +979,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /**
-     * Re-aim on the next draw; call after this slab has moved, or after its page did — a slide,
-     * the sink, the plank's tilt — since a transform alone never redraws a child.
+     * Re-aim on the next draw; call after this slab has moved in a way its own frame cannot see
+     * (a float dragged by its container's params, a FLIP move). A page's slide, sink or tilt and the
+     * wallpaper's pan need no call: the glass service sees them on every drawn frame ({@link SlabAim}).
      */
     public void invalidateGlassPosition() {
         mAimStale = true;
@@ -969,6 +996,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     public void setParallax(@Nullable WallpaperParallax parallax) {
         if (mParallax == parallax) return;
         mParallax = parallax;
+        mSlabAim.setParallax(parallax);
         invalidateGlassPosition();
     }
 
@@ -1001,7 +1029,26 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      * frame instead of leaving the frame out, which left the departing pane bare.
      */
     static boolean drawsPlainOnSoftware(boolean hasProgram, boolean hardwareCanvas) {
-        return hasProgram && !hardwareCanvas;
+        return drawsPlainOnSoftware(hasProgram, hardwareCanvas, false);
+    }
+
+    /**
+     * {@link #drawsPlainOnSoftware(boolean, boolean)} for a frame that may be held in GPU memory:
+     * a software canvas cannot draw a {@code HARDWARE} frame at all, so with or without a program
+     * it takes the plain draw, which reads the frame's software sampling copy.
+     */
+    static boolean drawsPlainOnSoftware(boolean hasProgram, boolean hardwareCanvas,
+                                        boolean hardwareFrame) {
+        return !hardwareCanvas && (hasProgram || hardwareFrame);
+    }
+
+    private static boolean isHardware(@Nullable Bitmap bitmap) {
+        return bitmap != null && bitmap.getConfig() == Bitmap.Config.HARDWARE;
+    }
+
+    /** Whether the frame is drawn through its own paint: on the GPU always, else only plain and software. */
+    static boolean drawsOnPaint(boolean hasProgram, boolean hardwareCanvas, boolean hardwareFrame) {
+        return hardwareCanvas || (!hasProgram && !hardwareFrame);
     }
 
     @Nullable private BitmapShader mSoftShader;
@@ -1013,19 +1060,62 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private void drawFramePlain(@NonNull Canvas canvas, int width, int height) {
         Bitmap frame = mFrame;
         if (frame == null) return;
-        if (mSoftShader == null || mSoftShaderFrame != frame) {
-            mSoftShader = new BitmapShader(frame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-            mSoftShaderFrame = frame;
+        // A HARDWARE frame is drawn from its small software copy, scaled back up to the frame.
+        Bitmap readable = com.termux.app.chrome.HardwareFrame.readable(frame);
+        if (readable == null) return;
+        if (mSoftShader == null || mSoftShaderFrame != readable) {
+            mSoftShader = new BitmapShader(readable, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
+            mSoftShaderFrame = readable;
         }
         GlassAnchor.place(this, mPlacement);
         mAim.set(mPlacement.toScreen, mFrameRect, frame.getWidth(), frame.getHeight(),
             mParallax == null ? 0f : mParallax.offsetPx());
         mAim.shaderMatrix(mSoftMatrix);
+        if (readable != frame) {
+            mSoftMatrix.preScale(frame.getWidth() / (float) readable.getWidth(),
+                frame.getHeight() / (float) readable.getHeight());
+        }
         mSoftShader.setLocalMatrix(mSoftMatrix);
         mSoftPaint.setShader(mSoftShader);
         mSoftPaint.setColorFilter(GlassFilters.undimmed(
             GlassFilters.withEvenOut(mEvenOut, mFrostFilter), mPlacement.keptBrightness));
         canvas.drawRect(0f, 0f, width, height, mSoftPaint);
+    }
+
+    // DIAG(slab-route): the route each slab draws, logged once per change; reverted before merge.
+    private int mDiagRoute = -1;
+
+    private void diagRoute(boolean live, @NonNull Canvas canvas) {
+        LivePicture picture = mLivePicture;
+        int pageLayer = -1;
+        android.view.View current = this;
+        while (current.getParent() instanceof android.view.View) {
+            android.view.View parent = (android.view.View) current.getParent();
+            if (parent instanceof com.termux.app.wall.PaneWallLayout) {
+                pageLayer = current.getLayerType();
+                break;
+            }
+            current = parent;
+        }
+        int route = (live ? 1 : 0) | (drawsLive() ? 2 : 0) | (picture != null ? 4 : 0)
+            | (picture != null && picture.released() ? 8 : 0)
+            | (picture != null && picture.ready() ? 16 : 0)
+            | (mFrame != null && !mFrame.isRecycled() ? 32 : 0)
+            | (canvas.isHardwareAccelerated() ? 64 : 0)
+            | (canvas instanceof android.graphics.RecordingCanvas ? 128 : 0)
+            | ((pageLayer + 1) << 8)
+            | (LiveSceneFrame.current() != null ? 1 << 12 : 0)
+            | (mLook != null ? 1 << 13 : 0);
+        if (route == mDiagRoute) return;
+        mDiagRoute = route;
+        com.termux.app.chrome.MotionLog.log("slab-route", "id=" + Integer.toHexString(
+            System.identityHashCode(this)) + " w=" + getWidth() + " live=" + live
+            + " drawsLive=" + drawsLive() + " pic=" + (picture != null) + " released="
+            + (picture != null && picture.released()) + " ready="
+            + (picture != null && picture.ready()) + " frame=" + (mFrame != null)
+            + " hw=" + canvas.isHardwareAccelerated() + " recording="
+            + (canvas instanceof android.graphics.RecordingCanvas) + " pageLayer=" + pageLayer
+            + " scene=" + (LiveSceneFrame.current() != null) + " look=" + (mLook != null));
     }
 
     @Override
@@ -1055,13 +1145,18 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
         boolean live = mCornerMaskRadiusPx <= 0f && drawLive(canvas, width, height);
+        if (com.termux.app.chrome.MotionLog.enabled) diagRoute(live, canvas); // DIAG(slab-route)
         if (!live) retireLiveNode(canvas);
+        // Any frame the paint may sample held in GPU memory keeps a software canvas off the paint.
+        boolean hardwareFrame = isHardware(mFrame) || isHardware(mPreviousFrame)
+            || isHardware(mClearFrame);
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
-                && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated())) {
+                && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated(),
+                    hardwareFrame)) {
             drawFramePlain(canvas, width, height);
         }
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
-                && (mProgram == null || canvas.isHardwareAccelerated())) {
+                && drawsOnPaint(mProgram != null, canvas.isHardwareAccelerated(), hardwareFrame)) {
             BitmapShader aimShader = mFrameShader;
             Bitmap aimFrame = mFrame;
             Rect aimRect = mFrameRect;

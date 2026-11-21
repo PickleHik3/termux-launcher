@@ -10,7 +10,7 @@ import android.content.SharedPreferences;
 import android.os.Build;
 
 import com.termux.app.dock.DockStyle;
-import com.termux.app.wall.WallPages.PageKind;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;

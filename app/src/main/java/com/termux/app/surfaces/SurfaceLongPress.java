@@ -23,6 +23,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.dock.SideRowViews;
 import com.termux.app.AzScrubRowView;
 import com.termux.app.fragments.settings.MiniatureDragPolicy;
 import com.termux.app.haptics.Haptics;
@@ -32,6 +33,7 @@ import com.termux.app.launcher.popup.AppMenuCard;
 import com.termux.app.launcher.popup.MenuRowFactory;
 import com.termux.app.layouteditor.LayoutEditorPlan;
 import com.termux.app.material.M3;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayoutStore;
@@ -42,7 +44,6 @@ import com.termux.app.surfaces.SurfaceLongPressRoute.Answer;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Box;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Target;
 import com.termux.app.surfaces.SurfaceLongPressRoute.Zone;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
 
 import java.util.ArrayList;
@@ -97,7 +98,7 @@ public final class SurfaceLongPress {
         @Nullable PlaceLayoutStore places();
 
         /** The page on screen, whose layout a Hide writes. */
-        @NonNull PaneWallPage page();
+        @NonNull PageKind page();
 
         @NonNull PlaceOrientation orientation();
 
@@ -115,15 +116,29 @@ public final class SurfaceLongPress {
 
         /** The status bar folds to its compact form, or unfolds, as the status swipe does. */
         void setStatusBarCompact(boolean compact);
+
+        /**
+         * How far below the stack container's top its rows start: the lane slack, laid out for the
+         * other side's taller rows and empty on this one. A hold there is on the page, not the dock.
+         */
+        default int dockFrameTopSlackPx() {
+            return 0;
+        }
     }
 
     /** The surfaces each target is made of, in the route's priority order. */
     private static final int[] KEYBOARD_IDS = {R.id.inapp_keyboard_container};
     private static final int[] STATUS_IDS = {R.id.terminal_window_bar_host};
-    private static final int[] AZ_IDS = {R.id.place_az_bar_host, R.id.apps_bar_az_row};
-    private static final int[] EXTRA_KEYS_IDS = {R.id.place_extra_keys_host,
-        R.id.terminal_toolbar_host};
-    private static final int[] APPS_IDS = {R.id.apps_bar_row_host, R.id.place_apps_bar_host};
+    // The rows, found through the side that owns them (SideRowViews).
+    private static final int[] AZ_IDS = {
+        SideRowViews.id(Element.AZ, SideRowViews.Part.EDGE_HOST),
+        SideRowViews.id(Element.AZ, SideRowViews.Part.ROW)};
+    private static final int[] EXTRA_KEYS_IDS = {
+        SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.EDGE_HOST),
+        SideRowViews.id(Element.EXTRA_KEYS, SideRowViews.Part.BOTTOM_HOST)};
+    private static final int[] APPS_IDS = {
+        SideRowViews.id(Element.APPS, SideRowViews.Part.BOTTOM_HOST),
+        SideRowViews.id(Element.APPS, SideRowViews.Part.EDGE_HOST)};
     private static final int[] DOCK_FRAME_IDS = {R.id.accessory_stack_container,
         R.id.place_off_dock_plank_host};
 
@@ -270,7 +285,9 @@ public final class SurfaceLongPress {
                 && view.getParent() instanceof FloatingKeyboardFrame)
                 view = (View) view.getParent();
             Box box = boxOf(view);
-            if (box == null) continue;
+            if (box != null && id == R.id.accessory_stack_container)
+                box = box.belowTop(mHost.dockFrameTopSlackPx());
+            if (box == null || box.isEmpty()) continue;
             Zone zone = new Zone(target, bar, box);
             mZoneViews.put(zone, view);
             out.add(zone);

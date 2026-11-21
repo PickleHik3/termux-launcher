@@ -3,14 +3,13 @@ package com.termux.app.place;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.layout.KindLayout;
 import com.termux.app.place.layout.LayoutFields;
 import com.termux.app.place.layout.LayoutKind;
 import com.termux.app.place.layout.Layouts;
 import com.termux.app.place.layout.LayoutsJson;
 import com.termux.app.place.layout.Sizes;
-import com.termux.app.wall.PaneWallPage;
-import com.termux.app.wall.WallPages.PageKind;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -96,14 +95,14 @@ final class LayoutsMigration {
         KindLayout terminal = fold(LayoutKind.TERMINAL, terminalSources(), null);
         KindLayout minimal = fold(LayoutKind.TERMINAL_MINIMAL,
             new LayoutVariant[]{LayoutVariant.MINIMAL}, terminal);
-        KindLayout display = withDress(withKeyboardOpen(terminal, PaneWallPage.DISPLAY),
+        KindLayout display = withDress(withKeyboardOpen(terminal, PageKind.DISPLAY),
             PageKind.DISPLAY);
         // Home keeps the kind visibility it had (was place.dress.home.*).
         kinds.put(LayoutKind.HOME, withDress(home, PageKind.HOME));
         kinds.put(LayoutKind.TERMINAL, withDress(
-            withKeyboardOpen(terminal, PaneWallPage.TERMINAL), PageKind.TERMINAL));
+            withKeyboardOpen(terminal, PageKind.TERMINAL), PageKind.TERMINAL));
         kinds.put(LayoutKind.TERMINAL_MINIMAL,
-            withKeyboardOpen(minimal, PaneWallPage.TERMINAL));
+            withKeyboardOpen(minimal, PageKind.TERMINAL));
         kinds.put(LayoutKind.DISPLAY, display);
         return new Layouts(kinds, sizes());
     }
@@ -237,7 +236,7 @@ final class LayoutsMigration {
     }
 
     @NonNull
-    private KindLayout withKeyboardOpen(@NonNull KindLayout layout, @NonNull PaneWallPage place) {
+    private KindLayout withKeyboardOpen(@NonNull KindLayout layout, @NonNull PageKind place) {
         Object open = mAll.get(PlaceLayoutStore.memoryKey(place, LayoutsJson.KEYBOARD_OPEN));
         return open instanceof Boolean
             ? layout.withWide(LayoutsJson.KEYBOARD_OPEN, open) : layout;
@@ -277,15 +276,4 @@ final class LayoutsMigration {
         return com.termux.app.place.layout.IconSize.fold(homeDp, dockDp);
     }
 
-    /**
-     * The page looks that fold into kind looks: {@code look.…@<page>} of the Start-in Home page
-     * into {@code @kind:home}, of the Terminal page into {@code @kind:terminal} and
-     * {@code @kind:display}, each only where the kind's cell is absent. Other pages' cells are
-     * left in the file and no longer read.
-     */
-    @NonNull
-    Map<String, Object> lookCells() {
-        return com.termux.shared.termux.settings.preferences.LookGrid.foldedPageCells(mAll,
-            homePageId, terminalPageId);
-    }
 }

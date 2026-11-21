@@ -17,7 +17,6 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -33,6 +32,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
 import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /**
  * The editor's host: every door opens the editor (on its object), the wallpaper picker stands
@@ -332,22 +332,34 @@ public class AppearanceSurfaceControllerTest {
     @Test
     public void thePickerFallsOverTheCardSheetAndLetsItsTouchesThrough() {
         ViewGroup content = activity.findViewById(android.R.id.content);
+        // The editor layer as the window has it: the panel host holds the sheet, the picker's host
+        // is added after it, and no Z orders them.
+        android.widget.FrameLayout editorLayer = new android.widget.FrameLayout(activity);
+        editorLayer.setId(com.termux.R.id.window_layer_editor);
+        android.widget.FrameLayout panels = new android.widget.FrameLayout(activity);
+        panels.setId(com.termux.R.id.editor_panel_host);
+        editorLayer.addView(panels);
+        content.addView(editorLayer);
         View sheet = new View(activity);
         sheet.setElevation(12f);
-        content.addView(sheet);
+        panels.addView(sheet);
         openPicker();
         View hostView = activity.findViewById(com.termux.R.id.appearance_surface_host);
         assertNotNull(hostView);
-        assertTrue(hostView.getZ() > sheet.getZ());
+        assertEquals(editorLayer, hostView.getParent());
+        assertTrue("over the sheet's host by child order",
+            editorLayer.indexOfChild(hostView) > editorLayer.indexOfChild(panels));
+        assertEquals("no Z orders it", 0f, hostView.getTranslationZ(), 0f);
 
         surface.onBack();
         assertFalse(hostView.isClickable());
-        assertTrue("drawn over the sheet while it falls", hostView.getZ() > sheet.getZ());
+        assertTrue("drawn over the sheet while it falls",
+            editorLayer.indexOfChild(hostView) > editorLayer.indexOfChild(panels));
         assertFalse("a touch goes on to the sheet", hostView.dispatchTouchEvent(
             android.view.MotionEvent.obtain(0, 0, android.view.MotionEvent.ACTION_DOWN, 10, 10, 0)));
 
         settle();
-        assertEquals("down, it rests at the sheet's level", 0f, hostView.getTranslationZ(), 0f);
+        assertEquals("down, it rests flat", 0f, hostView.getTranslationZ(), 0f);
     }
 
     @Test
@@ -371,29 +383,12 @@ public class AppearanceSurfaceControllerTest {
     public void theFirstFrameIsHeldOnlyForAHandoverAndNeverPastItsBackstops() {
         assertFalse(RelaunchReveal.holds(false));
         assertTrue(RelaunchReveal.holds(true));
-        assertTrue(RelaunchReveal.stillHeld(false, 0, 0));
-        assertFalse("shown as carried", RelaunchReveal.stillHeld(true, 0, 0));
-        assertFalse("the time backstop",
-            RelaunchReveal.stillHeld(false, 1, RelaunchReveal.BACKSTOP_MS));
-        assertFalse("the frame backstop",
-            RelaunchReveal.stillHeld(false, RelaunchReveal.MAX_HELD_FRAMES, 1));
         assertNull("no handover, no hold",
-            RelaunchReveal.holdFirstDraw(activity.getWindow().getDecorView(), false));
-    }
-
-    @Test
-    public void aHeldWindowDrawsOnceReleasedOrPastItsBackstop() {
-        View decor = activity.getWindow().getDecorView();
-        RelaunchReveal.Gate gate = RelaunchReveal.holdFirstDraw(decor, true);
-        assertNotNull(gate);
-        assertFalse("held", gate.onPreDraw());
-        gate.release();
-        assertTrue(gate.onPreDraw());
-
-        RelaunchReveal.Gate late = RelaunchReveal.holdFirstDraw(decor, true);
-        assertNotNull(late);
-        idle(RelaunchReveal.BACKSTOP_MS + 10);
-        assertTrue("released by its backstop", late.onPreDraw());
+            RelaunchReveal.hold(new com.termux.app.window.FramePipeline(), false));
+        assertNull("no pipeline, no hold", RelaunchReveal.hold(null, true));
+        // The frame and time backstops are the pipeline's first-frame hold's (FramePipelineTest).
+        assertEquals(300L, RelaunchReveal.BACKSTOP_MS);
+        assertEquals(40, RelaunchReveal.MAX_HELD_FRAMES);
     }
 
     @Test
@@ -491,6 +486,61 @@ public class AppearanceSurfaceControllerTest {
         idle(WallpaperApplyHold.RELAUNCH_WAIT_MS);
         assertFalse("the backstop reveals the card", surface.isWallpaperShown());
         assertTrue(surface.isOpen());
+    }
+
+    @Test
+    public void theColoursWaitIsANamedHoldThatSaysHowItEnded() {
+        com.termux.app.window.Counters.clear();
+        com.termux.app.window.Counters.enable(true, null);
+        try {
+            openPicker();
+            host.page.pending = true;
+            host.navigator.done();
+            assertEquals(1, com.termux.app.window.Counters.countOf("hold:wallpaper-colours"));
+            settle();
+            assertEquals("no colours came: the quiet window ended it", 1,
+                com.termux.app.window.Counters.countOf("hold:wallpaper-colours:quiet"));
+            assertFalse(surface.isWallpaperShown());
+        } finally {
+            com.termux.app.window.Counters.enable(false, null);
+            com.termux.app.window.Counters.clear();
+        }
+    }
+
+    @Test
+    public void aColoursCallbackThatBringsNoRelaunchEndsTheHoldAsLanded() {
+        com.termux.app.window.Counters.clear();
+        com.termux.app.window.Counters.enable(true, null);
+        try {
+            openPicker();
+            host.page.pending = true;
+            host.navigator.done();
+            surface.onWallpaperColoursChanged();
+            idle(WallpaperApplyHold.COLOURS_QUIET_MS + 100L);
+            idle(WallpaperApplyHold.RELAUNCH_WAIT_MS);
+            assertEquals(1, com.termux.app.window.Counters.countOf("hold:wallpaper-colours:landing"));
+            assertEquals(0, com.termux.app.window.Counters.countOf("hold:wallpaper-colours:quiet"));
+        } finally {
+            com.termux.app.window.Counters.enable(false, null);
+            com.termux.app.window.Counters.clear();
+        }
+    }
+
+    @Test
+    public void aRelaunchAbandonsTheColoursHoldWithoutRevealingAnything() {
+        com.termux.app.window.Counters.clear();
+        com.termux.app.window.Counters.enable(true, null);
+        try {
+            openPicker();
+            host.page.pending = true;
+            host.navigator.done();
+            surface.onHostDestroyed();
+            settle();
+            assertEquals(1, com.termux.app.window.Counters.countOf("hold:wallpaper-colours:abandoned"));
+        } finally {
+            com.termux.app.window.Counters.enable(false, null);
+            com.termux.app.window.Counters.clear();
+        }
     }
 
     @Test
@@ -663,7 +713,7 @@ public class AppearanceSurfaceControllerTest {
         boolean inPlace;
 
         @Override public void presentInPlace(@Nullable EditorCard card,
-                                             @Nullable PaneWallPage place,
+                                             @Nullable PageKind place,
                                              @Nullable Runnable onSettled) {
             inPlace = true;
             present(card, place, onSettled);
@@ -674,7 +724,7 @@ public class AppearanceSurfaceControllerTest {
             this.veiled = veiled;
         }
 
-        @Override public void present(@Nullable EditorCard card, @Nullable PaneWallPage place,
+        @Override public void present(@Nullable EditorCard card, @Nullable PageKind place,
                                       @Nullable Runnable onSettled) {
             if (events != null && !presented) events.add("present");
             veiledAtPresent = veiled;

@@ -52,10 +52,7 @@ import java.util.function.Function;
  * <p>The card runs down under the navigation bar and pads its rows above it, as the Appearance
  * editor's sheet and the drawer plane do. The activity hands it the window's insets ({@link
  * #applyInsets}): the shell's root fits the system windows and consumes them, so a dispatch never
- * reaches an overlay standing after it in the content frame. The under-pill strip a Docked dock
- * continues into is the decor's topmost child and would paint over the card's foot, so the sheet
- * reports how much of the band under the bar it covers ({@link Listener#onNavBandCovered}) and the
- * activity fades the strip out by as much.
+ * reaches an overlay standing after it in the content frame.
  */
 public final class HomeActionsSheet extends CoordinatorLayout {
 
@@ -67,12 +64,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
          * settled hidden, so nothing of that surface draws over the closing card.
          */
         void onHomeAction(@NonNull Item item);
-
-        /**
-         * How much of the band under the navigation bar the card now covers, 0 to 1
-         * ({@link HomeActionsSheetPolicy#navBandCover}); back to 0 once the sheet is put away.
-         */
-        default void onNavBandCovered(float covered) { }
 
         /** The Lock layout row was tapped; the sheet stays up and redraws its rows. */
         default void onLayoutLockChanged(boolean locked) { }
@@ -111,13 +102,10 @@ public final class HomeActionsSheet extends CoordinatorLayout {
     @NonNull private BottomSheetBehavior<LinearLayout> behavior;
     @NonNull private final BottomSheetBehavior.BottomSheetCallback behaviorCallback;
     @NonNull private final ModalSheetSlide slide;
-    @NonNull private final ViewTreeObserver.OnPreDrawListener slideInOnFirstDraw;
     @NonNull private final android.graphics.Rect cardBounds = new android.graphics.Rect();
     private final int cardPadLeft, cardPadRight, cardPadBottom;
-    /** The navigation bar's height under the card, from the last {@link #applyInsets}. */
-    private int navInsetPx;
-    /** The last cover told to the listener, so a settle that changes nothing tells it nothing. */
-    private float reportedCover;
+    /** The band under the card's rows, from the last {@link #setBottomBandPx}. */
+    private int bottomBandPx;
     private boolean open;
     /** The rows for a layout that is locked (true) or not, so the lock row can redraw in place. */
     @NonNull private Function<Boolean, List<Item>> source = locked -> java.util.Collections.emptyList();
@@ -187,55 +175,50 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         behaviorCallback = new BottomSheetBehavior.BottomSheetCallback() {
             @Override public void onStateChanged(@NonNull View bottomSheet, int newState) {
                 if (newState == BottomSheetBehavior.STATE_HIDDEN) finishClosing();
-                else if (newState == BottomSheetBehavior.STATE_EXPANDED) reportCover();
+
             }
             @Override public void onSlide(@NonNull View bottomSheet, float slideOffset) {
                 // A layout mid-slide reports the card's resting offset; the slide owns the dim.
                 if (slide.isRunning()) return;
                 scrim.setAlpha(Math.max(0f, Math.min(1f, 1f + slideOffset)));
-                reportCover();
             }
         };
         behavior.addBottomSheetCallback(behaviorCallback);
         slide = new ModalSheetSlide(card, this::onSlideFrame);
-        slideInOnFirstDraw = new ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                getViewTreeObserver().removeOnPreDrawListener(this);
-                if (!open) return true;
-                slide.slideIn(null);
-                onSlideFrame();
-                return true;
-            }
-        };
         setVisibility(GONE);
     }
 
     /**
-     * The window's insets: the card reaches the screen's bottom edge and its rows stay clear of
-     * the system bars. Called by the activity on every inset dispatch and read off the window
+     * The band under the pill the sheets layer reaches through
+     * ({@link com.termux.app.place.BottomInsets#sheetsBandPx}): the card's glass runs through it
+     * and its rows stay above it.
+     */
+    public void setBottomBandPx(int bandPx) {
+        int band = Math.max(0, bandPx);
+        if (band == bottomBandPx) return;
+        bottomBandPx = band;
+        int bottom = cardPadBottom + band;
+        if (card.getPaddingBottom() != bottom) {
+            card.setPadding(card.getPaddingLeft(), card.getPaddingTop(),
+                card.getPaddingRight(), bottom);
+        }
+    }
+
+    /**
+     * The window's insets: the card's rows stay clear of the bars at its sides (the bottom is
+     * {@link #setBottomBandPx}'s). Called by the activity on every inset dispatch and read off the window
      * again on {@link #open}.
      */
     public void applyInsets(@NonNull WindowInsetsCompat insets) {
         Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
             | WindowInsetsCompat.Type.displayCutout());
-        navInsetPx = Math.max(0, bars.bottom);
         int left = cardPadLeft + bars.left;
         int right = cardPadRight + bars.right;
-        int bottom = cardPadBottom + navInsetPx;
+        int bottom = cardPadBottom + bottomBandPx;
         if (card.getPaddingLeft() != left || card.getPaddingRight() != right
             || card.getPaddingBottom() != bottom) {
             card.setPadding(left, card.getPaddingTop(), right, bottom);
         }
-        if (open) reportCover();
-    }
-
-    /** Tells the listener how much of the band under the navigation bar the card covers. */
-    private void reportCover() {
-        int drawnTop = card.getTop() + Math.round(card.getTranslationY());
-        float cover = HomeActionsSheetPolicy.navBandCover(drawnTop, getHeight(), navInsetPx);
-        if (cover == reportedCover) return;
-        reportedCover = cover;
-        listener.onNavBandCovered(cover);
     }
 
     /** Whether the sheet is up, or on its way up. */
@@ -265,7 +248,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
@@ -289,7 +272,7 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         open = true;
         if (!wasOpen) behavior = ModalSheetSlide.armExpanded(card, behavior, behaviorCallback);
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         WindowInsetsCompat insets = ViewCompat.getRootWindowInsets(this);
         if (insets != null) applyInsets(insets);
         if (wasOpen) return;
@@ -301,10 +284,9 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         ViewCompat.setAccessibilityPaneTitle(card, title);
     }
 
-    /** Each step of the slide: the dim and the cover of the nav band follow the card. */
+    /** Each step of the slide: the dim follows the card. */
     private void onSlideFrame() {
         scrim.setAlpha(slide.scrimAlpha());
-        reportCover();
     }
 
     /**
@@ -318,7 +300,14 @@ public final class HomeActionsSheet extends CoordinatorLayout {
             return;
         }
         scrim.setAlpha(0f);
-        getViewTreeObserver().addOnPreDrawListener(slideInOnFirstDraw);
+        com.termux.app.window.FirstLayout.beforeNextDraw(this, this::slideInOnFirstDraw);
+    }
+
+    /** The card's first frame: it slides in unless the sheet closed meanwhile. */
+    private void slideInOnFirstDraw() {
+        if (!open) return;
+        slide.slideIn(null);
+        onSlideFrame();
     }
 
     /**
@@ -326,12 +315,8 @@ public final class HomeActionsSheet extends CoordinatorLayout {
      * leaves it at the new height's offset rather than the old one's.
      */
     private void settleExpandedAfterLayout() {
-        getViewTreeObserver().addOnPreDrawListener(new ViewTreeObserver.OnPreDrawListener() {
-            @Override public boolean onPreDraw() {
-                getViewTreeObserver().removeOnPreDrawListener(this);
-                if (open) behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
-                return true;
-            }
+        com.termux.app.window.FirstLayout.beforeNextDraw(this, () -> {
+            if (open) behavior.setState(BottomSheetBehavior.STATE_EXPANDED);
         });
     }
 
@@ -383,10 +368,6 @@ public final class HomeActionsSheet extends CoordinatorLayout {
         scrim.setAlpha(0f);
         setVisibility(GONE);
         slide.reset();
-        if (reportedCover != 0f) {
-            reportedCover = 0f;
-            listener.onNavBandCovered(0f);
-        }
         if (wasShown) listener.onSheetClosed();
         Runnable action = afterHidden;
         if (action != null) {

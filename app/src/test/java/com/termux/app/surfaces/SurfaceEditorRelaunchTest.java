@@ -1,6 +1,5 @@
 package com.termux.app.surfaces;
 
-import com.termux.app.wall.PaneWallPage;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
@@ -18,6 +17,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Slot;
@@ -68,13 +68,19 @@ public class SurfaceEditorRelaunchTest {
         SurfacePresets.applyLook(preferences, clear);
     }
 
+
+    /** What the editor writes: the preferences writing into the session's draft. */
+    private TermuxAppSharedPreferences editorWrites() {
+        return preferences.overDraft(com.termux.shared.settings.preferences.PreferenceDraft.current());
+    }
+
     @Test
     public void theRelaunchedEditorKeepsTheUnsavedEditAndItsUndo() {
         String atOpen = AppearanceSnapshot.signatureOf(preferences);
         SurfaceEditorController before = editorOnNewActivity();
         present(before);
-        // An edit, written through to the preferences as every editor write is.
-        preferences.detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
+        // An edit, written into the session's draft as every editor write is.
+        editorWrites().detachSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY,
             EDITED_KEYBOARD_OPACITY);
         String edited = AppearanceSnapshot.signatureOf(preferences);
         assertNotEquals(atOpen, edited);
@@ -104,6 +110,90 @@ public class SurfaceEditorRelaunchTest {
         assertFalse(isDirty(after));
     }
 
+    /**
+     * The widgets' glass preview lives in the activity's repository, which a theme relaunch
+     * builds again: the new editor shows the same preview and still counts it as unsaved.
+     */
+    @Test
+    public void theRelaunchedEditorKeepsTheWidgetGlassPreview() {
+        FakeGlass oldGlass = new FakeGlass();
+        SurfaceEditorController before = editorOnNewActivity(oldGlass);
+        present(before);
+        oldGlass.followPage();
+        assertTrue(oldGlass.dirty);
+
+        AppearanceSurfaceController.EditorSession carried = before.carrySession();
+        FakeGlass newGlass = new FakeGlass();
+        SurfaceEditorController after = editorOnNewActivity(newGlass);
+        after.adoptSessionNext(carried);
+        present(after);
+
+        assertTrue("the preview is shown again on the new activity", newGlass.dirty);
+        assertTrue("and is still unsaved", isDirty(after));
+    }
+
+    @Test
+    public void aRelaunchWithoutAWidgetGlassPreviewDraftsNone() {
+        FakeGlass oldGlass = new FakeGlass();
+        SurfaceEditorController before = editorOnNewActivity(oldGlass);
+        present(before);
+        AppearanceSurfaceController.EditorSession carried = before.carrySession();
+
+        FakeGlass newGlass = new FakeGlass();
+        SurfaceEditorController after = editorOnNewActivity(newGlass);
+        after.adoptSessionNext(carried);
+        present(after);
+
+        assertEquals(0, newGlass.followed);
+    }
+
+    /**
+     * The wait for the launcher's first frame is the first-layout helper's, so it goes with the
+     * session: an editor closed before the frame answers neither way.
+     */
+    @Test
+    public void aFrameWaitEndsWithTheSession() {
+        SurfaceEditorController editor = editorOnNewActivity();
+        editor.beginSession();
+        lastRoot.requestLayout();
+        int[] answers = {0, 0};
+
+        editor.awaitFrame(() -> answers[0]++, () -> answers[1]++);
+        assertEquals("a layout is still owed", 0, answers[0] + answers[1]);
+        editor.endSession();
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals("ready", 0, answers[0]);
+        assertEquals("failed", 0, answers[1]);
+    }
+
+    @Test
+    public void aFrameWaitAnswersOnceTheFrameIsLaidOut() {
+        SurfaceEditorController editor = editorOnNewActivity();
+        editor.beginSession();
+        lastRoot.requestLayout();
+        int[] answers = {0, 0};
+
+        editor.awaitFrame(() -> answers[0]++, () -> answers[1]++);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+
+        assertEquals("ready once", 1, answers[0]);
+        assertEquals("never failed", 0, answers[1]);
+    }
+
+    /** The root the last {@link #editorOnNewActivity} built. */
+    private View lastRoot;
+
+    /** One activity's repository draft, as the host adapts it. */
+    private static final class FakeGlass implements SurfaceEditorController.WidgetGlassDraft {
+        boolean dirty;
+        int followed;
+        @Override public void followPage() { dirty = true; followed++; }
+        @Override public boolean isDirty() { return dirty; }
+        @Override public void commit() { dirty = false; }
+        @Override public void discard() { dirty = false; }
+    }
+
     @Test
     public void undoPutsTheCardLooksBackEvenAfterARelaunch() {
         SharedPreferences store = preferences.getSharedPreferences();
@@ -111,7 +201,7 @@ public class SurfaceEditorRelaunchTest {
         CardCustoms.restore(store, atOpen);
         SurfaceEditorController before = editorOnNewActivity();
         present(before);
-        CardCustoms.put(store, "home", new int[] {4, 5, 6});
+        CardCustoms.put(editorWrites().getSharedPreferences(), "home", new int[] {4, 5, 6});
 
         AppearanceSurfaceController.EditorSession carried = before.carrySession();
         SurfaceEditorController after = editorOnNewActivity();
@@ -175,11 +265,16 @@ public class SurfaceEditorRelaunchTest {
 
     private static int stop(SurfaceEditorController editor) {
         return ReflectionHelpers.callInstanceMethod(editor, "matchingStop",
-            ReflectionHelpers.ClassParameter.from(PaneWallPage.class, PaneWallPage.TERMINAL));
+            ReflectionHelpers.ClassParameter.from(PageKind.class, PageKind.TERMINAL));
     }
 
     /** An activity with the views the editor looks for, and an editor over it. */
     private SurfaceEditorController editorOnNewActivity() {
+        return editorOnNewActivity(null);
+    }
+
+    private SurfaceEditorController editorOnNewActivity(
+            SurfaceEditorController.WidgetGlassDraft glass) {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         Context themed = new ContextThemeWrapper(activity,
             R.style.Theme_TermuxActivity_DayNight_NoActionBar);
@@ -198,10 +293,12 @@ public class SurfaceEditorRelaunchTest {
         root.addView(overlay, new FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         activity.setContentView(root, new ViewGroup.LayoutParams(1080, 2000));
-        return new SurfaceEditorController(host(activity, themed));
+        lastRoot = root;
+        return new SurfaceEditorController(host(activity, themed, glass));
     }
 
-    private SurfaceEditorController.Host host(Activity activity, Context themed) {
+    private SurfaceEditorController.Host host(Activity activity, Context themed,
+            SurfaceEditorController.WidgetGlassDraft glass) {
         PlaceLayout place = place();
         return (SurfaceEditorController.Host) Proxy.newProxyInstance(
             SurfaceEditorController.Host.class.getClassLoader(),
@@ -212,6 +309,7 @@ public class SurfaceEditorRelaunchTest {
                     case "findView": return activity.findViewById((Integer) args[0]);
                     case "preferences": return preferences;
                     case "placeLayout": return place;
+                    case "widgetGlassDraft": return glass;
                     case "isInAppKeyboardShown": return true;
                     case "editorPaintsWallpaper": return false;
                     case "hashCode": return System.identityHashCode(proxy);

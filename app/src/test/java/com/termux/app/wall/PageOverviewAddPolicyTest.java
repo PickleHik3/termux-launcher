@@ -5,6 +5,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 
 import org.junit.Test;
+import com.termux.app.page.PageKind;
 
 /** Edit pages' bottom pills: Add page, Bring back N Home pages, Add terminal. */
 public class PageOverviewAddPolicyTest {
@@ -30,9 +31,9 @@ public class PageOverviewAddPolicyTest {
         // Settings > Use as writes the preference alone: the Home pages stay in the page list,
         // nothing is detached, and the wall hides them. They are the ones to bring back.
         WallPages pages = WallPages.EMPTY
-            .add(WallPages.PageKind.HOME, WallPages.END, null).pages
-            .add(WallPages.PageKind.HOME, WallPages.END, null).pages
-            .add(WallPages.PageKind.TERMINAL, WallPages.END, null).pages;
+            .add(PageKind.HOME, WallPages.END, null).pages
+            .add(PageKind.HOME, WallPages.END, null).pages
+            .add(PageKind.TERMINAL, WallPages.END, null).pages;
         assertEquals(2, PageOverviewAddPolicy.bringBackCount(false, pages.detached().size(),
             pages.homePages().size()));
         assertEquals(0, PageOverviewAddPolicy.bringBackCount(true, pages.detached().size(),

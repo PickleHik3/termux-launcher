@@ -20,9 +20,9 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.widget.AppCompatTextView;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.pageswitch.PageGlyphPainter;
 import com.termux.app.wall.pageswitch.PageGlyphSource;
-import com.termux.app.wall.pageswitch.PageSwitchModel;
 import com.termux.shared.termux.extrakeys.ExtraKeyButton;
 import com.termux.shared.termux.font.NerdFontSpans;
 
@@ -72,7 +72,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
     private ExtraKeyModifiers.State mState = ExtraKeyModifiers.State.OFF;
 
     /** The page switcher key's state; null until the host says, when the cap draws its label. */
-    @Nullable private PageSwitchModel.Kind mGlyphKind;
+    @Nullable private PageKind mGlyphKind;
     private int mGlyphNumber;
     @Nullable private PageGlyphPainter mGlyphPainter;
 
@@ -158,7 +158,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
 
     /** The glyph this cap draws in place of its label; null on every key but the page switcher's. */
     @Nullable
-    PageSwitchModel.Kind pageGlyphKind() {
+    PageKind pageGlyphKind() {
         return mGlyphKind;
     }
 
@@ -176,7 +176,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
      * The page switcher key's cap: it draws {@code kind}'s glyph with {@code number} in place of
      * its label, sized and inked as a symbol in the label would be. Compared before it repaints.
      */
-    public void setPageGlyph(@NonNull PageSwitchModel.Kind kind, int number) {
+    public void setPageGlyph(@NonNull PageKind kind, int number) {
         if (mGlyphKind == kind && mGlyphNumber == number) return;
         if (mGlyphPainter == null) mGlyphPainter = new PageGlyphPainter(getContext());
         mGlyphKind = kind;
@@ -184,7 +184,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
         invalidate();
     }
 
-    private void drawPageGlyph(@NonNull Canvas canvas, @NonNull PageSwitchModel.Kind kind,
+    private void drawPageGlyph(@NonNull Canvas canvas, @NonNull PageKind kind,
                                @NonNull PageGlyphPainter painter) {
         float size = getTextSize() * NerdFontSpans.DRAWABLE_SYMBOL_EM;
         painter.draw(canvas, kind, mGlyphNumber, getScrollX() + (getWidth() - size) / 2f,
@@ -354,7 +354,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
             if (lit) drawGlow(canvas);
             canvas.restoreToCount(save);
         }
-        PageSwitchModel.Kind glyphKind = mGlyphKind;
+        PageKind glyphKind = mGlyphKind;
         PageGlyphPainter glyphPainter = mGlyphPainter;
         if (glyphKind != null && glyphPainter != null) drawPageGlyph(canvas, glyphKind, glyphPainter);
         else super.onDraw(canvas);

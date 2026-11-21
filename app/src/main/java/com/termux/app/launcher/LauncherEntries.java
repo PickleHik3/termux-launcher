@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.launcher.model.AppRef;
 
 /**
- * The launcher's own drawer entries: **Terminal**, which goes to the Workspace, and **Display**,
+ * The launcher's own drawer entries: **Terminal**, which goes to the Terminal, and **Display**,
  * which opens the bare display (ADR 0008). Each is an {@link AppRef} under the reserved
  * {@link #PACKAGE}, the way a Linux app is one under {@code X11Apps.PACKAGE}, so everything keyed
  * by {@code stableId} (ranking, pins, folders, search) takes them unchanged; the few places that
@@ -17,7 +17,7 @@ public final class LauncherEntries {
     /** Never a real Android package name: colons are not allowed in one. */
     public static final String PACKAGE = "launcher:entry";
 
-    /** The Terminal entry: the Workspace at the window last shown; a long press opens a window. */
+    /** The Terminal entry: the Terminal at the window last shown; a long press opens a window. */
     public static final String TERMINAL = "terminal";
 
     /** The Display entry, under Linux Apps: the bare display, started if none is up. */

@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.page.PageKind;
 
 /**
  * The dock as one surface (ADR 0018 §1, D3, D8, D11): where its glass stands, what shape it has,
@@ -23,9 +24,6 @@ import com.termux.app.chrome.GlassRefraction;
  * stack under it instead of the screen's edge.
  */
 public final class DockSpec {
-
-    /** The kind of page in front (ADR 0018 §3). */
-    public enum PageKind { HOME, TERMINAL, DISPLAY, ASSISTANT }
 
     /** What the card's bottom edge meets. */
     public enum Base {
@@ -47,7 +45,7 @@ public final class DockSpec {
         public final boolean rimOff;
         /** Corner radius the style resolves to (the {@code -1} sentinel already resolved), dp. */
         public final float cornerRadiusDp;
-        /** Refraction bend and dispersion of the element's own, or null while it follows Base. */
+        /** Refraction bend and dispersion of the element's own, or null while it follows Global. */
         @Nullable public final Integer depthDp;
         @Nullable public final Integer edgePercent;
 

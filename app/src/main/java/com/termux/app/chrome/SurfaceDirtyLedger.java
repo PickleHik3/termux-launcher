@@ -35,8 +35,6 @@ public final class SurfaceDirtyLedger {
     public enum Backdrop {
         /** The shared accessory (dock + unified keyboard) crop. */
         ACCESSORY,
-        /** The under-pill gesture-nav strip in the decor overlay. */
-        DECOR_NAV_BAR,
         /** The keyboard-local crop used when the keyboard is not on the unified dock material. */
         IN_APP_KEYBOARD
     }

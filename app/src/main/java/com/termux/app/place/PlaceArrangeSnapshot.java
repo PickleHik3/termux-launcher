@@ -11,27 +11,16 @@ import java.util.List;
 
 /**
  * One variant's arrangement (the normal layout, or the one minimal mode stands in), in both
- * orientations, as one immutable value: what the Layout editor took
- * a copy of on entry, what its revert puts back, and — folded to a string — how it knows a bar has
- * been moved since. The three sizes ride along, so a dragged dock, keyboard or chin is exactly as
- * unsaved as a moved bar (on the Home layout they are the normal layout's, linked, so its
- * snapshot captures and restores the values both halves share, #84), and so does the keyboard
- * element's on/off switch, with Home's own
- * (always on), which a Home page edits on whichever layout it wears. Each layout's Dock design
- * rides along too, with its Search field and Drawer tile toggles, so a design picked or a toggle
- * flipped in the editor is undone and asked about like a move.
+ * orientations, as one immutable value: folded to a string, it is how the Layout editor knows a
+ * bar has been moved. The sizes ride along, so a dragged dock, keyboard or chin is exactly as
+ * unsaved as a moved bar, and so does the keyboard element's on/off switch, with Home's own
+ * (always on). Each layout's Dock design rides along too, with its Search field and Drawer tile
+ * toggles.
  *
- * <p>Read and written through {@link PlaceLayoutStore}'s own accessors rather than the raw keys, so
- * a restore writes the value the layout was resolving to whether or not it had a key of its own.
- * That materialises a key the global value was answering for, at the value it was answering with:
- * the same arrangement, spelled out. The keyboard mode is the exception: it is put back as stored
- * or as absent, so a default that later changes is not kept as a choice. The signature still
- * compares the mode it resolves to, like every other field.
+ * <p>Read through {@link PlaceLayoutStore}'s own accessors rather than the raw keys. The
+ * signature compares the keyboard mode it resolves to, like every other field.
  *
- * <p>A snapshot remembers its variant and restores onto it, whatever the store is on by then, so a
- * Discard puts back the layout that was being edited and never the other one.
- *
- * <p>Pure: a store in, a value out, no views, so revert and dirtiness are testable without a window.
+ * <p>Pure: a store in, a value out, no views, so dirtiness is testable without a window.
  */
 public final class PlaceArrangeSnapshot {
 
@@ -104,21 +93,6 @@ public final class PlaceArrangeSnapshot {
             barOrder = base.barOrder;
         }
 
-        void restore(@NonNull PlaceLayoutStore places) {
-            for (Element element : Element.values())
-                places.setSlot(orientation, element, slots[element.ordinal()]);
-            if (keyboardModeStored) places.setKeyboardMode(orientation, keyboardMode);
-            else places.clearKeyboardMode(orientation);
-            places.setKeyboardForm(orientation, keyboardForm);
-            places.setWidgetColumns(orientation, widgetColumns);
-            places.setWidgetRows(orientation, widgetRows);
-            places.setDockHeightScale(orientation, dockHeightScale);
-            places.setKeyboardHeightScale(orientation, keyboardHeightScale);
-            places.setKeyboardChinDp(orientation, keyboardChinDp);
-            places.setWallStripHeightDp(orientation, wallStripHeightDp);
-            places.setBarOrder(orientation, barOrder);
-        }
-
         void appendTo(@NonNull StringBuilder out) {
             out.append(orientation.storageValue()).append(':');
             for (Slot slot : slots) out.append(slot).append(',');
@@ -132,6 +106,37 @@ public final class PlaceArrangeSnapshot {
                 .append(barOrder);
             out.append('|');
         }
+    }
+
+    /**
+     * The document fields {@link #signature} reads as resolved: each element's edge, show, place in
+     * its stack and edge to come back to, the keyboard's mode and form, the bars' order, the widget grid, the four
+     * sizes, and the keyboard switch, Dock design, Search field and Drawer tile. A field written
+     * out at the value it already resolved to changes no signature.
+     */
+    public static final java.util.Set<String> FIELDS;
+
+    static {
+        java.util.Set<String> fields = new java.util.HashSet<>();
+        for (Element element : Element.values()) {
+            fields.add(element.storageKey());
+            fields.add(element.storageKey() + com.termux.app.place.layout.LayoutsJson.ORDER_SUFFIX);
+            fields.add(element.storageKey()
+                + com.termux.app.place.layout.LayoutsJson.UNDER_KEYBOARD_SUFFIX);
+            // Where a put-away element comes back to: seen only through the slot once it is back.
+            fields.add(element.storageKey()
+                + com.termux.app.place.layout.LayoutsJson.RESTORE_EDGE_SUFFIX);
+        }
+        fields.add(com.termux.app.place.layout.LayoutsJson.KEYBOARD_MODE);
+        fields.add(com.termux.app.place.layout.LayoutsJson.KEYBOARD_FORM);
+        fields.add(com.termux.app.place.layout.LayoutsJson.BAR_ORDER);
+        fields.addAll(com.termux.app.place.layout.LayoutsJson.GRID_FIELDS);
+        fields.addAll(com.termux.app.place.layout.LayoutsJson.SIZE_FIELDS);
+        fields.add(com.termux.app.place.layout.LayoutsJson.KEYBOARD_SHOWN);
+        fields.add(com.termux.app.place.layout.LayoutsJson.DOCK_DESIGN);
+        fields.add(com.termux.app.place.layout.LayoutsJson.SEARCH_FIELD);
+        fields.add(com.termux.app.place.layout.LayoutsJson.DRAWER_TILE);
+        FIELDS = java.util.Collections.unmodifiableSet(fields);
     }
 
     @NonNull private final LayoutVariant mVariant;
@@ -207,17 +212,6 @@ public final class PlaceArrangeSnapshot {
     @NonNull
     public LayoutVariant variant() {
         return mVariant;
-    }
-
-    /** Puts the arrangement back the way {@link #capture} found it. */
-    public void restore(@NonNull PlaceLayoutStore places) {
-        PlaceLayoutStore layout = places.forVariant(mVariant);
-        for (Entry entry : mEntries) entry.restore(layout);
-        layout.setHomeKeyboardAlwaysOn(mHomeAlwaysOn);
-        layout.setKeyboardShown(mKeyboardShown);
-        layout.setDockStyle(mDockStyle);
-        layout.setSearchField(mSearchField);
-        layout.setDrawerTile(mDrawerTile);
     }
 
     /** The whole arrangement as one string, for the editor's unsaved-changes comparison. */

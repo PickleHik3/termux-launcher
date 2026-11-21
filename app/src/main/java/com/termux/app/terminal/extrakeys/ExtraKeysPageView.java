@@ -143,7 +143,7 @@ public final class ExtraKeysPageView extends ViewGroup {
     private final List<ExtraKeyCapView> mLeaving = new ArrayList<>();
     private boolean mMorphing;
     @Nullable private ValueAnimator mMorph;
-    @Nullable private android.view.ViewTreeObserver.OnPreDrawListener mMorphPreDraw;
+    @Nullable private com.termux.app.window.FirstLayout.Handle mMorphPreDraw;
     @Nullable private Runnable mMorphEnd;
     @Nullable private ExtraKeysSetMorph.Plan mMorphPlan;
     @Nullable private ExtraKeyCapView[] mMorphOldCaps;
@@ -339,8 +339,7 @@ public final class ExtraKeysPageView extends ViewGroup {
         publishPlaceGlyphColors();
         mMorphing = true;
         mMorphEnd = onEnd;
-        mMorphPreDraw = this::startMorph;
-        getViewTreeObserver().addOnPreDrawListener(mMorphPreDraw);
+        mMorphPreDraw = com.termux.app.window.FirstLayout.beforeNextDraw(this, this::startMorph);
         requestLayout();
     }
 
@@ -417,8 +416,7 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     private void removeMorphPreDraw() {
         if (mMorphPreDraw == null) return;
-        android.view.ViewTreeObserver observer = getViewTreeObserver();
-        if (observer.isAlive()) observer.removeOnPreDrawListener(mMorphPreDraw);
+        mMorphPreDraw.cancel();
         mMorphPreDraw = null;
     }
 
@@ -676,7 +674,7 @@ public final class ExtraKeysPageView extends ViewGroup {
      * What the page switcher key's cap draws: the current page's glyph and number. Compared before
      * anything repaints; the caps built later take it too.
      */
-    public void setPageSwitcherGlyph(@NonNull com.termux.app.wall.pageswitch.PageSwitchModel.Kind kind,
+    public void setPageSwitcherGlyph(@NonNull com.termux.app.page.PageKind kind,
                                      int number) {
         for (int i = 0; i < mCaps.size(); i++) {
             if (isPageSwitcherKey(mKeys.get(i))) mCaps.get(i).setPageGlyph(kind, number);
@@ -993,8 +991,17 @@ public final class ExtraKeysPageView extends ViewGroup {
         cancelPress();
         ExtraKeyCapView cap = capAtPoint(ev.getX(), ev.getY());
         String value = cap == null ? null : cap.key().getKey();
-        if (cap == null || value == null || cap.isDead() || !owner.ownsKey(value)
-            || !owner.down(ev, cap)) return false;
+        // DIAG(TL-PageBarDiag): which gate refuses an owned key's down; revert before merge.
+        String refused = cap == null ? "no-cap-at-point" : value == null ? "no-value"
+            : cap.isDead() ? "dead-cap" : !owner.ownsKey(value) ? null
+            : !owner.down(ev, cap) ? "owner-refused" : "";
+        if (refused == null) return false;
+        if (!refused.isEmpty()) {
+            android.util.Log.d("TL-PageBarDiag", "beginOwned refused=" + refused + " x="
+                + Math.round(ev.getX()) + " y=" + Math.round(ev.getY()) + " caps=" + mCaps.size()
+                + " w=" + getWidth() + " h=" + getHeight());
+            return false;
+        }
         mOwnedCap = cap;
         cap.pressAt(ev.getX() - cap.getLeft(), ev.getY() - cap.getTop());
         pressHaptic(cap);

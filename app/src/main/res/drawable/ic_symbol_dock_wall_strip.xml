@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Home dock style Wall strip: a first row for the Workspace (the clock and a new-terminal tile)
+<!-- Home dock style Wall strip: a first row for the Terminal (the clock and a new-terminal tile)
      over the icons, in one slab. The Layout editor's dock style chip; tinted by the chip. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android" android:tint="?attr/colorControlNormal"
     android:width="24dp"

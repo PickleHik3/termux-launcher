@@ -9,11 +9,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.app.x11.DisplayTouchpadPlacement;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -49,7 +49,7 @@ public class KeyboardOverlayPolicyTest {
         return new PlaceLayoutStore(launcher);
     }
 
-    private boolean overlays(PlaceLayoutStore store, PaneWallPage place,
+    private boolean overlays(PlaceLayoutStore store, PageKind place,
                              PlaceOrientation orientation) {
         return KeyboardOverlayPolicy.overlays(place, store.resolve(orientation));
     }
@@ -89,10 +89,10 @@ public class KeyboardOverlayPolicyTest {
     @Test
     public void outOfTheBoxEveryPlaceThatReadsTheModeFloatsTheKeyboardInBothOrientations() {
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                boolean expected = place == PaneWallPage.WIDGETS
-                    || place == PaneWallPage.DISPLAY;
+                boolean expected = place == PageKind.HOME
+                    || place == PageKind.DISPLAY;
                 assertEquals(place + " " + orientation, expected,
                     overlays(store, place, orientation));
             }
@@ -103,14 +103,14 @@ public class KeyboardOverlayPolicyTest {
     @Test
     public void leavingTheDisplayForATerminalWindowChangesTheContentsRoom() {
         PlaceLayout layout = layout(KeyboardMode.OVERLAY);
-        // The display window going off the Workspace without a slide: the terminal must get
+        // The display window going off the Terminal without a slide: the terminal must get
         // its room back from the floating keyboard, and the way back must float it again.
-        assertTrue(KeyboardOverlayPolicy.changesBetween(PaneWallPage.DISPLAY,
-            PaneWallPage.TERMINAL, layout));
-        assertTrue(KeyboardOverlayPolicy.changesBetween(PaneWallPage.TERMINAL,
-            PaneWallPage.DISPLAY, layout));
-        assertFalse(KeyboardOverlayPolicy.changesBetween(PaneWallPage.DISPLAY,
-            PaneWallPage.WIDGETS, layout));
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PageKind.DISPLAY,
+            PageKind.TERMINAL, layout));
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PageKind.TERMINAL,
+            PageKind.DISPLAY, layout));
+        assertFalse(KeyboardOverlayPolicy.changesBetween(PageKind.DISPLAY,
+            PageKind.HOME, layout));
     }
 
     @Test
@@ -119,9 +119,9 @@ public class KeyboardOverlayPolicyTest {
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             store.setKeyboardMode(orientation, KeyboardMode.RESIZE);
             assertTrue(String.valueOf(orientation),
-                overlays(store, PaneWallPage.WIDGETS, orientation));
+                overlays(store, PageKind.HOME, orientation));
         }
-        assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.WIDGETS,
+        assertTrue(KeyboardOverlayPolicy.overlays(PageKind.HOME,
             layout(KeyboardMode.RESIZE)));
     }
 
@@ -129,8 +129,8 @@ public class KeyboardOverlayPolicyTest {
     public void aStoredResizeKeepsTheDisplayResizingInPortraitToo() {
         PlaceLayoutStore store = store();
         store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
-        assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
-        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+        assertFalse(overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertTrue(overlays(store, PageKind.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
@@ -140,15 +140,15 @@ public class KeyboardOverlayPolicyTest {
             KeyboardMode.OVERLAY);
         store.setKeyboardMode(PlaceOrientation.LANDSCAPE,
             KeyboardMode.RESIZE);
-        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
-        assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+        assertTrue(overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertFalse(overlays(store, PageKind.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
     public void noOtherPlaceFloatsTheKeyboardEvenWithAnOverlayStored() {
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
-            if (place == PaneWallPage.DISPLAY || place == PaneWallPage.WIDGETS) continue;
+        for (PageKind place : PageKind.values()) {
+            if (place == PageKind.DISPLAY || place == PageKind.HOME) continue;
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 store.setKeyboardMode(orientation, KeyboardMode.OVERLAY);
                 assertFalse(place + " " + orientation, overlays(store, place, orientation));
@@ -162,14 +162,14 @@ public class KeyboardOverlayPolicyTest {
      */
     @Test
     public void aFloatingTypeFloatsOnEveryPlaceWhateverTheModeSays() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             assertTrue(place + " resize", KeyboardOverlayPolicy.overlays(place,
                 layout(KeyboardMode.RESIZE, KeyboardForm.FLOATING)));
             assertTrue(place + " overlay", KeyboardOverlayPolicy.overlays(place,
                 layout(KeyboardMode.OVERLAY, KeyboardForm.FLOATING)));
         }
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 store.setKeyboardForm(orientation, KeyboardForm.FLOATING);
                 assertTrue(place + " " + orientation, overlays(store, place, orientation));
@@ -180,7 +180,7 @@ public class KeyboardOverlayPolicyTest {
     /** Split is docked: it parts the rows, it does not lift off the bottom edge. */
     @Test
     public void aSplitTypeFloatsExactlyWhereADockedOneDoes() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (KeyboardMode mode : KeyboardMode.values()) {
                 assertEquals(place + " " + mode,
                     KeyboardOverlayPolicy.overlays(place, layout(mode, KeyboardForm.DOCKED)),
@@ -191,11 +191,11 @@ public class KeyboardOverlayPolicyTest {
 
     @Test
     public void theDisplayResizesWhenItIsNotThePlaceOnScreen() {
-        assertFalse(KeyboardOverlayPolicy.overlays(PaneWallPage.TERMINAL,
+        assertFalse(KeyboardOverlayPolicy.overlays(PageKind.TERMINAL,
             layout(KeyboardMode.OVERLAY)));
-        assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY,
+        assertTrue(KeyboardOverlayPolicy.overlays(PageKind.DISPLAY,
             layout(KeyboardMode.OVERLAY)));
-        assertFalse(KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY,
+        assertFalse(KeyboardOverlayPolicy.overlays(PageKind.DISPLAY,
             layout(KeyboardMode.RESIZE)));
     }
 
@@ -216,21 +216,21 @@ public class KeyboardOverlayPolicyTest {
         int padPx = 640;
         int closed = contentHeight(false, false, 0, available, dockPx, marginPx);
 
-        boolean overlays = overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT);
+        boolean overlays = overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT);
         assertTrue(overlays);
         assertEquals("Overlay: the X screen keeps its size", closed,
             contentHeight(overlays, true, padPx, available, dockPx, marginPx));
 
         DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT);
-        overlays = overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT);
+        overlays = overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT);
         assertFalse(overlays);
         assertEquals("Resize: the display shrinks above the pad", closed - padPx,
             contentHeight(overlays, true, padPx, available, dockPx, marginPx));
         assertTrue("landscape keeps its own mode",
-            overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+            overlays(store, PageKind.DISPLAY, PlaceOrientation.LANDSCAPE));
 
         DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT);
-        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertTrue(overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT));
     }
 
     // ------------------------------------------------------------------ what it leaves the content

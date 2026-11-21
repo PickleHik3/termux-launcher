@@ -24,6 +24,7 @@ import android.view.ViewTreeObserver;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
+import com.termux.app.page.PageKind;
 import com.termux.shared.termux.font.NerdFontSpans;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerTabGeometry;
@@ -36,7 +37,6 @@ import com.termux.R;
 import com.termux.app.ReducedMotion;
 import com.termux.app.notice.TerminalDress;
 import com.termux.app.statusbar.StatusBarLensView;
-import com.termux.app.wall.PaneWallPage;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
@@ -154,7 +154,7 @@ public final class HelpOverlayView extends FrameLayout {
 
     private HelpTargets.Snapshot snapshot;
     private TerminalDress dress;
-    private PaneWallPage place;
+    private PageKind place;
     private int accent;
     private String signature = "";
     private boolean showing;
@@ -216,7 +216,6 @@ public final class HelpOverlayView extends FrameLayout {
         // lifted between 6 and 40dp, and exploration has to wash over all of them; the outline is
         // dropped so the height casts no shadow of its own.
         setElevation(com.termux.app.chrome.ShapeTokens.elevationPx(context, 5));
-        setTranslationZ(stackHeightPx(context) - getElevation());
         setOutlineProvider(null);
         setWillNotDraw(false);
         setClickable(true);
@@ -234,21 +233,21 @@ public final class HelpOverlayView extends FrameLayout {
 
 
     /** The curated overview: a few cards at once, the key labels, and the way into the guide. */
-    public void overview(PaneWallPage place) {
+    public void overview(PageKind place) {
         start(place, null, false, Mode.OVERVIEW);
     }
 
     /** Explore a place. {@code selectTopicId} pre-selects a control, or is null. */
-    public void explore(PaneWallPage place, String selectTopicId) {
+    public void explore(PageKind place, String selectTopicId) {
         start(place, selectTopicId, false, Mode.EXPLORE);
     }
 
     /** Explore with the topic selected and its own gesture played once over its control. */
-    public void demonstrate(PaneWallPage place, String topicId) {
+    public void demonstrate(PageKind place, String topicId) {
         start(place, topicId, true, Mode.EXPLORE);
     }
 
-    private void start(PaneWallPage place, String selectTopicId, boolean withGesture, Mode mode) {
+    private void start(PageKind place, String selectTopicId, boolean withGesture, Mode mode) {
         this.mode = mode;
         setContentDescription(getContext().getString(mode == Mode.OVERVIEW
             ? R.string.help_centre_title : R.string.help_explore_title));
@@ -263,7 +262,7 @@ public final class HelpOverlayView extends FrameLayout {
         if (!showing) getViewTreeObserver().addOnGlobalLayoutListener(layoutListener);
         showing = true;
         setVisibility(VISIBLE);
-        bringToFront();
+        com.termux.app.window.WindowLayers.raiseWithin(this);
         requestFocus();
         requestLayout();
         refresh();

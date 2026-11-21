@@ -6,6 +6,8 @@ import android.view.ViewTreeObserver;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.window.FirstLayout;
+
 import java.util.ArrayList;
 
 /**
@@ -26,12 +28,11 @@ public final class FirstDrawGate {
     public static final long TIMEOUT_MS = 100L;
 
     @Nullable private View mView;
-    @Nullable private ViewTreeObserver mObserver;
+    @Nullable private FirstLayout.Handle mDrawWait;
     private boolean mOpen;
     private boolean mDrawn;
     private final ArrayList<Runnable> mWaiting = new ArrayList<>(2);
     private final Runnable mOpenNow = this::open;
-    private final ViewTreeObserver.OnDrawListener mOnDraw = this::onDraw;
 
     private FirstDrawGate() { }
 
@@ -53,8 +54,7 @@ public final class FirstDrawGate {
             return gate;
         }
         gate.mView = view;
-        gate.mObserver = observer;
-        observer.addOnDrawListener(gate.mOnDraw);
+        gate.mDrawWait = FirstLayout.afterNextDraw(view, gate::onDraw);
         view.postDelayed(gate.mOpenNow, TIMEOUT_MS);
         return gate;
     }
@@ -87,11 +87,11 @@ public final class FirstDrawGate {
         if (mOpen) return;
         mOpen = true;
         View view = mView;
-        ViewTreeObserver observer = mObserver;
+        FirstLayout.Handle drawWait = mDrawWait;
         mView = null;
-        mObserver = null;
+        mDrawWait = null;
         if (view != null) view.removeCallbacks(mOpenNow);
-        if (observer != null && observer.isAlive()) observer.removeOnDrawListener(mOnDraw);
+        if (drawWait != null) drawWait.cancel();
         ArrayList<Runnable> waiting = new ArrayList<>(mWaiting);
         mWaiting.clear();
         for (Runnable action : waiting) action.run();

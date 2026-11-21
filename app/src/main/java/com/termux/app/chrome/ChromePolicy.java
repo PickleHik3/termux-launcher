@@ -65,6 +65,18 @@ public final class ChromePolicy {
      * painted the same translucent glass again on top. Two coats of one material is a visibly
      * darker keyboard, and no amount of matching the two recipes could have closed it.</p>
      */
+    /**
+     * Whether the dock's glass host is laid out over the keyboard too: its bottom reaches the
+     * stack's bottom ({@code stackHeightPx}) and it is taller than the keyboard alone. The host
+     * stands below the stack's top by the lane slack and its top inset, so its height is never
+     * the stack's own.
+     */
+    public static boolean unifiedHostLaidOut(int hostBottomPx, int hostHeightPx,
+                                             int stackHeightPx, int keyboardHeightPx) {
+        return stackHeightPx > 0 && hostBottomPx >= stackHeightPx
+            && hostHeightPx > keyboardHeightPx;
+    }
+
     public static boolean unifiedKeyboardSurfaceIsTheMaterial(boolean geometryReady,
                                                               boolean blurEnabled,
                                                               boolean cropReady) {
@@ -169,15 +181,15 @@ public final class ChromePolicy {
             // Restore the shared layer first, so every surface that was following it comes back
             // with it, then place the surfaces that remembered something different. Writing these
             // through the plain setters would have made each one overwrite the last, because while
-            // they are linked they all name the same Base value.
-            // Base is named outright: all glass, everywhere (the grid's first cell).
-            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, appBar);
-            preferences.lookGrid().write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE,
+            // they are linked they all name the same Global value.
+            // Global is named outright: all glass, everywhere (the grid's first cell).
+            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, appBar);
+            preferences.lookGrid().write(LookGrid.Property.FROST, null,
                 FrostStops.nearestStopByBlur(blur));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, appBar);
-            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, terminal);
+            // The terminal's Opacity is its own key, outside the grid (ADR 0031 §4).
+            preferences.setTerminalBackgroundOpacity(terminal);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, blur);
         } else {
@@ -187,13 +199,12 @@ public final class ChromePolicy {
             preferences.setUseSystemWallpaperEnabled(false);
             // Opaque and unblurred is a uniform state, so it belongs on the shared layer: every
             // surface goes opaque, including the ones this policy never named individually.
-            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, LookGrid.NO_PAGE, 100);
-            preferences.lookGrid().write(LookGrid.Property.FROST, null, LookGrid.NO_PAGE,
+            preferences.lookGrid().write(LookGrid.Property.OPACITY, null, 100);
+            preferences.lookGrid().write(LookGrid.Property.FROST, null,
                 FrostStops.nearestStopByBlur(0));
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
-            preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.CANVAS,
-                TermuxAppSharedPreferences.SurfaceProperty.OPACITY, 100);
+            preferences.setTerminalBackgroundOpacity(100);
             preferences.setSurfaceValueExact(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
                 TermuxAppSharedPreferences.SurfaceProperty.BLUR, 0);
         }

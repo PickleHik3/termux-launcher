@@ -883,7 +883,7 @@ public final class AzScrubRowView extends AppCompatTextView {
                 if (interactionMode == InteractionMode.WAVE_TRACK) {
                     lockedInlineLetter = null;
                 }
-                bringToFront();
+                com.termux.app.window.WindowLayers.raiseWithin(this);
                 updateInteractionLayerOffset();
                 invalidate();
                 long now = event.getEventTime();

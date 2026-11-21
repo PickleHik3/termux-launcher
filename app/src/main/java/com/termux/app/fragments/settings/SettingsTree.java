@@ -145,6 +145,8 @@ public final class SettingsTree {
         page(terminal, text, R.string.settings_terminal_sub_text_title, R.xml.terminal_text_preferences);
         page(text, PAGES + "TermuxFontsPreferencesFragment", R.string.termux_fonts_preferences_title,
             R.xml.termux_fonts_preferences);
+        page(terminal, PAGES + "TuiAppThemesPreferencesFragment", R.string.appearance_row_tool_colours,
+            R.xml.tui_app_themes_preferences);
         page(terminal, PAGES + "TerminalClipboardPreferencesFragment",
             R.string.settings_terminal_sub_clipboard_title, R.xml.terminal_clipboard_preferences);
 
@@ -185,8 +187,6 @@ public final class SettingsTree {
         editor(layouts, PAGES + "KeyboardLayoutsFragment", R.string.settings_keyboard_layouts_title);
         editor(PAGES + "KeyboardLayoutsFragment", PAGES + "KeyboardLayoutEditorFragment",
             R.string.settings_keyboard_layout_editor_title);
-        page(keyboard, PAGES + "KeyboardSizePreferencesFragment", R.string.settings_keyboard_sub_size_title,
-            R.xml.termux_keyboard_size_preferences);
         page(keyboard, PAGES + "KeyboardTypingPreferencesFragment", R.string.settings_keyboard_sub_typing_title,
             R.xml.termux_keyboard_typing_preferences);
         String voice = PAGES + "KeyboardVoicePreferencesFragment";
@@ -240,6 +240,8 @@ public final class SettingsTree {
         ALIASES.put(PAGES + "SpeechModelPreferencesFragment", voice);
         ALIASES.put(PAGES + "AppBehaviorPreferencesFragment", general);
         ALIASES.put(PAGES + "LauncherDockPreferencesFragment", dock);
+        // Size and position held only rows the editor holds now; the page went with them.
+        ALIASES.put(PAGES + "KeyboardSizePreferencesFragment", keyboard);
         ALIASES.put(PAGES + "X11DisplayLinuxAppsPreferencesFragment", linuxApps);
         ALIASES.put(PAGES + "HiddenAppsPreferencesFragment", PAGES + "X11AppsPreferencesFragment");
         ALIASES.put(PAGES + "GuiAppsSetupPreferencesFragment", PAGES + "GuiAppsSetupGuideFragment");
@@ -324,9 +326,28 @@ public final class SettingsTree {
         java.util.Arrays.asList("keyboard_voice_pause_ms", "keyboard_voice_mic_sensitivity",
             "keyboard_voice_silence_timeout_ms"));
 
+    /**
+     * The Settings rows whose home is an Appearance editor card now (one home per setting). A link
+     * to one of them lands on the Appearance door, whose hit opens the editor. The Performance page
+     * keeps its copies of some of them, so a link that names it is left alone.
+     */
+    private static final java.util.Set<String> MOVED_TO_EDITOR = new java.util.HashSet<>(
+        java.util.Arrays.asList(
+            "app_launcher_home_icon_scale", "app_launcher_home_label_size",
+            "app_launcher_home_label_two_lines", "app_launcher_home_label_shadow",
+            "app_launcher_home_folder_density", "app_launcher_builtin_widget_style",
+            "app_launcher_home_page_indicator", "wallpaper_parallax",
+            "top_pane_clock_am_pm", "status_widget_cpu", "status_widget_ram", "status_widget_battery",
+            "status_widget_media", "status_widget_weather", "status_widget_weather_fahrenheit",
+            "terminal_cursor_trail_style", "terminal_retro_effect", "terminal_screen_events",
+            "terminal_retro_composite", "split_pane_controls", "pane_dwindle_default",
+            "pane_focus_grows", "fonts_size", "in_app_keyboard_floating_width",
+            "in_app_keyboard_floating_height", "in_app_keyboard_split_gap", "keyboard_shapes"));
+
     @Nullable
     private static String pageForMovedRow(@NonNull String className, @NonNull String key) {
         String name = className.startsWith(PAGES) ? className.substring(PAGES.length()) : className;
+        if (MOVED_TO_EDITOR.contains(key) && !name.equals("PerformancePreferencesFragment")) return APPEARANCE;
         switch (name) {
             case "KeyboardPreferencesFragment":
                 if (VOICE_FINE_TUNING_KEYS.contains(key)) return "KeyboardVoiceDetailsPreferencesFragment";
@@ -338,9 +359,6 @@ public final class SettingsTree {
                     || key.equals("in_app_keyboard_layouts")
                     || key.startsWith("keyboard_docs_") || key.startsWith("keyboard_credits"))
                     return "KeyboardLayoutPreferencesFragment";
-                if (key.equals("keyboard_shapes") || key.startsWith("in_app_keyboard_floating_")
-                    || key.equals("in_app_keyboard_split_gap"))
-                    return "KeyboardSizePreferencesFragment";
                 if (key.equals("keyboard_typing") || key.equals("keyboard_feedback")
                     || key.startsWith("in_app_keyboard_tap_correction")
                     || key.equals("in_app_keyboard_key_sound_enabled")
@@ -360,7 +378,6 @@ public final class SettingsTree {
                 if (key.equals("app_launcher_az_lock_method") || key.equals("app_launcher_az_double_tap_lock"))
                     return "LauncherLockPreferencesFragment";
                 if (key.equals("app_launcher_home_palette_gesture") || key.equals("app_launcher_widget_pane_enabled")
-                    || key.equals("app_launcher_builtin_widget_style")
                     || key.equals("app_launcher_quick_reply_swipe")
                     || key.equals("app_launcher_sub_lock"))
                     return "HomePreferencesFragment";
@@ -380,30 +397,25 @@ public final class SettingsTree {
                 if (key.equals("keyboard_appearance") || key.equals("customize_keyboard_surface")
                     || key.equals("in_app_keyboard_color_scheme_editor"))
                     return "KeyboardPreferencesFragment";
-                if (key.equals("wallpaper_parallax")) return "HomePreferencesFragment";
+                if (key.equals("theme_templates_enabled")) return "TuiAppThemesPreferencesFragment";
                 if (key.equals("fancier_glass_motion_light")) return "PerformancePreferencesFragment";
                 return null;
             case "TerminalPreferencesFragment":
             case "TerminalStatusPreferencesFragment":
                 switch (key) {
-                    case "split_pane_controls": case "show_key_hints": case "pane_dwindle_default":
-                    case "pane_focus_grows": case "pane_agent_api":
+                    case "show_key_hints": case "pane_agent_api":
                         return "TerminalWindowsPreferencesFragment";
                     case "terminal_body_swipe":
                         return "HomePreferencesFragment";
                     case "fullscreen":
                         return APPEARANCE;
-                    case "terminal_cursor_trail_style":
-                    case "terminal_retro_effect": case "terminal_fonts":
+                    case "terminal_fonts":
                         return "TerminalTextPreferencesFragment";
                     case "terminal_osc52_clipboard_read_enabled": case "terminal_clipboard_cleanup":
                     case "terminal_margin_adjustment": case "terminal_engine":
                     case "terminal_clipboard_read_reset":
                         return "TerminalClipboardPreferencesFragment";
-                    case "top_pane_clock_am_pm": case "status_widget_cpu": case "status_widget_ram":
-                    case "status_widget_battery":
-                    case "status_widget_media": case "status_widget_weather":
-                    case "status_widget_weather_fahrenheit": case "status_widget_weather_location":
+                    case "status_widget_weather_location":
                         return "StatusBarPreferencesFragment";
                     case "show_in_recents_when_not_default":
                         return "GeneralPreferencesFragment";
@@ -433,6 +445,8 @@ public final class SettingsTree {
                         return "X11DisplayStartupPreferencesFragment";
                     case "x11_legacy_drawing": case "x11_force_bgra":
                         return "X11DisplayTroubleshootingPreferencesFragment";
+                    case "x11_drawer_apps":
+                        return "LauncherPreferencesFragment";
                     default:
                         // The Linux apps rows sit on this page itself now.
                         return null;

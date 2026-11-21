@@ -256,8 +256,7 @@ public final class TermuxInAppKeyboard {
     }
 
     private static LayoutModifier.LayoutOptions buildLayoutOptions(String extraKeysStoredValue) {
-        return new LayoutModifier.LayoutOptions(true, false, true,
-            InAppKeyboardExtraKeys.resolve(extraKeysStoredValue));
+        return InAppKeyboardLayoutSource.textLayoutOptions(extraKeysStoredValue);
     }
 
     public boolean isEnabled() {
@@ -326,8 +325,13 @@ public final class TermuxInAppKeyboard {
         reloadLayoutRing(false);
         mSelectedLayoutId = mActiveTextLayoutId;
         if (state != null) {
-            mSelectedLayoutId = normalizeLayoutId(
+            String saved = normalizeLayoutId(
                 state.getString(STATE_SELECTED_LAYOUT, mActiveTextLayoutId));
+            // The modal pads are not ring entries; every text layout answers to the ring.
+            mSelectedLayoutId = LAYOUT_NUMERIC.equals(saved) || LAYOUT_GREEK_MATH.equals(saved)
+                ? saved
+                : InAppKeyboardLayoutSource.restoredTextLayoutId(mLayoutRing, saved,
+                    mActiveTextLayoutId);
             if (mEnabled && state.containsKey(STATE_VISIBLE))
                 mVisible = state.getBoolean(STATE_VISIBLE);
             else if (mEnabled)
@@ -351,6 +355,9 @@ public final class TermuxInAppKeyboard {
         } else {
             setContainerVisible(false);
         }
+        // Down, the keyboard is still laid out: put the container there now, not at the first hide.
+        if (mEnabled && !mVisible)
+            setContainerVisible(false);
     }
 
     public void onStart() {
@@ -1487,6 +1494,8 @@ public final class TermuxInAppKeyboard {
         destroyKeyPopup();
         mKeyboardView = null;
         mKeyEventHandler = null;
+        // Off, the container is put away as it always was (the hide above ran while it was on).
+        setContainerVisible(false);
 
         TerminalView terminalView = mHost.getTerminalView();
         if (terminalView != null)
@@ -1664,6 +1673,44 @@ public final class TermuxInAppKeyboard {
         if (mKeyPopup != null) mKeyPopup.refresh();
     }
 
+    /** The palettes a crossing blends between ({@link #beginGlassBlend}); null while none runs. */
+    @Nullable private juloo.keyboard2.Theme.Palette mBlendFrom;
+    @Nullable private juloo.keyboard2.Theme.Palette mBlendTo;
+
+    /**
+     * A look-only crossing begins: the legends drift from the palette the page being left wears to
+     * the one the arriving page will ({@link #setGlassBlend}), each built from the faces and tone
+     * rest kept for that page, so nothing is measured. Both palettes come from the memo of glass
+     * palettes, built at most once each.
+     */
+    public void beginGlassBlend(@NonNull int[] fromFaces, int fromTone, @NonNull int[] toFaces,
+                                int toTone) {
+        if (mDestroyed || mKeyboardView == null) return;
+        mBlendFrom = createPalette(fromFaces, fromTone);
+        mBlendTo = createPalette(toFaces, toTone);
+    }
+
+    /**
+     * The legends {@code share} of the way from the leaving page's inks to the arriving page's.
+     * Called at the crossing's look steps, never per frame; the keys repaint and nothing is laid
+     * out, and a step that moves no colour paints nothing.
+     */
+    public void setGlassBlend(float share) {
+        juloo.keyboard2.Theme.Palette from = mBlendFrom;
+        juloo.keyboard2.Theme.Palette to = mBlendTo;
+        if (from == null || to == null || mDestroyed || mKeyboardView == null) return;
+        juloo.keyboard2.Theme.Palette next = juloo.keyboard2.Theme.Palette.blend(from, to, share);
+        if (mAppliedPalette != null && sameInks(mAppliedPalette, next)) return;
+        mKeyboardView.setPaletteColors(next);
+        mAppliedPalette = next;
+    }
+
+    /** The blend is over; the landing's apply chooses the legends for the page it lands on. */
+    public void endGlassBlend() {
+        mBlendFrom = null;
+        mBlendTo = null;
+    }
+
     /** The last palette handed to the view, for {@link #setGlassFace} to compare against. */
     @Nullable private juloo.keyboard2.Theme.Palette mAppliedPalette;
 
@@ -1698,6 +1745,10 @@ public final class TermuxInAppKeyboard {
         new InAppKeyboardPaletteFactory.GlassMemo(4);
 
     private juloo.keyboard2.Theme.Palette createPalette() {
+        return createPalette(mGlassFaces, mGlassTone);
+    }
+
+    private juloo.keyboard2.Theme.Palette createPalette(@NonNull int[] glassFaces, int glassTone) {
         Context context = requireContainer().getContext();
         String theme = mPreferences.getInAppKeyboardTheme();
         // Every chrome apply with the keyboard up asks for the palette (the legend inks, the
@@ -1708,8 +1759,8 @@ public final class TermuxInAppKeyboard {
         try {
             InAppKeyboardPaletteFactory.GlassInputs inputs =
                 InAppKeyboardPaletteFactory.glassInputs(context, theme,
-                    com.termux.app.chrome.GlassLook.of(mPreferences), mGlassFaces, mKeyOpacity,
-                    mGlassTone);
+                    com.termux.app.chrome.GlassLook.of(mPreferences), glassFaces, mKeyOpacity,
+                    glassTone);
             palette = mGlassMemo.get(inputs);
             if (palette == null) {
                 android.os.Trace.beginSection("Keyboard.palette.glass.build");
@@ -1938,7 +1989,7 @@ public final class TermuxInAppKeyboard {
         mLayoutRing = LauncherKeyboardLayouts.parseSelection(resources,
             mPreferences.getInAppKeyboardLayouts());
         String stored = mPreferences.getInAppKeyboardActiveLayout();
-        String active = mLayoutRing.contains(stored) ? stored : mLayoutRing.get(0);
+        String active = InAppKeyboardLayoutSource.activeId(mLayoutRing, stored);
         if (active.equals(mActiveTextLayoutId))
             return;
         mActiveTextLayoutId = active;
@@ -2312,13 +2363,11 @@ public final class TermuxInAppKeyboard {
     }
 
     private KeyboardData loadBundledLayout(int resourceId) {
-        KeyboardData keyboard = KeyboardData.load(requireContainer().getResources(), resourceId);
-        if (keyboard == null) {
+        KeyboardData keyboard = InAppKeyboardLayoutSource.loadBundled(
+            requireContainer().getResources(), resourceId, mLayoutOptions);
+        if (keyboard == null)
             mHost.debugLog("Failed to load bundled in-app keyboard layout " + resourceId);
-            return null;
-        }
-        return LayoutModifier.modify(keyboard, mLayoutOptions,
-            requireContainer().getResources());
+        return keyboard;
     }
 
     /** Any modal pad, any catalogued text layout, or — for anything else — where the ring is. */

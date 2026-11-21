@@ -44,7 +44,7 @@ public final class AppearanceResetCard {
                                     @Nullable TermuxAppSharedPreferences prefs,
                                     @NonNull Runnable openEditor) {
         if (!isDue(prefs)) return false;
-        ViewGroup content = activity.findViewById(android.R.id.content);
+        ViewGroup content = com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.NOTICES);
         if (content == null) return false;
         if (content.findViewWithTag(AppearanceResetCard.class) != null) return true;
         Context context = activity;

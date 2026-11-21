@@ -12,6 +12,7 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 
 import com.termux.app.launcher.home.HomePageTransition;
+import com.termux.app.page.PageKind;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -22,9 +23,9 @@ import org.robolectric.annotation.Config;
 import android.app.Application;
 
 /**
- * Across the seam between Home and the Workspace the pages move by the page transition, as Home's
+ * Across the seam between Home and the Terminal the pages move by the page transition, as Home's
  * own pages do (ADR 0015 §4, amendment 2026-11-04, reversing 2026-11-02's flat slide): under Slide
- * Home's page leaves by the finger's distance with the Workspace's beside it, flat; under any
+ * Home's page leaves by the finger's distance with the Terminal's beside it, flat; under any
  * other effect they are turned, scaled or faded on a layer for those frames. The wall still says
  * it is moving across the seam, which the chrome eases on.
  */
@@ -58,9 +59,9 @@ public class SeamPageTurnTest {
         wall.addView(display);
         wall.setReducedMotion(true);
         wall.setPages(PaneWallPolicy.availablePages(false, true, true));
-        wall.setPageView(PaneWallPage.WIDGETS, widgets);
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
-        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.setPageView(PageKind.HOME, widgets);
+        wall.setPageView(PageKind.TERMINAL, terminal);
+        wall.setPageView(PageKind.DISPLAY, display);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
@@ -77,7 +78,7 @@ public class SeamPageTurnTest {
     @Test
     public void underSlideHomeLeavesWithTheFingerFlat() {
         build(HomePageTransition.SLIDE);
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertFalse("at rest", wall.slidesAcrossSeam());
         wall.beginDrag();
         wall.dragTo(-300f);
@@ -94,7 +95,7 @@ public class SeamPageTurnTest {
         for (HomePageTransition effect : HomePageTransition.values()) {
             if (effect == HomePageTransition.SLIDE) continue;
             build(effect);
-            wall.goTo(PaneWallPage.WIDGETS, false);
+            wall.goTo(PageKind.HOME, false);
             wall.beginDrag();
             wall.dragTo(-300f);
             String why = effect.name();
@@ -108,9 +109,9 @@ public class SeamPageTurnTest {
     }
 
     @Test
-    public void theWorkspaceTurnsTowardHomeUnderCarousel() {
+    public void theTerminalTurnsTowardHomeUnderCarousel() {
         build(HomePageTransition.CAROUSEL);
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();
         wall.dragTo(300f);
         assertTrue(wall.slidesAcrossSeam());
@@ -118,9 +119,9 @@ public class SeamPageTurnTest {
     }
 
     @Test
-    public void betweenTheWorkspacesOwnPagesTheEffectStillTurnsThem() {
+    public void betweenTheTerminalsOwnPagesTheEffectStillTurnsThem() {
         build(HomePageTransition.DEPTH);
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();
         wall.dragTo(-300f);
         assertFalse(wall.slidesAcrossSeam());

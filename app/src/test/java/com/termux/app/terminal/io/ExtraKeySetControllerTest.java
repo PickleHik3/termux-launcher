@@ -10,11 +10,11 @@ import android.widget.FrameLayout;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.app.terminal.extrakeys.ExtraKeysBarView;
 import com.termux.app.terminal.extrakeys.ExtraKeysBarView.Transition;
 import com.termux.app.terminal.extrakeys.ExtraKeysPageView;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 import com.termux.shared.termux.extrakeys.ExtraKeysInfo;
 import com.termux.shared.termux.extrakeys.SpecialButton;
@@ -41,7 +41,7 @@ public class ExtraKeySetControllerTest {
     private ExtraKeysPageView edge;
     private final ExtraKeyModifiers modifiers = new ExtraKeyModifiers();
     private final Map<String, String> lines = new HashMap<>();
-    private PaneWallPage place = PaneWallPage.TERMINAL;
+    private PageKind place = PageKind.TERMINAL;
     private boolean shown = true;
     private int edgeChanged;
     private ExtraKeySetController controller;
@@ -57,7 +57,7 @@ public class ExtraKeySetControllerTest {
         bar.setRowMetrics(100, 1f);
         edge = new ExtraKeysPageView(activity, null);
         controller = new ExtraKeySetController(new ExtraKeySetController.Host() {
-            @NonNull @Override public PaneWallPage settledPlace() { return place; }
+            @NonNull @Override public PageKind settledPlace() { return place; }
             @Override public boolean homeFloatFocused() { return false; }
             @Override public boolean homeFloatIsDisplay() { return false; }
             @Nullable @Override public String rawLine(@NonNull String key) { return lines.get(key); }
@@ -101,7 +101,7 @@ public class ExtraKeySetControllerTest {
     public void aTargetChangeClearsArmedModifiers() {
         controller.refresh(false);
         modifiers.tap(SpecialButton.CTRL);
-        place = PaneWallPage.ASSISTANT;
+        place = PageKind.ASSISTANT;
         controller.refresh(false);
         assertEquals(ExtraKeyModifiers.State.OFF, modifiers.state(SpecialButton.CTRL));
     }
@@ -111,18 +111,18 @@ public class ExtraKeySetControllerTest {
         controller.refresh(true);
         layout();
         ExtraKeysPageView front = bar.keyPage(0);
-        place = PaneWallPage.ASSISTANT;
+        place = PageKind.ASSISTANT;
         controller.refresh(true);
         assertEquals(Transition.MORPH, controller.lastTransition());
         assertSame(front, bar.keyPage(0));
 
-        place = PaneWallPage.TERMINAL;
+        place = PageKind.TERMINAL;
         shown = false;
         controller.refresh(true);
         assertEquals(Transition.SWAP, controller.lastTransition());
 
         shown = true;
-        place = PaneWallPage.ASSISTANT;
+        place = PageKind.ASSISTANT;
         controller.refresh(false);
         assertEquals(Transition.SWAP, controller.lastTransition());
 

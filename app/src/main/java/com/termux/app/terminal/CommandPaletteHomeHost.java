@@ -17,8 +17,8 @@ public interface CommandPaletteHomeHost {
     /** Opens a Home float on the Home page in view. */
     default void openTerminalHere() { }
 
-    /** Slides the wall to the Workspace. */
-    default void goToWorkspace() { }
+    /** Slides the wall to the Terminal. */
+    default void goToTerminal() { }
 
     /** Minimises every Home float into its chip. */
     default void minimiseAllFloats() { }

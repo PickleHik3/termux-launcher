@@ -2,6 +2,8 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 
+import com.termux.app.page.Rest;
+import com.termux.app.terminal.TerminalRest;
 import com.termux.app.wall.PageRef;
 
 import org.junit.Test;
@@ -48,6 +50,20 @@ public class TerminalRestParityTest {
     public void theTerminalsRestWithItsKeyboardDownIsTheRoomItsLandingLaysOut() {
         assertRestIsTheLanding(false, false);
         assertRestIsTheLanding(false, true);
+    }
+
+    @Test
+    public void theTerminalRestsRoomIsTheRoomItsLandingLaysOut() {
+        for (boolean up : new boolean[] {true, false}) {
+            for (boolean floating : new boolean[] {false, true}) {
+                Rest rest = TerminalRest.of(new Rest.Inputs.Builder()
+                    .keyboardRemembered(up).build());
+                assertEquals(f + ", up=" + up + ", floating=" + floating,
+                    f.settle(PageRef.TERMINAL, up, floating).contentReservationPx,
+                    TerminalRest.roomPx(rest,
+                        f.rest(PageRef.HOME, PageRef.TERMINAL, up, floating)));
+            }
+        }
     }
 
     @Test

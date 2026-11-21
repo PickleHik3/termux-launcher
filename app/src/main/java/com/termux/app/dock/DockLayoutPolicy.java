@@ -497,11 +497,18 @@ public final class DockLayoutPolicy {
         // a small gap over its top edge. The band is still the row's, so the stack, the pager and
         // the strip are sized exactly as before; only the glass starts lower (slabTopInsetPx).
         boolean dashesAboveSlab = dashesAboveSlab(in);
+        // The slab starts the capsules' own air (PageTickStrip.SURFACE_AIR_DP) below them, not flush
+        // under the strip's band, where the band's thin air under the capsules crowded its edge.
+        // The air is the foot of the strip's own band, so everything that reads the band reads it.
+        int surfaceAirPx = dashesAboveSlab
+            ? PageTickStrip.surfaceExtraPx(stripBandPx, density) : 0;
+        stripBandPx += surfaceAirPx;
         if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx;
         out.surface = in.surface;
         out.slabTopInsetPx = dashesAboveSlab && in.preferencesAvailable && in.appsRowEnabledPref
             ? stripBandPx : 0;
         out.appsRowStripBandPx = stripBandPx;
+        out.appsRowStripAirPx = surfaceAirPx;
         out.appsTopPaddingPx = airPx;
         out.appsBottomPaddingPx = airPx;
         out.appsRowTickSideAirPx = tickSideAirPx;
@@ -688,7 +695,7 @@ public final class DockLayoutPolicy {
      * off the resolved bottom stack ({@code EdgeStackPolicy.stack(layout, BOTTOM)}): no band
      * beside it on the sheet but the extra keys.
      *
-     * <p>The extra keys do not count. They are the Workspace's own and fold in and out with the
+     * <p>The extra keys do not count. They are the Terminal's own and fold in and out with the
      * swipe (ADR 0009), so counting them made the row a shared one on one half and a lone one on
      * the other, and its icons shrank as the keys folded in. The row keeps the band it has
      * without them — the same icon and the same air — and the dock grows by the keys' row

@@ -57,6 +57,16 @@ public final class DisplayKeyboardRoute {
     }
 
     /**
+     * Whether the drawer's search raise makes the keyboard the drawer's, to put down again on the
+     * close. Only a keyboard that was down both when the drawer was pulled and when the search
+     * asked: one already up at the pull (the Terminal's, as when the palette opens the drawer) is
+     * not the drawer's, even if it reads as down for a moment when the search asks.
+     */
+    public static boolean drawerOwnsRaise(boolean upWhenSearchAsked, boolean upAtDrawerPull) {
+        return !upWhenSearchAsked && !upAtDrawerPull;
+    }
+
+    /**
      * Whether the drawer closing puts back down the keyboard its search raised. Only one it raised
      * itself, that the user has not claimed since (by pinning or hiding it by hand), and that is
      * still up: a keyboard that was there first, or that the user took over, is theirs to close.

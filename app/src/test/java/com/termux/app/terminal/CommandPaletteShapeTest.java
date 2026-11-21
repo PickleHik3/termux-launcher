@@ -1,6 +1,8 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -33,5 +35,13 @@ public class CommandPaletteShapeTest {
         assertEquals(28f, CommandPaletteShape.radiusPx(6f, 40f, 1f, 56f), 1e-4f);
         assertEquals(0f, CommandPaletteShape.radiusPx(6f, 40f, 1f, -3f), 0f);
         assertEquals(10f, CommandPaletteShape.radiusPx(6f, 10f, 1f, 56f), 1e-4f);
+    }
+
+    @Test public void openingTheAppDrawerDropsThePaletteInPlace() {
+        assertTrue(CommandPaletteShape.dismissesInPlace(
+            TerminalActionDispatcher.TOOL_APP_OPEN_APP_DRAWER));
+        assertFalse(CommandPaletteShape.dismissesInPlace(
+            TerminalActionDispatcher.TOOL_APP_OPEN_DRAWER));
+        assertFalse(CommandPaletteShape.dismissesInPlace(null));
     }
 }

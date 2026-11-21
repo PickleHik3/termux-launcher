@@ -179,6 +179,9 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
   A Home float opens from `ad long 540 1000` (a free cell) then the Terminal row of the Home actions
   sheet that slides up (`ad tap Terminal`; the sheet's rows are real nodes, unlike the old menu); on a
   full-size float Close is about 1006,283 and Minimise about 796,283.
+  A float's bottom-right 28 dp is its resize grip: a page swipe that starts there resizes the float
+  instead (with the keyboard up the grip rises to about y 1500 on pong). Start page swipes clear of
+  any float, or with the keyboard down.
 - The Terminal entry's menu is a long press at 76,2190 on the dock (New float here / New window).
   The dock's edit sheet is a long press at 540,2180; the Terminal entry is under MOST USED there.
 - The Appearance editor on a named card without the corner tab (the Layout-mode intent
@@ -200,7 +203,7 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
 - Ctrl+Alt+F over adb needs a prior tap on the terminal for focus.
 - Home's corner tab: long press at 1040,175 on the free page; its plus (804,198) adds a page, and a
   long press on an empty cell then offers Remove page.
-- The sessions drawer opens from the list key at 990,1700 in the Workspace's key row (the grid key
+- The sessions drawer opens from the list key at 990,1700 in the Terminal's key row (the grid key
   at 810,1700 opens a split). In the drawer: the chevron at 102,542 expands a session, Home at
   118,1245, the session's Float row under it.
 - The display's controls appear from a long press at 1030,262 on the display window; power at 604,285.
@@ -224,7 +227,7 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
   Unpin (the gesture took the screen corner as its origin); a pin that vanishes on a long press is
   that bug, not the store.
 - A blind end-user review: `ad codex "<goal>" -c model_reasoning_effort=medium`, one area per run
-  (Home, Workspace, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
+  (Home, Terminal, floats, Settings), 6–35 min each; the goal text and answers of the 2026-10-18
   run are in the session scratchpad `codex-review/` and under ~/reports/wall-rework-2026-10-18/blind/.
 
 ## Wall rework phase two (feat/wall-rework-phase2, 2026-10-18)
@@ -235,7 +238,7 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
 - The corner long-press toolbar hangs off the page's corner, not the screen's. On a window it is
   the window's (Appearance, minimal, tiling, settings, help); on Home it is Home's (pencil, plus,
   palette, help), whose palette is the button described "Appearance" and opens the Overview. A
-  window's corner moves in with the Workspace's Margin. Home's page reaches the screen's edges
+  window's corner moves in with the Terminal's Margin. Home's page reaches the screen's edges
   since 9980f4a6d, so its corner squares sit at the screen's corners whatever the Margin.
 - A Home float drawn over most of a Home page looks like a window. Which toolbar a corner hold
   brings out (above) tells them apart.
@@ -435,13 +438,13 @@ a Linux app.
   (`su -c cat /data/data/com.termux/shared_prefs/com.termux_preferences.xml`), a Java thread dump
   (`su -c 'kill -3 <pid>'`, then `/data/anr/trace_00`) and `simpleperf record -p <pid> --duration N`
   all work on the release build, which is not debuggable (no `run-as`, no `ad runas`).
-- The dock glyphs are page tabs, laid out per page: on the Workspace the house at 870,1710 goes to
-  Home; on Home the terminal glyph at 500,1700 goes back to the Workspace (1203,1710 is empty there). A border drag along the pane's bottom edge (y≈1685) did not cross, and a horizontal
+- The dock glyphs are page tabs, laid out per page: on the Terminal the house at 870,1710 goes to
+  Home; on Home the terminal glyph at 500,1700 goes back to the Terminal (1203,1710 is empty there). A border drag along the pane's bottom edge (y≈1685) did not cross, and a horizontal
   `input swipe` on Home's free area at y=1500 pulled the notification shade instead.
 - `ad -s surface frames` and `record` refuse with "no lease on 100.68.34.42_5555" while the lease
   on `surface` is held: run `screenrecord` through `ad shell` and `adb pull` the file instead.
 - The developer's own terminal (claude under herdr) is usually in front: never type into it, and
-  leave the Workspace page in front when done.
+  leave the Terminal page in front when done.
 - RenderScript has no GPU driver here: `ScriptIntrinsicBlur` runs in `libRSCpuRef.so` on an
   8-thread pool whose threads inherit the submitter's name (`wallpaper-blur`), so nine
   `wallpaper-blur` threads are one worker plus the pool, not nine executors.
@@ -470,7 +473,7 @@ a Linux app.
   replacement (an unescaped `&` is sed's "the match"): check the file after the edit, because a
   corrupt prefs file is reset silently, pins and all, and brings back the "Use as your home
   screen?" sheet (Skip at about 613,2254; Back does not dismiss it). Edit after `ad stop
-  com.termux`, writing to a temp file and `cat`-ing it back. The Workspace's is
+  com.termux`, writing to a temp file and `cat`-ing it back. The Terminal's is
   `layout.dock_design`. `app_launcher_dock_style` is `docked` or `floating`, absent by default.
   The home app is set with `adb shell cmd package set-home-activity <component>`. Beads are faint at rest: judge them from a zoomed crop. With the
   keyboard up on Home under Beads the icons stand on bare wallpaper, no bead and no slab (the

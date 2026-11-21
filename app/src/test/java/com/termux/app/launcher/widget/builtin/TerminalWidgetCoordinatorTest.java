@@ -112,7 +112,7 @@ public class TerminalWidgetCoordinatorTest {
         TerminalSession running = shell();
         host.widgets.get(ID).putString(TerminalWidgetPolicy.KEY_SHELL, running.mHandle);
         assertTrue("named by its record, no widget on screen", coordinator.isWidgetShell(running));
-        assertFalse("a Workspace shell", coordinator.isWidgetShell(shell()));
+        assertFalse("a Terminal shell", coordinator.isWidgetShell(shell()));
         assertFalse(coordinator.isWidgetShell(null));
     }
 

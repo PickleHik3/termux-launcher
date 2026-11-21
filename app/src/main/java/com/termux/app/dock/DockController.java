@@ -25,6 +25,7 @@ import com.termux.app.DockSurfaceHostLayout;
 import com.termux.R;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.chrome.ChromeRenderer;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.LayoutVariant;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
@@ -33,7 +34,6 @@ import com.termux.app.place.ResolvedArrangement;
 import com.termux.app.place.SeamCrossing;
 import com.termux.app.place.layout.IconSize;
 import com.termux.app.wall.PageRef;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 /**
@@ -46,6 +46,9 @@ public final class DockController {
 
     /** What only the activity gives the dock. */
     public interface Host {
+        /** The bottom stack's one writer of transforms, which the plank's slab goes to. */
+        @NonNull com.termux.app.StackRenderer stackRenderer();
+
         // -------------------------------------------------------------- window and views
 
         /** The window's view of {@code id}, looked up afresh; null while it has none. */
@@ -127,19 +130,19 @@ public final class DockController {
         @Nullable PlaceLayoutStore placeLayoutStore();
         /** {@code page}'s resolved arrangement: its layout, Style, Dock design and toggles. */
         @NonNull ResolvedArrangement arrangementOf(@NonNull PageRef page);
-        @NonNull ResolvedArrangement arrangementOf(@NonNull PaneWallPage page);
+        @NonNull ResolvedArrangement arrangementOf(@NonNull PageKind page);
         /** The page {@code page} stands for in the arrangement (Home's page now, or the Terminal). */
-        @NonNull PageRef arrangedPageOf(@NonNull PaneWallPage page);
+        @NonNull PageRef arrangedPageOf(@NonNull PageKind page);
         /** The layout {@code page} wears. */
-        @NonNull LayoutVariant layoutOf(@NonNull PaneWallPage page);
+        @NonNull LayoutVariant layoutOf(@NonNull PageKind page);
         /** The arrangement store's revision. */
         int arrangementRevision();
         /** The icon size as it draws, capped by what the pinned apps fit at. */
         @NonNull IconSize drawnIconSize(@NonNull PlaceLayoutStore store);
         /** The page the chrome is committed to. */
-        @NonNull PaneWallPage lastWallPage();
+        @NonNull PageKind lastWallPage();
         /** The half whose rows the stack stands now. */
-        @NonNull PaneWallPage stackDressPage();
+        @NonNull PageKind stackDressPage();
         /** Whether the committed page's dock carries the Search field. */
         boolean committedSearchField();
         /** Whether the slab carries the field at rest. */
@@ -151,7 +154,7 @@ public final class DockController {
         float appliedPromptFieldReveal();
         float appliedWallStripReveal();
         /** The page whose half's rows the Drawer tile was last laid out for; null before one. */
-        @Nullable PaneWallPage drawerTileRowsPage();
+        @Nullable PageKind drawerTileRowsPage();
         /** Whether the status bar is compact, and the edge it stands on. */
         boolean isStatusBarCompact();
         @NonNull PlaceLayout.Edge statusBarEdge();
@@ -230,8 +233,8 @@ public final class DockController {
         /** The crossing's seam, which answers the committed and travelling designs mid-slide. */
         @NonNull SeamCrossing seam();
         /** The page a pictured dip dressed the slab for on its first frame; null otherwise. */
-        @Nullable PaneWallPage dockDesignTravelledTo();
-        void setDockDesignTravelledTo(@Nullable PaneWallPage page);
+        @Nullable PageKind dockDesignTravelledTo();
+        void setDockDesignTravelledTo(@Nullable PageKind page);
 
         // -------------------------------------------------------------- callbacks into the activity
 
@@ -248,7 +251,7 @@ public final class DockController {
         boolean updateAppLauncherBarHeight();
         /** The dock and geometry pass; whether the dock moved. */
         boolean setTerminalToolbarHeight(boolean requestTerminalResize);
-        /** The Wall strip's row takes the Workspace's windows. */
+        /** The Wall strip's row takes the Terminal's windows. */
         void syncWallStripFeed();
         /** {@code viewId}'s bottom margin set; whether it moved. */
         boolean updateViewBottomMargin(int viewId, int marginBottom);
@@ -319,6 +322,11 @@ public final class DockController {
     }
 
     /** Cuts {@code surface} (the dock's host or the strip under the pill) to the dock's shape. */
+    /** The slab's cut over the glass host, as last cut; see {@link DockSurface#slabCut}. */
+    public void slabCut(@NonNull View host, @NonNull float[] out) {
+        mSurface.slabCut(host, out);
+    }
+
     public void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                       boolean ownsInnerEdge, boolean innerRim) {
         mSurface.applyDockSurfaceShape(surface, capsule, surfaceHeightPx, ownsInnerEdge, innerRim);
@@ -395,6 +403,22 @@ public final class DockController {
             heightPx, pieces, layout);
     }
 
+    /** A look-only crossing begins: the tiles' glyphs drift between the inks of the two pages' faces. */
+    public void beginTilesInkBlend(int faceFrom, int faceTo, double target) {
+        SuggestionBarView row = mHost.dockRow();
+        if (row != null) row.beginTileInkBlend(faceFrom, faceTo, target);
+    }
+
+    public void tilesInkBlend(float share) {
+        SuggestionBarView row = mHost.dockRow();
+        if (row != null) row.setTileInkBlend(share);
+    }
+
+    public void endTilesInkBlend() {
+        SuggestionBarView row = mHost.dockRow();
+        if (row != null) row.endTileInkBlend();
+    }
+
     /** The row's own tiles' glyphs on the dock's face at {@code dockOpacity}. */
     public void syncDockTilesInk(float dockOpacity) {
         mSurface.syncDockTilesInk(dockOpacity);
@@ -420,13 +444,13 @@ public final class DockController {
     /** One snapshot of both halves for the dock's geometry, rows standing for {@code rowsPage}. */
     @NonNull
     public DockGeometry.Snapshot dockSnapshot(@NonNull PlaceLayout arrangement,
-                                              @NonNull PaneWallPage rowsPage) {
+                                              @NonNull PageKind rowsPage) {
         return mDress.dockSnapshot(arrangement, rowsPage);
     }
 
     /** {@code page}'s half, memoised while its facts stand. */
     @NonNull
-    public DockGeometry.Half dockHalf(@NonNull PaneWallPage page,
+    public DockGeometry.Half dockHalf(@NonNull PageKind page,
                                       @NonNull PlaceOrientation orientation,
                                       @NonNull PlaceLayout fallbackLayout) {
         return mDress.dockHalf(page, orientation, fallbackLayout);
@@ -452,7 +476,7 @@ public final class DockController {
 
     /** The Dock design {@code page}'s slab wears (WornDockDesign). */
     @NonNull
-    public DockStyle wornDockDesign(@NonNull PaneWallPage page) {
+    public DockStyle wornDockDesign(@NonNull PageKind page) {
         return mDress.wornDockDesign(page);
     }
 
@@ -473,8 +497,8 @@ public final class DockController {
     }
 
     /** A settle from {@code from} to {@code to} that changes the dock's dress re-dresses it. */
-    public void restyleDockSurfaceForPageIfChanged(@NonNull PaneWallPage from,
-                                                   @NonNull PaneWallPage to) {
+    public void restyleDockSurfaceForPageIfChanged(@NonNull PageKind from,
+                                                   @NonNull PageKind to) {
         mDress.restyleDockSurfaceForPageIfChanged(from, to);
     }
 
@@ -516,7 +540,7 @@ public final class DockController {
 
     /** The store pinned to the layout {@code page}'s dock is dressed by. */
     @Nullable
-    public PlaceLayoutStore dockStoreOf(@NonNull PaneWallPage page) {
+    public PlaceLayoutStore dockStoreOf(@NonNull PageKind page) {
         return mDress.dockStoreOf(page);
     }
 
@@ -584,7 +608,7 @@ public final class DockController {
     // ------------------------------------------------------------------ Lens beads
     //
     // Lens beads (DockSurfaceSpec.LENS_BEADS), on whichever half's dock wears the design (#93;
-    // under the Workspace's extra keys or a keyboard sharing the glass the row keeps the slab,
+    // under the Terminal's extra keys or a keyboard sharing the glass the row keeps the slab,
     // LensBeadGeometry.rowWearsBeads): the dock's one glass host draws a round
     // bead under each icon instead of its slab. The host clips everything in it to the beads
     // (DockSurfaceHostLayout), the dock's one glass program draws every bead's rim, shelf and
@@ -765,7 +789,7 @@ public final class DockController {
 
     /**
      * Watches the host and the row for layout while the dock's style draws beads, and lets go
-     * of them otherwise, so the Glass tray and the Workspace's dock carry no listener of this.
+     * of them otherwise, so the Glass tray and the Terminal's dock carry no listener of this.
      */
     public void syncDockBeadsListeners() {
         boolean beads = dockBeadsWanted();
@@ -821,39 +845,6 @@ public final class DockController {
         if (wereBeads != (mDockBeads != null) && mHost.chrome() != null)
             mHost.chrome().requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
                 | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-    }
-
-    /**
-     * One frame of a crossing's morph under Lens beads: each bead worked out from its icon's
-     * drawn box (SuggestionBarView#drawnIconBoxes) by the rule the beads at rest follow theirs
-     * (LensBeadGeometry.drawnAt), on the surface the last full read found, so bead and icon
-     * never part. The host, the shelf and the dock's effect once, as a swipe's frame does; at
-     * rest and off beads nothing runs past the first check.
-     */
-    public void syncDockBeadsWithMorph() {
-        com.termux.app.dock.LensBeadGeometry.Beads rest = mDockBeads;
-        SuggestionBarView row = mHost.dockRow();
-        if (rest == null || row == null || Float.isNaN(mDockBeadsRowDy)
-            || Float.isNaN(mDockBeadsBottomPx)) return;
-        View host = mHost.hotView(R.id.accessory_surface_host);
-        if (!(host instanceof DockSurfaceHostLayout) || host.getWidth() <= 0) return;
-        int count = row.drawnIconBoxes(mDockBeadBoxes);
-        if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return;
-        for (int i = 0; i < count; i++) {
-            mDockBeadBoxes[i * 4] += mDockBeadsRowDx;
-            mDockBeadBoxes[i * 4 + 1] += mDockBeadsRowDy;
-            mDockBeadBoxes[i * 4 + 2] += mDockBeadsRowDx;
-            mDockBeadBoxes[i * 4 + 3] += mDockBeadsRowDy;
-        }
-        com.termux.app.dock.LensBeadGeometry.Beads drawn =
-            com.termux.app.dock.LensBeadGeometry.drawnAt(rest, mDockBeadBoxes, count, 0f, 0f,
-                host.getWidth(), mDockBeadsBottomPx, mHost.density());
-        if (drawn.equals(rest)) return;
-        mDockBeads = drawn;
-        ((DockSurfaceHostLayout) host).setBeads(dockBeadsDrawn());
-        DockShelfView shelf = mHost.hotView(R.id.accessory_shelf_fx);
-        if (shelf != null && mHost.dockRows().shelfShown()) shelf.setBeads(dockBeadsShadowed());
-        mHost.rebuildBackdropGlassEffectForLens();
     }
 
     /**
@@ -913,8 +904,7 @@ public final class DockController {
         if (!com.termux.app.dock.LensBeadGeometry.rowWearsBeadsCuttingFrame(layout,
             mHost.stackStandsDownOnFrame(),
             mHost.keyboardSharesDockGlass())) return null;
-        // Where the row draws its icons: as laid out at rest, where a crossing's morph draws
-        // them mid-slide and through its landing (SuggestionBarView#drawnIconBoxes).
+        // Where the row draws its icons (SuggestionBarView#drawnIconBoxes).
         int count = row.drawnIconBoxes(mDockBeadBoxes);
         if (count <= 0 || count > com.termux.app.dock.LensBeadGeometry.MAX_BEADS) return null;
         float[] rowAt = layoutOffsetIn(row, container);
@@ -1095,7 +1085,9 @@ public final class DockController {
 
     /** Reactive glass-plank physics for the dock (tilt, specular, accent rim glow). */
     @Nullable private DockPlankController mDockPlankController;
-    @Nullable private View mDockPlankTarget;
+    /** The specular and glow views the plank was made with; a new tree makes a new plank. */
+    @Nullable private View mDockPlankSpecular;
+    @Nullable private View mDockPlankGlow;
     private boolean mDockPlankTouchInside = false;
     private float mDockPlankLeft = 0f;
     private float mDockPlankTop = 0f;
@@ -1136,7 +1128,7 @@ public final class DockController {
         }
         switch (ev.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                View plank = mDockPlankTarget;
+                View plank = mHost.stackRenderer().plankTargetView();
                 mDockPlankTouchInside = false;
                 if (plank == null || plank.getVisibility() != View.VISIBLE
                     || plank.getWidth() <= 0 || plank.getHeight() <= 0) {
@@ -1307,27 +1299,23 @@ public final class DockController {
 
     /** Lazily wires the reactive glass-plank controller to the inflated dock views. */
     public void setupDockPlankFx() {
-        View plank = mHost.findViewById(mHost.isInAppKeyboardShown()
-            ? R.id.accessory_surface_host : R.id.accessory_stack_container);
-        if (plank == null) {
+        if (mHost.findViewById(R.id.accessory_stack_container) == null) {
             return;
         }
-        if (mDockPlankController == null || mDockPlankTarget != plank) {
+        // The plank writes no transform of the stack's: it publishes its slab to the stack's
+        // renderer, which tilts the container (keyboard down) or the glass host (keyboard up),
+        // hands the rows standing on it the same slab, and composes it with the crossing's
+        // translation. One controller for both, so its springs survive the keyboard's toggle.
+        View specular = mHost.findViewById(R.id.accessory_specular_fx);
+        View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
+        if (mDockPlankController == null || mDockPlankSpecular != specular
+            || mDockPlankGlow != glow) {
             if (mDockPlankController != null)
                 mDockPlankController.reset();
-            View specular = mHost.findViewById(R.id.accessory_specular_fx);
-            View glow = mHost.findViewById(R.id.accessory_edge_glow_fx);
-            mDockPlankController = new DockPlankController(plank, specular, glow);
-            mDockPlankTarget = plank;
+            mDockPlankController = new DockPlankController(mHost.stackRenderer(), specular, glow);
+            mDockPlankSpecular = specular;
+            mDockPlankGlow = glow;
         }
-        // Every row standing on the glass follows the same springs as the glass under it: the
-        // pinned-apps layer, the letters, and the band of air between them. The set is registered
-        // whole rather than one row at a time — a row left out is a row that reads as thrown off
-        // the surface the moment the dock is pushed.
-        mDockPlankController.setContentLayers(
-            mHost.findViewById(R.id.apps_bar_plank_layer),
-            mHost.findViewById(R.id.apps_bar_az_row),
-            mHost.findViewById(R.id.apps_bar_indicator_band));
         mDockPlankController.setReducedMotion(mHost.isReducedMotionEnabled());
     }
 
