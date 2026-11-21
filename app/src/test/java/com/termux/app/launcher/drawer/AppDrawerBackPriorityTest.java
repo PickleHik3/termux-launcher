@@ -127,6 +127,65 @@ public class AppDrawerBackPriorityTest {
         assertEquals(AppDrawerSection.APPS, content.getSection());
     }
 
+    /** Edit mode is Back's first rung: one press leaves it, the next closes the drawer. */
+    @Test public void backLeavesEditModeBeforeAnythingElse() {
+        content.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+        assertTrue(content.isEditing());
+
+        assertTrue(back());
+        assertFalse(content.isEditing());
+        assertTrue("leaving edit mode is what the press was spent on", controller.isOpen());
+
+        assertTrue(back());
+        assertFalse(controller.isOpen());
+    }
+
+    /** The search is inert while editing: typed text is swallowed, not queried, and the bar is dimmed. */
+    @Test public void searchIsInertWhileEditing() {
+        content.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+
+        assertTrue("the stroke is swallowed, not handed to the shell",
+            controller.getSearchController().handleCodePoint('a', false));
+        assertFalse(content.hasQuery());
+        content.onSearchPillTapped();
+        assertEquals("a tap on the bar asks for no keyboard", 0f, content.getRevealFraction(), 0f);
+        assertTrue(content.getSearchPill().getAlpha() < 1f);
+
+        content.leaveEdit(AppDrawerEditModel.Leave.TICK);
+        assertEquals(1f, content.getSearchPill().getAlpha(), 0f);
+        assertTrue(controller.getSearchController().handleCodePoint('a', false));
+        assertTrue(content.hasQuery());
+    }
+
+    @Test public void editModeDoesNotSurviveTheDrawerClosing() {
+        content.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+        content.setInteractive(false);
+        assertFalse(content.isEditing());
+    }
+
+    @Test public void aViewTypeChangeEndsEditModeButASectionChangeDoesNot() {
+        content.setViewType(AppDrawerViewType.DEFAULT);
+        content.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+        content.setSection(AppDrawerSection.CATEGORIES);
+        assertTrue("one session covers both sections", content.isEditing());
+
+        content.setViewType(AppDrawerViewType.HORIZONTAL);
+        assertFalse(content.isEditing());
+    }
+
+    @Test public void cellsInTheDrawerAreOutlinedWhileEditing() {
+        AppDrawerAppCellView cell = new AppDrawerAppCellView(content.getContext());
+        content.addView(cell);
+        assertFalse(cell.hasEditOutline());
+
+        content.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+        assertTrue(AppDrawerContentView.isEditingAround(cell));
+        assertTrue(cell.hasEditOutline());
+
+        content.leaveEdit(AppDrawerEditModel.Leave.BACK);
+        assertFalse(cell.hasEditOutline());
+    }
+
     private void assertBackWalksTheHierarchy() {
         expandFirstCategory();
         assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDED,

@@ -45,6 +45,18 @@ final class AppDrawerCornerTab {
 
         void openSettings();
 
+        /** The Edit button ran: enter edit mode. */
+        void enterEdit();
+
+        /** The tick ran: leave edit mode. */
+        void leaveEdit();
+
+        /** The grid-size button ran; {@code tab} is the tab's bounds in the content's coordinates. */
+        void openGridSize(@NonNull android.graphics.RectF tab);
+
+        /** The grid-size button's text: the size the drawer's grid has now. */
+        @NonNull String gridSizeText();
+
         /** Edit mode as the drawer holds it. */
         @NonNull AppDrawerEditModel editModel();
 
@@ -130,8 +142,9 @@ final class AppDrawerCornerTab {
                 mPressedAction = action;
                 return CONSUME;
             }
-            // A tap anywhere else, or a scroll started there, puts the tab away.
-            tab.dismiss();
+            // A tap anywhere else, or a scroll started there, puts the tab away; while the drawer
+            // is edited the tab is pinned open and stays.
+            if (!mHost.editModel().tabPinnedOpen()) tab.dismiss();
         }
         ViewGroup view = mHost.view();
         int count = mHost.chromeRects(mChromeRects) / 4;
@@ -206,8 +219,23 @@ final class AppDrawerCornerTab {
                         PaneControlsView.TINT_PRIMARY,
                         context.getString(R.string.pane_controls_open_settings)));
                     break;
+                case AppDrawerCornerTabButtons.EDIT:
+                    actions.add(PaneControlsView.Action.drawn(id,
+                        vectorMark(context, R.drawable.ic_drawer_corner_edit),
+                        PaneControlsView.TINT_PRIMARY,
+                        context.getString(R.string.app_drawer_corner_edit)));
+                    break;
+                case AppDrawerCornerTabButtons.GRID_SIZE:
+                    actions.add(PaneControlsView.Action.label(id, mHost.gridSizeText(),
+                        context.getString(R.string.app_drawer_corner_grid_size)));
+                    break;
+                case AppDrawerCornerTabButtons.TICK:
+                    actions.add(PaneControlsView.Action.drawn(id,
+                        com.termux.app.wall.WidgetPaneFrame::drawTickMark,
+                        PaneControlsView.TINT_PRIMARY,
+                        context.getString(R.string.app_drawer_corner_done)));
+                    break;
                 default:
-                    // Edit, grid size and tick get their drawn actions with edit mode.
                     break;
             }
         }
@@ -260,15 +288,54 @@ final class AppDrawerCornerTab {
         if (tab != null) return tab;
         ViewGroup view = mHost.view();
         tab = new PaneControlsView(view.getContext());
-        tab.setListener(id -> {
-            if (id != AppDrawerCornerTabButtons.SETTINGS) return;
-            dismiss();
-            mHost.openSettings();
-        });
+        tab.setListener(this::onAction);
         view.addView(tab, new android.widget.FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         mTab = tab;
         return tab;
+    }
+
+    private void onAction(int id) {
+        switch (id) {
+            case AppDrawerCornerTabButtons.SETTINGS:
+                dismiss();
+                mHost.openSettings();
+                break;
+            case AppDrawerCornerTabButtons.EDIT:
+                mHost.enterEdit();
+                break;
+            case AppDrawerCornerTabButtons.GRID_SIZE: {
+                PaneControlsView tab = mTab;
+                if (tab == null) break;
+                android.graphics.RectF bounds = new android.graphics.RectF();
+                tab.tabBounds(bounds);
+                mHost.openGridSize(bounds);
+                break;
+            }
+            case AppDrawerCornerTabButtons.TICK:
+                mHost.leaveEdit();
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * Edit mode began or ended: an out tab swaps its buttons to match, and a tab no longer pinned
+     * is put away. The grid-size text is re-read here, and again through {@link #refreshButtons}
+     * when the size changes.
+     */
+    void onEditModelChanged() {
+        PaneControlsView tab = mTab;
+        if (tab == null || !tab.isControlsShown()) return;
+        if (mHost.editModel().tabPinnedOpen()) applyButtons(tab);
+        else tab.dismiss();
+    }
+
+    /** The grid's size changed under an out tab: its grid-size button reads the new size. */
+    void refreshButtons() {
+        PaneControlsView tab = mTab;
+        if (tab != null && tab.isControlsShown()) applyButtons(tab);
     }
 
     /**

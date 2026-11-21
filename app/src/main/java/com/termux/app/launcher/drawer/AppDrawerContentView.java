@@ -42,6 +42,7 @@ import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryAssignmentSource;
+import com.termux.app.launcher.data.LauncherCategoryOrderStore;
 import com.termux.app.launcher.data.LauncherCategoryOverrideStore;
 import com.termux.app.launcher.data.LauncherUsageStatsStore;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -128,7 +129,27 @@ public final class AppDrawerContentView extends FrameLayout
         default void onCornerSettingsRequested() {
         }
 
+        /** The stop the stored column count stands on, in {@link AppDrawerGridChoices#COLUMN_VALUES}. */
+        default int gridColumnIndex() {
+            return 0;
+        }
+
+        /** The stop the stored row count stands on, in {@link AppDrawerGridChoices#ROW_VALUES}. */
+        default int gridRowIndex() {
+            return 0;
+        }
+
+        /**
+         * The grid-size wheels moved to these stops; {@code rowIndex} is -1 where the type has no
+         * rows to choose. The same preferences the Drawer layout page writes.
+         */
+        default void onGridSizeChosen(int columnIndex, int rowIndex) {
+        }
+
     }
+
+    /** The search bar's alpha while the drawer is edited: still there, plainly not for typing. */
+    private static final float SEARCH_DIMMED_ALPHA = 0.38f;
 
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
     public static final float OVERPULL_MAX_DP = 96f;
@@ -207,7 +228,23 @@ public final class AppDrawerContentView extends FrameLayout
             }
 
             @NonNull @Override public AppDrawerEditModel editModel() {
-                return AppDrawerEditModel.OFF;
+                return mEditModel;
+            }
+
+            @Override public void enterEdit() {
+                AppDrawerContentView.this.enterEdit(AppDrawerEditModel.Entry.CORNER_BUTTON);
+            }
+
+            @Override public void leaveEdit() {
+                AppDrawerContentView.this.leaveEdit(AppDrawerEditModel.Leave.TICK);
+            }
+
+            @Override public void openGridSize(@NonNull android.graphics.RectF tab) {
+                showGridSizePopup(tab);
+            }
+
+            @NonNull @Override public String gridSizeText() {
+                return gridSizeTabText();
             }
 
             @NonNull @Override public AppDrawerViewType viewType() {
@@ -235,6 +272,9 @@ public final class AppDrawerContentView extends FrameLayout
                 return holdTabGlass(wanted);
             }
         });
+    @Nullable private com.termux.app.launcher.widget.WidgetGridSizePopup mGridSizePopup;
+    /** Edit mode, owned here: one value for the whole drawer, never stored. */
+    @NonNull private AppDrawerEditModel mEditModel = AppDrawerEditModel.OFF;
     private float mCardCornerRadiusPx;
     /** The corner tab is holding the card's glass; the switch may not be. */
     private boolean mTabGlassWanted;
@@ -346,6 +386,20 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mGestureDragEligible;
     @Nullable private String mGestureDragStableId;
     @Nullable private AppDrawerDragPolicy mDragPolicy;
+    /** What a finger does while the drawer is edited; decided at the down, read by the pager. */
+    private final AppDrawerEditGesturePolicy mEditGesture = new AppDrawerEditGesturePolicy();
+    /** The folder cell a still-undecided edit gesture started on: a tap opens it, a move lifts it. */
+    @Nullable private View mEditFolderCell;
+    @Nullable private PinnedFolderItem mEditFolder;
+    private float mEditDownX;
+    private float mEditDownY;
+    private long mEditDownTime;
+    private final Runnable mEditFolderHold = this::onEditFolderHold;
+    /** A Categories tile is lifted and this view owns the rest of the stream. */
+    private boolean mTileLiftActive;
+    private float mLastTouchX;
+    private float mLastTouchY;
+    @NonNull private final LauncherCategoryOrderStore mCategoryOrderStore;
     private int mDragEdgeDirection;
     private boolean mDragEdgeConsumed;
     private float mDragAutoscrollVelocity;
@@ -406,6 +460,7 @@ public final class AppDrawerContentView extends FrameLayout
         });
         mUsageStats = LauncherUsageStatsStore.getInstance(context);
         mCategoryOverrides = new LauncherCategoryOverrideStore(context);
+        mCategoryOrderStore = new LauncherCategoryOrderStore(context);
         mCategoryAssignments = new LauncherCategoryAssignmentSource(mCategoryOverrides);
         mCategoryClassifier = new AppDrawerCategoryClassifier(loadCuratedMap(context.getResources()),
             mCategoryAssignments);
@@ -904,6 +959,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
+            leaveEdit(AppDrawerEditModel.Leave.DRAWER_CLOSED);
             mCornerTab.reset();
             // The drawer is closing, not torn down: what it shows stays until it is gone
             // (resetDrawerFx), or Back blanks the card to "Nothing here yet" for the whole close.
@@ -1219,7 +1275,9 @@ public final class AppDrawerContentView extends FrameLayout
                                   @NonNull AppDrawerSection section) {
         dismissContextPopups();
         cancelCellLongPresses();
-        mCornerTab.reset();
+        setEditModel(mEditModel.onViewTypeChanged(mViewType, viewType));
+        // Default's sections share one edit session: the pinned tab stays across the swap.
+        if (!mEditModel.isEditing()) mCornerTab.reset();
         stopPresentationMotion();
         // Default's Apps page keeps the Categories tiles bound beside it; leaving them bound under
         // another type would hold their previews for nothing.
@@ -1244,6 +1302,7 @@ public final class AppDrawerContentView extends FrameLayout
         mSection = section;
         applyViewType();
         submitVisibleResults(true);
+        mCornerTab.refreshButtons();
     }
 
     /**
@@ -1514,9 +1573,29 @@ public final class AppDrawerContentView extends FrameLayout
         return labelRes == null ? null : getResources().getString(labelRes);
     }
 
+    /** The buckets in the user's tile order; nothing stored leaves them as they came. */
+    @NonNull
+    private List<AppDrawerCategoryBucket> orderedByUser(@NonNull List<AppDrawerCategoryBucket> in) {
+        List<String> stored = mCategoryOrderStore.read();
+        if (stored.isEmpty() || in.size() < 2) return in;
+        List<AppDrawerCategory> present = new ArrayList<>(in.size());
+        for (AppDrawerCategoryBucket bucket : in) present.add(bucket.category);
+        List<AppDrawerCategory> ordered = new AppDrawerCategoryOrder(stored).apply(present);
+        List<AppDrawerCategoryBucket> out = new ArrayList<>(in.size());
+        for (AppDrawerCategory category : ordered) {
+            for (AppDrawerCategoryBucket bucket : in) {
+                if (bucket.category == category) {
+                    out.add(bucket);
+                    break;
+                }
+            }
+        }
+        return Collections.unmodifiableList(out);
+    }
+
     /** One write path for the buckets, so the search rows' category index can never go stale. */
     private void setCategoryBuckets(@NonNull List<AppDrawerCategoryBucket> buckets) {
-        mCategoryBuckets = buckets;
+        mCategoryBuckets = orderedByUser(buckets);
         mCategoryLabelIds.clear();
         for (AppDrawerCategoryBucket bucket : buckets) {
             // Synthetic buckets (Suggestions, Recently Added) duplicate apps that also live in a
@@ -1716,10 +1795,133 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** One internal hierarchy; one press performs at most one action. */
     public boolean handleBackInDrawer() {
-        // The corner tab is the top-most thing on the card, so the press goes to it first.
-        if (mCornerTab.dismiss()) return true;
+        boolean editing = mEditModel.isEditing();
+        // The corner tab is the top-most thing on the card, so the press goes to it first; while
+        // editing it is pinned open and the first rung is leaving edit mode instead.
+        if (!editing && mCornerTab.dismiss()) return true;
+        boolean expanded = categoryTilesShown()
+            && mCategoryView.expansionState() != AppDrawerCategoryExpansionModel.State.OVERVIEW;
+        if (AppDrawerEditModel.backStep(true, editing, hasQuery(), expanded)
+            == AppDrawerEditModel.BackStep.LEAVE_EDIT) {
+            leaveEdit(AppDrawerEditModel.Leave.BACK);
+            return true;
+        }
         if (clearQueryIfPresent()) return true;
         return collapseCategoryIfNeeded();
+    }
+
+    // ------------------------------------------------------------------ edit mode
+
+    public boolean isEditing() {
+        return mEditModel.isEditing();
+    }
+
+    /** Enters edit mode; the corner tab swaps to the editing buttons and stays open. */
+    public void enterEdit(@NonNull AppDrawerEditModel.Entry entry) {
+        setEditModel(AppDrawerEditModel.enter(entry));
+    }
+
+    public void leaveEdit(@NonNull AppDrawerEditModel.Leave reason) {
+        setEditModel(mEditModel.leave(reason));
+    }
+
+    /** Applies what the model says to the views, once per change. */
+    private void setEditModel(@NonNull AppDrawerEditModel next) {
+        AppDrawerEditModel previous = mEditModel;
+        if (previous == next) return;
+        mEditModel = next;
+        if (!next.isEditing()) {
+            dismissGridSizePopup();
+            mTileLiftActive = false;
+            mCategoryView.cancelReorder();
+            removeCallbacks(mEditFolderHold);
+            mEditFolderCell = null;
+            mEditFolder = null;
+        } else {
+            // Tiles reorder only on the overview: an open category closes as editing starts.
+            mCategoryView.collapseIfNeeded();
+        }
+        AppDrawerSearchController search = mSearch;
+        if (search != null) search.setInputEnabled(next.searchEnabled());
+        mPill.setAlpha(next.searchDimmed() ? SEARCH_DIMMED_ALPHA : 1f);
+        applyEditOutlines(this, next.outlinesVisible());
+        mCornerTab.onEditModelChanged();
+    }
+
+    @NonNull
+    private String[] gridLabels(@NonNull String[] values) {
+        String[] labels = new String[values.length];
+        for (int i = 0; i < values.length; i++) {
+            labels[i] = AppDrawerGridChoices.AUTO.equals(values[i])
+                ? getResources().getString(com.termux.R.string.settings_drawer_grid_auto) : values[i];
+        }
+        return labels;
+    }
+
+    /** The grid-size button's text: columns, and rows where the type has them. */
+    @NonNull
+    private String gridSizeTabText() {
+        Callbacks callbacks = mCallbacks;
+        String[] columnLabels = gridLabels(AppDrawerGridChoices.COLUMN_VALUES);
+        int column = callbacks == null ? 0 : callbacks.gridColumnIndex();
+        String columns = columnLabels[Math.max(0, Math.min(columnLabels.length - 1, column))];
+        if (!AppDrawerGridChoices.showsRows(mViewType)) return columns;
+        String[] rowLabels = gridLabels(AppDrawerGridChoices.ROW_VALUES);
+        int row = callbacks == null ? 0 : callbacks.gridRowIndex();
+        String rows = rowLabels[Math.max(0, Math.min(rowLabels.length - 1, row))];
+        return getResources().getString(com.termux.R.string.app_drawer_corner_grid_size_tab,
+            columns, rows);
+    }
+
+    /** The wheels, hanging off the tab; each stop writes the preferences and the grid re-lays. */
+    private void showGridSizePopup(@NonNull android.graphics.RectF tab) {
+        dismissGridSizePopup();
+        Callbacks callbacks = mCallbacks;
+        if (callbacks == null) return;
+        boolean rows = AppDrawerGridChoices.showsRows(mViewType);
+        mGridSizePopup = com.termux.app.launcher.widget.WidgetGridSizePopup.show(this, tab,
+            com.termux.app.launcher.widget.WidgetGridSizePopup.WheelSpec.choices(
+                gridLabels(AppDrawerGridChoices.COLUMN_VALUES), callbacks.gridColumnIndex()),
+            rows ? com.termux.app.launcher.widget.WidgetGridSizePopup.WheelSpec.choices(
+                gridLabels(AppDrawerGridChoices.ROW_VALUES), callbacks.gridRowIndex()) : null,
+            (columnIndex, rowIndex) -> {
+                Callbacks current = mCallbacks;
+                if (current == null) return;
+                current.onGridSizeChosen(columnIndex, rows ? rowIndex : -1);
+                mCornerTab.refreshButtons();
+            });
+    }
+
+    private void dismissGridSizePopup() {
+        if (mGridSizePopup != null) {
+            mGridSizePopup.dismiss();
+            mGridSizePopup = null;
+        }
+    }
+
+    /** One pass over the attached cells and tiles; recycled ones read the state when they attach. */
+    private static void applyEditOutlines(@NonNull ViewGroup group, boolean on) {
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child instanceof AppDrawerAppCellView) {
+                ((AppDrawerAppCellView) child).setEditOutline(on);
+            } else if (child instanceof AppDrawerCategoryTileView) {
+                ((AppDrawerCategoryTileView) child).setEditOutline(on);
+            } else if (child instanceof ViewGroup) {
+                applyEditOutlines((ViewGroup) child, on);
+            }
+        }
+    }
+
+    /** True while the drawer {@code view} sits in is being edited; read at a tap, never per frame. */
+    static boolean isEditingAround(@NonNull View view) {
+        for (android.view.ViewParent parent = view.getParent(); parent != null;
+             parent = parent.getParent()) {
+            if (parent instanceof AppDrawerContentView) {
+                return ((AppDrawerContentView) parent).mEditModel.isEditing();
+            }
+        }
+        return false;
     }
 
     /**
@@ -2216,11 +2418,13 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public void onSearchPillClear() {
+        if (!mEditModel.searchEnabled()) return;
         clearQueryIfPresent();
     }
 
     @Override
     public void onSearchPillTapped() {
+        if (!mEditModel.searchEnabled()) return;
         requestSearchKeyboard();
     }
 
@@ -2332,6 +2536,7 @@ public final class AppDrawerContentView extends FrameLayout
         boolean terminal = terminalAction == MotionEvent.ACTION_UP
             || terminalAction == MotionEvent.ACTION_CANCEL;
         try {
+            if (mTileLiftActive && !mCancellingContent) return handleTileLiftTouch(ev);
             if (!mCancellingContent && mCornerTab.filter(ev) == AppDrawerCornerTab.CONSUME) {
                 return true;
             }
@@ -2389,6 +2594,9 @@ public final class AppDrawerContentView extends FrameLayout
         // scroll from inside this dispatch, and that end has to know it is a cancellation rather
         // than a release, or a stream taken away by another window would report as a decision.
         if (action == MotionEvent.ACTION_CANCEL) mStreamCancelled = true;
+        mLastTouchX = ev.getX();
+        mLastTouchY = ev.getY();
+        if (mEditFolderCell != null) trackEditFolder(ev, action);
         // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
         // the one place a finger lands while typing).
         if (action == MotionEvent.ACTION_DOWN && mSearch != null
@@ -2466,8 +2674,223 @@ public final class AppDrawerContentView extends FrameLayout
                         break;
                 }
             }
+            beginEditGesture(ev, region, downItem);
         }
         return handled;
+    }
+
+    // ------------------------------------------------------------------ edit-mode lift
+
+    private static boolean hits(@Nullable View view, float x, float y) {
+        return view != null && view.getVisibility() == VISIBLE
+            && x >= view.getX() && x < view.getX() + view.getWidth()
+            && y >= view.getY() && y < view.getY() + view.getHeight();
+    }
+
+    /**
+     * Hands the down to the edit gesture policy and acts on its first answer: an app lifts at once
+     * through the same pickup a long press starts; a folder waits for a tap, a move or a hold; a
+     * tile lifts for reordering. Runs after the down's snapshot, which the pickup is gated on.
+     */
+    private void beginEditGesture(@NonNull MotionEvent ev,
+                                  @NonNull AppDrawerTouchRegions.Region region,
+                                  @Nullable AppDrawerItem downItem) {
+        removeCallbacks(mEditFolderHold);
+        mEditFolderCell = null;
+        mEditFolder = null;
+        boolean editing = mEditModel.isEditing();
+        float x = ev.getX();
+        float y = ev.getY();
+        AppDrawerEditGesturePolicy.Touched touched = AppDrawerEditGesturePolicy.Touched.GAP;
+        View cell = null;
+        View tile = null;
+        if (editing) {
+            if (region == AppDrawerTouchRegions.Region.COLUMN) {
+                touched = AppDrawerEditGesturePolicy.Touched.AZ_INDEX;
+            } else if (hits(mPill, x, y) || hits(mInput, x, y)) {
+                touched = AppDrawerEditGesturePolicy.Touched.SEARCH_BAR;
+            } else if (hits(mSectionSwitch, x, y)) {
+                touched = AppDrawerEditGesturePolicy.Touched.SECTION_SWITCH;
+            } else if (presentedType() == AppDrawerViewType.CATEGORIES) {
+                if (!mGestureCategorySearch) {
+                    tile = mCategoryView.tileViewAt(x - mCategoryView.getLeft(),
+                        y - mCategoryView.getTop());
+                }
+                if (tile != null) touched = AppDrawerEditGesturePolicy.Touched.TILE_BODY;
+            } else if (downItem != null) {
+                cell = cellViewAt(x, y);
+                if (cell != null) {
+                    touched = downItem.folder != null
+                        ? AppDrawerEditGesturePolicy.Touched.FOLDER_CELL
+                        : AppDrawerEditGesturePolicy.Touched.APP_CELL;
+                }
+            }
+        }
+        AppDrawerEditGesturePolicy.Action action = mEditGesture.begin(editing, mViewType, mSection,
+            touched, getLayoutDirection() == LAYOUT_DIRECTION_RTL, mCategoryView.isOverview());
+        switch (action) {
+            case LIFT_APP:
+                if (cell != null && downItem != null && downItem.app != null)
+                    liftApp(cell, downItem.app);
+                break;
+            case LIFT_TILE:
+                if (tile instanceof AppDrawerCategoryTileView)
+                    liftTile((AppDrawerCategoryTileView) tile, x, y);
+                break;
+            case PENDING:
+                if (cell != null && downItem != null && downItem.folder != null) {
+                    mEditFolderCell = cell;
+                    mEditFolder = downItem.folder;
+                    mEditDownX = x;
+                    mEditDownY = y;
+                    mEditDownTime = ev.getEventTime();
+                    postDelayed(mEditFolderHold, AppDrawerEditGesturePolicy.HOLD_LIFT_MS);
+                }
+                break;
+            default:
+                break;
+        }
+    }
+
+    /** The cell view under a point of the vertical grid or the pages grid, or null. */
+    @Nullable
+    private View cellViewAt(float x, float y) {
+        AppDrawerViewType type = presentedType();
+        if (type == AppDrawerViewType.VERTICAL) {
+            return mGrid.findChildViewUnder(x - mGrid.getLeft(), y - mGrid.getTop());
+        }
+        if (type != AppDrawerViewType.HORIZONTAL) return null;
+        View pageView = mHorizontalPager.findChildViewUnder(x - mHorizontalPager.getLeft(),
+            y - mHorizontalPager.getTop());
+        if (pageView == null) return null;
+        RecyclerView.ViewHolder raw = mHorizontalPager.getChildViewHolder(pageView);
+        if (!(raw instanceof AppDrawerHorizontalPageAdapter.PageHolder)) return null;
+        AppDrawerHorizontalPageAdapter.PageHolder page =
+            (AppDrawerHorizontalPageAdapter.PageHolder) raw;
+        float localX = x - mHorizontalPager.getLeft() - pageView.getLeft();
+        float localY = y - mHorizontalPager.getTop() - pageView.getTop();
+        for (int i = 0; i < page.cells.size(); i++) {
+            View cell = page.cells.get(i);
+            if (cell.getVisibility() == VISIBLE
+                && localX >= cell.getLeft() && localX < cell.getRight()
+                && localY >= cell.getTop() && localY < cell.getBottom()) return cell;
+        }
+        return null;
+    }
+
+    private void liftApp(@NonNull View cell, @NonNull LauncherAppEntry entry) {
+        AppDrawerDragController controller = mDragController;
+        if (controller == null) return;
+        // The long press's own steps: the press is spent, then the same pickup runs.
+        cancelCellLongPresses();
+        controller.startPickup(cell, entry);
+    }
+
+    private void liftFolder() {
+        View cell = mEditFolderCell;
+        PinnedFolderItem folder = mEditFolder;
+        removeCallbacks(mEditFolderHold);
+        mEditFolderCell = null;
+        mEditFolder = null;
+        AppDrawerDragController controller = mDragController;
+        if (cell == null || folder == null || controller == null) return;
+        cancelCellLongPresses();
+        controller.startFolderPickup(cell, folder);
+    }
+
+    private void onEditFolderHold() {
+        if (mEditFolderCell == null) return;
+        if (mEditGesture.evaluate(0f, 0f, AppDrawerEditGesturePolicy.HOLD_LIFT_MS, mTouchSlopPx,
+            false) == AppDrawerEditGesturePolicy.Action.LIFT_FOLDER) liftFolder();
+    }
+
+    /** A move past the slop lifts the folder; a release inside it is a tap the cell handles. */
+    private void trackEditFolder(@NonNull MotionEvent ev, int action) {
+        if (action == MotionEvent.ACTION_CANCEL) {
+            removeCallbacks(mEditFolderHold);
+            mEditFolderCell = null;
+            mEditFolder = null;
+            return;
+        }
+        if (action != MotionEvent.ACTION_MOVE && action != MotionEvent.ACTION_UP) return;
+        boolean released = action == MotionEvent.ACTION_UP;
+        AppDrawerEditGesturePolicy.Action answer = mEditGesture.evaluate(ev.getX() - mEditDownX,
+            ev.getY() - mEditDownY, ev.getEventTime() - mEditDownTime, mTouchSlopPx, released);
+        if (answer == AppDrawerEditGesturePolicy.Action.LIFT_FOLDER && !released) {
+            liftFolder();
+        } else if (answer != AppDrawerEditGesturePolicy.Action.PENDING || released) {
+            removeCallbacks(mEditFolderHold);
+            mEditFolderCell = null;
+            mEditFolder = null;
+        }
+    }
+
+    // ------------------------------------------------------------------ tile reorder
+
+    /** The tile takes the finger: the children are cancelled and this view owns the stream. */
+    private void liftTile(@NonNull AppDrawerCategoryTileView tile, float x, float y) {
+        if (mTileLiftActive) return;
+        cancelContentTouch(x, y);
+        if (!mCategoryView.beginReorder(tile, x - mCategoryView.getLeft(),
+            y - mCategoryView.getTop(), this::onCategoryReordered)) return;
+        mTileLiftActive = true;
+        mGestureActive = false;
+        mDownOverGrid = false;
+        disarm();
+        ViewParent parent = getParent();
+        if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
+    }
+
+    private boolean handleTileLiftTouch(@NonNull MotionEvent ev) {
+        float x = ev.getX() - mCategoryView.getLeft();
+        float y = ev.getY() - mCategoryView.getTop();
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                mCategoryView.moveReorder(x, y);
+                break;
+            case MotionEvent.ACTION_UP:
+                mTileLiftActive = false;
+                mCategoryView.dropReorder(x, y);
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                mTileLiftActive = false;
+                mCategoryView.cancelReorder();
+                break;
+            default:
+                break;
+        }
+        return true;
+    }
+
+    /** The drop's answer: the new order is stored, and the tiles are bound once in it. */
+    private void onCategoryReordered(@NonNull AppDrawerCategory what,
+                                     @Nullable AppDrawerCategory before) {
+        mCategoryOrderStore.write(new AppDrawerCategoryOrder(mCategoryOrderStore.read())
+            .moved(what, before));
+        setCategoryBuckets(mCategoryBuckets);
+        if (categoryBucketsLive()) mCategoryView.submitBuckets(mCategoryBuckets);
+    }
+
+    /**
+     * A long press on a Categories tile's heading outside edit mode: edit mode starts and the tile
+     * lifts in the same gesture. Called by the heading; false when it is not the drawer's to do.
+     */
+    static boolean enterEditFromTile(@NonNull AppDrawerCategoryTileView tile) {
+        for (ViewParent parent = tile.getParent(); parent != null; parent = parent.getParent()) {
+            if (parent instanceof AppDrawerContentView) {
+                return ((AppDrawerContentView) parent).enterEditLiftingTile(tile);
+            }
+        }
+        return false;
+    }
+
+    private boolean enterEditLiftingTile(@NonNull AppDrawerCategoryTileView tile) {
+        if (mEditModel.isEditing() || !mInteractive || hasQuery()
+            || presentedType() != AppDrawerViewType.CATEGORIES || !mCategoryView.isOverview())
+            return false;
+        enterEdit(AppDrawerEditModel.Entry.TILE_LONG_PRESS);
+        if (mEditModel.liftsTileOnEntry()) liftTile(tile, mLastTouchX, mLastTouchY);
+        return true;
     }
 
     @Nullable
@@ -2795,7 +3218,7 @@ public final class AppDrawerContentView extends FrameLayout
     /** A long press or pickup has armed on the cell under the finger. */
     private boolean isPickupArmed() {
         AppDrawerDragPolicy policy = mDragPolicy;
-        return mDragActive || (policy != null
+        return mDragActive || mEditGesture.blocksPageSwipe() || (policy != null
             && (policy.claim() == AppDrawerDragPolicy.Claim.CONTEXT
                 || policy.claim() == AppDrawerDragPolicy.Claim.DRAG));
     }
@@ -3191,6 +3614,7 @@ public final class AppDrawerContentView extends FrameLayout
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        leaveEdit(AppDrawerEditModel.Leave.DRAWER_CLOSED);
         mCornerTab.reset();
         stopOverpullSpring();
         endSectionStream();

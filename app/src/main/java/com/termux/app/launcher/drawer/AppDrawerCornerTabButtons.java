@@ -14,12 +14,8 @@ final class AppDrawerCornerTabButtons {
     static final int GRID_SIZE = 3;
     static final int TICK = 4;
 
-    /**
-     * Whether the Edit button is shown at all. Edit mode is not wired to a view yet, so the model
-     * always says "not editing" and the button would do nothing; the change that wires edit mode
-     * flips this to true.
-     */
-    static final boolean EDIT_BUTTON_SHIPPED = false;
+    /** Whether the Edit button is shown at all. */
+    static final boolean EDIT_BUTTON_SHIPPED = true;
 
     private AppDrawerCornerTabButtons() {
     }

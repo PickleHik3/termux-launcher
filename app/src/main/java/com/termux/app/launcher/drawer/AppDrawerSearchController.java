@@ -97,6 +97,8 @@ public final class AppDrawerSearchController
     @Nullable private Host mHost;
     @Nullable private ResultsListener mListener;
     private boolean mTextFieldOwnsInput;
+    /** False while the drawer is being edited: typing is swallowed, only Back and Esc act. */
+    private boolean mInputEnabled = true;
 
     public AppDrawerSearchController() {
         this(() -> null);
@@ -337,6 +339,11 @@ public final class AppDrawerSearchController
         }
     }
 
+    /** Whether typed text reaches the query; off while the drawer's edit mode is on. */
+    public void setInputEnabled(boolean enabled) {
+        mInputEnabled = enabled;
+    }
+
     // ------------------------------------------------------------------ hardware keys
 
     /**
@@ -346,6 +353,13 @@ public final class AppDrawerSearchController
      */
     public boolean handleKeyDown(int keyCode, @NonNull KeyEvent event) {
         if (!isActive()) return false;
+        if (!mInputEnabled) {
+            if (event.getAction() == KeyEvent.ACTION_DOWN
+                && (keyCode == KeyEvent.KEYCODE_BACK || keyCode == KeyEvent.KEYCODE_ESCAPE)) {
+                dismiss();
+            }
+            return true;
+        }
         // Whichever keyboard the search uses, a stroke that reaches this channel was sent to the
         // terminal, never to the drawer's text field: a focused field takes its own keys. So it is
         // typed into the query here, in either mode — declining it would hand it to the shell
@@ -369,6 +383,7 @@ public final class AppDrawerSearchController
      * @return true when the drawer consumed the code point
      */
     public boolean handleCodePoint(int codePoint, boolean ctrlDown) {
+        if (!mInputEnabled) return isActive();
         CommandPaletteSoftKeyDecision.Action action =
             CommandPaletteSoftKeyDecision.decide(isActive(), false, codePoint, ctrlDown);
         switch (action) {

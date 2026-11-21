@@ -170,4 +170,55 @@ public class AppDrawerCategoryReorderPolicyTest {
         next = order.moved(all.get(source), null);
         assertEquals(all.get(source).slug, next.get(next.size() - 1));
     }
+
+    private static int[] slots(int count, int source, int before) {
+        int[] out = new int[count];
+        for (int i = 0; i < count; i++)
+            out[i] = AppDrawerCategoryReorderPolicy.slotOf(i, source, before, count);
+        return out;
+    }
+
+    @Test public void slotsAreTheIdentityWhileTheOrderIsUnchanged() {
+        assertEquals(Arrays.toString(new int[] {0, 1, 2, 3, 4}),
+            Arrays.toString(slots(5, 2, 3)));
+        assertEquals(Arrays.toString(new int[] {0, 1, 2, 3, 4}),
+            Arrays.toString(slots(5, 4, END)));
+    }
+
+    @Test public void carryingForwardClosesRanksAndLandsBeforeTheTarget() {
+        // 0 1 2 3 4 with tile 1 carried in front of tile 4: 0 2 3 1 4.
+        assertEquals(Arrays.toString(new int[] {0, 3, 1, 2, 4}),
+            Arrays.toString(slots(5, 1, 4)));
+    }
+
+    @Test public void carryingBackOpensAGapAtTheTarget() {
+        // Tile 3 in front of tile 1: 0 3 1 2 4.
+        assertEquals(Arrays.toString(new int[] {0, 2, 3, 1, 4}),
+            Arrays.toString(slots(5, 3, 1)));
+    }
+
+    @Test public void carryingToTheEndMovesEveryoneUp() {
+        assertEquals(Arrays.toString(new int[] {4, 0, 1, 2, 3}),
+            Arrays.toString(slots(5, 0, END)));
+    }
+
+    @Test public void slotsAgreeWithMovedForEveryDrop() {
+        for (int source = 0; source < 5; source++) {
+            for (int before = 0; before <= 5; before++) {
+                int b = before == 5 ? END : before;
+                int[] s = slots(5, source, b);
+                Integer[] order = new Integer[5];
+                for (int i = 0; i < 5; i++) order[s[i]] = i;
+                java.util.List<Integer> expected = new java.util.ArrayList<>(
+                    Arrays.asList(0, 1, 2, 3, 4));
+                if (b != source) {
+                    expected.remove(Integer.valueOf(source));
+                    int at = b == END ? expected.size() : expected.indexOf(b);
+                    expected.add(at, source);
+                }
+                assertEquals("source " + source + " before " + b, expected,
+                    Arrays.asList(order));
+            }
+        }
+    }
 }

@@ -11,10 +11,11 @@ public class AppDrawerCornerTabButtonsTest {
         return AppDrawerCornerTabButtons.ids(model, type, section, editShipped);
     }
 
-    @Test public void editIsNotShownYetSoOnlyTheGearIs() {
+    @Test public void outsideEditModeTheTabShowsEditThenTheGearOnEveryType() {
         for (AppDrawerViewType type : AppDrawerViewType.values()) {
             for (AppDrawerSection section : AppDrawerSection.values()) {
-                assertArrayEquals(new int[] {AppDrawerCornerTabButtons.SETTINGS},
+                assertArrayEquals(
+                    new int[] {AppDrawerCornerTabButtons.EDIT, AppDrawerCornerTabButtons.SETTINGS},
                     ids(AppDrawerEditModel.OFF, type, section,
                         AppDrawerCornerTabButtons.EDIT_BUTTON_SHIPPED));
             }
