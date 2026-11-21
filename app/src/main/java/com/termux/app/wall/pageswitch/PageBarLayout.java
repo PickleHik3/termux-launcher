@@ -50,12 +50,21 @@ public final class PageBarLayout {
     private final float[] mScratchCenters;
     private final float[] mScratchScales;
 
+    /** Home's bar: the pill hugs its glyphs, each slot at most {@link #MAX_SLOT_DP}. */
     public PageBarLayout(float density, float paneWidthPx, int slotCount) {
+        this(density, paneWidthPx, slotCount, false);
+    }
+
+    /**
+     * @param fill the pill spans the pane less {@link #SIDE_INSET_DP} on each side, its slots equal
+     *             and uncapped: the bar the page switcher key pops up on a workspace page
+     */
+    public PageBarLayout(float density, float paneWidthPx, int slotCount, boolean fill) {
         mDensity = density;
         mPaneWidth = paneWidthPx;
         mSlotCount = Math.max(1, slotCount);
         float area = Math.max(0f, paneWidthPx - 2f * SIDE_INSET_DP * density);
-        mSlotWidth = Math.min(MAX_SLOT_DP * density, area / mSlotCount);
+        mSlotWidth = fill ? area / mSlotCount : Math.min(MAX_SLOT_DP * density, area / mSlotCount);
         mPillLeft = (paneWidthPx - mSlotWidth * mSlotCount) / 2f;
         mScratchCenters = new float[mSlotCount];
         mScratchScales = new float[mSlotCount];

@@ -25,6 +25,14 @@ public class PageBarLayoutTest {
         assertEquals(36.44f, new PageBarLayout(1f, 360f, 9).slotWidthPx(), EPS);
     }
 
+    @Test public void theKeysBarSpansThePaneWithEqualUncappedSlots() {
+        PageBarLayout l = new PageBarLayout(1f, 360f, 3, true);
+        assertEquals(328f / 3f, l.slotWidthPx(), EPS);
+        assertEquals(328f, l.pillWidthPx(), EPS);
+        assertEquals(16f, l.pillLeftPx(), EPS);
+        assertEquals(16f + 328f / 6f, l.restCenterX(0), EPS);
+    }
+
     @Test public void pillIsCentredAndSlotsFillItEndToEnd() {
         PageBarLayout l = new PageBarLayout(1f, 360f, 5);
         assertEquals(265f, l.pillWidthPx(), EPS);
