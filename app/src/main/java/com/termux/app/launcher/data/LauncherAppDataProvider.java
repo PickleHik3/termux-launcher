@@ -105,8 +105,7 @@ public final class LauncherAppDataProvider {
     private final android.content.SharedPreferences.OnSharedPreferenceChangeListener iconSizeListener =
         (prefs, key) -> {
             if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
-                    .KEY_APP_LAUNCHER_DRAWER_ICON_SIZE.equals(key)
-                || com.termux.app.launcher.home.HomeSettings.KEY_ICON_SCALE.equals(key)) {
+                    .KEY_APP_LAUNCHER_DRAWER_ICON_SIZE.equals(key)) {
                 // A raised cap dropped the store; the renders and catalogue made from the old
                 // artwork are stale with it.
                 if (applyIconSizes(prefs)) invalidateIconArtwork(true);
@@ -124,6 +123,29 @@ public final class LauncherAppDataProvider {
             Context.MODE_PRIVATE);
         applyIconSizes(prefs);
         prefs.registerOnSharedPreferenceChangeListener(iconSizeListener);
+        // Home draws IconSizeCap.effective(layout size, published cap): the cap is published after
+        // layout and the layout size can change on its own, so both re-run the policy, off the
+        // layout pass, coalesced.
+        com.termux.app.dock.IconSizeCap.setPublishListener(this::scheduleIconSizeRefresh);
+        com.termux.app.place.layout.LayoutStore.shared(context)
+            .addListener(layouts -> scheduleIconSizeRefresh());
+    }
+
+    private final android.os.Handler iconSizeHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable iconSizeRefresh = this::refreshIconSizes;
+
+    private void refreshIconSizes() {
+        if (applyIconSizes(context.getSharedPreferences(
+                com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+                Context.MODE_PRIVATE))) {
+            invalidateIconArtwork(true);
+        }
+    }
+
+    private void scheduleIconSizeRefresh() {
+        iconSizeHandler.removeCallbacks(iconSizeRefresh);
+        iconSizeHandler.post(iconSizeRefresh);
     }
 
     /** @return true when the store's cap rose and it was dropped. */
@@ -137,12 +159,15 @@ public final class LauncherAppDataProvider {
             // "auto" and garbage read as Auto's 48dp.
         }
         try {
-            largest = Math.max(largest, com.termux.app.launcher.widget.HomeIconSize.fromStored(
-                prefs.getString(com.termux.app.launcher.home.HomeSettings.KEY_ICON_SCALE, null)).dp);
+            // The size Home really draws (layout size held to the dock's published cap).
+            largest = Math.max(largest,
+                com.termux.app.launcher.home.HomeSettings.iconStyle(context).iconDp);
         } catch (RuntimeException ignored) {
             // An unreadable Home size draws at the dock's.
         }
-        return iconStore.setLargestIconDp(largest);
+        boolean raised = iconStore.setLargestIconDp(largest);
+        iconResolver.setArtworkCapPx(iconStore.capPx());
+        return raised;
     }
 
     /**

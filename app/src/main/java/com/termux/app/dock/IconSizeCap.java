@@ -143,6 +143,15 @@ public final class IconSizeCap {
     public static void publish(@NonNull IconSize cap, int count) {
         sCap = cap;
         sCount = count;
+        Runnable listener = sPublishListener;
+        if (listener != null) listener.run();
+    }
+
+    /** Told after each {@link #publish}, on the publishing thread; the artwork cap follows Home's drawn size. */
+    @androidx.annotation.Nullable private static volatile Runnable sPublishListener;
+
+    public static void setPublishListener(@androidx.annotation.Nullable Runnable listener) {
+        sPublishListener = listener;
     }
 
     /** The cap last published; {@link IconSize#XL} (no cap) before the launcher measured one. */
