@@ -5,6 +5,7 @@ import androidx.annotation.NonNull;
 import com.termux.app.page.PageKind;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
+import com.termux.app.place.HomeKeyboardCover;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.terminal.AccessoryStackLayoutPolicy;
@@ -51,15 +52,33 @@ public final class DockPlacement {
      * {@link #peekCardStands} on a Home page or not ({@code homePage}): on Home neither the
      * in-app keyboard nor the system keyboard's lift refuses the card, which stands at its rest
      * and the keyboard covers it (ADR 0018 D11, changed by #309: Home's dock no longer rides the
-     * keyboard). Everywhere else both do.
+     * keyboard). Everywhere else both do. A Home whose keyboard is always on keeps the dock
+     * riding it: use the overload with {@code rowsCovered}.
      */
     public static boolean peekCardStands(boolean peekWorn, boolean dockShown,
                                          @NonNull PlaceLayout layout,
                                          boolean sheetStandsDownOnFrame, boolean keyboardShown,
                                          boolean imeLifted, boolean searchFieldShown,
                                          boolean homePage) {
-        if (!peekWorn || !dockShown) return false;
-        if (((keyboardShown || imeLifted) && !homePage) || searchFieldShown) return false;
+        return peekCardStands(peekWorn, dockShown, layout, sheetStandsDownOnFrame, keyboardShown,
+            imeLifted, searchFieldShown, homePage, homePage);
+    }
+
+    /**
+     * {@link #peekCardStands} on a Home page or not, with the cover's answer apart
+     * ({@code rowsCovered}: the keyboard covers this page's rows, {@code !HomeKeyboardCover
+     * .liftsRows}). On Home the in-app keyboard never refuses the card (unchanged since D11); the
+     * system keyboard's lift refuses it unless the rows are covered, so a Home whose keyboard is
+     * always on (rows ride it) is refused by the lift as before #309.
+     */
+    public static boolean peekCardStands(boolean peekWorn, boolean dockShown,
+                                         @NonNull PlaceLayout layout,
+                                         boolean sheetStandsDownOnFrame, boolean keyboardShown,
+                                         boolean imeLifted, boolean searchFieldShown,
+                                         boolean homePage, boolean rowsCovered) {
+        if (!peekWorn || !dockShown || searchFieldShown) return false;
+        if (keyboardShown && !homePage) return false;
+        if (imeLifted && !rowsCovered) return false;
         return peekRowStands(layout, sheetStandsDownOnFrame);
     }
 
@@ -76,8 +95,23 @@ public final class DockPlacement {
                                            boolean dockShown, @NonNull PlaceLayout layout,
                                            boolean sheetStandsDownOnFrame, boolean keyboardShown,
                                            boolean imeLifted, boolean searchFieldShown) {
+        return peekCardStandsOn(rowsPage, false, peekWorn, dockShown, layout,
+            sheetStandsDownOnFrame, keyboardShown, imeLifted, searchFieldShown);
+    }
+
+    /**
+     * {@link #peekCardStandsOn} for a Home whose keyboard is always on or not
+     * ({@code homeKeyboardAlwaysOn}): the always-on Home's rows ride the keyboard, so its IME lift
+     * refuses the card as before #309.
+     */
+    public static boolean peekCardStandsOn(@NonNull PageKind rowsPage,
+                                           boolean homeKeyboardAlwaysOn, boolean peekWorn,
+                                           boolean dockShown, @NonNull PlaceLayout layout,
+                                           boolean sheetStandsDownOnFrame, boolean keyboardShown,
+                                           boolean imeLifted, boolean searchFieldShown) {
         return peekCardStands(peekWorn, dockShown, layout, sheetStandsDownOnFrame, keyboardShown,
-            imeLifted, searchFieldShown, PaneWallPolicy.isHomePlace(rowsPage));
+            imeLifted, searchFieldShown, PaneWallPolicy.isHomePlace(rowsPage),
+            !HomeKeyboardCover.liftsRows(rowsPage, homeKeyboardAlwaysOn));
     }
 
     /**

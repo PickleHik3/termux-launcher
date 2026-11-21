@@ -159,6 +159,18 @@ public class DockSpecTest {
             in.imeVisible, in.keyboardShown, PageKind.TERMINAL));
     }
 
+    /** An always-on Home's rows ride the keyboard: the system keyboard refuses its card. */
+    @Test
+    public void anAlwaysOnHomePeekIsRefusedBySystemKeyboardOnly() {
+        DockSpec.Input in = pong(DockStyle.PEEK_GLASS, false, false);
+        assertFalse(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            true, false, PageKind.HOME, true));
+        assertTrue(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            false, true, PageKind.HOME, true));
+        assertTrue(DockSpec.peekCardStands(in.design, in.dockShown, in.peekRowAlone,
+            true, false, PageKind.HOME, false));
+    }
+
     @Test
     public void terminalKindWearsItsOwnDesignWhateverTheKeyboard() {
         for (boolean keyboard : new boolean[] {false, true}) {

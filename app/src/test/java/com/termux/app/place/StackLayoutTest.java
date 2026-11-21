@@ -303,6 +303,10 @@ public class StackLayoutTest {
 
     /** The Home page at rest with the toolbar and keyboard up, {@code lift} the IME's lift. */
     private static StackLayout.Result homeWithLift(int lift) {
+        return homeWithLift(lift, false);
+    }
+
+    private static StackLayout.Result homeWithLift(int lift, boolean alwaysOn) {
         Snapshot s = device(half(HOME, false), half(WINDOW, false))
             .rows(PageRef.HOME).arrangement(HOME).build();
         StackLayout.Input in = new StackLayout.Input(s);
@@ -311,7 +315,14 @@ public class StackLayoutTest {
         in.keyboardShown = true;
         in.keyboardHeightPx = KEYBOARD;
         in.imeLiftPx = lift;
+        in.homeKeyboardAlwaysOn = alwaysOn;
         return run(in);
+    }
+
+    @Test
+    public void anAlwaysOnHomeKeepsItsDockRidingTheImeAsBefore() {
+        assertEquals("the lift grows an always-on Home's margin",
+            homeWithLift(0, true).bottomMarginPx + 50, homeWithLift(50, true).bottomMarginPx);
     }
 
     @Test

@@ -22,9 +22,22 @@ public final class HomeKeyboardCover {
 
     private HomeKeyboardCover() {}
 
-    /** Whether a keyboard lifts the rows {@code page} stands: every page but Home. */
+    /**
+     * Whether a keyboard lifts the rows {@code page} stands, for a Home whose keyboard is raised
+     * on demand: every page but Home. Same as {@link #liftsRows(PageKind, boolean)} with
+     * {@code false}.
+     */
     public static boolean liftsRows(@NonNull PageKind page) {
-        return !PaneWallPolicy.isHomePlace(page);
+        return liftsRows(page, false);
+    }
+
+    /**
+     * Whether a keyboard lifts the rows {@code page} stands. Every page but Home does. A Home
+     * whose keyboard is always on ({@code homeKeyboardAlwaysOn}) keeps the dock riding it, as
+     * before #309: the cover applies only when Home's keyboard is raised on demand.
+     */
+    public static boolean liftsRows(@NonNull PageKind page, boolean homeKeyboardAlwaysOn) {
+        return homeKeyboardAlwaysOn || !PaneWallPolicy.isHomePlace(page);
     }
 
     /**

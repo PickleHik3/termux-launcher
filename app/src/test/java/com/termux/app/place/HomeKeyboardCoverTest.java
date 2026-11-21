@@ -21,6 +21,18 @@ public class HomeKeyboardCoverTest {
     }
 
     @Test
+    public void anAlwaysOnHomeKeepsRidingTheKeyboard() {
+        assertTrue(HomeKeyboardCover.liftsRows(PageKind.HOME, true));
+        assertFalse(HomeKeyboardCover.liftsRows(PageKind.HOME, false));
+        for (PageKind page : PageKind.values()) {
+            if (page != PageKind.HOME) {
+                assertTrue(page.name(), HomeKeyboardCover.liftsRows(page, true));
+                assertTrue(page.name(), HomeKeyboardCover.liftsRows(page, false));
+            }
+        }
+    }
+
+    @Test
     public void aLiftingSideIsNeverDropped() {
         assertEquals(0f, HomeKeyboardCover.rowsDropPx(true, K, 0f), 0f);
         assertEquals(0f, HomeKeyboardCover.imeStandPx(true, 300, 40, 10f), 0f);

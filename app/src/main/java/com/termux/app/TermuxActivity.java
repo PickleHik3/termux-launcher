@@ -5809,7 +5809,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // mid-crossing the rows a dip or a pictured dip brings in wear their page's answer from
         // the frame they stand, out of sight, and the settle commits that same answer.
         return com.termux.app.dock.DockPlacement.peekCardStandsOn(stackDressPage(),
-                mDock.shownDockSurfaceSpec().peek, dockShown, arrangement().layout(), false,
+                isHomeKeyboardAlwaysOn(), mDock.shownDockSurfaceSpec().peek, dockShown, arrangement().layout(), false,
                 keyboardShown, mImeLiftPx > 0, mAppliedPromptFieldBandPx > 0)
             && (arrangement().floating() || !stackStandsDownOnFrame());
     }
@@ -7653,8 +7653,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // like the docked one does. Bands under the keyboard wear a card of their own below it,
         // and one material spanning the dock and the keyboard would run on down behind that card.
         if (underKeyboardBandsShown()) return false;
+        // The page whose rows the stack stands (stackDressPage: the committed page at rest, the
+        // seam's stack page mid-crossing): on Home the keyboard covers the dock and is never one
+        // surface with it, unless Home's keyboard is always on and the dock rides it.
         return ChromePolicy.shouldUseUnifiedDefaultKeyboardGlassSurface(state.toolbarShown,
-            state.keyboardShown, arrangement().floating(), isInAppKeyboardGlassSurface())
+            state.keyboardShown, arrangement().floating(), isInAppKeyboardGlassSurface(),
+            com.termux.app.place.HomeKeyboardCover.liftsRows(stackDressPage(),
+                isHomeKeyboardAlwaysOn()))
             && !hasInAppKeyboardBackgroundOverride()
             && inAppKeyboardMaterial() == KeyboardMaterialPolicy.Material.GLASS
             // Over a Display page the unified glass would lay the wallpaper over the display.
@@ -18190,6 +18195,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         stackIn.ceilingBeforeMarginPx = accessoryStackCeilingBeforeMarginPx();
         stackIn.keyboardOverlays = keyboardOverlays;
         stackIn.dockOverlays = mLastWallPage == com.termux.app.page.PageKind.HOME;
+        stackIn.homeKeyboardAlwaysOn = isHomeKeyboardAlwaysOn();
         stackIn.systemImeTakePx = systemImeTakePx();
         stackIn.travelHoldsContent = mCrossing.holdsContent();
         stackIn.heldReservationPx = mCrossing.heldReservationPx();
@@ -25818,6 +25824,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public int keyboardDownLaidOutPx() { return mKeyboardDownLaidOutPx; }
         @Override public boolean displayWindowInFront() { return isDisplayWindowInFront(); }
         @Override public int imeLiftPx() { return mImeLiftPx; }
+        @Override public boolean homeKeyboardAlwaysOn() { return isHomeKeyboardAlwaysOn(); }
         @Override public int appliedToolbarHeightPx() { return TermuxActivity.this.appliedToolbarHeightPx(); }
         @Override public int measuredExtraKeysRowPx() { return TermuxActivity.this.measuredExtraKeysRowPx(); }
         @Override public int appliedContentReservationPx() { return TermuxActivity.this.appliedContentReservationPx(); }

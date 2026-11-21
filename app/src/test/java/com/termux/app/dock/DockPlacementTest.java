@@ -85,6 +85,20 @@ public class DockPlacementTest {
     }
 
     @Test
+    public void anAlwaysOnHomeIsStillRefusedTheCardByTheSystemKeyboardsLift() {
+        assertFalse("rows ride the keyboard: the lift refuses", DockPlacement.peekCardStands(true,
+            true, APPS_OVER_AZ, false, false, true, false, true, false));
+        assertTrue("the in-app keyboard never refuses Home's card", DockPlacement.peekCardStands(
+            true, true, APPS_OVER_AZ, false, true, false, false, true, false));
+        assertTrue("covered rows: the lift does not refuse", DockPlacement.peekCardStands(true,
+            true, APPS_OVER_AZ, false, false, true, false, true, true));
+        assertFalse("always on, through the page overload", DockPlacement.peekCardStandsOn(
+            PageKind.HOME, true, true, true, APPS_OVER_AZ, false, false, true, false));
+        assertTrue("on demand, through the page overload", DockPlacement.peekCardStandsOn(
+            PageKind.HOME, false, true, true, APPS_OVER_AZ, false, false, true, false));
+    }
+
+    @Test
     public void lensBeadsStillTakeTheAzRowsGlass() {
         assertFalse(LensBeadGeometry.rowWearsBeads(APPS_OVER_AZ, false, false));
         assertFalse(LensBeadGeometry.rowWearsBeads(AZ_OVER_APPS, false, false));

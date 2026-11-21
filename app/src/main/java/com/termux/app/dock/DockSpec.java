@@ -5,6 +5,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.page.PageKind;
+import com.termux.app.place.HomeKeyboardCover;
 
 /**
  * The dock as one surface (ADR 0018 §1, D3, D8, D11): where its glass stands, what shape it has,
@@ -71,6 +72,11 @@ public final class DockSpec {
     /** Everything the dock's surface is decided from. Coordinates are the screen's, px. */
     public static final class Input {
         @NonNull public PageKind kind = PageKind.TERMINAL;
+        /**
+         * Home's keyboard is always on: its rows ride the keyboard as before #309, so the system
+         * keyboard's lift refuses the Peek card there.
+         */
+        public boolean homeKeyboardAlwaysOn;
         /** The page in front's Dock design, as its layout holds it. */
         @Nullable public DockStyle design;
         public boolean floatingStyle;
@@ -184,8 +190,23 @@ public final class DockSpec {
     public static boolean peekCardStands(@Nullable DockStyle design, boolean dockShown,
                                          boolean peekRowAlone, boolean imeVisible,
                                          boolean keyboardShown, @NonNull PageKind kind) {
-        return DockStyle.effectiveStyle(design) == DockStyle.PEEK_GLASS && dockShown
-            && peekRowAlone && (kind == PageKind.HOME || (!imeVisible && !keyboardShown));
+        return peekCardStands(design, dockShown, peekRowAlone, imeVisible, keyboardShown, kind,
+            false);
+    }
+
+    /**
+     * {@link #peekCardStands} for a Home whose keyboard is always on or not
+     * ({@code homeKeyboardAlwaysOn}): its rows ride the keyboard, so on Home the system keyboard
+     * refuses the card as before #309. The in-app keyboard never refuses it on Home.
+     */
+    public static boolean peekCardStands(@Nullable DockStyle design, boolean dockShown,
+                                         boolean peekRowAlone, boolean imeVisible,
+                                         boolean keyboardShown, @NonNull PageKind kind,
+                                         boolean homeKeyboardAlwaysOn) {
+        if (DockStyle.effectiveStyle(design) != DockStyle.PEEK_GLASS || !dockShown
+            || !peekRowAlone) return false;
+        if (kind != PageKind.HOME) return !imeVisible && !keyboardShown;
+        return !imeVisible || !HomeKeyboardCover.liftsRows(kind, homeKeyboardAlwaysOn);
     }
 
     /** The dock's surface for {@code in}. */
@@ -193,7 +214,7 @@ public final class DockSpec {
     public static DockSpec of(@NonNull Input in) {
         DockStyle design = DockStyle.effectiveStyle(in.design);
         boolean peekStands = peekCardStands(design, in.dockShown, in.peekRowAlone, in.imeVisible,
-            in.keyboardShown, in.kind);
+            in.keyboardShown, in.kind, in.homeKeyboardAlwaysOn);
         boolean floats = DockPlacement.floats(in.floatingStyle, peekStands);
         boolean foot = footExists(in.dockShown, floats, in.keyboardShown, in.imeVisible,
             in.navInsetPx);
