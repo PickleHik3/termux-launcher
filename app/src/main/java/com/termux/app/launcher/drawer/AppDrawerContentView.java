@@ -1071,14 +1071,16 @@ public final class AppDrawerContentView extends FrameLayout
 
     /**
      * True while Default shows Apps and Categories side by side: the Default type with no query
-     * typed and no search asked for. A search shows the settled section's own presentation.
+     * typed. A query shows the settled section's own presentation. A keyboard asked for with
+     * nothing typed keeps the pages: that request outlives the keyboard (a scroll can put the
+     * keyboard away and leave it set), and the pages must not stay frozen behind it.
      */
     public boolean isDefaultPagesActive() {
         return defaultPagesActive();
     }
 
     private boolean defaultPagesActive() {
-        return mViewType == AppDrawerViewType.DEFAULT && !hasQuery() && !mSearchRevealRequested;
+        return mViewType == AppDrawerViewType.DEFAULT && !hasQuery();
     }
 
     /** Re-lays the type out when the pages gave way to a search, or came back, since last applied. */
@@ -2724,7 +2726,7 @@ public final class AppDrawerContentView extends FrameLayout
         }
         AppDrawerSectionGesturePolicy.Claim claim = mSectionGesture.begin(
             new AppDrawerSectionGesturePolicy.Down(mSection, target, part,
-                mCategoryView.isOverview(), hasQuery() || mSearchRevealRequested, mInteractive,
+                mCategoryView.isOverview(), hasQuery(), mInteractive,
                 settling, getLayoutDirection() == LAYOUT_DIRECTION_RTL));
         if (claim == AppDrawerSectionGesturePolicy.Claim.CHILD) return;
         mSectionDownX = x;
