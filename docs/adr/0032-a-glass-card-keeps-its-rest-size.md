@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-21
 amends: 0030 §4 (the glass under the rows: a card both ends show in the same place stays put; any other card belongs to a side and travels with it, so nothing "stays put and blends" its size), 0018 §1 (each element one surface: the unit of glass is the card a rest draws, not the element)
 ---
@@ -77,6 +77,28 @@ Build order (map §5): the property test, then the per-rest answer, then the ext
 card under Floating, the same under Docked, then the Peek card and the apps row's card, and
 last the scene and the renderer on cards. A new piece, such as the page bar decided on
 2026-11-20, is built as its own card from the start.
+
+## Accepted on 2026-11-21
+
+The developer saw the two cards on pong (the prototype of #300, Floating with Peek, keyboard up
+and down, both directions) and accepted the look: Home's Peek card slides out with Home and the
+extra-keys bar's card slides in with the Terminal. Nothing fades.
+
+What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled:
+
+- **Docked's slab fails the test.** The glass host changes height between Home and the Terminal
+  in every dock design and both Styles, so the open case above closes: the slab splits into
+  flush cards joined at their edges (#304).
+- **Floating with Tray, Beads or Strip re-sizes the host too**, in height only. Peek is the one
+  design where its sides move as well.
+- **Each side keeps its own bottom gap.** Peek stands flush and the Terminal's card keeps
+  Floating's 6 dp gap, so the stack's container holds one margin at both rests and Home's side
+  carries the difference as a constant. A container margin that follows the front page steps
+  16 px one frame after landing.
+- **The two-card rule reads Home's dock design**, not the design of the page in front: the
+  Terminal wears no design when its layout shows no apps row.
+- **The keyboard's card is built once, in the Terminal's look, as the crossing begins.** Dressed
+  at landing instead, its glass arrives about a second late.
 
 ## Consequences
 
