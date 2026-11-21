@@ -178,7 +178,7 @@ public final class BuiltinWidgetStyle {
         outlineVariant = shift ? atTone(src.outlineVariant, DarkTones.OUTLINE_VARIANT)
             : src.outlineVariant;
         outline = shift ? atTone(src.outline, DarkTones.OUTLINE) : src.outline;
-        primary = shift ? atTone(src.primary, DarkTones.PRIMARY) : src.primary;
+        primary = onSide(src.primary, DarkTones.PRIMARY, shift);
         onPrimary = shift ? atTone(src.onPrimary, DarkTones.ON_PRIMARY) : src.onPrimary;
         primaryContainer = shift ? atTone(src.primaryContainer, DarkTones.CONTAINER_ACCENT)
             : src.primaryContainer;
@@ -297,6 +297,11 @@ public final class BuiltinWidgetStyle {
     @ColorInt public static int textInkOn(@NonNull Context context, boolean dark) {
         return onSide(M3.onSurfaceVariant(context), DarkTones.ON_SURFACE_VARIANT,
             dark && !isNight(context));
+    }
+
+    /** The card's accent (primary) on {@link #cardOn}'s side. */
+    @ColorInt public static int primaryOn(@NonNull Context context, boolean dark) {
+        return onSide(M3.primary(context), DarkTones.PRIMARY, dark && !isNight(context));
     }
 
     /** The theme's own card, opaque. */

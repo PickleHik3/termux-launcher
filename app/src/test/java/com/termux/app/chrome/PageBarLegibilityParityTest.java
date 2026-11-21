@@ -19,6 +19,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.google.android.material.color.utilities.Hct;
+import com.termux.app.launcher.widget.HomeLabelInk;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetGlass;
 import com.termux.app.launcher.widget.builtin.BuiltinWidgetStyle;
 import com.termux.app.terminal.MaterialTerminalColorScheme;
@@ -36,7 +37,7 @@ import org.robolectric.annotation.Config;
  * body and ink. For the same rect, glass and accent, the pill's answer equals a built-in widget's
  * (its card on the widget's side, its weakest text ink, the lift, the veil and the even-out the
  * slab is drawn through), by day and at night, on either page ink, with Adaptive legibility off
- * and on. At night over a pale wallpaper the pill's ink reads on its body at the contract's floor.
+ * and on; and every page mark reads on the ground it is drawn on, the current page strongest.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -129,7 +130,7 @@ public class PageBarLegibilityParityTest {
             BuiltinWidgetGlass.darkCard(false, source.widgetPolarity()));
         BuiltinWidgetStyle style = glass ? onInk.glassVariant(context) : onInk;
         WidgetBody.solve(source, PILL, glass, style.card, PALE_TINT, style.onSurfaceVariant,
-            ACCENT, out);
+            style.primary, out);
     }
 
     private static void assertSameBody(@NonNull String where, @NonNull WidgetBody.Answer widget,
@@ -166,7 +167,8 @@ public class PageBarLegibilityParityTest {
                             polarity), glass, widget);
                         WidgetBody.Answer pill = new WidgetBody.Answer();
                         PageBarGlass.solve(context, new Source(newInk(adaptive, MID, true,
-                            polarity), polarity), PILL, glass, PALE_TINT, ACCENT, pill);
+                            polarity), polarity), PILL, glass, PALE_TINT, ACCENT, pill,
+                            new PageBarGlass.Ink());
                         assertSameBody(where, widget, pill);
                     }
                 }
@@ -174,24 +176,48 @@ public class PageBarLegibilityParityTest {
         }
     }
 
+    /** The drawn contrast of {@code color} (alpha included) on the opaque {@code ground}. */
+    private static double drawn(@ColorInt int color, @ColorInt int ground) {
+        return OnGlass.ratio(GlassInk.effective(color, ground), OnGlass.opaque(ground));
+    }
+
+    /**
+     * System light and night, each over a pale and a dark wallpaper (the page's ink following the
+     * wallpaper): every page mark reads on the ground it is drawn on, and the current page is the
+     * strongest. The pill's glyphs on its body (the bubble's disc wears that same body and draws
+     * the same current glyph), and the bubble's label on the bare wallpaper,
+     * with Adaptive legibility off and on.
+     */
     @Test
-    public void atNightOverAPaleWallpaperThePillsInkReadsOnItsBody() {
-        Context context = themed(true);
-        for (boolean adaptive : new boolean[] {false, true}) {
-            ChromeInk ink = newInk(adaptive, LIGHT, false, ChromeInk.Polarity.DARK_INK);
-            WidgetBody.Answer pill = new WidgetBody.Answer();
-            PageBarGlass.solve(context, new Source(ink, ChromeInk.Polarity.DARK_INK), PILL, true,
-                PALE_TINT, ACCENT, pill);
-            assertNotNull(pill.resolution);
-            double floor = ink.target(OnGlass.TARGET_BODY_TEXT);
-            double ratio = OnGlass.ratio(pill.resolution.ink, pill.resolution.surface);
-            assertTrue("pill ink " + Integer.toHexString(pill.resolution.ink) + " on "
-                    + Integer.toHexString(pill.resolution.surface) + " is " + ratio + ":1",
-                ratio >= floor);
-            // Night wears the dark card, as a widget does: the body's lift is dark.
-            assertTrue(Color.alpha(pill.lift) > 0);
-            assertTrue(androidx.core.graphics.ColorUtils.calculateLuminance(pill.lift | 0xFF000000)
-                < 0.2d);
+    public void everyPageMarkReadsOnItsGroundInTheFourStates() {
+        for (boolean night : new boolean[] {false, true}) {
+            Context context = themed(night);
+            int accent = com.termux.app.material.M3.primary(context);
+            for (int wallpaper : new int[] {LIGHT, DARK}) {
+                ChromeInk.Polarity polarity = wallpaper == LIGHT ? ChromeInk.Polarity.DARK_INK
+                    : ChromeInk.Polarity.PALE_INK;
+                for (boolean adaptive : new boolean[] {false, true}) {
+                    String where = (night ? "night" : "light") + " over "
+                        + (wallpaper == LIGHT ? "pale" : "dark")
+                        + (adaptive ? " adaptive" : " shared");
+                    ChromeInk ink = newInk(adaptive, wallpaper, false, polarity);
+                    PageBarGlass.Ink pill = new PageBarGlass.Ink();
+                    PageBarGlass.solve(context, new Source(ink, polarity), PILL, true,
+                        PALE_TINT, accent, new WidgetBody.Answer(), pill);
+                    double current = drawn(pill.accent, pill.ground);
+                    double other = drawn(pill.other, pill.ground);
+                    assertTrue(where + " current glyph " + current,
+                        current >= PageMarkInk.CURRENT);
+                    assertTrue(where + " other glyph " + other, other >= PageMarkInk.OTHER_FLOOR);
+                    assertTrue(where + " current " + current + " over other " + other,
+                        current > other);
+
+                    int label = PageBarGlass.labelInk(wallpaper, pill.ink);
+                    assertTrue(where + " label", drawn(label, wallpaper)
+                        >= OnGlass.TARGET_BODY_TEXT);
+
+                }
+            }
         }
     }
 }

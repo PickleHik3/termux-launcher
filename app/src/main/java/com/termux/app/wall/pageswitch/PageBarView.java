@@ -72,8 +72,6 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private static final float SLIDE_ACCENT_KEEP = 0.45f;
 
     private final PageBarGlyphPainter mPainter;
-    private final double[] mLabA = new double[3];
-    private final double[] mLabB = new double[3];
     private final PaneGlassBackdropView mGlass;
     private final float mDensity;
     private final int mTouchSlop;
@@ -86,6 +84,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     private final int[] mRoot = new int[2];
     private final int[] mAt = new int[2];
     private final PageBarGlass.Ink mInk = new PageBarGlass.Ink();
+    /** The mock's translucent fill and outline over the solid card, as alphas of the ink. */
+    static final int MOCK_FILL_ALPHA = 0x21;
+    static final int MOCK_STROKE_ALPHA = 0x4D;
+    /** The bubble label's ink, measured on the wallpaper above the bubble ({@link #measureLabelInk}). */
+    @ColorInt private int mBubbleLabelInk = Color.WHITE;
     /** DIAG(TL-PageBarDiag): the fold line last logged; revert before merge. */
     @Nullable private String mDiagFold;
     /** The widget body the pill was last dressed in ({@link PageBarGlass#measure}), reused. */
@@ -180,8 +183,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mFixedInk = true;
         mFixedInkColor = ink;
         mFixedAccent = accent;
-        mInk.ink = ink;
-        mInk.accent = accent;
+        fixInks();
         invalidate();
     }
 
@@ -367,13 +369,12 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mGlassShown = shown;
         if (shown) mGlass.invalidateOutline();
         if (mFixedInk) {
-            mInk.ground = Color.TRANSPARENT;
             mInk.veil = Color.TRANSPARENT;
-            mInk.ink = mFixedInkColor;
-            mInk.accent = mFixedAccent;
+            fixInks();
             mGlass.setEvenOut(null);
+            mBubbleLabelInk = mInk.ink;
             PageBarBubbleView popBubble = mBubble;
-            if (popBubble != null) popBubble.dress(mLook);
+            if (popBubble != null) dressBubble(popBubble);
             invalidate();
             return;
         }
@@ -381,6 +382,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         mInk.ground = Color.TRANSPARENT;
         mInk.veil = Color.TRANSPARENT;
         mInk.ink = Color.WHITE;
+        mInk.other = Color.WHITE;
+        mBody.evenOut = null;
         if (layout != null) {
             mInkRect.set(Math.round(layout.pillLeftPx()), Math.round(layout.pillTopPx()),
                 Math.round(layout.pillLeftPx() + layout.pillWidthPx()),
@@ -391,9 +394,54 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             mInk.accent = accent;
             mGlass.setEvenOut(null);
         }
+        mBubbleLabelInk = measureLabelInk(layout);
         PageBarBubbleView bubble = mBubble;
-        if (bubble != null) bubble.dress(mLook);
+        if (bubble != null) dressBubble(bubble);
         invalidate();
+    }
+
+    /**
+     * The key's pop-up inks: its fixed ink and accent, the glyphs solved on the card it lays under
+     * them with the mock's translucent fill over it, as {@link #dispatchDraw} draws it.
+     */
+    private void fixInks() {
+        int card = PageBarGlass.cardFor(mFixedInkColor);
+        int ground = com.termux.app.chrome.OnGlass.opaque(com.termux.app.chrome.OnGlass.composite(
+            com.termux.app.chrome.OnGlass.withAlpha(mFixedInkColor, MOCK_FILL_ALPHA), card));
+        mInk.ground = ground;
+        mInk.ink = mFixedInkColor;
+        mInk.accent = com.termux.app.chrome.PageMarkInk.current(ground, mFixedAccent,
+            com.termux.app.chrome.GlassInk.isPaleSide(mFixedInkColor, ground));
+        mInk.other = com.termux.app.chrome.PageMarkInk.other(ground, mFixedInkColor, mInk.accent);
+    }
+
+    /**
+     * The bubble's label ink: the bare-text ink of the wallpaper above the bubble's disc, where the
+     * label stands ({@link PageBarGlass#labelInk}); the pill's ink while nothing can be read.
+     */
+    @ColorInt
+    private int measureLabelInk(@Nullable PageBarLayout layout) {
+        if (layout == null || !(mLook instanceof com.termux.app.chrome.WidgetInkSource)) {
+            return mInk.ink;
+        }
+        com.termux.app.chrome.WidgetInkSource source = (com.termux.app.chrome.WidgetInkSource) mLook;
+        float discTop = layout.pillTopPx() + layout.bubbleCenterYFromPillTopPx()
+            - PageBarLayout.BUBBLE_DIAMETER_DP * mDensity / 2f;
+        float labelBottom = discTop - PageBarLayout.LABEL_GAP_DP * mDensity;
+        // A band of the pill's height is room for the label's one line.
+        mInkRect.set(Math.round(layout.pillLeftPx()),
+            Math.round(labelBottom - layout.pillHeightPx()),
+            Math.round(layout.pillLeftPx() + layout.pillWidthPx()), Math.round(labelBottom));
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(this, mOrigin, mRoot);
+        mInkRect.offset(mOrigin[0], mOrigin[1]);
+        int wallpaper = source.wallpaperSample(mInkRect);
+        if (Color.alpha(wallpaper) == 0) wallpaper = source.wallpaperFallback();
+        return PageBarGlass.labelInk(wallpaper, mInk.ink);
+    }
+
+    /** The bubble wears the pill's body (its fill and even-out) and the label its own ink. */
+    private void dressBubble(@NonNull PageBarBubbleView bubble) {
+        bubble.dress(mLook, mInk.veil, mGlassShown ? mBody.evenOut : null, mBubbleLabelInk);
     }
 
     // ---- Drawing ----------------------------------------------------------------------------
@@ -423,9 +471,9 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
                 mFill.setColor(card);
                 canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
             }
-            mFill.setColor((mInk.ink & 0x00FFFFFF) | 0x21000000);
+            mFill.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_FILL_ALPHA));
             canvas.drawRoundRect(mRect, height / 2f, height / 2f, mFill);
-            mStroke.setColor((mInk.ink & 0x00FFFFFF) | 0x4D000000);
+            mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk.ink, MOCK_STROKE_ALPHA));
             mRect.inset(0.5f * mDensity, 0.5f * mDensity);
             canvas.drawRoundRect(mRect, height / 2f, height / 2f, mStroke);
         }
@@ -436,8 +484,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         List<PageBarFold.Slot> slots = fold.slots;
         int accent = (mInk.accent & 0x00FFFFFF)
             | (Math.round(255f * (1f - (1f - SLIDE_ACCENT_KEEP) * mEnter)) << 24);
-        float dim = PageBarInk.neutralAlpha(mInk.accent, mInk.ink, mLabA, mLabB);
-        int neutral = (mInk.ink & 0x00FFFFFF) | (Math.round(Color.alpha(mInk.ink) * dim) << 24);
+        // The others a tier under the current page (PageMarkInk), solved at the dress pass.
+        int neutral = mInk.other;
         for (int i = 0; i < slots.size(); i++) {
             float scale = lifted ? mScales[i] : 1f;
             if (scale <= 0.01f) continue;
@@ -621,8 +669,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         bubble.setVisibility(GONE);
         ((ViewGroup) getParent()).addView(bubble, new android.widget.FrameLayout.LayoutParams(
             LayoutParams.MATCH_PARENT, bubble.heightPx()));
-        bubble.dress(mLook);
         mBubble = bubble;
+        dressBubble(bubble);
     }
 
     private void hideBubble() {

@@ -47,6 +47,10 @@ final class PageBarBubbleView extends ViewGroup {
     private int mNumber;
     @ColorInt private int mAccent;
     @ColorInt private int mInk;
+    /** The pill's fill the disc wears ({@link #dress}). */
+    @ColorInt private int mBodyFill;
+    /** The label's ink, measured on the wallpaper it stands on ({@link #dress}). */
+    @ColorInt private int mLabelInk = android.graphics.Color.WHITE;
     /** The disc's centre x within the pane, clamped by the layout. */
     private float mCenterX;
     private boolean mGlassShown;
@@ -107,10 +111,19 @@ final class PageBarBubbleView extends ViewGroup {
         placeGlass();
     }
 
-    /** Dresses the disc in the Look's glass, or puts it down where the solid fallback applies. */
-    void dress(@Nullable PaneSurfaceStyle look) {
+    /**
+     * Dresses the disc as the pill is dressed: the Look's glass drawn through {@code evenOut} with
+     * the pill's {@code fill} over it (lift and veil), or, where the solid fallback applies, the
+     * pill's card ({@code fill}) under the mock's translucent disc. The label above stands on the
+     * wallpaper and takes {@code labelInk}. A dress pass, never per frame.
+     */
+    void dress(@Nullable PaneSurfaceStyle look, @ColorInt int fill,
+               @Nullable android.graphics.ColorMatrix evenOut, @ColorInt int labelInk) {
         mGlassShown = PageBarGlass.dress(getContext(), look, this, mGlass, mDiameter / 2f);
+        mGlass.setEvenOut(mGlassShown ? evenOut : null);
         mGlass.invalidateOutline();
+        mBodyFill = fill;
+        mLabelInk = labelInk;
         invalidate();
     }
 
@@ -155,12 +168,20 @@ final class PageBarBubbleView extends ViewGroup {
         super.dispatchDraw(canvas);
         float discLeft = mCenterX - mDiameter / 2f;
         float discTop = mAscent + PageBarLayout.LABEL_GAP_DP * mDensity;
+        float discCenterY = discTop + mDiameter / 2f;
+        if (android.graphics.Color.alpha(mBodyFill) != 0) {
+            // The pill's body: its lift and veil over the glass, or its card when solid.
+            mFill.setColor(mBodyFill);
+            canvas.drawCircle(mCenterX, discCenterY, mDiameter / 2f, mFill);
+        }
         if (!mGlassShown) {
             // The solid fallback: the pill's own translucent fill, drawn as a disc.
-            mFill.setColor((mInk & 0x00FFFFFF) | 0x21000000);
-            canvas.drawCircle(mCenterX, discTop + mDiameter / 2f, mDiameter / 2f, mFill);
-            mStroke.setColor((mInk & 0x00FFFFFF) | 0x4D000000);
-            canvas.drawCircle(mCenterX, discTop + mDiameter / 2f, mDiameter / 2f - 0.5f, mStroke);
+            mFill.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk,
+                PageBarView.MOCK_FILL_ALPHA));
+            canvas.drawCircle(mCenterX, discCenterY, mDiameter / 2f, mFill);
+            mStroke.setColor(com.termux.app.chrome.OnGlass.withAlpha(mInk,
+                PageBarView.MOCK_STROKE_ALPHA));
+            canvas.drawCircle(mCenterX, discCenterY, mDiameter / 2f - 0.5f, mStroke);
         }
         float glyph = PageBarLayout.GLYPH_DP * mDensity * PageBarLayout.FOCUS_SCALE;
         mPainter.draw(canvas, mKind, mNumber, discLeft + mDiameter / 2f, discTop + mDiameter / 2f,
@@ -175,7 +196,7 @@ final class PageBarBubbleView extends ViewGroup {
         if (text == null || text.length() == 0) return;
         float width = mText.measureText(text, 0, text.length());
         float x = Math.max(inset, Math.min(getWidth() - inset - width, mCenterX - width / 2f));
-        mText.setColor(mInk);
+        mText.setColor(mLabelInk);
         canvas.drawText(text, 0, text.length(), x, mAscent, mText);
     }
 
