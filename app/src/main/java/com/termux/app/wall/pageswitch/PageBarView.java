@@ -798,9 +798,10 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             int fill = slot.current
                 ? (out > 0f ? ColorUtils.blendARGB(accent, liftAccent, out) : accent) : other;
             if (slot.folded()) {
-                mPainter.drawStack(canvas, slot.kind, slot.number, cx, cy, size, fill, other);
+                mPainter.drawStack(canvas, slot.kind, slot.number, cx, cy, size, fill, slot.current,
+                    other);
             } else {
-                mPainter.draw(canvas, slot.kind, slot.number, cx, cy, size, fill);
+                mPainter.draw(canvas, slot.kind, slot.number, cx, cy, size, fill, slot.current);
             }
         }
     }

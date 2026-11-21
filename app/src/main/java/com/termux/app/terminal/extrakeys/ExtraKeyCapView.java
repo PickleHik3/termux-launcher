@@ -178,7 +178,7 @@ public final class ExtraKeyCapView extends AppCompatTextView {
      */
     public void setPageGlyph(@NonNull PageKind kind, int number) {
         if (mGlyphKind == kind && mGlyphNumber == number) return;
-        if (mGlyphPainter == null) mGlyphPainter = new PageGlyphPainter(getContext());
+        if (mGlyphPainter == null) mGlyphPainter = new PageGlyphPainter();
         mGlyphKind = kind;
         mGlyphNumber = number;
         invalidate();
