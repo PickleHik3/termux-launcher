@@ -303,7 +303,7 @@ public class WindowSourceRulesTest {
     /** Files that reach the decor or the content view while adding views, with the count of sites. */
     static final List<String> DECOR_OR_CONTENT_ADDS = Arrays.asList(
         // decor and content view: moves into the layer hosts
-        "app/TermuxActivity.java:73",
+        "app/TermuxActivity.java:72",
         // reads the decor to find the keys under a gesture; its debug recorder now wraps the window root
         "app/chrome/scene/SceneController.java:1",
         // decor and content view: moves into the layer hosts

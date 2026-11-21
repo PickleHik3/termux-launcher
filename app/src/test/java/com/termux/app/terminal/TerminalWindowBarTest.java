@@ -141,7 +141,7 @@ public class TerminalWindowBarTest {
         assertEquals(add.getPaddingTop(), add.getPaddingBottom());
         assertEquals(add.getHeight() / 2f, (add.getTop() + add.getBottom()) / 2f, .01f);
         assertEquals(add.getDrawable().getIntrinsicWidth(), add.getDrawable().getIntrinsicHeight());
-        assertEquals(Math.round(10f * bar.getResources().getDisplayMetrics().density),
+        assertEquals(Math.round(TerminalWindowBar.WINDOW_ICON_DP * bar.getResources().getDisplayMetrics().density),
             add.getDrawable().getIntrinsicWidth());
         assertEquals(0f, add.getTranslationY(), .01f);
     }
