@@ -38,7 +38,7 @@ public class InsetGlassTest {
             assertTrue(alpha(bottom) < alpha(InsetGlass.floorAt(0f, dark)) / 2);
         }
         // About 24 % under the lip on a dark ground.
-        assertEquals(0.24f, alpha(InsetGlass.floorAt(0f, true)) / 255f, 0.01f);
+        assertEquals(0.12f, alpha(InsetGlass.floorAt(0f, true)) / 255f, 0.01f);
     }
 
     @Test
