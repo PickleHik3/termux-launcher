@@ -108,6 +108,12 @@ public final class DockRowViews implements DockRows.Views {
         return height(R.id.apps_bar_indicator_band, px);
     }
 
+    @Override public boolean setPageBandAir(int px) {
+        View band = mFinder.find(R.id.apps_bar_indicator_band);
+        return band instanceof com.termux.app.launcher.paging.PageTickStripView
+            && ((com.termux.app.launcher.paging.PageTickStripView) band).setAirBelowPx(px);
+    }
+
     @Override public boolean pageTicksAreTheDocks() {
         View band = mFinder.find(R.id.apps_bar_indicator_band);
         return band != null && mTicks.areBoundTo(band);

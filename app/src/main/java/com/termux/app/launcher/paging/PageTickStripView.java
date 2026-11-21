@@ -202,6 +202,21 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
             * getResources().getDisplayMetrics().density);
     }
 
+    private int airBelowPx;
+
+    /**
+     * The empty air at the band's foot, under the ticks: they are centred in the band less it.
+     *
+     * @return whether it moved
+     */
+    public boolean setAirBelowPx(int px) {
+        int wanted = Math.max(0, px);
+        if (airBelowPx == wanted) return false;
+        airBelowPx = wanted;
+        invalidate();
+        return true;
+    }
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         super.onDraw(canvas);
@@ -213,7 +228,7 @@ public class PageTickStripView extends View implements EdgeStackView.Air {
         float[] centers = PageTickStrip.centersPx(lengths, gap, stripLengthPx);
         float thickness = PageTickStrip.THICKNESS_DP * density;
         float radius = PageTickStrip.CORNER_RADIUS_DP * density;
-        float across = (verticalForm ? getWidth() : getHeight()) * 0.5f;
+        float across = (verticalForm ? getWidth() : getHeight() - airBelowPx) * 0.5f;
         for (int page = 0; page < centers.length; page++) {
             int color = tickColorAt(page);
             if (dimmed) {

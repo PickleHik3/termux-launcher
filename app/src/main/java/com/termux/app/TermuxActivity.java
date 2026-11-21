@@ -16608,6 +16608,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     dockLayout.appsRowViewBandPx());
                 setBandSize(indicator, ViewGroup.LayoutParams.MATCH_PARENT,
                     dockLayout.appsRowStripBandPx);
+                indicator.setAirBelowPx(dockLayout.appsRowStripAirPx);
                 setBandSize(host, ViewGroup.LayoutParams.MATCH_PARENT,
                     ViewGroup.LayoutParams.WRAP_CONTENT);
             }

@@ -73,6 +73,8 @@ public final class DockRows {
         boolean setRowHeight(@NonNull Element row, int px);
         /** The pinned apps' page band's height; whether it moved. */
         boolean setPageBandHeight(int px);
+        /** The empty air at the page band's foot under its ticks; whether it moved. */
+        default boolean setPageBandAir(int px) { return false; }
         /** Whether the ticks the pinned apps feed are the dock's own band (not another edge's). */
         boolean pageTicksAreTheDocks();
     }
@@ -295,6 +297,7 @@ public final class DockRows {
         boolean moved = mViews.setRowHeight(Element.APPS, appsFrom.appsBarHeightPx);
         // The page band is the apps row's own: it stands and is sized with that row.
         moved |= mViews.setPageBandHeight(appsFrom.indicatorBandHeightPx);
+        moved |= mViews.setPageBandAir(appsFrom.appsRowStripAirPx);
         moved |= mViews.setRowHeight(Element.AZ, azFrom.azRowHeightPx);
         return moved;
     }

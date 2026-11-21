@@ -499,13 +499,16 @@ public final class DockLayoutPolicy {
         boolean dashesAboveSlab = dashesAboveSlab(in);
         // The slab starts the capsules' own air (PageTickStrip.SURFACE_AIR_DP) below them, not flush
         // under the strip's band, where the band's thin air under the capsules crowded its edge.
-        int surfaceExtraPx = dashesAboveSlab
+        // The air is the foot of the strip's own band, so everything that reads the band reads it.
+        int surfaceAirPx = dashesAboveSlab
             ? PageTickStrip.surfaceExtraPx(stripBandPx, density) : 0;
-        if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx + surfaceExtraPx;
+        stripBandPx += surfaceAirPx;
+        if (dashesAboveSlab) tickSideAirPx = airPx + stripBandPx;
         out.surface = in.surface;
         out.slabTopInsetPx = dashesAboveSlab && in.preferencesAvailable && in.appsRowEnabledPref
-            ? stripBandPx + surfaceExtraPx : 0;
+            ? stripBandPx : 0;
         out.appsRowStripBandPx = stripBandPx;
+        out.appsRowStripAirPx = surfaceAirPx;
         out.appsTopPaddingPx = airPx;
         out.appsBottomPaddingPx = airPx;
         out.appsRowTickSideAirPx = tickSideAirPx;

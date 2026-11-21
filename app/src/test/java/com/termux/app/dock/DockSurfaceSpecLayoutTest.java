@@ -215,9 +215,8 @@ public class DockSurfaceSpecLayoutTest {
                 assertEquals(plain.iconScale, tray.iconScale, 0f);
                 // The stack grows by the air the dashes no longer stand in, and the capsules' air
                 // over the slab, and nothing else.
-                int slabAir = tray.slabTopInsetPx - tray.appsRowStripBandPx;
                 assertEquals(plain.appsRowBandPx + (tray.appsBottomPaddingPx
-                        + tray.appsRowStripBandPx + slabAir - plain.appsRowTickSideAirPx),
+                        + tray.appsRowStripBandPx - plain.appsRowTickSideAirPx),
                     tray.appsRowBandPx);
             }
         }
@@ -235,8 +234,9 @@ public class DockSurfaceSpecLayoutTest {
             for (boolean alone : new boolean[] {false, true}) {
                 DockLayout l = DockLayoutPolicy.compute(inputs(true, alone, true,
                     DockLayoutPolicy.sizePreset(2)).surface(kind).build());
-                float below = PageTickStrip.edgeGapPx(l.appsRowStripBandPx, DENSITY)
-                    + (l.slabTopInsetPx - l.appsRowStripBandPx);
+                // Centred in the band less its foot air, then the foot air to the slab's edge.
+                float below = PageTickStrip.edgeGapPx(
+                    l.appsRowStripBandPx - l.appsRowStripAirPx, DENSITY) + l.appsRowStripAirPx;
                 assertEquals(kind.name + " alone=" + alone + ": " + below / DENSITY + "dp",
                     PageTickStrip.SURFACE_AIR_DP * DENSITY, below, 1f);
                 assertTrue(kind.name + " alone=" + alone,
