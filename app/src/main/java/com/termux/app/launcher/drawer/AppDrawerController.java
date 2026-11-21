@@ -982,6 +982,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
     }
 
+    /** Whether the drawer shows Categories: the type itself, or Default on its Categories section. */
+    private boolean presentsCategories() {
+        AppDrawerContentView content = mContent;
+        return content != null ? content.presentedType() == AppDrawerViewType.CATEGORIES
+            : mLayoutConfig.viewType == AppDrawerViewType.CATEGORIES;
+    }
+
     /**
      * The categories layout's nudge: apps installed since the last categorization run land in
      * "Other" until it is run again, and past a handful of them the drawer says so once, on the
@@ -990,7 +997,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
      * or left the categories layout is dropped and asked again on the next open.
      */
     private void nudgeCategorizationIfPending() {
-        if (mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
+        if (!presentsCategories()) return;
         Context context = mHost.context();
         LauncherCategoryPendingApps.countWaitingAsync(context,
             LauncherAppDataProvider.getInstance(context).getAllApps(), waiting -> {
@@ -998,7 +1005,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     mCategoryNudge.reset();
                     return;
                 }
-                if (!mOpen || mLayoutConfig.viewType != AppDrawerViewType.CATEGORIES) return;
+                if (!mOpen || !presentsCategories()) return;
                 if (!mCategoryNudge.onDrawerOpened(waiting)) return;
                 AppNotice.shell(context,
                     context.getResources().getQuantityString(R.plurals.app_drawer_category_pending_notice,
@@ -1874,6 +1881,9 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             && preferences.isAppLauncherDrawerSearchAndroidKeyboardEnabled();
         mSearch.setTextFieldOwnsInput(mTextFieldSearch);
         content.setTextFieldSearch(mTextFieldSearch);
+        // The remembered section goes in first and silently, so the type swap below builds the
+        // right presentation once and nothing writes back the value just read.
+        content.restoreSection(storedSection(preferences));
         content.setViewType(mLayoutConfig.viewType);
         applyContentMetrics(content, contentRect, false);
         content.bind(LauncherAppDataProvider.getInstance(mHost.context()), mSearch);
@@ -1897,6 +1907,24 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         if (start == mReveal.value) return;
         mReveal.value = start;
         mReveal.vel = 0f;
+    }
+
+    @NonNull
+    private static AppDrawerSection storedSection(@Nullable TermuxAppSharedPreferences preferences) {
+        return preferences == null ? AppDrawerSection.APPS
+            : AppDrawerSection.fromPreference(preferences.getAppLauncherDrawerSection());
+    }
+
+    /** The user moved between Default's sections: remember it, and size the section now shown. */
+    @Override
+    public void onSectionChanged(@NonNull AppDrawerSection section) {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        if (preferences != null) preferences.setAppLauncherDrawerSection(section.preferenceValue);
+        AppDrawerContentView content = mContent;
+        Frame rect = mContentRect != null ? mContentRect : resolveContentBaseRect(mOpenRect);
+        if (content == null || rect == null) return;
+        applyContentMetrics(content, rect, false);
+        content.rebindCurrentResults();
     }
 
     /** Reconfigures the existing content tree; never enters styling/accessory/activity paths. */
@@ -1950,7 +1978,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         content.setBottomInsetPx(resolveContentBottomInsetPx(content, rect));
         float labelHeightPx = resolveCellLabelHeightPx();
         AppDrawerLayoutConfig config = mLayoutConfig;
-        switch (config.viewType) {
+        // Default is whichever of the two its section shows, sized exactly as that type is.
+        switch (content.presentedType()) {
             case VERTICAL:
                 if (heightOnly) return;
                 content.setVerticalMetrics(AppDrawerGridMetrics.resolve(rect.width()

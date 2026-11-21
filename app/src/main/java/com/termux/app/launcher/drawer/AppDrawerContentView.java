@@ -108,6 +108,10 @@ public final class AppDrawerContentView extends FrameLayout
 
         void onContentCloseDragCancel();
 
+        /** The section changed through {@link #setSection}; not called for a restore. */
+        default void onSectionChanged(@NonNull AppDrawerSection section) {
+        }
+
     }
 
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
@@ -190,7 +194,10 @@ public final class AppDrawerContentView extends FrameLayout
     private int mVerticalColumns = AppDrawerGridMetrics.MIN_COLUMNS;
     private boolean mCategorySearchPresentation;
     private final int mGridBaseTopMarginPx;
+    /** The configured type. Everything that draws or routes touches reads {@link #presentedType()}. */
     @NonNull private AppDrawerViewType mViewType = AppDrawerViewType.VERTICAL;
+    /** The remembered section; only the Default type shows it. */
+    @NonNull private AppDrawerSection mSection = AppDrawerSection.APPS;
     @NonNull private AppDrawerViewType mGestureViewType = AppDrawerViewType.VERTICAL;
 
     /** Re-registered on every catalogue change: {@code invalidate()} drops pending callbacks. */
@@ -565,7 +572,7 @@ public final class AppDrawerContentView extends FrameLayout
         // An external edit or a finished sort run rewrites app-categories.conf behind our back.
         mCategoryAssignments.invalidate();
         classifyCatalogue(mVisibleResults, true);
-        if (mViewType == AppDrawerViewType.CATEGORIES)
+        if (presentedType() == AppDrawerViewType.CATEGORIES)
             mCategoryView.submitBuckets(mCategoryBuckets);
     }
 
@@ -889,15 +896,68 @@ public final class AppDrawerContentView extends FrameLayout
             AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity);
     }
 
+    /**
+     * The type that is drawn and routed: Default is Vertical on its Apps section and Categories on
+     * its Categories section, every other type is itself. No allocation; read freely.
+     */
+    @NonNull
+    AppDrawerViewType presentedType() {
+        if (mViewType != AppDrawerViewType.DEFAULT) return mViewType;
+        return mSection == AppDrawerSection.CATEGORIES
+            ? AppDrawerViewType.CATEGORIES : AppDrawerViewType.VERTICAL;
+    }
+
+    @NonNull
+    public AppDrawerSection getSection() {
+        return mSection;
+    }
+
+    /** The user moved to {@code section}: swaps the presentation and tells the callbacks. */
+    public void setSection(@NonNull AppDrawerSection section) {
+        applySection(section, true);
+    }
+
+    /**
+     * The stored section put back as the drawer opens: the same swap, but silent, so a restore never
+     * writes the preference it was just read from.
+     */
+    public void restoreSection(@NonNull AppDrawerSection section) {
+        applySection(section, false);
+    }
+
+    private void applySection(@NonNull AppDrawerSection section, boolean notify) {
+        if (mSection == section) return;
+        AppDrawerViewType from = presentedType();
+        AppDrawerSection previous = mSection;
+        mSection = section;
+        AppDrawerViewType to = presentedType();
+        mSection = previous;
+        if (from == to) {
+            mSection = section;
+        } else {
+            swapPresentation(mViewType, section);
+        }
+        if (notify && mCallbacks != null) mCallbacks.onSectionChanged(section);
+    }
+
     public void setViewType(@NonNull AppDrawerViewType viewType) {
         if (mViewType == viewType) {
             applyViewType();
             return;
         }
+        swapPresentation(viewType, mSection);
+    }
+
+    /**
+     * Tears the current presented type down and brings the new one up. The fields still hold the
+     * old values while the old presentation is stopped and cleared; they change after.
+     */
+    private void swapPresentation(@NonNull AppDrawerViewType viewType,
+                                  @NonNull AppDrawerSection section) {
         dismissContextPopups();
         cancelCellLongPresses();
         stopPresentationMotion();
-        switch (mViewType) {
+        switch (presentedType()) {
             case VERTICAL:
                 clearScrub();
                 restoreCellAppearance();
@@ -914,6 +974,7 @@ public final class AppDrawerContentView extends FrameLayout
                 break;
         }
         mViewType = viewType;
+        mSection = section;
         applyViewType();
         submitVisibleResults(true);
     }
@@ -931,7 +992,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** @param keepContent a closing drawer: the categories keep their tiles until it is gone */
     private void stopPresentationMotion(boolean keepContent) {
-        switch (mViewType) {
+        switch (presentedType()) {
             case HORIZONTAL:
                 cancelNestedClose();
                 mHorizontalPager.stopForModeChange();
@@ -1010,7 +1071,7 @@ public final class AppDrawerContentView extends FrameLayout
         boolean searching = hasQuery() || mSearchRevealRequested;
         boolean portrait = getResources().getConfiguration().orientation
             != android.content.res.Configuration.ORIENTATION_LANDSCAPE;
-        mLowerStartPx = mViewType != AppDrawerViewType.VERTICAL ? 0
+        mLowerStartPx = presentedType() != AppDrawerViewType.VERTICAL ? 0
             : AppDrawerLowerStartPolicy.offsetPx(mLowerStart, portrait, searching, getHeight(),
                 mGridBaseTopMarginPx);
         int top = gridTopMargin();
@@ -1028,7 +1089,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     private void applyViewTypeLayout() {
         LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
-        switch (mViewType) {
+        switch (presentedType()) {
             case VERTICAL:
                 applyCategorySearchPresentation(false);
                 gridParams.leftMargin = mAzSide.leftInsetPx(Math.round(mColumnWidthPx));
@@ -1209,23 +1270,23 @@ public final class AppDrawerContentView extends FrameLayout
         mSavedPosition = 0;
         mSavedOffsetPx = 0;
         if (!mRememberPosition || hasQuery()) return;
-        if (mViewType == AppDrawerViewType.VERTICAL) {
+        if (presentedType() == AppDrawerViewType.VERTICAL) {
             int first = mLayoutManager.findFirstVisibleItemPosition();
             View view = first < 0 ? null : mLayoutManager.findViewByPosition(first);
             mSavedPosition = Math.max(0, first);
             mSavedOffsetPx = view == null ? 0 : view.getTop() - mGrid.getPaddingTop();
-        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+        } else if (presentedType() == AppDrawerViewType.HORIZONTAL) {
             mSavedPosition = mHorizontalPager.getSelectedPage();
         }
     }
 
     private void restoreReopenPosition() {
         if (!mRememberPosition) return;
-        if (mViewType == AppDrawerViewType.VERTICAL) {
+        if (presentedType() == AppDrawerViewType.VERTICAL) {
             int position = AppDrawerReopenPolicy.startPosition(true, mSavedPosition,
                 mAdapter.getItemCount());
             if (position > 0) mLayoutManager.scrollToPositionWithOffset(position, mSavedOffsetPx);
-        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+        } else if (presentedType() == AppDrawerViewType.HORIZONTAL) {
             int page = AppDrawerReopenPolicy.startPosition(true, mSavedPosition,
                 mHorizontalAdapter.getItemCount());
             if (page > 0) mHorizontalPager.setSelectedPage(page, false);
@@ -1246,10 +1307,10 @@ public final class AppDrawerContentView extends FrameLayout
     public void resetSearchToTop() {
         clearSearchState();
         mInput.mirror("", 0);
-        if (mViewType == AppDrawerViewType.VERTICAL) {
+        if (presentedType() == AppDrawerViewType.VERTICAL) {
             mGrid.stopScroll();
             mGrid.scrollToPosition(0);
-        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+        } else if (presentedType() == AppDrawerViewType.HORIZONTAL) {
             mHorizontalPager.setSelectedPage(0, false);
         }
     }
@@ -1279,7 +1340,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** True while the category tiles are the presentation: categories view type, no query typed. */
     private boolean categoryTilesShown() {
-        return mViewType == AppDrawerViewType.CATEGORIES && !hasQuery();
+        return presentedType() == AppDrawerViewType.CATEGORIES && !hasQuery();
     }
 
     /** @return true when a non-empty query was cleared, i.e. when Back has already been spent */
@@ -1324,7 +1385,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Nullable
     private View cellViewAt(int position) {
-        switch (mViewType) {
+        switch (presentedType()) {
             case HORIZONTAL:
                 return mHorizontalAdapter.iconAt(mHorizontalPager, position);
             case CATEGORIES:
@@ -1350,7 +1411,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public void onSearchHighlightChanged(int oldIndex, int newIndex) {
-        if (mViewType == AppDrawerViewType.HORIZONTAL) {
+        if (presentedType() == AppDrawerViewType.HORIZONTAL) {
             mHorizontalAdapter.moveHighlight(newIndex);
             int page = mHorizontalAdapter.pageOf(newIndex);
             if (page >= 0 && page != mHorizontalPager.getSelectedPage()) {
@@ -1365,7 +1426,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Override
     public int searchColumns() {
-        switch (mViewType) {
+        switch (presentedType()) {
             case HORIZONTAL:
                 AppDrawerHorizontalGridMetrics metrics = mHorizontalAdapter.getMetrics();
                 return metrics == null ? 1 : Math.max(1, metrics.columns);
@@ -1402,7 +1463,7 @@ public final class AppDrawerContentView extends FrameLayout
         // can ask it for one.
         mSectionIndex = AppDrawerSectionIndex.build(results);
         mVisibleResults = new ArrayList<>(results);
-        if (mViewType == AppDrawerViewType.CATEGORIES) {
+        if (presentedType() == AppDrawerViewType.CATEGORIES) {
             if (hasQuery()) mCategoryView.cancelForSearch();
             else if (mGrid.getVisibility() == VISIBLE) recycleSearchGridHolders();
             applyViewType();
@@ -1411,8 +1472,8 @@ public final class AppDrawerContentView extends FrameLayout
         // The list identity changed under the finger, and the scroll target the scrub was driving
         // no longer means the same app.
         clearScrub();
-        if (queryChanged && (mViewType == AppDrawerViewType.VERTICAL
-            || (mViewType == AppDrawerViewType.CATEGORIES && hasQuery()))) {
+        if (queryChanged && (presentedType() == AppDrawerViewType.VERTICAL
+            || (presentedType() == AppDrawerViewType.CATEGORIES && hasQuery()))) {
             mGrid.scrollToPosition(0);
             // A different list is a different scroll: an arming earned against the previous one is
             // no longer a promise about anything.
@@ -1456,12 +1517,12 @@ public final class AppDrawerContentView extends FrameLayout
 
     private void submitVisibleResults(boolean resetPosition) {
         boolean pickupEnabled = !hasQuery()
-            && (mViewType == AppDrawerViewType.VERTICAL
-                || mViewType == AppDrawerViewType.HORIZONTAL);
+            && (presentedType() == AppDrawerViewType.VERTICAL
+                || presentedType() == AppDrawerViewType.HORIZONTAL);
         mAdapter.setPickupEnabled(pickupEnabled);
         mHorizontalAdapter.setPickupEnabled(pickupEnabled);
         List<AppDrawerItem> mixed = mixedItems();
-        switch (mViewType) {
+        switch (presentedType()) {
             case VERTICAL:
                 AppDrawerSectionIndex mixedIndex = AppDrawerSectionIndex.build(indexEntries(mixed));
                 mSectionIndex = mixedIndex;
@@ -1492,10 +1553,10 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull
     private List<AppDrawerItem> mixedItems() {
         SuggestionBarView dock = mDock;
-        if (dock == null || hasQuery() || mViewType == AppDrawerViewType.CATEGORIES)
+        if (dock == null || hasQuery() || presentedType() == AppDrawerViewType.CATEGORIES)
             return AppDrawerItemComposer.appsOnly(mVisibleResults);
         return AppDrawerItemComposer.compose(mVisibleResults, dock.getLauncherConfigSnapshot(),
-            true, mViewType);
+            true, presentedType());
     }
 
     @NonNull
@@ -1529,7 +1590,7 @@ public final class AppDrawerContentView extends FrameLayout
         int pages = mHorizontalAdapter.getItemCount();
         mPageIndicator.setPageCount(pages);
         mPageIndicator.setSelectedPage(mHorizontalPager.getSelectedPage());
-        if (mViewType != AppDrawerViewType.HORIZONTAL) mPageIndicator.setVisibility(GONE);
+        if (presentedType() != AppDrawerViewType.HORIZONTAL) mPageIndicator.setVisibility(GONE);
     }
 
     private void notifyRevealTarget() {
@@ -1566,7 +1627,7 @@ public final class AppDrawerContentView extends FrameLayout
      */
     private void cancelCellLongPresses() {
         RecyclerView surface;
-        switch (mViewType) {
+        switch (presentedType()) {
             case VERTICAL:
                 surface = mGrid;
                 break;
@@ -1614,7 +1675,7 @@ public final class AppDrawerContentView extends FrameLayout
             letters[i] = mSectionIndex.letterAt(i);
         }
         mColumn.setLetters(letters);
-        mColumn.setActive(mViewType == AppDrawerViewType.VERTICAL && mAzSide.shown()
+        mColumn.setActive(presentedType() == AppDrawerViewType.VERTICAL && mAzSide.shown()
             && !hasQuery() && letterCount >= 2);
     }
 
@@ -1687,7 +1748,7 @@ public final class AppDrawerContentView extends FrameLayout
      * @return true while either still needs another frame
      */
     public boolean advanceDrawerFx(float p, float dt, boolean reduced) {
-        switch (mViewType) {
+        switch (presentedType()) {
             case HORIZONTAL:
                 return false;
             case CATEGORIES:
@@ -1709,7 +1770,7 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** Drops the rope and the highlight. For a drawer that has closed. */
     public void resetDrawerFx() {
-        switch (mViewType) {
+        switch (presentedType()) {
             case VERTICAL:
                 clearScrub();
                 mColumn.resetRope();
@@ -1843,7 +1904,7 @@ public final class AppDrawerContentView extends FrameLayout
      */
     @NonNull
     private AppDrawerTouchRegions.Region regionAt(float localX, float localY) {
-        switch (mViewType) {
+        switch (presentedType()) {
             case VERTICAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid),
                     boundsOf(mColumn), mInteractive, isColumnActive());
@@ -1936,7 +1997,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (action == MotionEvent.ACTION_DOWN) {
             mDownRawY = ev.getRawY();
             mLastRawY = mDownRawY;
-            mGestureViewType = mViewType;
+            mGestureViewType = presentedType();
             mGestureCategorySearch = mGestureViewType == AppDrawerViewType.CATEGORIES && hasQuery();
             mGestureCategoryPart = AppDrawerCategoryTouchRegions.Part.OUTSIDE;
             mGestureRecycler = null;
@@ -2000,17 +2061,17 @@ public final class AppDrawerContentView extends FrameLayout
 
     @Nullable
     private AppDrawerItem drawerItemAt(float x, float y) {
-        if (mViewType == AppDrawerViewType.VERTICAL) {
+        if (presentedType() == AppDrawerViewType.VERTICAL) {
             View child = mGrid.findChildViewUnder(x - mGrid.getLeft(), y - mGrid.getTop());
             if (child == null) return null;
             return mAdapter.itemAt(mGrid.getChildAdapterPosition(child));
         }
-        if (mViewType == AppDrawerViewType.CATEGORIES) {
+        if (presentedType() == AppDrawerViewType.CATEGORIES) {
             LauncherAppEntry entry = mCategoryView.appEntryAt(x - mCategoryView.getLeft(),
                 y - mCategoryView.getTop());
             return entry == null ? null : AppDrawerItem.app(entry);
         }
-        if (mViewType != AppDrawerViewType.HORIZONTAL) return null;
+        if (presentedType() != AppDrawerViewType.HORIZONTAL) return null;
         View pageView = mHorizontalPager.findChildViewUnder(x - mHorizontalPager.getLeft(),
             y - mHorizontalPager.getTop());
         if (pageView == null) return null;
@@ -2112,7 +2173,7 @@ public final class AppDrawerContentView extends FrameLayout
      */
     @NonNull @Override public String drawerAnchorFor(@Nullable String targetStableId) {
         if (targetStableId == null) return PinnedFolderItem.DRAWER_ANCHOR_END;
-        List<AppDrawerItem> items = mViewType == AppDrawerViewType.HORIZONTAL
+        List<AppDrawerItem> items = presentedType() == AppDrawerViewType.HORIZONTAL
             ? mHorizontalAdapter.items() : mAdapter.items();
         int index = -1;
         for (int i = 0; i < items.size(); i++) {

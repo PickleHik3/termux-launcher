@@ -97,6 +97,36 @@ public class AppDrawerBackPriorityTest {
         assertFalse(controller.isOpen());
     }
 
+    /** Default on Categories: Back collapses the category, then closes; the section is never touched. */
+    @Test public void backNeverLeavesDefaultsCategoriesSection() {
+        content.setViewType(AppDrawerViewType.DEFAULT);
+        content.setSection(AppDrawerSection.CATEGORIES);
+        assertEquals(AppDrawerViewType.CATEGORIES, content.presentedType());
+        expandFirstCategory(AppDrawerViewType.DEFAULT);
+
+        assertTrue(back());
+        settleCategory();
+        assertEquals(AppDrawerCategoryExpansionModel.State.OVERVIEW,
+            content.getCategoryView().expansionState());
+        assertTrue(controller.isOpen());
+        assertEquals(AppDrawerSection.CATEGORIES, content.getSection());
+
+        assertTrue("with nothing expanded the press closes the drawer", back());
+        assertFalse(controller.isOpen());
+        assertEquals(AppDrawerSection.CATEGORIES, content.getSection());
+    }
+
+    /** Default on Apps: nothing to collapse, so Back closes the drawer and stays on Apps. */
+    @Test public void backClosesDefaultOnAppsWithoutChangingSection() {
+        content.setViewType(AppDrawerViewType.DEFAULT);
+        assertEquals(AppDrawerViewType.VERTICAL, content.presentedType());
+        assertFalse(content.handleBackInDrawer());
+
+        assertTrue(back());
+        assertFalse(controller.isOpen());
+        assertEquals(AppDrawerSection.APPS, content.getSection());
+    }
+
     private void assertBackWalksTheHierarchy() {
         expandFirstCategory();
         assertEquals(AppDrawerCategoryExpansionModel.State.EXPANDED,
@@ -125,7 +155,11 @@ public class AppDrawerBackPriorityTest {
     }
 
     private void expandFirstCategory() {
-        content.setViewType(AppDrawerViewType.CATEGORIES);
+        expandFirstCategory(AppDrawerViewType.CATEGORIES);
+    }
+
+    private void expandFirstCategory(AppDrawerViewType type) {
+        content.setViewType(type);
         content.setCategoryMetrics(AppDrawerCategoryTileAdapterTest.metrics());
         AppDrawerCategoryBucket bucket =
             AppDrawerCategoryTileAdapterTest.bucket(AppDrawerCategory.SOCIAL, 8);

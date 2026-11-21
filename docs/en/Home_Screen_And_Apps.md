@@ -184,13 +184,13 @@ display. See [The Linux display](X11_Display.md#apps-on-the-display).
 
 **Settings → Apps → Drawer layout** opens the drawer's own page:
 
-- **Grid**: **Vertical**, **Horizontal pages** or **Categories**.
+- **Grid**: **Default**, **Vertical**, **Horizontal pages** or **Categories**.
 - **Open keyboard automatically**: the keyboard comes up when the drawer opens.
 - **Use system keyboard**: "Search with the phone's own keyboard instead of the launcher's, with its suggestions and swipe typing."
 
 ### Categories
 
-With the **Categories** layout, two more rows appear:
+With the **Default** or **Categories** layout, two more rows appear:
 
 - **Category sorting** ("Choose how apps are grouped.") opens **Sort apps into categories**:
   - **On this device**: a local model sorts your apps, and nothing leaves your phone. It takes a few

@@ -6,7 +6,7 @@
     <com.termux.app.fragments.settings.SegmentedPillPreference
         app:key="app_launcher_drawer_view_type"
         app:title="@string/settings_app_drawer_grid_title"
-        android:defaultValue="vertical"
+        android:defaultValue="default"
         app:entries="@array/app_launcher_drawer_view_type_entries"
         app:entryValues="@array/app_launcher_drawer_view_type_values" />
 

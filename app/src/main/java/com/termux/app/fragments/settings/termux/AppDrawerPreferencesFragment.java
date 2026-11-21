@@ -49,6 +49,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
     private static final String KEY_VIEW_TYPE = "app_launcher_drawer_view_type";
     /** The only drawer layout that renders categories, so the only one the two rows apply to. */
     private static final String VIEW_TYPE_CATEGORIES = "categories";
+    private static final String VIEW_TYPE_DEFAULT = "default";
     private static final long POLL_INTERVAL_MS = 700L;
     private static final int REQUEST_POST_NOTIFICATIONS = 4711;
 
@@ -155,7 +156,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
      * hidden rather than disabled: nothing on this screen could make them do anything there.
      */
     private void applyCategoryVisibility(@Nullable String viewType) {
-        boolean categories = VIEW_TYPE_CATEGORIES.equals(viewType);
+        boolean categories = VIEW_TYPE_CATEGORIES.equals(viewType) || VIEW_TYPE_DEFAULT.equals(viewType);
         Preference sort = findPreference(KEY_CATEGORY_SORT);
         if (sort != null) sort.setVisible(categories);
         Preference refresh = findPreference(KEY_CATEGORY_REFRESH);

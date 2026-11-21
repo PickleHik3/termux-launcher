@@ -23,7 +23,7 @@ public class AppDrawerPreferencesFragmentTest {
         SegmentedPillPreference view = fragment.findPreference(
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE);
         assertNotNull(view);
-        assertEquals(3, view.segmentCount());
+        assertEquals(4, view.segmentCount());
         // Icon size and the per-view column/row counts were removed: every view resolves its own
         // geometry from the plane's width, and the category cards size their previews to fill, so a
         // pinned size could only put the dead space back.

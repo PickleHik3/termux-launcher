@@ -60,7 +60,7 @@ public class LauncherDrawerViewTypePreferenceTest {
         Preference found = screen.findPreference("app_launcher_drawer_view_type");
         assertTrue(found instanceof SegmentedPillPreference);
         SegmentedPillPreference pill = (SegmentedPillPreference) found;
-        assertEquals(3, pill.segmentCount());
+        assertEquals(4, pill.segmentCount());
         pill.setValue("categories");
         assertEquals("categories", pill.getValue());
     }

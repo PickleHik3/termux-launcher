@@ -139,7 +139,9 @@ public class LauncherPreferencesFragment extends MaterialPreferenceFragment {
         String value = TermuxStylePreferencesDataStore.getInstance(getContext()).getString(
             TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE);
-        int summary = TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
+        int summary = TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT.equals(value)
+            ? R.string.settings_app_drawer_view_type_default
+            : TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL.equals(value)
             ? R.string.settings_app_drawer_view_type_horizontal
             : TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES.equals(value)
                 ? R.string.settings_app_drawer_view_type_categories
