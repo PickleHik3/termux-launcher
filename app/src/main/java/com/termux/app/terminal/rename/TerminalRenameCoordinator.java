@@ -111,7 +111,11 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
         // stack on top of a still-active chip that would fight it for the interceptor and the name.
         if (controller.isActive()) controller.cancel();
         ViewGroup container = host.chipHost();
-        if (container == null || !host.ensureTypingKeyboard()) {
+        RenameDiag.armOpen();
+        boolean typingDiag = container != null && host.ensureTypingKeyboard();
+        RenameDiag.logWithCallers("begin target=" + target + " host=" + (container != null)
+            + " typing=" + typingDiag + " current=" + host.currentName(target));
+        if (!typingDiag) {
             host.promptRenameWithDialog(target);
             return true;
         }
@@ -164,12 +168,23 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
 
     /** Hardware and external-keyboard strokes, claimed while a rename is up. */
     public boolean handleKeyDown(int keyCode, @NonNull KeyEvent event) {
-        return controller.handleKeyDown(keyCode, event);
+        boolean wasActive = controller.isActive();
+        boolean took = controller.handleKeyDown(keyCode, event);
+        if (wasActive) RenameDiag.log("key code=" + keyCode + " action=" + event.getAction()
+            + " repeat=" + event.getRepeatCount() + " device=" + event.getDeviceId()
+            + " meta=" + Integer.toHexString(event.getMetaState()) + " took=" + took
+            + " activeAfter=" + controller.isActive()
+            + " draft=" + (controller.model() == null ? "-" : controller.model().committedName()));
+        return took;
     }
 
     /** System-IME committed text, claimed while a rename is up. */
     public boolean handleCodePoint(int codePoint, boolean ctrlDown) {
-        return controller.handleCodePoint(codePoint, ctrlDown);
+        boolean wasActive = controller.isActive();
+        boolean took = controller.handleCodePoint(codePoint, ctrlDown);
+        if (wasActive) RenameDiag.log("codepoint=" + codePoint + " ctrl=" + ctrlDown
+            + " took=" + took + " activeAfter=" + controller.isActive());
+        return took;
     }
 
     /** Cancels on pause: a chip that survived a trip to another app would edit stale state. */
@@ -200,11 +215,18 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
     @Override
     public void onRenameEnded(boolean committed, @Nullable String committedName) {
         TerminalRenameTarget ended = target;
+        RenameDiag.armTrail();
+        RenameDiag.logWithCallers("ended target=" + ended + " committed=" + committed
+            + " name=" + committedName);
         target = null;
         host.installRenameInterceptor(null);
         hideChip();
         if (ended == null) return;
-        if (committed) host.applyName(ended, committedName);
+        if (committed) {
+            boolean applied = host.applyName(ended, committedName);
+            RenameDiag.log("applied target=" + ended + " ok=" + applied
+                + " readBack=" + host.currentName(ended));
+        }
         host.onRenameEnded(ended, committed);
     }
 

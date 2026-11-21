@@ -768,6 +768,53 @@ public class TermuxInAppKeyboardTest {
     }
 
     @Test
+    public void aFieldOpeningLeavesTheKeyboardDownWhileAHardwareKeyboardTypes() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(true);
+        mController.setHardwareKeyboardDetector(() -> true);
+        mController.onCreate(null);
+
+        // A rename, the find strip or a sheet's field asks for typing, not for this keyboard.
+        mController.show(TermuxInAppKeyboard.ShowReason.TEXT_ENTRY);
+        assertFalse(mController.isVisible());
+        assertTrue(mController.yieldsToHardwareKeyboard());
+        // The keyboard key is still a person asking for it.
+        mController.show(TermuxInAppKeyboard.ShowReason.KEYBOARD_ACTION);
+        assertTrue(mController.isVisible());
+    }
+
+    @Test
+    public void aFieldOpeningRaisesTheKeyboardWithNoHardwareKeyboard() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(true);
+        mController.setHardwareKeyboardDetector(() -> false);
+        mController.onCreate(null);
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+
+        mController.show(TermuxInAppKeyboard.ShowReason.TEXT_ENTRY);
+        assertTrue(mController.isVisible());
+        assertFalse(mController.yieldsToHardwareKeyboard());
+    }
+
+    @Test
+    public void aKeyboardAFieldRaisedGoesDownWhenAHardwareKeyboardAttaches() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(true);
+        boolean[] attached = {false};
+        mController.setHardwareKeyboardDetector(() -> attached[0]);
+        mController.onCreate(null);
+        mController.hide(TermuxInAppKeyboard.HideReason.USER_EVENT);
+        mController.show(TermuxInAppKeyboard.ShowReason.TEXT_ENTRY);
+        assertTrue(mController.isVisible());
+
+        attached[0] = true;
+        mController.onConfigurationChanged(new Configuration());
+        assertFalse(mController.isVisible());
+        assertEquals(TermuxInAppKeyboard.HideReason.HARDWARE_KEYBOARD,
+            mController.getLastHideReason());
+    }
+
+    @Test
     public void detachingAndAttachingTheHardwareKeyboardShowsAndHidesTheKeyboard() {
         mPreferences.setInAppKeyboardEnabled(true);
         mPreferences.setSoftKeyboardEnabledOnlyIfNoHardware(true);

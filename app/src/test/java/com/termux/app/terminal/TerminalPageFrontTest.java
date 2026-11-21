@@ -1,7 +1,9 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertSame;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.os.Build;
@@ -37,13 +39,19 @@ public class TerminalPageFrontTest {
 
     private static final class FakeHost implements TerminalPageHost {
         @Nullable TerminalPaneController.Window active;
-        boolean keysWithTerminal;
+        boolean activePaneHoldsKeys;
+        /** Whether a hand-back lands; false while the panes are off screen and refuse it. */
+        boolean handBackLands = true;
         int handBacks;
         View paneHost;
         @Nullable @Override public TerminalPaneController.Window activeWindow() { return active; }
         @NonNull @Override public View paneHost() { return paneHost; }
-        @Override public boolean keysWithTerminal() { return keysWithTerminal; }
-        @Override public boolean handKeysToTerminal() { handBacks++; return true; }
+        @Override public boolean activePaneHoldsKeys() { return activePaneHoldsKeys; }
+        @Override public boolean handKeysToTerminal() {
+            handBacks++;
+            if (handBackLands) activePaneHoldsKeys = true;
+            return handBackLands;
+        }
         @Override public boolean backIsEscape() { return false; }
         @Override public boolean lowerKeyboard() { return false; }
     }
@@ -103,6 +111,8 @@ public class TerminalPageFrontTest {
     public void aWindowStepIsOneFrontChangeAndTheKeysGoToThePaneOnce() {
         land(TERMINAL_CELL, PageKind.TERMINAL);
         host.handBacks = 0;
+        // The window shown next has its own pane, which does not hold the keys yet.
+        host.activePaneHoldsKeys = false;
         asks = 0;
         host.active = w2;
         pages.innerChanged();
@@ -115,13 +125,59 @@ public class TerminalPageFrontTest {
     }
 
     @Test
-    public void aWindowStepWithTheKeysOnATerminalHandsNothing() {
+    public void aWindowStepWithTheKeysOnTheShownPaneHandsNothing() {
         land(TERMINAL_CELL, PageKind.TERMINAL);
         host.handBacks = 0;
-        host.keysWithTerminal = true;
+        host.activePaneHoldsKeys = true;
         host.active = w2;
         pages.innerChanged();
         pages.applyFront();
+        assertEquals(0, host.handBacks);
+    }
+
+    @Test
+    public void aWindowStepWithTheKeysLeftOnTheOldWindowOrAChipHandsThemToTheShownPane() {
+        land(TERMINAL_CELL, PageKind.TERMINAL);
+        host.handBacks = 0;
+        // Some terminal view, or a chip, has the focus; the shown window's pane does not.
+        host.activePaneHoldsKeys = false;
+        host.active = w2;
+        pages.innerChanged();
+        pages.applyFront();
+        assertEquals(1, host.handBacks);
+        assertTrue(host.activePaneHoldsKeys);
+    }
+
+    @Test
+    public void aStepWhosePanesWereOffScreenAtTheFrontGetsTheKeysWhenTheyComeBack() {
+        land(TERMINAL_CELL, PageKind.TERMINAL);
+        host.activePaneHoldsKeys = false;
+        host.handBackLands = false;
+        host.handBacks = 0;
+        host.active = w2;
+        pages.innerChanged();
+        pages.applyFront();
+        assertEquals(1, host.handBacks);
+        assertFalse(host.activePaneHoldsKeys);
+
+        host.handBackLands = true;
+        terminalPages.onPanesBackOnScreen();
+        assertEquals(2, host.handBacks);
+        assertTrue(host.activePaneHoldsKeys);
+        // Once held, coming back on screen again hands nothing.
+        terminalPages.onPanesBackOnScreen();
+        assertEquals(2, host.handBacks);
+    }
+
+    @Test
+    public void thePanesComingBackOnScreenOffTheTerminalFrontHandNothing() {
+        land(TERMINAL_CELL, PageKind.TERMINAL);
+        pages.committed(HOME_CELL, PageKind.HOME);
+        land(HOME_CELL, PageKind.HOME);
+        host.activePaneHoldsKeys = false;
+        host.handBacks = 0;
+        // A peek at the Terminal from Home: a Home float keeps the keys.
+        terminalPages.onPanesBackOnScreen();
         assertEquals(0, host.handBacks);
     }
 

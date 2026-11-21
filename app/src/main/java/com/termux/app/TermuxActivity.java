@@ -2007,7 +2007,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPaneController == null ? null : mPaneController.activeWindow();
             }
             @NonNull @Override public View paneHost() { return findViewById(R.id.terminal_pane_host); }
-            @Override public boolean keysWithTerminal() { return getCurrentFocus() instanceof TerminalView; }
+            @Override public boolean activePaneHoldsKeys() {
+                return com.termux.app.terminal.PaneKeys.holds(getTerminalView());
+            }
             @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
             @Override public boolean backIsEscape() {
                 return mProperties != null && mProperties.isBackKeyTheEscapeKey();
@@ -20489,15 +20491,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * Makes a keyboard available for typing into a focusless surface, and reports whether one is.
      *
      * <p>False means there is nothing on screen to aim the key channel at — the caller either does
-     * without typing or falls back to a focused editor.
+     * without typing or falls back to a focused editor. A field opening is not a person asking for
+     * the keyboard: with a hardware keyboard attached and the setting on, the in-app keyboard stays
+     * down and this is still true, since the hardware keys reach the surface through the overlay
+     * key channel.
      */
     private boolean ensureInAppTypingKeyboard() {
         if (!isInAppKeyboardEnabled() || mInAppKeyboard == null) return false;
         if (!mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
+    }
+
+    /**
+     * Raises the in-app keyboard by hand for a field the Home palette opens; true when it raised.
+     * Nothing is raised while a hardware keyboard is the one typing (the setting asks the in-app
+     * keyboard to stand aside), so the palette opens alone and takes the hardware keys.
+     */
+    private boolean raiseKeyboardForField() {
+        if (mInAppKeyboard != null && mInAppKeyboard.yieldsToHardwareKeyboard()) return false;
+        return terminalHost().showInAppKeyboard(false);
     }
 
     /**
@@ -22984,7 +22999,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isDisplayWindowInFront()) return false;
         if (mPaneController == null || mCurrentWSession == null
             || mCurrentWSession.windows.isEmpty()) return false;
-        mPaneController.setWindowName(mCurrentWSession.currentWindow(), name);
+        com.termux.app.terminal.TerminalPaneController.Window renamedDiag =
+            mCurrentWSession.currentWindow();
+        mPaneController.setWindowName(renamedDiag, name);
+        com.termux.app.terminal.TerminalPaneController.Window floatDiag =
+            mPaneController.focusedHomeFloat();
+        com.termux.app.terminal.rename.RenameDiag.logWithCallers("store window=" + (renamedDiag == null ? "null"
+            : renamedDiag.id + " float=" + renamedDiag.isHomeFloat()) + " index="
+            + mCurrentWSession.current + " name=" + name + " readBack="
+            + mPaneController.windowName(renamedDiag) + " focusedFloat="
+            + (floatDiag == null ? "none" : floatDiag.id + "/" + mPaneController.windowName(floatDiag))
+            + " home=" + mPages.isCommitted(com.termux.app.page.PageKind.HOME)
+            + " batch=" + mWindowBarRefreshBatchDepth);
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         return true;
@@ -25308,7 +25334,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void setHomeActionsAnchor(float rawX, float rawY) { mHomeActionsRawX = rawX; mHomeActionsRawY = rawY; }
         // -------------------------------------------------------------- the Home palette
         @Override public boolean isOnHome() { return mPages.isCommitted(com.termux.app.page.PageKind.HOME); }
-        @Override public boolean raiseInAppKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        // The palette is a field: a hardware keyboard the in-app one yields to types into it.
+        @Override public boolean raiseInAppKeyboard() { return raiseKeyboardForField(); }
         @Override public boolean isHomeKeyboardAlwaysOn() { return TermuxActivity.this.isHomeKeyboardAlwaysOn(); }
         @Override public @NonNull PlaceLayout.Edge appsEdge() { return arrangement().appsEdge(); }
         @Override public @Nullable TermuxAppSharedPreferences preferences() { return mPreferences; }
@@ -27021,6 +27048,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if ((changed & (com.termux.app.wall.WallPose.RIMS
                 | com.termux.app.wall.WallPose.OFF_SCREEN)) != 0 && mPaneController != null) {
                 mPaneController.onWallPose(pose, changed);
+                // Back on screen the panes take focus again: a window whose step panned it in
+                // gets the keys its front could not hand it while it was off screen.
+                if ((changed & com.termux.app.wall.WallPose.OFF_SCREEN) != 0
+                    && !pose.terminalOffScreen()) mTerminalPages.onPanesBackOnScreen();
             }
         });
         // The chips rest a wall's width off on Home: a wall laid out at another width stands the
@@ -28278,19 +28309,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** One quiet focus request on the active pane; true when the pane really holds the keys. */
     private boolean handKeysToActivePane() {
-        TerminalView pane = getTerminalView();
-        return com.termux.app.x11.DisplayViewFocus.handBackTo(pane, () -> {
-            View.OnFocusChangeListener listener = pane.getOnFocusChangeListener();
-            pane.setOnFocusChangeListener(null);
-            try {
-                // A pane focused while it was out of the window says it is focused and refuses
-                // the request: its stale claim goes first.
-                if (pane.isFocused()) pane.clearFocus();
-                pane.requestFocus();
-            } finally {
-                pane.setOnFocusChangeListener(listener);
-            }
-        });
+        return com.termux.app.terminal.PaneKeys.handTo(getTerminalView(), true);
     }
 
     /** The display's view holds the keys on its own window at rest, where they are X's. */
@@ -28308,6 +28327,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Override
     public boolean dispatchKeyEvent(KeyEvent event) {
+        if (isTerminalRenameActive()) {
+            View focusDiag = getCurrentFocus();
+            com.termux.app.terminal.rename.RenameDiag.log("dispatch code=" + event.getKeyCode()
+                + " action=" + event.getAction() + " device=" + event.getDeviceId() + " focus="
+                + (focusDiag == null ? "none" : focusDiag.getClass().getSimpleName()));
+        }
         if (routeKeyNobodyHolds(event)) {
             // DIAG(back-path): revert before merge.
             if (MotionLog.enabled && event.getKeyCode() == KeyEvent.KEYCODE_BACK)
@@ -28520,7 +28545,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mSheets.runWithoutNotices(() -> mPaneController.openHomeFloat(shell, page));
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
     }
@@ -30718,6 +30743,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** Refresh visibility, labels, selection and the shared dock/keyboard glass treatment. */
     public void refreshTerminalWindowBar() {
+        if (com.termux.app.terminal.rename.RenameDiag.armed())
+            com.termux.app.terminal.rename.RenameDiag.log("refresh batch=" + mWindowBarRefreshBatchDepth);
         if (mWindowBarRefreshBatchDepth > 0) {
             mWindowBarRefreshPending = true;
             return;
@@ -30752,6 +30779,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             action.run();
         } finally {
             if (--mWindowBarRefreshBatchDepth == 0 && mWindowBarRefreshPending) {
+                if (com.termux.app.terminal.rename.RenameDiag.armed()) com.termux.app.terminal.rename.RenameDiag.log("refresh batch flushed");
                 mWindowBarRefreshPending = false;
                 refreshTerminalWindowBar();
             }
@@ -30773,6 +30801,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
             ? View.VISIBLE : View.GONE;
+        if (com.termux.app.terminal.rename.RenameDiag.armed())
+            com.termux.app.terminal.rename.RenameDiag.log("doRefresh visible=" + visible + " chips=" + (chips == View.VISIBLE)
+                + " wallPage=" + mLastWallPage + " home="
+                + mPages.isCommitted(com.termux.app.page.PageKind.HOME)
+                + " wallStrip=" + (wallStripFed() && wallStripOn(mLastWallPage)));
         if (bar.getVisibility() != chips) bar.setVisibility(chips);
         mStatusBar.syncBorderStatusSwipe(visible);
         if (!visible) {
@@ -30995,6 +31028,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.
         bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
+        if (com.termux.app.terminal.rename.RenameDiag.armed()) {
+            StringBuilder labelsDiag = new StringBuilder();
+            for (com.termux.app.terminal.TerminalWindowBar.WindowItem item : items)
+                labelsDiag.append('[').append(item.label).append(']');
+            StringBuilder floatsDiag = new StringBuilder();
+            for (com.termux.app.terminal.TerminalWindowBar.WindowItem item : floatItems.values())
+                floatsDiag.append('[').append(item.label).append(']');
+            com.termux.app.terminal.rename.RenameDiag.log("sync bar=" + labelsDiag + " selected=" + selected + " floats="
+                + floatsDiag + " display=" + isDisplayWindowInFront()
+                + " barShown=" + bar.isShown());
+        }
         bar.setWindows(items, selected);
         refreshPageGlyphsIfWindowsMoved();
         if (mScene != null && selected >= 0 && selected < items.size())
@@ -33081,7 +33125,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController.focusedHomeFloat() == window && mInAppKeyboard != null
             && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
     }
 
@@ -33294,7 +33338,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         rebuildDrawerSessions();
         if (mInAppKeyboard != null && !mInAppKeyboard.isVisible()) {
             mInAppKeyboard.show(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
-                .ShowReason.KEYBOARD_ACTION);
+                .ShowReason.TEXT_ENTRY);
         }
         return true;
     }
@@ -33347,7 +33391,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // by hand as the swipe up raises it (openHomePalette).
         @Override public boolean isKeyboardUp() { return committedKeyboardVisible(); }
 
-        @Override public boolean raiseKeyboard() { return terminalHost().showInAppKeyboard(false); }
+        @Override public boolean raiseKeyboard() { return raiseKeyboardForField(); }
     }
 
     @Nullable
