@@ -2007,7 +2007,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mPaneController == null ? null : mPaneController.activeWindow();
             }
             @NonNull @Override public View paneHost() { return findViewById(R.id.terminal_pane_host); }
-            @Override public boolean keysWithTerminal() { return getCurrentFocus() instanceof TerminalView; }
+            @Override public boolean activePaneHoldsKeys() {
+                return com.termux.app.terminal.PaneKeys.holds(getTerminalView());
+            }
             @Override public boolean handKeysToTerminal() { return returnKeysToTerminal(); }
             @Override public boolean backIsEscape() {
                 return mProperties != null && mProperties.isBackKeyTheEscapeKey();
@@ -27018,6 +27020,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if ((changed & (com.termux.app.wall.WallPose.RIMS
                 | com.termux.app.wall.WallPose.OFF_SCREEN)) != 0 && mPaneController != null) {
                 mPaneController.onWallPose(pose, changed);
+                // Back on screen the panes take focus again: a window whose step panned it in
+                // gets the keys its front could not hand it while it was off screen.
+                if ((changed & com.termux.app.wall.WallPose.OFF_SCREEN) != 0
+                    && !pose.terminalOffScreen()) mTerminalPages.onPanesBackOnScreen();
             }
         });
         // The chips rest a wall's width off on Home: a wall laid out at another width stands the
@@ -28275,19 +28281,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** One quiet focus request on the active pane; true when the pane really holds the keys. */
     private boolean handKeysToActivePane() {
-        TerminalView pane = getTerminalView();
-        return com.termux.app.x11.DisplayViewFocus.handBackTo(pane, () -> {
-            View.OnFocusChangeListener listener = pane.getOnFocusChangeListener();
-            pane.setOnFocusChangeListener(null);
-            try {
-                // A pane focused while it was out of the window says it is focused and refuses
-                // the request: its stale claim goes first.
-                if (pane.isFocused()) pane.clearFocus();
-                pane.requestFocus();
-            } finally {
-                pane.setOnFocusChangeListener(listener);
-            }
-        });
+        return com.termux.app.terminal.PaneKeys.handTo(getTerminalView(), true);
     }
 
     /** The display's view holds the keys on its own window at rest, where they are X's. */

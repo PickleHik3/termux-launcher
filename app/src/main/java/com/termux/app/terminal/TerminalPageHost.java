@@ -14,8 +14,11 @@ public interface TerminalPageHost {
     /** The one pane host every window's panes are drawn in. */
     @NonNull View paneHost();
 
-    /** Whether the keys already go to a terminal view. */
-    boolean keysWithTerminal();
+    /**
+     * Whether the active pane of the window in front really holds the keys (
+     * {@link PaneKeys#holds}). Another window's pane, a chip or a stale focus claim do not count.
+     */
+    boolean activePaneHoldsKeys();
 
     /** Hands the keys to the active pane, once; false when nothing took them. */
     boolean handKeysToTerminal();

@@ -26,7 +26,7 @@ public class TerminalPageBackTest {
         @Nullable TerminalPaneController.Window active;
         @Nullable @Override public TerminalPaneController.Window activeWindow() { return active; }
         @NonNull @Override public View paneHost() { throw new UnsupportedOperationException(); }
-        @Override public boolean keysWithTerminal() { return true; }
+        @Override public boolean activePaneHoldsKeys() { return true; }
         @Override public boolean handKeysToTerminal() { return true; }
         @Override public boolean backIsEscape() { return escape; }
         @Override public boolean lowerKeyboard() {

@@ -40,7 +40,7 @@ public class TerminalGlassTest {
         View paneHost;
         @Nullable @Override public TerminalPaneController.Window activeWindow() { return active; }
         @NonNull @Override public View paneHost() { return paneHost; }
-        @Override public boolean keysWithTerminal() { return true; }
+        @Override public boolean activePaneHoldsKeys() { return true; }
         @Override public boolean handKeysToTerminal() { return true; }
         @Override public boolean backIsEscape() { return false; }
         @Override public boolean lowerKeyboard() { return false; }
