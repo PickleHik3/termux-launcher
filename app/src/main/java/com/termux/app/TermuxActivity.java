@@ -13071,11 +13071,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.launcher.widget.HomeLabelInk.PALE_INK);
             }
         }
+        // DIAG(TL-PageBarDiag): the capsules' ground, when it changes; revert before merge.
+        if (surface != mDiagTickSurface || ink != mDiagTickInk) {
+            mDiagTickSurface = surface;
+            mDiagTickInk = ink;
+            android.util.Log.d("TL-PageBarDiag", "ticks onWallpaper=" + onWallpaper + " strip="
+                + (strip == null ? "none" : strip.getWidth() + "x" + strip.getHeight())
+                + " slabInset=" + mDock.appliedDockLayout().slabTopInsetPx + " beads="
+                + (mDock.beads() != null) + " surface=" + Integer.toHexString(surface)
+                + " ink=" + Integer.toHexString(ink) + " up=" + android.os.SystemClock.uptimeMillis());
+        }
         bar.setTickGround(surface, ink);
     }
 
     /** The A-Z answer the ticks last borrowed on the slab; re-read on the dock's dress pass. */
     @Nullable private OnGlass.Resolution mTickGroundGlass;
+    /** DIAG(TL-PageBarDiag): the tick ground last logged; revert before merge. */
+    private int mDiagTickSurface = 1;
+    private int mDiagTickInk = 1;
 
     private void syncAzScrubLettersAndTint() {
         if (!isAzIndexEnabled() || mAzScrubRowView == null || mSuggestionBarView == null) {
