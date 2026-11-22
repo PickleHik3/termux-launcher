@@ -160,6 +160,37 @@ public class EditorScreenLookTest {
     }
 
     @Test
+    public void aLookTileStaysSelectedWhileSurfacesKeepTheirOwnGlass() {
+        // The status bar, the dock and the keyboard own their Opacity and Blur; a Global Look
+        // leaves them, so the tile that was tapped is the one shown.
+        preferences.setSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY, 20);
+        preferences.setSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 3);
+        preferences.setSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY, 70);
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
+            TERMINAL_PAGE);
+        for (String id : new String[] {"solid", "frost", "minimal", "solid"}) {
+            int stop = AppearanceLooks.stopForPresetId(id);
+            tapLook(editor, stop);
+            assertEquals(id + " stays selected", stop, model(editor).value(Row.LOOK));
+        }
+        assertFalse("the own value stays",
+            preferences.isSurfaceInheriting(SurfaceSlot.STATUS, SurfaceProperty.OPACITY));
+    }
+
+    @Test
+    public void aGlobalValueEditedAfterALookIsCustomEvenWithOwnSurfaceGlass() {
+        preferences.setSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY, 20);
+        SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
+            TERMINAL_PAGE);
+        tapLook(editor, SOLID);
+        assertEquals(SOLID, model(editor).value(Row.LOOK));
+        model(editor).onValue(Row.OPACITY, 33, false);
+        model(editor).onReleased(Row.OPACITY);
+        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
+        assertEquals(AppearanceLooks.CUSTOM_STOP, model(editor).value(Row.LOOK));
+    }
+
+    @Test
     public void homesLookRowIsItsOwnHalfWhateverTheFrameShows() {
         for (PageKind frame : PageKind.values())
             assertEquals(TermuxAppSharedPreferences.PAGE_WALL, EditorRows.pageFor(EditorCard.HOME, Row.LOOK));
