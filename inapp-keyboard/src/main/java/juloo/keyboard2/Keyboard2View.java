@@ -87,6 +87,10 @@ public class Keyboard2View extends View
   private float _marginRight;
   private float _marginLeft;
   private float _marginBottom;
+  /** The side back-swipe strips last published ({@link #publishBackExclusion}), in px; a
+      cancelled press commits only from inside them ({@link #onTouch}). */
+  private int _backStripLeftPx;
+  private int _backStripRightPx;
 
   private Theme _theme;
   private Theme.Computed _tc;
@@ -1689,7 +1693,11 @@ public class Keyboard2View extends View
       case MotionEvent.ACTION_CANCEL:
         reportCancelledTaps();
         finishAllTouchFx();
-        _pointers.onTouchCancelCommit();
+        // Only a press in a side strip is committed: there the cancel is a back swipe the
+        // exclusion budget denied, and dropping it would lose the key. Anywhere else a cancel is
+        // the system or the launcher taking the stream (home, quick switch, a parent's gesture),
+        // and the press was never a tap.
+        _pointers.onTouchCancelCommit(_backStripLeftPx, getWidth() - _backStripRightPx);
         _trails.clear();
         requestDisallowIntercept(false);
         break;
@@ -1943,10 +1951,14 @@ public class Keyboard2View extends View
     {
       // Not attached yet: keep the old whole-view request until the insets arrive.
       rects = Collections.singletonList(new Rect(0, 0, width, height));
+      _backStripLeftPx = 0;
+      _backStripRightPx = 0;
     }
     else
     {
       android.graphics.Insets gestures = insets.getSystemGestureInsets();
+      _backStripLeftPx = gestures.left;
+      _backStripRightPx = gestures.right;
       rects = backExclusionRects(width, height, gestures.left, gestures.right);
     }
     setSystemGestureExclusionRects(rects);
