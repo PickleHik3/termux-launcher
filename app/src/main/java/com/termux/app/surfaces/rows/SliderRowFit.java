@@ -55,4 +55,35 @@ public final class SliderRowFit {
             && valuePx + 2 * valuePadPx <= track
             && valueLinePx <= trackHeightPx;
     }
+
+    /**
+     * Whether a readout is a note (a disabled row's "Off while ..."), not a number: it has no
+     * digit. A note is measured as it stands and drawn in the row's text face; the numeric
+     * readouts keep the widest-number width so a drag never lays the row out again.
+     */
+    public static boolean isNote(CharSequence readout) {
+        if (readout == null)
+            return false;
+        for (int i = 0; i < readout.length(); i++) {
+            if (Character.isDigit(readout.charAt(i)))
+                return false;
+        }
+        return readout.length() > 0;
+    }
+
+    /** The width the one-line fit gives the value: a note's own, else the widest number's. */
+    public static int fitValuePx(boolean note, int widestNumberPx, int textPx) {
+        return note ? textPx : widestNumberPx;
+    }
+
+    /**
+     * The width the two-line row's value takes: the widest number's, or a note's own, at most
+     * the track's share of the column so the name keeps the rest (the note ellipsizes).
+     */
+    public static int twoLineValuePx(boolean note, int widestNumberPx, int textPx,
+                                     int columnPx) {
+        if (!note)
+            return widestNumberPx;
+        return Math.max(0, Math.min(textPx, Math.round(columnPx * TRACK_SHARE)));
+    }
 }

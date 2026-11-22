@@ -4134,7 +4134,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static int wornStop(@NonNull TermuxAppSharedPreferences prefs,
                                 @NonNull PageKind half) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
-            if (SurfacePresets.wornOn(prefs, preset, half))
+            if (SurfacePresets.wornOnGlobal(prefs, preset, half))
                 return AppearanceLooks.stopForPresetId(preset.id);
         }
         return AppearanceLooks.CUSTOM_STOP;

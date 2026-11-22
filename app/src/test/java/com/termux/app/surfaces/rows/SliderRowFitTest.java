@@ -50,4 +50,36 @@ public class SliderRowFitTest {
     public void noWidthIsNoLine() {
         assertFalse(SliderRowFit.oneLine(0, MIN_TRACK, GAP, 0, 0, 0, 0, 40));
     }
+
+    @Test
+    public void aNoteHasNoDigitANumberHasOne() {
+        assertTrue(SliderRowFit.isNote("Off while Reduce idle activity is on."));
+        assertFalse(SliderRowFit.isNote("20%"));
+        assertFalse(SliderRowFit.isNote("2.5 dp"));
+        assertFalse(SliderRowFit.isNote(""));
+    }
+
+    @Test
+    public void aNoteWiderThanTheTrackKeepsTwoLinesWhereTheNumberFitsOne() {
+        int note = 230;
+        int number = SliderRowFit.fitValuePx(false, 40, note);
+        int noteFit = SliderRowFit.fitValuePx(true, 40, note);
+        assertTrue(SliderRowFit.oneLine(COLUMN, MIN_TRACK, GAP, 70, number, 12, 20, 40));
+        assertFalse(SliderRowFit.oneLine(COLUMN, MIN_TRACK, GAP, 70, noteFit, 12, 20, 40));
+    }
+
+    @Test
+    public void aShortNoteStaysOnOneLine() {
+        assertTrue(SliderRowFit.oneLine(COLUMN, MIN_TRACK, GAP, 70,
+            SliderRowFit.fitValuePx(true, 40, 60), 12, 20, 40));
+    }
+
+    @Test
+    public void aNoteInTheTwoLineRowEllipsizesWithinTheTracksShareOfTheColumn() {
+        int share = Math.round(COLUMN * SliderRowFit.TRACK_SHARE);
+        assertEquals(share, SliderRowFit.twoLineValuePx(true, 40, 500, COLUMN));
+        assertEquals(120, SliderRowFit.twoLineValuePx(true, 40, 120, COLUMN));
+        assertEquals("a number keeps the widest number's width", 40,
+            SliderRowFit.twoLineValuePx(false, 40, 500, COLUMN));
+    }
 }
