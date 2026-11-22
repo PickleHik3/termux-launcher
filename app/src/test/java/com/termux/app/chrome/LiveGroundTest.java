@@ -9,8 +9,12 @@ public class LiveGroundTest {
     @Test
     public void noSceneEveryViewDrawsItself() {
         assertEquals(LiveGround.Draw.CHILD, LiveGround.choose(false, false, false));
-        assertEquals(LiveGround.Draw.CHILD, LiveGround.choose(false, true, false));
         assertEquals(LiveGround.Draw.CHILD, LiveGround.choose(false, false, true));
+    }
+
+    @Test
+    public void sceneLayerWithNoFrameIsNeverDrawn() {
+        assertEquals(LiveGround.Draw.SKIP, LiveGround.choose(false, true, false));
     }
 
     @Test

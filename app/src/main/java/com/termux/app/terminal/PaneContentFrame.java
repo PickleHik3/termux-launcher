@@ -715,6 +715,8 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      */
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        // A backdrop recording never holds a SurfaceView (the display's): it would move the real surface.
+        if (com.termux.app.chrome.BackdropRecording.skips(child)) return false;
         if (child == mContent) drawBezel(canvas);
         if (child != mContent || !drawPaddingFillBand(canvas))
             return super.drawChild(canvas, child, drawingTime);
