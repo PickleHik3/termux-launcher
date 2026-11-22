@@ -9123,9 +9123,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** {@link #clearInAppKeyboardBackdrop} for a host whose held background holds no frame. */
     private void clearInAppKeyboardBackdropFrame() {
         mInAppKeyboardBackdropBitmap = null;
-        mInAppKeyboardBackdropDrawable = null;
-        mInAppKeyboardBackdropHost = null;
-        mInAppKeyboardBackdropParallax = null;
+        // The drawable is kept for the host's next glass (SharedFrameReuse): a new one compiles
+        // its own refraction program, 10-35 ms of the main thread on pong, and every keyboard
+        // hide came through here. The cache's in-use scan reads the bitmap above, not this.
         mInAppKeyboardBackdropFrameRect.setEmpty();
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
     }
@@ -11594,6 +11594,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.hide();
         mChrome.onTrimMemory();
         clearInAppKeyboardBackdrop();
+        // Under this pressure the kept keyboard glass goes too, and the frame it still points at.
+        mInAppKeyboardBackdropDrawable = null;
+        mInAppKeyboardBackdropHost = null;
+        mInAppKeyboardBackdropParallax = null;
         clearAccessoryRenderEffectBackdrop();
         if (mLiveBackdrop != null) mLiveBackdrop.releaseAll();
         // A policy event: no surface is Live again until the window comes back.
