@@ -31628,6 +31628,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (clock != null) clock.setLazyMode(lazy);
     }
 
+    private int mSeenDirectCpu;
+    @Nullable private com.termux.privileged.PrivilegedChoice.Status mSeenBackendStatus;
+    private com.termux.app.statusbar.StatusStatNeedsPolicy.Access mSeenGpuAccess =
+        com.termux.app.statusbar.StatusStatNeedsPolicy.Access.UNKNOWN;
+
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
         if (mStatsController == null) {
             mStatsController = new com.termux.app.statusbar.SystemStatsController(this, this::onStatsUpdated);
@@ -31643,6 +31648,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onStatsUpdated(@NonNull com.termux.app.statusbar.SystemStatsController.Stats stats) {
         long nowMs = android.os.SystemClock.uptimeMillis();
+        // What the phone lets the app read decides whether CPU and GPU stand greyed or show; the
+        // bar is redrawn once when that is learned, not per sample.
+        com.termux.privileged.PrivilegedChoice.Status backendStatus =
+            com.termux.privileged.PrivilegedBackendManager.getInstance().currentStatus();
+        if (stats.directCpu != mSeenDirectCpu || stats.gpuAccess != mSeenGpuAccess
+            || backendStatus != mSeenBackendStatus) {
+            mSeenDirectCpu = stats.directCpu;
+            mSeenGpuAccess = stats.gpuAccess;
+            mSeenBackendStatus = backendStatus;
+            mStatusBar.updateStatusWidgets();
+        }
         com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
         // The GPU smoother is fed while the switch is on, shown or not: a hidden widget learns it

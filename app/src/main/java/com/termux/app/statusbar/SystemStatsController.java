@@ -90,6 +90,10 @@ public final class SystemStatsController {
         public boolean stale;
         /** GPU, clocks and temperatures; null unless a consumer asked for them (the open card). */
         @Nullable public HardwareStats hardware;
+        /** Whether the app read {@code /proc/stat} itself: 0 not tried, 1 it did, -1 refused. */
+        public int directCpu;
+        /** Whether the GPU load reads, needs a backend, or is not there; unknown until probed. */
+        @NonNull public StatusStatNeedsPolicy.Access gpuAccess = StatusStatNeedsPolicy.Access.UNKNOWN;
 
         /** A copy that shares nothing writable with this one. */
         @NonNull
@@ -110,6 +114,8 @@ public final class SystemStatsController {
             copy.top = Collections.unmodifiableList(new ArrayList<>(top));
             copy.stale = stale;
             copy.hardware = hardware;   // immutable, so shared
+            copy.directCpu = directCpu;
+            copy.gpuAccess = gpuAccess;
             return copy;
         }
     }
@@ -508,6 +514,9 @@ public final class SystemStatsController {
 
     /** Posts a snapshot of the working copy to main; worker thread. */
     private void publish() {
+        mLatest.directCpu = mDirectCpu;
+        HardwareNodes probed = sHardwareNodes;
+        if (probed != null) mLatest.gpuAccess = probed.gpuAccess();
         Stats snapshot = mLatest.snapshot();
         mMainHandler.post(() -> {
             mPublished = snapshot;

@@ -29,7 +29,7 @@ import com.termux.privileged.PrivilegedBackendManager;
  * <p>It is a checkpoint, not a wall. The user can still turn the widget on unprivileged from the
  * same dialog — RAM in particular works fine that way — they just do it knowing what they will get.
  */
-final class StatusWidgetPrivilegedGate {
+public final class StatusWidgetPrivilegedGate {
 
     /** The Permissions page of the project wiki, which is where Shizuku setup is written up. */
     private static final String SHIZUKU_GUIDE_URL =
@@ -90,7 +90,7 @@ final class StatusWidgetPrivilegedGate {
         }
     }
 
-    private static void openPrivilegedAccessSettings(@NonNull Context context) {
+    public static void openPrivilegedAccessSettings(@NonNull Context context) {
         // Inside Settings the screen is pushed in place, so no second Settings instance stacks.
         Context unwrapped = context;
         while (unwrapped instanceof android.content.ContextWrapper

@@ -2204,6 +2204,12 @@
             <string name="termux_privileged_status_root_denied">Root was denied</string>
             <string name="termux_privileged_status_not_available">Not available on this phone</string>
             <string name="termux_privileged_status_off">Off</string>
+            <string name="status_stat_needs_start_shizuku">Start Shizuku</string>
+            <string name="status_stat_needs_allow_shizuku">Allow Shizuku</string>
+            <string name="status_stat_needs_allow_root">Allow root</string>
+            <string name="status_stat_needs_both">Needs Shizuku or root</string>
+            <string name="status_stat_needs_shizuku">Needs Shizuku</string>
+            <string name="status_stat_needs_root">Needs root</string>
             <string name="termux_privileged_status_checking">Checking…</string>
             <string name="termux_privileged_lane_state_no_root">Root is not available</string>
             <string name="termux_app_launcher_az_lock_shizuku_unavailable">Turn on Shizuku in Settings to lock the screen.</string>

@@ -84,6 +84,8 @@ public final class HardwareNodes {
 
     /** Set when a directory or classifying file could not be read, so root may know more. */
     private boolean needsPrivilegedDiscovery;
+    /** Set when the app could not list the GPU's directories, so root might know a GPU it cannot. */
+    private boolean gpuBlind;
 
     private HardwareNodes() {}
 
@@ -126,6 +128,7 @@ public final class HardwareNodes {
             boolean thermalBlind = isBlank(direct.list(THERMAL)) || n.unclassifiedZone;
             boolean cpufreqBlind = isBlank(direct.list(CPUFREQ)) || n.unclassifiedPolicy;
             boolean gpuBlind = isBlank(direct.list(DEVFREQ)) && (n.gpuBusy == null || n.gpuCur == null);
+            n.gpuBlind = gpuBlind;
             n.needsPrivilegedDiscovery = thermalBlind || cpufreqBlind || gpuBlind;
         }
         return n;
@@ -137,6 +140,20 @@ public final class HardwareNodes {
 
     private boolean unclassifiedZone;
     private boolean unclassifiedPolicy;
+
+    /**
+     * Whether the GPU load reads here, needs a backend to, or has no node at all (even for root,
+     * once the privileged discovery has run).
+     */
+    @androidx.annotation.NonNull
+    public StatusStatNeedsPolicy.Access gpuAccess() {
+        if (gpuBusy != null) {
+            return gpuBusy.readable ? StatusStatNeedsPolicy.Access.DIRECT
+                : StatusStatNeedsPolicy.Access.NEEDS_BACKEND;
+        }
+        return gpuBlind ? StatusStatNeedsPolicy.Access.NEEDS_BACKEND
+            : StatusStatNeedsPolicy.Access.ABSENT;
+    }
 
     /** True when one privileged discovery could still find nodes the app could not see. */
     public boolean needsPrivilegedDiscovery() {

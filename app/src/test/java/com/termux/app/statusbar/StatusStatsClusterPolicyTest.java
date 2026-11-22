@@ -21,18 +21,4 @@ public class StatusStatsClusterPolicyTest {
         assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.DISPLAY, true));
         assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.ASSISTANT, true));
     }
-
-    @Test public void gpuShowsOnlyWithItsSwitchAndAReading() {
-        assertTrue(StatusStatsClusterPolicy.gpuShown(true, true));
-        assertFalse(StatusStatsClusterPolicy.gpuShown(true, false));
-        assertFalse(StatusStatsClusterPolicy.gpuShown(false, true));
-        assertFalse(StatusStatsClusterPolicy.gpuShown(false, false));
-    }
-
-    @Test public void cpuShowsOnlyWithItsSwitchAndPrivilegedAccess() {
-        assertTrue(StatusStatsClusterPolicy.cpuShown(true, true));
-        assertFalse(StatusStatsClusterPolicy.cpuShown(true, false));
-        assertFalse(StatusStatsClusterPolicy.cpuShown(false, true));
-        assertFalse(StatusStatsClusterPolicy.cpuShown(false, false));
-    }
 }

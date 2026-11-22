@@ -423,6 +423,53 @@ final class StatusBarWidgets {
         }
     }
 
+    /**
+     * A tap on the CPU or GPU: its card, or, while it stands greyed, what it is waiting on. A
+     * missing permission is asked for; anything else opens Settings > Shizuku and root.
+     */
+    private void onStatTapped(@NonNull View view) {
+        com.termux.app.statusbar.StatusStatNeedsPolicy.Hint needs = view instanceof
+            com.termux.app.statusbar.StatusBarWidgetView
+            ? ((com.termux.app.statusbar.StatusBarWidgetView) view).needs() : null;
+        if (needs == null) {
+            mHost.toggleStatsCard(view);
+            return;
+        }
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        if (needs == com.termux.app.statusbar.StatusStatNeedsPolicy.Hint.ALLOW_SHIZUKU
+            && manager.requestPrivilegedPermission(
+                com.termux.privileged.ShizukuBackend.PERMISSION_REQUEST_CODE)) {
+            return;
+        }
+        if (needs == com.termux.app.statusbar.StatusStatNeedsPolicy.Hint.ALLOW_ROOT) {
+            // Picking the backend again runs su, which is what raises the root prompt.
+            manager.reselectBackend();
+            return;
+        }
+        com.termux.app.fragments.settings.termux.StatusWidgetPrivilegedGate
+            .openPrivilegedAccessSettings(mHost.context());
+    }
+
+    private boolean isShizukuInstalled() {
+        try {
+            mHost.context().getPackageManager().getPackageInfo("moe.shizuku.privileged.api", 0);
+            return true;
+        } catch (android.content.pm.PackageManager.NameNotFoundException absent) {
+            return false;
+        }
+    }
+
+    private static final String[] SU_PATHS = {"/system/bin/su", "/system/xbin/su", "/sbin/su",
+        "/su/bin/su", "/debug_ramdisk/su", "/product/bin/su", "/vendor/bin/su"};
+
+    /** Whether an su binary stands where one is usually put: root may then be asked for. */
+    private static boolean isSuPresent() {
+        for (String path : SU_PATHS) {
+            if (new java.io.File(path).exists()) return true;
+        }
+        return false;
+    }
+
     // ---- Trailing status widgets (CPU / RAM / battery / weather) + their anchored detail cards ----
 
     /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
@@ -435,19 +482,39 @@ final class StatusBarWidgets {
         com.termux.app.statusbar.StatusBarWidgetView weather = mHost.findViewById(R.id.terminal_status_widget_weather);
         com.termux.app.statusbar.StatusBarWidgetView battery =
             mHost.findViewById(R.id.terminal_status_widget_battery);
-        // The CPU reading needs privileged access; without it the widget hides rather than show a
-        // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
-        // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
-        boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
-            mHost.preferences() != null && mHost.preferences().isStatusWidgetCpuEnabled(),
-            PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
-        // The GPU reading needs no switch beyond its own, but a phone that reports none keeps it
-        // hidden: it is shown only once a sample has read a load (the smoother holds the last one).
+        // A reading the phone refuses the app, with no backend to fill it, stays in its place greyed
+        // with what is missing (StatusStatNeedsPolicy). The backend itself is brought up (and
+        // retried) by refreshPrivilegedBackendIfNeeded() on every resume; the availability listener
+        // and a change in what the sampler can read repaint this.
+        PrivilegedBackendManager privileged = PrivilegedBackendManager.getInstance();
+        com.termux.privileged.PrivilegedChoice.Status backend = privileged.currentStatus();
+        boolean shizukuInstalled = isShizukuInstalled();
+        boolean suPresent = isSuPresent();
+        com.termux.app.statusbar.SystemStatsController.Stats latest = mHost.statsController() == null
+            ? null : mHost.statsController().latest();
+        boolean cpuEnabled = mHost.preferences() != null && mHost.preferences().isStatusWidgetCpuEnabled();
+        com.termux.app.statusbar.StatusStatNeedsPolicy.Access cpuAccess = latest == null
+            ? com.termux.app.statusbar.StatusStatNeedsPolicy.Access.UNKNOWN
+            : latest.directCpu > 0 ? com.termux.app.statusbar.StatusStatNeedsPolicy.Access.DIRECT
+            : latest.directCpu < 0 ? com.termux.app.statusbar.StatusStatNeedsPolicy.Access.NEEDS_BACKEND
+            : com.termux.app.statusbar.StatusStatNeedsPolicy.Access.UNKNOWN;
+        com.termux.app.statusbar.StatusStatNeedsPolicy.Verdict cpuVerdict =
+            com.termux.app.statusbar.StatusStatNeedsPolicy.cpu(
+                cpuEnabled, cpuAccess, backend, shizukuInstalled, suPresent);
+        boolean cpuOn = cpuVerdict.shown;
+        // The GPU reading is shown once a sample has read a load (the smoother holds the last one);
+        // a phone whose nodes the app cannot read stands greyed until a backend can, and one with
+        // no GPU node even for root stays hidden.
         boolean gpuEnabled = mHost.preferences() != null && mHost.preferences().isStatusWidgetGpuEnabled();
         if (!gpuEnabled) mHost.barGpuSmoother().reset();
-        boolean gpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.gpuShown(
-            gpuEnabled, mHost.barGpuSmoother().publishedPercent()
-                != com.termux.app.statusbar.StatusBarStatSmoother.UNKNOWN);
+        com.termux.app.statusbar.StatusStatNeedsPolicy.Verdict gpuVerdict =
+            com.termux.app.statusbar.StatusStatNeedsPolicy.gpu(gpuEnabled,
+                mHost.barGpuSmoother().publishedPercent()
+                    != com.termux.app.statusbar.StatusBarStatSmoother.UNKNOWN,
+                latest == null ? com.termux.app.statusbar.StatusStatNeedsPolicy.Access.UNKNOWN
+                    : latest.gpuAccess,
+                backend, shizukuInstalled, suPresent);
+        boolean gpuOn = gpuVerdict.shown;
         boolean ramOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetRamEnabled();
         boolean batteryOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetBatteryEnabled();
         boolean weatherOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetWeatherEnabled();
@@ -460,23 +527,25 @@ final class StatusBarWidgets {
         if (cpu != null) {
             cpu.setVisibility(cpuOn ? View.VISIBLE : View.GONE);
             cpu.dressAsCpu();
+            cpu.setNeeds(cpuVerdict.needs);
             // Seeded from the smoother every pass: onStatsUpdated skips hidden widgets, so a value
             // published while this one was off or covered is otherwise only repainted when the
             // reading next changes \u2014 and before the first sample this is what puts "--" on screen
             // instead of an empty slot.
-            if (cpuOn) cpu.setValue(mHost.barCpuSmoother().text());
+            if (cpuOn && cpuVerdict.needs == null) cpu.setValue(mHost.barCpuSmoother().text());
             if (cpu.getTag() == null) {
                 cpu.setTag("wired");
-                cpu.setOnClickListener(v -> mHost.toggleStatsCard(v));
+                cpu.setOnClickListener(this::onStatTapped);
             }
         }
         if (gpu != null) {
             gpu.setVisibility(gpuOn ? View.VISIBLE : View.GONE);
             gpu.dressAsGpu();
-            if (gpuOn) gpu.setValue(mHost.barGpuSmoother().text());
+            gpu.setNeeds(gpuVerdict.needs);
+            if (gpuOn && gpuVerdict.needs == null) gpu.setValue(mHost.barGpuSmoother().text());
             if (gpu.getTag() == null) {
                 gpu.setTag("wired");
-                gpu.setOnClickListener(v -> mHost.toggleStatsCard(v));
+                gpu.setOnClickListener(this::onStatTapped);
             }
         }
         if (ram != null) {
@@ -512,7 +581,7 @@ final class StatusBarWidgets {
 
         // An enabled GPU stat keeps the sampler running (and reading hardware, in the same one
         // poll) even while it is hidden for want of a reading: that is how it learns it can show.
-        if (cpuOn || ramOn || gpuEnabled) {
+        if (cpuEnabled || ramOn || gpuEnabled) {
             boolean cardShowing = mHost.statusCardHost().isShowing() && mHost.statsCardView() != null;
             mHost.ensureStatsController().start(
                 mHost.statsInterval(cardShowing ? mHost.statsCardIntervalMs() : mHost.statsBarIntervalMs()),
