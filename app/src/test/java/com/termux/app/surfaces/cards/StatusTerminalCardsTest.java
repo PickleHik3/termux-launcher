@@ -262,7 +262,7 @@ public class StatusTerminalCardsTest {
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
         List<MaterialButton> indicatorTiles = buttons(indicators.view);
-        assertEquals(7, indicatorTiles.size());
+        assertEquals(8, indicatorTiles.size());
         assertEquals("Clock is the first Elements tile", "Clock",
             indicatorTiles.get(StatusBarCard.INDICATOR_CLOCK).getText().toString());
         assertFalse("Notifications starts off",
@@ -404,7 +404,7 @@ public class StatusTerminalCardsTest {
         int face = 5;
         int align;
         final boolean[] options = {false, false, false, true};
-        final boolean[] indicators = {true, true, true, true, false, true, false};
+        final boolean[] indicators = {true, true, false, true, true, false, true, false};
         int cameraGapOpened;
 
         @Override public int position() { return position; }

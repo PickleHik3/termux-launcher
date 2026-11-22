@@ -58,6 +58,7 @@ public final class SettingsEditorDoors {
         switch (key) {
             case "top_pane_clock_am_pm":
             case "status_widget_cpu":
+            case "status_widget_gpu":
             case "status_widget_ram":
             case "status_widget_battery":
             case "status_widget_media":

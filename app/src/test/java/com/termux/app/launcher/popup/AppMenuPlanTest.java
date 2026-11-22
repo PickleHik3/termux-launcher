@@ -275,4 +275,42 @@ public class AppMenuPlanTest {
         onDock.onDock = true;
         assertFalse(AppMenuPlan.groups(onDock).get(0).contains(ADD_TO_FOLDER));
     }
+
+    @Test
+    public void withRoot_aGroupOfItsOwnFollowsTheActionsAndOffersFreeze() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.rootActions = true;
+        assertEquals(Arrays.asList(
+                Arrays.asList(WIDGETS, APP_INFO, ADD_TO_HOME, UNPIN, CHANGE_ICON, UNINSTALL),
+                Arrays.asList(AppMenuPlan.Row.FORCE_STOP, AppMenuPlan.Row.CLEAR_CACHE,
+                    AppMenuPlan.Row.FREEZE)),
+            AppMenuPlan.groups(in));
+    }
+
+    @Test
+    public void aFrozenApp_offersUnfreezeInsteadOfFreeze() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.rootActions = true;
+        in.appDisabled = true;
+        assertEquals(Arrays.asList(AppMenuPlan.Row.FORCE_STOP, AppMenuPlan.Row.CLEAR_CACHE,
+            AppMenuPlan.Row.UNFREEZE), AppMenuPlan.groups(in).get(1));
+    }
+
+    @Test
+    public void withoutRootActions_noRootRowShowsEvenWhenDisabled() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.appDisabled = true;
+        assertEquals(1, AppMenuPlan.groups(in).size());
+    }
+
+    @Test
+    public void theRootGroupSitsBeforeEditDock() {
+        AppMenuPlan.Inputs in = dockApp();
+        in.rootActions = true;
+        in.onDock = true;
+        List<List<AppMenuPlan.Row>> groups = AppMenuPlan.groups(in);
+        assertEquals(3, groups.size());
+        assertEquals(AppMenuPlan.Row.FORCE_STOP, groups.get(1).get(0));
+        assertEquals(Collections.singletonList(EDIT_DOCK), groups.get(2));
+    }
 }

@@ -393,6 +393,11 @@ public final class TerminalBindingConfig {
                     errors.add("line " + lineNumber + ": unknown terminal action '" + actionName + "'");
                     continue;
                 }
+                if (LauncherToolRegistry.isPaletteOnly(actionName)) {
+                    errors.add("line " + lineNumber + ": '" + actionName
+                        + "' asks first and so cannot be bound to a key");
+                    continue;
+                }
                 JSONObject arguments = toolArguments(tool,
                     words.subList(cursor, words.size()), lineNumber, errors);
                 if (arguments == null) continue;

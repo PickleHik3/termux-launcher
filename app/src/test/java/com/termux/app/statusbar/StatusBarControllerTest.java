@@ -231,9 +231,9 @@ public class StatusBarControllerTest {
             ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
         assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(0) + StatusInkSlots.WIDGET_LARGE]),
             ReflectionHelpers.<Integer>getField(cpu, "mIconInk"));
-        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(5) + StatusInkSlots.WIDGET_MUTED]),
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(6) + StatusInkSlots.WIDGET_MUTED]),
             ReflectionHelpers.<Integer>getField(ai, "mMutedInk"));
-        assertEquals(Integer.valueOf(inks[StatusInkSlots.dot(4)]),
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.dot(6)]),
             ReflectionHelpers.<Integer>getField(dot, "mInk"));
     }
 
@@ -251,9 +251,9 @@ public class StatusBarControllerTest {
         assertSame(label, ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
         assertSame(dotInk, ReflectionHelpers.<Integer>getField(dot, "mInk"));
         int[] moved = inks.clone();
-        moved[StatusInkSlots.dot(0)] ^= 0x00FF00;
+        moved[StatusInkSlots.dot(2)] ^= 0x00FF00;
         widgets().applyStatusInks(moved);
-        assertEquals(Integer.valueOf(moved[StatusInkSlots.dot(0)]),
+        assertEquals(Integer.valueOf(moved[StatusInkSlots.dot(2)]),
             ReflectionHelpers.<Integer>getField(dot, "mInk"));
     }
 
@@ -395,6 +395,8 @@ public class StatusBarControllerTest {
         @Override public long statsCardIntervalMs() { return 0L; }
         @Override public StatusBarStatSmoother barCpuSmoother() { return null; }
         @Override public StatusBarStatSmoother barMemorySmoother() { return null; }
+        private final StatusBarStatSmoother gpuSmoother = StatusBarStatSmoother.forGpuPercent();
+        @Override public StatusBarStatSmoother barGpuSmoother() { return gpuSmoother; }
         @Override public void toggleStatsCard(@NonNull View anchor) {}
         @Override public void toggleWeatherCard(@NonNull View anchor) {}
     }

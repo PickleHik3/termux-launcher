@@ -438,6 +438,23 @@ public final class LauncherToolRegistry {
     public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
+    public static final String TOOL_PANE_ROOT_SHELL = "pane.root_shell";
+    /** Root restarts, started from the palette; confirmed there, and never bound to a key by default. */
+    public static final String TOOL_DEVICE_RESTART = "device.restart";
+    public static final String TOOL_DEVICE_RESTART_RECOVERY = "device.restart_recovery";
+    public static final String TOOL_DEVICE_RESTART_BOOTLOADER = "device.restart_bootloader";
+
+    /**
+     * Tools only the command palette may start, because only its sheet asks first. Key bindings,
+     * extra keys and keyboard-layout keys call the dispatcher directly, so they refuse these.
+     */
+    private static final Set<String> PALETTE_ONLY_TOOLS = new HashSet<>(Arrays.asList(
+        TOOL_DEVICE_RESTART, TOOL_DEVICE_RESTART_RECOVERY, TOOL_DEVICE_RESTART_BOOTLOADER));
+
+    /** Whether {@code toolName} may be started from the palette alone, never from a key. */
+    public static boolean isPaletteOnly(@Nullable String toolName) {
+        return toolName != null && PALETTE_ONLY_TOOLS.contains(toolName);
+    }
     public static final String TOOL_PANE_LIST = "pane.list";
     public static final String TOOL_PANE_FOCUS = "pane.focus";
     public static final String TOOL_PANE_CLOSE = "pane.close";
@@ -719,6 +736,30 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_move_to_edge, R.string.tool_desc_pane_move_to_edge,
             null, REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_ROOT_SHELL,
+            "Open a pane with a root shell that keeps the Termux tools.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_root_shell, R.string.tool_desc_pane_root_shell,
+            null, REQUIRES_ROOT_AND_SPLITS);
+        addUi(map, TOOL_DEVICE_RESTART,
+            "Restart the phone, through root.",
+            schemaEmpty(),
+            ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_device_restart, R.string.tool_desc_device_restart,
+            null, REQUIRES_ROOT);
+        addUi(map, TOOL_DEVICE_RESTART_RECOVERY,
+            "Restart the phone into recovery, through root.",
+            schemaEmpty(),
+            ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_device_restart_recovery,
+            R.string.tool_desc_device_restart_recovery, null, REQUIRES_ROOT);
+        addUi(map, TOOL_DEVICE_RESTART_BOOTLOADER,
+            "Restart the phone into the bootloader, through root.",
+            schemaEmpty(),
+            ToolRisk.HIGH, true, ToolExecutor.TERMINAL,
+            CATEGORY_APP, R.string.tool_device_restart_bootloader,
+            R.string.tool_desc_device_restart_bootloader, null, REQUIRES_ROOT);
         // The pane API for agents and scripts (`launcherctl pane …`, /v1/panes). Not in the palette:
         // every one of them takes an argument the palette cannot ask for, and they exist so a
         // process in a shell can show its work in a pane of its own, not for a finger.
@@ -1499,6 +1540,18 @@ public final class LauncherToolRegistry {
         context.isSplitPanesEnabled()
             ? Availability.available()
             : Availability.unavailable(R.string.palette_unavailable_splits_disabled);
+
+    /** Actions that run a command as root. */
+    private static final AvailabilityPredicate REQUIRES_ROOT = context ->
+        com.termux.privileged.PrivilegedBackendManager.getInstance().isRootActive()
+            ? Availability.available()
+            : Availability.unavailable(R.string.palette_unavailable_no_root);
+
+    /** Actions that need a root shell and a pane to put it in. */
+    private static final AvailabilityPredicate REQUIRES_ROOT_AND_SPLITS = context ->
+        !com.termux.privileged.PrivilegedBackendManager.getInstance().isRootActive()
+            ? Availability.unavailable(R.string.palette_unavailable_no_root)
+            : REQUIRES_SPLITS.evaluate(context);
 
     /** Actions that operate on the current text selection. */
     private static final AvailabilityPredicate REQUIRES_SELECTION = context ->

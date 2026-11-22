@@ -648,6 +648,32 @@ launcherctl wallpaper set ~/pics/a.jpg --lock   # --home | --lock | --both (defa
 launcherctl wallpaper get
 ```
 
+### Root system routes: lock, reboot, wifi, data, airplane, dnd
+
+| Method | Path | Body | Answer |
+| --- | --- | --- | --- |
+| POST | `/v1/root/lock` | none | `{"ok": true}` |
+| POST | `/v1/root/reboot` | `{"target": "system"}` (`target`: `system`, `recovery`, `bootloader`; default `system`) | `{"ok": true}` |
+| POST | `/v1/root/wifi` | `{"on": true}` | `{"ok": true}` |
+| POST | `/v1/root/data` | `{"on": true}` | `{"ok": true}` |
+| POST | `/v1/root/airplane` | `{"on": true}` | `{"ok": true}` |
+| POST | `/v1/root/dnd` | `{"on": true}` | `{"ok": true}` |
+
+System actions that Android only lets a root shell do. Each runs one command through the
+launcher's root shell and waits up to 10 s for it. They need no pane and no visible launcher; the
+same bearer token applies, with a per-route rate limit (30 a minute, 3 for reboot).
+
+- `lock` turns the screen off.
+- `reboot` restarts the phone, into recovery or the bootloader when asked. The answer comes back
+  as soon as the command is sent, since the restart ends the shell. It is off until the user turns
+  on "Let launcherctl restart the phone" under Settings, Privileged access: 403
+  `reboot_not_allowed` while it is off. An unknown `target` is 400 `bad_request`.
+- `wifi`, `data`, `airplane` and `dnd` turn the setting on or off. `on` must be `true` or `false`,
+  else 400 `bad_request`. `dnd` on means priority-only interruptions.
+- Every route answers 409 `root_unavailable` when root access is not active, 500 `command_failed`
+  (with the shell's message) when the command reports an error, and 504 `timeout` when it does not
+  finish in time.
+
 ### Agent status and the display's GPU
 
 | Method | Path | Purpose |
@@ -896,6 +922,8 @@ Limits are per-route, not global, so heavy generation traffic does not starve un
 | `POST /v1/volume`, `POST /v1/toast` | 60 each |
 | `POST /v1/wallpaper` | 6 |
 | `GET /v1/wallpaper` | 30 |
+| `POST /v1/root/lock`, `/wifi`, `/data`, `/airplane`, `/dnd` | 30 each |
+| `POST /v1/root/reboot` | 3 |
 | `GET /v1/models`, `GET /v1/ai/status`, `GET /v1/ai/runtime`, `GET /v1/ai/models`, `GET /v1/ai/models/downloads`, `GET /v1/ai/benchmarks` | 120 each |
 | `POST /v1/chat/completions`, `/v1/responses`, `/v1/completions`, `/v1/embeddings` | 60 each |
 | `POST /v1/tokenize` | 120 |

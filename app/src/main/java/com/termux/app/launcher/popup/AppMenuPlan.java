@@ -13,7 +13,8 @@ import java.util.List;
  * top to bottom: the notifications row (only while the app is badged), the app's shortcuts, Move to category
  * (alone, where the drawer can sort the app), then the
  * actions in Launcher3's order — Widgets, App info, Add to home, Pin or Unpin, Change icon (with
- * Reset icon beside it once a custom icon is set), Uninstall (a Linux app in the drawer ends with Hide instead). An app in a dock folder trades Pin for
+ * Reset icon beside it once a custom icon is set), Uninstall (a Linux app in the drawer ends with Hide instead).
+ * With root, a group of its own follows: Force stop, Clear cache and Freeze or Unfreeze. An app in a dock folder trades Pin for
  * Move to dock and Remove from folder, the two things only a folder member can do. An icon on Home
  * has no Add to home (it is there already) and offers Remove from Home before Uninstall: the same
  * thing its drag onto the Remove target does. An icon on the dock adds Edit dock, alone in the last
@@ -42,6 +43,10 @@ public final class AppMenuPlan {
         RESET_ICON,
         UNINSTALL,
         HIDE,
+        FORCE_STOP,
+        FREEZE,
+        UNFREEZE,
+        CLEAR_CACHE,
         EDIT_DOCK
     }
 
@@ -78,6 +83,10 @@ public final class AppMenuPlan {
         public boolean canAddToFolder;
         /** The host can hide this app from the drawer (a Linux app); see {@link #hidesFromDrawer}. */
         public boolean canHide;
+        /** Root is active, the app is an Android app and not the launcher itself: the root rows show. */
+        public boolean rootActions;
+        /** The app is frozen (disabled); the root group offers Unfreeze instead of Freeze. */
+        public boolean appDisabled;
     }
 
     private AppMenuPlan() {
@@ -160,6 +169,13 @@ public final class AppMenuPlan {
         if (in.androidPackage) actions.add(Row.UNINSTALL);
         if (hidesFromDrawer(in)) actions.add(Row.HIDE);
         groups.add(actions);
+        if (in.rootActions) {
+            List<Row> root = new ArrayList<>(3);
+            root.add(Row.FORCE_STOP);
+            root.add(Row.CLEAR_CACHE);
+            root.add(in.appDisabled ? Row.UNFREEZE : Row.FREEZE);
+            groups.add(root);
+        }
         if (in.onDock) groups.add(Collections.singletonList(Row.EDIT_DOCK));
         return groups;
     }

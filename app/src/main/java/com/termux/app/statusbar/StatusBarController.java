@@ -156,6 +156,7 @@ public final class StatusBarController {
         /** The bar's smoothed CPU and memory readings. */
         com.termux.app.statusbar.StatusBarStatSmoother barCpuSmoother();
         com.termux.app.statusbar.StatusBarStatSmoother barMemorySmoother();
+        com.termux.app.statusbar.StatusBarStatSmoother barGpuSmoother();
         /** Opens or closes the stats card, or the weather card, from {@code anchor}. */
         void toggleStatsCard(@NonNull View anchor);
         void toggleWeatherCard(@NonNull View anchor);

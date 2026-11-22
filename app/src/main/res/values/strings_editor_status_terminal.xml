@@ -36,6 +36,7 @@
     <!-- Pinned notifications ↗: where the page stands in Settings. -->
     <string name="editor_link_pinned_notifications_summary">Settings › Notifications</string>
     <string name="editor_st_indicator_cpu">CPU</string>
+    <string name="editor_st_indicator_gpu">GPU</string>
     <string name="editor_st_indicator_ram">RAM</string>
     <string name="editor_st_indicator_battery">Battery</string>
     <string name="editor_st_indicator_weather">Weather</string>

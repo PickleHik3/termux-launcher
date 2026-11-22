@@ -187,6 +187,7 @@ public class AppearanceResetTest {
             // Status bar.
             .putString(TERMUX_APP.KEY_TOP_PANE_CLOCK_STYLE, "digital").putString(TERMUX_APP.KEY_TOP_PANE_CLOCK_ALIGNMENT, "end")
             .putBoolean(TERMUX_APP.KEY_STATUS_CLOCK_SECONDS, true).putBoolean(TERMUX_APP.KEY_STATUS_WIDGET_CPU, true)
+            .putBoolean(TERMUX_APP.KEY_STATUS_WIDGET_GPU, true)
             .putBoolean(TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, true)
             // A place's dress as its flat copy (kept for a downgrade before the reset).
             .putString("place.dress.home.portrait.extra_keys", "true")
@@ -293,6 +294,7 @@ public class AppearanceResetTest {
     @Test
     public void theScopeNamesBothSidesOfEverySharedPrefix() {
         assertTrue(AppearanceReset.inScope("status_widget_cpu"));
+        assertTrue(AppearanceReset.inScope("status_widget_gpu"));
         assertFalse(AppearanceReset.inScope("status_widget_weather_location"));
         assertTrue(AppearanceReset.inScope(TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME));
         assertFalse(AppearanceReset.inScope("in_app_keyboard_layouts"));

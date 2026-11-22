@@ -43,6 +43,21 @@ public class AppearanceSnapshotTest {
     }
 
     @Test
+    public void undoPutsBackTheGpuSwitchAndTheSignatureSeesIt() {
+        assertFalse(preferences.isStatusWidgetGpuEnabled());
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        preferences.setStatusWidgetGpuEnabled(true);
+        assertNotEquals("the GPU switch moves the signature", signature,
+            AppearanceSnapshot.capture(preferences).signature());
+
+        entry.restore(preferences);
+        assertFalse(preferences.isStatusWidgetGpuEnabled());
+        assertEquals(signature, AppearanceSnapshot.capture(preferences).signature());
+    }
+
+    @Test
     public void undoPutsBackEveryValueTheEditorWrites() {
         SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);

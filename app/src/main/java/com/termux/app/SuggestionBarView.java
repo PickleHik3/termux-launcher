@@ -6510,6 +6510,8 @@ public final class SuggestionBarView extends GridLayout
             && addToHomeListener.canOpenWidgets() && hasWidgetProviders(packageName);
         inputs.canAddToHome = addToHomeListener != null && addToHomeListener.canAddToHome();
         inputs.canMoveToCategory = categoryChoiceHandler != null;
+        inputs.rootActions = !linuxApp && canRunRootAppAction(packageName);
+        inputs.appDisabled = inputs.rootActions && isAppDisabled(packageName);
         inputs.canHide = context.fromDrawer && com.termux.app.x11.X11Apps.isLinuxApp(entry.appRef);
         inputs.canAddToFolder = categoryChoiceHandler != null && !linuxApp
             && configRepository != null
@@ -6797,10 +6799,105 @@ public final class SuggestionBarView extends GridLayout
             case HIDE:
                 return appMenuItem(R.string.settings_x11_app_drawer_hide, R.drawable.ic_rl_eye_off,
                     () -> hideLinuxAppWithUndo(entry));
+            case FORCE_STOP:
+                return appMenuItem(R.string.app_menu_force_stop, R.drawable.ic_ms_stop_circle,
+                    () -> runRootAppAction(entry, RootAction.FORCE_STOP));
+            case CLEAR_CACHE:
+                return appMenuItem(R.string.app_menu_clear_cache, R.drawable.ic_ms_cleaning_services,
+                    () -> confirmRootAppAction(entry, RootAction.CLEAR_CACHE));
+            case FREEZE:
+                return appMenuItem(R.string.app_menu_freeze, R.drawable.ic_ms_pause,
+                    () -> confirmRootAppAction(entry, RootAction.FREEZE));
+            case UNFREEZE:
+                return appMenuItem(R.string.app_menu_unfreeze, R.drawable.ic_ms_play_arrow,
+                    () -> runRootAppAction(entry, RootAction.UNFREEZE));
             case UNINSTALL:
             default:
                 return appMenuItem(R.string.app_menu_uninstall, R.drawable.ic_app_menu_uninstall,
                     () -> requestUninstall(entry));
+        }
+    }
+
+    private enum RootAction { FORCE_STOP, CLEAR_CACHE, FREEZE, UNFREEZE }
+
+    /** Root is active and {@code packageName} is a plain package other than the launcher itself. */
+    private boolean canRunRootAppAction(@Nullable String packageName) {
+        return com.termux.privileged.RootAppCommands.isValidPackage(packageName)
+            && !packageName.equals(getContext().getPackageName())
+            && com.termux.privileged.PrivilegedBackendManager.getInstance().isRootActive();
+    }
+
+    private boolean isAppDisabled(@NonNull String packageName) {
+        try {
+            android.content.pm.ApplicationInfo info =
+                getContext().getPackageManager().getApplicationInfo(packageName,
+                    android.content.pm.PackageManager.MATCH_DISABLED_COMPONENTS);
+            return info != null && !info.enabled;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** Freeze and Clear cache ask first; the plain copy says what the user keeps or loses. */
+    private void confirmRootAppAction(@NonNull LauncherAppEntry entry, @NonNull RootAction action) {
+        String label = String.valueOf(entry.label);
+        boolean freeze = action == RootAction.FREEZE;
+        try {
+            new MaterialAlertDialogBuilder(getContext())
+                .setTitle(getResources().getString(freeze
+                    ? R.string.app_menu_freeze_title : R.string.app_menu_clear_cache_title, label))
+                .setMessage(freeze ? R.string.app_menu_freeze_message
+                    : R.string.app_menu_clear_cache_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(freeze ? R.string.app_menu_freeze : R.string.app_menu_clear_cache,
+                    (d, w) -> runRootAppAction(entry, action))
+                .show();
+        } catch (RuntimeException e) {
+            Log.d(LOG_TAG, "root action dialog failed: " + e.getMessage());
+        }
+    }
+
+    /** Runs the action through the root shell off the main thread; one notice line says how it went. */
+    private void runRootAppAction(@NonNull LauncherAppEntry entry, @NonNull RootAction action) {
+        String packageName = entry.appRef.packageName;
+        // Re-checked at run time: root may have gone, and the launcher never stops or freezes itself.
+        if (!canRunRootAppAction(packageName)) return;
+        String command;
+        switch (action) {
+            case FORCE_STOP: command = com.termux.privileged.RootAppCommands.forceStop(packageName); break;
+            case CLEAR_CACHE: command = com.termux.privileged.RootAppCommands.clearCache(packageName); break;
+            case FREEZE: command = com.termux.privileged.RootAppCommands.freeze(packageName); break;
+            default: command = com.termux.privileged.RootAppCommands.unfreeze(packageName); break;
+        }
+        if (command == null) return;
+        String label = String.valueOf(entry.label);
+        Context noticeContext = getContext();
+        com.termux.privileged.PrivilegedBackendManager.getInstance().executeCommand(command)
+            .whenComplete((output, error) -> post(() -> {
+                boolean ok = error == null && output != null
+                    && !output.startsWith("Error") && !output.startsWith("Failure");
+                showRootAppResult(noticeContext, entry, label, action, ok);
+            }));
+    }
+
+    private void showRootAppResult(@NonNull Context context, @NonNull LauncherAppEntry entry,
+                                   @NonNull String label, @NonNull RootAction action, boolean ok) {
+        int res;
+        switch (action) {
+            case FORCE_STOP: res = ok ? R.string.app_menu_force_stop_done : R.string.app_menu_force_stop_failed; break;
+            case CLEAR_CACHE: res = ok ? R.string.app_menu_clear_cache_done : R.string.app_menu_clear_cache_failed; break;
+            case FREEZE: res = ok ? R.string.app_menu_freeze_done : R.string.app_menu_freeze_failed; break;
+            default: res = ok ? R.string.app_menu_unfreeze_done : R.string.app_menu_unfreeze_failed; break;
+        }
+        String message = context.getString(res, label);
+        if (!ok) {
+            AppNotice.error(context, message);
+        } else if (action == RootAction.FREEZE) {
+            // A frozen app leaves the drawer, so the notice itself is the way back.
+            AppNotice.undoable(context, message, context.getString(R.string.app_menu_freeze_undo_hint),
+                () -> runRootAppAction(entry, RootAction.UNFREEZE));
+        } else {
+            AppNotice.success(context, message);
         }
     }
 

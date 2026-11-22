@@ -116,6 +116,7 @@ public class SettingsSearchIndexTest {
             {"wallpaper scrolls", "wallpaper_parallax"},
             {"12-hour time", "top_pane_clock_am_pm"},
             {"cpu usage", "status_widget_cpu"},
+            {"gpu", "status_widget_gpu"},
             {"memory usage", "status_widget_ram"},
             {"battery", "status_widget_battery"},
             {"fahrenheit", "status_widget_weather_fahrenheit"},

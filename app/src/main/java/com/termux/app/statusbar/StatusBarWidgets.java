@@ -77,6 +77,7 @@ final class StatusBarWidgets {
         if (shown)
             mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
         boolean anyStatBefore = mHost.preferences() != null && (mHost.preferences().isStatusWidgetCpuEnabled()
+            || mHost.preferences().isStatusWidgetGpuEnabled()
             || mHost.preferences().isStatusWidgetRamEnabled()
             || mHost.preferences().isStatusWidgetBatteryEnabled()
             || mHost.preferences().isStatusWidgetWeatherEnabled());
@@ -92,13 +93,14 @@ final class StatusBarWidgets {
 
     /** The status widgets and their dots, in the order the row lays them out. */
     private static final int[] STATUS_INK_WIDGET_IDS = {
-        R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
-        R.id.terminal_status_widget_battery,
+        R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_gpu,
+        R.id.terminal_status_widget_ram, R.id.terminal_status_widget_battery,
         R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
         R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
     };
 
     private static final int[] STATUS_INK_DOT_IDS = {
+        R.id.terminal_status_dot_cpu_gpu, R.id.terminal_status_dot_gpu_ram,
         R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
         R.id.terminal_status_dot_battery_weather,
         R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
@@ -353,10 +355,15 @@ final class StatusBarWidgets {
     /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
     void updateStatusWidgets() {
         com.termux.app.statusbar.StatusBarWidgetView cpu = mHost.findViewById(R.id.terminal_status_widget_cpu);
+        com.termux.app.statusbar.StatusBarWidgetView gpu = mHost.findViewById(R.id.terminal_status_widget_gpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = mHost.findViewById(R.id.terminal_status_widget_ram);
         com.termux.app.statusbar.StatusBarWidgetView weather = mHost.findViewById(R.id.terminal_status_widget_weather);
         com.termux.app.statusbar.MaterialDotSeparatorView cpuRamDot =
             mHost.findViewById(R.id.terminal_status_dot_cpu_ram);
+        com.termux.app.statusbar.MaterialDotSeparatorView cpuGpuDot =
+            mHost.findViewById(R.id.terminal_status_dot_cpu_gpu);
+        com.termux.app.statusbar.MaterialDotSeparatorView gpuRamDot =
+            mHost.findViewById(R.id.terminal_status_dot_gpu_ram);
         com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
             mHost.findViewById(R.id.terminal_status_dot_ram_weather);
         com.termux.app.statusbar.StatusBarWidgetView battery =
@@ -369,6 +376,13 @@ final class StatusBarWidgets {
         boolean cpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.cpuShown(
             mHost.preferences() != null && mHost.preferences().isStatusWidgetCpuEnabled(),
             PrivilegedBackendManager.getInstance().isPrivilegedAvailableForUi());
+        // The GPU reading needs no switch beyond its own, but a phone that reports none keeps it
+        // hidden: it is shown only once a sample has read a load (the smoother holds the last one).
+        boolean gpuEnabled = mHost.preferences() != null && mHost.preferences().isStatusWidgetGpuEnabled();
+        if (!gpuEnabled) mHost.barGpuSmoother().reset();
+        boolean gpuOn = com.termux.app.statusbar.StatusStatsClusterPolicy.gpuShown(
+            gpuEnabled, mHost.barGpuSmoother().publishedPercent()
+                != com.termux.app.statusbar.StatusBarStatSmoother.UNKNOWN);
         boolean ramOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetRamEnabled();
         boolean batteryOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetBatteryEnabled();
         boolean weatherOn = mHost.preferences() != null && mHost.preferences().isStatusWidgetWeatherEnabled();
@@ -389,6 +403,15 @@ final class StatusBarWidgets {
             if (cpu.getTag() == null) {
                 cpu.setTag("wired");
                 cpu.setOnClickListener(v -> mHost.toggleStatsCard(v));
+            }
+        }
+        if (gpu != null) {
+            gpu.setVisibility(gpuOn ? View.VISIBLE : View.GONE);
+            gpu.dressAsGpu();
+            if (gpuOn) gpu.setValue(mHost.barGpuSmoother().text());
+            if (gpu.getTag() == null) {
+                gpu.setTag("wired");
+                gpu.setOnClickListener(v -> mHost.toggleStatsCard(v));
             }
         }
         if (ram != null) {
@@ -424,11 +447,23 @@ final class StatusBarWidgets {
 
         if (cpuRamDot != null) {
             boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .cpuRamDotVisible(cpuOn, ramOn, batteryOn, weatherOn);
+                .cpuRamDotVisible(cpuOn, gpuOn, ramOn, batteryOn, weatherOn);
             cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
             // The dot takes the tier it leads into: RAM, or the weather when RAM is off. Both are
             // secondary now, so AI alone carries the tertiary role.
             cpuRamDot.setColorRole(
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+        }
+        if (cpuGpuDot != null) {
+            cpuGpuDot.setVisibility(com.termux.app.statusbar.StatusStatsClusterPolicy
+                .cpuGpuDotVisible(cpuOn, gpuOn) ? View.VISIBLE : View.GONE);
+            cpuGpuDot.setColorRole(
+                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
+        }
+        if (gpuRamDot != null) {
+            gpuRamDot.setVisibility(com.termux.app.statusbar.StatusStatsClusterPolicy
+                .gpuRamDotVisible(gpuOn, ramOn, batteryOn, weatherOn) ? View.VISIBLE : View.GONE);
+            gpuRamDot.setColorRole(
                 com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
         if (ramWeatherDot != null) {
@@ -446,11 +481,13 @@ final class StatusBarWidgets {
                 com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         }
 
-        if (cpuOn || ramOn) {
+        // An enabled GPU stat keeps the sampler running (and reading hardware, in the same one
+        // poll) even while it is hidden for want of a reading: that is how it learns it can show.
+        if (cpuOn || ramOn || gpuEnabled) {
             boolean cardShowing = mHost.statusCardHost().isShowing() && mHost.statsCardView() != null;
             mHost.ensureStatsController().start(
                 mHost.statsInterval(cardShowing ? mHost.statsCardIntervalMs() : mHost.statsBarIntervalMs()),
-                cardShowing);
+                cardShowing, cardShowing || gpuEnabled);
             // The sampler pauses while nothing shows its numbers (StatsPollCadence).
             mHost.statsController().setConsumerVisible(mHost.statsConsumerVisible());
         } else if (mHost.statsController() != null) {

@@ -19,6 +19,8 @@ import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.privileged.lane.PrivilegedLaneBinding;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 @Keep
 public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragment {
@@ -154,6 +156,9 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
             case RUNNING:
                 label = getString(R.string.termux_privileged_lane_state_running, binding.serviceUid());
                 break;
+            case ROOT:
+                label = getString(R.string.termux_privileged_lane_state_root);
+                break;
             case BINDING:
                 label = getString(R.string.termux_privileged_lane_state_binding);
                 break;
@@ -168,7 +173,8 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
                 label = getString(R.string.termux_privileged_lane_state_off);
                 break;
         }
-        ((StatusCardPreference) lanePreference).setStatus(label, state == PrivilegedLaneBinding.State.RUNNING);
+        ((StatusCardPreference) lanePreference).setStatus(label, state == PrivilegedLaneBinding.State.RUNNING
+            || state == PrivilegedLaneBinding.State.ROOT);
     }
 
     private void refreshStatusSummary() {
@@ -236,6 +242,11 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
             case PrivilegedPolicyStore.KEY_LANE_ENABLED:
                 PrivilegedPolicyStore.setLaneEnabled(mContext, value);
                 break;
+            case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT: {
+                TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+                if (preferences != null) preferences.setLauncherCtlRootRebootEnabled(value);
+                break;
+            }
             default:
                 break;
         }
@@ -255,6 +266,10 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
                 return PrivilegedPolicyStore.isShellFallbackEnabled(mContext);
             case PrivilegedPolicyStore.KEY_LANE_ENABLED:
                 return PrivilegedPolicyStore.isLaneSwitchOn(mContext);
+            case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT: {
+                TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+                return preferences != null && preferences.isLauncherCtlRootRebootEnabled();
+            }
             default:
                 return defValue;
         }

@@ -95,6 +95,10 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_PANE_SPLIT = "pane.split";
     /** Panes opened and driven through the local API (agents, scripts); see AgentPaneRegistry. */
     public static final String TOOL_PANE_OPEN = "pane.open";
+    public static final String TOOL_PANE_ROOT_SHELL = "pane.root_shell";
+    public static final String TOOL_DEVICE_RESTART = "device.restart";
+    public static final String TOOL_DEVICE_RESTART_RECOVERY = "device.restart_recovery";
+    public static final String TOOL_DEVICE_RESTART_BOOTLOADER = "device.restart_bootloader";
     public static final String TOOL_PANE_LIST = "pane.list";
     public static final String TOOL_PANE_FOCUS = "pane.focus";
     public static final String TOOL_PANE_CLOSE = "pane.close";
@@ -449,6 +453,10 @@ public final class TerminalActionDispatcher {
             case TOOL_SHELL_PROGRESS:
             case TOOL_CLIPBOARD_WRITE:
             case TOOL_CLIPBOARD_READ:
+            case TOOL_PANE_ROOT_SHELL:
+            case TOOL_DEVICE_RESTART:
+            case TOOL_DEVICE_RESTART_RECOVERY:
+            case TOOL_DEVICE_RESTART_BOOTLOADER:
                 return true;
             default:
                 return false;
@@ -755,6 +763,40 @@ public final class TerminalActionDispatcher {
                         : openedIn.layoutPolicyOf(openedIn.windowOf(opened));
                     return ok().put("pane", paneRecord(host, opened))
                         .put("layout", layout == null ? JSONObject.NULL : layout);
+                }
+                case TOOL_PANE_ROOT_SHELL: {
+                    if (!host.isSplitPanesEnabled()) return splitsDisabled();
+                    if (!com.termux.privileged.PrivilegedBackendManager.getInstance().isRootActive()) {
+                        return error(409, "root_unavailable",
+                            "Root access is not available, so a root shell cannot be opened");
+                    }
+                    List<String> command = new java.util.ArrayList<>();
+                    command.add("sh");
+                    command.add("-c");
+                    command.add(com.termux.privileged.RootShellCommand.line());
+                    TerminalSession opened = host.openCommandPane(command, null, "root", true, null);
+                    if (opened == null) {
+                        return error(409, "pane_open_failed",
+                            "No pane could be opened: there is no active terminal session, or the terminal limit is reached");
+                    }
+                    return ok().put("pane", paneRecord(host, opened));
+                }
+                case TOOL_DEVICE_RESTART:
+                case TOOL_DEVICE_RESTART_RECOVERY:
+                case TOOL_DEVICE_RESTART_BOOTLOADER: {
+                    com.termux.privileged.PrivilegedBackendManager root =
+                        com.termux.privileged.PrivilegedBackendManager.getInstance();
+                    if (!root.isRootActive()) {
+                        return error(409, "root_unavailable",
+                            "Root access is not available, so the phone cannot be restarted");
+                    }
+                    // Not waited for: the restart takes the shell, and this process, down with it.
+                    root.executeCommand(TOOL_DEVICE_RESTART.equals(toolName)
+                        ? com.termux.privileged.RootSystemCommands.reboot()
+                        : TOOL_DEVICE_RESTART_RECOVERY.equals(toolName)
+                            ? com.termux.privileged.RootSystemCommands.rebootRecovery()
+                            : com.termux.privileged.RootSystemCommands.rebootBootloader());
+                    return ok();
                 }
                 case TOOL_WINDOW_OPEN: {
                     if (!host.isSplitPanesEnabled()) return splitsDisabled();

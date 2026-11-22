@@ -49,13 +49,22 @@ public class StatusStatsClusterPolicyTest {
         assertEquals(480f, StatusStatsClusterPolicy.clusterStart(500f, 500f, 480f, 900f, false), 0f);
     }
 
-    @Test public void cpuRamDotHidesOnlyWhenNothingFollowsCpu() {
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, false, false));
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, true, false));
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, true));
-        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, true, true));
-        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, false));
-        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(false, true, true, true));
+    @Test public void cpuRamDotHidesOnlyWhenNothingFollowsCpuOrTheGpuTakesIt() {
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, true, false, false));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, true, false));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, false, true));
+        assertTrue(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, true, true, true));
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(true, false, false, false, false));
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(false, false, true, true, true));
+        // With the GPU showing, the CPU-GPU dot carries that pair.
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, true, true, true));
+    }
+
+    @Test public void gpuShowsOnlyWithItsSwitchAndAReading() {
+        assertTrue(StatusStatsClusterPolicy.gpuShown(true, true));
+        assertFalse(StatusStatsClusterPolicy.gpuShown(true, false));
+        assertFalse(StatusStatsClusterPolicy.gpuShown(false, true));
+        assertFalse(StatusStatsClusterPolicy.gpuShown(false, false));
     }
 
     @Test public void cpuShowsOnlyWithItsSwitchAndPrivilegedAccess() {
@@ -68,7 +77,7 @@ public class StatusStatsClusterPolicyTest {
     @Test public void aCpuHiddenForWantOfAccessLeavesNoDotBehind() {
         // Switch on, no access, RAM and weather on: the CPU dot goes with the CPU.
         boolean cpuOn = StatusStatsClusterPolicy.cpuShown(true, false);
-        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(cpuOn, true, false, true));
+        assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(cpuOn, false, true, false, true));
         assertTrue(StatusStatsClusterPolicy.ramWeatherDotVisible(true, false, true));
     }
 
@@ -89,29 +98,35 @@ public class StatusStatsClusterPolicyTest {
     }
 
     /**
-     * Over every on/off combination of the four widgets, in the row's order: a dot is shown
-     * exactly when its widget shows and a later one does, so between two shown widgets there is
-     * one dot and none is doubled or left dangling at the end.
+     * Over every on/off combination of the five widgets, in the row's order (CPU, GPU, RAM,
+     * battery, weather): a dot is shown exactly when its pair stands next to each other among the
+     * shown widgets, so between two shown widgets there is one dot and none is doubled or left
+     * dangling at the end.
      */
     @Test public void everyCombinationHasOneDotBetweenNeighboursAndNoneDangling() {
-        for (int mask = 0; mask < 16; mask++) {
-            boolean cpu = (mask & 1) != 0, ram = (mask & 2) != 0;
-            boolean battery = (mask & 4) != 0, weather = (mask & 8) != 0;
-            boolean[] shown = {cpu, ram, battery, weather};
+        for (int mask = 0; mask < 32; mask++) {
+            boolean cpu = (mask & 1) != 0, gpu = (mask & 2) != 0, ram = (mask & 4) != 0;
+            boolean battery = (mask & 8) != 0, weather = (mask & 16) != 0;
+            boolean[] shown = {cpu, gpu, ram, battery, weather};
+            // The row's dots in layout order: CPU-GPU, GPU-RAM, CPU-RAM, RAM-weather, battery-weather.
             boolean[] dots = {
-                StatusStatsClusterPolicy.cpuRamDotVisible(cpu, ram, battery, weather),
+                StatusStatsClusterPolicy.cpuGpuDotVisible(cpu, gpu),
+                StatusStatsClusterPolicy.gpuRamDotVisible(gpu, ram, battery, weather),
+                StatusStatsClusterPolicy.cpuRamDotVisible(cpu, gpu, ram, battery, weather),
                 StatusStatsClusterPolicy.ramWeatherDotVisible(ram, battery, weather),
                 StatusStatsClusterPolicy.batteryWeatherDotVisible(battery, weather), };
             int widgets = 0, dotsShown = 0;
             for (boolean w : shown) if (w) widgets++;
             for (boolean d : dots) if (d) dotsShown++;
             assertEquals("mask " + mask, Math.max(0, widgets - 1), dotsShown);
-            // Dot i sits after widget i: shown only after a shown widget with a later one shown.
-            for (int i = 0; i < 3; i++) {
-                boolean laterShown = false;
-                for (int n = i + 1; n < 4; n++) laterShown |= shown[n];
-                assertEquals("mask " + mask + " dot " + i, shown[i] && laterShown, dots[i]);
-            }
+            // CPU's dot is the CPU-GPU one when the GPU follows, else the CPU-RAM one; every later
+            // widget owns exactly its own dot, shown when a later widget shows.
+            boolean laterThanCpu = gpu || ram || battery || weather;
+            assertEquals("mask " + mask + " cpu dots", cpu && laterThanCpu, dots[0] || dots[2]);
+            assertFalse("mask " + mask + " cpu dots are never both", dots[0] && dots[2]);
+            assertEquals("mask " + mask + " gpu dot", gpu && (ram || battery || weather), dots[1]);
+            assertEquals("mask " + mask + " ram dot", ram && (battery || weather), dots[3]);
+            assertEquals("mask " + mask + " battery dot", battery && weather, dots[4]);
         }
     }
 }

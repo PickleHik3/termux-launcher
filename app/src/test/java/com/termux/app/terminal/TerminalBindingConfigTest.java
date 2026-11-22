@@ -200,4 +200,29 @@ public class TerminalBindingConfigTest {
         assertEquals(1, result.mappings.size());
         assertEquals("ctrl+alt+q", result.mappings.get(0).sequence);
     }
+
+    @Test
+    public void restartActionsCannotBeBoundToAKey() {
+        for (String tool : new String[]{"device.restart", "device.restart_recovery",
+                "device.restart_bootloader"}) {
+            TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+                "map ctrl+alt+q " + tool + "\n", registry, true);
+            assertTrue(tool, result.mappings.isEmpty());
+            assertEquals(tool, 1, result.errors.size());
+            assertTrue(tool, result.errors.get(0).contains("cannot be bound"));
+        }
+    }
+
+    @Test
+    public void restartActionsStayInThePaletteWithAConfirmation() {
+        for (String tool : new String[]{"device.restart", "device.restart_recovery",
+                "device.restart_bootloader"}) {
+            assertTrue(tool, LauncherToolRegistry.isPaletteOnly(tool));
+            LauncherToolRegistry.ToolMetadata metadata = registry.getTool(tool);
+            assertTrue(tool, metadata.requiresConfirmation);
+            assertTrue(tool, registry.getUiToolsByCategory().get(metadata.category).contains(metadata));
+        }
+        assertFalse(LauncherToolRegistry.isPaletteOnly("pane.split"));
+        assertFalse(LauncherToolRegistry.isPaletteOnly(null));
+    }
 }

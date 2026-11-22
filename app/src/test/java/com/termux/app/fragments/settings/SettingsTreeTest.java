@@ -120,6 +120,7 @@ public class SettingsTreeTest {
         {"TerminalPreferencesFragment", "terminal_osc52_clipboard_read_enabled"},
         {"TerminalPreferencesFragment", "terminal_margin_adjustment"},
         {"TerminalStatusPreferencesFragment", "status_widget_cpu"},
+        {"TerminalStatusPreferencesFragment", "status_widget_gpu"},
         {"TerminalStatusPreferencesFragment", "lazy_mode"},
         {"KeyboardPreferencesFragment", "in_app_keyboard_haptics_enabled"},
         {"KeyboardPreferencesFragment", "keyboard_voice_engine"},

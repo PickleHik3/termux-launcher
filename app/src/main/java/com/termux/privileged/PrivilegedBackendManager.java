@@ -57,7 +57,6 @@ public class PrivilegedBackendManager {
     private PrivilegedBackend currentBackend = new NoOpBackend();
     private ShizukuBackend shizukuBackend;
     private ShellBackend shellBackend;
-    private boolean shizukuOnlyMode;
     @Nullable private Handler mainHandler;
     /** Fed by every state change and every availability check; see {@link #addAvailabilityListener}. */
     /** Read-only commands now running, by their text; see {@link #executeSharedReadCommand}. */
@@ -96,7 +95,6 @@ public class PrivilegedBackendManager {
 
     public CompletableFuture<Boolean> initialize(Context context) {
         this.applicationContext = context.getApplicationContext();
-        shizukuOnlyMode = false;
         updateState(BackendState.INITIALIZING, StatusReason.UNAVAILABLE, "Choosing backend");
 
         return CompletableFuture.supplyAsync(this::reselectBackendInternal, getExecutorService());
@@ -117,23 +115,50 @@ public class PrivilegedBackendManager {
 
     public CompletableFuture<Boolean> initializeShizukuOnly(Context context) {
         this.applicationContext = context.getApplicationContext();
-        shizukuOnlyMode = true;
-        // A healthy backend is left alone. This runs on every activity resume (and every
-        // Shizuku lock press); tearing down a READY backend to rebuild the same one made
+        // A healthy backend is left alone. This runs on a Shizuku lock press and the settings
+        // screen's permission request; tearing down a READY backend to rebuild the same one made
         // isPrivilegedAvailable() read false for the first seconds after each home-return,
         // which silently starved every privileged consumer — most visibly the CPU card's
         // process list. isAvailable() pings the binder, so a dead Shizuku still re-initializes.
         if (currentBackend instanceof ShizukuBackend && isPrivilegedAvailable()) {
             return CompletableFuture.completedFuture(true);
         }
+        final PrivilegedBackend previousBackend = currentBackend;
+        final boolean previousShellHealthy = previousBackend instanceof ShellBackend && isPrivilegedAvailable();
         updateState(BackendState.INITIALIZING, StatusReason.UNAVAILABLE, "Initializing Shizuku");
         return CompletableFuture.supplyAsync(() -> {
             boolean initialized = attemptShizukuInitialization(applicationContext);
             if (!initialized) {
-                fallbackToNoOp("Shizuku unavailable");
+                // A rooted phone without Shizuku keeps the su backend it already had.
+                switch (decideFallback(isMasterEnabled(), previousShellHealthy, isShellFallbackEnabled())) {
+                    case KEEP_SHELL:
+                        applyBackend(previousBackend, BackendState.FALLBACK_SHELL,
+                            StatusReason.FALLBACK_SHELL, "Shizuku unavailable, keeping shell backend");
+                        break;
+                    case SHELL:
+                        fallbackToShell("Shizuku unavailable");
+                        break;
+                    default:
+                        fallbackToNoOp("Shizuku unavailable");
+                        break;
+                }
             }
             return initialized;
         }, getExecutorService());
+    }
+
+    enum FallbackAfterShizuku { KEEP_SHELL, SHELL, NONE }
+
+    /** What to do once Shizuku could not be used. Pure so the branches are unit-tested. */
+    static FallbackAfterShizuku decideFallback(boolean masterEnabled, boolean previousShellHealthy,
+                                               boolean shellFallbackEnabled) {
+        if (!masterEnabled) {
+            return FallbackAfterShizuku.NONE;
+        }
+        if (previousShellHealthy) {
+            return FallbackAfterShizuku.KEEP_SHELL;
+        }
+        return shellFallbackEnabled ? FallbackAfterShizuku.SHELL : FallbackAfterShizuku.NONE;
     }
 
     public CompletableFuture<Boolean> reselectBackend() {
@@ -235,9 +260,7 @@ public class PrivilegedBackendManager {
         } else {
             applyBackend(currentBackend, BackendState.PERMISSION_DENIED, StatusReason.DENIED,
                 "Shizuku permission denied");
-            if (!shizukuOnlyMode) {
-                fallbackToShell("Shizuku permission denied");
-            }
+            fallbackToShell("Shizuku permission denied");
         }
     }
 
@@ -248,9 +271,7 @@ public class PrivilegedBackendManager {
 
         updateState(BackendState.SERVICE_NOT_RUNNING, StatusReason.BINDER_DEAD,
             "Shizuku binder died");
-        if (!shizukuOnlyMode) {
-            fallbackToShell("Shizuku binder dead");
-        }
+        fallbackToShell("Shizuku binder dead");
     }
 
     private void handleShizukuBinderReceived() {
@@ -354,6 +375,16 @@ public class PrivilegedBackendManager {
         synchronized (stateLock) {
             return statusMessage;
         }
+    }
+
+    /** True when the active backend is the shell backend running through su. */
+    public boolean isRootActive() {
+        if (!isMasterEnabled()) {
+            return false;
+        }
+        PrivilegedBackend backend = currentBackend;
+        return backend instanceof ShellBackend && ((ShellBackend) backend).isRoot()
+            && getBackendState() == BackendState.FALLBACK_SHELL;
     }
 
     /**

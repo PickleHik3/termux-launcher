@@ -139,6 +139,7 @@
     <string name="settings_clock_alignment_right">Right</string>
     <string name="settings_use_12_hour_title">12-hour time</string>
     <string name="settings_cpu_usage_title">CPU usage</string>
+    <string name="settings_gpu_usage_title">GPU</string>
     <string name="settings_memory_usage_title">Memory usage</string>
     <string name="settings_battery_title">Battery</string>
     <string name="settings_status_media_title">Media</string>
@@ -900,6 +901,35 @@
     <string name="app_menu_change_icon">Change icon</string>
     <string name="app_menu_reset_icon">Reset icon</string>
     <string name="app_menu_uninstall">Uninstall</string>
+    <string name="app_menu_force_stop">Force stop</string>
+    <string name="app_menu_clear_cache">Clear cache</string>
+    <string name="app_menu_freeze">Freeze</string>
+    <string name="app_menu_unfreeze">Unfreeze</string>
+    <string name="app_menu_freeze_title">Freeze %1$s?</string>
+    <string name="app_menu_freeze_message">It disappears from the drawer until you unfreeze it.</string>
+    <string name="app_menu_clear_cache_title">Clear %1$s’s cache?</string>
+    <string name="app_menu_clear_cache_message">Its saved data stays.</string>
+    <string name="app_menu_force_stop_done">%1$s stopped</string>
+    <string name="app_menu_force_stop_failed">Couldn’t stop %1$s</string>
+    <string name="app_menu_clear_cache_done">%1$s’s cache cleared</string>
+    <string name="app_menu_clear_cache_failed">Couldn’t clear %1$s’s cache</string>
+    <string name="app_menu_freeze_done">%1$s frozen</string>
+    <string name="app_menu_freeze_failed">Couldn’t freeze %1$s</string>
+    <string name="app_menu_freeze_undo_hint">Tap to unfreeze</string>
+    <string name="app_menu_unfreeze_done">%1$s is back</string>
+    <string name="app_menu_unfreeze_failed">Couldn’t unfreeze %1$s</string>
+    <string name="stats_process_stop_title">Stop %1$s?</string>
+    <string name="stats_process_stop_message">The app closes and its background work ends.</string>
+    <string name="stats_process_end_title">End %1$s?</string>
+    <string name="stats_process_end_message">The process is asked to quit.</string>
+    <string name="stats_process_force_title">%1$s is still running</string>
+    <string name="stats_process_force_message">Force it to end?</string>
+    <string name="stats_process_stop_action">Stop</string>
+    <string name="stats_process_end_action">End</string>
+    <string name="stats_process_force_action">Force end</string>
+    <string name="stats_process_stopped">%1$s stopped</string>
+    <string name="stats_process_ended">%1$s ended</string>
+    <string name="stats_process_failed">Couldn’t end %1$s</string>
     <string name="app_drawer_category_open">Open %1$s</string>
     <string name="app_drawer_category_collapse">Collapse %1$s</string>
     <string name="app_drawer_category_empty_title">Nothing here yet</string>
@@ -927,7 +957,7 @@
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
     <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings</string>
     <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
-    <string name="settings_double_tap_action_summary">Shizuku keeps the normal screen-off animation. Accessibility is optional and may flicker.</string>
+    <string name="settings_double_tap_action_summary">Shizuku and root keep the normal screen-off animation. Accessibility may flicker.</string>
 
     <string name="application_name">&TERMUX_APP_NAME;</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; user</string>
@@ -1048,8 +1078,9 @@
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
-    <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
-    <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
+    <string name="status_widget_needs_shizuku_title">Connect Shizuku or root</string>
+    <string name="status_widget_needs_shizuku_message">%1$s shows per-core CPU, detailed memory and top apps once Shizuku or root is connected. Without either it shows a rougher reading that some phones leave blank.</string>
+    <string name="termux_app_launcher_az_lock_root_unavailable">Allow root access for the launcher to lock the screen.</string>
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>
     <string name="status_widget_needs_shizuku_connect">Connect</string>
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
@@ -1286,6 +1317,7 @@
                 <string name="termux_named_sessions_indicator_content_description">Session %1$d of %2$d: %3$s</string>
                 <string name="termux_sessions_indicator_empty_content_description">No sessions</string>
                 <string name="termux_status_widget_cpu_content_description">CPU usage</string>
+                <string name="termux_status_widget_gpu_content_description">GPU load</string>
                 <string name="termux_status_widget_ram_content_description">Memory usage</string>
                 <string name="termux_status_widget_battery_content_description">Battery</string>
                 <string name="termux_status_widget_weather_content_description">Weather</string>
@@ -1503,7 +1535,7 @@
         <string name="termux_theme_mode_light">Light</string>
         <string name="termux_theme_mode_dark">Dark</string>
 
-        <string name="termux_privileged_access_preferences_title">Shizuku</string>
+        <string name="termux_privileged_access_preferences_title">Shizuku and root</string>
 
         <string name="termux_ai_preferences_title">On-device AI</string>
         <string name="termux_ai_zone_runtime_title">Runtime</string>
@@ -2172,6 +2204,8 @@
             <string name="termux_privileged_allow_shell_fallback_off">Do not use shell fallback; remain unavailable if Shizuku is unusable.</string>
             <string name="termux_privileged_request_permission_title">Request Shizuku permission</string>
             <string name="termux_privileged_request_permission_summary">Request or re-check Shizuku permission now.</string>
+            <string name="termux_privileged_launcherctl_reboot_title">Let launcherctl restart the phone</string>
+            <string name="termux_privileged_launcherctl_reboot_summary">Allows restart, recovery and bootloader requests from scripts.</string>
             <string name="termux_privileged_request_permission_requested">Shizuku permission requested.</string>
             <string name="termux_privileged_request_permission_unavailable">Permission request unavailable for current backend state.</string>
 
@@ -2183,7 +2217,8 @@
             <string name="termux_privileged_lane_state_no_shizuku">Shizuku isn\'t running</string>
             <string name="termux_privileged_lane_state_no_permission">Shizuku permission missing</string>
             <string name="termux_privileged_lane_state_off">Off</string>
-            <string name="termux_privileged_lane_enabled_title">Allow catalog tools to run as shell via Shizuku</string>
+            <string name="termux_privileged_lane_state_root">Running through root</string>
+            <string name="termux_privileged_lane_enabled_title">Allow catalog tools to run as shell via Shizuku or root</string>
             <string name="termux_privileged_lane_enabled_on">A tool the catalog marks priv=shizuku (btop, for one) may start as the shell user from a terminal session.</string>
             <string name="termux_privileged_lane_enabled_off">Every request from the terminal is refused.</string>
 
@@ -2307,6 +2342,7 @@
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
                 <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku</string>
+                <string name="termux_app_launcher_az_lock_method_root">Root</string>
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
@@ -2454,6 +2490,10 @@
 
     <!-- Terminal action titles, shown in the command palette -->
     <string name="tool_pane_split">New pane</string>
+    <string name="tool_pane_root_shell">Root shell</string>
+    <string name="tool_device_restart">Restart phone</string>
+    <string name="tool_device_restart_recovery">Restart to recovery</string>
+    <string name="tool_device_restart_bootloader">Restart to bootloader</string>
     <string name="tool_pane_split_vertical">Split pane vertically</string>
     <string name="tool_pane_split_horizontal">Split pane horizontally</string>
     <string name="tool_pane_focus_direction">Move pane focus</string>
@@ -2558,6 +2598,10 @@
     <string name="tool_pane_rename_prompt">Rename pane…</string>
     <!-- Palette subtitles -->
     <string name="tool_desc_pane_split">Open a new pane where there is the most room.</string>
+    <string name="tool_desc_pane_root_shell">Open a pane with a root shell that keeps your Termux tools.</string>
+    <string name="tool_desc_device_restart">Restart the phone now.</string>
+    <string name="tool_desc_device_restart_recovery">Restart the phone into recovery mode.</string>
+    <string name="tool_desc_device_restart_bootloader">Restart the phone into the bootloader.</string>
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
@@ -2881,6 +2925,7 @@
     </plurals>
     <string name="sessions_drawer_run_commands">Also start what was running</string>
     <string name="sessions_drawer_session_name">Session name</string>
+    <string name="palette_unavailable_no_root">Unavailable: root access is off</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
     <string name="palette_unavailable_no_in_app_keyboard">Unavailable: the in-app keyboard is off</string>
@@ -3720,9 +3765,9 @@
     <string name="setup_cards_coming">Coming in the next pre-release.</string>
     <string name="setup_cards_step_done">Done: %s</string>
     <string name="setup_cards_step_pending">Not done: %s</string>
-    <string name="setup_card_shizuku_name">Shizuku</string>
-    <string name="setup_card_shizuku_description">Connect Shizuku for the CPU widget in the status bar and double-tap to lock the screen.</string>
-    <string name="setup_card_shizuku_step">Start Shizuku and grant access</string>
+    <string name="setup_card_shizuku_name">Shizuku or root</string>
+    <string name="setup_card_shizuku_description">Connect Shizuku or root for the CPU widget in the status bar and double-tap to lock the screen.</string>
+    <string name="setup_card_shizuku_step">Start Shizuku and grant access, or allow root</string>
     <string name="setup_card_shizuku_guide">Shizuku setup guide</string>
     <string name="setup_card_accessibility_name">Accessibility service</string>
     <string name="setup_card_accessibility_description">Optional: another way to lock the screen with a double-tap on the A–Z strip.</string>
@@ -3824,4 +3869,10 @@
     <string name="setup_guide_panes_caption">New terminals tile next to the current one. Tap a pane to focus it.</string>
     <string name="setup_guide_desktop_title">Open a desktop app</string>
     <string name="setup_guide_desktop_caption">A desktop app opens as a normal window. The display starts when it\'s needed.</string>
+    <string name="stats_hw_gpu">GPU</string>
+    <string name="stats_hw_load">%1$d%%</string>
+    <string name="stats_hw_mhz">%1$d MHz</string>
+    <string name="stats_hw_mhz_of">%1$d/%2$d MHz</string>
+    <string name="stats_hw_ghz">%1$s GHz</string>
+    <string name="stats_hw_temp">%1$d°</string>
 </resources>

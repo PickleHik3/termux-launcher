@@ -1112,6 +1112,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_CPU, value, false);
     }
 
+    public boolean isStatusWidgetGpuEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_GPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+    }
+
+    public void setStatusWidgetGpuEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_GPU, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
@@ -2034,6 +2043,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         switch (value.trim().toLowerCase()) {
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU:
                 return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU;
+            case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT:
+                return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT;
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY:
                 return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY;
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_OFF:
@@ -4659,5 +4670,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setAppearanceThemeHintSeen(boolean seen) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, seen, true);
+    }
+
+    public boolean isLauncherCtlRootRebootEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT, TERMUX_APP.DEFAULT_LAUNCHERCTL_ROOT_REBOOT);
+    }
+
+    public void setLauncherCtlRootRebootEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT, value, false);
     }
 }
