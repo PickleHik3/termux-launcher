@@ -163,8 +163,7 @@ public final class PageBarGlass {
 
     /**
      * The refraction the bar's glass wears: the concave lens over the Look's Fancier Glass
-     * ({@code refraction}, null while it is off) for the concave glass, raised by the tint's cover
-     * as every slab's is; nothing for the well, nor with Fancier Glass off, which is the plain
+     * ({@code refraction}, null while it is off) for the concave glass; nothing for the well, nor with Fancier Glass off, which is the plain
      * blur. Pure.
      */
     @Nullable
@@ -172,7 +171,7 @@ public final class PageBarGlass {
                                               @Nullable GlassRefraction.Look refraction,
                                               @ColorInt int tint) {
         if (style != PageBarGlassStyle.CONCAVE || refraction == null) return null;
-        return refraction.withCover((tint >>> 24) / 255f).withConcave(true);
+        return refraction.withConcave(true);
     }
 
     /**

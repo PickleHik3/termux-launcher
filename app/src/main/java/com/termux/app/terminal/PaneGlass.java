@@ -171,7 +171,7 @@ public final class PaneGlass {
     }
 
     /**
-     * The slab's refraction, and with it the gathered light along its edge, for {@code frame}: the
+     * The slab's refraction, and with it the rim along its edge, for {@code frame}: the
      * style's while the edge shows, none while a terminal effect's bezel stands over it. Under the
      * bezel the bend is hidden anyway, and the light along the outline leaks past the bezel's
      * anti-aliased edge as a thin bright ring round the solid frame. The frost and tint inside the
@@ -180,12 +180,7 @@ public final class PaneGlass {
     public static void applyEdgeLight(@NonNull PaneSurfaceStyle style, @NonNull View frame,
                                       @NonNull PaneGlassBackdropView backdrop) {
         boolean bezel = frame instanceof PaneContentFrame && ((PaneContentFrame) frame).bezelWorn();
-        // The slab's gathered light is drawn under its tint (Shade folded in), so it is raised by
-        // what that tint covers.
-        com.termux.app.chrome.GlassRefraction.Look refraction =
-            bezel ? null : style.paneGlassRefraction();
-        backdrop.setRefraction(refraction == null ? null
-            : refraction.withCover((style.paneGlassTintColor() >>> 24) / 255f));
+        backdrop.setRefraction(bezel ? null : style.paneGlassRefraction());
     }
 
     /** Scratch for {@link #measureBarePane}; main thread only, as every dress pass is. */

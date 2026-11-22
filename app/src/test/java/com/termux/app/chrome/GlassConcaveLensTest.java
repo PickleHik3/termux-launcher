@@ -148,13 +148,12 @@ public class GlassConcaveLensTest {
     }
 
     @Test
-    public void concaveIsPartOfTheLookAndSurvivesCover() {
+    public void concaveIsPartOfTheLookAndSurvivesTheFaceTerms() {
         GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
         assertFalse(look.concave);
         GlassRefraction.Look sunk = look.withConcave(true);
         assertTrue(sunk.concave);
         assertNotEquals(look, sunk);
-        assertTrue(sunk.withCover(0.4f).concave);
         assertTrue(sunk.withFaceTerms(10, 10, 10).concave);
         assertEquals(look, sunk.withConcave(false));
         assertEquals(sunk, look.withConcave(true));

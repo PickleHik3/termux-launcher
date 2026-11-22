@@ -420,16 +420,14 @@ public class GlassTiltTest {
             float tx = (float) Math.cos(n + turn), ty = (float) Math.sin(n + turn);
             // To half a percent: the resting light is a unit vector to 1e-4, the turned one
             // exactly, and the lobe's 16th power makes that a few parts in a thousand.
-            float still = GlassRefraction.liveGatherShare(nx, ny, KX, KY);
-            assertEquals(still, GlassRefraction.liveGatherShare(tx, ty, key[0], key[1]), 5e-3f * still);
-            assertEquals(GlassRefraction.liveShadeShare(nx, ny, KX, KY),
-                GlassRefraction.liveShadeShare(tx, ty, key[0], key[1]), 5e-3f);
+            float still = GlassRefraction.liveRimLobe(nx, ny, KX, KY);
+            assertEquals(still, GlassRefraction.liveRimLobe(tx, ty, key[0], key[1]), 5e-3f * Math.max(still, 0.25f));
         }
         // In the program, every live term reads uKeyLight, and nothing reads a time.
         String agsl = GlassRefraction.AGSL;
-        assertTrue(agsl.contains("float c = dot(n, uKeyLight);"));
-        assertTrue(agsl.contains("return 1.0 - liveKeyLobe(dot(n, uKeyLight));"));
-        assertTrue(agsl.contains("liveKeyLobe(c) + kCounter * liveKeyLobe(-c)"));
+        assertTrue(agsl.contains("float lc = dot(n, uKeyLight);"));
+        assertTrue(agsl.contains("liveKeyLobe(lc) + kCounter * liveKeyLobe(-lc)"));
+        assertTrue(agsl.contains("away = mix(away, lc < 0.0 ? lc * lc : 0.0, glintW);"));
         for (String time : new String[] {"uTime", "uSweep", "uPhase", "uClock"}) {
             assertTrue(time, !agsl.contains(time));
         }
@@ -454,12 +452,11 @@ public class GlassTiltTest {
             + "        sampleCoord = sampleCoord + tiltOffset(p, b, inside, rimW);\n"
             + "    }\n"));
         assertTrue(agsl.contains("        if (tilted) {\n"
-            + "            k = k * (1.0 + kTiltLight * tiltLean);\n"
+            + "            lobe = lobe * (1.0 + kTiltLight * tiltLean);\n"
             + "        }\n"));
         assertTrue(agsl.contains("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
-        assertTrue(agsl.contains(
-            "float k = glow * (gatherShare(n) + 1.5 * touchG) * (1.0 - kPaleCut * pale) * uEdgeGain;"));
+        assertTrue(agsl.contains("        float lobe = rimLobe(rc);\n"));
         // The face is moved before the finger's light, and takes one sample: no new eval.
         assertTrue(agsl.indexOf("tiltOffset(p, b, inside, rimW)") < agsl.indexOf("if (uTouchActive > 0.001) {"));
         // The mirror's arithmetic.

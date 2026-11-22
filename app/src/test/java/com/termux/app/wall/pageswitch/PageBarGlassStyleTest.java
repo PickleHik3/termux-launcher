@@ -94,7 +94,7 @@ public class PageBarGlassStyleTest {
         assertNull(PageBarGlass.refractionFor(PageBarGlassStyle.CONCAVE, null, tint));
         GlassRefraction.Look concave = PageBarGlass.refractionFor(PageBarGlassStyle.CONCAVE, fancier, tint);
         assertTrue(concave.concave);
-        assertEquals(40, concave.coverPercent);
+        assertEquals("the look itself, sunk; the tint does not change it", fancier.withConcave(true), concave);
         assertFalse(fancier.concave);
     }
 }
