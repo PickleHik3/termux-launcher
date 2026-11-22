@@ -32037,10 +32037,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Posted from the slide's end, so the frame that draws the window at rest goes out first
         // and the rebuild (one neighbour's tree, the drawer and the bar: about 27 ms on pong)
         // runs with nothing moving.
-        View root = getWindow().getDecorView();
+        View root = mTermuxActivityRootView;
         animateTerminalArrival(direction, true,
             windowSwitchMs(com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS),
-            0f, previous, false, () -> root.post(afterStep));
+            0f, previous, false, () -> {
+                if (root == null || !root.post(afterStep)) afterStep.run();
+            });
     }
 
     /**
