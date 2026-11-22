@@ -115,8 +115,8 @@ public class PrivilegedBackendManager {
 
     public CompletableFuture<Boolean> initializeShizukuOnly(Context context) {
         this.applicationContext = context.getApplicationContext();
-        // A healthy backend is left alone. This runs on every activity resume (and every
-        // Shizuku lock press); tearing down a READY backend to rebuild the same one made
+        // A healthy backend is left alone. This runs on a Shizuku lock press and the settings
+        // screen's permission request; tearing down a READY backend to rebuild the same one made
         // isPrivilegedAvailable() read false for the first seconds after each home-return,
         // which silently starved every privileged consumer — most visibly the CPU card's
         // process list. isAvailable() pings the binder, so a dead Shizuku still re-initializes.
@@ -377,12 +377,6 @@ public class PrivilegedBackendManager {
         }
     }
 
-    /**
-     * Whether any privileged backend (Shizuku, or su/rish) can run a command right now. Each call
-     * also reports what it found to the availability listeners, so a binder that died without a
-     * callback, or a master switch flipped under us, is noticed by the next reader (the stats
-     * sampler reads this every tick).
-     */
     /** True when the active backend is the shell backend running through su. */
     public boolean isRootActive() {
         if (!isMasterEnabled()) {
@@ -393,6 +387,12 @@ public class PrivilegedBackendManager {
             && getBackendState() == BackendState.FALLBACK_SHELL;
     }
 
+    /**
+     * Whether any privileged backend (Shizuku, or su/rish) can run a command right now. Each call
+     * also reports what it found to the availability listeners, so a binder that died without a
+     * callback, or a master switch flipped under us, is noticed by the next reader (the stats
+     * sampler reads this every tick).
+     */
     public boolean isPrivilegedAvailable() {
         boolean available = computePrivilegedAvailable();
         availability.report(available);
