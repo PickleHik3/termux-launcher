@@ -60,6 +60,7 @@ public final class SettingsEditorDoors {
             case "status_widget_cpu":
             case "status_widget_gpu":
             case "status_widget_font_toggle":
+            case "status_row_order":
             case "status_widget_ram":
             case "status_widget_battery":
             case "status_widget_media":

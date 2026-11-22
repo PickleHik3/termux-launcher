@@ -744,6 +744,13 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_FONT_TOGGLE = "status_widget_font_toggle";
         public static final boolean DEFAULT_STATUS_WIDGET_FONT_TOGGLE = false;
 
+        /**
+         * The order the status bar's row draws its items in: a comma list of item keys
+         * ({@code StatusRowOrder}). Empty, the default, is the shipped order.
+         */
+        public static final String KEY_STATUS_ROW_ORDER = "status_row_order";
+        public static final String DEFAULT_STATUS_ROW_ORDER = "";
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 

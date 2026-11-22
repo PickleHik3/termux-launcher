@@ -65,6 +65,8 @@ final class EditorCardReset {
                 prefs.setStatusWidgetNotificationsEnabled(
                     TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
                 prefs.setStatusWidgetMediaEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_MEDIA);
+                // Absent, as shipped: the row stands in its shipped order.
+                remove(prefs, TERMUX_APP.KEY_STATUS_ROW_ORDER);
                 break;
             case TERMINAL:
                 prefs.setTerminalContrastLevel(TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL);

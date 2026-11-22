@@ -1364,6 +1364,11 @@ public final class StatusBarController {
         return mWidgets.syncFontToggle(shown, compact);
     }
 
+    /** An item of the row (the mouse, the AI glyph) showed or hid: the dots follow it. */
+    public void syncRowDots() {
+        mWidgets.syncRowDots();
+    }
+
     /** {@link StatusBarWidgets#updateStatusWidgets}. */
     public void updateStatusWidgets() {
         mWidgets.updateStatusWidgets();

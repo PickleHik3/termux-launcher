@@ -32,6 +32,11 @@ public class ShellBackend implements PrivilegedBackend {
     
     @Override
     public CompletableFuture<Boolean> initialize(Context context) {
+        return initialize(context, true);
+    }
+
+    /** {@code allowRish} false is the Root choice: su only. */
+    public CompletableFuture<Boolean> initialize(Context context, boolean allowRish) {
         this.context = context.getApplicationContext();
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -44,9 +49,9 @@ public class ShellBackend implements PrivilegedBackend {
                     rootMethod = RootMethod.SU;
                     Log.i(TAG, "Root access available via su");
                 } else {
-                    // Try rish as alternative
-                    String rishCheck = executeRootCommand(RootMethod.RISH, List.of("echo", "test"));
-                    if (isCommandSuccessful(rishCheck)) {
+                    // Try rish as alternative, unless the choice is root only
+                    String rishCheck = allowRish ? executeRootCommand(RootMethod.RISH, List.of("echo", "test")) : null;
+                    if (allowRish && isCommandSuccessful(rishCheck)) {
                         hasPermission = true;
                         rootMethod = RootMethod.RISH;
                         Log.i(TAG, "Root access available via rish");

@@ -5,6 +5,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
@@ -12,6 +13,8 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.statusbar.StatusRowItem;
+import com.termux.app.statusbar.StatusRowOrder;
 import com.termux.app.statusbar.TopPaneClockForm;
 import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Offers;
@@ -19,6 +22,7 @@ import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.EditorRows.Spec;
 import com.termux.app.surfaces.rows.EditorGlyphs;
 import com.termux.app.surfaces.rows.PreviewTilesRow;
+import com.termux.app.surfaces.rows.ReorderList;
 import com.termux.app.surfaces.rows.SectionHeader;
 import com.termux.app.surfaces.rows.SegmentRow;
 import com.termux.app.surfaces.rows.SwitchRow;
@@ -34,7 +38,8 @@ import java.util.List;
 /**
  * The Status bar card (editor-redesign §2, Status bar): Position (Top, Bottom), the glass and
  * shape strip under its Glass header, the Clock as live face previews with Clock position under
- * it, then the Options and Indicators tiles. The Visible switch is the header's eye.
+ * it, then Options and Elements: the clock and media tiles, and the row's items in the bar's
+ * order, dragged to move. The Visible switch is the header's eye.
  *
  * <p>{@link #rows} is the card's table and the pure policy below it maps stored values to the
  * choices the rows show, so JVM tests hold both; {@link #view} builds the card's own rows from the
@@ -135,6 +140,73 @@ public final class StatusBarCard {
     public static final int INDICATOR_FONT_TOGGLE = 8;
     static final int INDICATOR_COUNT = 9;
 
+    /** The Elements tiles that are not in the row (the clock and the media stand above it). */
+    static final int[] OFF_ROW_INDICATORS = {INDICATOR_CLOCK, INDICATOR_MEDIA};
+
+    /**
+     * The indicator switch of the row's {@code item}, or -1 for an item with none: the AI glyph
+     * and the mouse show on their own while they are in use.
+     */
+    public static int indicatorFor(@NonNull StatusRowItem item) {
+        switch (item) {
+            case CPU: return INDICATOR_CPU;
+            case GPU: return INDICATOR_GPU;
+            case RAM: return INDICATOR_RAM;
+            case BATTERY: return INDICATOR_BATTERY;
+            case WEATHER: return INDICATOR_WEATHER;
+            case TEXT_SIZE: return INDICATOR_FONT_TOGGLE;
+            case NOTIFICATIONS: return INDICATOR_NOTIFICATIONS;
+            default: return -1;
+        }
+    }
+
+    /** The row's {@code item} as the Elements list draws it: its glyph. */
+    @DrawableRes
+    static int glyphFor(@NonNull StatusRowItem item) {
+        switch (item) {
+            case CPU: return R.drawable.ic_rl_cpu;
+            case GPU: return R.drawable.ic_rl_gpu;
+            case RAM: return R.drawable.ic_rl_memory;
+            case BATTERY: return R.drawable.ic_ms_battery_full;
+            case WEATHER: return R.drawable.ic_ms_partly_cloudy_day;
+            case TEXT_SIZE: return R.drawable.ic_rl_text_size;
+            case NOTIFICATIONS: return R.drawable.ic_ms_notifications;
+            case AI: return R.drawable.ic_rl_assistant;
+            default: return R.drawable.ic_rl_mouse;
+        }
+    }
+
+    /** The row's {@code item} as the Elements list names it. */
+    @StringRes
+    static int nameFor(@NonNull StatusRowItem item) {
+        switch (item) {
+            case CPU: return R.string.editor_st_indicator_cpu;
+            case GPU: return R.string.editor_st_indicator_gpu;
+            case RAM: return R.string.editor_st_indicator_ram;
+            case BATTERY: return R.string.editor_st_indicator_battery;
+            case WEATHER: return R.string.editor_st_indicator_weather;
+            case TEXT_SIZE: return R.string.editor_st_indicator_font_toggle;
+            case NOTIFICATIONS: return R.string.editor_st_indicator_notifications;
+            case AI: return R.string.editor_st_indicator_ai;
+            default: return R.string.editor_st_indicator_mouse;
+        }
+    }
+
+    /** Each place's item, as {@link ReorderList} takes it: the item's ordinal. */
+    @NonNull
+    static int[] placesOf(@NonNull StatusRowItem[] order) {
+        int[] out = new int[order.length];
+        for (int i = 0; i < order.length; i++)
+            out[i] = order[i].ordinal();
+        return out;
+    }
+
+    /** The order stored after the item at place {@code from} is dropped at place {@code to}. */
+    @NonNull
+    public static String movedOrder(@Nullable String stored, int from, int to) {
+        return StatusRowOrder.format(StatusRowOrder.move(StatusRowOrder.parse(stored), from, to));
+    }
+
     /**
      * Whether {@code row} is one of the Clock &amp; Weather section's clock rows, which stand
      * disabled ("Clock is hidden") while the Clock tile is off; °C · °F is the weather's and stays.
@@ -185,6 +257,9 @@ public final class StatusBarCard {
         /** Indicator tile {@code index} ({@link #INDICATOR_CPU} and on). */
         boolean indicator(int index);
         void setIndicator(int index, boolean on);
+        /** The row's order as stored ({@link StatusRowOrder}). */
+        @Nullable String rowOrder();
+        void setRowOrder(@NonNull String order);
         /** The Camera gap tile was tapped: the #163 cutout setting opens. */
         void openCameraGap();
     }
@@ -388,36 +463,56 @@ public final class StatusBarCard {
     @NonNull
     private static CardRowView indicators(@NonNull Context context, int widthPx,
                                           @NonNull Host host) {
+        // The clock and the media stand above the row: plain on/off tiles, first.
         List<TileGrid.Tile> tiles = Arrays.asList(
             new TileGrid.Tile(R.drawable.ic_editor_clock,
                 context.getString(R.string.editor_st_indicator_clock)),
-            new TileGrid.Tile(R.drawable.ic_rl_cpu,
-                context.getString(R.string.editor_st_indicator_cpu)),
-            new TileGrid.Tile(R.drawable.ic_rl_gpu,
-                context.getString(R.string.editor_st_indicator_gpu)),
-            new TileGrid.Tile(R.drawable.ic_rl_memory,
-                context.getString(R.string.editor_st_indicator_ram)),
-            new TileGrid.Tile(R.drawable.ic_ms_partly_cloudy_day,
-                context.getString(R.string.editor_st_indicator_weather)),
-            new TileGrid.Tile(R.drawable.ic_ms_notifications,
-                context.getString(R.string.editor_st_indicator_notifications),
-                context.getString(R.string.editor_st_indicator_notifications_hint)),
             new TileGrid.Tile(R.drawable.ic_ms_music_note,
-                context.getString(R.string.editor_st_indicator_media)),
-            new TileGrid.Tile(R.drawable.ic_ms_battery_full,
-                context.getString(R.string.editor_st_indicator_battery)),
-            new TileGrid.Tile(R.drawable.ic_rl_text_size,
-                context.getString(R.string.editor_st_indicator_font_toggle)));
+                context.getString(R.string.editor_st_indicator_media)));
+        boolean[] tilesOn = new boolean[OFF_ROW_INDICATORS.length];
+        for (int i = 0; i < tilesOn.length; i++)
+            tilesOn[i] = host.indicator(OFF_ROW_INDICATORS[i]);
+        TileGrid grid = TileGrid.build(context, tiles, tilesOn, widthPx,
+            (index, on) -> host.setIndicator(OFF_ROW_INDICATORS[index], on));
+
+        // The row's items, in the bar's order: drag a line to move it, switch it on or off.
+        StatusRowItem[] items = StatusRowItem.values();
+        List<ReorderList.Entry> entries = new ArrayList<>(items.length);
+        boolean[] itemsOn = new boolean[items.length];
+        for (StatusRowItem item : items) {
+            int indicator = indicatorFor(item);
+            entries.add(new ReorderList.Entry(glyphFor(item), context.getString(nameFor(item)),
+                indicator >= 0));
+            itemsOn[item.ordinal()] = indicator >= 0 && host.indicator(indicator);
+        }
+        ReorderList[] built = new ReorderList[1];
+        ReorderList list = ReorderList.build(context, entries,
+            placesOf(StatusRowOrder.parse(host.rowOrder())), itemsOn,
+            (from, to) -> {
+                host.setRowOrder(movedOrder(host.rowOrder(), from, to));
+                // The dropped line takes its place at once, whatever the sheet restates.
+                built[0].setOrder(placesOf(StatusRowOrder.parse(host.rowOrder())));
+            },
+            (entry, on) -> host.setIndicator(indicatorFor(items[entry]), on));
+        built[0] = list;
+
+        android.widget.LinearLayout body = new android.widget.LinearLayout(context);
+        body.setOrientation(android.widget.LinearLayout.VERTICAL);
+        body.addView(grid.root, new android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        body.addView(list.root, new android.widget.LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         // "Elements" is a plain label inside the Status bar section, not a section heading.
-        boolean[] on = new boolean[INDICATOR_COUNT];
-        for (int i = 0; i < on.length; i++)
-            on[i] = host.indicator(i);
-        TileGrid grid = TileGrid.build(context, tiles, on, widthPx, host::setIndicator);
         View section = CardRowView.section(context,
-            context.getString(R.string.editor_st_section_indicators), null, true, grid.root);
+            context.getString(R.string.editor_st_section_indicators), null, true, body);
         return new CardRowView(section, () -> {
-            for (int i = 0; i < INDICATOR_COUNT; i++)
-                grid.setOn(i, host.indicator(i));
+            for (int i = 0; i < OFF_ROW_INDICATORS.length; i++)
+                grid.setOn(i, host.indicator(OFF_ROW_INDICATORS[i]));
+            for (StatusRowItem item : items) {
+                int indicator = indicatorFor(item);
+                if (indicator >= 0) list.setOn(item.ordinal(), host.indicator(indicator));
+            }
+            list.setOrder(placesOf(StatusRowOrder.parse(host.rowOrder())));
         });
     }
 

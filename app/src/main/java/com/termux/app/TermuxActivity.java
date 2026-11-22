@@ -14934,6 +14934,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             executePrivilegedLockCommand(manager);
             return;
         }
+        if (!com.termux.privileged.PrivilegedPolicyStore.getChoice(this).allowsShizuku()) {
+            // The user's choice forbids Shizuku; the lock's own method does not override it.
+            AppNotice.show(this, R.string.termux_app_launcher_az_lock_shizuku_unavailable, false);
+            return;
+        }
         manager.initializeShizukuOnly(this)
             .thenAccept(available -> {
                 if (!available || !manager.isPrivilegedAvailable()) {
@@ -24589,16 +24594,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View sessionsIndicator = findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator instanceof com.termux.app.statusbar.SessionsIndicatorView)
             ((com.termux.app.statusbar.SessionsIndicatorView) sessionsIndicator).setDeckLook(deck);
-        for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_gpu,
-                R.id.terminal_status_widget_ram, R.id.terminal_status_widget_battery, R.id.terminal_status_widget_weather}) {
-            View widget = findViewById(id);
+        // Every item of the row stands in the display window, in whatever order the user set.
+        for (com.termux.app.statusbar.StatusRowItem item
+                : com.termux.app.statusbar.StatusRowItem.values()) {
+            View widget = findViewById(item.widgetId);
             if (widget instanceof com.termux.app.statusbar.StatusBarWidgetView)
                 ((com.termux.app.statusbar.StatusBarWidgetView) widget).setDeckLook(deck);
-        }
-        for (int id : new int[]{R.id.terminal_status_dot_cpu_gpu, R.id.terminal_status_dot_gpu_ram,
-                R.id.terminal_status_dot_cpu_ram,
-                R.id.terminal_status_dot_ram_weather, R.id.terminal_status_dot_battery_weather}) {
-            View dot = findViewById(id);
+            View dot = findViewById(item.dotId);
             if (dot instanceof com.termux.app.statusbar.MaterialDotSeparatorView)
                 ((com.termux.app.statusbar.MaterialDotSeparatorView) dot).setDeckLook(deck);
         }
@@ -27459,152 +27461,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         applyPlaceStripInset(mStatusBar.isStatusBarCompact()
             ? 0f : 1f);
         syncPlaceBarOffset(mWallOffsetPx);
-        // The weather says more on the Widgets place; it reads the place, so it follows it.
+        // A column's weather is the bare number; it reads the bar's form, so it follows it.
         if (mWeatherController != null && mWeatherController.cache().valid) {
             onWeatherUpdated(mWeatherController.cache());
         }
-        applyStatsClusterArrangement();
-    }
-
-    /** Between the centred cluster and the end widgets (AI, mouse) when they show. */
-    private static final float STATS_CLUSTER_END_GAP_DP = 6f;
-
-    /**
-     * The span of the row the centred cluster's content may use, as {@code {low, high}} in the
-     * row's coordinates: after the place strip's lens, and short of the end widgets (the AI glyph,
-     * the mouse) when they show, so it is never drawn over them. The second value says whether
-     * those widgets are at the high end (left to right) or the low one.
-     */
-    @Nullable
-    private float[] statsClusterBounds() {
-        View row = findViewById(R.id.terminal_status_row);
-        View strip = findViewById(R.id.terminal_status_place_content);
-        View widgets = findViewById(R.id.terminal_status_widgets);
-        if (row == null || row.getWidth() == 0) return null;
-        // The strip stands in the slot the two sides share, at the slot's own left.
-        View slot = findViewById(R.id.terminal_status_sides);
-        int slotLeft = slot == null || strip == null || strip.getParent() != slot ? 0 : slot.getLeft();
-        boolean rtl = row.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
-        boolean widgetsShown = widgets != null && widgets.getVisibility() == View.VISIBLE
-            && widgets.getWidth() > 0;
-        float gap = dpToPx(STATS_CLUSTER_END_GAP_DP);
-        float low;
-        float high;
-        if (!rtl) {
-            low = strip != null ? slotLeft + strip.getLeft() + strip.getPaddingLeft()
-                : row.getPaddingLeft();
-            high = widgetsShown ? widgets.getLeft() - gap : row.getWidth() - row.getPaddingRight();
-        } else {
-            low = widgetsShown ? widgets.getRight() + gap : row.getPaddingLeft();
-            high = strip != null ? slotLeft + strip.getRight() - strip.getPaddingRight()
-                : row.getWidth() - row.getPaddingRight();
-        }
-        return new float[] {low, high, rtl ? 0f : 1f};
-    }
-
-    /**
-     * Shifts the cluster so its content's centre is the status row's centre, pulled in off-centre
-     * only if that would run it into the end widgets.
-     */
-    private void centerStatsClusterOnRow(@NonNull ViewGroup cluster) {
-        View row = findViewById(R.id.terminal_status_row);
-        float[] bounds = statsClusterBounds();
-        if (row == null || bounds == null || cluster.getWidth() == 0) return;
-        float contentLeft = cluster.getLeft() + cluster.getPaddingStart();
-        float contentWidth = cluster.getWidth() - cluster.getPaddingStart() - cluster.getPaddingEnd();
-        float start = com.termux.app.statusbar.StatusStatsClusterPolicy.clusterStart(
-            row.getWidth() / 2f, contentWidth, bounds[0], bounds[1], bounds[2] > 0f);
-        float shift = start - contentLeft;
-        if (Math.abs(cluster.getTranslationX() - shift) >= 0.5f) cluster.setTranslationX(shift);
-    }
-
-    /**
-     * On the Widgets place, the longest of {@link #mWeatherForms} the centred cluster has room
-     * for: the temperature, the sky and the place; then the temperature and the sky; then the
-     * temperature alone. It follows the room, not what took it, so the AI glyph, the mouse, a
-     * narrow phone or a large font all shorten it the same way. {@code fade} for a change the
-     * user did not make (something arrived at the row's end), so the text does not jump.
-     */
-    private void fitWeatherToRow(boolean fade) {
-        String[] forms = mWeatherForms;
-        com.termux.app.statusbar.StatusBarWidgetView widget =
-            findViewById(R.id.terminal_status_widget_weather);
-        ViewGroup cluster = findViewById(R.id.terminal_status_stats_cluster);
-        View row = findViewById(R.id.terminal_status_row);
-        if (forms == null || widget == null || cluster == null || row == null) return;
-        // A hidden chip has no row to fit: its forms are stale until the next weather update,
-        // and setting a value on it would still ask the cluster to lay out again.
-        if (widget.getVisibility() != View.VISIBLE) return;
-        float[] bounds = statsClusterBounds();
-        if (bounds == null || widget.getWidth() == 0) {
-            // Not laid out yet: the whole of it, and the next layout pass fits it.
-            widget.setValue(forms[0]);
-            return;
-        }
-        float[] widths = new float[forms.length];
-        for (int i = 0; i < forms.length; i++) widths[i] = widget.valueWidthOf(forms[i]);
-        float others = cluster.getWidth() - cluster.getPaddingStart() - cluster.getPaddingEnd()
-            - widget.getWidth();
-        int form = com.termux.app.statusbar.StatusStatsClusterPolicy.weatherFormThatFits(widths,
-            others, widget.widthWithoutValue(), widget.getMinimumWidth(),
-            com.termux.app.statusbar.StatusStatsClusterPolicy.centeredRoom(
-                row.getWidth() / 2f, bounds[0], bounds[1]));
-        if (fade) widget.setValueFading(forms[form]);
-        else widget.setValue(forms[form]);
-    }
-
-    /**
-     * On the Widgets place the CPU/RAM/weather cluster reads Weather · RAM · CPU and centres in
-     * the row, on a spacer that balances the place content strip's own weight; everywhere else it
-     * keeps today's CPU · RAM · Weather order at the row's end. Both are gravity/weight, not a
-     * measured translation, so a stat toggling off in Settings or the weather text changing width
-     * re-centres for free on the next layout pass instead of needing a recompute here.
-     */
-    private void applyStatsClusterArrangement() {
-        ViewGroup cluster = findViewById(R.id.terminal_status_stats_cluster);
-        View spacer = findViewById(R.id.terminal_status_stats_center_spacer);
-        if (cluster == null || spacer == null) return;
-        boolean reversed = com.termux.app.statusbar.StatusStatsClusterPolicy
-            .centeredReversed(currentWallPage());
-        spacer.setVisibility(reversed ? View.VISIBLE : View.GONE);
-        // The spacer only balances the strip's weight; the fixed end widgets and paddings still
-        // pull the cluster off the row's centre by half their width, so the residual is corrected
-        // after every layout from the real bounds.
-        if (cluster.getTag(R.id.terminal_status_stats_cluster) == null) {
-            cluster.setTag(R.id.terminal_status_stats_cluster, Boolean.TRUE);
-            cluster.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-                if (!mStatusBar.isStatusBarVertical() && com.termux.app.statusbar.StatusStatsClusterPolicy
-                        .centeredReversed(currentWallPage())) {
-                    fitWeatherToRow(true);
-                    centerStatsClusterOnRow((ViewGroup) v);
-                } else if (v.getTranslationX() != 0f) {
-                    v.setTranslationX(0f);
-                }
-            });
-            // The AI glyph or the mouse arriving at the row's end takes room from the cluster
-            // without moving it, so their own layout re-fits it too.
-            View endWidgets = findViewById(R.id.terminal_status_widgets);
-            if (endWidgets != null) {
-                endWidgets.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-                    if (l == ol && r == or) return;
-                    if (mStatusBar.isStatusBarVertical() || !com.termux.app.statusbar.StatusStatsClusterPolicy
-                            .centeredReversed(currentWallPage())) return;
-                    fitWeatherToRow(true);
-                    centerStatsClusterOnRow(cluster);
-                });
-            }
-        }
-        // A column's cluster centres itself by weight; there is no leftover width to correct for.
-        if (!reversed || mStatusBar.isStatusBarVertical()) cluster.setTranslationX(0f);
-        else cluster.post(() -> centerStatsClusterOnRow(cluster));
-        int count = cluster.getChildCount();
-        boolean currentlyReversed = count > 0
-            && cluster.getChildAt(0).getId() == R.id.terminal_status_widget_weather;
-        if (reversed == currentlyReversed) return;
-        View[] children = new View[count];
-        for (int i = 0; i < count; i++) children[i] = cluster.getChildAt(i);
-        cluster.removeAllViews();
-        for (int i = count - 1; i >= 0; i--) cluster.addView(children[i]);
     }
 
     /**
@@ -30355,11 +30215,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return true;
     }
 
-    /** A small mouse at the end of the stats while mouse mode is on; gone the moment it is off. */
+    /** A small mouse in the status row while mouse mode is on; gone the moment it is off. */
     private void syncMouseModeMark() {
         com.termux.app.statusbar.StatusBarWidgetView mark = findViewById(R.id.terminal_status_widget_mouse);
-        com.termux.app.statusbar.MaterialDotSeparatorView dot = findViewById(R.id.terminal_status_dot_mouse);
-        if (mark == null || dot == null) return;
+        if (mark == null) return;
         if (mFrameContent.isMouseMode() && mark.getTag() == null) {
             mark.setTag("wired");
             mark.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
@@ -30367,16 +30226,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mark.setValue("");
             mark.setOnClickListener(v -> toggleMouseMode());
         }
-        boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
-            || mPreferences.isStatusWidgetGpuEnabled()
-            || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetBatteryEnabled()
-            || mPreferences.isStatusWidgetWeatherEnabled());
-        View fontPill = findViewById(R.id.terminal_status_widget_font_toggle);
-        anyStatBefore |= fontPill != null && fontPill.getVisibility() == View.VISIBLE;
         mark.setVisibility(mFrameContent.isMouseMode() ? View.VISIBLE : View.GONE);
-        dot.setVisibility(mFrameContent.isMouseMode() && anyStatBefore
-            ? View.VISIBLE : View.GONE);
-        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+        mStatusBar.syncRowDots();
         mStatusBar.syncStatusBarInk();
     }
 
@@ -30811,8 +30662,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 ? R.string.font_toggle_restore_content_description
                 : R.string.font_toggle_content_description));
         }
-        // The mouse mark's dot counts the pill as a neighbour, so it is redrawn with it.
-        if (mStatusBar.syncFontToggle(shown, compact)) syncMouseModeMark();
+        // The row's dots follow the pill there (StatusBarWidgets.syncRowDots).
+        mStatusBar.syncFontToggle(shown, compact);
     }
 
     private void setTerminalWindowBar() {
@@ -31745,11 +31596,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void ensureAiIndicatorController() {
         com.termux.app.statusbar.StatusBarWidgetView ai = findViewById(R.id.terminal_status_widget_ai);
-        com.termux.app.statusbar.MaterialDotSeparatorView aiDot =
-            findViewById(R.id.terminal_status_dot_ai);
-        if (ai == null || aiDot == null) return;
+        if (ai == null) return;
         if (mAiIndicatorController == null) {
-            mAiIndicatorController = new com.termux.app.statusbar.AiIndicatorController(ai, aiDot);
+            mAiIndicatorController = new com.termux.app.statusbar.AiIndicatorController(ai,
+                () -> mStatusBar.syncRowDots());
             ai.setOnClickListener(view -> {
                 Intent intent = new Intent(this, com.termux.app.activities.SettingsActivity.class);
                 intent.putExtra(com.termux.app.activities.SettingsActivity.EXTRA_OPEN_TAI_SETTINGS, true);
@@ -31782,6 +31632,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (clock != null) clock.setLazyMode(lazy);
     }
 
+    private int mSeenDirectCpu;
+    @Nullable private com.termux.privileged.PrivilegedChoice.Status mSeenBackendStatus;
+    private com.termux.app.statusbar.StatusStatNeedsPolicy.Access mSeenGpuAccess =
+        com.termux.app.statusbar.StatusStatNeedsPolicy.Access.UNKNOWN;
+
     private com.termux.app.statusbar.SystemStatsController ensureStatsController() {
         if (mStatsController == null) {
             mStatsController = new com.termux.app.statusbar.SystemStatsController(this, this::onStatsUpdated);
@@ -31797,6 +31652,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void onStatsUpdated(@NonNull com.termux.app.statusbar.SystemStatsController.Stats stats) {
         long nowMs = android.os.SystemClock.uptimeMillis();
+        // What the phone lets the app read decides whether CPU and GPU stand greyed or show; the
+        // bar is redrawn once when that is learned, not per sample.
+        com.termux.privileged.PrivilegedChoice.Status backendStatus =
+            com.termux.privileged.PrivilegedBackendManager.getInstance().currentStatus();
+        if (stats.directCpu != mSeenDirectCpu || stats.gpuAccess != mSeenGpuAccess
+            || backendStatus != mSeenBackendStatus) {
+            mSeenDirectCpu = stats.directCpu;
+            mSeenGpuAccess = stats.gpuAccess;
+            mSeenBackendStatus = backendStatus;
+            mStatusBar.updateStatusWidgets();
+        }
         com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
         // The GPU smoother is fed while the switch is on, shown or not: a hidden widget learns it
@@ -31904,12 +31770,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mWeatherController;
     }
 
-    /**
-     * The Widgets place's weather, longest first: temperature · sky · place, temperature · sky,
-     * temperature. Null everywhere else, where the weather is the temperature alone.
-     */
-    @Nullable private String[] mWeatherForms;
-
     private void onWeatherUpdated(@NonNull com.termux.app.statusbar.WeatherController.Weather weather) {
         com.termux.app.statusbar.StatusBarWidgetView widget = findViewById(R.id.terminal_status_widget_weather);
         if (widget != null && widget.getVisibility() == View.VISIBLE) {
@@ -31918,38 +31778,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     weather.currentCode, weather.currentIsDay));
                 boolean fahrenheit = mPreferences != null
                     && mPreferences.isStatusWidgetWeatherFahrenheit();
-                // The Widgets place has room, so the weather says as much of it as fits there:
-                // the temperature, the sky, and where that is, with the degree glyph; the AI
-                // glyph or the mouse at the row's end shortens it (fitWeatherToRow). A side
-                // bar's chip has room for the number alone.
-                // The long forms go with the centred cluster, which no page wears since #90.
-                boolean widgetsPage = com.termux.app.statusbar.StatusStatsClusterPolicy
-                    .centeredReversed(currentWallPage());
-                boolean bare = mStatusBar.isStatusBarVertical() && !widgetsPage;
-                String temp = bare
+                // The temperature with the degree glyph; a side bar's chip has room for the
+                // number alone.
+                widget.setValue(mStatusBar.isStatusBarVertical()
                     ? com.termux.app.statusbar.WeatherController.formatTempBare(
                         weather.currentC, fahrenheit)
                     : com.termux.app.statusbar.WeatherController.formatTemp(
-                        weather.currentC, fahrenheit);
-                if (widgetsPage) {
-                    java.util.LinkedHashSet<String> forms = new java.util.LinkedHashSet<>();
-                    String sky = com.termux.app.statusbar.WeatherController.describe(weather.currentCode);
-                    String withSky = sky.isEmpty() ? temp : temp + " · " + sky;
-                    forms.add(weather.locationName.isEmpty() ? withSky
-                        : withSky + " · " + weather.locationName);
-                    forms.add(withSky);
-                    forms.add(temp);
-                    mWeatherForms = forms.toArray(new String[0]);
-                    fitWeatherToRow(false);
-                } else {
-                    mWeatherForms = null;
-                    widget.setValue(temp);
-                }
+                        weather.currentC, fahrenheit));
             } else {
-                mWeatherForms = null;
-                widget.setValue(mStatusBar.isStatusBarVertical()
-                    && !com.termux.app.statusbar.StatusStatsClusterPolicy
-                        .centeredReversed(currentWallPage()) ? "--" : "--°");
+                widget.setValue(mStatusBar.isStatusBarVertical() ? "--" : "--°");
             }
         }
         if (mWeatherCardView != null && mStatusCardHost.isShowing()) {

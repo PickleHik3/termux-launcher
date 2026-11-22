@@ -112,6 +112,8 @@ final class AppearanceSnapshot {
      * 12-hour, seconds, °F weather, and the CPU, RAM, weather, media and notifications indicators.
      */
     private final boolean[] mStatusSwitches;
+    /** The status row's order, in its one spelling ({@code StatusRowOrder#normalize}). */
+    private final String mStatusRowOrder;
     /**
      * Every half's own key as stored (ADR 0013): a key absent here is absent in the store, so a
      * half that followed the shared value at open follows it again after a restore.
@@ -195,6 +197,8 @@ final class AppearanceSnapshot {
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
         mStatusSwitches = statusSwitches(prefs);
+        mStatusRowOrder = com.termux.app.statusbar.StatusRowOrder.normalize(
+            prefs.getStatusRowOrder());
         mHalfKeys = halfKeys(prefs);
         mGridCells = gridCells(prefs);
     }
@@ -309,6 +313,9 @@ final class AppearanceSnapshot {
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
         restoreStatusSwitches(prefs, mStatusSwitches);
+        if (!mStatusRowOrder.equals(com.termux.app.statusbar.StatusRowOrder.normalize(
+                prefs.getStatusRowOrder())))
+            prefs.setStatusRowOrder(mStatusRowOrder);
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
         restoreGridCells(prefs, mGridCells);
@@ -349,6 +356,7 @@ final class AppearanceSnapshot {
             .append('|').append(mKeyboardFloatingHeight).append('|').append(mKeyboardSplitGap)
             .append('|').append(mClockAlignment)
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
+            .append('|').append(mStatusRowOrder)
             .append('|').append(mHalfKeys).append('|').append(mGridCells)
             .toString();
     }
