@@ -46,7 +46,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     }
 
     private static final char[] NO_LETTERS = new char[0];
-    private static final int VIEW_TYPE_APP = 0;
+    static final int VIEW_TYPE_APP = 0;
     private static final int VIEW_TYPE_FOLDER = 1;
     private static final int VIEW_TYPE_SEARCH_ROW = 2;
 
@@ -179,6 +179,9 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
      * pixel size that has just changed, so every holder is stale.
      */
     public void setMetrics(@Nullable AppDrawerGridMetrics metrics) {
+        // Every open re-resolves the same numbers; rebinding then would recycle every attached
+        // cell for nothing.
+        if (java.util.Objects.equals(mMetrics, metrics)) return;
         mMetrics = metrics;
         prefetchLeadingIcons();
         notifyDataSetChanged();
