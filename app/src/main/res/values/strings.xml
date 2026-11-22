@@ -2478,6 +2478,7 @@
 
     <!-- Terminal action titles, shown in the command palette -->
     <string name="tool_pane_split">New pane</string>
+    <string name="tool_pane_root_shell">Root shell</string>
     <string name="tool_pane_split_vertical">Split pane vertically</string>
     <string name="tool_pane_split_horizontal">Split pane horizontally</string>
     <string name="tool_pane_focus_direction">Move pane focus</string>
@@ -2581,6 +2582,7 @@
     <string name="tool_pane_rename_prompt">Rename pane…</string>
     <!-- Palette subtitles -->
     <string name="tool_desc_pane_split">Open a new pane where there is the most room.</string>
+    <string name="tool_desc_pane_root_shell">Open a pane with a root shell that keeps your Termux tools.</string>
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>
@@ -2903,6 +2905,7 @@
     </plurals>
     <string name="sessions_drawer_run_commands">Also start what was running</string>
     <string name="sessions_drawer_session_name">Session name</string>
+    <string name="palette_unavailable_no_root">Unavailable: root access is off</string>
     <string name="palette_unavailable_no_selection">Unavailable: no text selected</string>
     <string name="palette_unavailable_no_session">Unavailable: no active session</string>
     <string name="palette_unavailable_no_in_app_keyboard">Unavailable: the in-app keyboard is off</string>

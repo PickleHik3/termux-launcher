@@ -438,6 +438,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_MOUSE_TOGGLE = "mouse.toggle";
     public static final String TOOL_PANE_TOGGLE_FLOAT = "pane.toggle_float";
     public static final String TOOL_PANE_OPEN = "pane.open";
+    public static final String TOOL_PANE_ROOT_SHELL = "pane.root_shell";
     public static final String TOOL_PANE_LIST = "pane.list";
     public static final String TOOL_PANE_FOCUS = "pane.focus";
     public static final String TOOL_PANE_CLOSE = "pane.close";
@@ -718,6 +719,12 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_PANE, R.string.tool_pane_move_to_edge, R.string.tool_desc_pane_move_to_edge,
             null, REQUIRES_SPLITS);
+        addUi(map, TOOL_PANE_ROOT_SHELL,
+            "Open a pane with a root shell that keeps the Termux tools.",
+            schemaEmpty(),
+            ToolRisk.MEDIUM, false, ToolExecutor.TERMINAL,
+            CATEGORY_PANE, R.string.tool_pane_root_shell, R.string.tool_desc_pane_root_shell,
+            null, REQUIRES_ROOT_AND_SPLITS);
         // The pane API for agents and scripts (`launcherctl pane …`, /v1/panes). Not in the palette:
         // every one of them takes an argument the palette cannot ask for, and they exist so a
         // process in a shell can show its work in a pane of its own, not for a finger.
@@ -1491,6 +1498,12 @@ public final class LauncherToolRegistry {
         context.isSplitPanesEnabled()
             ? Availability.available()
             : Availability.unavailable(R.string.palette_unavailable_splits_disabled);
+
+    /** Actions that need a root shell and a pane to put it in. */
+    private static final AvailabilityPredicate REQUIRES_ROOT_AND_SPLITS = context ->
+        !com.termux.privileged.PrivilegedBackendManager.getInstance().isRootActive()
+            ? Availability.unavailable(R.string.palette_unavailable_no_root)
+            : REQUIRES_SPLITS.evaluate(context);
 
     /** Actions that operate on the current text selection. */
     private static final AvailabilityPredicate REQUIRES_SELECTION = context ->

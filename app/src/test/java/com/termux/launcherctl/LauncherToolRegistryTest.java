@@ -433,6 +433,20 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void rootShell_isAPaneToolThatNeedsRoot() {
+        LauncherToolRegistry.ToolMetadata tool = registry.getTool("pane.root_shell");
+        assertNotNull(tool);
+        assertEquals("pane", tool.category);
+        assertEquals(LauncherToolRegistry.ToolRisk.MEDIUM, tool.risk);
+        assertFalse(tool.requiresConfirmation);
+        assertTrue(tool.defaultBindings.isEmpty());
+        assertTrue(tool.titleRes != 0);
+        LauncherToolRegistry.Availability noRoot = tool.availabilityIn(context(true, true));
+        assertFalse("no root shell without root", noRoot.available);
+        assertTrue(noRoot.reasonRes != 0);
+    }
+
+    @Test
     public void sessionDependentActions_areUnavailableWithoutSession() {
         LauncherToolRegistry.ActionContext none = context(true, false);
         LauncherToolRegistry.ActionContext present = context(true, true);
