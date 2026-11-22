@@ -227,20 +227,106 @@ public class StatusBarControllerTest {
         MaterialDotSeparatorView dot = dotAt(R.id.terminal_status_dot_ai);
         int[] inks = distinctInks();
         widgets().applyStatusInks(inks);
-        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(0) + StatusInkSlots.WIDGET_BODY]),
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(StatusRowItem.CPU)
+                + StatusInkSlots.WIDGET_BODY]),
             ReflectionHelpers.<Integer>getField(cpu, "mLabelInk"));
-        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(0) + StatusInkSlots.WIDGET_LARGE]),
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(StatusRowItem.CPU)
+                + StatusInkSlots.WIDGET_LARGE]),
             ReflectionHelpers.<Integer>getField(cpu, "mIconInk"));
-        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(6) + StatusInkSlots.WIDGET_MUTED]),
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.widget(StatusRowItem.AI)
+                + StatusInkSlots.WIDGET_MUTED]),
             ReflectionHelpers.<Integer>getField(ai, "mMutedInk"));
-        assertEquals(Integer.valueOf(inks[StatusInkSlots.dot(6)]),
+        assertEquals(Integer.valueOf(inks[StatusInkSlots.dot(StatusRowItem.AI)]),
             ReflectionHelpers.<Integer>getField(dot, "mInk"));
+    }
+
+    /** The row in a ViewGroup, every item's dot and widget in shipped order, wired to the host. */
+    private android.widget.LinearLayout rowGroup() {
+        android.widget.LinearLayout group =
+            new android.widget.LinearLayout(RuntimeEnvironment.getApplication());
+        group.setId(R.id.terminal_status_stats_cluster);
+        mHost.views.put(R.id.terminal_status_stats_cluster, group);
+        for (StatusRowItem item : StatusRowItem.values()) {
+            MaterialDotSeparatorView dot = dotAt(item.dotId);
+            dot.setId(item.dotId);
+            dot.setVisibility(View.GONE);
+            group.addView(dot);
+            StatusBarWidgetView widget = widgetAt(item.widgetId);
+            widget.setId(item.widgetId);
+            widget.setVisibility(View.GONE);
+            group.addView(widget);
+        }
+        return group;
+    }
+
+    @Test
+    public void theRowStandsItsItemsInTheStoredOrderAndRebuildsOnlyOnAChange() {
+        withPreferences();
+        android.widget.LinearLayout group = rowGroup();
+        mHost.prefs.setStatusRowOrder("mouse,weather,cpu");
+        widgets().syncRowOrder();
+        StatusRowItem[] order = StatusRowOrder.parse("mouse,weather,cpu");
+        for (int i = 0; i < order.length; i++) {
+            assertEquals(order[i].dotId, group.getChildAt(2 * i).getId());
+            assertEquals(order[i].widgetId, group.getChildAt(2 * i + 1).getId());
+        }
+        // The same order again moves nothing.
+        View first = group.getChildAt(0);
+        widgets().syncRowOrder();
+        assertSame(first, group.getChildAt(0));
+        // Back to nothing stored: the shipped order.
+        mHost.prefs.setStatusRowOrder("");
+        widgets().syncRowOrder();
+        assertEquals(R.id.terminal_status_dot_cpu, group.getChildAt(0).getId());
+        assertEquals(R.id.terminal_status_widget_mouse,
+            group.getChildAt(group.getChildCount() - 1).getId());
+    }
+
+    @Test
+    public void aDotShowsOnlyBetweenTwoShownNeighboursInTheUsersOrder() {
+        withPreferences();
+        rowGroup();
+        mHost.prefs.setStatusRowOrder("mouse,ai,ram");
+        widgets().syncRowOrder();
+        mHost.views.get(R.id.terminal_status_widget_mouse).setVisibility(View.VISIBLE);
+        mHost.views.get(R.id.terminal_status_widget_ram).setVisibility(View.VISIBLE);
+        mHost.views.get(R.id.terminal_status_widget_weather).setVisibility(View.VISIBLE);
+        widgets().syncRowDots();
+        // Mouse first: no dot before it. AI is hidden: no dot. RAM after the mouse: a dot.
+        assertEquals(View.GONE, mHost.views.get(R.id.terminal_status_dot_mouse).getVisibility());
+        assertEquals(View.GONE, mHost.views.get(R.id.terminal_status_dot_ai).getVisibility());
+        assertEquals(View.VISIBLE, mHost.views.get(R.id.terminal_status_dot_ram).getVisibility());
+        assertEquals(View.VISIBLE,
+            mHost.views.get(R.id.terminal_status_dot_weather).getVisibility());
+        assertEquals(View.GONE, mHost.views.get(R.id.terminal_status_dot_cpu).getVisibility());
+        // The AI dot wears the AI's tier.
+        assertEquals(StatusBarWidgetView.ColorRole.TERTIARY,
+            ((MaterialDotSeparatorView) mHost.views.get(R.id.terminal_status_dot_ai)).colorRole());
+    }
+
+    /** A crossing blends slot by slot: a reordered row must keep each item on its own slots. */
+    @Test
+    public void inkSlotsFollowTheItemWhereverTheOrderStandsIt() {
+        withPreferences();
+        rowGroup();
+        mHost.prefs.setStatusRowOrder("ai,mouse,notifications,cpu");
+        widgets().syncRowOrder();
+        int[] inks = distinctInks();
+        widgets().applyStatusInks(inks);
+        for (StatusRowItem item : StatusRowItem.values()) {
+            StatusBarWidgetView widget = (StatusBarWidgetView) mHost.views.get(item.widgetId);
+            assertEquals(item.key, Integer.valueOf(inks[StatusInkSlots.widget(item)
+                    + StatusInkSlots.WIDGET_BODY]),
+                ReflectionHelpers.<Integer>getField(widget, "mLabelInk"));
+            assertEquals(item.key, Integer.valueOf(inks[StatusInkSlots.dot(item)]),
+                ReflectionHelpers.<Integer>getField(mHost.views.get(item.dotId), "mInk"));
+        }
     }
 
     @Test
     public void applyingTheSameInksTwiceWritesNothingTheSecondTime() {
         StatusBarWidgetView cpu = widgetAt(R.id.terminal_status_widget_cpu);
-        MaterialDotSeparatorView dot = dotAt(R.id.terminal_status_dot_cpu_ram);
+        MaterialDotSeparatorView dot = dotAt(R.id.terminal_status_dot_ram);
         int[] inks = distinctInks();
         widgets().applyStatusInks(inks);
         // A write boxes a fresh Integer (these are past the small-int cache): the same object

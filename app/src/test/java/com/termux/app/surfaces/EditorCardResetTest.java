@@ -95,7 +95,10 @@ public class EditorCardResetTest {
         prefs.setStatusWidgetGpuEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
         prefs.setStatusWidgetFontToggleEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
         prefs.setStatusWidgetNotificationsEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
+        prefs.setStatusRowOrder("mouse,weather,cpu");
         EditorCardReset.resetStore(prefs, EditorCard.STATUS, TermuxAppSharedPreferences.terminalPageId());
+        assertEquals("the row stands in its shipped order", TERMUX_APP.DEFAULT_STATUS_ROW_ORDER,
+            prefs.getStatusRowOrder());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE, prefs.getTopPaneClockStyle());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_ALIGNMENT, prefs.getTopPaneClockAlignment());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_AM_PM, prefs.isTopPaneClockAmPmEnabled());

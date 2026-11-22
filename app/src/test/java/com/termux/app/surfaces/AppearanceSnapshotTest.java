@@ -73,6 +73,26 @@ public class AppearanceSnapshotTest {
     }
 
     @Test
+    public void undoPutsBackTheRowOrderAndTheSignatureSeesOnlyARealMove() {
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        // The shipped order spelled out is the same order: nothing to save.
+        preferences.setStatusRowOrder(
+            "cpu,gpu,ram,battery,weather,text_size,notifications,ai,mouse");
+        assertEquals(signature, AppearanceSnapshot.capture(preferences).signature());
+
+        preferences.setStatusRowOrder("mouse,cpu");
+        assertNotEquals("a moved item moves the signature", signature,
+            AppearanceSnapshot.capture(preferences).signature());
+
+        entry.restore(preferences);
+        assertEquals(signature, AppearanceSnapshot.capture(preferences).signature());
+        assertEquals(com.termux.app.statusbar.StatusRowOrder.normalize(""),
+            com.termux.app.statusbar.StatusRowOrder.normalize(preferences.getStatusRowOrder()));
+    }
+
+    @Test
     public void undoPutsBackEveryValueTheEditorWrites() {
         SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);

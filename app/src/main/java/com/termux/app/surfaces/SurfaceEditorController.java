@@ -6088,6 +6088,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 syncDirty();
             }
 
+            @Override public String rowOrder() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? null : prefs.getStatusRowOrder();
+            }
+
+            @Override public void setRowOrder(@NonNull String order) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || com.termux.app.statusbar.StatusRowOrder.normalize(
+                        prefs.getStatusRowOrder()).equals(
+                        com.termux.app.statusbar.StatusRowOrder.normalize(order)))
+                    return;
+                prefs.setStatusRowOrder(com.termux.app.statusbar.StatusRowOrder.normalize(order));
+                // The bar's refresh ends in its widgets' pass, which stands the row in this order.
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
             @Override public void openCameraGap() {
                 Context context = mHost.context();
                 try {
