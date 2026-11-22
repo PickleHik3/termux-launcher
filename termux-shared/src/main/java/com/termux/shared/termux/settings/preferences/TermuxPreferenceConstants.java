@@ -977,6 +977,8 @@ public final class TermuxPreferenceConstants {
 
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU = "shizuku";
 
+        public static final String APP_LAUNCHER_AZ_LOCK_METHOD_ROOT = "root";
+
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY = "accessibility";
 
         public static final String DEFAULT_APP_LAUNCHER_AZ_LOCK_METHOD = APP_LAUNCHER_AZ_LOCK_METHOD_OFF;

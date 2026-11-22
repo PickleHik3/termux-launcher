@@ -82,6 +82,11 @@ public class ShellBackend implements PrivilegedBackend {
         return hasPermission;
     }
     
+    /** True when this backend runs commands through su. */
+    public boolean isRoot() {
+        return rootMethod == RootMethod.SU && hasPermission;
+    }
+
     @Override
     public boolean requestPermission(int requestCode) {
         // Shell backend doesn't need explicit permission requests

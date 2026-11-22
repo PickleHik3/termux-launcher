@@ -383,6 +383,16 @@ public class PrivilegedBackendManager {
      * callback, or a master switch flipped under us, is noticed by the next reader (the stats
      * sampler reads this every tick).
      */
+    /** True when the active backend is the shell backend running through su. */
+    public boolean isRootActive() {
+        if (!isMasterEnabled()) {
+            return false;
+        }
+        PrivilegedBackend backend = currentBackend;
+        return backend instanceof ShellBackend && ((ShellBackend) backend).isRoot()
+            && getBackendState() == BackendState.FALLBACK_SHELL;
+    }
+
     public boolean isPrivilegedAvailable() {
         boolean available = computePrivilegedAvailable();
         availability.report(available);

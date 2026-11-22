@@ -2034,6 +2034,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         switch (value.trim().toLowerCase()) {
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU:
                 return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU;
+            case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT:
+                return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT;
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY:
                 return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY;
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_OFF:

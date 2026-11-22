@@ -14901,6 +14901,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String method = mPreferences.getAppLauncherAzLockMethod();
         if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU.equals(method)) {
             lockScreenWithShizuku();
+        } else if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT.equals(method)) {
+            lockScreenWithRoot();
         } else if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY.equals(method)) {
             lockScreenWithAccessibility();
         }
@@ -14939,6 +14941,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             })
             .exceptionally(throwable -> {
                 Logger.logWarn(LOG_TAG, "A-Z Shizuku lock initialization failed: " + throwable.getMessage());
+                return null;
+            });
+    }
+
+    /** Locks with whatever backend is up, bringing the manager up first; never touches Shizuku permission. */
+    private void lockScreenWithRoot() {
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        if (manager.isPrivilegedAvailable()) {
+            executePrivilegedLockCommand(manager);
+            return;
+        }
+        manager.initializeIfNeeded(this)
+            .thenAccept(ready -> runOnUiThread(() -> {
+                if (manager.isPrivilegedAvailable()) {
+                    executePrivilegedLockCommand(manager);
+                } else {
+                    AppNotice.show(this, R.string.termux_app_launcher_az_lock_root_unavailable, false);
+                }
+            }))
+            .exceptionally(throwable -> {
+                Logger.logWarn(LOG_TAG, "A-Z root lock initialization failed: " + throwable.getMessage());
                 return null;
             });
     }

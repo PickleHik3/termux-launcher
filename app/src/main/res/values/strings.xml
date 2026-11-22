@@ -927,7 +927,7 @@
     <string name="settings_set_default_launcher_title">Set as default launcher</string>
     <string name="settings_set_default_launcher_summary">Opens Android’s default home app settings</string>
     <string name="settings_double_tap_action_title">Double tap A–Z Row to lock screen</string>
-    <string name="settings_double_tap_action_summary">Shizuku keeps the normal screen-off animation. Accessibility is optional and may flicker.</string>
+    <string name="settings_double_tap_action_summary">Shizuku and root keep the normal screen-off animation. Accessibility may flicker.</string>
 
     <string name="application_name">&TERMUX_APP_NAME;</string>
     <string name="shared_user_label">&TERMUX_APP_NAME; user</string>
@@ -1048,8 +1048,9 @@
     <string name="msg_wallpaper_read_permission">The status bar, dock and keyboard blur your wallpaper. Allow storage access to turn the blur on.</string>
     <string name="action_wallpaper_read_permission_allow">Allow</string>
     <string name="action_wallpaper_read_permission_dismiss">Not now</string>
-    <string name="status_widget_needs_shizuku_title">Shizuku isn\'t connected</string>
-    <string name="status_widget_needs_shizuku_message">%1$s reads far better with the privileged backend: per-core CPU, detailed memory and the top-process list all come from it. Without it the CPU figure is a best-effort /proc estimate that some ROMs refuse outright, and the widget can end up blank. Set Shizuku up, or turn the widget on anyway and take the unprivileged reading.</string>
+    <string name="status_widget_needs_shizuku_title">Connect Shizuku or root</string>
+    <string name="status_widget_needs_shizuku_message">%1$s shows per-core CPU, detailed memory and top apps once Shizuku or root is connected. Without either it shows a rougher reading that some phones leave blank.</string>
+    <string name="termux_app_launcher_az_lock_root_unavailable">Allow root access for the launcher to lock the screen.</string>
     <string name="status_widget_needs_shizuku_guide">Read the guide</string>
     <string name="status_widget_needs_shizuku_connect">Connect</string>
     <string name="status_widget_needs_shizuku_enable_anyway">Enable anyway</string>
@@ -1494,7 +1495,7 @@
         <string name="termux_theme_mode_light">Light</string>
         <string name="termux_theme_mode_dark">Dark</string>
 
-        <string name="termux_privileged_access_preferences_title">Shizuku</string>
+        <string name="termux_privileged_access_preferences_title">Shizuku and root</string>
 
         <string name="termux_ai_preferences_title">On-device AI</string>
         <string name="termux_ai_zone_runtime_title">Runtime</string>
@@ -2298,6 +2299,7 @@
                 <string name="termux_app_launcher_permission_settings_unavailable">Permission settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_az_lock_method_off">Off</string>
                 <string name="termux_app_launcher_az_lock_method_shizuku">Shizuku</string>
+                <string name="termux_app_launcher_az_lock_method_root">Root</string>
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
@@ -3709,9 +3711,9 @@
     <string name="setup_cards_coming">Coming in the next pre-release.</string>
     <string name="setup_cards_step_done">Done: %s</string>
     <string name="setup_cards_step_pending">Not done: %s</string>
-    <string name="setup_card_shizuku_name">Shizuku</string>
-    <string name="setup_card_shizuku_description">Connect Shizuku for the CPU widget in the status bar and double-tap to lock the screen.</string>
-    <string name="setup_card_shizuku_step">Start Shizuku and grant access</string>
+    <string name="setup_card_shizuku_name">Shizuku or root</string>
+    <string name="setup_card_shizuku_description">Connect Shizuku or root for the CPU widget in the status bar and double-tap to lock the screen.</string>
+    <string name="setup_card_shizuku_step">Start Shizuku and grant access, or allow root</string>
     <string name="setup_card_shizuku_guide">Shizuku setup guide</string>
     <string name="setup_card_accessibility_name">Accessibility service</string>
     <string name="setup_card_accessibility_description">Optional: another way to lock the screen with a double-tap on the A–Z strip.</string>
