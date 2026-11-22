@@ -341,6 +341,9 @@ public final class WallpaperLiveHost {
             SharedPreferences openPrefs = prefs();
             mOpenedRate = openPrefs == null ? 30 : ShaderStore.readVideoRate(openPrefs);
             showKind(LiveSceneLogic.startKind(readStored(), true));
+            // A notification's door opened the picker on one shader: its editor comes up.
+            ShaderEditorRequest waiting = ShaderEditorRequest.attach(mRequestTarget);
+            if (waiting != null) openRequested(waiting);
         }
     }
 
@@ -444,6 +447,7 @@ public final class WallpaperLiveHost {
         if (mSupported && !mCommitted && !mReleased) revertPreview();
         mReleased = true;
         PhotoShaderNotification.unwatch(mWatcher);
+        ShaderEditorRequest.detach(mRequestTarget);
         mSwap.cancel();
         if (mPage == Page.EDITOR) discardEditor();
         if (mEditor != null) mEditor.release();
@@ -796,6 +800,10 @@ public final class WallpaperLiveHost {
             appliedFromNotification(motion);
         }
 
+        @Override public void onUndone(@NonNull String id) {
+            undoneFromNotification(id);
+        }
+
         @Override public void onSystemWallpaperChanged() {
             if (!mReleased) mListener.onSystemWallpaperChanged();
         }
@@ -855,6 +863,51 @@ public final class WallpaperLiveHost {
         } else if (mPage == Page.LIST && mList != null) {
             mList.bind(readStored());
         }
+    }
+
+    /**
+     * The notification's Undo put shader {@code id}'s earlier source back (and the earlier
+     * wallpaper, through {@link #appliedFromNotification}). An editor open on it holds the undone
+     * code: it goes to the list as after an apply, so nothing saves that code back. The shader
+     * stays saved.
+     */
+    private void undoneFromNotification(@NonNull String id) {
+        if (mReleased) return;
+        if (mPage == Page.EDITOR && mEditor != null && id.equals(mEditor.id())) {
+            mEditorSaved = true;
+            showList();
+        } else if (mPage == Page.LIST && mList != null) {
+            mList.bind(readStored());
+        }
+    }
+
+    /** Where Send to AI's Edit and body tap reach this picker ({@link ShaderEditorRequest}). */
+    private final ShaderEditorRequest.Target mRequestTarget = this::openRequested;
+
+    /**
+     * Opens the editor on the shader a notification named, on the Shader side. An editor open on
+     * another shader with changes stays, and says so; a shader that is gone shows the list.
+     */
+    private void openRequested(@NonNull ShaderEditorRequest request) {
+        if (!mSupported || mReleased || mList == null || mEditor == null) return;
+        boolean editorOpen = mPage == Page.EDITOR;
+        boolean exists = ShaderStore.sourceFile(mContext, request.id).isFile()
+            || (request.photoFlow && ShaderStore.metaFile(mContext, request.id).isFile());
+        ShaderEditorRequest.Landing landing = ShaderEditorRequest.landing(editorOpen,
+            request.id.equals(mEditor.id()), editorOpen && mEditor.hasUnsavedEdits(), exists);
+        Logger.logInfo(LOG_TAG, "shader door " + request.id + " (photo flow " + request.photoFlow + "): " + landing);
+        switch (landing) {
+            case STAYS:
+                return;
+            case KEEPS_EDITS:
+                toast(R.string.shader_open_kept_edits);
+                return;
+            default:
+                break;
+        }
+        if (mKind != WallpaperMotion.Kind.SHADER) showKind(WallpaperMotion.Kind.SHADER);
+        else if (mPage != Page.LIST) showList();
+        if (landing == ShaderEditorRequest.Landing.EDITOR) openShader(request.id, request.photoFlow);
     }
 
     @Nullable

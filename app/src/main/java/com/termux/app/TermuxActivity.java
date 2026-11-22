@@ -15205,6 +15205,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String initialSection = intent.getStringExtra(EXTRA_SURFACE_EDITOR_SECTION);
         boolean fromSettings = intent.getBooleanExtra(EXTRA_APPEARANCE_FROM_SETTINGS, false);
         String door = intent.getStringExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_DOOR);
+        String shader = intent.getStringExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_SHADER);
+        intent.removeExtra(com.termux.app.surfaces.AppearanceEditorEntry.EXTRA_SHADER);
         intent.removeExtra(EXTRA_SURFACE_EDITOR);
         intent.removeExtra(EXTRA_SURFACE_EDITOR_SECTION);
         intent.removeExtra(EXTRA_APPEARANCE_FROM_SETTINGS);
@@ -15213,7 +15215,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.surfaces.EditorDoor
             .forName(door, com.termux.app.surfaces.EditorDoor.SECTION_INTENT)
             .log(com.termux.app.surfaces.EditorCard.forKey(initialSection));
-        openAppearanceSurface(initialSection, null, null);
+        // A shader door: the picker comes up and its live host opens that shader's editor.
+        if (com.termux.app.chrome.wallpaper.ShaderEditorRequest.send(shader)) resumeWallpaper(null);
+        else openAppearanceSurface(initialSection, null, null);
         // A Settings row's door: closing the editor goes back to Settings.
         if (fromSettings) mAppearanceFromSettings = true;
     }

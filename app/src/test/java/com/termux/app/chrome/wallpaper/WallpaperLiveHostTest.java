@@ -237,4 +237,58 @@ public class WallpaperLiveHostTest {
         assertFalse(r.ok);
         assertEquals("Video arrives in the next build", r.error);
     }
+
+    private String savedShader(String name) throws java.io.IOException {
+        String id = ShaderStore.newId();
+        ShaderStore.writeSource(mActivity, id, "void mainImage(out vec4 c, in vec2 p) { c = vec4(1.0); }");
+        ShaderStore.writeMeta(mActivity, id, ShaderStore.Meta.defaults(name));
+        return id;
+    }
+
+    @Test
+    public void aShaderDoorBeforeThePickerIsBuilt_opensThatShadersEditor() throws Exception {
+        String id = savedShader("Waves");
+        // No picker is up: the request waits for the one the launcher builds next.
+        open(true).release();
+        assertTrue(ShaderEditorRequest.send(ShaderEditorRequest.encode(id, false)));
+        WallpaperLiveHost host = open(true);
+        assertTrue(host.showingLive());
+        assertTrue(host.editorShown());
+        assertEquals(id, host.editor().id());
+        assertFalse(host.editor().isNew());
+    }
+
+    @Test
+    public void aShaderDoorWithThePickerUp_opensThatShadersEditor_andAGoneShaderShowsTheList() throws Exception {
+        String id = savedShader("Waves");
+        WallpaperLiveHost host = open(true);
+        assertEquals(WallpaperMotion.Kind.PHOTO, host.kind());
+        ShaderEditorRequest.send(ShaderEditorRequest.encode(id, false));
+        assertTrue(host.editorShown());
+        assertEquals(id, host.editor().id());
+
+        ShaderStore.delete(mActivity, id);
+        String other = ShaderStore.newId();
+        ShaderEditorRequest.send(ShaderEditorRequest.encode(other, true));
+        assertEquals(WallpaperMotion.Kind.SHADER, host.kind());
+        assertFalse(host.editorShown());
+    }
+
+    @Test
+    public void aShaderDoorKeepsAnEditorWithChangesOnAnotherShader() throws Exception {
+        String first = savedShader("First");
+        String second = savedShader("Second");
+        WallpaperLiveHost host = open(true);
+        ShaderEditorRequest.send(ShaderEditorRequest.encode(first, false));
+        android.widget.EditText code = host.editor().root().findViewById(R.id.shader_code);
+        code.setText("void mainImage(out vec4 c, in vec2 p) { c = vec4(0.5); }");
+        ShaderEditorRequest.send(ShaderEditorRequest.encode(second, false));
+        assertTrue(host.editorShown());
+        assertEquals("the edits are not thrown away", first, host.editor().id());
+
+        // Unchanged, the editor gives way to the requested shader.
+        code.setText("void mainImage(out vec4 c, in vec2 p) { c = vec4(1.0); }");
+        ShaderEditorRequest.send(ShaderEditorRequest.encode(second, false));
+        assertEquals(second, host.editor().id());
+    }
 }

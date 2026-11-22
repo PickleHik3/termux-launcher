@@ -170,6 +170,8 @@ public final class ShaderEditorPage {
     private boolean mBinding;
     /** A new shader from a photo: Send to AI shows once a photo is chosen. */
     private boolean mPhotoFlow;
+    /** The draft as {@link #show} bound it: what {@link #hasUnsavedEdits} compares against. */
+    @Nullable private Draft mShown;
 
     public ShaderEditorPage(@NonNull Context context, boolean launcherIsHomeApp, @NonNull Actions actions) {
         mContext = context;
@@ -337,6 +339,13 @@ public final class ShaderEditorPage {
         }
         setHeldReason(heldReason);
         setBusy(false);
+        mShown = draft();
+    }
+
+    /** Whether the person changed anything since the shader opened: leaving would lose it. */
+    boolean hasUnsavedEdits() {
+        Draft shown = mShown;
+        return shown != null && ShaderEditorLogic.edited(shown, draft());
     }
 
     /**
