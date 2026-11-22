@@ -6026,6 +6026,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         return prefs.isStatusClockShown();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
                         return prefs.isStatusWidgetCpuEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_GPU:
+                        return prefs.isStatusWidgetGpuEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
                         return prefs.isStatusWidgetRamEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
@@ -6054,6 +6056,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         break;
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
                         prefs.setStatusWidgetCpuEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_GPU:
+                        prefs.setStatusWidgetGpuEnabled(on);
                         break;
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
                         prefs.setStatusWidgetRamEnabled(on);

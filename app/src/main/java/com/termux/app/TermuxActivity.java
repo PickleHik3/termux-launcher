@@ -645,6 +645,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.statusbar.StatusBarStatSmoother mBarCpuSmoother =
         com.termux.app.statusbar.StatusBarStatSmoother.forCpuPercent();
+    private final com.termux.app.statusbar.StatusBarStatSmoother mBarGpuSmoother =
+        com.termux.app.statusbar.StatusBarStatSmoother.forGpuPercent();
     private final com.termux.app.statusbar.StatusBarStatSmoother mBarMemorySmoother =
         com.termux.app.statusbar.StatusBarStatSmoother.forMemoryPercent();
     /**
@@ -11467,6 +11469,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // than aged out on resume: the first reading the user sees again has to be the true one.
         mBarCpuSmoother.reset();
         mBarMemorySmoother.reset();
+        mBarGpuSmoother.reset();
         if (mIsInvalidState)
             return;
         // A stopped activity may be finished or killed next: the arrangement is kept for both.
@@ -24582,13 +24585,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View sessionsIndicator = findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator instanceof com.termux.app.statusbar.SessionsIndicatorView)
             ((com.termux.app.statusbar.SessionsIndicatorView) sessionsIndicator).setDeckLook(deck);
-        for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
-                R.id.terminal_status_widget_battery, R.id.terminal_status_widget_weather}) {
+        for (int id : new int[]{R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_gpu,
+                R.id.terminal_status_widget_ram, R.id.terminal_status_widget_battery, R.id.terminal_status_widget_weather}) {
             View widget = findViewById(id);
             if (widget instanceof com.termux.app.statusbar.StatusBarWidgetView)
                 ((com.termux.app.statusbar.StatusBarWidgetView) widget).setDeckLook(deck);
         }
-        for (int id : new int[]{R.id.terminal_status_dot_cpu_ram,
+        for (int id : new int[]{R.id.terminal_status_dot_cpu_gpu, R.id.terminal_status_dot_gpu_ram,
+                R.id.terminal_status_dot_cpu_ram,
                 R.id.terminal_status_dot_ram_weather, R.id.terminal_status_dot_battery_weather}) {
             View dot = findViewById(id);
             if (dot instanceof com.termux.app.statusbar.MaterialDotSeparatorView)
@@ -25510,6 +25514,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public long statsCardIntervalMs() { return STATS_CARD_INTERVAL_MS; }
         @Override public com.termux.app.statusbar.StatusBarStatSmoother barCpuSmoother() { return mBarCpuSmoother; }
         @Override public com.termux.app.statusbar.StatusBarStatSmoother barMemorySmoother() { return mBarMemorySmoother; }
+        @Override public com.termux.app.statusbar.StatusBarStatSmoother barGpuSmoother() { return mBarGpuSmoother; }
         @Override public ChromeRenderer chrome() { return mChrome; }
         @Override public @Nullable com.termux.app.statusbar.SystemStatsCardView statsCardView() { return mStatsCardView; }
         @Override public @Nullable com.termux.app.statusbar.SystemStatsController statsController() { return mStatsController; }
@@ -30356,6 +30361,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mark.setOnClickListener(v -> toggleMouseMode());
         }
         boolean anyStatBefore = mPreferences != null && (mPreferences.isStatusWidgetCpuEnabled()
+            || mPreferences.isStatusWidgetGpuEnabled()
             || mPreferences.isStatusWidgetRamEnabled() || mPreferences.isStatusWidgetBatteryEnabled()
             || mPreferences.isStatusWidgetWeatherEnabled());
         mark.setVisibility(mFrameContent.isMouseMode() ? View.VISIBLE : View.GONE);
@@ -31739,6 +31745,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         long nowMs = android.os.SystemClock.uptimeMillis();
         com.termux.app.statusbar.StatusBarWidgetView cpu = findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = findViewById(R.id.terminal_status_widget_ram);
+        // The GPU smoother is fed while the switch is on, shown or not: a hidden widget learns it
+        // can show from the first sample that reads a load, and the bar is redrawn once on that
+        // change (and when the reading goes away), not per sample.
+        if (mPreferences != null && mPreferences.isStatusWidgetGpuEnabled()) {
+            com.termux.app.statusbar.StatusBarWidgetView gpu = findViewById(R.id.terminal_status_widget_gpu);
+            boolean gpuKnownBefore = mBarGpuSmoother.publishedPercent()
+                != com.termux.app.statusbar.StatusBarStatSmoother.UNKNOWN;
+            int gpuLoad = stats.hardware != null
+                ? stats.hardware.gpuBusyPercent : com.termux.app.statusbar.StatusBarStatSmoother.UNKNOWN;
+            boolean gpuChanged = mBarGpuSmoother.offer(gpuLoad, nowMs);
+            boolean gpuKnown = mBarGpuSmoother.publishedPercent()
+                != com.termux.app.statusbar.StatusBarStatSmoother.UNKNOWN;
+            if (gpuKnown != gpuKnownBefore) {
+                mStatusBar.updateStatusWidgets();
+            } else if (gpuChanged && gpu != null && gpu.getVisibility() == View.VISIBLE) {
+                gpu.setValue(mBarGpuSmoother.text());
+            }
+        }
         // The smoothers feed the bar's widgets, on Home as on a window (#91).
         if (cpu != null && cpu.getVisibility() == View.VISIBLE
             && mBarCpuSmoother.offer(stats.cpuPercent, nowMs)) {
@@ -31774,8 +31798,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setWidgetAccent(anchor, false);
             if (mStatsController != null
                 && mPreferences != null
-                && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled())) {
-                mStatsController.start(statsInterval(STATS_BAR_INTERVAL_MS), false);
+                && (mPreferences.isStatusWidgetCpuEnabled() || mPreferences.isStatusWidgetRamEnabled()
+                    || mPreferences.isStatusWidgetGpuEnabled())) {
+                mStatsController.start(statsInterval(STATS_BAR_INTERVAL_MS), false,
+                    mPreferences.isStatusWidgetGpuEnabled());
             }
         });
     }

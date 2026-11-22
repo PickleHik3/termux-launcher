@@ -232,7 +232,8 @@ public final class HelpTargets {
 
     /** The widgets that are out, as one box: the topic is about the cluster, not about CPU. */
     private void stats(Snapshot s) {
-        int[] ids = {R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_ram,
+        int[] ids = {R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_gpu,
+            R.id.terminal_status_widget_ram,
             R.id.terminal_status_widget_battery, R.id.terminal_status_widget_weather};
         Rect bounds = null;
         for (int id : ids) bounds = union(bounds, rect(finder.findHelpView(id)));

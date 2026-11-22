@@ -1112,6 +1112,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_CPU, value, false);
     }
 
+    public boolean isStatusWidgetGpuEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_GPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+    }
+
+    public void setStatusWidgetGpuEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_GPU, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);

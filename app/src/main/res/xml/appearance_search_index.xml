@@ -93,6 +93,10 @@
         app:persistent="false"
         app:title="@string/settings_cpu_usage_title" />
     <Preference
+        app:key="status_widget_gpu"
+        app:persistent="false"
+        app:title="@string/settings_gpu_usage_title" />
+    <Preference
         app:key="status_widget_ram"
         app:persistent="false"
         app:title="@string/settings_memory_usage_title" />

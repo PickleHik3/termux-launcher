@@ -75,11 +75,31 @@ public final class StatusStatsClusterPolicy {
         return cpuEnabled && privilegedAvailable;
     }
 
-    /** The dot after the CPU widget, wherever the cluster sits in the row (CPU, RAM, battery,
-     *  weather): on only when CPU shows and something follows it, whichever of the three does. */
-    public static boolean cpuRamDotVisible(boolean cpuOn, boolean ramOn, boolean batteryOn,
+    /**
+     * Whether the GPU widget shows: its switch is on and the last sample read a GPU load. A phone
+     * that reports none (no node, no privilege) keeps it hidden rather than showing a dash.
+     */
+    public static boolean gpuShown(boolean gpuEnabled, boolean gpuKnown) {
+        return gpuEnabled && gpuKnown;
+    }
+
+    /** The dot between CPU and GPU: on only when both show. */
+    public static boolean cpuGpuDotVisible(boolean cpuOn, boolean gpuOn) {
+        return cpuOn && gpuOn;
+    }
+
+    /** The dot after the GPU widget: on only when GPU shows and RAM, battery or weather follows. */
+    public static boolean gpuRamDotVisible(boolean gpuOn, boolean ramOn, boolean batteryOn,
                                            boolean weatherOn) {
-        return cpuOn && (ramOn || batteryOn || weatherOn);
+        return gpuOn && (ramOn || batteryOn || weatherOn);
+    }
+
+    /** The dot after the CPU widget when the GPU is not showing (the cluster reads CPU, GPU, RAM,
+     *  battery, weather): on only when CPU shows, GPU does not, and something else follows it.
+     *  With the GPU showing, the CPU-GPU dot carries that pair. */
+    public static boolean cpuRamDotVisible(boolean cpuOn, boolean gpuOn, boolean ramOn,
+                                           boolean batteryOn, boolean weatherOn) {
+        return cpuOn && !gpuOn && (ramOn || batteryOn || weatherOn);
     }
 
     /** The dot after the RAM widget: on only when RAM shows and the battery or the weather

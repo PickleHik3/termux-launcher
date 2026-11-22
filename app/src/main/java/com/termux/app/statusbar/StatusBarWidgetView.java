@@ -44,6 +44,12 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         setIconResource(R.drawable.ic_rl_cpu);
     }
 
+    /** Dresses this widget as the GPU load reading: its icon and its tier, the primary role. */
+    public void dressAsGpu() {
+        setColorRole(ColorRole.PRIMARY);
+        setIconResource(R.drawable.ic_ms_developer_board);
+    }
+
     /** Dresses this widget as the memory reading: its icon and its tier, the secondary role. */
     public void dressAsRam() {
         setColorRole(ColorRole.SECONDARY);

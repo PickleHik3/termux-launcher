@@ -732,6 +732,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
         public static final boolean DEFAULT_STATUS_WIDGET_CPU = false;
 
+        /** The GPU load in the status bar: off by default, shown only where a phone reports it. */
+        public static final String KEY_STATUS_WIDGET_GPU = "status_widget_gpu";
+        public static final boolean DEFAULT_STATUS_WIDGET_GPU = false;
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 

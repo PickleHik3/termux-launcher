@@ -126,12 +126,13 @@ public final class StatusBarCard {
     /** The Elements tiles, in order; Clock (show or hide the bar's clock) first. */
     public static final int INDICATOR_CLOCK = 0;
     public static final int INDICATOR_CPU = 1;
-    public static final int INDICATOR_RAM = 2;
-    public static final int INDICATOR_WEATHER = 3;
-    public static final int INDICATOR_NOTIFICATIONS = 4;
-    public static final int INDICATOR_MEDIA = 5;
-    public static final int INDICATOR_BATTERY = 6;
-    static final int INDICATOR_COUNT = 7;
+    public static final int INDICATOR_GPU = 2;
+    public static final int INDICATOR_RAM = 3;
+    public static final int INDICATOR_WEATHER = 4;
+    public static final int INDICATOR_NOTIFICATIONS = 5;
+    public static final int INDICATOR_MEDIA = 6;
+    public static final int INDICATOR_BATTERY = 7;
+    static final int INDICATOR_COUNT = 8;
 
     /**
      * Whether {@code row} is one of the Clock &amp; Weather section's clock rows, which stand
@@ -391,6 +392,8 @@ public final class StatusBarCard {
                 context.getString(R.string.editor_st_indicator_clock)),
             new TileGrid.Tile(R.drawable.ic_ms_memory,
                 context.getString(R.string.editor_st_indicator_cpu)),
+            new TileGrid.Tile(R.drawable.ic_ms_speed,
+                context.getString(R.string.editor_st_indicator_gpu)),
             new TileGrid.Tile(R.drawable.ic_ms_developer_board,
                 context.getString(R.string.editor_st_indicator_ram)),
             new TileGrid.Tile(R.drawable.ic_ms_partly_cloudy_day,

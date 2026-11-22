@@ -208,7 +208,7 @@ final class AppearanceSnapshot {
             prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled(),
             prefs.isStatusClockShown(), prefs.isCompatibilityModeEnabled(),
             prefs.isDwindleDefaultLayoutEnabled(), prefs.isFocusedPaneGrowsEnabled(),
-            prefs.isStatusWidgetBatteryEnabled()};
+            prefs.isStatusWidgetBatteryEnabled(), prefs.isStatusWidgetGpuEnabled()};
     }
 
     /** Writes back the status bar's switches that differ from the store's now. */
@@ -229,6 +229,7 @@ final class AppearanceSnapshot {
         if (now[10] != kept[10]) prefs.setDwindleDefaultLayoutEnabled(kept[10]);
         if (now[11] != kept[11]) prefs.setFocusedPaneGrowsEnabled(kept[11]);
         if (now[12] != kept[12]) prefs.setStatusWidgetBatteryEnabled(kept[12]);
+        if (now[13] != kept[13]) prefs.setStatusWidgetGpuEnabled(kept[13]);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
