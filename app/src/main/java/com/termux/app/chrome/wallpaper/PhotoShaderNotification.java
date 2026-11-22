@@ -28,7 +28,6 @@ import androidx.core.content.ContextCompat;
 import androidx.core.content.FileProvider;
 
 import com.termux.R;
-import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.scene.ShaderCheck;
 import com.termux.app.chrome.scene.ShaderErrors;
 import com.termux.app.chrome.scene.ShaderStore;
@@ -222,13 +221,17 @@ public final class PhotoShaderNotification {
 
     @NonNull
     private static NotificationCompat.Builder base(@NonNull Context app) {
-        PendingIntent open = PendingIntent.getActivity(app, 0, TermuxActivity.newInstance(app),
-            PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
-        return new NotificationCompat.Builder(app, CHANNEL_ID)
+        NotificationCompat.Builder builder = new NotificationCompat.Builder(app, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_service_notification)
-            .setContentIntent(open)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW);
+        // The body brings the launcher forward, named by the package's own launch intent.
+        Intent launch = app.getPackageManager().getLaunchIntentForPackage(app.getPackageName());
+        if (launch != null) {
+            builder.setContentIntent(PendingIntent.getActivity(app, 0, launch,
+                PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag()));
+        }
+        return builder;
     }
 
     @NonNull
