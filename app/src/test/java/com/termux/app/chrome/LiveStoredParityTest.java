@@ -115,9 +115,9 @@ public class LiveStoredParityTest {
     }
 
     @Test
-    public void aPictureTakesTheParityAndAPanelNever() {
+    public void aPictureTakesTheParity() {
         View surface = new View(RuntimeEnvironment.getApplication());
-        LivePicture widget = new LivePicture(surface, 20f, false);
+        LivePicture widget = new LivePicture(surface, 20f);
         assertNull("nothing to match yet", widget.parityFilter());
         widget.setStoredParity(0x66000000, 100, GlassFrameTint.NONE);
         assertNotNull("the wall's dim comes back out", widget.parityFilter());
@@ -125,10 +125,6 @@ public class LiveStoredParityTest {
         assertNull(widget.parityFilter());
         widget.setStoredParity(0, 130, TINT);
         assertNotNull("Vibrancy and the frame tint go in", widget.parityFilter());
-
-        LivePicture panel = new LivePicture(surface, 20f, true);
-        panel.setStoredParity(0x66000000, 130, TINT);
-        assertNull("a panel matches its old live blur, which saw the dim", panel.parityFilter());
     }
 
     @Test

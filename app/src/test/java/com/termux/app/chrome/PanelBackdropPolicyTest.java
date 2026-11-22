@@ -17,10 +17,16 @@ public class PanelBackdropPolicyTest {
 
     private static final int S = 31;
 
-    @Test public void liveOnlyWhenTheServiceGrantsIt() {
-        assertEquals(Kind.LIVE, PanelBackdropPolicy.kind(S, true, true));
-        // Live blur off, memory short or no slot free: the service did not grant it.
-        assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(S, true, false));
+    @Test public void theLayeredGlassIsLiveOrTheStoredFrameNeverASnapshot() {
+        assertTrue(PanelBackdropPolicy.layered(S, true));
+        // A popup menu is a window of its own, and below Android 12 nothing is Live.
+        assertFalse(PanelBackdropPolicy.layered(S, false));
+        assertFalse(PanelBackdropPolicy.layered(S - 1, true));
+        assertEquals(Kind.LIVE, PanelBackdropPolicy.layeredKind(true, true));
+        // Not granted (Live off, memory short or no slot free), or no blur to draw the layers with:
+        // the stored frame.
+        assertEquals(Kind.STORED, PanelBackdropPolicy.layeredKind(false, true));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.layeredKind(true, false));
     }
 
     @Test public void aPanelAsksForLiveOnlyOnTheGpuInTheLaunchersWindow() {
@@ -37,8 +43,7 @@ public class PanelBackdropPolicyTest {
 
     @Test public void belowAndroid12EveryPanelIsASoftwareSnapshotAndNeverLive() {
         for (int sdk = 26; sdk < S; sdk++) {
-            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, true));
-            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(sdk, true, false));
+            assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.snapshotKind(sdk, true));
             assertTrue(PanelBackdropPolicy.canRecord(sdk));
             assertFalse(PanelBackdropPolicy.onGpu(sdk));
         }
@@ -47,9 +52,9 @@ public class PanelBackdropPolicyTest {
     }
 
     @Test public void theStoredFrameWithNoRecorderOrBeforeAndroid8() {
-        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(S, false, true));
-        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(30, false, false));
-        assertEquals(Kind.STORED, PanelBackdropPolicy.kind(25, true, false));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.snapshotKind(S, false));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.snapshotKind(30, false));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.snapshotKind(25, true));
         assertFalse(PanelBackdropPolicy.canRecord(25));
     }
 

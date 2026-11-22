@@ -1324,7 +1324,7 @@
              never through the flush-padding solver or a terminal resize. INVISIBLE rather than gone
              so the host stays measured and the blur can gate its own work on isShown().
              AppDrawerController drives it and clips the glass to the animated rounded rect. -->
-        <FrameLayout
+        <com.termux.app.chrome.LiveBackdropFrameLayout
             android:id="@+id/app_drawer_host"
             android:layout_width="match_parent"
             android:layout_height="match_parent"
@@ -1357,7 +1357,7 @@
                     android:scaleType="fitXY"
                     android:importantForAccessibility="no" />
             </FrameLayout>
-        </FrameLayout>
+        </com.termux.app.chrome.LiveBackdropFrameLayout>
 
         <!-- Command palette overlay. Last child of the content root so the palette can sprout
              from the in-app keyboard's space bar and land over the terminal without a Dialog

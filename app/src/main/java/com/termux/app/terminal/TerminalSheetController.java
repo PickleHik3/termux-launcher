@@ -47,7 +47,7 @@ public final class TerminalSheetController
     implements TerminalKeyEventHandler.KeyValueInterceptor {
 
     /** What the plane needs from the activity: its views, the keyboard it is typed with, its glass. */
-    public interface Host {
+    public interface Host extends com.termux.app.chrome.PanelBackdrop.GlassBlur {
         @NonNull Context context();
 
         @Nullable <T extends View> T findView(int viewId);
@@ -845,7 +845,7 @@ public final class TerminalSheetController
     /**
      * Picks the glass backdrop for this open: over the system wallpaper a pre-blurred wallpaper
      * frost (a recording there holds no wallpaper and renders grey mud, and below Android 12 nothing
-     * can be recorded), otherwise the picture of what is drawn beneath the glass
+     * can be recorded), otherwise the layered glass every surface wears
      * ({@link com.termux.app.chrome.PanelBackdrop}).
      */
     private void applyBackdropMaterial() {
@@ -869,10 +869,14 @@ public final class TerminalSheetController
         if (blur == null) return;
         if (!frosted) blur.setVisibility(View.VISIBLE);
         // A sheet stacked on a sheet keeps the picture the plane already has.
-        boolean pictured = !frosted && mBackdrop != null
-            && (mBackdrop.isOpen() || mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(blur.getContext(),
-                    com.termux.app.chrome.PanelBackdrop.PROMPT_BLUR_RADIUS_DP)));
-        if (!pictured) {
+        // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
+        // surface draws nothing over the stored frame until then.
+        if (!frosted && mBackdrop != null) {
+            if (!mBackdrop.isOpen()) {
+                mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(blur.getContext(),
+                    Math.max(0, mHost.glassBlurDp())));
+            }
+        } else {
             if (mBackdrop != null) mBackdrop.close();
             blur.setVisibility(View.GONE);
         }

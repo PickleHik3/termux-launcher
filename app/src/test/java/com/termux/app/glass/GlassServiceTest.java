@@ -7,6 +7,7 @@ import android.os.PowerManager;
 import android.view.View;
 
 import com.termux.app.window.FramePipeline;
+import com.termux.app.window.WindowLayer;
 import com.termux.app.window.FrameStep;
 
 import org.junit.Before;
@@ -199,5 +200,39 @@ public class GlassServiceTest {
         glass.unregister("panel");
         glass.unregister("slab");
         assertFalse(frames.isArmed(FrameStep.GLASS_COMMIT));
+    }
+
+    @Test
+    public void aSheetAtRestTakesTheSlotsOfWhatItHidesAndGivesThemBackAsItLeaves() {
+        glass.setLiveOn(true);
+        // Not on screen (no window here), on the pages beneath the sheets: hidden by the card.
+        register("widget", GlassEntry.PRIORITY_WIDGET);
+        glass.register(new GlassEntry("drawer", view(), GlassKind.LIVE, GlassEntry.PRIORITY_DOCK,
+            WindowLayer.SHEETS, null), kind -> redressed.add("drawer=" + kind));
+        glass.register(new GlassEntry("drawer-search", view(), GlassKind.LIVE,
+            GlassEntry.PRIORITY_FLOAT, WindowLayer.SHEETS, null),
+            kind -> redressed.add("drawer-search=" + kind));
+        frame();
+        redressed.clear();
+
+        glass.cover("drawer", new android.graphics.Rect(0, 100, 1080, 2200));
+        frame();
+        assertEquals(Arrays.asList("widget=WALLPAPER"), redressed);
+        assertEquals(GlassKind.LIVE, glass.granted("drawer"));
+        assertEquals(GlassKind.LIVE, glass.granted("drawer-search"));
+        // A surface that comes while the card stands is covered as it comes.
+        assertEquals(GlassKind.WALLPAPER, register("float", GlassEntry.PRIORITY_FLOAT));
+
+        redressed.clear();
+        glass.uncover("drawer");
+        frame();
+        assertEquals(GlassKind.LIVE, glass.granted("widget"));
+        assertEquals(GlassKind.LIVE, glass.granted("float"));
+
+        // The card's entry going lets everything back too.
+        glass.cover("drawer", new android.graphics.Rect(0, 100, 1080, 2200));
+        assertEquals(GlassKind.WALLPAPER, glass.granted("widget"));
+        glass.unregister("drawer");
+        assertEquals(GlassKind.LIVE, glass.granted("widget"));
     }
 }

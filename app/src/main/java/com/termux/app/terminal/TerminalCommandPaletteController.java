@@ -75,7 +75,7 @@ public final class TerminalCommandPaletteController
      * keyboard it sprouts from, the planes it yields to, the sessions it lists, the glass and shape
      * it wears, and the few things only an activity can do.
      */
-    public interface Host {
+    public interface Host extends com.termux.app.chrome.PanelBackdrop.GlassBlur {
         // ---------------------------------------------------------- context and resources
 
         /** The activity's own context: strings, resources, notices, stores. */
@@ -794,7 +794,7 @@ public final class TerminalCommandPaletteController
     /**
      * Picks the glass backdrop for this open: over the system wallpaper (or where nothing can be
      * recorded) a pre-blurred wallpaper frost, since a recording there holds no wallpaper and
-     * renders grey mud; otherwise the picture of what is drawn beneath the glass
+     * renders grey mud; otherwise the layered glass every surface wears
      * ({@link com.termux.app.chrome.PanelBackdrop}).
      */
     private void applyBackdropMaterial() {
@@ -803,9 +803,11 @@ public final class TerminalCommandPaletteController
         boolean frosted = frost != null && mPaletteHost.applyCommandPaletteWallpaperFrost(frost);
         if (blur == null) return;
         if (!frosted) blur.setVisibility(View.VISIBLE);
-        boolean pictured = !frosted && mBackdrop != null
-            && mBackdrop.open(dp(com.termux.app.chrome.PanelBackdrop.PROMPT_BLUR_RADIUS_DP));
-        if (!pictured) {
+        // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
+        // surface draws nothing over the stored frame until then.
+        if (!frosted && mBackdrop != null) {
+            mBackdrop.open(dp(Math.max(0, mPaletteHost.glassBlurDp())));
+        } else {
             if (mBackdrop != null) mBackdrop.close();
             blur.setVisibility(View.GONE);
         }

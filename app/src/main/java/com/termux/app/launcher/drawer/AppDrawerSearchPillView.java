@@ -3,12 +3,14 @@ package com.termux.app.launcher.drawer;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.view.MotionEvent;
 import android.view.View;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -92,6 +94,12 @@ public final class AppDrawerSearchPillView extends View {
     private float mFold;
     private float mDrawnLeft;
     private float mDrawnRight;
+    /** The solved inks ({@link #setSolvedInk}); transparent means the scheme's. */
+    @ColorInt private int mInk = Color.TRANSPARENT;
+    @ColorInt private int mAccent = Color.TRANSPARENT;
+    @ColorInt private int mVeil = Color.TRANSPARENT;
+    /** Whether the glass slab laid under this view is drawing the capsule's body. */
+    private boolean mGlassShown;
     /** True while a DOWN that landed on the clear affordance is still live. */
     private boolean mClearPressed;
 
@@ -152,6 +160,40 @@ public final class AppDrawerSearchPillView extends View {
         if (changed) invalidate();
     }
 
+    /**
+     * Whether glass (Live or the wallpaper's frost) is laid under this view and draws the body.
+     * Without it the capsule draws its own solid body, the card's surface colour, so the rows
+     * beneath never show through the text; with it the body is the glass alone.
+     */
+    public void setGlassShown(boolean shown) {
+        if (mGlassShown == shown) return;
+        mGlassShown = shown;
+        invalidate();
+    }
+
+    /**
+     * The inks solved on what the capsule stands on, as Home's page bar pill's are: the text and
+     * glyph ink, the caret's accent and the veil laid over the glass under the ink (transparent for
+     * none). Transparent {@code ink} puts the scheme's own ink back. Dress passes only.
+     */
+    public void setSolvedInk(@ColorInt int ink, @ColorInt int accent, @ColorInt int veil) {
+        if (mInk == ink && mAccent == accent && mVeil == veil) return;
+        mInk = ink;
+        mAccent = accent;
+        mVeil = veil;
+        invalidate();
+    }
+
+    /** The capsule's left edge in the view's own coordinates (the glass slab's outline). */
+    public float capsuleLeftPx() {
+        return drawnLeft();
+    }
+
+    /** The capsule's right edge in the view's own coordinates. */
+    public float capsuleRightPx() {
+        return drawnRight();
+    }
+
     /** The capsule actually drawn, in the parent's coordinates: what a touch or a hold sees. */
     public void getDrawnRect(@NonNull RectF out) {
         float originX = getLeft() + getTranslationX();
@@ -185,14 +227,28 @@ public final class AppDrawerSearchPillView extends View {
             androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(getContext(), R.color.termux_primary));
 
+        // On glass the ink is the one solved on the ground; without it, the scheme's.
+        if (mGlassShown && Color.alpha(mInk) != 0) onSurface = mInk;
+        if (mGlassShown && Color.alpha(mAccent) != 0) accent = mAccent;
         float radius = resolveRadiusPx();
         float inset = mStroke.getStrokeWidth() * 0.5f;
         float left = drawnLeft();
         float right = drawnRight();
         float fold = Math.max(0f, Math.min(1f, mFold));
         mBounds.set(left + inset, inset, right - inset, height - inset);
-        mFill.setColor(ColorUtils.setAlphaComponent(onSurface, FILL_ALPHA));
-        canvas.drawRoundRect(mBounds, radius, radius, mFill);
+        if (mGlassShown && Color.alpha(mVeil) != 0) {
+            mFill.setColor(mVeil);
+            canvas.drawRoundRect(mBounds, radius, radius, mFill);
+        }
+        if (!mGlassShown) {
+            // No glass: the card's own surface, solid, under the wash.
+            mFill.setColor(MaterialColors.getColor(this,
+                com.google.android.material.R.attr.colorSurface,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            canvas.drawRoundRect(mBounds, radius, radius, mFill);
+            mFill.setColor(ColorUtils.setAlphaComponent(onSurface, FILL_ALPHA));
+            canvas.drawRoundRect(mBounds, radius, radius, mFill);
+        }
         mStroke.setColor(ColorUtils.setAlphaComponent(onSurface, STROKE_ALPHA));
         canvas.drawRoundRect(mBounds, radius, radius, mStroke);
 
@@ -262,7 +318,8 @@ public final class AppDrawerSearchPillView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 // Folded, the view still stands where the full bar was; only the circle answers.
-                if (event.getX() < drawnLeft() || event.getX() >= drawnRight()) return false;
+                if (!AppDrawerFloatingList.capsuleContains(event.getX(), event.getY(), drawnLeft(),
+                    drawnRight(), getHeight())) return false;
                 mClearPressed = hasQuery() && isOverClear(event.getX());
                 return true;
             case MotionEvent.ACTION_UP: {

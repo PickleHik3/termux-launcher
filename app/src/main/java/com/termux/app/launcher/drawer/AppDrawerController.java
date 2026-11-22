@@ -138,6 +138,25 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return null;
         }
 
+        /**
+         * The search capsule's Live picture for {@code slab} at {@code blurDp}: the slab registers
+         * as the glass service's drawer search surface, wanting Live; null while another kind is
+         * granted (the slab then draws the wallpaper frame). {@code redress} runs when that moves.
+         */
+        @Nullable
+        default com.termux.app.chrome.LivePicture drawerSearchGlassWear(@NonNull View slab,
+                int blurDp, @Nullable Runnable redress) {
+            return null;
+        }
+
+        /** The capsule's slab gave its glass back: its registry entry and picture are let go. */
+        default void drawerSearchGlassDrop(@NonNull View slab) {}
+
+        /** The card's own blur radius in dp, the capsule's blur; zero where there is none. */
+        default int drawerSearchGlassBlurDp() {
+            return 0;
+        }
+
         /** The style a terminal pane's corner tab is dressed with; null where the app has none. */
         @Nullable
         default com.termux.app.terminal.PaneSurfaceStyle drawerTabStyle() {
@@ -434,6 +453,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private boolean mDragging;
     /** The plane's picture of what is beneath it; the settle logic freezes and retakes it. */
     @Nullable private com.termux.app.chrome.PanelBackdrop mBackdrop;
+    /** The card's name in the glass registry. */
+    private static final String DRAWER_GLASS = "drawer";
     @NonNull private AppDrawerCommitPolicy.Direction mDirection =
         AppDrawerCommitPolicy.Direction.OPENING;
     private float mDownRawY;
@@ -975,7 +996,42 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     void applyBackdropRest() {
         com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
         if (backdrop == null) return;
-        backdrop.setMoving(!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
+        boolean settled = isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value);
+        backdrop.setMoving(!settled);
+        applyGlassCover(settled && backdrop.kind() != null);
+    }
+
+    /** The card stands at rest over the page and the glass service was told so. */
+    private boolean mGlassCovering;
+    private final int[] mCoverWhere = new int[2];
+    private final android.graphics.Rect mCoverRect = new android.graphics.Rect();
+
+    /**
+     * While the card rests open it covers what is beneath it: the glass service takes the Live
+     * slots of the surfaces it hides (Home's widgets and floats under the card), so the card and
+     * the search capsule riding it are Live first. Told once as the card comes to rest and once
+     * as it leaves (a drag, a close), never per frame.
+     */
+    private void applyGlassCover(boolean covering) {
+        if (covering == mGlassCovering) return;
+        FrameLayout host = mHostLayout;
+        AppDrawerPlaneView plane = mPlane;
+        com.termux.app.glass.GlassService glass = host == null ? null
+            : com.termux.app.glass.GlassService.of(host);
+        mGlassCovering = covering && glass != null && plane != null;
+        if (glass == null) return;
+        if (!mGlassCovering) {
+            glass.uncover(DRAWER_GLASS);
+            return;
+        }
+        Frame frame = plane.getFrame();
+        host.getLocationInWindow(mCoverWhere);
+        // Inward, as the plane's outline is cut: a surface on the edge is still seen.
+        mCoverRect.set(mCoverWhere[0] + (int) Math.ceil(frame.left),
+            mCoverWhere[1] + (int) Math.ceil(frame.top),
+            mCoverWhere[0] + (int) Math.floor(frame.right),
+            mCoverWhere[1] + (int) Math.floor(frame.bottom));
+        glass.cover(DRAWER_GLASS, mCoverRect);
     }
 
     /** True for the length of one Snapshot's recording; see {@link #mSettledScene}. */
@@ -1380,6 +1436,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.suggestionBar());
         content.setCallbacks(this);
         content.setSwitchGlassSource(mHost::drawerSwitchGlass);
+        content.setSearchGlassHost(new AppDrawerContentView.SearchGlassHost() {
+            @Nullable @Override public com.termux.app.chrome.LivePicture wear(@NonNull View slab,
+                    int blurDp, @Nullable Runnable redress) {
+                return mHost.drawerSearchGlassWear(slab, blurDp, redress);
+            }
+
+            @Override public void drop(@NonNull View slab) {
+                mHost.drawerSearchGlassDrop(slab);
+            }
+
+            @Override public int blurDp() {
+                return mHost.drawerSearchGlassBlurDp();
+            }
+        });
         content.setTabStyleSource(new AppDrawerContentView.TabStyleSource() {
             @Nullable @Override public com.termux.app.terminal.PaneSurfaceStyle style() {
                 return mHost.drawerTabStyle();
@@ -2186,14 +2256,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
-     * The plane's glass shows what is drawn beneath it ({@link com.termux.app.chrome.PanelBackdrop}):
-     * a Snapshot taken on this open's first frame, of the settled-open scene ({@link #mSettledScene}),
-     * frozen while the plane moves and retaken once it rests; Live while Live blur is on. Over the
-     * system wallpaper the recording holds no wallpaper, so a crop of the shared pre-blurred
-     * wallpaper frame stands beneath it, and the picture ghosts the terminal through the glass over
-     * that; without the crop (dock blur off, a live wallpaper) the picture is not a fallback there
-     * and the plane is simply tinted glass. Where nothing can be recorded (below Android 12) the
-     * crop stands alone.
+     * The plane's glass is the glass every other surface wears
+     * ({@link com.termux.app.chrome.PanelBackdrop}): while the glass service grants the
+     * card Live, the recorder's backdrop layers (the stored frame as ground, the pages, and what is
+     * beneath in the window, live) at the card's own blur, the dock's; otherwise the crop of the
+     * shared pre-blurred wallpaper frame that stands beneath it, as the dock shows. Without the crop
+     * (dock blur off, a live wallpaper) the plane is simply tinted glass.
      */
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
@@ -2201,7 +2269,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
         if (!(blur instanceof ImageView)) return;
         if (mBackdrop == null) {
-            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "drawer");
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, DRAWER_GLASS);
             mBackdrop.setScene(mSettledScene);
             // The scene dim is the host's background: beneath the glass on screen, but a recording
             // holds only the views beneath, so the picture wears the settled dim itself.
@@ -2211,9 +2279,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         boolean wanted = frosted || !wallpaperMode;
         if (wanted) blur.setVisibility(View.VISIBLE);
+        // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
+        // surface draws nothing over the stored frame until then.
+        // The card's blur is the dock's, the stored frame's radius the layers' ground is cut at.
         boolean pictured = wanted && mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(
-            mHost.context(), com.termux.app.chrome.PanelBackdrop.DRAWER_BLUR_RADIUS_DP));
-        if (!pictured) {
+            mHost.context(), Math.max(0, mHost.drawerSearchGlassBlurDp())));
+        if (!wanted) {
+            mGlassCovering = false;
             mBackdrop.close();
             blur.setVisibility(View.GONE);
         }
@@ -2691,6 +2763,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);
             }
+            // Letting the entry go lets every surface the card covered back.
+            mGlassCovering = false;
             if (mBackdrop != null) mBackdrop.close();
             startContentGate(true);
             if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);

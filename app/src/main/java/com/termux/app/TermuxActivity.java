@@ -4842,6 +4842,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
             int blurRadiusDp, int rank, @NonNull String element,
             @Nullable com.termux.app.glass.GlassService.Redress redress) {
+        return attachLivePicture(surface, blurRadiusDp, rank, element, redress, null);
+    }
+
+    /** As above; {@code layer} is the window layer the surface stands in, null for the rank's own. */
+    @Nullable
+    private com.termux.app.chrome.LivePicture attachLivePicture(@NonNull View surface,
+            int blurRadiusDp, int rank, @NonNull String element,
+            @Nullable com.termux.app.glass.GlassService.Redress redress,
+            @Nullable com.termux.app.window.WindowLayer layer) {
         com.termux.app.glass.GlassKind kind = mGlass.grantedTo(element, surface);
         if (kind == null) {
             int priority = rank == com.termux.app.chrome.LiveBackdrop.RANK_FLOAT
@@ -4850,7 +4859,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The dock stands in the chrome layer; floats and widgets on the pages.
             kind = mGlass.register(new com.termux.app.glass.GlassEntry(element, surface,
                 com.termux.app.glass.GlassKind.LIVE, priority,
-                priority == com.termux.app.glass.GlassEntry.PRIORITY_DOCK
+                layer != null ? layer
+                : priority == com.termux.app.glass.GlassEntry.PRIORITY_DOCK
                     ? com.termux.app.window.WindowLayer.CHROME
                     : com.termux.app.window.WindowLayer.PAGES, null), redress);
         }
@@ -4865,6 +4875,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
         return recorder.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density, rank);
+    }
+
+    /** The drawer search capsule's name in the glass registry: one surface, whatever its shape. */
+    private static final String DRAWER_SEARCH_GLASS = "drawer-search";
+
+    /**
+     * The search capsule's Live picture: the slab registers while the drawer is open, wanting
+     * Live in the sheets layer at a float's place in the budget, and takes its picture from the
+     * recorder, which draws the list beneath it in its local layer. Null while the service grants
+     * Wallpaper (the slab then draws the stored frame).
+     */
+    @Nullable
+    private com.termux.app.chrome.LivePicture wearDrawerSearchGlass(@NonNull View slab,
+            int blurDp, @Nullable Runnable redress) {
+        return attachLivePicture(slab, blurDp, com.termux.app.chrome.LiveBackdrop.RANK_FLOAT,
+            DRAWER_SEARCH_GLASS, redress == null ? null : k -> redress.run(),
+            com.termux.app.window.WindowLayer.SHEETS);
+    }
+
+    /** The capsule's slab gave its glass back: its Live slot and picture go. */
+    private void dropDrawerSearchGlass(@NonNull View slab) {
+        if (mLiveBackdrop != null) mLiveBackdrop.detach(slab);
+        if (mGlass.grantedTo(DRAWER_SEARCH_GLASS, slab) != null) {
+            mGlass.unregister(DRAWER_SEARCH_GLASS);
+        }
     }
 
     /** The window's recorder, made on first use; null before the content root exists. */
@@ -20423,6 +20458,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mSheets.applyCommandPaletteWallpaperFrost(frost);
         }
 
+        @Override public int glassBlurDp() {
+            return mChrome.frost().topGlassFrostRadiusDp();
+        }
+
         @Override public int commandPaletteCornersDp() {
             return mSheets.commandPaletteCornersDp();
         }
@@ -20492,6 +20531,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
             return mSheets.applyTerminalSheetWallpaperFrost(frost);
+        }
+
+        @Override public int glassBlurDp() {
+            return mChrome.frost().topGlassFrostRadiusDp();
         }
 
         @NonNull @Override public Drawable sheetSurface() {
@@ -20592,6 +20635,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.chrome.DrawerCardGlassStyle card = drawerCardGlassStyle();
             card.setWanted(wanted);
             return wanted ? card : null;
+        }
+
+        @Nullable @Override public com.termux.app.chrome.LivePicture drawerSearchGlassWear(
+                @NonNull View slab, int blurDp, @Nullable Runnable redress) {
+            return wearDrawerSearchGlass(slab, blurDp, redress);
+        }
+
+        @Override public void drawerSearchGlassDrop(@NonNull View slab) {
+            dropDrawerSearchGlass(slab);
+        }
+
+        @Override public int drawerSearchGlassBlurDp() {
+            return getEffectiveExtraKeysBlurRadius();
         }
 
         @Nullable @Override public com.termux.app.terminal.PaneSurfaceStyle drawerTabStyle() {
