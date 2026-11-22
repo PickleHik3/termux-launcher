@@ -3,5 +3,8 @@
   {"slug": "aurora", "name": "Aurora", "quality": "half", "rate": 30},
   {"slug": "drift", "name": "Drift", "quality": "half", "rate": 30},
   {"slug": "caustics", "name": "Caustics", "quality": "half", "rate": 30},
-  {"slug": "starfield", "name": "Starfield", "quality": "half", "rate": 30}
+  {"slug": "starfield", "name": "Starfield", "quality": "half", "rate": 30},
+  {"slug": "mesh-gradient", "name": "Mesh gradient", "quality": "half", "rate": 30},
+  {"slug": "water", "name": "Water", "quality": "half", "rate": 30},
+  {"slug": "fluted-glass", "name": "Fluted glass", "quality": "half", "rate": 30}
 ]

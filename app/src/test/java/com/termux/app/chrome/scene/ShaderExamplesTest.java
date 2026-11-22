@@ -16,14 +16,25 @@ public class ShaderExamplesTest {
 
     private static final File DIR = new File("src/main/assets/" + ShaderExamples.DIR);
 
+    /** The three adapted from Paper Design: longer, and each carries the licence notice. */
+    private static final List<String> PAPER = java.util.Arrays.asList("mesh-gradient", "water", "fluted-glass");
+
     private static String read(String name) throws Exception {
         return new String(Files.readAllBytes(new File(DIR, name).toPath()), StandardCharsets.UTF_8);
     }
 
     @Test
-    public void theIndexListsFiveExamplesAtHalfAndThirty() throws Exception {
+    public void theIndexListsEightExamplesAtHalfAndThirty() throws Exception {
         List<ShaderExamples.Example> all = ShaderExamples.parseIndex(read("index.json"));
-        assertEquals(5, all.size());
+        assertEquals(8, all.size());
+        for (String slug : PAPER) {
+            boolean listed = false;
+            for (ShaderExamples.Example e : all) listed |= e.slug.equals(slug);
+            assertTrue(slug + " is listed", listed);
+            String src = read(slug + ".glsl");
+            assertTrue(slug + " credits Paper Design", src.contains("Paper Design"));
+            assertTrue(slug + " carries Apache-2.0", src.contains("Apache License, Version 2.0"));
+        }
         for (ShaderExamples.Example e : all) {
             assertEquals(ShaderSafety.Quality.HALF, e.quality);
             assertEquals(30, e.rateHz);
@@ -37,7 +48,7 @@ public class ShaderExamplesTest {
             String src = read(e.slug + ".glsl");
             assertTrue(e.slug + " defines mainImage", src.contains("void mainImage("));
             assertFalse(e.slug + " has no #define", src.contains("#define"));
-            assertTrue(e.slug + " is under 60 lines", src.split("\n", -1).length <= 61);
+            assertTrue(e.slug + " is short", src.split("\n", -1).length <= (PAPER.contains(e.slug) ? 130 : 61));
             ShaderPrelude.Built b = ShaderPrelude.build(src);
             assertEquals(e.slug, ShaderPrelude.Flavour.ES3_MAIN_IMAGE, b.flavour);
             assertTrue(e.slug + " has a main", b.source.contains("void main"));
