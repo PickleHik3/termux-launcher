@@ -23,22 +23,19 @@ import com.termux.app.chrome.scene.ShaderErrors;
 import com.termux.app.chrome.scene.ShaderSafety;
 import com.termux.app.chrome.scene.ShaderStore;
 
-import java.io.ByteArrayOutputStream;
 import java.io.File;
-import java.io.IOException;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /**
- * The shader editor, top to bottom: name, the knobs (Quality, Frame rate), in the photo flow the
- * copy step, the Photo row and the Depth area, Apply, Back to photo while a motion is in use,
+ * The shader editor, top to bottom: name, the knobs (Quality, Frame rate), the Photo row and the
+ * Depth area, in the photo flow Send to AI ({@link PhotoShaderNotification}), Apply, Back to photo while a motion is in use,
  * Delete, and last the shader itself: a monospace code box that scrolls sideways, Paste and Import
  * file, the error strip. The page edits a draft; the host checks, saves and applies it
- * ({@link Actions#onApply}). Nothing is written until Apply.
+ * ({@link Actions#onApply}). Nothing is written until Apply; Send to AI only writes the settings
+ * the notification needs into the shader's folder, which lists no shader until a source is saved.
  */
 public final class ShaderEditorPage {
 
@@ -111,6 +108,9 @@ public final class ShaderEditorPage {
 
         /** Delete, confirmed. */
         void onDelete(@NonNull String id);
+
+        /** Send to AI, with the draft as it is now (it has a photo). */
+        default void onSendToAi(@NonNull Draft draft) {}
     }
 
     private final Context mContext;
@@ -120,6 +120,7 @@ public final class ShaderEditorPage {
     private final View mContent;
     private final View mCopyGroup;
     private final MaterialButton mCopy;
+    private final TextView mSendNote;
     private final View mCodeHeading;
     private final TextInputEditText mName;
     private final TextInputEditText mCode;
@@ -167,8 +168,8 @@ public final class ShaderEditorPage {
     private boolean mBusy;
     /** Knobs are being set from code: their listeners stay quiet. */
     private boolean mBinding;
-    /** The instructions were copied since the page opened: Copy reads Copied. */
-    private boolean mCopied;
+    /** A new shader from a photo: Send to AI shows once a photo is chosen. */
+    private boolean mPhotoFlow;
 
     public ShaderEditorPage(@NonNull Context context, boolean launcherIsHomeApp, @NonNull Actions actions) {
         mContext = context;
@@ -178,6 +179,7 @@ public final class ShaderEditorPage {
         mContent = mRoot.findViewById(R.id.shader_editor_content);
         mCopyGroup = mRoot.findViewById(R.id.shader_photo_flow_copy);
         mCopy = mRoot.findViewById(R.id.shader_photo_flow_copy_button);
+        mSendNote = mRoot.findViewById(R.id.shader_photo_flow_note);
         mCodeHeading = mRoot.findViewById(R.id.shader_code_heading);
         mName = mRoot.findViewById(R.id.shader_name);
         mCode = mRoot.findViewById(R.id.shader_code);
@@ -254,7 +256,7 @@ public final class ShaderEditorPage {
             }
         });
 
-        mCopy.setOnClickListener(v -> copyInstructions());
+        mCopy.setOnClickListener(v -> mActions.onSendToAi(draft()));
         mPaste.setOnClickListener(v -> paste());
         mImport.setOnClickListener(v -> mActions.onImport());
         mApply.setOnClickListener(v -> apply());
@@ -338,47 +340,41 @@ public final class ShaderEditorPage {
     }
 
     /**
-     * The photo flow: the copy step above the Photo row and the heading over the shader. Off for
-     * every shader opened by {@link #show}; the host turns it on for a new shader from a photo.
-     * Copy reads Copy again.
+     * The photo flow: Send to AI under the Photo and Depth rows once a photo is chosen, and the
+     * heading over the shader. Off for every shader opened by {@link #show}; the host turns it on
+     * for a new shader from a photo. The note under Send to AI goes.
      */
     void setPhotoFlow(boolean on) {
-        mCopied = false;
-        if (!mCopy.getText().toString().equals(mContext.getString(R.string.photo_shader_copy))) {
-            mCopy.setText(R.string.photo_shader_copy);
-        }
+        mPhotoFlow = on;
+        showSendNote(0);
+        updateSend();
         int want = on ? View.VISIBLE : View.GONE;
-        if (mCopyGroup.getVisibility() != want) mCopyGroup.setVisibility(want);
         if (mCodeHeading.getVisibility() != want) mCodeHeading.setVisibility(want);
     }
 
-    /** Puts the AI instructions on the clipboard; the button then reads Copied until the page closes. */
-    private void copyInstructions() {
-        String text = readInstructions(mContext);
-        ClipboardManager cm = (ClipboardManager) mContext.getSystemService(Context.CLIPBOARD_SERVICE);
-        if (text == null || cm == null) return;
-        try {
-            cm.setPrimaryClip(ClipData.newPlainText(mContext.getString(R.string.photo_shader_title), text));
-        } catch (RuntimeException e) {
-            return;
-        }
-        if (!mCopied) {
-            mCopied = true;
-            mCopy.setText(R.string.photo_shader_copied);
-        }
+    /** Send to AI shows only when it can be used: in the photo flow, with a photo. */
+    private void updateSend() {
+        int want = PhotoShaderHandoff.sendShows(mPhotoFlow, mTexture) ? View.VISIBLE : View.GONE;
+        if (mCopyGroup.getVisibility() != want) mCopyGroup.setVisibility(want);
     }
 
-    /** The AI instructions (the raw resource, English), or null when it cannot be read. */
-    @Nullable
-    static String readInstructions(@NonNull Context context) {
-        try (InputStream in = context.getResources().openRawResource(R.raw.photo_shader_instructions)) {
-            ByteArrayOutputStream out = new ByteArrayOutputStream();
-            byte[] buf = new byte[4096];
-            int n;
-            while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
-            return new String(out.toByteArray(), StandardCharsets.UTF_8);
-        } catch (IOException | RuntimeException e) {
-            return null;
+    /** One line under Send to AI ({@code text} 0 hides it). */
+    void showSendNote(int text) {
+        int want = text == 0 ? View.GONE : View.VISIBLE;
+        if (text != 0) mSendNote.setText(text);
+        if (mSendNote.getVisibility() != want) mSendNote.setVisibility(want);
+    }
+
+    /** Puts the AI prompt on the clipboard, for a shader with or without a depth image; false when it could not. */
+    boolean copyPrompt(boolean depth) {
+        String text = PhotoShaderPrompt.read(mContext, depth);
+        ClipboardManager cm = (ClipboardManager) mContext.getSystemService(Context.CLIPBOARD_SERVICE);
+        if (text == null || cm == null) return false;
+        try {
+            cm.setPrimaryClip(ClipData.newPlainText(mContext.getString(R.string.photo_shader_title), text));
+            return true;
+        } catch (RuntimeException e) {
+            return false;
         }
     }
 
@@ -453,6 +449,7 @@ public final class ShaderEditorPage {
         mDepthFailed = false;
         bindImages();
         updateApply();
+        updateSend();
     }
 
     /** The depth image the draft uses; null for none. */

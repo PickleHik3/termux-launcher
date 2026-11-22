@@ -1,6 +1,9 @@
 package com.termux.app.chrome.scene;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+
+import com.termux.app.chrome.wallpaper.PhotoShaderPrompt;
 
 import org.junit.Test;
 
@@ -26,11 +29,26 @@ public class PhotoShaderInstructionsTest {
         return new String(Files.readAllBytes(file), StandardCharsets.UTF_8);
     }
 
+    /** The template and both image lines it is filled with: all of it reaches the AI. */
+    private static String everyText() throws IOException {
+        return instructions() + "\n" + PhotoShaderPrompt.IMAGE_WITH_DEPTH + "\n" + PhotoShaderPrompt.IMAGE_NO_DEPTH;
+    }
+
+    @Test
+    public void theTemplateHasOneImageLineOfItsOwnAndEndsOnTheWishes() throws IOException {
+        String text = instructions().replace("\r\n", "\n");
+        int at = text.indexOf(PhotoShaderPrompt.PLACEHOLDER);
+        assertTrue(at >= 0);
+        assertEquals(at, text.lastIndexOf(PhotoShaderPrompt.PLACEHOLDER));
+        assertTrue(text.contains("\n" + PhotoShaderPrompt.PLACEHOLDER + "\n"));
+        assertTrue(text.trim().endsWith("My wishes (optional; follow them within the rules above):"));
+    }
+
     @Test
     public void everyInputTheTextNamesIsDeclaredByTheContract() throws IOException {
         Set<String> declared = new HashSet<>();
         for (ShaderPrelude.Uniform u : ShaderPrelude.UNIFORMS) declared.add(u.name);
-        Matcher m = INPUT.matcher(instructions());
+        Matcher m = INPUT.matcher(everyText());
         int found = 0;
         while (m.find()) {
             String name = m.group(1);
