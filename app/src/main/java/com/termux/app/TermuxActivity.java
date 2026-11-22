@@ -32292,6 +32292,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The frost the panes' glass puts over the frame it samples, as a ground drawn beside them
+     * (the departure card's, a switch's gap) wears it: the glass's frost at the Terminal's
+     * opacity; over the scene's live frame, which is the raw scene, the stored frame's bake first.
+     */
+    @NonNull
+    private android.graphics.ColorFilter glassGroundFilter(boolean scene) {
+        int opacity = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100;
+        if (!scene) return com.termux.app.chrome.GlassFilters.frost(opacity);
+        com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+        return com.termux.app.chrome.LiveStoredParity.sceneGroundFilter(opacity,
+            cache.bakedVibrancy(), cache.bakedFrameTint(),
+            mPreferences != null && mPreferences.getTerminalGlassBlurRadius() > 0);
+    }
+
+    /**
      * The shared pre-blurred wallpaper frame as the ground under the panes' slabs, mapped exactly
      * as {@link com.termux.app.terminal.PaneGlassBackdropView} maps it (frame rect in screen
      * coordinates, clamped shader), so a departure card's ground matches what the live layout
@@ -32308,20 +32323,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Bitmap frame;
         android.graphics.Rect frameRect;
         float parallaxPx;
-        int opacity = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100;
-        android.graphics.ColorFilter groundFilter = com.termux.app.chrome.GlassFilters.frost(opacity);
+        android.graphics.ColorFilter groundFilter;
         if (live != null && !live.bitmap.isRecycled()
                 && live.bitmap.getConfig() != android.graphics.Bitmap.Config.HARDWARE
                 && !com.termux.app.chrome.scene.LiveSceneFrame.rect().isEmpty()) {
             frame = live.bitmap;
             frameRect = com.termux.app.chrome.scene.LiveSceneFrame.rect();
             parallaxPx = 0f;
-            // The live frame is the raw scene: it takes the stored frame's bake before the frost.
-            com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
-            groundFilter = com.termux.app.chrome.LiveStoredParity.sceneGroundFilter(opacity,
-                cache.bakedVibrancy(), cache.bakedFrameTint(),
-                mPreferences != null && mPreferences.getTerminalGlassBlurRadius() > 0);
+            groundFilter = glassGroundFilter(true);
         } else {
+            groundFilter = glassGroundFilter(false);
             // The card's canvas is software, which a HARDWARE frame cannot reach: it takes the
             // frame's small software copy, and the matrix below scales it up to the frame rect.
             frame = com.termux.app.chrome.HardwareFrame.readable(obtainTerminalPaneGlassFrame());
@@ -32485,9 +32496,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 + " callers=" + MotionLog.callers(6));
         }
         travel.addUpdateListener(poseCard);
+        // The gap the turn opens between the card and the arriving window shows the glass's frost,
+        // not the sharp wallpaper (#316). Taken away by this travel's end, which a cancel runs too.
+        int frostTicket = showSwitchFrost(durationMs);
         travel.addListener(new android.animation.AnimatorListenerAdapter() {
             @Override public void onAnimationEnd(android.animation.Animator animation) {
                 if (MotionLog.enabled) MotionLog.log("departure-animate-end", "kind=turn");
+                endSwitchFrost(frostTicket);
                 surfaceHost.removeView(ghost);
                 ghost.setImageDrawable(null);
                 departure.recycle();
@@ -32497,6 +32512,74 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // clock's gate opens: the wall's nudge starts from the same gate, on the same frame.
         travel.setCurrentFraction(0f);
         clock.then(travel::start);
+    }
+
+    // ---- the frost under a turning switch's gap (#316)
+
+    @Nullable private com.termux.app.chrome.GroundFrostView mGroundFrost;
+    @NonNull private final com.termux.app.terminal.SwitchFrostHold mSwitchFrostHold =
+        new com.termux.app.terminal.SwitchFrostHold();
+    @NonNull private final android.graphics.Rect mSwitchFrostRect = new android.graphics.Rect();
+    /** The backstop: the frost goes once its switch has run past its time, however it ended. */
+    @NonNull private final Runnable mSwitchFrostBackstop = () -> {
+        if (mSwitchFrostHold.expire(android.os.SystemClock.uptimeMillis())) hideSwitchFrost();
+    };
+
+    /**
+     * Shows the frost under the ground strip for a turning switch of {@code travelMs}, from the
+     * frame the panes' glass samples now (the scene's live frame, else the stored frame already
+     * resident; nothing is captured or blurred for it), when {@link
+     * com.termux.app.terminal.TerminalSurfacePolicy#underGround} says so. A switch that shows none
+     * takes down a frost an earlier one left up.
+     *
+     * @return the ticket that takes it away again ({@link #endSwitchFrost}), 0 for none
+     */
+    private int showSwitchFrost(long travelMs) {
+        if (mGroundFrost == null) mGroundFrost = findViewById(R.id.ground_frost);
+        com.termux.app.chrome.GroundFrostView frost = mGroundFrost;
+        if (frost == null) return 0;
+        boolean wallpaperMode = shouldUseWallpaperPassthroughMode();
+        boolean glass = mGroundGlassPane;
+        com.termux.app.chrome.scene.LiveSceneFrame.Frame live =
+            com.termux.app.chrome.scene.LiveSceneFrame.current();
+        boolean scene = live != null && !live.bitmap.isRecycled()
+            && !com.termux.app.chrome.scene.LiveSceneFrame.rect().isEmpty();
+        android.graphics.Bitmap stored = null;
+        if (!scene && wallpaperMode && glass && mChrome != null) {
+            int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
+            stored = radiusDp > 0 ? mChrome.blurCache().peek(radiusDp) : null;
+        }
+        if (com.termux.app.terminal.TerminalSurfacePolicy.underGround(true, travelMs,
+                wallpaperMode, glass, scene || stored != null)
+                != com.termux.app.terminal.TerminalSurfacePolicy.UnderGround.FROST) {
+            if (mSwitchFrostHold.drop()) hideSwitchFrost();
+            return 0;
+        }
+        if (scene) {
+            frost.showScene(glassGroundFilter(true));
+        } else {
+            mChrome.blurCache().copyFrameRect(mSwitchFrostRect);
+            frost.showFrame(stored, mSwitchFrostRect, mWallpaperParallax.offsetPx(),
+                glassGroundFilter(false));
+        }
+        int ticket = mSwitchFrostHold.begin(android.os.SystemClock.uptimeMillis(), travelMs,
+            com.termux.app.wall.FirstDrawGate.TIMEOUT_MS);
+        frost.removeCallbacks(mSwitchFrostBackstop);
+        frost.postDelayed(mSwitchFrostBackstop, com.termux.app.terminal.SwitchFrostHold
+            .backstopDelayMs(travelMs, com.termux.app.wall.FirstDrawGate.TIMEOUT_MS));
+        return ticket;
+    }
+
+    /** The switch holding {@code ticket} ended or was cancelled: its frost goes, unless a newer one's. */
+    private void endSwitchFrost(int ticket) {
+        if (ticket != 0 && mSwitchFrostHold.end(ticket)) hideSwitchFrost();
+    }
+
+    private void hideSwitchFrost() {
+        com.termux.app.chrome.GroundFrostView frost = mGroundFrost;
+        if (frost == null) return;
+        frost.removeCallbacks(mSwitchFrostBackstop);
+        frost.hide();
     }
 
     // DIAG #316 gap-ground: scratch for logSwitchGapGround; remove with it.

@@ -61,6 +61,34 @@ public final class TerminalSurfacePolicy {
         return terminalPage ? wallGround(glassPane, terminalSurfaceColor, wallpaperDim) : wallpaperDim;
     }
 
+    /** What the wallpaper under the wall pages' ground shows (#316). */
+    public enum UnderGround {
+        /** The wallpaper as it is, under the page's ground ({@link #pageGround}). */
+        WALLPAPER,
+        /** The frame the panes' glass samples, through its frost, under the same ground. */
+        FROST
+    }
+
+    /**
+     * What shows under the Terminal's ground. At rest it is the wallpaper as it always was (the
+     * wall's margins stay sharp). While a window switch turns (a page transition other than the
+     * slide), the gap between the leaving card and the arriving window shows the frost the windows'
+     * glass samples, so it reads as glass beside glass, not as a sharp sliver of wallpaper (#316).
+     * Only with glass panes in wallpaper mode and a frame already resident: there is no frost to
+     * show otherwise. A switch with no travel (Animation speed Off) has no gap to show.
+     *
+     * @param turning whether a window switch is turning now
+     * @param travelMs the switch's travel, ms
+     * @param wallpaperMode whether the wallpaper shows through the terminal
+     * @param glassPane whether every pane is a glass slab
+     * @param frostResident whether the frame the glass samples is already held (no capture starts)
+     */
+    public static UnderGround underGround(boolean turning, long travelMs, boolean wallpaperMode,
+                                          boolean glassPane, boolean frostResident) {
+        return turning && travelMs > 0L && wallpaperMode && glassPane && frostResident
+            ? UnderGround.FROST : UnderGround.WALLPAPER;
+    }
+
     /**
      * A wall page's wallpaper dim, percent (ADR 0031 §4): the Terminal's one dim on every page of
      * the Terminal (a terminal window, a Display page, the Assistant page), none on Home's.
