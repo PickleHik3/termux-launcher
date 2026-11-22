@@ -435,6 +435,8 @@ public final class ExtraKeyActionPicker {
                 // No title is what marks a tool agent-only, the same rule the command palette
                 // reads: a state query has nothing to put on a key cap.
                 if (tool.titleRes == 0) continue;
+                // Palette-only tools ask first, and a key would skip the question.
+                if (LauncherToolRegistry.isPaletteOnly(tool.name)) continue;
                 // A key carries one action and no keyboard, so an action that insists on two
                 // typed values can never be bound right from here.
                 if (requiredArgumentCount(tool.schema) > 1) continue;

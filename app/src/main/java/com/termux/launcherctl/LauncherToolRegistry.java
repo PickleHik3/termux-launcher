@@ -443,6 +443,18 @@ public final class LauncherToolRegistry {
     public static final String TOOL_DEVICE_RESTART = "device.restart";
     public static final String TOOL_DEVICE_RESTART_RECOVERY = "device.restart_recovery";
     public static final String TOOL_DEVICE_RESTART_BOOTLOADER = "device.restart_bootloader";
+
+    /**
+     * Tools only the command palette may start, because only its sheet asks first. Key bindings,
+     * extra keys and keyboard-layout keys call the dispatcher directly, so they refuse these.
+     */
+    private static final Set<String> PALETTE_ONLY_TOOLS = new HashSet<>(Arrays.asList(
+        TOOL_DEVICE_RESTART, TOOL_DEVICE_RESTART_RECOVERY, TOOL_DEVICE_RESTART_BOOTLOADER));
+
+    /** Whether {@code toolName} may be started from the palette alone, never from a key. */
+    public static boolean isPaletteOnly(@Nullable String toolName) {
+        return toolName != null && PALETTE_ONLY_TOOLS.contains(toolName);
+    }
     public static final String TOOL_PANE_LIST = "pane.list";
     public static final String TOOL_PANE_FOCUS = "pane.focus";
     public static final String TOOL_PANE_CLOSE = "pane.close";
