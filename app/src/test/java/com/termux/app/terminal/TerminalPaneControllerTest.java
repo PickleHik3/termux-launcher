@@ -1807,6 +1807,25 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void fontToggle_aSplitOfACompactPaneStartsAtItsOwnSize() {
+        TerminalPaneController controller = newSplittingController();
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        assertTrue(controller.setActivePaneFontSize(34));
+        assertTrue(controller.toggleActivePaneCompact(14));
+        assertTrue(controller.isActivePaneCompact());
+
+        assertTrue(controller.split(LinearLayout.HORIZONTAL));
+        assertEquals("the new pane starts at the size it was split at", 14,
+            controller.getActivePaneFontSize());
+        assertFalse("the new pane is not Compact", controller.isActivePaneCompact());
+        assertTrue(controller.toggleActivePaneCompact(10));
+        assertTrue(controller.toggleActivePaneCompact(10));
+        assertEquals("it returns to its own size, not the other pane's", 14,
+            controller.getActivePaneFontSize());
+    }
+
+    @Test
     public void fontToggle_rememberedSizeSurvivesSavedStateIncludingFloats() {
         TerminalPaneController source = newController();
         TerminalSession first = terminal();

@@ -33738,6 +33738,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             refreshTerminalWindowBar();
+            syncFontToggle();
         }
 
         @Override public void onActivePaneMoved() {
