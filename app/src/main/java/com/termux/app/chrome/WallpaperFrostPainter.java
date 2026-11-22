@@ -438,29 +438,89 @@ public final class WallpaperFrostPainter {
     @NonNull private ElementOn sheets() { return new ElementOn(null, mSurfaces.stackLookPage()); }
 
     /**
-     * The clearer frame Fancier Glass's edge clarity shows through the bend
-     * ({@link SharedFrameDrawable#setClearFrame}), or none. Wanted only while the look asks for
-     * clarity and the surface's own frost is blurrier than the clear frame would be; a surface
-     * already that clear has nothing clearer to show. The frame is the cache's one rect at
-     * {@link GlassRefraction#CLARITY_RADIUS_DP}, so it lines up with the frost wherever it is
-     * sampled. Null while that blur is still in flight: the edge shows the frost until it lands,
-     * and the landing asks for the pass that hands it over. Restated on every pass like the look;
-     * an unchanged answer is one identity compare on the drawable and redraws nothing.
+     * The sharp frame the glass's edge shows through the bend
+     * ({@link SharedFrameDrawable#setClearFrame}), or none ({@link #sharpFrame}). Null while a
+     * blur is still in flight: the edge shows the frost until it lands, and the landing asks for
+     * the pass that hands it over. Restated on every pass like the look; an unchanged answer is
+     * one identity compare on the drawable and redraws nothing.
      */
     private void clarify(@NonNull SharedFrameDrawable frost, @Nullable GlassRefraction.Look look,
                          int blurRadiusDp, @NonNull View wallpaperFrame) {
-        frost.setClearFrame(wantsClearFrame(look, blurRadiusDp)
-            ? mBlurCache.obtain(GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame) : null);
+        frost.setClearFrame(sharpFrame(mBlurCache, look, blurRadiusDp, wallpaperFrame));
+    }
+
+    /** Where {@link #sharpFrame} found its picture; pure, for its tests. */
+    enum SharpSource {
+        /** No sharp picture: the edge keeps the frost. */
+        NONE,
+        /** The clear frame obtained for a look whose stored clarity asks for one. */
+        CLEAR_OBTAINED,
+        /** The clear frame already resident for another surface, at no new cost. */
+        CLEAR_RESIDENT,
+        /** The wallpaper itself (radius 0), resident for the wall, at no new cost. */
+        WALLPAPER_RESIDENT,
     }
 
     /**
-     * True when a surface frosted at {@code blurRadiusDp} under {@code look} takes a clear frame.
-     * The one rule for every surface that shows one: the frosts here, the keyboard host and the
-     * under-keyboard card, and the pane slabs.
+     * Which picture the edge of a surface frosted at {@code blurRadiusDp} under {@code look}
+     * samples, without ever making a frame for a look that did not hold one before: a look whose
+     * stored clarity is above 0 obtains the clear frame as it always did; any other look takes
+     * the clear frame only if it is already resident, else the wallpaper itself only if it is
+     * resident (the wall paints it) and the frost carries no bake the bare wallpaper lacks
+     * (Vibrancy, frame tint), else nothing and its edge keeps the frost. Pure.
+     */
+    @NonNull
+    static SharpSource sharpSource(@Nullable GlassRefraction.Look look, int blurRadiusDp,
+                                   boolean clearResident, boolean wallpaperResident,
+                                   int bakedVibrancy, int bakedFrameTint) {
+        if (!wantsClearFrame(look, blurRadiusDp)) return SharpSource.NONE;
+        if (look.clarityPercent > 0) return SharpSource.CLEAR_OBTAINED;
+        if (clearResident) return SharpSource.CLEAR_RESIDENT;
+        boolean baked = GlassVibrancy.bakes(blurRadiusDp, bakedVibrancy)
+            || GlassFrameTint.bakes(blurRadiusDp, bakedFrameTint);
+        return wallpaperResident && !baked ? SharpSource.WALLPAPER_RESIDENT : SharpSource.NONE;
+    }
+
+    /**
+     * The sharp picture for {@link #sharpSource}, from {@code cache}: obtained only where a look
+     * held one before, otherwise a frame already resident ({@link WallpaperBlurCache#peek}, which
+     * neither captures nor blurs), so it adds no pixels. Any of them is the cache's one frame
+     * rect, so it lines up with the frost wherever it is sampled. The one rule for every surface
+     * that shows one: the frosts here, the keyboard host and the under-keyboard card, the drawer
+     * cards, the look glass and the pane slabs.
+     */
+    @Nullable
+    public static android.graphics.Bitmap sharpFrame(@NonNull WallpaperBlurCache cache,
+                                                     @Nullable GlassRefraction.Look look,
+                                                     int blurRadiusDp, @NonNull View wallpaperFrame) {
+        android.graphics.Bitmap clear = wantsClearFrame(look, blurRadiusDp)
+            ? cache.peek(GlassRefraction.CLARITY_RADIUS_DP) : null;
+        android.graphics.Bitmap wallpaper = clear == null && wantsClearFrame(look, blurRadiusDp)
+            ? cache.peek(0) : null;
+        android.graphics.Bitmap out;
+        switch (sharpSource(look, blurRadiusDp, clear != null, wallpaper != null,
+                cache.bakedVibrancy(), cache.bakedFrameTint())) {
+            case CLEAR_OBTAINED:
+                out = cache.obtain(GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame);
+                break;
+            case CLEAR_RESIDENT:
+                out = clear;
+                break;
+            case WALLPAPER_RESIDENT:
+                out = wallpaper;
+                break;
+            default:
+                out = null;
+        }
+        return out != null && !out.isRecycled() ? out : null;
+    }
+
+    /**
+     * True when a surface frosted at {@code blurRadiusDp} under {@code look} may show a sharp
+     * picture at its edge at all: a convex look, over a frost blurrier than the clear frame.
      */
     public static boolean wantsClearFrame(@Nullable GlassRefraction.Look look, int blurRadiusDp) {
-        return look != null && look.clarityPercent > 0
-            && blurRadiusDp > GlassRefraction.CLARITY_RADIUS_DP;
+        return look != null && !look.concave && blurRadiusDp > GlassRefraction.CLARITY_RADIUS_DP;
     }
 
     /**

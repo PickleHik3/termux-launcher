@@ -175,7 +175,8 @@ public class WallpaperFrostPainterOffDockTest {
         assertTrue("the clear frame counts as on screen, so the cache keeps it",
             drawable.shows(clear));
 
-        // An unchanged pass keeps the very same frame; no clarity takes it away again.
+        // An unchanged pass keeps the very same frame; so does a look whose stored clarity is 0:
+        // the edge reads the sharp frame whatever that knob held.
         assertTrue(chrome.frost().applyOffDockSheet(frost,
             SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
         assertSame(clear, drawable.clearFrame());
@@ -183,6 +184,11 @@ public class WallpaperFrostPainterOffDockTest {
         assertTrue(chrome.frost().applyOffDockSheet(frost,
             SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
         assertSame(drawable, SharedFrameDrawable.of(frost.getDrawable()));
+        assertSame(clear, drawable.clearFrame());
+        // No look, no bend: the frame goes.
+        surfaces.look = null;
+        assertTrue(chrome.frost().applyOffDockSheet(frost,
+            SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
         assertNull(drawable.clearFrame());
     }
 
@@ -206,8 +212,42 @@ public class WallpaperFrostPainterOffDockTest {
 
         assertTrue(WallpaperFrostPainter.wantsClearFrame(lookWithClarity(1),
             GlassRefraction.CLARITY_RADIUS_DP + 1));
-        assertFalse(WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0), 25));
+        assertTrue("the edge is sharp whatever the stored clarity",
+            WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0), 25));
+        assertFalse("the concave well has no sharp edge",
+            WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0).withConcave(true), 25));
         assertFalse(WallpaperFrostPainter.wantsClearFrame(null, 25));
+    }
+
+    @Test
+    public void aLookWithoutClarityNeverMakesAFrameForItsEdge() {
+        GlassRefraction.Look clear = lookWithClarity(76);
+        GlassRefraction.Look plain = lookWithClarity(0);
+        int none = GlassFrameTint.NONE;
+        // A look that held the clear frame before obtains it as it always did.
+        assertEquals(WallpaperFrostPainter.SharpSource.CLEAR_OBTAINED,
+            WallpaperFrostPainter.sharpSource(clear, 25, false, false, 100, none));
+        // Any other look takes only what is already resident: the clear frame first, then the
+        // wallpaper itself, and nothing at all when neither is.
+        assertEquals(WallpaperFrostPainter.SharpSource.CLEAR_RESIDENT,
+            WallpaperFrostPainter.sharpSource(plain, 25, true, true, 100, none));
+        assertEquals(WallpaperFrostPainter.SharpSource.WALLPAPER_RESIDENT,
+            WallpaperFrostPainter.sharpSource(plain, 25, false, true, 100, none));
+        assertEquals(WallpaperFrostPainter.SharpSource.NONE,
+            WallpaperFrostPainter.sharpSource(plain, 25, false, false, 100, none));
+        // The bare wallpaper lacks the frost's bakes: under Vibrancy or a frame tint the edge
+        // keeps the frost rather than change colour.
+        assertEquals(WallpaperFrostPainter.SharpSource.NONE,
+            WallpaperFrostPainter.sharpSource(plain, 25, false, true, 140, none));
+        assertEquals(WallpaperFrostPainter.SharpSource.NONE,
+            WallpaperFrostPainter.sharpSource(plain, 25, false, true, 100, 0x40FF0000));
+        // No look, the concave well, or a frost already as clear: nothing.
+        assertEquals(WallpaperFrostPainter.SharpSource.NONE,
+            WallpaperFrostPainter.sharpSource(null, 25, true, true, 100, none));
+        assertEquals(WallpaperFrostPainter.SharpSource.NONE,
+            WallpaperFrostPainter.sharpSource(plain.withConcave(true), 25, true, true, 100, none));
+        assertEquals(WallpaperFrostPainter.SharpSource.NONE, WallpaperFrostPainter.sharpSource(
+            clear, GlassRefraction.CLARITY_RADIUS_DP, true, true, 100, none));
     }
 
     @Test

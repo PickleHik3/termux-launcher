@@ -138,13 +138,12 @@ public final class DrawerCardGlassStyle implements PaneSurfaceStyle, WidgetInkSo
 
     @Override @Nullable public Bitmap paneGlassClearFrame() {
         View wallpaperFrame = mHost.wallpaperFrame();
-        if (!wantsFrost() || wallpaperFrame == null || !WallpaperFrostPainter.wantsClearFrame(
-                paneGlassRefraction(), mHost.cardBlurDp())) {
+        if (!wantsFrost() || wallpaperFrame == null) {
             mClearFrame = null;
             return null;
         }
-        Bitmap clear = mChrome.blurCache().obtain(GlassRefraction.CLARITY_RADIUS_DP,
-            wallpaperFrame);
+        Bitmap clear = WallpaperFrostPainter.sharpFrame(mChrome.blurCache(),
+            paneGlassRefraction(), mHost.cardBlurDp(), wallpaperFrame);
         mClearFrame = clear != null && !clear.isRecycled() ? clear : null;
         return mClearFrame;
     }

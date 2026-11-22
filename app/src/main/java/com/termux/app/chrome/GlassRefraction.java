@@ -39,9 +39,11 @@ import java.util.Arrays;
  * while a slab is live does the key light's lobe gather into a sharp glint that travels with its
  * pose, with a faint one facing away ({@link #glintWeight}); it fades back to the rest look as the
  * springs settle. The rim is fixed material, not a knob (a debug property tunes its numbers), and
- * every surface that runs the program wears it. Where a clearer picture of the wallpaper is handed in
+ * every surface that runs the program wears it. Where a sharp picture of what is behind is handed in
  * ({@link Program#setClarityInput}), the band shows it through the bend in place of the frost,
- * growing clearer toward the rim, which is what a thick glass edge does to what is behind it.
+ * wholly at the rim ({@link #sharpShare}), at rest and in motion alike: a bevel is thin glass, so
+ * what is behind it reads sharp. The live route binds none (an effect takes one input), so its
+ * edge keeps the frost.
  * Dispersion splits the bent picture into red and blue evenly round the outline, in step with how
  * far it is bent there, the way a prism fans out white light (the Edge slider). A
  * pressed extra key adds a lens that magnifies toward the key's centre and eases to nothing at its
@@ -158,9 +160,6 @@ public final class GlassRefraction {
          */
         static final float GLINT_SHARE = GLINT_PERCENT / 100f * GLINT_SLOPE;
 
-        /** How much of the clearer picture the band shows at the rim at 100%: all of it. */
-        static final float MAX_CLARITY = 1f;
-
         /**
          * Clear's face tone: the darkest share a white backdrop is dimmed by at dim 100 (Apple's
          * HIG 35% dimming layer), the luminance range it eases in across, and the lift toward
@@ -253,7 +252,11 @@ public final class GlassRefraction {
         public final int specularPercent;
         /** The chromatic split at the corners, a percentage; 0 samples r, g and b alike. */
         public final int dispersionPercent;
-        /** How clear the wallpaper shows through the bent edge, a percentage; 0 keeps the frost. */
+        /**
+         * The stored edge clarity, a percentage. Kept so a saved look loads and compares as it
+         * was; the program ignores it, as {@link #specularPercent}: the edge shows the sharp
+         * picture wholly wherever one is bound ({@link GlassRefraction#sharpShare}).
+         */
         public final int clarityPercent;
         /**
          * Clear's face terms, percentages, 0 for every other Look (the program skips them): how
@@ -370,11 +373,6 @@ public final class GlassRefraction {
             float glint = share(GLINT_PERCENT) * GLINT_SLOPE;
             return glint + (percent - GLINT_PERCENT) / (float) (100 - GLINT_PERCENT)
                 * (MAX_DISPERSION_SHARE - glint);
-        }
-
-        /** {@code uClarity}: how much of the clearer picture the rim shows, 0..{@link #MAX_CLARITY}. */
-        public float clarity() {
-            return share(clarityPercent) * MAX_CLARITY;
         }
 
         /** {@code uFaceClarity}: how much of the clearer picture the face shows, 0..1. */
@@ -537,7 +535,9 @@ public final class GlassRefraction {
         "uniform float uBand;\n" +
         "uniform float uStrength;\n" +
         "uniform float uDisp;\n" +
-        "uniform float uClarity;\n" +
+        // 1 while sharp is a clearer picture of its own, 0 while it is the frost bound in its
+        // place (or nothing): the band then shows that picture wholly toward the rim.
+        "uniform float uSharpEdge;\n" +
         "uniform float uFaceClarity;\n" +
         "uniform float uDim;\n" +
         "uniform float uSizeLens;\n" +
@@ -559,10 +559,6 @@ public final class GlassRefraction {
         // world turns in a tipping plate's frame. keyLight in Java; never written by time, and
         // read only while the slab is live (glintW > 0).
         "uniform float2 uKeyLight;\n" +
-        // How far toward the clearer picture the rim goes while the slab moves, at a whole lean:
-        // LIVE_CLARITY while a clearer frame of its own is bound, 0 while sharp is the frost
-        // itself (or nothing), so a live rim then reads no extra sample.
-        "uniform float uLiveClarity;\n" +
         // The dock surface's own glass (DockSurfaceSpec), 0 on every other surface, which then
         // draws exactly as before: the soft rim band's width in px, how much of the lower shelf
         // the slab wears (0..1). SOFT_RIM_DP and setDockSurface in Java.
@@ -659,9 +655,6 @@ public final class GlassRefraction {
         "const float kLagBand = " + GlassRefraction.LAG_BAND + ";\n" +
         "const float kLagLean = " + GlassRefraction.LAG_LEAN_GAIN + ";\n" +
         "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
-        // The live rim's clearer picture: how much further in the clear part of the band reaches
-        // at a whole lean of liveness. LIVE_CLARITY_REACH in Java.
-        "const float kLiveReach = " + GlassRefraction.LIVE_CLARITY_REACH + ";\n" +
         // The tilted slab: how far its face carries the picture at the tilt's asymptote, dp, and
         // the sine at which half of that is reached; how much it magnifies across the face per
         // unit of that share and the most that moves the picture, dp; how many times its sine an
@@ -997,24 +990,15 @@ public final class GlassRefraction {
         "            lensGlow = fade * (1.0 - rr);\n" +
         "        }\n" +
         "    }\n" +
-        // How far the clearer picture takes over: easing in from the frost at the band's inner
-        // edge, half way at the band's middle, uClarity under the rim. Zero on the face.
+        // The edge's share of the sharp picture: a bevel is thin glass, so it shows what is
+        // behind it unblurred (de Rousiers et al. 2011), easing in from the frost at the band's
+        // inner edge, half way at the band's middle, whole under the rim, at rest and in motion
+        // alike. The soft band eases on the same smootherstep it bends on, so the sharp picture
+        // has no inner edge either. Zero on the face, which keeps its frost. sharpShare in Java.
         "    float x = 1.0 - t;\n" +
-        "    float clarityK = uClarity > 0.0 && x > 0.0 ? x * x * (3.0 - 2.0 * x) * uClarity : 0.0;\n" +
-        // The soft band clears on the same smootherstep it bends on, so the clearer picture has
-        // no inner edge either.
-        "    if (softB > 0.0 && clarityK > 0.0) {\n" +
-        "        clarityK = x * x * x * (x * (x * 6.0 - 15.0) + 10.0) * uClarity;\n" +
-        "    }\n" +
-        // While the slab moves, the rim's picture clears toward the clearer frame, so the bend
-        // has detail to move (a bevel is thin glass, so less frosted than the face: de Rousiers
-        // et al. 2011), and the clear part reaches a little further in; it eases back as liveK
-        // does. Inside the band only: the face under the pane's text keeps its frost (Baudisch &
-        // Gutwin 2004). At liveK 0 it is the resting term exactly. liveClarityK in Java.
-        "    if (live && uLiveClarity > 0.0 && x > 0.0) {\n" +
-        "        float xl = min(x * (1.0 + kLiveReach * liveK), 1.0);\n" +
-        "        clarityK = xl * xl * (3.0 - 2.0 * xl) * mix(uClarity, 1.0, uLiveClarity * liveK);\n" +
-        "    }\n" +
+        "    float edgeK = x > 0.0 ? (softB > 0.0 ? x * x * x * (x * (x * 6.0 - 15.0) + 10.0)\n" +
+        "        : x * x * (3.0 - 2.0 * x)) : 0.0;\n" +
+        "    float clarityK = edgeK * uSharpEdge;\n" +
         // Clear's face: the clearer picture shows through by uFaceClarity everywhere, the band
         // included, where one is handed in (uFaceClarity is 0 where none is). At 0 nothing runs.
         "    if (faceMix > 0.0) {\n" +
@@ -1606,27 +1590,6 @@ public final class GlassRefraction {
     static final float LIVE_DISPERSION = 0.15f;
 
     /**
-     * How far toward the clearer frame the rim's picture goes at a whole lean of liveness
-     * ({@link #liveness}), from the look's own clarity: all the way ({@code uLiveClarity} when a
-     * clearer frame is bound). A bend seen through frost is a blur moving over a blur. Through
-     * the clearer frame ({@link #CLARITY_RADIUS_DP}) it has detail to move: research
-     * recommendation 2 asks the bend's change to pass the blur of the frame it samples (Levi &
-     * Klein 1990, spatial thresholds about σ above the eye's own blur), and the lag's or tilt's
-     * lean moves a Clear rim's picture by about 5 dp at the press rig's 1.1 degrees and by its
-     * whole bend at a whole lean, against the clearer frame's 2 dp. A look with no clarity
-     * clears its rim only while it moves; the face never does.
-     */
-    static final float LIVE_CLARITY = 1f;
-    /**
-     * How much further in the clear part of the band reaches at a whole lean of liveness, as a
-     * share of how far it reaches at rest ({@code kLiveReach}): half again, so the outer third of
-     * the band, where the bend lives (Haze's profile puts a third of it a quarter of the way
-     * in), is wholly clear, and the band's inner part keeps the rest look's frost. Never the face:
-     * the share is held at the band.
-     */
-    static final float LIVE_CLARITY_REACH = 0.5f;
-
-    /**
      * The program's {@code liveK}: how live the slab is, 0..1, the most of a whole lean its lag
      * ({@link #lagLean}'s gain over the lag's length) or its tilt ({@link #TILT_LEAN_GAIN} over
      * the tilt's sine) asks. It is pose, not time: it falls back with the springs as they settle
@@ -1660,21 +1623,37 @@ public final class GlassRefraction {
     }
 
     /**
-     * The program's {@code clarityK}: how much of the clearer picture a pixel at {@code t} across
-     * the band (0 at the rim, 1 at its inner edge and on the face) shows, for the look's
-     * {@code clarity} ({@code uClarity}), how far a live rim may clear ({@code uLiveClarity}, 0
-     * with no clearer frame of its own) and how live the slab is ({@link #liveness}). At liveness
-     * 0 it is the resting term; on the face it is 0 always.
+     * The program's {@code edgeK}: how much of the sharp picture a pixel at {@code t} across the
+     * band (0 at the rim, 1 at its inner edge and on the face) shows where one is bound, on the
+     * band's smoothstep, or the soft band's smootherstep when {@code soft}. Whole at the rim, 0
+     * on the face, at rest and in motion alike: the face's own share is Clear's face clarity,
+     * which this does not touch. Pure.
      */
-    static float liveClarityK(float t, float clarity, float liveClarity, float liveK) {
+    static float sharpShare(float t, boolean soft) {
         float x = 1f - Math.max(0f, Math.min(1f, t));
         if (x <= 0f) return 0f;
-        if (liveK > 0f && liveClarity > 0f) {
-            float xl = Math.min(x * (1f + LIVE_CLARITY_REACH * liveK), 1f);
-            float c = clarity + (1f - clarity) * liveClarity * liveK;
-            return xl * xl * (3f - 2f * xl) * c;
-        }
-        return clarity > 0f ? x * x * (3f - 2f * x) * clarity : 0f;
+        return soft ? x * x * x * (x * (x * 6f - 15f) + 10f) : x * x * (3f - 2f * x);
+    }
+
+    /** {@code uSharpEdge} for a program whose sharp input is bound and a picture of its own. Pure. */
+    static float sharpEdge(boolean sharpBound, boolean sharpDistinct) {
+        return sharpBound && sharpDistinct ? 1f : 0f;
+    }
+
+    /** {@code uFaceClarity}: Clear's face share, only where a clearer picture of its own is bound. Pure. */
+    static float faceClarity(@Nullable Look look, boolean sharpBound, boolean sharpDistinct) {
+        return look != null && sharpBound && sharpDistinct ? look.faceClarity() : 0f;
+    }
+
+    /**
+     * The program's {@code clarityK}: how much of the sharp picture a pixel at {@code t} shows,
+     * for {@code uSharpEdge} and the face's share {@code faceMix} ({@code uFaceClarity} after the
+     * size fade). The edge's share is {@link #sharpShare} whole; the face mixes toward the sharp
+     * picture by its own share and nothing else. Pure.
+     */
+    static float sharpMix(float t, boolean soft, float sharpEdge, float faceMix) {
+        float k = sharpShare(t, soft) * sharpEdge;
+        return faceMix > 0f ? k + (1f - k) * faceMix : k;
     }
 
     /**
@@ -2011,7 +1990,7 @@ public final class GlassRefraction {
         private float mLensCx, mLensCy, mLensHx, mLensHy, mLensRadius, mLensIntensity;
         /** Whether {@code sharp} has a shader bound: only then may the program read it. */
         private boolean mSharpBound;
-        private float mClarityWritten = Float.NaN;
+        private float mSharpEdgeWritten = Float.NaN;
         private float mFaceClarityWritten = Float.NaN;
         private float mDimWritten = Float.NaN;
         /**
@@ -2029,7 +2008,6 @@ public final class GlassRefraction {
         private final float[] mKeyNext = new float[2];
         /** Whether {@code sharp} is a clearer frame of its own, not the frost bound in its place. */
         private boolean mSharpDistinct;
-        private float mLiveClarityWritten = Float.NaN;
         /** The dock surface's glass as last written: {@code uSoftRim} in px and {@code uShelf}. */
         private float mSoftRimWritten = Float.NaN, mShelfWritten = Float.NaN;
         /**
@@ -2286,21 +2264,21 @@ public final class GlassRefraction {
         }
 
         /**
-         * {@code uClarity}: the look's clarity while a sharp shader is bound, zero otherwise; and
-         * {@code uLiveClarity}: {@link #LIVE_CLARITY} while that shader is a clearer frame of its
-         * own, zero while it is the frost bound in its place, where clearing toward it would read
-         * a second sample of the same picture.
+         * {@code uSharpEdge}: 1 while the sharp shader is a clearer picture of its own, so the
+         * band shows it wholly toward the rim ({@link #sharpShare}); 0 while it is the frost bound
+         * in its place, where mixing toward it would read a second sample of the same picture.
+         * {@code uFaceClarity}: Clear's face share, where such a picture is bound.
          */
         private void syncClarity() {
             Look look = mLook;
-            float clarity = look != null && mSharpBound ? look.clarity() : 0f;
-            if (clarity != mClarityWritten) {
-                mClarityWritten = clarity;
-                mShader.setFloatUniform("uClarity", clarity);
+            float sharpEdge = sharpEdge(mSharpBound, mSharpDistinct);
+            if (sharpEdge != mSharpEdgeWritten) {
+                mSharpEdgeWritten = sharpEdge;
+                mShader.setFloatUniform("uSharpEdge", sharpEdge);
             }
             // The face shows the clearer picture only where one is handed in, a distinct frame:
             // under a RenderEffect, or with the frost bound in its place, it stays 0.
-            float face = look != null && mSharpBound && mSharpDistinct ? look.faceClarity() : 0f;
+            float face = faceClarity(look, mSharpBound, mSharpDistinct);
             if (face != mFaceClarityWritten) {
                 mFaceClarityWritten = face;
                 mShader.setFloatUniform("uFaceClarity", face);
@@ -2311,11 +2289,6 @@ public final class GlassRefraction {
             if (dim != mDimWritten) {
                 mDimWritten = dim;
                 mShader.setFloatUniform("uDim", dim);
-            }
-            float live = mSharpBound && mSharpDistinct ? LIVE_CLARITY : 0f;
-            if (live != mLiveClarityWritten) {
-                mLiveClarityWritten = live;
-                mShader.setFloatUniform("uLiveClarity", live);
             }
         }
 
