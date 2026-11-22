@@ -32272,12 +32272,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Bitmap frame;
         android.graphics.Rect frameRect;
         float parallaxPx;
+        int opacity = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100;
+        android.graphics.ColorFilter groundFilter = com.termux.app.chrome.GlassFilters.frost(opacity);
         if (live != null && !live.bitmap.isRecycled()
                 && live.bitmap.getConfig() != android.graphics.Bitmap.Config.HARDWARE
                 && !com.termux.app.chrome.scene.LiveSceneFrame.rect().isEmpty()) {
             frame = live.bitmap;
             frameRect = com.termux.app.chrome.scene.LiveSceneFrame.rect();
             parallaxPx = 0f;
+            // The live frame is the raw scene: it takes the stored frame's bake before the frost.
+            com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+            groundFilter = com.termux.app.chrome.LiveStoredParity.sceneGroundFilter(opacity,
+                cache.bakedVibrancy(), cache.bakedFrameTint(),
+                mPreferences != null && mPreferences.getTerminalGlassBlurRadius() > 0);
         } else {
             // The card's canvas is software, which a HARDWARE frame cannot reach: it takes the
             // frame's small software copy, and the matrix below scales it up to the frame rect.
@@ -32303,7 +32310,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         android.graphics.Paint paint =
             new android.graphics.Paint(android.graphics.Paint.FILTER_BITMAP_FLAG);
         paint.setShader(shader);
-        paint.setColorFilter(com.termux.app.chrome.GlassFilters.frost(mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100));
+        paint.setColorFilter(groundFilter);
         paint.setAntiAlias(true);
         return (canvas, slabs) -> canvas.drawPath(slabs, paint);
     }

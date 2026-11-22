@@ -153,6 +153,13 @@ public final class GlassFilters {
         return made.filter;
     }
 
+    /** The matrix behind {@link #frost(int)}, for composing; a fresh one on each call. */
+    @NonNull
+    static ColorMatrix frostMatrix(int opacityPercent) {
+        return frostMatrix(LowOpacityGlass.keep(opacityPercent / 100f) > 0f
+            ? FROST_OFFSET : CLEAR_OFFSET);
+    }
+
     @NonNull
     private static ColorMatrix frostMatrix(float t) {
         ColorMatrix frost = new ColorMatrix();

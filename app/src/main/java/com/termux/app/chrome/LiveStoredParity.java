@@ -44,6 +44,32 @@ public final class LiveStoredParity {
         return concat(bake, undim);
     }
 
+    /**
+     * The colours a still ground wears (the frame's own bake, then the frost at
+     * {@code opacityPercent}) for the live scene frame, which carries neither: the departure
+     * card's ground. The same parity a live picture builds ({@link #matrix}, no dim: a scene
+     * leaves the photo and its dim out of the recording), then the frost, in the order the slab's
+     * effect chain runs them. Null when there is no parity, and the frost alone
+     * ({@link GlassFilters#frost(int)}) is the answer. Built once per capture.
+     */
+    @Nullable
+    public static float[] sceneGroundMatrix(int opacityPercent, int vibrancyPercent,
+                                            int frameTint, boolean blurs) {
+        float[] parity = matrix(0, vibrancyPercent, frameTint, blurs);
+        if (parity == null) return null;
+        return concat(GlassFilters.frostMatrix(opacityPercent).getArray(), parity);
+    }
+
+    /** {@link #sceneGroundMatrix} as the filter the card's paint wears. */
+    @NonNull
+    public static android.graphics.ColorFilter sceneGroundFilter(int opacityPercent,
+                                                                 int vibrancyPercent,
+                                                                 int frameTint, boolean blurs) {
+        float[] matrix = sceneGroundMatrix(opacityPercent, vibrancyPercent, frameTint, blurs);
+        return matrix == null ? GlassFilters.frost(opacityPercent)
+            : new android.graphics.ColorMatrixColorFilter(matrix);
+    }
+
     /** The matrix that takes {@code dimColor}, drawn source-over, back off; null for no dim. */
     @Nullable
     static float[] undim(int dimColor) {
