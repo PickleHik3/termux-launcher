@@ -1128,6 +1128,47 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             + " scene=" + (LiveSceneFrame.current() != null) + " look=" + (mLook != null));
     }
 
+    /**
+     * Whether the frame is left out of this draw: the live scene frame is a hardware bitmap,
+     * which a software canvas (the departure card's) refuses. Pure.
+     */
+    static boolean skipsFrame(boolean liveFrame, boolean hardwareCanvas) {
+        return liveFrame && !hardwareCanvas;
+    }
+
+    /** What goes over the frame: tint, veil, grain, rim; the corner mask's own colour instead. */
+    private void drawDressing(@NonNull Canvas canvas, int width, int height) {
+        // A corner mask stands in for what is behind the page, so it takes neither the pane
+        // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
+        // the wall's own colour over the frame - the dim the root wears - or alone.
+        if (mCornerMaskRadiusPx > 0f) {
+            if (android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
+                mTintPaint.setColor(mCornerMaskFallbackColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+        } else {
+            if (android.graphics.Color.alpha(mTintColor) > 0) {
+                mTintPaint.setColor(mTintColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+            // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
+            // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
+            // that did not move costs one walk up the tree.
+            if (android.graphics.Color.alpha(mVeilColor) > 0) {
+                mTintPaint.setColor(mVeilColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+            if (mGrain != null) {
+                mGrain.setBounds(0, 0, width, height);
+                mGrain.draw(canvas);
+            }
+            if (mRim != null) {
+                mRim.setBounds(0, 0, width, height);
+                mRim.draw(canvas);
+            }
+        }
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int width = getWidth();
@@ -1150,7 +1191,13 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // one), so the refracted frame sits that pass out; it only feeds another view's blur.
         LiveSceneFrame.Frame liveFrame = LiveSceneFrame.current();
         // The live frame is a hardware bitmap, which a software canvas refuses outright.
-        if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
+        if (skipsFrame(liveFrame != null, canvas.isHardwareAccelerated())) {
+            // Only the frame sits out: the tint, veil, grain and rim still go over the ground the
+            // departure card painted, so the card is as dark as the pane it replaces.
+            drawDressing(canvas, width, height);
+            canvas.restoreToCount(save);
+            return;
+        }
         // The scene went off: the still frame goes back on the paint.
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
@@ -1277,35 +1324,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
             }
         }
-        // A corner mask stands in for what is behind the page, so it takes neither the pane
-        // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
-        // the wall's own colour over the frame - the dim the root wears - or alone.
-        if (mCornerMaskRadiusPx > 0f) {
-            if (android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
-                mTintPaint.setColor(mCornerMaskFallbackColor);
-                canvas.drawRect(0f, 0f, width, height, mTintPaint);
-            }
-        } else {
-            if (android.graphics.Color.alpha(mTintColor) > 0) {
-                mTintPaint.setColor(mTintColor);
-                canvas.drawRect(0f, 0f, width, height, mTintPaint);
-            }
-            // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
-            // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
-            // that did not move costs one walk up the tree.
-            if (android.graphics.Color.alpha(mVeilColor) > 0) {
-                mTintPaint.setColor(mVeilColor);
-                canvas.drawRect(0f, 0f, width, height, mTintPaint);
-            }
-            if (mGrain != null) {
-                mGrain.setBounds(0, 0, width, height);
-                mGrain.draw(canvas);
-            }
-            if (mRim != null) {
-                mRim.setBounds(0, 0, width, height);
-                mRim.draw(canvas);
-            }
-        }
+        drawDressing(canvas, width, height);
         canvas.restoreToCount(save);
     }
     /** Rebuilt only when the size or the radius changes, never per draw. */
