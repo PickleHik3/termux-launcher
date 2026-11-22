@@ -23,6 +23,17 @@ public class PanelBackdropPolicyTest {
         assertEquals(Kind.SNAPSHOT, PanelBackdropPolicy.kind(S, true, false));
     }
 
+    @Test public void theLayeredGlassIsLiveOrTheStoredFrameNeverASnapshot() {
+        assertEquals(GlassKind.LIVE, PanelBackdropPolicy.layeredWants(S, true, true));
+        assertNull(PanelBackdropPolicy.layeredWants(S, true, false));
+        assertNull(PanelBackdropPolicy.layeredWants(S, false, true));
+        assertNull(PanelBackdropPolicy.layeredWants(S - 1, true, true));
+        assertEquals(Kind.LIVE, PanelBackdropPolicy.layeredKind(true, true));
+        // Not granted, or no blur to draw the layers with: the stored frame.
+        assertEquals(Kind.STORED, PanelBackdropPolicy.layeredKind(false, true));
+        assertEquals(Kind.STORED, PanelBackdropPolicy.layeredKind(true, false));
+    }
+
     @Test public void aPanelAsksForLiveOnlyOnTheGpuInTheLaunchersWindow() {
         assertEquals(GlassKind.LIVE, PanelBackdropPolicy.wants(S, true, true));
         // A popup menu is a window of its own: the recorder does not refresh it.

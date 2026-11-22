@@ -52,7 +52,8 @@ import java.util.ArrayList;
  * from the views' own display lists and blurred) and, beneath the wall, a frozen picture of the
  * pages ({@link PageLayerCapture}) moved by their travel, at rest and moving alike. It is taken
  * again behind the old one when the pages change ({@link PageLayerRefresh}), so a landing has
- * nothing to swap. A panel keeps its one picture until panels join the glass service.</p>
+ * nothing to swap. The app drawer's card wears these layers too ({@link PanelBackdrop#setLayered});
+ * the other panels (the palette, the terminal sheet, the menus) still keep one picture.</p>
  *
  * <p><b>When.</b> Layers are recorded again in a pre-draw of a frame that is already being drawn
  * (the glass commit, the frame table's last step), and only when their own trigger fires: the local
@@ -622,7 +623,8 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             int margin = picture.marginPx();
             int reach = picture.reachTopPx();
             if (picture.panelRadius()) {
-                // A panel keeps its one picture until panels join the glass service.
+                // The palette, the terminal sheet and the menus keep one picture; the drawer's
+                // card is attached as a surface and draws its layers below.
                 picture.setRecordedDim(dimBeneath());
                 recordOne(picture, surface, margin, reach);
                 continue;

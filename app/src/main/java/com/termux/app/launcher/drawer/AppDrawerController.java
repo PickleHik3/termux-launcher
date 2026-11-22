@@ -2219,14 +2219,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     }
 
     /**
-     * The plane's glass shows what is drawn beneath it ({@link com.termux.app.chrome.PanelBackdrop}):
-     * a Snapshot taken on this open's first frame, of the settled-open scene ({@link #mSettledScene}),
-     * frozen while the plane moves and retaken once it rests; Live while Live blur is on. Over the
-     * system wallpaper the recording holds no wallpaper, so a crop of the shared pre-blurred
-     * wallpaper frame stands beneath it, and the picture ghosts the terminal through the glass over
-     * that; without the crop (dock blur off, a live wallpaper) the picture is not a fallback there
-     * and the plane is simply tinted glass. Where nothing can be recorded (below Android 12) the
-     * crop stands alone.
+     * The plane's glass is the glass every other surface wears
+     * ({@link com.termux.app.chrome.PanelBackdrop#setLayered}): while the glass service grants the
+     * card Live, the recorder's backdrop layers (the stored frame as ground, the pages, and what is
+     * beneath in the window, live) at the card's own blur, the dock's; otherwise the crop of the
+     * shared pre-blurred wallpaper frame that stands beneath it, as the dock shows. Without the crop
+     * (dock blur off, a live wallpaper) the plane is simply tinted glass.
      */
     private void applyBackdropMaterial() {
         ImageView frost = mHost.findView(R.id.app_drawer_wallpaper_backdrop);
@@ -2243,10 +2241,15 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         boolean wanted = frosted || !wallpaperMode;
+        // The card's blur is the dock's, the stored frame's radius the layers' ground is cut at.
+        mBackdrop.setLayered(com.termux.shared.view.ViewUtils.dpToPx(mHost.context(),
+            Math.max(0, mHost.drawerSearchGlassBlurDp())));
         if (wanted) blur.setVisibility(View.VISIBLE);
+        // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
+        // surface draws nothing over the stored frame until then.
         boolean pictured = wanted && mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(
             mHost.context(), com.termux.app.chrome.PanelBackdrop.DRAWER_BLUR_RADIUS_DP));
-        if (!pictured) {
+        if (!wanted) {
             mBackdrop.close();
             blur.setVisibility(View.GONE);
         }

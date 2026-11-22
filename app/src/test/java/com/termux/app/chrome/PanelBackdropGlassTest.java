@@ -1,6 +1,7 @@
 package com.termux.app.chrome;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
@@ -28,6 +29,7 @@ import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import org.robolectric.util.ReflectionHelpers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -136,6 +138,35 @@ public class PanelBackdropGlassTest {
         assertEquals(PanelBackdropPolicy.Kind.SNAPSHOT, panel.kind());
         assertEquals(0, recorder.size());
         panel.close();
+    }
+
+    @Test
+    public void theDrawersLayeredGlassIsASurfacesPictureAndTheStoredFrameWhenNotLive() {
+        ImageView surface = surface();
+        PanelBackdrop panel = new PanelBackdrop(surface, root, "drawer");
+        panel.setLayered(30f);
+        assertTrue(panel.open(20f));
+        assertEquals(PanelBackdropPolicy.Kind.LIVE, panel.kind());
+        // Attached as a surface at the stored frame's blur: it draws the backdrop layers, not a
+        // panel's one picture.
+        LivePicture picture = (LivePicture) ReflectionHelpers.callInstanceMethod(recorder, "find",
+            ReflectionHelpers.ClassParameter.from(View.class, surface));
+        assertNotNull(picture);
+        assertFalse(picture.panelRadius());
+        assertEquals(30f, picture.radiusPx(), 0f);
+        assertEquals(WindowLayer.SHEETS, glass.entry("drawer").layer);
+        // Live off: the stored frame, as every other surface; never a Snapshot.
+        glass.setLiveOn(false);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(PanelBackdropPolicy.Kind.STORED, panel.kind());
+        assertNull(surface.getDrawable());
+        assertEquals(0, recorder.size());
+        // And back on, while it is open.
+        glass.setLiveOn(true);
+        shadowOf(Looper.getMainLooper()).idle();
+        assertEquals(PanelBackdropPolicy.Kind.LIVE, panel.kind());
+        panel.close();
+        assertNull(glass.granted("drawer"));
     }
 
     @Test

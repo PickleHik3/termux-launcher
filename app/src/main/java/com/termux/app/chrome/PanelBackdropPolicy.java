@@ -80,6 +80,24 @@ public final class PanelBackdropPolicy {
     }
 
     /**
+     * What a panel wearing the glass surfaces' layered Live glass asks the service for (the app
+     * drawer's card): Live where the GPU records and the panel is in the launcher's own window,
+     * else nothing, and it shows the stored frame as every other glass surface does.
+     */
+    public static GlassKind layeredWants(int sdkInt, boolean recorderAvailable,
+                                         boolean sameWindow) {
+        return onGpu(sdkInt) && recorderAvailable && sameWindow ? GlassKind.LIVE : null;
+    }
+
+    /**
+     * The picture such a panel shows: its Live layers when the service granted Live and it has a
+     * blur to draw them with; the stored frame for anything else, never a Snapshot.
+     */
+    public static Kind layeredKind(boolean liveGranted, boolean blurred) {
+        return liveGranted && blurred ? Kind.LIVE : Kind.STORED;
+    }
+
+    /**
      * Whether this motion change takes a Snapshot: only a Snapshot panel, only while open, and
      * only when it comes to rest. Nothing is taken while it moves, so the picture stays frozen.
      */
