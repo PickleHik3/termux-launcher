@@ -256,12 +256,6 @@ public final class GlassRefraction {
         /** How clear the wallpaper shows through the bent edge, a percentage; 0 keeps the frost. */
         public final int clarityPercent;
         /**
-         * How much the layers drawn over this frost cover it, a percentage: the surface's tint. Not
-         * stored; each surface states its own. 0 (as read
-         * from the preferences) leaves the light at its tuned strength.
-         */
-        public final int coverPercent;
-        /**
          * Clear's face terms, percentages, 0 for every other Look (the program skips them): how
          * much of the clearer picture the face shows, how far the face is dimmed over a bright
          * backdrop and lifted over a dark one, and how far the lensing scales with the surface's
@@ -290,24 +284,18 @@ public final class GlassRefraction {
         public Look(int bendDp, int edgeWidthDp, int edgeLightPercent,
                     int specularPercent, int dispersionPercent, int clarityPercent) {
             this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
-                clarityPercent, 0);
+                clarityPercent, 0, 0, 0);
         }
 
         private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
-                     int dispersionPercent, int clarityPercent, int coverPercent) {
-            this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
-                clarityPercent, coverPercent, 0, 0, 0);
-        }
-
-        private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
-                     int dispersionPercent, int clarityPercent, int coverPercent,
+                     int dispersionPercent, int clarityPercent,
                      int faceClarityPercent, int dimPercent, int sizeLensPercent) {
             this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
-                clarityPercent, coverPercent, faceClarityPercent, dimPercent, sizeLensPercent, false);
+                clarityPercent, faceClarityPercent, dimPercent, sizeLensPercent, false);
         }
 
         private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
-                     int dispersionPercent, int clarityPercent, int coverPercent,
+                     int dispersionPercent, int clarityPercent,
                      int faceClarityPercent, int dimPercent, int sizeLensPercent, boolean concave) {
             this.concave = concave;
             this.faceClarityPercent = Math.max(0, Math.min(100, faceClarityPercent));
@@ -319,21 +307,6 @@ public final class GlassRefraction {
             this.specularPercent = specularPercent;
             this.dispersionPercent = dispersionPercent;
             this.clarityPercent = clarityPercent;
-            this.coverPercent = Math.max(0, Math.min(100, coverPercent));
-        }
-
-        /**
-         * This look on a surface whose tint covers the frost by {@code cover} (0..1): the
-         * gathered light is raised to read through it ({@link #edgeGain}). Rounded to a percent,
-         * so a surface re-dressed at the same opacity compares equal and writes nothing.
-         */
-        @NonNull
-        public Look withCover(float cover) {
-            int percent = Math.round(Math.max(0f, Math.min(1f, cover)) * 100f);
-            if (percent == coverPercent) return this;
-            return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, percent, faceClarityPercent, dimPercent,
-                sizeLensPercent, concave);
         }
 
         /** This look sunk into the page ({@link #concave}), or standing out of it as every other glass. */
@@ -341,7 +314,7 @@ public final class GlassRefraction {
         public Look withConcave(boolean concave) {
             if (concave == this.concave) return this;
             return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, coverPercent, faceClarityPercent, dimPercent,
+                dispersionPercent, clarityPercent, faceClarityPercent, dimPercent,
                 sizeLensPercent, concave);
         }
 
@@ -349,7 +322,7 @@ public final class GlassRefraction {
         @NonNull
         public Look withFaceTerms(int faceClarity, int dim, int sizeLens) {
             Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, coverPercent, faceClarity, dim, sizeLens, concave);
+                dispersionPercent, clarityPercent, faceClarity, dim, sizeLens, concave);
             return next.equals(this) ? this : next;
         }
 
@@ -447,14 +420,13 @@ public final class GlassRefraction {
                 && faceClarityPercent == that.faceClarityPercent
                 && dimPercent == that.dimPercent
                 && sizeLensPercent == that.sizeLensPercent
-                && coverPercent == that.coverPercent
                 && concave == that.concave;
         }
 
         @Override
         public int hashCode() {
-            return (((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
-                + dispersionPercent) * 31 + clarityPercent) * 31 + coverPercent) * 31
+            return ((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
+                + dispersionPercent) * 31 + clarityPercent) * 31
                 + faceClarityPercent) * 31 + dimPercent) * 31 + sizeLensPercent) * 31
                 + (concave ? 1 : 0);
         }
@@ -464,7 +436,7 @@ public final class GlassRefraction {
         public String toString() {
             return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%, specular="
                 + specularPercent + "%, dispersion=" + dispersionPercent + "%, clarity=" + clarityPercent
-                + "%, cover=" + coverPercent + "%, face=" + faceClarityPercent + "%, dim=" + dimPercent
+                + "%, face=" + faceClarityPercent + "%, dim=" + dimPercent
                 + "%, sizeLens=" + sizeLensPercent + "%" + (concave ? ", concave" : "") + "}";
         }
     }

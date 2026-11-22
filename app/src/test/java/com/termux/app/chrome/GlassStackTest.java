@@ -126,9 +126,8 @@ public class GlassStackTest {
 
         assertEquals(2, stack.getNumberOfLayers());
         assertSame(backdrop, stack.getDrawable(0));
-        // The look as stored, raised by what the tint over it covers (its opacity, no Shade).
-        assertEquals(FANCIER.withCover(spec.tintAlpha), backdrop.refractionLook());
-        assertEquals(FANCIER, backdrop.refractionLook().withCover(0f));
+        // The look as stored: the rim is drawn under the tint, never raised by its cover (#314).
+        assertEquals(FANCIER, backdrop.refractionLook());
         assertEquals(RADIUS_PX, backdrop.refractionRadiusPx(), 0f);
         LayerDrawable tint = (LayerDrawable) stack.getDrawable(1);
         // base, light, grain, rim: the one rim the factory draws.
@@ -161,8 +160,7 @@ public class GlassStackTest {
 
         assertFalse(backdrop.refracts());
         assertEquals(1, rimsIn(stack));
-        assertEquals("the look itself is what is stored, with the tint's cover", FANCIER,
-            backdrop.refractionLook().withCover(0f));
+        assertEquals("the look itself is what is stored", FANCIER, backdrop.refractionLook());
         // A stack with no backdrop at all, the scheme-colour one, the same way.
         assertEquals(1, rimsIn(GlassStack.build(glass,
             keyboardSpec(null).withTintColor(0x80112233), 2f, null)));
@@ -179,8 +177,7 @@ public class GlassStackTest {
 
         Drawable stack = GlassStack.build(glass, keyboardSpec(FANCIER), 2f, backdrop, b -> {
             asked[0] = true;
-            assertEquals("asked after the look is handed over", FANCIER,
-                b.refractionLook().withCover(0f));
+            assertEquals("asked after the look is handed over", FANCIER, b.refractionLook());
             return true;
         });
 

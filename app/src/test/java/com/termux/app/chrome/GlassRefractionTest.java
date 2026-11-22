@@ -560,22 +560,6 @@ public class GlassRefractionTest {
 
     // ------------------------------------------------------------- the edge follows the cover
 
-    /** A surface states its cover on its look; read from the preferences a look has none. */
-    @Test
-    public void theCoverIsPartOfALooksIdentityAndRoundsToAPercent() {
-        GlassRefraction.Look look = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
-        assertEquals(0, look.coverPercent);
-        GlassRefraction.Look mist = look.withCover(0.6f);
-        assertEquals(60, mist.coverPercent);
-        assertNotEquals(look, mist);
-        assertEquals(mist, look.withCover(0.6001f));
-        assertTrue("the same cover writes nothing new", mist == mist.withCover(0.6f));
-        assertEquals("clamped", 100, look.withCover(3f).coverPercent);
-        assertEquals("clamped", 0, look.withCover(-1f).coverPercent);
-        assertEquals("the stored knobs are kept", look.dispersionPercent,
-            mist.dispersionPercent);
-    }
-
     // ------------------------------- dispersion on the gathered light (glass tuning 2026-10-17)
 
     private static String f3(float[] c) {
@@ -752,11 +736,10 @@ public class GlassRefractionTest {
         assertNotEquals(clear, plain.withFaceTerms(0, 100, 100));
         assertNotEquals(clear, plain.withFaceTerms(100, 0, 100));
         assertNotEquals(clear, plain.withFaceTerms(100, 100, 0));
-        // Each term alone moves the hash, and a cover keeps them.
+        // Each term alone moves the hash.
         assertNotEquals(plain.withFaceTerms(0, 100, 0).hashCode(), plain.withFaceTerms(0, 0, 100).hashCode());
-        GlassRefraction.Look covered = clear.withCover(0.5f);
-        assertEquals(100, covered.dimPercent);
-        assertEquals(1f, covered.faceClarity(), 0f);
+        assertEquals(100, clear.dimPercent);
+        assertEquals(1f, clear.faceClarity(), 0f);
         // Clamped to a percentage.
         assertEquals(100, plain.withFaceTerms(400, -3, 7).faceClarityPercent);
         assertEquals(0, plain.withFaceTerms(400, -3, 7).dimPercent);

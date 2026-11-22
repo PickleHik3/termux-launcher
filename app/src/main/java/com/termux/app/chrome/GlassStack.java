@@ -244,7 +244,7 @@ public final class GlassStack {
      * or null where there is nothing to blur) dressed with the frost and the refraction, the tint
      * with its grain and rim, all under the spec's one stack alpha. Where this stack's own
      * backdrop runs the program ({@link SharedFrameDrawable#refracts}) the program draws the
-     * outline as gathered light and the spec's rim is left out ({@link #wearsRim}); a stack with
+     * outline as its rim and the spec's rim is left out ({@link #wearsRim}); a stack with
      * no backdrop, or one drawn plain, keeps its rim.
      */
     @NonNull
@@ -294,12 +294,8 @@ public final class GlassStack {
             // evened on its own rect, then frosted as before. Null for every other stack.
             backdrop.setColorFilter(GlassFilters.withEvenOut(glass.bandEvenOut(spec.band),
                 GlassFilters.frost(Math.round(spec.tintAlpha * 100f))));
-            // The gathered light is drawn under the tint, so it is raised by what the tint covers
-            // and every surface shows a like outline.
-            backdrop.setRefraction(spec.look.withCover(spec.tintColor != null
-                    ? android.graphics.Color.alpha(spec.tintColor) / 255f
-                    : spec.tintAlpha),
-                density, spec.cornerRadiusPx, spec.seams);
+            // The rim (GlassRim) is drawn under the tint, which dims it as it dims the face.
+            backdrop.setRefraction(spec.look, density, spec.cornerRadiusPx, spec.seams);
             programEdge = probe.drawsEdge(backdrop);
             layers.add(backdrop);
             // The page's ground over the frame and under the tint (#283), drawn where the stack's
@@ -332,7 +328,7 @@ public final class GlassStack {
 
     /**
      * Whether a stack lays its gradient rim: when its spec asks for one and its own backdrop does
-     * not already draw the outline ({@code programEdge}, the program's gathered light). One edge
+     * not already draw the outline ({@code programEdge}, the program's rim). One edge
      * per surface, decided per stack: another surface's glass refracting says nothing about this
      * one's.
      */

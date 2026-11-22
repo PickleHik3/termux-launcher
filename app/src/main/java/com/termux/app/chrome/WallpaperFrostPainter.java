@@ -127,7 +127,6 @@ public final class WallpaperFrostPainter {
         mPassGate.begin();
         mPassGate.add(blurRadiusDp).add(stripRadiusDp).add(capsule).add(lead.ordinal())
             .add(onPlank).add(paneSeams).add(rimCornerPx)
-            .add(statusCover()).add(dockCover())
             .add(mSurfaces.statusLookPage()).add(mSurfaces.stackLookPage())
             .add(java.util.Objects.hashCode(status().refraction()))
             .add(java.util.Objects.hashCode(dock().refraction()))
@@ -155,21 +154,21 @@ public final class WallpaperFrostPainter {
                 : SurfaceDirtyLedger.FrostRadius.TOP_PANE,
             0f, ChromeEdgeRule.seams(false, ChromeEdgeRule.flushEdges(
                 com.termux.app.place.PlaceLayout.Edge.TOP), ChromeEdgeRule.BOTTOM),
-            stripIsDockSheet ? dockCover() : statusCover(), stripIsDockSheet ? dock() : status());
+            stripIsDockSheet ? dock() : status());
         if (lead == ChromeEdgeRule.TopLead.NONE)
             hide(statusFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_STATUS);
         boolean paneApplied = !onPlank && applyFrost(paneFrost,
             barShown && mainCard != null ? mainCard : barHost, blurRadiusDp,
             SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR, SurfaceDirtyLedger.FrostRadius.TOP_PANE,
             capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
-            paneSeams, statusCover(), status());
+            paneSeams, status());
         if (onPlank) hide(paneFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR);
         boolean sideApplied = paneApplied && barShown && sideFrost != null && sideCard != null
             && sideCard.getVisibility() == View.VISIBLE && applyFrost(sideFrost, sideCard,
                 blurRadiusDp, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE,
                 SurfaceDirtyLedger.FrostRadius.TOP_PANE,
                 capsule ? mSurfaces.statusBarRimCornerRadiusPx() : 0f,
-                paneSeams, statusCover(), status());
+                paneSeams, status());
         if (!sideApplied && sideFrost != null)
             hide(sideFrost, SurfaceDirtyLedger.FrostRect.TOP_PANE_WINDOW_BAR_SIDE);
         if (statusApplied || paneApplied) mPassGate.landed();
@@ -209,7 +208,7 @@ public final class WallpaperFrostPainter {
         return applyFrost(new ImageSlot(frost), glassOf(frost, null), topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.COMMAND_PALETTE,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
-            sheetsCover(), sheets(), true);
+            sheets(), true);
     }
 
     /**
@@ -224,7 +223,7 @@ public final class WallpaperFrostPainter {
             topGlassFrostRadiusDp(),
             SurfaceDirtyLedger.FrostRect.TERMINAL_SHEET,
             SurfaceDirtyLedger.FrostRadius.COMMAND_PALETTE, mSurfaces.planeGlassCornerRadiusPx(), 0,
-            sheetsCover(), sheets(), true);
+            sheets(), true);
     }
 
     /**
@@ -238,7 +237,7 @@ public final class WallpaperFrostPainter {
         return applyFrost(new ImageSlot(frost), glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
             SurfaceDirtyLedger.FrostRect.APP_DRAWER,
             SurfaceDirtyLedger.FrostRadius.APP_DRAWER, mSurfaces.planeGlassCornerRadiusPx(), 0,
-            sheetsCover(), sheets(), true);
+            sheets(), true);
     }
 
     /**
@@ -268,8 +267,7 @@ public final class WallpaperFrostPainter {
                                      float cornerRadiusPx, int seams) {
         followMoves(frost);
         return applyFrost(new ImageSlot(frost), glassOf(frost, null), mSurfaces.effectiveDockBlurRadiusDp(),
-            rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, seams, dockCover(),
-            dock());
+            rectKey, SurfaceDirtyLedger.FrostRadius.OFF_DOCK, cornerRadiusPx, seams, dock());
     }
 
     /**
@@ -334,10 +332,10 @@ public final class WallpaperFrostPainter {
     private boolean applyFrost(@NonNull Slot frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
-                               float cornerRadiusPx, int seams, float cover,
+                               float cornerRadiusPx, int seams,
                                @NonNull ElementOn glass) {
         return applyFrost(frost, boundsView, blurRadiusDp, rectKey, radiusKey, cornerRadiusPx, seams,
-            cover, glass, false);
+            glass, false);
     }
 
     /**
@@ -348,7 +346,7 @@ public final class WallpaperFrostPainter {
     private boolean applyFrost(@NonNull Slot frost, @Nullable View boundsView, int blurRadiusDp,
                                @NonNull SurfaceDirtyLedger.FrostRect rectKey,
                                @NonNull SurfaceDirtyLedger.FrostRadius radiusKey,
-                               float cornerRadiusPx, int seams, float cover,
+                               float cornerRadiusPx, int seams,
                                @NonNull ElementOn glass, boolean panel) {
         View wallpaperFrame = mSurfaces.findChromeView(R.id.activity_termux_root_view);
         boolean wanted = mSurfaces.wallpaperPassthroughEnabled()
@@ -364,7 +362,7 @@ public final class WallpaperFrostPainter {
             mTmpViewLocation[0] + boundsView.getWidth(), mTmpViewLocation[1] + boundsView.getHeight());
         SharedFrameDrawable installed = SharedFrameDrawable.of(frost.drawable());
         GlassRefraction.Look look = glass.refraction();
-        if (installed != null) refract(installed, look, cornerRadiusPx, seams, cover);
+        if (installed != null) refract(installed, look, cornerRadiusPx, seams);
         Bitmap frame = mBlurCache.obtain(blurRadiusDp, wallpaperFrame);
         Rect frameRect = mBlurCache.frameRectRef();
         if (frame == null) {
@@ -393,7 +391,7 @@ public final class WallpaperFrostPainter {
         } else {
             installed = new SharedFrameDrawable(frame, frameRect,
                 mSurfaces.wallpaperParallax(), GlassAnchor.screen(frost.view()));
-            refract(installed, look, cornerRadiusPx, seams, cover);
+            refract(installed, look, cornerRadiusPx, seams);
             frost.setDrawable(installed);
         }
         clarify(installed, look, blurRadiusDp, wallpaperFrame);
@@ -405,12 +403,11 @@ public final class WallpaperFrostPainter {
     }
 
     /**
-     * Fancier Glass on one frost, or the plain frost while the look is null. {@code cover} is how
-     * much the surface's tint covers the frost, which its gathered light is raised by.
+     * Fancier Glass on one frost, or the plain frost while the look is null.
      */
     private void refract(@NonNull SharedFrameDrawable frost, @Nullable GlassRefraction.Look look,
-                         float cornerRadiusPx, int seams, float cover) {
-        frost.setRefraction(look == null ? null : look.withCover(cover),
+                         float cornerRadiusPx, int seams) {
+        frost.setRefraction(look,
             mSurfaces.context().getResources().getDisplayMetrics().density, cornerRadiusPx, seams);
     }
 
@@ -439,25 +436,6 @@ public final class WallpaperFrostPainter {
     @NonNull private ElementOn dock() { return new ElementOn(com.termux.shared.termux.settings.preferences.LookGrid.Element.DOCK, mSurfaces.stackLookPage()); }
     /** The sheets wear Global's glass (the all-glass cell), not an element's own. */
     @NonNull private ElementOn sheets() { return new ElementOn(null, mSurfaces.stackLookPage()); }
-
-    /** What a sheet's tint (Global's opacity, raised to the sheets' floor) covers of its frost. */
-    private float sheetsCover() {
-        return SheetGlass.of(mSurfaces.preferences()).tintAlpha();
-    }
-
-    /** What the status bar's tint covers of its frost. */
-    private float statusCover() {
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
-            mSurfaces.preferences();
-        return preferences != null ? preferences.getStatusBarOpacity(mSurfaces.statusLookPage()) / 100f : 0f;
-    }
-
-    /** What the dock's material (the planes and sheets wear it) covers of its frost. */
-    private float dockCover() {
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
-            mSurfaces.preferences();
-        return preferences != null ? preferences.getAppBarOpacity(mSurfaces.stackLookPage()) / 100f : 0f;
-    }
 
     /**
      * The clearer frame Fancier Glass's edge clarity shows through the bend

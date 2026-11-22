@@ -176,12 +176,9 @@ public final class GlassEffects {
             program.setRect(mRect[RoundCut.LEFT], mRect[RoundCut.TOP], mRect[RoundCut.RIGHT],
                 mRect[RoundCut.BOTTOM], mRect[RoundCut.RADIUS]);
             // The user's knobs while Fancier Glass is on, the numbers this dock always ran with
-            // otherwise; either way its gathered edge is raised by what the dock's tint covers
-            // of it, the one rule every glass surface's edge follows. The cover is the one
-            // the last dress pass worked out, so a key's lens rebuilding this per frame reads no
-            // preference.
-            program.setLook(GlassStack.lookFor(mHost.fancierLook())
-                .withCover(Math.max(0f, mHost.dockCover())));
+            // otherwise. The look is a value the host already holds, so a key's lens rebuilding
+            // this per frame reads no preference.
+            program.setLook(GlassStack.lookFor(mHost.fancierLook()));
             // The Dock design's own glass (the Tray's soft rim and shelf).
             mHost.applyDockSurfaceGlass(program);
             // Per-key lens state (0 intensity == no lens, dock refraction unchanged).
