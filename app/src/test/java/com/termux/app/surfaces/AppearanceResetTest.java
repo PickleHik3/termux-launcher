@@ -297,6 +297,7 @@ public class AppearanceResetTest {
         assertTrue(AppearanceReset.inScope("status_widget_cpu"));
         assertTrue(AppearanceReset.inScope("status_widget_gpu"));
         assertTrue(AppearanceReset.inScope("status_widget_font_toggle"));
+        assertTrue(AppearanceReset.inScope(TERMUX_APP.KEY_STATUS_ROW_ORDER));
         assertFalse(AppearanceReset.inScope("status_widget_weather_location"));
         assertTrue(AppearanceReset.inScope(TERMUX_APP.KEY_IN_APP_KEYBOARD_THEME));
         assertFalse(AppearanceReset.inScope("in_app_keyboard_layouts"));

@@ -132,7 +132,7 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_STATUS_WIDGET_RAM,
         TERMUX_APP.KEY_STATUS_WIDGET_BATTERY, TERMUX_APP.KEY_STATUS_WIDGET_MEDIA,
         TERMUX_APP.KEY_STATUS_WIDGET_WEATHER, TERMUX_APP.KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT,
-        TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS,
+        TERMUX_APP.KEY_STATUS_WIDGET_NOTIFICATIONS, TERMUX_APP.KEY_STATUS_ROW_ORDER,
         // The look steps' markers, so they write and seed the shipped look as on a new install.
         // Every other migration marker (wall, pages, half looks, places, cut-out) stays.
         TERMUX_APP.KEY_SHIPPED_SURFACE_DEFAULTS_ADOPTED, TERMUX_APP.KEY_SURFACE_INHERITANCE_MIGRATED,

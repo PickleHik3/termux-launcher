@@ -101,6 +101,10 @@
         app:persistent="false"
         app:title="@string/settings_font_toggle_title" />
     <Preference
+        app:key="status_row_order"
+        app:persistent="false"
+        app:title="@string/editor_st_row_order" />
+    <Preference
         app:key="status_widget_ram"
         app:persistent="false"
         app:title="@string/settings_memory_usage_title" />
