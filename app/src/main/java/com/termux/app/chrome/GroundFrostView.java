@@ -18,7 +18,7 @@ import com.termux.app.chrome.scene.LiveSceneFrame;
 /**
  * The frosted wallpaper under a turning window switch's gap (#316): in the ground layer, under the
  * ground strip's dim, it draws the frame the windows' glass already samples (the scene's live
- * frame, or the stored pre-blurred frame) through the glass's frost, so the gap between the
+ * frame, or the stored pre-blurred frame) through the glass's frost and tint, so the gap between the
  * leaving card and the arriving window reads as glass beside glass instead of the sharp wallpaper.
  * Gone at rest; shown only for a switch's duration. While shown it is left out of every recording
  * ({@link BackdropRecording#leaveOut}), so live glass over it keeps sampling the plain ground.
@@ -32,6 +32,7 @@ public final class GroundFrostView extends View implements LiveSceneFrame.Surfac
     @NonNull private final int[] mAt = new int[2];
     /** The stored frame drawn, or null while the scene's live frame is (or nothing is shown). */
     @Nullable private Bitmap mFrame;
+    @NonNull private final Paint mTintPaint = new Paint();
     private boolean mScene;
     private float mParallaxPx;
 
@@ -44,30 +45,35 @@ public final class GroundFrostView extends View implements LiveSceneFrame.Surfac
         setWillNotDraw(false);
     }
 
-    /** Shows the scene's live frame, read at each draw, through {@code frost}. */
-    public void showScene(@NonNull ColorFilter frost) {
+    /**
+     * Shows the scene's live frame, read at each draw, through {@code frost}, with {@code tint}
+     * (the windows' glass tint, ARGB, alpha included) laid over it as the glass's face lays it.
+     */
+    public void showScene(@NonNull ColorFilter frost, int tint) {
         mScene = true;
         mFrame = null;
         mParallaxPx = 0f;
         mFrameRect.setEmpty();
-        show(frost);
+        show(frost, tint);
     }
 
     /**
      * Shows the stored frame {@code frame}, standing for {@code frameRect} on screen and sampled
-     * {@code parallaxPx} along, through {@code frost}: as the panes' glass aims it.
+     * {@code parallaxPx} along, through {@code frost} and under {@code tint}: as the panes' glass
+     * aims and dresses it.
      */
     public void showFrame(@NonNull Bitmap frame, @NonNull Rect frameRect, float parallaxPx,
-                          @NonNull ColorFilter frost) {
+                          @NonNull ColorFilter frost, int tint) {
         mScene = false;
         mFrame = frame;
         mFrameRect.set(frameRect);
         mParallaxPx = parallaxPx;
-        show(frost);
+        show(frost, tint);
     }
 
-    private void show(@NonNull ColorFilter frost) {
+    private void show(@NonNull ColorFilter frost, int tint) {
         mPaint.setColorFilter(frost);
+        mTintPaint.setColor(tint);
         BackdropRecording.leaveOut(this);
         if (getVisibility() != VISIBLE) setVisibility(VISIBLE);
         invalidate();
@@ -79,6 +85,7 @@ public final class GroundFrostView extends View implements LiveSceneFrame.Surfac
         mFrame = null;
         mScene = false;
         mPaint.setColorFilter(null);
+        mTintPaint.setColor(android.graphics.Color.TRANSPARENT);
         if (getVisibility() != GONE) setVisibility(GONE);
     }
 
@@ -119,5 +126,8 @@ public final class GroundFrostView extends View implements LiveSceneFrame.Surfac
         float top = rect.top - mAt[1];
         mDest.set(left, top, left + rect.width(), top + rect.height());
         canvas.drawBitmap(bitmap, null, mDest, mPaint);
+        // The glass's face: its tint over the frost, at the Terminal's Opacity (the alpha).
+        if (android.graphics.Color.alpha(mTintPaint.getColor()) > 0)
+            canvas.drawRect(mDest, mTintPaint);
     }
 }

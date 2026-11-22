@@ -32298,7 +32298,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private android.graphics.ColorFilter glassGroundFilter(boolean scene) {
-        int opacity = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100;
+        int opacity = mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100;
         if (!scene) return com.termux.app.chrome.GlassFilters.frost(opacity);
         com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
         return com.termux.app.chrome.LiveStoredParity.sceneGroundFilter(opacity,
@@ -32513,6 +32513,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSwitchFrostHold.expire(android.os.SystemClock.uptimeMillis())) hideSwitchFrost();
     };
 
+    /** The front window's glass face tint, which the switch gap's frost wears too. */
+    private int switchGapTint() {
+        return com.termux.app.terminal.TerminalSurfacePolicy.switchGapTint(
+            paneSurfaceStyle().paneGlassTintColor());
+    }
+
     /**
      * Shows the frost under the ground strip for a turning switch of {@code travelMs}, from the
      * frame the panes' glass samples now (the scene's live frame, else the stored frame already
@@ -32544,11 +32550,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return 0;
         }
         if (scene) {
-            frost.showScene(glassGroundFilter(true));
+            frost.showScene(glassGroundFilter(true), switchGapTint());
         } else {
             mChrome.blurCache().copyFrameRect(mSwitchFrostRect);
             frost.showFrame(stored, mSwitchFrostRect, mWallpaperParallax.offsetPx(),
-                glassGroundFilter(false));
+                glassGroundFilter(false), switchGapTint());
         }
         int ticket = mSwitchFrostHold.begin(android.os.SystemClock.uptimeMillis(), travelMs,
             com.termux.app.wall.FirstDrawGate.TIMEOUT_MS);
