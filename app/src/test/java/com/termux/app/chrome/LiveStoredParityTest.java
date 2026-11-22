@@ -137,4 +137,33 @@ public class LiveStoredParityTest {
             assertEquals(0.4f * stored + 0.6f * f, live, 1e-3f);
         }
     }
+
+    @Test
+    public void theSceneCardWearsTheSlabsParityThenTheFrost() {
+        // The departing card's ground: what a live picture builds with no dim (a scene leaves it
+        // out), then the frost, so the card and the slab agree at the first frame of the slide.
+        for (int opacity : new int[] {100, 40, 2}) {
+            for (int vibrancy : VIBRANCY) {
+                float[] card = LiveStoredParity.sceneGroundMatrix(opacity, vibrancy, TINT, true);
+                float[] parity = LiveStoredParity.matrix(0, vibrancy, TINT, true);
+                float[] frost = GlassFilters.frostMatrix(opacity).getArray();
+                assertNotNull(card);
+                assertArrayEquals(LiveStoredParity.concat(frost, parity), card, 1e-5f);
+                for (int[] px : WALLPAPER) {
+                    float[] viaCard = LiveStoredParity.apply(card, px[0], px[1], px[2]);
+                    float[] mid = LiveStoredParity.apply(parity, px[0], px[1], px[2]);
+                    float[] viaSlab = LiveStoredParity.apply(frost, mid[0], mid[1], mid[2]);
+                    assertArrayEquals(viaSlab, viaCard, 1e-2f);
+                }
+            }
+        }
+    }
+
+    @Test
+    public void theSceneCardWithNothingBakedIsTheFrostAlone() {
+        assertNull(LiveStoredParity.sceneGroundMatrix(100, 100, GlassFrameTint.NONE, true));
+        assertNull(LiveStoredParity.sceneGroundMatrix(100, 150, TINT, false));
+        assertEquals(GlassFilters.frost(100),
+            LiveStoredParity.sceneGroundFilter(100, 100, GlassFrameTint.NONE, true));
+    }
 }
