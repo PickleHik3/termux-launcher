@@ -13,11 +13,16 @@ import android.widget.ScrollView;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
 import androidx.core.graphics.ColorUtils;
 
 import com.google.android.material.color.MaterialColors;
+import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
+import com.termux.app.notice.AppNotice;
+import com.termux.privileged.PrivilegedBackendManager;
+import com.termux.privileged.RootAppCommands;
 
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -346,7 +351,125 @@ public final class SystemStatsCardView extends LinearLayout {
         cpu.setGravity(Gravity.END);
         row.addView(cpu);
         row.setPadding(0, dp(1), 0, dp(1));
+        if (rootCanEnd(p)) {
+            android.util.TypedValue ripple = new android.util.TypedValue();
+            if (getContext().getTheme().resolveAttribute(
+                android.R.attr.selectableItemBackground, ripple, true)) {
+                row.setBackgroundResource(ripple.resourceId);
+            }
+            row.setClickable(true);
+            row.setOnClickListener(v -> confirmEnd(p));
+        }
         return row;
+    }
+
+    private boolean rootCanEnd(@NonNull SystemStatsController.Proc p) {
+        return PrivilegedBackendManager.getInstance().isRootActive()
+            && ProcessEndRules.canEnd(p, android.os.Process.myPid(), getContext().getPackageName());
+    }
+
+    /** The installed package this process belongs to, or null when the name is not an app. */
+    @Nullable
+    private String installedPackageOf(@NonNull SystemStatsController.Proc p) {
+        String packageName = ProcessEndRules.packageOf(p.name);
+        if (!RootAppCommands.isValidPackage(packageName)) return null;
+        try {
+            getContext().getPackageManager().getApplicationInfo(packageName, 0);
+            return packageName;
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    private void confirmEnd(@NonNull SystemStatsController.Proc p) {
+        if (!rootCanEnd(p)) return;
+        String packageName = installedPackageOf(p);
+        String label = packageName != null ? resolveProcessName(p) : p.name;
+        boolean app = packageName != null;
+        try {
+            new MaterialAlertDialogBuilder(getContext())
+                .setTitle(getResources().getString(app
+                    ? R.string.stats_process_stop_title : R.string.stats_process_end_title, label))
+                .setMessage(app ? R.string.stats_process_stop_message : R.string.stats_process_end_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(app ? R.string.stats_process_stop_action : R.string.stats_process_end_action,
+                    (d, w) -> {
+                        if (app) stopApp(packageName, label);
+                        else endProcess(p, label);
+                    })
+                .show();
+        } catch (RuntimeException ignored) {
+            // The card's window went away under the tap.
+        }
+    }
+
+    private void stopApp(@NonNull String packageName, @NonNull String label) {
+        String command = RootAppCommands.forceStop(packageName);
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        if (command == null || !manager.isRootActive()
+            || packageName.equals(getContext().getPackageName())) return;
+        Context context = getContext();
+        manager.executeCommand(command).whenComplete((output, error) -> post(() -> {
+            if (isOk(output, error)) AppNotice.success(context,
+                context.getString(R.string.stats_process_stopped, label));
+            else AppNotice.error(context, context.getString(R.string.stats_process_failed, label));
+        }));
+    }
+
+    /** SIGTERM first; a process still alive a second later is offered SIGKILL. */
+    private void endProcess(@NonNull SystemStatsController.Proc p, @NonNull String label) {
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        String term = RootAppCommands.killPid(p.pid, "TERM");
+        if (term == null || !manager.isRootActive()) return;
+        Context context = getContext();
+        manager.executeCommand(term).whenComplete((output, error) -> post(() -> {
+            if (!isOk(output, error)) {
+                AppNotice.error(context, context.getString(R.string.stats_process_failed, label));
+                return;
+            }
+            postDelayed(() -> checkEnded(p, label), 1000L);
+        }));
+    }
+
+    private void checkEnded(@NonNull SystemStatsController.Proc p, @NonNull String label) {
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        String probe = RootAppCommands.isAlive(p.pid);
+        if (probe == null || !manager.isRootActive()) return;
+        Context context = getContext();
+        manager.executeCommand(probe).whenComplete((output, error) -> post(() -> {
+            // kill -0 exits non-zero once the process is gone, which the shell reports as "Error".
+            if (isOk(output, error)) confirmForce(p, label);
+            else AppNotice.success(context, context.getString(R.string.stats_process_ended, label));
+        }));
+    }
+
+    private void confirmForce(@NonNull SystemStatsController.Proc p, @NonNull String label) {
+        try {
+            new MaterialAlertDialogBuilder(getContext())
+                .setTitle(getResources().getString(R.string.stats_process_force_title, label))
+                .setMessage(R.string.stats_process_force_message)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.stats_process_force_action, (d, w) -> forceEnd(p, label))
+                .show();
+        } catch (RuntimeException ignored) {
+            // The card's window went away.
+        }
+    }
+
+    private void forceEnd(@NonNull SystemStatsController.Proc p, @NonNull String label) {
+        PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        String kill = RootAppCommands.killPid(p.pid, "KILL");
+        if (kill == null || !manager.isRootActive()) return;
+        Context context = getContext();
+        manager.executeCommand(kill).whenComplete((output, error) -> post(() -> {
+            if (isOk(output, error)) AppNotice.success(context,
+                context.getString(R.string.stats_process_ended, label));
+            else AppNotice.error(context, context.getString(R.string.stats_process_failed, label));
+        }));
+    }
+
+    private static boolean isOk(@Nullable String output, @Nullable Throwable error) {
+        return error == null && output != null && !output.startsWith("Error");
     }
 
     private View procColumns() {
