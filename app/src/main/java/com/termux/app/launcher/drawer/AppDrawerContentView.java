@@ -563,13 +563,14 @@ public final class AppDrawerContentView extends FrameLayout
                 // Back at the top (a scroll up, or the A-Z strip's jump), the bar is back too.
                 // (A layout's own dy of 0 is not a scroll.)
                 if (dy < 0 && mSearchCollapsed) unfoldSearchAtTop(recyclerView);
+                foldAfterARow(dy);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                     if (!mGridUserScrolling) {
-                        notifyListDragStarted(recyclerView.computeVerticalScrollRange()
+                        notifyListDragStarted(recyclerView, recyclerView.computeVerticalScrollRange()
                             > recyclerView.computeVerticalScrollExtent());
                         // Decided once, as the drag starts: a list that fits has no scroll to give.
                         mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
@@ -580,6 +581,7 @@ public final class AppDrawerContentView extends FrameLayout
                     mGridUserScrolling = true;
                 } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
                     mGridUserScrolling = false;
+                    mFoldDragArmed = false;
                     if (mSearchCollapsed) unfoldSearchAtTop(recyclerView);
                     KeyboardScrollListener keyboard = mKeyboardScrollListener;
                     if (keyboard != null) keyboard.onListScrollIdle();
@@ -927,12 +929,52 @@ public final class AppDrawerContentView extends FrameLayout
         default void onListDragStarted() {}
     }
 
-    /** A list the finger started dragging: the keyboard's cue. Shared by every list. */
+    /**
+     * A page strip or the A-Z index the finger started dragging: the keyboard's cue, and the
+     * search bar folds into its round button, the user browsing now.
+     */
     private void notifyListDragStarted(boolean scrollable) {
         KeyboardScrollListener keyboard = mKeyboardScrollListener;
         if (keyboard != null) keyboard.onListDragStarted();
-        // The same cue folds the search bar into its round button: the user is browsing now.
         foldSearchForBrowse(scrollable);
+    }
+
+    /**
+     * A vertical list the finger started dragging: the keyboard's cue at once, the bar's fold
+     * once the drag has scrolled the list down one full row ({@link #foldAfterARow}).
+     */
+    private void notifyListDragStarted(@NonNull RecyclerView list, boolean scrollable) {
+        KeyboardScrollListener keyboard = mKeyboardScrollListener;
+        if (keyboard != null) keyboard.onListDragStarted();
+        mFoldDragScrollable = scrollable;
+        mFoldDragScrolledPx = 0;
+        mFoldDragRowPx = rowHeightPx(list);
+        mFoldDragArmed = !mSearchCollapsed;
+    }
+
+    /** This drag folds the bar once it has scrolled the list a row; cleared as the list rests. */
+    private boolean mFoldDragArmed;
+    private boolean mFoldDragScrollable;
+    private int mFoldDragScrolledPx;
+    private int mFoldDragRowPx;
+
+    /** A dragged list scrolled {@code dy}: the bar folds once the drag has gone a full row down. */
+    private void foldAfterARow(int dy) {
+        if (!mFoldDragArmed || dy == 0) return;
+        mFoldDragScrolledPx += dy;
+        if (!AppDrawerSearchCollapsePolicy.browsedARow(mFoldDragScrolledPx, mFoldDragRowPx)) {
+            return;
+        }
+        mFoldDragArmed = false;
+        foldSearchForBrowse(mFoldDragScrollable);
+    }
+
+    /** One row of {@code list}'s grid as laid out now, its decorations included; 0 with none. */
+    private static int rowHeightPx(@NonNull RecyclerView list) {
+        RecyclerView.LayoutManager layout = list.getLayoutManager();
+        View row = list.getChildCount() > 0 ? list.getChildAt(0) : null;
+        if (layout == null || row == null) return 0;
+        return layout.getDecoratedMeasuredHeight(row);
     }
 
     /**
@@ -944,14 +986,16 @@ public final class AppDrawerContentView extends FrameLayout
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 if (dy < 0 && mSearchCollapsed) unfoldSearchAtTop(recyclerView);
+                foldAfterARow(dy);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
-                    notifyListDragStarted(recyclerView.canScrollVertically(1)
+                    notifyListDragStarted(recyclerView, recyclerView.canScrollVertically(1)
                         || recyclerView.canScrollVertically(-1));
                 } else if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    mFoldDragArmed = false;
                     unfoldSearchAtTop(recyclerView);
                 }
             }

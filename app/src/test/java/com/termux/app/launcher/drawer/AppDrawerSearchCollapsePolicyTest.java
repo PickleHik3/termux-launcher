@@ -40,4 +40,20 @@ public class AppDrawerSearchCollapsePolicyTest {
                 AppDrawerSearchCollapsePolicy.collapsedAfter(true, e, true, false, false));
         }
     }
+
+    @Test public void aDragFoldsTheBarOnlyOnceItHasScrolledAFullRow() {
+        // A 96 px row of the grid on screen.
+        assertFalse(AppDrawerSearchCollapsePolicy.browsedARow(0, 96));
+        assertFalse(AppDrawerSearchCollapsePolicy.browsedARow(95, 96));
+        assertTrue(AppDrawerSearchCollapsePolicy.browsedARow(96, 96));
+        assertTrue(AppDrawerSearchCollapsePolicy.browsedARow(400, 96));
+        // Up counts back: a drag down a row and back up has not browsed.
+        assertFalse(AppDrawerSearchCollapsePolicy.browsedARow(96 - 96, 96));
+        assertFalse(AppDrawerSearchCollapsePolicy.browsedARow(-200, 96));
+    }
+
+    @Test public void aListWithNoRowLaidOutFoldsOnAnyScrollDown() {
+        assertFalse(AppDrawerSearchCollapsePolicy.browsedARow(0, 0));
+        assertTrue(AppDrawerSearchCollapsePolicy.browsedARow(1, 0));
+    }
 }
