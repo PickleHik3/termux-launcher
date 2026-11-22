@@ -613,6 +613,52 @@ public class AppDrawerKeyboardSeparationTest {
         assertTrue((boolean) ReflectionHelpers.getField(content, "mSearchRevealRequested"));
     }
 
+    @Test public void settlingOnCategoriesSendsTheBuiltInKeyboardAwayAndKeepsTheQuery() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(content, "mSearchRevealRequested", true);
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        reveal(1f);
+
+        controller.onSectionChanged(AppDrawerSection.CATEGORIES);
+
+        Object spring = ReflectionHelpers.getField(controller, "mReveal");
+        assertEquals(0f, (float) ReflectionHelpers.getField(spring, "target"), 0f);
+        assertTrue((boolean) ReflectionHelpers.getField(content, "mSearchRevealRequested"));
+    }
+
+    @Test public void settlingOnCategoriesDismissesTheSystemKeyboardEachTime() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mImePinTopPx", 1500f);
+
+        controller.onSectionChanged(AppDrawerSection.CATEGORIES);
+        controller.onSectionChanged(AppDrawerSection.CATEGORIES);
+
+        assertEquals(2, host.dismissSearchSystemKeyboardCalls);
+    }
+
+    @Test public void settlingOnAppsOrWithNoKeyboardLeavesTheKeyboardAlone() {
+        floating();
+        AppDrawerContentView content = new AppDrawerContentView(plane.getContext());
+        content.setRevealListener(() -> { });
+        ReflectionHelpers.setField(controller, "mContent", content);
+        ReflectionHelpers.setField(controller, "mOpen", true);
+        ReflectionHelpers.setField(controller, "mImePinTopPx", 1500f);
+        controller.onSectionChanged(AppDrawerSection.APPS);
+        assertEquals(0, host.dismissSearchSystemKeyboardCalls);
+
+        ReflectionHelpers.setField(controller, "mImePinTopPx", 0f);
+        reveal(0f);
+        controller.onSectionChanged(AppDrawerSection.CATEGORIES);
+        assertEquals(0, host.dismissSearchSystemKeyboardCalls);
+    }
+
     @Test public void aDragWithTheKeyboardDownOrTheDrawerClosedDoesNothing() {
         floating();
         AppDrawerContentView content = new AppDrawerContentView(plane.getContext());

@@ -2066,10 +2066,31 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     public void onSectionChanged(@NonNull AppDrawerSection section) {
         TermuxAppSharedPreferences preferences = mHost.preferences();
         if (preferences != null) preferences.setAppLauncherDrawerSection(section.preferenceValue);
+        hideSearchKeyboardForSection(section);
         AppDrawerContentView content = mContent;
         // Default's pages are sized for both sections at once; a turn changes no metric.
         if (content != null && content.isDefaultPagesActive()) return;
         reapplyMetrics();
+    }
+
+    /**
+     * The switch committed to {@code section} (the settle, so a drag that comes back never gets
+     * here): Categories has no search field, so the keyboard goes the way a list drag sends it,
+     * the query kept. A keyboard that was up before the drawer opened is the Terminal's and stays.
+     */
+    @VisibleForTesting
+    void hideSearchKeyboardForSection(@NonNull AppDrawerSection section) {
+        if (!AppDrawerSectionKeyboardPolicy.hidesKeyboard(section, searchKeyboardUp())) return;
+        onListDragHidesKeyboard();
+        // No scroll follows to report idle, so the once-per-scroll latch is released here.
+        mSystemImeScrolledAway = false;
+    }
+
+    /** Whether the search keyboard is up and {@link #onListDragHidesKeyboard} would send it away. */
+    private boolean searchKeyboardUp() {
+        if (!mOpen) return false;
+        if (mImePinTopPx > 0f) return true;
+        return hasRevealableKeyboard() && !keyboardStaysUp() && mReveal.target > 0f;
     }
 
     /** Default's pages gave way to a search or came back: the grid's metrics differ between them. */
