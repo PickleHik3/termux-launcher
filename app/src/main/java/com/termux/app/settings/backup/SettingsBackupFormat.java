@@ -221,6 +221,7 @@ public final class SettingsBackupFormat {
         "active_family_id", "nerd_icons", "ligatures", "recommended_features", "weight")));
 
     static final Set<String> PRIVILEGED_KEYS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+        PrivilegedPolicyStore.KEY_BACKEND,
         PrivilegedPolicyStore.KEY_MASTER_ENABLED,
         PrivilegedPolicyStore.KEY_PREFER_SHIZUKU,
         PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK,

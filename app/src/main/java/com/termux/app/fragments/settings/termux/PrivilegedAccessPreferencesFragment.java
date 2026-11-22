@@ -16,6 +16,7 @@ import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
 import com.termux.privileged.PrivilegedBackendManager;
+import com.termux.privileged.PrivilegedChoice;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.privileged.lane.PrivilegedLaneBinding;
@@ -27,9 +28,7 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
 
     private static final String KEY_STATUS = "privileged_backend_status";
     private static final String KEY_REQUEST_PERMISSION = "priv_request_shizuku_permission";
-    private static final String KEY_MASTER = PrivilegedPolicyStore.KEY_MASTER_ENABLED;
-    private static final String KEY_PREFER_SHIZUKU = PrivilegedPolicyStore.KEY_PREFER_SHIZUKU;
-    private static final String KEY_ALLOW_SHELL = PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK;
+    private static final String KEY_BACKEND = PrivilegedPolicyStore.KEY_BACKEND;
     private static final String KEY_LANE_STATUS = "priv_lane_status";
     private static final String KEY_LANE = PrivilegedPolicyStore.KEY_LANE_ENABLED;
 
@@ -45,9 +44,7 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
         SettingsLayoutUtils.applyScreenLayout(this);
 
         configurePermissionRequestAction(context);
-        configureBackendToggleRefresh(context, KEY_MASTER);
-        configureBackendToggleRefresh(context, KEY_PREFER_SHIZUKU);
-        configureBackendToggleRefresh(context, KEY_ALLOW_SHELL);
+        configureBackendChoice(context);
         configureLaneToggle(context);
         refreshStatusSummary();
     }
@@ -92,40 +89,27 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
         });
     }
 
-    private void configureBackendToggleRefresh(@NonNull Context context, @NonNull String key) {
-        Preference preference = findPreference(key);
+    private void configureBackendChoice(@NonNull Context context) {
+        Preference preference = findPreference(KEY_BACKEND);
         if (preference == null)
             return;
 
         preference.setOnPreferenceChangeListener((changed, newValue) -> {
-            if (newValue instanceof Boolean) {
-                writePrivilegedToggle(context, key, (Boolean) newValue);
-            }
-            // The master switch gates the lane too.
+            PrivilegedChoice choice = PrivilegedChoice.fromStored(String.valueOf(newValue));
+            if (choice == null)
+                return false;
+            PrivilegedPolicyStore.setChoice(context, choice);
+            // The choice gates the lane too; settle it again once the backend has been re-picked.
             PrivilegedLaneBinding.getInstance().applyPolicy();
             PrivilegedBackendManager.getInstance().reselectBackend().thenAccept(success -> {
+                PrivilegedLaneBinding.getInstance().applyPolicy();
                 if (isAdded() && getActivity() != null) {
                     getActivity().runOnUiThread(this::refreshStatusSummary);
                 }
             });
+            refreshStatusSummary();
             return true;
         });
-    }
-
-    private void writePrivilegedToggle(@NonNull Context context, @NonNull String key, boolean value) {
-        switch (key) {
-            case PrivilegedPolicyStore.KEY_MASTER_ENABLED:
-                PrivilegedPolicyStore.setMasterEnabled(context, value);
-                break;
-            case PrivilegedPolicyStore.KEY_PREFER_SHIZUKU:
-                PrivilegedPolicyStore.setPreferShizuku(context, value);
-                break;
-            case PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK:
-                PrivilegedPolicyStore.setShellFallbackEnabled(context, value);
-                break;
-            default:
-                break;
-        }
     }
 
     private void configureLaneToggle(@NonNull Context context) {
@@ -168,6 +152,9 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
             case NO_PERMISSION:
                 label = getString(R.string.termux_privileged_lane_state_no_permission);
                 break;
+            case NO_ROOT:
+                label = getString(R.string.termux_privileged_lane_state_no_root);
+                break;
             case OFF:
             default:
                 label = getString(R.string.termux_privileged_lane_state_off);
@@ -178,33 +165,49 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
     }
 
     private void refreshStatusSummary() {
-        refreshLaneStatus();
-        Preference statusPreference = findPreference(KEY_STATUS);
-        if (statusPreference == null)
+        Context context = getContext();
+        if (context == null)
             return;
+        refreshLaneStatus();
 
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
-        PrivilegedBackendManager.BackendState state = manager.getBackendState();
-        boolean permission = manager.getBackend() != null && manager.getBackend().hasPermission();
+        PrivilegedChoice.Status status = manager.currentStatus();
 
+        Preference statusPreference = findPreference(KEY_STATUS);
         if (statusPreference instanceof StatusCardPreference) {
-            boolean active = state == PrivilegedBackendManager.BackendState.READY
-                || state == PrivilegedBackendManager.BackendState.FALLBACK_SHELL;
-            ((StatusCardPreference) statusPreference).setStatus(
-                manager.getBackendType() + " · " + state, active);
-            StringBuilder body = new StringBuilder();
-            appendStatusLine(body, "state", String.valueOf(state));
-            appendStatusLine(body, "reason", String.valueOf(manager.getStatusReason()));
-            appendStatusLine(body, "permission", String.valueOf(permission));
-            appendStatusLine(body, "message", manager.getStatusMessage());
-            statusPreference.setSummary(body.toString().trim());
-        } else {
-            statusPreference.setSummary(manager.getStatusDescription());
+            ((StatusCardPreference) statusPreference).setStatus(getString(statusLabel(status)),
+                status == PrivilegedChoice.Status.USING_SHIZUKU || status == PrivilegedChoice.Status.USING_ROOT);
+        }
+
+        // Asking for Shizuku's permission only makes sense once Shizuku is up and has not granted it.
+        Preference request = findPreference(KEY_REQUEST_PERMISSION);
+        if (request != null) {
+            boolean visible = status == PrivilegedChoice.Status.NEEDS_PERMISSION;
+            if (request.isVisible() != visible)
+                request.setVisible(visible);
         }
     }
 
-    private void appendStatusLine(@NonNull StringBuilder builder, @NonNull String key, String value) {
-        builder.append(String.format(java.util.Locale.US, "%-11s", key)).append(value).append('\n');
+    private static int statusLabel(@NonNull PrivilegedChoice.Status status) {
+        switch (status) {
+            case USING_SHIZUKU:
+                return R.string.termux_privileged_status_using_shizuku;
+            case USING_ROOT:
+                return R.string.termux_privileged_status_using_root;
+            case NEEDS_PERMISSION:
+                return R.string.termux_privileged_status_needs_permission;
+            case SHIZUKU_NOT_RUNNING:
+                return R.string.termux_privileged_status_shizuku_not_running;
+            case ROOT_DENIED:
+                return R.string.termux_privileged_status_root_denied;
+            case NOT_AVAILABLE:
+                return R.string.termux_privileged_status_not_available;
+            case OFF:
+                return R.string.termux_privileged_status_off;
+            case CHECKING:
+            default:
+                return R.string.termux_privileged_status_checking;
+        }
     }
 }
 
@@ -230,15 +233,6 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
             return;
 
         switch (key) {
-            case PrivilegedPolicyStore.KEY_MASTER_ENABLED:
-                PrivilegedPolicyStore.setMasterEnabled(mContext, value);
-                break;
-            case PrivilegedPolicyStore.KEY_PREFER_SHIZUKU:
-                PrivilegedPolicyStore.setPreferShizuku(mContext, value);
-                break;
-            case PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK:
-                PrivilegedPolicyStore.setShellFallbackEnabled(mContext, value);
-                break;
             case PrivilegedPolicyStore.KEY_LANE_ENABLED:
                 PrivilegedPolicyStore.setLaneEnabled(mContext, value);
                 break;
@@ -258,12 +252,6 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
             return defValue;
 
         switch (key) {
-            case PrivilegedPolicyStore.KEY_MASTER_ENABLED:
-                return PrivilegedPolicyStore.isMasterEnabled(mContext);
-            case PrivilegedPolicyStore.KEY_PREFER_SHIZUKU:
-                return PrivilegedPolicyStore.isPreferShizuku(mContext);
-            case PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK:
-                return PrivilegedPolicyStore.isShellFallbackEnabled(mContext);
             case PrivilegedPolicyStore.KEY_LANE_ENABLED:
                 return PrivilegedPolicyStore.isLaneSwitchOn(mContext);
             case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT: {
@@ -276,8 +264,19 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
     }
 
     @Override
+    public void putString(String key, @Nullable String value) {
+        PrivilegedChoice choice = PrivilegedChoice.fromStored(value);
+        if (PrivilegedPolicyStore.KEY_BACKEND.equals(key) && choice != null) {
+            PrivilegedPolicyStore.setChoice(mContext, choice);
+        }
+    }
+
+    @Override
     @Nullable
     public String getString(String key, @Nullable String defValue) {
+        if (PrivilegedPolicyStore.KEY_BACKEND.equals(key)) {
+            return PrivilegedPolicyStore.getChoice(mContext).stored;
+        }
         return defValue;
     }
 }

@@ -15,6 +15,7 @@ import androidx.annotation.Nullable;
 import com.termux.BuildConfig;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedAvailabilitySignal;
+import com.termux.privileged.PrivilegedChoice;
 import com.termux.privileged.PrivilegedPolicyStore;
 
 import rikka.shizuku.Shizuku;
@@ -31,7 +32,7 @@ public final class PrivilegedLaneBinding {
     private static final long REBIND_DELAY_MS = 2_000L;
 
     /** What the settings screen shows. */
-    public enum State { OFF, NO_SHIZUKU, NO_PERMISSION, BINDING, RUNNING, ROOT }
+    public enum State { OFF, NO_SHIZUKU, NO_PERMISSION, NO_ROOT, BINDING, RUNNING, ROOT }
 
     /** The lane cannot serve right now; the message is for the client. */
     public static final class Unavailable extends Exception {
@@ -162,6 +163,8 @@ public final class PrivilegedLaneBinding {
         }
         if (ctx == null) return;
         if (PrivilegedPolicyStore.isLaneEnabled(ctx)) {
+            // The choice may have changed: let go of the old way, then take the one it allows.
+            unbind();
             bindIfPossible();
         } else {
             unbind();
@@ -176,8 +179,8 @@ public final class PrivilegedLaneBinding {
             ctx = appContext;
             current = lane;
         }
-        State chosen = LaneChoice.choose(ctx != null && PrivilegedPolicyStore.isLaneEnabled(ctx),
-            shizukuAlive(), permissionGranted(), isRootActiveNow());
+        State chosen = ctx == null ? State.OFF : LaneChoice.choose(PrivilegedPolicyStore.getChoice(ctx),
+            PrivilegedPolicyStore.isLaneEnabled(ctx), shizukuAlive(), permissionGranted(), isRootActiveNow());
         if (chosen != State.BINDING) return chosen;
         if (current != null && current != rootLaneNow() && current.asBinder().isBinderAlive()) return State.RUNNING;
         // Bound or not yet: the next request binds, so from the outside it is on its way.
@@ -206,8 +209,10 @@ public final class PrivilegedLaneBinding {
         if (!PrivilegedPolicyStore.isLaneEnabled(ctx)) {
             throw new Unavailable("the privileged lane is turned off in Settings › Shizuku");
         }
-        if (!(shizukuAlive() && permissionGranted())) {
-            if (isRootActiveNow()) return ensureRootLane(ctx);
+        PrivilegedChoice choice = PrivilegedPolicyStore.getChoice(ctx);
+        if (!(choice.allowsShizuku() && shizukuAlive() && permissionGranted())) {
+            if (choice.allowsRoot() && isRootActiveNow()) return ensureRootLane(ctx);
+            if (choice == PrivilegedChoice.ROOT) throw new Unavailable("root is not available");
             if (!shizukuAlive()) throw new Unavailable("Shizuku is not running");
             throw new Unavailable("grant Shizuku permission to " + appLabel(ctx));
         }
@@ -311,8 +316,9 @@ public final class PrivilegedLaneBinding {
             if (binding || (lane != null && lane != rootLane && lane.asBinder().isBinderAlive())) return;
             if (!PrivilegedPolicyStore.isLaneEnabled(ctx)) return;
         }
-        if (!shizukuAlive() || !permissionGranted()) {
-            if (isRootActiveNow()) ensureRootLane(ctx);
+        PrivilegedChoice choice = PrivilegedPolicyStore.getChoice(ctx);
+        if (!choice.allowsShizuku() || !shizukuAlive() || !permissionGranted()) {
+            if (choice.allowsRoot() && isRootActiveNow()) ensureRootLane(ctx);
             return;
         }
         synchronized (lock) {
