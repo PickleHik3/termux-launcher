@@ -4767,9 +4767,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             return;
         }
-        if (com.termux.app.chrome.MotionLog.enabled) {
-            com.termux.app.chrome.MotionLog.log("pane-style-moved", "fields=" + key.movedFields(previousKey)); // DIAG(pane-style)
-        }
         Trace.beginSection("Frost.terminal.paneStyle");
         try {
             mPaneController.setSurfaceStyle(style);
