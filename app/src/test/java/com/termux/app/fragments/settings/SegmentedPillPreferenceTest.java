@@ -65,13 +65,13 @@ public class SegmentedPillPreferenceTest {
 
     @Test
     public void xmlEntriesAndEntryValuesConfigureAPillWithoutAnyFragmentCode() {
-        // termux_style_preferences.xml's theme_mode row declares app:entries/app:entryValues and
+        // status_bar_preferences.xml's cutout-mode row declares app:entries/app:entryValues and
         // nothing else — the fragment never calls setSegments for it.
         Application app = RuntimeEnvironment.getApplication();
         PreferenceManager manager = new PreferenceManager(app);
         PreferenceScreen screen = manager.inflateFromResource(
-            app, R.xml.termux_style_preferences, null);
-        androidx.preference.Preference found = screen.findPreference("theme_mode");
+            app, R.xml.status_bar_preferences, null);
+        androidx.preference.Preference found = screen.findPreference("status_bar_cutout_mode");
         assertNotNull(found);
         assertTrue(found instanceof SegmentedPillPreference);
         SegmentedPillPreference pill = (SegmentedPillPreference) found;
@@ -140,6 +140,38 @@ public class SegmentedPillPreferenceTest {
         MaterialButtonToggleGroup group =
             bind(1f, "Off", "Follow the system theme every evening", "On");
         assertEquals(LinearLayout.VERTICAL, group.getOrientation());
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = PHONE)
+    public void aLabelThatFitsWithTrimmedPaddingKeepsTheRowWhole() {
+        // A word just too wide for the style's 12dp sides but not for 4dp: on the emulator, the
+        // Grid row's "Categories" at font scale 1.3.
+        MaterialButtonToggleGroup probe = bind(1.3f, DRAWER);
+        MaterialButton segment = button(probe, 2);
+        float density = segment.getResources().getDisplayMetrics().density;
+        int roomAtStyle = segment.getWidth() - Math.round(24 * density);
+        int roomTrimmed = segment.getWidth() - Math.round(8 * density);
+        String word = "Categories";
+        while (segment.getPaint().measureText(word) <= roomAtStyle) word = word + "s";
+        assertTrue("the probe word fits trimmed: " + word,
+            segment.getPaint().measureText(word) <= roomTrimmed);
+
+        MaterialButtonToggleGroup group = bind(1.3f, "Vertical", "Pages", word);
+
+        assertOneRow(group);
+        assertEquals(Math.round(4 * density), button(group, 2).getPaddingStart());
+        assertEquals(Math.round(4 * density), button(group, 0).getPaddingEnd());
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = PHONE)
+    public void aRowThatFitsKeepsTheStylesPadding() {
+        MaterialButtonToggleGroup group = bind(1f, TOUCH);
+        float density = button(group, 0).getResources().getDisplayMetrics().density;
+        assertEquals(Math.round(12 * density), button(group, 1).getPaddingStart());
     }
 
     @Test

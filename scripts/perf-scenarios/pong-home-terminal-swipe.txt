@@ -1,0 +1,10 @@
+# Pong, starting on Home 2 (the page next to the Terminal), keyboard up on the Terminal
+# (1080x2412). Swipe to the Terminal and back across the wallpaper, five times: the slide that
+# carries the keyboard and extra-keys glass in and out. Live blur's cost gate
+# (project-docs/active/live-glass-2026-11-03.md).
+repeat 5
+swipe 850 700 150 700 300
+sleep 1
+swipe 150 400 850 400 300
+sleep 1
+end

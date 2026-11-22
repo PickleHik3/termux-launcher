@@ -18,7 +18,7 @@ import com.google.android.material.color.MaterialColors;
 import com.termux.R;
 
 /**
- * The scale rail on the Display page: a vertical slider along the page's leading edge, out
+ * The scale rail on the display window: a vertical slider along the page's leading edge, out
  * together with the border tab, with one stop per {@link DisplayScaleSteps#STEPS} entry and a
  * read-out beside the thumb.
  *

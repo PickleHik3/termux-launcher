@@ -127,9 +127,9 @@ public class ChromeRendererTest {
         assertFalse(chrome.isRenderSyncPending());
     }
 
-    /** The commit runs before layout, the render after it: two phases, so two passes. */
+    /** The commit applies the whole spec, so the render asked for in the same frame is run by it (l5-F1). */
     @Test
-    public void anApplyAndARenderInOneFrameAreStillTwoPasses() {
+    public void anApplyAndARenderInOneFrameCostOnePass() {
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
         chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
@@ -137,7 +137,7 @@ public class ChromeRendererTest {
         assertEquals(0, surfaces.applied.size());
         mainLooper().idle();
 
-        assertEquals(2, surfaces.applied.size());
+        assertEquals(1, surfaces.applied.size());
         assertEquals(1, surfaces.invariantsEnforced);
     }
 
@@ -227,41 +227,17 @@ public class ChromeRendererTest {
     public void theDockScopeDoesNotWidenToTheKeyboardsOwnCrop() {
         chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, 12, false,
             new android.graphics.Rect(0, 0, 1, 1));
-        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, 12, false,
-            new android.graphics.Rect(0, 0, 1, 1));
         chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, 12, false,
             new android.graphics.Rect(0, 0, 1, 1));
 
         chrome.requestSync(ChromeRenderer.SCOPE_BACKDROPS);
 
         assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
-        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
         assertFalse("only the paths that touched all three may invalidate the keyboard crop",
             chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
 
         chrome.requestSync(ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
         assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
-    }
-
-    /** A rebuilt nav strip or a moved dock says so alone, without dragging the other crop along. */
-    @Test
-    public void eachBackdropHasAScopeOfItsOwn() {
-        android.graphics.Rect rect = new android.graphics.Rect(0, 0, 1, 1);
-        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, 12, false, rect);
-        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, 12, false, rect);
-
-        chrome.requestSync(ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP);
-        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
-        assertFalse(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
-
-        chrome.ledger().recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, 12, false, rect);
-        chrome.requestSync(ChromeRenderer.SCOPE_DOCK_BACKDROP);
-        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
-        assertFalse(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
-
-        assertEquals("the pair scope is exactly the two singles",
-            ChromeRenderer.SCOPE_DOCK_BACKDROP | ChromeRenderer.SCOPE_NAV_STRIP_BACKDROP,
-            ChromeRenderer.SCOPE_BACKDROPS);
     }
 
     @Test
@@ -324,7 +300,6 @@ public class ChromeRendererTest {
 
         assertEquals(0, chrome.blurCache().residentRadiiCount());
         assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
-        assertTrue(chrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
         assertEquals(0, surfaces.applied.size());
 
         mainLooper().idle();
@@ -431,10 +406,107 @@ public class ChromeRendererTest {
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
     }
 
+    /** The commit applies the whole spec, so a render asked for before it is not run again after. */
+    @Test
+    public void aRenderRequestedBeforeACommitIsRunByTheCommitNotAgainAfterIt() {
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+        mainLooper().idle();
+
+        assertEquals("one apply, the commit's", 1, surfaces.applied.size());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** A render asked for after the commit ran still books its pass. */
+    @Test
+    public void aRenderRequestedAfterACommitStillRuns() {
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+        chrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+        mainLooper().idle();
+
+        assertEquals("the commit, then the render", 2, surfaces.applied.size());
+    }
+
+    /** A renderer whose commit is a step of a frame pipeline hooked on {@code root}. */
+    private ChromeRenderer rendererOnWindow(View root) {
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        frames.attach(root);
+        return new ChromeRenderer(surfaces, null, frames);
+    }
+
+    /**
+     * A commit asked for after the frame's animation phase runs in the pipeline's pre-draw hook,
+     * and the frame draws even when the apply moved a view: the draw cancel is gone (ADR 0028).
+     */
+    @Test
+    public void aCommitAskedInsideTheTraversalRunsAtPreDrawAndTheFrameDraws() {
+        View root = new View(RuntimeEnvironment.getApplication());
+        chrome = rendererOnWindow(root);
+        drawFirstFrame(root);
+        surfaces.applied.clear();
+        root.layout(0, 0, 10, 10);
+        surfaces.onApply = root::requestLayout;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+
+        assertFalse("the draw goes ahead (the observer reports no cancel)",
+            root.getViewTreeObserver().dispatchOnPreDraw());
+        assertEquals(1, surfaces.applied.size());
+        assertFalse(chrome.isCommitPending());
+        mainLooper().idle();
+        assertEquals("the booked frame finds the commit done", 1, surfaces.applied.size());
+    }
+
+    /**
+     * An apply that asks for another apply from inside itself (the ink measuring a band's new
+     * dress) is applied once more inside the same step: no second commit is booked, so no step
+     * runs late in the frame's pre-draw.
+     */
+    @Test
+    public void anApplyThatAsksForItselfOnceIsAppliedTwiceInTheSameStep() {
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+        surfaces.chrome = chrome;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+
+        assertEquals("twice inside the one step", 2, surfaces.applied.size());
+        assertFalse(chrome.isCommitPending());
+        assertFalse("the pipeline is not re-dirtied", frames.isFrameBooked());
+    }
+
+    @Test
+    public void anApplyThatAlwaysAsksIsAppliedTwiceThenBookedOnce() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 3;
+        com.termux.app.window.FramePipeline frames = new com.termux.app.window.FramePipeline();
+        chrome = new ChromeRenderer(surfaces, null, frames);
+        surfaces.chrome = chrome;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        frames.flush("test");
+
+        assertEquals("exactly twice inside the step", 2, surfaces.applied.size());
+        assertTrue("the next commit is booked, not looped", chrome.isCommitPending());
+        assertTrue(frames.isFrameBooked());
+    }
+
     /** Dispatches the root's pre-draw until a frame is let through, as a traversal would. */
     private static void drawFirstFrame(View root) {
         for (int i = 0; i < 3; i++) {
-            if (root.getViewTreeObserver().dispatchOnPreDraw()) return;
+            if (!root.getViewTreeObserver().dispatchOnPreDraw()) return;
         }
     }
 
@@ -445,7 +517,7 @@ public class ChromeRendererTest {
     @Test
     public void topPaneFrostBeforeTheFirstFrameFoldsIntoOnePassAtItsPreDraw() {
         View root = new View(RuntimeEnvironment.getApplication());
-        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome = rendererOnWindow(root);
 
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         assertEquals("the first pass runs at once", 1, surfaces.terminalGlassFrostUpdates);
@@ -470,7 +542,7 @@ public class ChromeRendererTest {
     @Test
     public void theFirstFramesCommitRunsBeforeTheHeldFrost() {
         View root = new View(RuntimeEnvironment.getApplication());
-        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome = rendererOnWindow(root);
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME | ChromeRenderer.SCOPE_TOP_PANE_FROST);
         assertTrue(chrome.isCommitPending());
@@ -489,7 +561,7 @@ public class ChromeRendererTest {
     @Test
     public void destroyingBeforeTheFirstFrameRunsNothingHeld() {
         View root = new View(RuntimeEnvironment.getApplication());
-        surfaces.views.put(com.termux.R.id.activity_termux_root_view, root);
+        chrome = rendererOnWindow(root);
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
 
@@ -498,5 +570,102 @@ public class ChromeRendererTest {
 
         assertEquals(1, surfaces.terminalGlassFrostUpdates);
         assertFalse(chrome.isFrostHeldForFirstFrame());
+    }
+
+    /**
+     * Across the seam, the ink measuring a band's new dress inside the frame's commit asked for a
+     * second whole apply before the draw (24 ms of a drag frame on pong). While the even-out is
+     * held for the crossing, that request is the post-layout pass that follows: two applies, not
+     * three.
+     */
+    @Test
+    public void anApplyAskedInsideACommitWhileTravellingFoldsIntoTheRenderPass() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;   // the commit's apply asks once
+        chrome.holdEvenOut();
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        assertTrue(chrome.isCommitPending());
+        mainLooper().idle();
+
+        assertEquals("the frame's commit, then the render pass it folded into",
+            2, surfaces.applied.size());
+        assertEquals("the second apply is the render pass", 1, surfaces.invariantsEnforced);
+        assertFalse(chrome.isCommitPending());
+        assertFalse(chrome.isRenderSyncPending());
+    }
+
+    /** At rest nothing changes: an apply asked inside a commit books a commit of its own. */
+    @Test
+    public void anApplyAskedInsideACommitAtRestStillBooksACommit() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_APPLY_THIS_FRAME;
+        surfaces.applyRequestsRemaining = 1;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        mainLooper().idle();
+
+        assertEquals("two commits", 2, surfaces.applied.size());
+        assertEquals("neither is the render pass", 0, surfaces.invariantsEnforced);
+    }
+
+    /** An apply asked outside a commit, even mid-crossing, is a commit as ever. */
+    @Test
+    public void anApplyAskedOutsideACommitWhileTravellingIsACommit() {
+        chrome.holdEvenOut();
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        assertTrue(chrome.isCommitPending());
+        assertFalse(chrome.isRenderSyncPending());
+        mainLooper().idle();
+        assertEquals(1, surfaces.applied.size());
+        assertEquals(0, surfaces.invariantsEnforced);
+    }
+
+    /**
+     * A top-pane frost asked for while the frame's commit is booked goes with that commit: cut
+     * once, after its apply, instead of now and again once the apply has moved the bands.
+     */
+    @Test
+    public void aFrostAskedWhileACommitIsBookedRunsOnceAfterItsApply() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals("nothing is cut before the commit", 0, surfaces.terminalGlassFrostUpdates);
+
+        mainLooper().idle();
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals("one cut, with the commit", 1, surfaces.terminalGlassFrostUpdates);
+        // With nothing booked, a frost runs when it is asked for, as before.
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        assertEquals(2, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** A commit whose apply cut the frost itself owes no second one. */
+    @Test
+    public void aFrostTheCommitsApplyCutsIsNotCutAgain() {
+        surfaces.chrome = chrome;
+        surfaces.applyRequestsScopes = ChromeRenderer.SCOPE_TOP_PANE_FROST;
+        surfaces.applyRequestsRemaining = 1;
+
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        mainLooper().idle();
+
+        assertEquals(1, surfaces.applied.size());
+        assertEquals(1, surfaces.terminalGlassFrostUpdates);
+    }
+
+    /** Tearing the chrome down drops the owed frost with the commit. */
+    @Test
+    public void cancellingTheCommitDropsTheFrostItOwed() {
+        chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
+        chrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
+        chrome.cancelPendingWork();
+        mainLooper().idle();
+
+        assertEquals(0, surfaces.applied.size());
+        assertEquals(0, surfaces.terminalGlassFrostUpdates);
     }
 }

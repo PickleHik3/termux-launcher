@@ -48,8 +48,7 @@ public final class TaiSpeechModels {
      *  (the registry wins on a shared id, so a model mid re-download keeps its installed path). */
     @NonNull
     public static List<TaiModelSpec> installed(@NonNull TaiModelStore store) {
-        LinkedHashMap<String, TaiModelSpec> models = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        models.putAll(store.getInstalledUserModels());
+        Map<String, TaiModelSpec> models = ModelAvailability.get(store.context()).models();
         List<TaiModelSpec> speech = new ArrayList<>();
         for (TaiModelSpec spec : models.values()) {
             if (isSpeechModel(spec)) speech.add(spec);
@@ -259,6 +258,12 @@ public final class TaiSpeechModels {
 
     // ---- naming ----
 
+    /** Whether the catalog says this model needs the GPU at full float precision (and never the CPU on its own). */
+    public static boolean needsGpuFp32(@Nullable String modelId) {
+        TaiModelCatalog.CatalogEntry entry = TaiModelCatalog.get(modelId);
+        return entry != null && entry.gpuPrecisionFp32;
+    }
+
     /** The engine a model runs on, for a row's summary: "Whisper" or "Parakeet". */
     @NonNull
     public static String engineLabel(@NonNull TaiModelSpec spec) {
@@ -286,7 +291,7 @@ public final class TaiSpeechModels {
 
     @NonNull
     public static String plainName(@NonNull String modelId, @Nullable String displayName, @Nullable String path) {
-        String size = sizeWord(modelId);
+        String size = needsGpuFp32(modelId) ? "Base GPU" : sizeWord(modelId);
         String head = size != null ? size : (displayName == null || displayName.trim().isEmpty() ? modelId : displayName.trim());
         return head + " · " + (isEnglishOnly(modelId, path) ? "English" : "Many languages");
     }
@@ -367,7 +372,7 @@ public final class TaiSpeechModels {
     @NonNull
     public static JSONObject startDownload(@NonNull Context context, @NonNull String modelId, int windowSeconds)
             throws JSONException {
-        JSONObject result = TaiManager.getInstance(context).downloadSpeechModel(modelId, windowSeconds);
+        JSONObject result = TaiManager.getInstance(context).modelManagement().downloadSpeechModel(modelId, windowSeconds);
         if (result.optBoolean("ok", false)) {
             synchronized (LOCK) {
                 new TaiSettings(context).setSttPendingDownloadJson(
@@ -385,7 +390,7 @@ public final class TaiSpeechModels {
     @NonNull
     public static JSONObject startWindowSwitch(@NonNull Context context, @NonNull TaiModelSpec installed, int windowSeconds)
             throws JSONException {
-        JSONObject result = TaiManager.getInstance(context).downloadSpeechModel(installed.id, windowSeconds);
+        JSONObject result = TaiManager.getInstance(context).modelManagement().downloadSpeechModel(installed.id, windowSeconds);
         if (result.optBoolean("ok", false)) {
             synchronized (LOCK) {
                 new TaiSettings(context).setSttPendingDownloadJson(

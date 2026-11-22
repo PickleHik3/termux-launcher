@@ -11,7 +11,7 @@ import java.util.Locale;
 import java.util.TimeZone;
 
 /**
- * What the Scratchpad widget says about its file: how long ago it was edited ("just now", "2m",
+ * What the Notes widget says about its file: how long ago it was edited ("just now", "2m",
  * "3h", "Mon") and which of its lines a card shows. Pure, so the wording is tested without a
  * device; the words themselves come from resources and are passed in.
  */
@@ -104,6 +104,35 @@ public final class NotesWidgetFormats {
             out.add(line.trim());
             if (out.size() >= max) break;
         }
+        return out;
+    }
+
+    /**
+     * The note's title: its first non-blank line when that is a markdown heading, without the
+     * hashes; null when the note opens with plain text, which then belongs to the body.
+     */
+    @Nullable public static String title(@Nullable String text) {
+        for (String line : head(text, 200)) {
+            if (line.trim().isEmpty()) continue;
+            if (!isHeading(line)) return null;
+            String bare = line.trim().replaceFirst("^#+\\s*", "");
+            return bare.isEmpty() ? null : bare;
+        }
+        return null;
+    }
+
+    /**
+     * The lines under the title, in order and as written: all of the note when it has no title,
+     * else everything after the title line, leading blank lines dropped.
+     */
+    @NonNull public static List<String> bodyLines(@Nullable String text, int max) {
+        List<String> lines = head(text, 200);
+        int from = 0;
+        while (from < lines.size() && lines.get(from).trim().isEmpty()) from++;
+        if (title(text) != null) from++;
+        while (from < lines.size() && lines.get(from).trim().isEmpty()) from++;
+        List<String> out = new ArrayList<>();
+        for (int i = from; i < lines.size() && out.size() < max; i++) out.add(lines.get(i));
         return out;
     }
 

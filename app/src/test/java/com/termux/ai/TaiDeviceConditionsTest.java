@@ -15,10 +15,11 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 import java.util.concurrent.ExecutorService;
+import android.app.Application;
 
 /** The thermal listener's thread lives only between start and stop, so a run leaves none behind. */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = 33)
+@Config(sdk = 33, application = Application.class)
 public class TaiDeviceConditionsTest {
 
     @Test

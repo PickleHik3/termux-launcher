@@ -13,7 +13,7 @@ import androidx.annotation.Nullable;
 import com.termux.app.TermuxService;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.terminal.rename.TerminalRenameTarget;
-import com.termux.shared.termux.extrakeys.ExtraKeysView;
+import com.termux.app.terminal.extrakeys.ExtraKeyModifiers;
 import com.termux.shared.termux.interact.TextInputDialogUtils;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
@@ -86,6 +86,7 @@ class FakeTerminalHost implements TerminalHost {
     int toolbarToggles;
     int flushDockRequests;
     int paneFontSize;
+    int paneCompactReturn = FontCompactPolicy.NOT_COMPACT;
     boolean overlaysConsume;
 
     // Panes
@@ -128,6 +129,11 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable String lastRenamedBrowserName;
     int lastRenamedBrowserIndex = -1;
     @Nullable Integer lastSelectedWindow;
+    @Nullable int[] lastMovedWindow;
+    @Nullable Boolean lastConsumedFromLeft;
+    @Nullable Boolean lastExpelledToLeft;
+    boolean consumeWindowResult = true;
+    boolean expelPaneResult = true;
     @Nullable Boolean lastSwitchWindowForward;
 
     // Workspaces
@@ -231,8 +237,10 @@ class FakeTerminalHost implements TerminalHost {
         return currentSession;
     }
 
-    @Override @Nullable public ExtraKeysView extraKeysView() {
-        return null;
+    private final ExtraKeyModifiers extraKeyModifiers = new ExtraKeyModifiers();
+
+    @Override @NonNull public ExtraKeyModifiers extraKeyModifiers() {
+        return extraKeyModifiers;
     }
 
     @Override @Nullable public EditText toolbarTextInput() {
@@ -363,6 +371,19 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public boolean setActivePaneFontSize(int size) {
         paneFontSize = size;
+        paneCompactReturn = FontCompactPolicy.afterManualChange(paneCompactReturn);
+        return true;
+    }
+
+    @Override public boolean activePaneCompact() {
+        return FontCompactPolicy.isCompact(paneCompactReturn);
+    }
+
+    @Override public boolean toggleActivePaneCompact(int compactSize) {
+        FontCompactPolicy.Next next =
+            FontCompactPolicy.toggle(paneFontSize, paneCompactReturn, compactSize);
+        paneFontSize = next.pinnedSize;
+        paneCompactReturn = next.returnSize;
         return true;
     }
 
@@ -724,6 +745,24 @@ class FakeTerminalHost implements TerminalHost {
         return selectWindowResult;
     }
 
+    @Override public boolean moveWindow(int from, int to) {
+        record("moveWindow");
+        lastMovedWindow = new int[]{from, to};
+        return true;
+    }
+
+    @Override public boolean consumeWindow(boolean fromLeft) {
+        record("consumeWindow");
+        lastConsumedFromLeft = fromLeft;
+        return consumeWindowResult;
+    }
+
+    @Override public boolean expelPane(boolean toLeft) {
+        record("expelPane");
+        lastExpelledToLeft = toLeft;
+        return expelPaneResult;
+    }
+
     @Override public int currentWindowCount() {
         return windowCount;
     }
@@ -858,6 +897,10 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public void showCommandPalette() {
         record("showCommandPalette");
+    }
+
+    @Override public void showPageSwitcher() {
+        record("showPageSwitcher");
     }
 
     @Override public void showExtraKeysRowEditor() {

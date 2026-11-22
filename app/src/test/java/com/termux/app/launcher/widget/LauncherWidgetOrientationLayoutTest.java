@@ -17,8 +17,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * Rotation. Each orientation keeps its own cell assignments, so a turn to landscape and back
- * leaves the portrait wall exactly as the user left it. The first turn into an orientation still
+ * Rotation. Only the portrait arrangement is kept (ADR 0020 §12): a turn to landscape and back
+ * leaves the portrait wall exactly as the user left it, and no landscape shelf is stored. The first turn into an orientation still
  * seeds from the other one's layout, and a save written before any of this existed moves nothing.
  */
 @RunWith(RobolectricTestRunner.class)
@@ -55,28 +55,61 @@ public class LauncherWidgetOrientationLayoutTest {
         assertEquals(1, repository.pageCount());
     }
 
-    @Test public void eachSideKeepsItsOwnArrangementOnceItHasOne() {
+    @Test public void onlyThePortraitArrangementIsKept() {
+        // ADR 0020 §12: one arrangement for both orientations, the portrait one. A move made
+        // while landscape was on screen is not shelved for landscape.
         WidgetTestFixtures.Memory storage = new WidgetTestFixtures.Memory();
         LauncherWidgetRepository repository = new LauncherWidgetRepository(storage);
         assertTrue(repository.putRecord(record(1, new WidgetCellRect(0, 0, 2, 2), 0)));
         assertFalse(repository.applyOrientation(PORTRAIT_KEY, PORTRAIT));
         assertTrue(repository.applyOrientation(LANDSCAPE_KEY, LANDSCAPE));
-
-        // Moved by hand while landscape was on screen.
         assertTrue(repository.putRecord(record(1, new WidgetCellRect(4, 1, 6, 3), 0)));
 
         assertTrue(repository.applyOrientation(PORTRAIT_KEY, PORTRAIT));
         assertEquals("portrait is untouched by a landscape move",
             new WidgetCellRect(0, 0, 2, 2), repository.get(1).cell);
-        assertTrue(repository.applyOrientation(LANDSCAPE_KEY, LANDSCAPE));
-        assertEquals("landscape kept the hand-placed cell",
-            new WidgetCellRect(4, 1, 6, 3), repository.get(1).cell);
+        assertTrue(repository.storedOrientations().isEmpty());
+        assertFalse("no landscape shelf is stored",
+            storage.value.contains("\"layouts\""));
+    }
 
-        // And across a reload: the shelf is durable.
-        LauncherWidgetRepository reloaded = new LauncherWidgetRepository(storage);
-        assertEquals(LANDSCAPE_KEY, reloaded.orientation());
-        assertTrue(reloaded.applyOrientation(PORTRAIT_KEY, PORTRAIT));
-        assertEquals(new WidgetCellRect(0, 0, 2, 2), reloaded.get(1).cell);
+    @Test public void aSaveWithALandscapeShelfLoadsItsPortraitArrangement() throws Exception {
+        // The fixture: a wall saved while landscape was on screen, its portrait arrangement on
+        // the shelf, and a stale landscape copy beside it from an older build.
+        WidgetTestFixtures.Memory storage = new WidgetTestFixtures.Memory();
+        LauncherWidgetRepository seed = new LauncherWidgetRepository(storage);
+        assertTrue(seed.putRecord(record(1, new WidgetCellRect(0, 0, 4, 4), 0)));
+        assertFalse(seed.applyOrientation(PORTRAIT_KEY, PORTRAIT));
+        assertTrue(seed.applyOrientation(LANDSCAPE_KEY, LANDSCAPE));
+        assertTrue(seed.putRecord(record(1, new WidgetCellRect(2, 0, 6, 3), 0)));
+        JSONObject saved = new JSONObject(storage.value);
+        JSONObject shelf = saved.getJSONObject("layouts");
+        JSONObject portrait = shelf.getJSONObject(PORTRAIT_KEY);
+        shelf.put(LANDSCAPE_KEY, new JSONObject(portrait.toString()));
+        storage.value = saved.toString();
+
+        LauncherWidgetRepository loaded = new LauncherWidgetRepository(storage);
+        assertEquals(java.util.Collections.singleton(PORTRAIT_KEY), loaded.storedOrientations());
+        assertTrue(loaded.applyOrientation(PORTRAIT_KEY, PORTRAIT));
+        assertEquals(new WidgetCellRect(0, 0, 4, 4), loaded.get(1).cell);
+        assertFalse(new JSONObject(storage.value).has("layouts"));
+    }
+
+    @Test public void aPortraitSaveDropsItsLandscapeShelfOnTheNextWrite() throws Exception {
+        WidgetTestFixtures.Memory storage = new WidgetTestFixtures.Memory();
+        LauncherWidgetRepository seed = new LauncherWidgetRepository(storage);
+        assertTrue(seed.putRecord(record(1, new WidgetCellRect(0, 0, 2, 2), 0)));
+        assertFalse(seed.applyOrientation(PORTRAIT_KEY, PORTRAIT));
+        JSONObject saved = new JSONObject(storage.value);
+        JSONObject cells = new JSONObject().put("pages", 1).put("rows", 3).put("columns", 6);
+        saved.put("layouts", new JSONObject().put(LANDSCAPE_KEY, cells));
+        storage.value = saved.toString();
+
+        LauncherWidgetRepository loaded = new LauncherWidgetRepository(storage);
+        assertTrue(loaded.storedOrientations().isEmpty());
+        assertTrue(loaded.putRecord(record(2, new WidgetCellRect(2, 0, 3, 1), 0)));
+        assertFalse(new JSONObject(storage.value).has("layouts"));
+        assertEquals(new WidgetCellRect(0, 0, 2, 2), loaded.get(1).cell);
     }
 
     @Test public void theSameGridInBothOrientationsStillKeepsTwoArrangements() {

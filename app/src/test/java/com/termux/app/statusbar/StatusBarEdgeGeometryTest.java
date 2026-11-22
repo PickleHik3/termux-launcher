@@ -21,6 +21,45 @@ public class StatusBarEdgeGeometryTest {
             StatusBarEdgeGeometry.frame(Edge.BOTTOM, W, H, 96, 0));
     }
 
+    private static final float[] DENSITIES = {1f, 2.625f, 3.5f};
+
+    @Test public void rowGeometryReproducesTheRowArithmetic() {
+        for (float d : DENSITIES) for (Edge edge : Edge.values())
+            for (boolean capsule : new boolean[] {false, true})
+                for (boolean compact : new boolean[] {false, true})
+                    for (boolean collapsed : new boolean[] {false, true}) {
+                        StatusBarEdgeGeometry.RowGeometry g = StatusBarEdgeGeometry.rowGeometry(
+                            edge, capsule, compact, collapsed, d);
+                        assertEquals(StatusBarEdgeGeometry.thicknessPx(edge, capsule, compact, d),
+                            g.thickness);
+                        assertEquals(Math.round((capsule ? 69f : 65f) * d), g.slot);
+                        assertEquals(collapsed ? 0
+                            : Math.round((capsule ? 3f : 2f) * d), g.foot);
+                        assertEquals(Math.round((collapsed && capsule ? 22f : 24f) * d),
+                            g.rowHeight);
+                    }
+    }
+
+    @Test public void theCollapsedCapsuleRowUsesItsNamedConstant() {
+        assertEquals(22f, StatusBarEdgeGeometry.STATUS_ROW_COLLAPSED_CAPSULE_DP, 0f);
+        assertEquals(Math.round(StatusBarEdgeGeometry.STATUS_ROW_COLLAPSED_CAPSULE_DP * 2.625f),
+            StatusBarEdgeGeometry.rowGeometry(Edge.TOP, true, true, true, 2.625f).rowHeight);
+    }
+
+    @Test public void theFoldPassInputsAreTheRestPassAnswers() {
+        for (float d : DENSITIES) for (Edge edge : new Edge[] {Edge.TOP, Edge.BOTTOM})
+            for (boolean capsule : new boolean[] {false, true}) {
+                StatusBarEdgeGeometry.RowGeometry folded =
+                    StatusBarEdgeGeometry.rowGeometry(edge, capsule, true, true, d);
+                StatusBarEdgeGeometry.RowGeometry open =
+                    StatusBarEdgeGeometry.rowGeometry(edge, capsule, false, false, d);
+                assertEquals(Math.round((capsule ? 22f : 24f) * d), folded.rowHeight);
+                assertEquals(Math.round(24f * d), open.rowHeight);
+                assertEquals(Math.round((capsule ? 3f : 2f) * d), open.foot);
+                assertEquals(0, folded.foot);
+            }
+    }
+
     @Test public void aColumnSpansTheHeightPastWhateverAlreadyHoldsItsEdge() {
         // 44px of display cutout, then the bar's own 76px of width.
         assertEquals(new StatusBarEdgeGeometry.Frame(44, 0, 120, H),

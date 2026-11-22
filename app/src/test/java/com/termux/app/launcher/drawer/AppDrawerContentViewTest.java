@@ -3,6 +3,7 @@ package com.termux.app.launcher.drawer;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
@@ -100,6 +101,31 @@ public class AppDrawerContentViewTest {
         search.setCatalogue(apps(APP_COUNT));
         grid = content.getGrid();
         layout();
+    }
+
+    // ------------------------------------------------------------------ home press reset
+
+    @Test
+    public void aHomePressCloseEmptiesTheFieldAndScrollsToTopWhileAnOrdinaryCloseKeepsTheOffset() {
+        content.setRememberPosition(true);
+        content.setTextFieldSearch(true);
+        grid.scrollBy(0, 4000);
+        layout();
+        androidx.recyclerview.widget.LinearLayoutManager lm =
+            (androidx.recyclerview.widget.LinearLayoutManager) grid.getLayoutManager();
+        assertTrue(lm.findFirstVisibleItemPosition() > 0);
+
+        content.resetSearch();
+        layout();
+        assertTrue("Back keeps the offset", lm.findFirstVisibleItemPosition() > 0);
+
+        search.replaceQuery("app", 3);
+        content.searchInput().mirror("app", 3);
+        content.resetSearchToTop();
+        layout();
+        assertEquals("", content.searchInput().getText().toString());
+        assertFalse(search.hasQuery());
+        assertEquals(0, lm.findFirstVisibleItemPosition());
     }
 
     // ------------------------------------------------------------------ the claim
@@ -244,43 +270,42 @@ public class AppDrawerContentViewTest {
     }
 
     @Test
-    public void midScrollTopmostVisibleGridItemDoesNotIntersectSearchPill() {
-        grid.scrollBy(0, 400);
-        layout();
-        assertTrue("fixture must exercise a real mid-list production layout",
-            grid.computeVerticalScrollOffset() > 0);
+    public void theGridSpansTheCardAndRestsItsFirstRowBelowTheFloatingCapsule() {
+        // The list runs the card's full height: no top margin, the chrome's band as start padding,
+        // and no clip to that padding, so scrolled rows pass under the capsule.
+        android.widget.FrameLayout.LayoutParams params =
+            (android.widget.FrameLayout.LayoutParams) grid.getLayoutParams();
+        assertEquals(0, params.topMargin);
+        assertEquals(0, grid.getTop());
+        assertFalse(grid.getClipToPadding());
+        AppDrawerSearchPillView pill = content.getSearchPill();
+        assertTrue("the first row rests below the capsule at rest",
+            grid.getPaddingTop() >= pill.getTop() + pill.getHeight());
+        assertTrue("the capsule is drawn over the list",
+            content.indexOfChild(pill) > content.indexOfChild(grid));
+        // No draw-time clip line, whatever the fold.
+        assertNull(grid.getClipBounds());
+    }
 
-        View topmost = null;
-        for (int i = 0; i < grid.getChildCount(); i++) {
-            View child = grid.getChildAt(i);
-            if (topmost == null || child.getTop() < topmost.getTop()) topmost = child;
-        }
-        assertNotNull(topmost);
-        assertTrue("the mid-scroll holder must straddle the production surface's leading edge",
-            topmost.getTop() < 0);
-        assertTrue("the production grid must install a hard bounds clip",
-            grid.getClipToOutline());
-        Rect visibleItem = new Rect(0, 0, topmost.getWidth(), topmost.getHeight());
-        grid.offsetDescendantRectToMyCoords(topmost, visibleItem);
-        assertTrue(visibleItem.intersect(0, 0, grid.getWidth(), grid.getHeight()));
-        content.offsetDescendantRectToMyCoords(grid, visibleItem);
-        Rect pill = new Rect(content.getSearchPill().getLeft(),
-            content.getSearchPill().getTop(), content.getSearchPill().getRight(),
-            content.getSearchPill().getBottom());
-        assertFalse("the topmost visible production holder must be clipped below the pill",
-            Rect.intersects(visibleItem, pill));
+    @Test
+    public void theListsFadeAtTheCardsEdgesOverOneLength() {
+        assertTrue(grid.isVerticalFadingEdgeEnabled());
+        assertEquals(AppDrawerFloatingList.fadeLengthPx(density), grid.getVerticalFadingEdgeLength());
     }
 
     @Test
     public void everyPillViewTypeClipsItsProductionContentSurface() {
-        assertTrue(grid.getClipToPadding());
+        // Not clipped to padding: the bottom padding is the content inset rows scroll under; the
+        // outline below is the hard boundary.
+        assertFalse(grid.getClipToPadding());
         assertTrue(grid.getClipToOutline());
         assertTrue(content.getHorizontalPager().getClipToPadding());
         assertTrue(content.getHorizontalPager().getClipToOutline());
         assertTrue(content.getCategoryView().getClipChildren());
         assertTrue(content.getCategoryView().getClipToOutline());
-        assertTrue(content.getCategoryView().getOverview().getClipToPadding());
-        assertTrue(content.getCategoryView().getDetailList().getClipToPadding());
+        assertFalse("rows pass under the capsule through the overview's top band",
+            content.getCategoryView().getOverview().getClipToPadding());
+        assertTrue(content.getCategoryView().getDetailList().getClipToOutline());
     }
 
     @Test

@@ -4,10 +4,12 @@ import android.content.Context;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewParent;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
 import com.termux.app.terminal.TerminalWindowBar;
@@ -19,11 +21,60 @@ import com.termux.app.terminal.TerminalWindowBar;
  * when the chips run out of room it stands the readings tight — no dots between them, less room
  * around each — and gives the chips what that frees. A row with room looks exactly as it always
  * did. Standing in a column it is a plain linear layout.
+ *
+ * <p>Along a row it also keeps clear of what the screen takes from it (#163): its ends step in
+ * from the screen's rounded corners, and where it shares a band with the camera it leaves a gap
+ * there and lays its children out either side of it. {@link StatusRowKeepOut} works out both from
+ * where the row stands at rest; the row only applies the answer, inside its own measure and
+ * layout, so nothing here asks for another pass.
  */
 public final class StatusRowLayout extends LinearLayout {
 
+    /**
+     * How far each edge of the bar is drawn out past where it is laid out while a crossing eases
+     * its Margin (BarMarginEase): each child nearer an edge is drawn moved with that edge, at its
+     * own size. Drawn only, never laid out; 0 at rest, where drawing is untouched.
+     */
+    private float mEdgeGrowPx;
+
+    /** Sets {@link #mEdgeGrowPx}; a redraw of this row only, and only when it moves. */
+    public void setEdgeGrow(float growPx) {
+        if (growPx == mEdgeGrowPx) return;
+        mEdgeGrowPx = growPx;
+        invalidate();
+    }
+
+    @Override
+    protected boolean drawChild(@NonNull android.graphics.Canvas canvas, @NonNull View child,
+                                long drawingTime) {
+        float dx = mEdgeGrowPx == 0f ? 0f : com.termux.app.place.BarMarginEase.contentShiftPx(
+            child.getLeft(), child.getRight(), getWidth(), mEdgeGrowPx);
+        if (dx == 0f) return super.drawChild(canvas, child, drawingTime);
+        int save = canvas.save();
+        try {
+            canvas.translate(dx, 0f);
+            return super.drawChild(canvas, child, drawingTime);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
     /** Whether the readings are standing tight right now. */
     private boolean mTight;
+
+    /** What the window says about its own shape; null until the host has said. */
+    @Nullable private StatusRowKeepOut.Screen mScreen;
+    /** The answer the last measure was made for. */
+    @NonNull private StatusRowKeepOut.Answer mKeepOut = StatusRowKeepOut.Answer.NONE;
+    /** Whether the last measure laid the children out by {@link StatusRowKeepOut#flow}. */
+    private boolean mFlowing;
+    /** The least the chip strip may be given, from the last measure; 0 with no chips to keep. */
+    private int mStripMinPx;
+    /** Bit {@code i}: child {@code i} is hidden because the row had no room for it. */
+    private int mDroppedMask;
+    private int mWidthSpec;
+    private int mHeightSpec;
+    private boolean mHaveSpecs;
 
     public StatusRowLayout(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -34,15 +85,63 @@ public final class StatusRowLayout extends LinearLayout {
         return mTight;
     }
 
+    /**
+     * The window's camera box, corners and the user's cutout choice. Compared first, so the host
+     * may hand it over on every insets pass; a change lays the row out again.
+     */
+    public void setScreenKeepOut(@Nullable StatusRowKeepOut.Screen screen) {
+        if (mScreen == null ? screen == null : mScreen.equals(screen)) return;
+        mScreen = screen;
+        requestLayout();
+    }
+
+    /** For tests: the answer the row is laid out with now. */
+    @VisibleForTesting
+    @NonNull
+    StatusRowKeepOut.Answer keepOut() {
+        return mKeepOut;
+    }
+
+    /**
+     * The window was laid out. The row reads where it stands only in its own layout pass, and a
+     * pane that moves under it (Full screen hiding the system bar lifts the status pane from under
+     * it to the screen's top) leaves the row's own frame as it was, so that pass never comes: the
+     * row would keep the answer it had below the bar and run into the corners and the camera.
+     * Asked after every window layout, it lays itself out again only when the answer moved.
+     */
+    private final android.view.ViewTreeObserver.OnGlobalLayoutListener mWindowLaidOut =
+        this::onWindowLaidOut;
+
+    @VisibleForTesting
+    void onWindowLaidOut() {
+        if (!mHaveSpecs || isLayoutRequested()) return;
+        if (!currentKeepOut().equals(mKeepOut)) requestLayout();
+    }
+
+    @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        getViewTreeObserver().addOnGlobalLayoutListener(mWindowLaidOut);
+    }
+
+    @Override
+    protected void onDetachedFromWindow() {
+        getViewTreeObserver().removeOnGlobalLayoutListener(mWindowLaidOut);
+        super.onDetachedFromWindow();
+    }
+
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
-        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-        View strip = findViewById(R.id.terminal_status_place_content);
+        mWidthSpec = widthMeasureSpec;
+        mHeightSpec = heightMeasureSpec;
+        mHaveSpecs = true;
+        measureRow(widthMeasureSpec, heightMeasureSpec);
+        View strip = stripSlot();
         TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         boolean horizontal = getOrientation() == HORIZONTAL;
         if (!horizontal || strip == null || bar == null || bar.getVisibility() != VISIBLE) {
             // No chips in a row to make room for: the readings stand as they always have.
-            if (setTight(false, strip)) super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            if (setTight(false, strip)) measureRow(widthMeasureSpec, heightMeasureSpec);
             return;
         }
         int gap = Math.round(StatusRowFitPolicy.CHIPS_READINGS_GAP_DP
@@ -58,7 +157,237 @@ public final class StatusRowLayout extends LinearLayout {
         // widths do not show yet.
         int end = StatusRowFitPolicy.chipsEndPaddingPx(gap, readingsLeadPx(strip, bar, mTight));
         changed |= bar.setTrailingGapPx(end);
-        if (changed) super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+        // Home's float chips stand in the same slot and stop at the same place.
+        TerminalWindowBar homeBar = findViewById(R.id.terminal_home_float_bar);
+        if (homeBar != null) changed |= homeBar.setTrailingGapPx(end);
+        if (changed) measureRow(widthMeasureSpec, heightMeasureSpec);
+    }
+
+    /**
+     * The linear layout's own measure, made around the keep-out when there is one: the children
+     * are measured into the room the corners and the camera leave, and each flexible child is
+     * then given exactly the stretch its side of the gap has for it.
+     */
+    private void measureRow(int widthMeasureSpec, int heightMeasureSpec) {
+        boolean keepOut = keepOutApplies(widthMeasureSpec);
+        if (!keepOut) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            mStripMinPx = stripMinPx();
+            // A plain row is laid out as a linear layout unless that would squeeze the strip
+            // below what shows one whole chip: then the flow below takes over, once.
+            View strip = stripSlot();
+            mFlowing = mStripMinPx > 0 && strip != null && strip.getVisibility() != GONE
+                && getOrientation() == HORIZONTAL
+                && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED
+                && strip.getMeasuredWidth() < mStripMinPx;
+            if (!mFlowing) return;
+        }
+        int width = MeasureSpec.getSize(widthMeasureSpec);
+        int start = Math.min(width, mKeepOut.leftInsetPx);
+        int end = Math.max(start, width - mKeepOut.rightInsetPx);
+        int gap = Math.max(0, Math.min(end, mKeepOut.gapEndPx)
+            - Math.max(start, mKeepOut.gapStartPx));
+        if (keepOut) {
+            super.onMeasure(MeasureSpec.makeMeasureSpec(Math.max(0, end - start - gap),
+                MeasureSpec.EXACTLY), heightMeasureSpec);
+            mStripMinPx = stripMinPx();
+            mFlowing = true;
+        }
+        View[] children = visualChildren();
+        int[] left = new int[children.length];
+        int[] widths = new int[children.length];
+        flowAroundKeepOut(children, start, end, left, widths);
+        for (int i = 0; i < children.length; i++) {
+            View child = children[i];
+            if (weightOf(child) <= 0f || child.getMeasuredWidth() == widths[i]) continue;
+            child.measure(MeasureSpec.makeMeasureSpec(widths[i], MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(child.getMeasuredHeight(), MeasureSpec.EXACTLY));
+        }
+        setMeasuredDimension(width, getMeasuredHeight());
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int l, int t, int r, int b) {
+        super.onLayout(changed, l, t, r, b);
+        // Where the row stands is known only now. When it asks for a different answer than the
+        // measure was made for, the row measures its own children again and lays them out here:
+        // its own size does not move, so its parent has nothing to redo.
+        StatusRowKeepOut.Answer answer = currentKeepOut();
+        if (!answer.equals(mKeepOut)) {
+            mKeepOut = answer;
+            if (mHaveSpecs) {
+                onMeasure(mWidthSpec, mHeightSpec);
+                super.onLayout(changed, l, t, r, b);
+            }
+        }
+        if (!mHaveSpecs || !mFlowing) {
+            applyDropped(null, null);
+            return;
+        }
+        int width = r - l;
+        int start = Math.min(width, mKeepOut.leftInsetPx);
+        int end = Math.max(start, width - mKeepOut.rightInsetPx);
+        View[] children = visualChildren();
+        int[] left = new int[children.length];
+        int[] widths = new int[children.length];
+        flowAroundKeepOut(children, start, end, left, widths);
+        for (int i = 0; i < children.length; i++) {
+            View child = children[i];
+            int top = child.getTop();
+            boolean dropped = StatusRowKeepOut.isDropped(child.getMeasuredWidth(), weightOf(child),
+                widths[i]);
+            child.layout(left[i], top, left[i] + (dropped ? 0 : child.getMeasuredWidth()),
+                top + child.getMeasuredHeight());
+        }
+        applyDropped(children, widths);
+    }
+
+    /**
+     * Hides the children the flow dropped and shows again those it no longer drops. Invisible,
+     * not gone: that asks for no layout, and it is undone only for what this row hid.
+     */
+    private void applyDropped(@Nullable View[] children, @Nullable int[] widths) {
+        int mask = 0;
+        if (children != null && widths != null) {
+            for (int i = 0; i < children.length; i++) {
+                if (StatusRowKeepOut.isDropped(children[i].getMeasuredWidth(),
+                    weightOf(children[i]), widths[i])) {
+                    mask |= 1 << indexOfChild(children[i]);
+                }
+            }
+        }
+        if (mask == mDroppedMask) return;
+        for (int i = 0; i < getChildCount() && i < 32; i++) {
+            View child = getChildAt(i);
+            boolean now = (mask & (1 << i)) != 0;
+            boolean before = (mDroppedMask & (1 << i)) != 0;
+            if (now && child.getVisibility() == VISIBLE) child.setVisibility(INVISIBLE);
+            else if (!now && before && child.getVisibility() == INVISIBLE) {
+                child.setVisibility(VISIBLE);
+            }
+        }
+        mDroppedMask = mask;
+    }
+
+    /**
+     * The least the chip strip may be given, from the badge and the front chip at their own
+     * width: the badge is measured unconstrained, since the strip it sits in may be squeezed and
+     * would hand it a cut-down width. 0 when the strip is not a row of chips.
+     */
+    private int stripMinPx() {
+        View strip = findViewById(R.id.terminal_status_place_content);
+        TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
+        if (!(strip instanceof ViewGroup) || bar == null || bar.getVisibility() != VISIBLE
+            || getOrientation() != HORIZONTAL
+            || ((LinearLayout) strip).getOrientation() != HORIZONTAL) {
+            return 0;
+        }
+        int badgeLead = 0;
+        int badgeWidth = 0;
+        ViewGroup group = (ViewGroup) strip;
+        for (int i = 0; i < group.getChildCount(); i++) {
+            View child = group.getChildAt(i);
+            if (child == bar || child.getVisibility() == GONE || weightOf(child) > 0f) continue;
+            ViewGroup.LayoutParams params = child.getLayoutParams();
+            if (params instanceof MarginLayoutParams) {
+                badgeLead += ((MarginLayoutParams) params).leftMargin
+                    + ((MarginLayoutParams) params).rightMargin;
+            }
+            child.measure(getChildMeasureSpec(
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), 0, params.width),
+                MeasureSpec.makeMeasureSpec(child.getMeasuredHeight(), MeasureSpec.EXACTLY));
+            badgeWidth += child.getMeasuredWidth();
+        }
+        int barChrome = bar.getPaddingLeft() + bar.getPaddingRight();
+        ViewGroup.LayoutParams barParams = bar.getLayoutParams();
+        if (barParams instanceof MarginLayoutParams) {
+            barChrome += ((MarginLayoutParams) barParams).leftMargin
+                + ((MarginLayoutParams) barParams).rightMargin;
+        }
+        return StatusRowFitPolicy.stripMinPx(strip.getPaddingLeft() + strip.getPaddingRight(),
+            badgeLead, badgeWidth, barChrome, bar.frontChipWidthPx());
+    }
+
+    /**
+     * The row's child that holds the place strip: the strip itself, or the slot it shares with
+     * Home's float chips. What the row measures, flows and stands the readings after.
+     */
+    @Nullable
+    private View stripSlot() {
+        View view = findViewById(R.id.terminal_status_place_content);
+        while (view != null && view.getParent() != this) {
+            ViewParent parent = view.getParent();
+            view = parent instanceof View ? (View) parent : null;
+        }
+        return view;
+    }
+
+    /** Whether the row is laid out around a keep-out rather than as a plain linear layout. */
+    private boolean keepOutApplies(int widthMeasureSpec) {
+        return getOrientation() == HORIZONTAL && !mKeepOut.isNone()
+            && MeasureSpec.getMode(widthMeasureSpec) != MeasureSpec.UNSPECIFIED;
+    }
+
+    /** The answer for where the row stands at rest in its window, translations left out. */
+    @NonNull
+    private StatusRowKeepOut.Answer currentKeepOut() {
+        if (mScreen == null || getOrientation() != HORIZONTAL) return StatusRowKeepOut.Answer.NONE;
+        int x = 0;
+        int y = 0;
+        View view = this;
+        while (true) {
+            x += view.getLeft();
+            y += view.getTop();
+            ViewParent parent = view.getParent();
+            if (!(parent instanceof View)) break;
+            View up = (View) parent;
+            x -= up.getScrollX();
+            y -= up.getScrollY();
+            view = up;
+        }
+        return StatusRowKeepOut.answer(mScreen, view.getWidth(), view.getHeight(), x, y,
+            x + getWidth(), y + getHeight());
+    }
+
+    /** The children that take room, left to right on screen (reversed in a right-to-left row). */
+    @NonNull
+    private View[] visualChildren() {
+        int count = 0;
+        for (int i = 0; i < getChildCount(); i++) if (getChildAt(i).getVisibility() != GONE) count++;
+        View[] children = new View[count];
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        int at = 0;
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(rtl ? getChildCount() - 1 - i : i);
+            if (child.getVisibility() != GONE) children[at++] = child;
+        }
+        return children;
+    }
+
+    private void flowAroundKeepOut(@NonNull View[] children, int start, int end,
+                                   @NonNull int[] outLeft, @NonNull int[] outWidth) {
+        int n = children.length;
+        int[] marginLeft = new int[n];
+        int[] marginRight = new int[n];
+        int[] widths = new int[n];
+        float[] weights = new float[n];
+        for (int i = 0; i < n; i++) {
+            View child = children[i];
+            ViewGroup.LayoutParams params = child.getLayoutParams();
+            if (params instanceof MarginLayoutParams) {
+                marginLeft[i] = ((MarginLayoutParams) params).leftMargin;
+                marginRight[i] = ((MarginLayoutParams) params).rightMargin;
+            }
+            widths[i] = child.getMeasuredWidth();
+            weights[i] = weightOf(child);
+        }
+        int[] minWidths = new int[n];
+        View slot = stripSlot();
+        for (int i = 0; i < n; i++) {
+            if (children[i] == slot) minWidths[i] = mStripMinPx;
+        }
+        StatusRowKeepOut.flow(marginLeft, widths, marginRight, weights, minWidths, start, end,
+            mKeepOut.gapStartPx, mKeepOut.gapEndPx, outLeft, outWidth);
     }
 
     /** Stands every reading after the strip tight or not; whether anything changed. */

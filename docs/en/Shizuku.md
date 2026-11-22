@@ -2,11 +2,11 @@
 
 This page lists every permission Termux Launcher asks for and what it uses each one for, then
 explains Shizuku, the optional service that lets the launcher read system information Android
-normally hides. Both live under **Settings → Permissions & services**.
+normally hides. Both live under **Settings → General → Permissions & services**.
 
 ## Permissions
 
-**Settings → Permissions & services** has two groups. **Permissions**: **Files and media**,
+**Settings → General → Permissions & services** has two groups. **Permissions**: **Files and media**,
 **Wallpaper access**, **Notification access**, **Accessibility service**, **App notifications** and
 **All app permissions** (Android's own page). **Connected services**: **Shizuku** and
 **Termux:API**. A permission is asked for when a feature first needs it; turn down the ones for
@@ -14,8 +14,8 @@ features you do not use.
 
 | Permission | What it is for |
 | --- | --- |
-| Default home app | Termux Launcher as the home screen. Set it in **Settings → Apps** or Android's settings. |
-| Approximate location | The weather on the [status bar](Status_Bar.md) and the Weather widget, and only while no location is picked. Pick a city in **Settings → Status bar → Weather → Location** and no location permission is asked for. |
+| Default home app | Termux Launcher as the home screen. Set it in **Settings → General → Set as default launcher** or Android's settings. |
+| Approximate location | The weather on the [status bar](Status_Bar.md) and the Weather widget, and only while no location is picked. Pick a city in **Settings → Terminal → Status bar → Weather → Location** and no location permission is asked for. |
 | Microphone | [Voice input](Voice_Input.md): the Enter-key swipe on the built-in keyboard and the **Dictate** action, while a dictation listens. |
 | Notification access | Notification dots, media controls, pinned notifications and, if you choose apps for it, **Settings → Notifications → Notification history**, which `launcherctl notifications` reads. See [Notifications](Notifications.md). |
 | Notifications (app notifications) | The launcher's own notices, and messages and progress sent from the shell (`launcherctl notify`, `launcherctl progress`, the OSC 99 escape). |
@@ -62,12 +62,12 @@ that app. Root is not required: Shizuku can start through Wireless debugging.
 1. Install the Shizuku app.
 2. Start its service through Wireless debugging or root. Follow the
    [official Shizuku setup guide](https://shizuku.rikka.app/guide/setup/).
-3. In Termux Launcher, open **Settings → Permissions & services → Shizuku**.
+3. In Termux Launcher, open **Settings → General → Permissions & services → Shizuku**.
 4. Tap **Request Shizuku permission** and approve the Shizuku dialog.
 
 ## The Shizuku page
 
-**Settings → Permissions & services → Shizuku** shows **Backend status** at the top, as
+**Settings → General → Permissions & services → Shizuku** shows **Backend status** at the top, as
 `TYPE · STATE` (for example `SHIZUKU · READY`). Below it, **Backend policy** has four controls, all
 on by default:
 
@@ -98,7 +98,7 @@ match the installed edition: `com.termux`, `com.termux.launcher.nix` or `io.vaj.
 ### Shizuku is unavailable after a reboot
 
 A Wireless debugging start does not survive a reboot. Start Shizuku again, then open **Settings →
-Permissions & services → Shizuku** so the launcher checks again. Until then the launcher uses `su` or
+General → Permissions & services → Shizuku** so the launcher checks again. Until then the launcher uses `su` or
 `rish` if **Allow shell fallback** is on, or the unprivileged behaviour above.
 
 ### Permission is denied or the prompt does not appear
@@ -111,7 +111,7 @@ denial, then tap **Request Shizuku permission** again. Check that **Enable privi
 
 CPU percentages need two samples, and the process list is sampled only while the card is open, so
 leave it open for a few seconds. If it does not recover, check that the page says
-`SHIZUKU · READY`, restart Shizuku, and try **Settings → Diagnostics → Test privileged backend**.
+`SHIZUKU · READY`, restart Shizuku, and try **Settings → General → Diagnostics → Test privileged backend**.
 
 ### btop says the lane isn't there
 

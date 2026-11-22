@@ -62,36 +62,44 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
     }
 
     private void setExtraKeys(int i) {
-        mExtraKeysInfo = null;
+        int page = Math.max(0, Math.min(i, PAGE_PROPERTY_KEYS.length - 1));
+        // The mMap stores the extra key and style string values while loading properties
+        // Check {@link #getExtraKeysInternalPropertyValueFromValue(String)} and
+        // {@link #getExtraKeysStyleInternalPropertyValueFromValue(String)}
+        String extrakeys = (String) mActivity.getProperties().getInternalPropertyValue(PAGE_PROPERTY_KEYS[page], false);
+        mExtraKeysInfo = parsePage(mActivity, extrakeys, page, PAGE_DEFAULT_VALUES[page]);
+    }
+
+    /**
+     * Parse one page of keys: the shipped row loses the wall keys the wall does not have, the style
+     * comes from the properties, and a row that is not valid JSON gives the notice and falls back to
+     * {@code fallbackValue}. Null when even that fails.
+     */
+    @Nullable
+    public static ExtraKeysInfo parsePage(@NonNull TermuxActivity activity, @Nullable String value,
+                                          int page, @NonNull String fallbackValue) {
         try {
-            // The mMap stores the extra key and style string values while loading properties
-            // Check {@link #getExtraKeysInternalPropertyValueFromValue(String)} and
-            // {@link #getExtraKeysStyleInternalPropertyValueFromValue(String)}
-            String pageKey = PAGE_PROPERTY_KEYS[Math.max(0, Math.min(i, PAGE_PROPERTY_KEYS.length - 1))];
-            String extrakeys = (String) mActivity.getProperties().getInternalPropertyValue(pageKey, false);
-            // The shipped row carries a switch for each place; the ones whose place the wall
+            // The shipped row carries a wall key for each page kind; the ones whose kind the wall
             // does not have are dropped from it — and from it only, since a row the user wrote
             // keeps every key and has the dead ones greyed instead.
-            extrakeys = ExtraKeysDefaultRow.forWall(extrakeys, mActivity.availableWallPages());
-            String extraKeysStyle = (String) mActivity.getProperties().getInternalPropertyValue(TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE, true);
+            String extrakeys = ExtraKeysDefaultRow.forWall(value, activity.availableWallPages());
+            String extraKeysStyle = (String) activity.getProperties().getInternalPropertyValue(TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE, true);
             ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap = ExtraKeysInfo.getCharDisplayMapForStyle(extraKeysStyle);
             if (ExtraKeysConstants.EXTRA_KEY_DISPLAY_MAPS.DEFAULT_CHAR_DISPLAY.equals(extraKeyDisplayMap) && !TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE.equals(extraKeysStyle)) {
                 Logger.logError(TermuxSharedProperties.LOG_TAG, "The style \"" + extraKeysStyle + "\" for the key \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS_STYLE + "\" is invalid. Using default style instead.");
                 extraKeysStyle = TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE;
             }
-            mExtraKeysInfo = new ExtraKeysInfo(extrakeys, extraKeysStyle, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
+            return new ExtraKeysInfo(extrakeys, extraKeysStyle, ExtraKeysConstants.CONTROL_CHARS_ALIASES);
         } catch (JSONException e) {
-            com.termux.app.notice.AppNotice.show(mActivity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
+            com.termux.app.notice.AppNotice.show(activity, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: " + e.toString(), true);
             Logger.logStackTraceWithMessage(LOG_TAG, "Could not load and set the \"" + TermuxPropertyConstants.KEY_EXTRA_KEYS + "\" property from the properties file: ", e);
             try {
-                mExtraKeysInfo = new ExtraKeysInfo(
-                    PAGE_DEFAULT_VALUES[Math.max(0, Math.min(i, PAGE_DEFAULT_VALUES.length - 1))],
-                    TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
+                return new ExtraKeysInfo(fallbackValue, TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE,
                     ExtraKeysConstants.CONTROL_CHARS_ALIASES);
             } catch (JSONException e2) {
-                com.termux.app.notice.AppNotice.show(mActivity, "Can't create default extra keys", true);
+                com.termux.app.notice.AppNotice.show(activity, "Can't create default extra keys", true);
                 Logger.logStackTraceWithMessage(LOG_TAG, "Could create default extra keys: ", e);
-                mExtraKeysInfo = null;
+                return null;
             }
         }
     }
@@ -220,6 +228,10 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
                 } catch (JSONException ignored) {
                 }
             }
+        }
+        if (com.termux.launcherctl.LauncherToolRegistry.isPaletteOnly(toolName)) {
+            Logger.logWarn(LOG_TAG, "Extra key tool '" + toolName + "' is palette-only");
+            return;
         }
         org.json.JSONObject result = com.termux.app.terminal.TerminalActionDispatcher
             .getInstance().execute(toolName, arguments);

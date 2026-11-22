@@ -160,6 +160,7 @@ public final class StatusBarGesturePolicy {
     }
 
     @NonNull public Claim secondPointer() { return latch(Claim.CHILD_OWNED); }
+
     @NonNull public Claim nestedScrollStarted() { return latch(Claim.CHILD_OWNED); }
     @NonNull public Claim cancel() { return latch(Claim.CANCELLED); }
 

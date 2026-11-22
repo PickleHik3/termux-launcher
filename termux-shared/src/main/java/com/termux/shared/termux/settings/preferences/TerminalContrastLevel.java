@@ -11,11 +11,12 @@ import androidx.annotation.NonNull;
  * chroma. Changes the terminal palette only, never the chrome bands or the pane's glass.
  */
 public enum TerminalContrastLevel {
-    //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach
-    //                                              min   max    dark  light  dark  light  dark light  dark light
-    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d),
-    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d),
-    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d);
+    //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach  dim tone    dim    glass  glass  even
+    //                                              min   max    dark  light  dark  light  dark light  dark light         dark light  ratio  ansi   dim    out
+    //                                                                                                                                  ratio  tone   width
+    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   52d,  41d,   92d,  34d,   80d, 30d,  16d,  90d,   4d,   36d,  60d,  2.0d,  2.5d,  60d,  22d),
+    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   55d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d,   45d,  50d,  3.0d,  3.0d,  65d,  14d),
+    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   60d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d,   62d,  36d,  4.5d,  4.5d,  70d,  10d);
 
     @NonNull public final String value;
     /**
@@ -48,13 +49,43 @@ public enum TerminalContrastLevel {
      * reach 4.5:1, and chasing it all the way ends every colour at black or white.
      */
     public final double toneReach;
+    /**
+     * The dim text's HCT tone (ANSI bright black, slot 8: comments, autosuggestions, a prompt's
+     * grey) on a dark palette and on a light one. It stays between ANSI black (25) and white (80
+     * dark, 75 light) at every level, so it never passes for the ground or for ordinary text;
+     * Harder moves it toward the text and Softer toward the ground. It used to be 45 and 50 at
+     * every level, held to one fixed 3.0:1, so the three levels drew nearly the same grey.
+     */
+    public final double dimToneDark;
+    public final double dimToneLight;
+    /** The contrast the dim text is held to against what it stands on. */
+    public final double dimRatio;
+    /**
+     * The contrast the normal accents (slots 1-6) are held to when the terminal stands on glass
+     * (kitty parity, decided 2026-10-27); the opaque terminal keeps {@link #ansiRatio}.
+     */
+    public final double glassAnsiRatio;
+    /**
+     * The highest tone the dim text may rise to on glass in search of its {@link #dimRatio}, still
+     * clearly below the foreground. Mirrored for a dark ink, which may fall to 100 minus this.
+     */
+    public final double glassDimToneMax;
+    /**
+     * The lightness range, in HCT tone, the glass even-out stage keeps from a pane's wallpaper:
+     * the widest at Softer, the narrowest at Harder, so Harder trades the wallpaper's depth for a
+     * flatter, more readable ground.
+     */
+    public final double evenOutWidth;
 
     TerminalContrastLevel(@NonNull String value, double bodyTarget, double ansiRatio,
                           double cursorRatio, double chromaScale, double chromaMin,
                           double chromaMax, double normalToneDark, double normalToneLight,
                           double brightToneDark, double brightToneLight,
                           double fgToneDark, double fgToneLight,
-                          double bgToneDark, double bgToneLight, double toneReach) {
+                          double bgToneDark, double bgToneLight, double toneReach,
+                          double dimToneDark, double dimToneLight, double dimRatio,
+                          double glassAnsiRatio, double glassDimToneMax,
+                          double evenOutWidth) {
         this.value = value;
         this.bodyTarget = bodyTarget;
         this.ansiRatio = ansiRatio;
@@ -71,6 +102,22 @@ public enum TerminalContrastLevel {
         this.bgToneDark = bgToneDark;
         this.bgToneLight = bgToneLight;
         this.toneReach = toneReach;
+        this.dimToneDark = dimToneDark;
+        this.dimToneLight = dimToneLight;
+        this.dimRatio = dimRatio;
+        this.glassAnsiRatio = glassAnsiRatio;
+        this.glassDimToneMax = glassDimToneMax;
+        this.evenOutWidth = evenOutWidth;
+    }
+
+    /**
+     * How far, in HCT tone, an ink may move from its recipe tone on glass: at least 10 at every
+     * level. On glass the ink, not the ground, absorbs the difference between wallpapers, so
+     * Softer's 4-tone {@link #toneReach} would otherwise give it a lower even-out band than Default
+     * and invert what Softer means. The opaque terminal keeps {@link #toneReach}.
+     */
+    public double glassToneReach() {
+        return Math.max(toneReach, 10d);
     }
 
     /** {@code sourceChroma} as this level spends it: scaled, then held inside the level's band. */

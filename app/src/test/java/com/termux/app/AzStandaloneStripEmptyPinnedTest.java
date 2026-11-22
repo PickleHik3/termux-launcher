@@ -27,13 +27,13 @@ import com.termux.app.launcher.data.LauncherConfigRepository;
 import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.launcher.model.PinnedAppItem;
 import com.termux.app.launcher.model.PinnedItem;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceChromePolicy;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.Slot;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.After;
@@ -107,8 +107,12 @@ public class AzStandaloneStripEmptyPinnedTest {
     private FrameLayout window;
     private ActivityController<Activity> activity;
 
+    /** The scale the JVM had before this test, put back after it: other tests share the JVM. */
+    private float durationScaleBefore;
+
     @Before
     public void setUp() {
+        durationScaleBefore = ReflectionHelpers.getStaticField(ValueAnimator.class, "sDurationScale");
         setDurationScale(1f);
         context = RuntimeEnvironment.getApplication().getApplicationContext();
         assertEquals("the fixture must be the reviewed screen width",
@@ -120,7 +124,7 @@ public class AzStandaloneStripEmptyPinnedTest {
     @After
     public void tearDown() {
         if (activity != null) activity.pause().stop().destroy();
-        setDurationScale(0f);
+        setDurationScale(durationScaleBefore);
     }
 
     // ------------------------------------------------------------------ the reported arrangement
@@ -307,6 +311,8 @@ public class AzStandaloneStripEmptyPinnedTest {
         ReflectionHelpers.setField(screen, "mPreferences", preferences);
 
         SuggestionBarView bar = new SuggestionBarView(screen, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         ViewGroup plank = screen.findViewById(R.id.apps_bar_plank_layer);
         plank.addView(bar, new ViewGroup.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
@@ -330,7 +336,7 @@ public class AzStandaloneStripEmptyPinnedTest {
         PlaceLayout layout = arrangement;
         PlaceLayoutStore store = ReflectionHelpers.callInstanceMethod(screen, "placeLayoutStore");
         assertNotNull(store);
-        for (PaneWallPage place : PaneWallPage.values())
+        for (PageKind place : PageKind.values())
             for (PlaceOrientation orientation : PlaceOrientation.values())
                 for (Element element : Element.values())
                     store.setSlot(orientation, element, layout.slot(element));

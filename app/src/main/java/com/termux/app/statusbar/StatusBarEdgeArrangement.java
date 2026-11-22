@@ -99,6 +99,19 @@ public final class StatusBarEdgeArrangement {
             strip.setGravity(vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
             stretch(strip, vertical);
         }
+        // The slot the two sides' strips share takes the room; each strip fills it.
+        View sides = host.findViewById(R.id.terminal_status_sides);
+        if (sides != null) stretch(sides, vertical);
+        PlaceContentStrip homeStrip = host.findViewById(R.id.terminal_status_home_chips);
+        if (homeStrip != null) {
+            homeStrip.setVertical(vertical);
+            homeStrip.setGravity(vertical ? Gravity.CENTER_HORIZONTAL : Gravity.CENTER_VERTICAL);
+        }
+        View homeBar = host.findViewById(R.id.terminal_home_float_bar);
+        View homeColumn = host.findViewById(R.id.terminal_home_float_column);
+        if (homeColumn != null) stretch(homeColumn, vertical);
+        if (homeBar != null && vertical) homeBar.setVisibility(View.GONE);
+        if (homeColumn != null && !vertical) homeColumn.setVisibility(View.GONE);
 
         View sessions = host.findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) fit(sessions, vertical);
@@ -110,10 +123,10 @@ public final class StatusBarEdgeArrangement {
         if (windows != null && vertical) windows.setVisibility(View.GONE);
         if (windowColumn != null && !vertical) windowColumn.setVisibility(View.GONE);
 
+        // The row's items stand in one group, in the user's order, inside the end group: both
+        // turn, so a column reads them top to bottom in the order a row reads them start to end.
         stack(host.findViewById(R.id.terminal_status_stats_cluster), vertical);
         stack(host.findViewById(R.id.terminal_status_widgets), vertical);
-        View spacer = host.findViewById(R.id.terminal_status_stats_center_spacer);
-        if (spacer != null) stretch(spacer, vertical);
     }
 
     /** A container of stat widgets, turned to run down the bar rather than along it. */

@@ -512,6 +512,11 @@ public final class WcWidth {
      * Return the terminal display width of a code point: 0, 1 || 2.
      */
     public static int width(int ucs) {
+        // Printable ASCII is one cell. Shell, editor and compiler output is mostly this, so it
+        // skips the zero-width and wide checks and the table searches. NUL, the other C0 controls
+        // and DEL are not in this range and still take the paths below.
+        if (ucs >= 0x20 && ucs < 0x7F)
+            return 1;
         if (ucs == 0 || ucs == 0x034F || (0x200B <= ucs && ucs <= 0x200F) || ucs == 0x2028 || ucs == 0x2029 || (0x202A <= ucs && ucs <= 0x202E) || (0x2060 <= ucs && ucs <= 0x2063)) {
             return 0;
         }

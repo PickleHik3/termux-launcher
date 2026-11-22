@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Terminal › Text & display: the terminal font. The cursor trail, effect and the rest of how
+     the terminal looks are the editor's Terminal card; search still finds them
+     (appearance_search_index). -->
+<PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto">
+    <Preference
+        app:key="terminal_text_layout_editor"
+        app:persistent="false"
+        app:title="@string/settings_layout_editor_title"
+        app:summary="@string/settings_appearance_door_summary" />
+    <PreferenceCategory app:title="@string/settings_fonts_header">
+        <Preference
+            app:key="terminal_fonts"
+            app:persistent="false"
+            app:title="@string/termux_fonts_preferences_title"
+            app:summary="@string/termux_fonts_preferences_summary"
+            app:fragment="com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment" />
+    </PreferenceCategory>
+</PreferenceScreen>

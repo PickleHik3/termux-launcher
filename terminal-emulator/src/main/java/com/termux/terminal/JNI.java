@@ -39,4 +39,7 @@ final class JNI {
      * Close a file descriptor through the close(2) system call.
      */
     public static native void close(int fileDescriptor);
+
+    /** The foreground process group of the pty, through tcgetpgrp(3), or -1 on failure. */
+    public static native int getForegroundProcessGroup(int fd);
 }

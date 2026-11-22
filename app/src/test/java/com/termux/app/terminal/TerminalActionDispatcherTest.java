@@ -55,7 +55,8 @@ public class TerminalActionDispatcherTest {
             "window.previous", "session.new", "session.next", "session.previous", "session.close_current",
             "session.browser", "session.clone_current",
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
-            "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
+            "terminal.font_size_decrease", "terminal.font_size_toggle_compact",
+            "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename",
             "session.rename_at_index", "terminal.reset",
             "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
@@ -68,8 +69,9 @@ public class TerminalActionDispatcherTest {
             "pane.next_layout", "pane.toggle_float",
             "keyboard.cycle_layout", "keyboard.select_layout",
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
-            "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate",
-            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split"};
+            "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate", "minimal.toggle",
+            "pane.open", "pane.list", "pane.focus", "pane.close", "pane.write", "pane.read", "pane.split",
+            "window.move", "window.move_left", "window.move_right", "pane.consume", "pane.expel"};
         for (String name : handled) {
             assertTrue(name, TerminalActionDispatcher.handles(name));
         }
@@ -106,7 +108,8 @@ public class TerminalActionDispatcherTest {
             "window.previous", "session.new", "session.next", "session.previous", "session.close_current",
             "session.browser", "session.clone_current",
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
-            "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
+            "terminal.font_size_decrease", "terminal.font_size_toggle_compact",
+            "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename", "terminal.reset",
             "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
             "app.command_palette", "app.open_drawer", "app.open_app_drawer", "app.close_drawer", "terminal.action_sheet",
@@ -117,7 +120,7 @@ public class TerminalActionDispatcherTest {
             "pane.layout", "pane.equalize", "pane.rotate", "pane.move_to_edge",
             "pane.next_layout", "pane.toggle_float",
             "keyboard.cycle_form", "keyboard.set_form", "keyboard.show", "keyboard.hide",
-            "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate"};
+            "keyboard.clipboard", "keyboard.toggle_enabled", "voice.dictate", "minimal.toggle"};
         for (String name : tools) {
             JSONObject result = dispatcher.execute(name, new JSONObject());
             assertFalse(name, result.getBoolean("ok"));
@@ -504,6 +507,7 @@ public class TerminalActionDispatcherTest {
             {"app.open_apps_bar", "openAppsBar"},
             {"app.open_app_drawer", "openAppDrawer"},
             {"app.command_palette", "showCommandPalette"},
+            {"app.page_switcher", "showPageSwitcher"},
             // The retired sessions drawer's own binding, kept pointed at its replacement.
             {"app.open_drawer", "showSessionBrowser"},
             {"appearance.set_wallpaper", "openWallpaperPicker"},
@@ -827,6 +831,90 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
+    public void windowMoveTakesLeftRightOrAPlaceCountedFromOne() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 3;
+        host.windowIndex = 0;
+
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject()).getInt("_statusCode"));
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject().put("to", "0"))
+            .getInt("_statusCode"));
+        assertEquals(400, dispatcher.execute("window.move", new JSONObject().put("to", "up"))
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastMovedWindow);
+
+        JSONObject last = dispatcher.execute("window.move", new JSONObject().put("to", 3));
+        assertEquals(3, last.getInt("to"));
+        assertEquals(0, host.lastMovedWindow[0]);
+        assertEquals(2, host.lastMovedWindow[1]);
+
+        host.windowIndex = 2;
+        dispatcher.execute("window.move_left", new JSONObject());
+        assertEquals(2, host.lastMovedWindow[0]);
+        assertEquals(1, host.lastMovedWindow[1]);
+        dispatcher.execute("window.move", new JSONObject().put("to", "right"));
+        assertEquals(2, host.lastMovedWindow[1]);
+
+        host.windowCount = 0;
+        host.windowIndex = -1;
+        assertEquals(409, dispatcher.execute("window.move_right", new JSONObject())
+            .getInt("_statusCode"));
+    }
+
+    @Test
+    public void paneConsumePullsTheRightNeighbourUnlessTheLeftIsAsked() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 3;
+        host.windowIndex = 1;
+
+        JSONObject right = dispatcher.execute("pane.consume", new JSONObject());
+        assertEquals("right", right.getString("from"));
+        assertEquals(3, right.getInt("consumed"));
+        assertEquals(Boolean.FALSE, host.lastConsumedFromLeft);
+        dispatcher.execute("pane.consume", new JSONObject().put("from", "left"));
+        assertEquals(Boolean.TRUE, host.lastConsumedFromLeft);
+        assertEquals(400, dispatcher.execute("pane.consume", new JSONObject().put("from", "up"))
+            .getInt("_statusCode"));
+
+        // Nothing to the right of the row's last window, and nothing beside a lone one.
+        host.lastConsumedFromLeft = null;
+        host.windowIndex = 2;
+        assertEquals(409, dispatcher.execute("pane.consume", new JSONObject())
+            .getInt("_statusCode"));
+        host.windowCount = 1;
+        host.windowIndex = 0;
+        assertEquals(409, dispatcher.execute("pane.consume", new JSONObject().put("from", "left"))
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastConsumedFromLeft);
+    }
+
+    @Test
+    public void paneExpelGoesRightByDefaultAndRefusesALonePane() throws Exception {
+        FakeTerminalHost host = attach();
+        host.windowCount = 2;
+        host.windowIndex = 0;
+
+        assertEquals("right", dispatcher.execute("pane.expel", new JSONObject()).getString("to"));
+        assertEquals(Boolean.FALSE, host.lastExpelledToLeft);
+        dispatcher.execute("pane.expel", new JSONObject().put("to", "left"));
+        assertEquals(Boolean.TRUE, host.lastExpelledToLeft);
+        assertEquals(400, dispatcher.execute("pane.expel", new JSONObject().put("to", "2"))
+            .getInt("_statusCode"));
+
+        host.expelPaneResult = false;
+        assertEquals(409, dispatcher.execute("pane.expel", new JSONObject())
+            .getInt("_statusCode"));
+
+        host.expelPaneResult = true;
+        host.lastExpelledToLeft = null;
+        host.windowCount = 0;
+        host.windowIndex = -1;
+        assertEquals(409, dispatcher.execute("pane.expel", new JSONObject())
+            .getInt("_statusCode"));
+        assertEquals(null, host.lastExpelledToLeft);
+    }
+
+    @Test
     public void windowRenameTakesAnEmptyNameButNotAnAbsentOne() throws Exception {
         FakeTerminalHost host = attach();
         host.windowName = "build";
@@ -1118,7 +1206,7 @@ public class TerminalActionDispatcherTest {
         attach();
         for (String tool : new String[]{"terminal.toggle_soft_keyboard",
                 "terminal.font_size_increase", "terminal.font_size_decrease",
-                "terminal.select_url", "terminal.hints", "terminal.search_scrollback",
+                "terminal.font_size_toggle_compact", "terminal.select_url", "terminal.hints", "terminal.search_scrollback",
                 "terminal.share_transcript", "clipboard.paste"}) {
             JSONObject result = dispatcher.execute(tool, new JSONObject());
             assertEquals(tool, 503, result.getInt("_statusCode"));
@@ -1134,6 +1222,31 @@ public class TerminalActionDispatcherTest {
         JSONObject result = dispatcher.execute("terminal.font_size_increase", new JSONObject());
         assertEquals(409, result.getInt("_statusCode"));
         assertEquals("no_session", result.getString("error"));
+    }
+
+    @Test
+    public void fontToggleSwitchesTheFocusedPaneToCompactAndBack() throws Exception {
+        FakeTerminalHost host = attach();
+        host.viewClient = new TermuxTerminalViewClient(FakeTerminalHost.testContext(), host, null);
+        host.currentSession = session();
+        host.paneFontSize = 34;
+        int compact = com.termux.app.terminal.FontCompactPolicy.compactSize(
+            host.preferences.getStoredCompactFontSize(), host.preferences.getFontSize(),
+            host.preferences.getMinFontSize(), host.preferences.getMaxFontSize());
+
+        assertTrue(dispatcher.execute("terminal.font_size_toggle_compact", new JSONObject())
+            .getBoolean("ok"));
+        assertEquals(compact, host.paneFontSize);
+        assertTrue(host.activePaneCompact());
+
+        assertTrue(dispatcher.execute("terminal.font_size_toggle_compact", new JSONObject())
+            .getBoolean("ok"));
+        assertEquals(34, host.paneFontSize);
+
+        // A zoom while Compact leaves it: the next tap goes to Compact again.
+        dispatcher.execute("terminal.font_size_toggle_compact", new JSONObject());
+        dispatcher.execute("terminal.font_size_increase", new JSONObject());
+        assertFalse(host.activePaneCompact());
     }
 
     @Test

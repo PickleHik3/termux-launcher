@@ -27,9 +27,16 @@ public class ShellBackend implements PrivilegedBackend {
     private boolean isAvailable = false;
     private boolean hasPermission = false;
     private RootMethod rootMethod = RootMethod.NONE;
+    /** One su shell for every root command; created on first use, stops itself when idle. */
+    private RootShellSession rootSession;
     
     @Override
     public CompletableFuture<Boolean> initialize(Context context) {
+        return initialize(context, true);
+    }
+
+    /** {@code allowRish} false is the Root choice: su only. */
+    public CompletableFuture<Boolean> initialize(Context context, boolean allowRish) {
         this.context = context.getApplicationContext();
         return CompletableFuture.supplyAsync(() -> {
             try {
@@ -42,9 +49,9 @@ public class ShellBackend implements PrivilegedBackend {
                     rootMethod = RootMethod.SU;
                     Log.i(TAG, "Root access available via su");
                 } else {
-                    // Try rish as alternative
-                    String rishCheck = executeRootCommand(RootMethod.RISH, List.of("echo", "test"));
-                    if (isCommandSuccessful(rishCheck)) {
+                    // Try rish as alternative, unless the choice is root only
+                    String rishCheck = allowRish ? executeRootCommand(RootMethod.RISH, List.of("echo", "test")) : null;
+                    if (allowRish && isCommandSuccessful(rishCheck)) {
                         hasPermission = true;
                         rootMethod = RootMethod.RISH;
                         Log.i(TAG, "Root access available via rish");
@@ -82,6 +89,11 @@ public class ShellBackend implements PrivilegedBackend {
         return hasPermission;
     }
     
+    /** True when this backend runs commands through su. */
+    public boolean isRoot() {
+        return rootMethod == RootMethod.SU && hasPermission;
+    }
+
     @Override
     public boolean requestPermission(int requestCode) {
         // Shell backend doesn't need explicit permission requests
@@ -234,7 +246,12 @@ public class ShellBackend implements PrivilegedBackend {
     
     @Override
     public void cleanup() {
-        // Shell backend doesn't need specific cleanup
+        synchronized (this) {
+            if (rootSession != null) {
+                rootSession.close();
+                rootSession = null;
+            }
+        }
         Log.i(TAG, "Shell backend cleaned up");
     }
     
@@ -258,6 +275,9 @@ public class ShellBackend implements PrivilegedBackend {
             return "Error: No root method available";
         }
         String shellCommand = buildShellCommand(command);
+        if (method == RootMethod.SU) {
+            return runInRootSession(shellCommand);
+        }
         List<String> fullCommand = new ArrayList<>();
         if (method == RootMethod.SU) {
             fullCommand.add("su");
@@ -268,6 +288,34 @@ public class ShellBackend implements PrivilegedBackend {
         fullCommand.add(shellCommand);
         String logCommand = (method == RootMethod.SU ? "su -c " : "rish -c ") + shellCommand;
         return runProcess(fullCommand, logCommand);
+    }
+
+    private synchronized RootShellSession rootSession() {
+        if (rootSession == null) {
+            rootSession = RootShellSession.createDefault();
+        }
+        return rootSession;
+    }
+
+    private String runInRootSession(String shellCommand) {
+        String logCommand = "su: " + shellCommand;
+        RootShellSession.Result r =
+            rootSession().run(shellCommand, TimeUnit.SECONDS.toMillis(COMMAND_TIMEOUT_SECONDS));
+        if (r.failure == null) {
+            if (r.exitCode == 0) {
+                return r.stdout;
+            }
+            Log.w(TAG, "Command failed (" + r.exitCode + "): " + maskSensitive(logCommand));
+            String errorMsg = r.stderr.length() > 0 ? r.stderr : "Exit code: " + r.exitCode;
+            return "Error (" + r.exitCode + "): " + errorMsg;
+        }
+        if (r.failure == RootShellSession.Failure.TIMEOUT) {
+            Log.w(TAG, "Command timed out: " + maskSensitive(logCommand));
+            return "Error: Command timed out";
+        }
+        Log.e(TAG, "Failed to execute shell command: " + maskSensitive(logCommand)
+            + " (" + r.failure + ")");
+        return "Error: " + r.reason;
     }
 
     private String runProcess(List<String> command, String logCommand) {

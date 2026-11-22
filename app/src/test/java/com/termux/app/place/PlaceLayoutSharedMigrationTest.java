@@ -10,11 +10,11 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -57,7 +57,7 @@ public class PlaceLayoutSharedMigrationTest {
     }
 
     private PlaceLayoutStore store() {
-        return new PlaceLayoutStore(launcher);
+        return routed(new PlaceLayoutStore(launcher));
     }
 
     /** An install on version 5 whose three places were arranged three different ways. */
@@ -128,7 +128,9 @@ public class PlaceLayoutSharedMigrationTest {
         seedThreeDifferentPlaces();
         PlaceLayoutStore store = store();
         assertEquals(6, store.widgetColumns(PlaceOrientation.PORTRAIT));
-        assertEquals(3, store.widgetRows(PlaceOrientation.LANDSCAPE));
+        // One grid for both orientations (ADR 0020 §12): landscape reads the portrait count.
+        assertEquals(store.widgetRows(PlaceOrientation.PORTRAIT),
+            store.widgetRows(PlaceOrientation.LANDSCAPE));
         assertEquals(KeyboardMode.RESIZE, store.keyboardMode(PlaceOrientation.LANDSCAPE));
     }
 
@@ -151,9 +153,9 @@ public class PlaceLayoutSharedMigrationTest {
         seedThreeDifferentPlaces();
         prefs.edit().putBoolean("place.terminal.keyboard_open", false).commit();
         PlaceLayoutStore store = store();
-        assertTrue(store.wasKeyboardOpen(PaneWallPage.DISPLAY));
-        assertFalse(store.wasKeyboardOpen(PaneWallPage.TERMINAL));
-        assertFalse(store.wasKeyboardOpen(PaneWallPage.WIDGETS));
+        assertTrue(store.wasKeyboardOpen(PageKind.DISPLAY));
+        assertFalse(store.wasKeyboardOpen(PageKind.TERMINAL));
+        assertFalse(store.wasKeyboardOpen(PageKind.HOME));
     }
 
     @Test
@@ -164,15 +166,15 @@ public class PlaceLayoutSharedMigrationTest {
             .putInt(TERMUX_APP.KEY_TERMINAL_PANE_GAP, 3)
             .putInt(TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM, 10)
             // The terminal took a corner radius of its own; that is what it was showing.
-            .putInt(PlaceLayoutStore.legacyLookKey(PaneWallPage.TERMINAL,
+            .putInt(PlaceLayoutStore.legacyLookKey(PageKind.TERMINAL,
                 TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS), 20)
             // Another place's overrides were never on the terminal, so the shared value stands.
-            .putInt(PlaceLayoutStore.legacyLookKey(PaneWallPage.DISPLAY,
+            .putInt(PlaceLayoutStore.legacyLookKey(PageKind.DISPLAY,
                 TERMUX_APP.KEY_TERMINAL_PANE_GAP), 5)
-            .putInt(PlaceLayoutStore.legacyLookKey(PaneWallPage.WIDGETS,
+            .putInt(PlaceLayoutStore.legacyLookKey(PageKind.HOME,
                 TERMUX_APP.KEY_WALLPAPER_BACKDROP_DIM), 40)
             // A key the terminal alone had, with no shared value beside it.
-            .putString(PlaceLayoutStore.legacyLookKey(PaneWallPage.TERMINAL,
+            .putString(PlaceLayoutStore.legacyLookKey(PageKind.TERMINAL,
                 TERMUX_APP.KEY_APP_LAUNCHER_DOCK_STYLE), "rounded")
             .commit();
 
@@ -190,7 +192,7 @@ public class PlaceLayoutSharedMigrationTest {
     public void aSecondRunChangesNothing() {
         seedThreeDifferentPlaces();
         prefs.edit()
-            .putInt(PlaceLayoutStore.legacyLookKey(PaneWallPage.TERMINAL,
+            .putInt(PlaceLayoutStore.legacyLookKey(PageKind.TERMINAL,
                 TERMUX_APP.KEY_TERMINAL_CORNER_RADIUS), 20)
             .commit();
         PlaceLayoutStore first = store();
@@ -225,5 +227,12 @@ public class PlaceLayoutSharedMigrationTest {
         assertFalse(store.isStatusCompact(PlaceOrientation.LANDSCAPE));
         for (String key : prefs.getAll().keySet())
             assertFalse(key, PER_PLACE_KEY.matcher(key).matches());
+    }
+
+    /** Reads and writes of layout keys go where the store keeps them now: the documents (ADR 0020). */
+    private PlaceLayoutStore routed(PlaceLayoutStore store) {
+        android.content.SharedPreferences view = store.layoutPreferences();
+        if (view != null) prefs = view;
+        return store;
     }
 }

@@ -45,6 +45,13 @@ public final class OverlayRegistry {
 
         /** Drops the overlay with no animation for {@code reason}; do nothing to ignore it. */
         default void closeImmediately(@NonNull CloseReason reason) { }
+
+        /**
+         * Whether the overlay is up now, as a layer over the page below: what asks it is a page
+         * that has to leave Back and the keys to it. Default false, for an overlay that has not
+         * said.
+         */
+        default boolean isOpen() { return false; }
     }
 
     /**
@@ -80,8 +87,14 @@ public final class OverlayRegistry {
 
     /** @return true when some overlay spent the press. */
     public boolean onBackPressed() {
-        for (Overlay overlay : mOverlays)
-            if (overlay.onBack()) return true;
+        for (int i = 0; i < mOverlays.size(); i++) {
+            if (mOverlays.get(i).onBack()) {
+                // DIAG(back-path): which overlay spent Back; revert before merge.
+                if (MotionLog.enabled) MotionLog.log("back-overlay", "index=" + i + " of="
+                    + mOverlays.size() + " via=pressed");
+                return true;
+            }
+        }
         return false;
     }
 
@@ -92,10 +105,17 @@ public final class OverlayRegistry {
     public boolean consumeKeyDown(int keyCode, @NonNull KeyEvent event) {
         boolean backDown = keyCode == KeyEvent.KEYCODE_BACK
             && event.getAction() == KeyEvent.ACTION_DOWN;
-        for (Overlay overlay : mOverlays) {
+        for (int i = 0; i < mOverlays.size(); i++) {
+            Overlay overlay = mOverlays.get(i);
             if (overlay instanceof TypedOverlay) {
-                if (((TypedOverlay) overlay).onKeyDown(keyCode, event)) return true;
+                if (((TypedOverlay) overlay).onKeyDown(keyCode, event)) {
+                    // DIAG(back-path): revert before merge.
+                    if (MotionLog.enabled && keyCode == KeyEvent.KEYCODE_BACK)
+                        MotionLog.log("back-overlay", "index=" + i + " via=typed-key");
+                    return true;
+                }
             } else if (backDown && overlay.onBack()) {
+                if (MotionLog.enabled) MotionLog.log("back-overlay", "index=" + i + " via=key");
                 mClaimedBackDown = true;
                 return true;
             }
@@ -120,6 +140,13 @@ public final class OverlayRegistry {
         for (Overlay overlay : mOverlays)
             if (overlay instanceof TypedOverlay
                 && ((TypedOverlay) overlay).onCodePoint(codePoint, ctrlDown)) return true;
+        return false;
+    }
+
+    /** Whether any overlay is up: a layer is open over the page, and takes Back and keys first. */
+    public boolean anyOpen() {
+        for (Overlay overlay : mOverlays)
+            if (overlay.isOpen()) return true;
         return false;
     }
 

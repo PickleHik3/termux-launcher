@@ -97,4 +97,19 @@ public class ChromeShapeOutlineProviderTest {
         ChromeShapeOutlineProvider.cardRect(card, 1080, 96, rect);
         assertEquals("a view that grew has an outline that grew with it", 1080, rect[2]);
     }
+
+    @Test
+    public void theCutIsTheOutlinesRoundRect() {
+        ChromeShapeOutlineProvider provider = new ChromeShapeOutlineProvider();
+        float[] cut = new float[RoundCut.SIZE];
+        provider.cut(1080, 900, cut);
+        org.junit.Assert.assertArrayEquals("no clip: the bounds, square",
+            new float[] {0f, 0f, 1080f, 900f, 0f}, cut, 0f);
+
+        // A Docked slab at the screen's bottom: its top corners rounded, its lower ones square,
+        // so the round rect runs on past the bottom by the radius and the bounds cut it there.
+        provider.setClip(new LiveChromeShape.Clip(0, 0, 0, 0, 40f, 40f, 0f, 0f));
+        provider.cut(1080, 900, cut);
+        org.junit.Assert.assertArrayEquals(new float[] {0f, 0f, 1080f, 940f, 40f}, cut, 0f);
+    }
 }

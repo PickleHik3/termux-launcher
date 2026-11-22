@@ -29,7 +29,7 @@ public class AppDrawerNestedVelocityTest {
         float converted = AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(velocityY);
         assertEquals(2400f, converted, 0f);
         assertEquals(Decision.COMMIT_CLOSE,
-            AppDrawerCommitPolicy.decide(0.88f, converted, Direction.CLOSING));
+            AppDrawerCommitPolicy.decide(0.88f, converted, Direction.CLOSING, 1f));
     }
 
     @Test
@@ -38,7 +38,7 @@ public class AppDrawerNestedVelocityTest {
         float converted = AppDrawerCloseArmingPolicy.closeVelocityForNestedFling(velocityY);
         assertEquals(-2400f, converted, 0f);
         assertEquals(Decision.CANCEL,
-            AppDrawerCommitPolicy.decide(0.2f, converted, Direction.CLOSING));
+            AppDrawerCommitPolicy.decide(0.2f, converted, Direction.CLOSING, 1f));
     }
 
     @Test

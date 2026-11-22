@@ -42,10 +42,9 @@ import java.util.Properties;
 import java.util.Set;
 
 /**
- * Standalone settings page for the built-in terminal keyboard: input method, layouts, typing, and
- * feedback. The keyboard's look (theme, colors, typeface, bottom padding, and the "Customize
- * keyboard appearance" surface entry) moved to the Look page, since it is edited alongside the
- * launcher's other visual choices there.
+ * Keyboard: input method, layouts, size, typing, voice and the keyboard's look (its theme page and
+ * the Appearance editor's entry, moved here from Appearance so everything about the keyboard is in
+ * one place).
  */
 @Keep
 public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
@@ -59,8 +58,9 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_TAP_CORRECTION_STATUS = "in_app_keyboard_tap_correction_status";
     private static final String KEY_TAP_CORRECTION_RESET = "in_app_keyboard_tap_correction_reset";
     private static final String KEY_VOICE_ENGINE = "keyboard_voice_engine";
-    private static final String KEY_VOICE_MODEL = "keyboard_voice_model";
-    private static final String KEY_VOICE_POLISH_MODEL = "keyboard_voice_polish_model";
+    /** The Voice input page's Speech model rows; null on every other keyboard page. */
+    @Nullable private VoiceSpeechModelRows voiceSpeechModelRows;
+    @Nullable private VoiceCleanupRows voiceCleanupRows;
 
     private static final String UPSTREAM_GITHUB_URL =
         "https://github.com/Julow/Unexpected-Keyboard";
@@ -98,14 +98,6 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         preferenceManager.setPreferenceDataStore(store);
         setPreferencesFromResource(preferencesXml(), rootKey);
 
-        // Keyboard sizes are percentage ratios, whichever page holds them.
-        for (String key : new String[] {"in_app_keyboard_floating_width",
-            "in_app_keyboard_floating_height", "in_app_keyboard_split_gap"}) {
-            Preference slider = findPreference(key);
-            if (slider instanceof com.termux.app.fragments.settings.SliderPreference)
-                ((com.termux.app.fragments.settings.SliderPreference) slider).setValueSuffix("%");
-        }
-
         SegmentedPillPreference inputMethodPreference = findPreference("keyboard_input_method");
         if (inputMethodPreference == null) {
             // A focused subpage has no input-method row of its own: it follows the stored choice,
@@ -120,6 +112,13 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
 
+
+        Preference customizeKeyboardSurface = findPreference("customize_keyboard_surface");
+        if (customizeKeyboardSurface != null) customizeKeyboardSurface.setOnPreferenceClickListener(preference -> {
+            SettingsEditorDoors.openEditor(this, preference,
+                com.termux.app.surfaces.EditorDoor.SETTINGS_KEYBOARD);
+            return true;
+        });
 
         MultiSelectListPreference extraKeysPreference = findPreference(KEY_EXTRA_KEYS);
         if (extraKeysPreference != null)
@@ -164,63 +163,25 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
                 // back, so the screen that downloads one opens instead and the row stays as it was.
                 if (TermuxPreferenceConstants.TERMUX_APP.IN_APP_KEYBOARD_VOICE_ENGINE_ON_DEVICE.equals(newValue)
                     && TaiSpeechModels.resolveActive(context) == null) {
-                    openSpeechModelSettings(context);
+                    TaiModelCentreFragment.open(getActivity(), TaiModelCentreFragment.SEGMENT_SPEECH);
                     return false;
                 }
                 return true;
             });
         }
-        Preference voiceModel = findPreference(KEY_VOICE_MODEL);
-        if (voiceModel != null) voiceModel.setOnPreferenceClickListener(preference -> {
-            openSpeechModelSettings(context);
-            return true;
-        });
+        // The Voice input page holds the speech model rows; the other keyboard pages do not.
+        if (findPreference(VoiceSpeechModelRows.KEY_PICK) != null) {
+            voiceSpeechModelRows = new VoiceSpeechModelRows(this);
+            voiceSpeechModelRows.bind(context);
+        }
 
-        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
-        if (polishModel != null) polishModel.setOnPreferenceClickListener(preference -> {
-            // The Cleanup model choice is the TIDY_DICTATION function's picker sheet.
-            TaiFunctionPickerSheet.show(this, com.termux.ai.TaiFunction.TIDY_DICTATION);
-            return true;
-        });
-        refreshPolishModelSummary(context);
+        // The Voice input page holds the cleanup model rows too.
+        if (findPreference(VoiceCleanupRows.KEY_MODEL) != null) {
+            voiceCleanupRows = new VoiceCleanupRows(this);
+            voiceCleanupRows.bind(context);
+        }
 
         SettingsLayoutUtils.applyScreenLayout(this);
-    }
-
-    /**
-     * The Speech model screen: the installed speech models, which one is in use, and downloads.
-     * Pushed in place via {@link com.termux.app.activities.SettingsActivity#openScreen} rather than
-     * relaunched with {@code startActivity}, so Back returns here instead of closing Settings --
-     * this fragment only ever lives inside SettingsActivity, so the cast is always safe.
-     */
-    private void openSpeechModelSettings(@NonNull Context context) {
-        if (getActivity() instanceof com.termux.app.activities.SettingsActivity) {
-            ((com.termux.app.activities.SettingsActivity) getActivity()).openScreen(
-                SpeechModelPreferencesFragment.class,
-                R.string.settings_keyboard_voice_model_title, null);
-        }
-    }
-
-    /** The chosen model's plain name, "Automatic" when the stored id is empty, the remote id for a remote pick, "Raw text" for off. */
-    private void refreshPolishModelSummary(@NonNull Context context) {
-        Preference polishModel = findPreference(KEY_VOICE_POLISH_MODEL);
-        if (polishModel == null) return;
-        String modelId = TermuxAppSharedPreferences.build(context, true).getInAppKeyboardVoicePolishModelId();
-        if (modelId.isEmpty()) {
-            polishModel.setSummary(R.string.cleanup_model_automatic_title);
-            return;
-        }
-        if (com.termux.ai.TaiFunctionModels.VALUE_OFF.equals(modelId)) {
-            polishModel.setSummary(R.string.tai_callers_cleanup_raw_text);
-            return;
-        }
-        if (com.termux.ai.TaiFunctionModels.isRemote(modelId)) {
-            polishModel.setSummary(modelId.substring(com.termux.ai.TaiFunctionModels.REMOTE_PREFIX.length()));
-            return;
-        }
-        com.termux.ai.TaiModelSpec spec = com.termux.app.terminal.inappkeyboard.voice.LocalTaiVoiceTextPolisher
-            .installedChatModels(context).get(modelId);
-        polishModel.setSummary(spec == null ? getString(R.string.cleanup_model_automatic_title) : spec.displayName);
     }
 
     /** The status row says learning, active or paused and how much was learned; reset follows. */
@@ -283,14 +244,15 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
 
     private void updateBuiltInKeyboardRows(boolean enabled) {
         Preference layout = findPreference("keyboard_layout");
-        Preference shapes = findPreference("keyboard_shapes");
         Preference feedback = findPreference("keyboard_feedback");
-        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_size", "keyboard_sub_typing"}) {
+        for (String key : new String[] {"keyboard_sub_layout", "keyboard_sub_typing"}) {
             Preference row = findPreference(key);
             if (row != null) row.setEnabled(enabled);
         }
+        // The keyboard's look (moved here from Appearance) only matters for the built-in one.
+        Preference look = findPreference("keyboard_appearance");
+        if (look != null) look.setEnabled(enabled);
         if (layout != null) layout.setEnabled(enabled);
-        if (shapes != null) shapes.setEnabled(enabled);
         if (feedback != null) feedback.setEnabled(enabled);
     }
 
@@ -303,9 +265,46 @@ public class KeyboardPreferencesFragment extends MaterialPreferenceFragment {
         // The file may have been hand-edited while the screen was away.
         if (getContext() != null) {
             KeyboardPreferencesDataStore.getInstance(getContext()).forgetTermuxProperties();
-            refreshPolishModelSummary(getContext());
+            if (voiceSpeechModelRows != null) voiceSpeechModelRows.refresh(getContext());
+            if (voiceCleanupRows != null) voiceCleanupRows.refresh(getContext());
             // The keyboard may have learned more, or paused itself, while the screen was away.
             refreshTapCorrectionRows();
+            refreshExtraKeysSummary(getContext());
+        }
+    }
+
+    /** The extra-keys entry says which pages have a row of their own; the rest follow Global. */
+    private void refreshExtraKeysSummary(@NonNull Context context) {
+        Preference entry = findPreference("edit_extra_keys_row");
+        if (entry == null) return;
+        Properties properties = TermuxPropertiesFile.load(context);
+        java.util.List<com.termux.app.terminal.io.ExtraKeysTarget> own =
+            com.termux.app.terminal.io.ExtraKeysOwnPages.of(properties::getProperty);
+        String summary;
+        if (own.isEmpty()) {
+            summary = getString(R.string.settings_edit_extra_keys_summary_global);
+        } else {
+            String names = "";
+            for (int i = 0; i < own.size(); i++) {
+                String name = ownPageName(own.get(i));
+                if (i == 0) names = name;
+                else if (i == own.size() - 1) names = getString(R.string.settings_extra_keys_list_and, names, name);
+                else names = names + ", " + name;
+            }
+            summary = getString(own.size() == 1 ? R.string.settings_edit_extra_keys_summary_own_one
+                : R.string.settings_edit_extra_keys_summary_own, names);
+        }
+        if (!summary.contentEquals(entry.getSummary() == null ? "" : entry.getSummary())) entry.setSummary(summary);
+    }
+
+    @NonNull
+    private String ownPageName(@NonNull com.termux.app.terminal.io.ExtraKeysTarget target) {
+        switch (target) {
+            case TERMINAL: return getString(R.string.settings_extra_keys_target_terminal);
+            case DISPLAY: return getString(R.string.settings_extra_keys_target_display);
+            case HOME: return getString(R.string.settings_extra_keys_target_home);
+            case ASSISTANT: return getString(R.string.settings_extra_keys_target_assistant);
+            default: return getString(R.string.settings_extra_keys_target_global);
         }
     }
 
@@ -598,6 +597,11 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
             case "keyboard_voice_mic_sensitivity":
                 mPreferences.setInAppKeyboardVoiceMicSensitivity(value);
                 break;
+            case VoiceSpeechModelRows.KEY_ACCELERATOR:
+                // Remembered for the model in use; another model keeps its own.
+                new com.termux.ai.TaiSettings(mContext).setSttAccelerator(
+                    com.termux.ai.TaiSpeechModels.activeModelId(mContext), value);
+                break;
             default:
                 break;
         }
@@ -633,6 +637,9 @@ class KeyboardPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getInAppKeyboardVoicePolishLevel();
             case "keyboard_voice_mic_sensitivity":
                 return mPreferences.getInAppKeyboardVoiceMicSensitivity();
+            case VoiceSpeechModelRows.KEY_ACCELERATOR:
+                return new com.termux.ai.TaiSettings(mContext).getSttAccelerator(
+                    com.termux.ai.TaiSpeechModels.activeModelId(mContext));
             default:
                 return defValue;
         }

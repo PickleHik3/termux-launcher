@@ -92,6 +92,23 @@ final class TermuxInstaller {
      * Performs bootstrap setup if necessary.
      */
     static void setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone) {
+        setupBootstrapIfNeeded(activity, whenDone, null);
+    }
+
+    /** Whether the prefix holds a bootstrap: its login binary is in place. Reads one file's status. */
+    static boolean isBootstrapInstalled() {
+        return new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/login").isFile();
+    }
+
+    /**
+     * Performs bootstrap setup if necessary.
+     *
+     * @param whenSettled runs on the main thread once a started install has ended, installed or
+     *                    failed (after its progress dialog is gone); not run when no install starts
+     * @return whether an install started
+     */
+    static boolean setupBootstrapIfNeeded(final Activity activity, final Runnable whenDone,
+                                          @Nullable final Runnable whenSettled) {
         String bootstrapErrorMessage;
         Error filesDirectoryAccessibleError;
         // This will also call Context.getFilesDir(), which should ensure that termux files directory
@@ -106,7 +123,7 @@ final class TermuxInstaller {
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
             sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
             MessageDialogUtils.exitAppWithErrorMessage(activity, activity.getString(R.string.bootstrap_error_title), bootstrapErrorMessage);
-            return;
+            return false;
         }
         // Android assigns the SELinux domain from the highest target sdk version in the app's
         // sharedUserId group and remembers it until every member is uninstalled, so the app can be
@@ -117,7 +134,7 @@ final class TermuxInstaller {
         if (restrictedDomain != null) {
             Logger.logError(LOG_TAG, "isFilesDirectoryAccessible: " + isFilesDirectoryAccessible);
             showExecRestrictedErrorDialog(activity, restrictedDomain);
-            return;
+            return false;
         }
         if (!isFilesDirectoryAccessible) {
             bootstrapErrorMessage = Error.getMinimalErrorString(filesDirectoryAccessibleError);
@@ -128,7 +145,7 @@ final class TermuxInstaller {
             Logger.logError(LOG_TAG, bootstrapErrorMessage);
             sendBootstrapCrashReportNotification(activity, bootstrapErrorMessage);
             MessageDialogUtils.showMessage(activity, activity.getString(R.string.bootstrap_error_title), bootstrapErrorMessage, null);
-            return;
+            return false;
         }
         // If prefix directory exists, even if its a symlink to a valid directory and symlink is not broken/dangling
         if (FileUtils.directoryFileExists(TERMUX_PREFIX_DIR_PATH, true)) {
@@ -142,7 +159,7 @@ final class TermuxInstaller {
                 );
                 if (loginBinaryError == null) {
                     whenDone.run();
-                    return;
+                    return false;
                 }
                 Logger.logWarn(LOG_TAG, "The termux prefix directory exists but bootstrap appears incomplete/broken. Reinstalling bootstrap. " +
                     Error.getMinimalErrorString(loginBinaryError));
@@ -287,10 +304,12 @@ final class TermuxInstaller {
                         } catch (RuntimeException e) {
                             // Activity already dismissed - ignore.
                         }
+                        if (whenSettled != null) whenSettled.run();
                     });
                 }
             }
         }.start();
+        return true;
     }
 
     /**

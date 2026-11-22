@@ -130,7 +130,7 @@ public final class DrawablePixels {
      * whatever draws the result pays nothing for it.
      *
      * <p>Artwork made of pixels is redrawn into a bitmap no larger than the pixels it already
-     * holds and never above {@link LauncherIconStore#MAX_RETAINED_PX}, the size the store would
+     * holds and never above {@code maxPx} (the store's cap), the size the store would
      * keep it at anyway, so it costs no more than it did. A vector stays a vector: it is wrapped
      * in an inset that reaches past its box, which holds no pixels at all.
      *
@@ -139,6 +139,13 @@ public final class DrawablePixels {
     @NonNull
     public static Drawable scaleAboutCentre(@NonNull Resources resources,
                                             @NonNull Drawable source, float scale) {
+        return scaleAboutCentre(resources, source, scale, LauncherIconStore.MAX_RETAINED_PX);
+    }
+
+    /** {@link #scaleAboutCentre(Resources, Drawable, float)} held to {@code maxPx}, the store's current cap. */
+    @NonNull
+    public static Drawable scaleAboutCentre(@NonNull Resources resources,
+                                            @NonNull Drawable source, float scale, int maxPx) {
         if (scale <= 1f) return source;
         float[] place = ArtworkFootprint.placementAboutCentre(scale);
         try {
@@ -147,7 +154,7 @@ public final class DrawablePixels {
                 return new InsetDrawable(source, place[0], place[1], 1f - place[2],
                     1f - place[3]);
             }
-            int edge = Math.min(largestBitmap, LauncherIconStore.MAX_RETAINED_PX);
+            int edge = Math.min(largestBitmap, maxPx);
             Bitmap scaled = Bitmap.createBitmap(edge, edge, Bitmap.Config.ARGB_8888);
             Rect previousBounds = new Rect(source.getBounds());
             try {

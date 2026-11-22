@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Appearance editor glyph (depth), after Material Symbols. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24"
+    android:tint="?attr/colorControlNormal">
+    <path
+        android:fillColor="@android:color/white"
+        android:fillType="nonZero"
+        android:pathData="M12,2L2,7l10,5 10,-5 -10,-5zM2,17l10,5 10,-5 -2.24,-1.12L12,19.76 4.24,15.88 2,17zM2,12l10,5 10,-5 -2.24,-1.12L12,14.76 4.24,10.88 2,12z" />
+</vector>

@@ -6,6 +6,7 @@ buildscript {
     dependencies {
         classpath "com.android.tools.build:gradle:8.13.2"
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:1.8.22"
+        classpath "io.github.takahirom.roborazzi:roborazzi-gradle-plugin:1.43.0"
     }
 }
 
@@ -28,6 +29,10 @@ allprojects {
         // instrumented android-all jar per sandbox, and the forks that lose the race die with an
         // OutOfMemoryError inside ShadowArscApkAssets9 rather than a test failure.
         maxHeapSize = '2g'
+
+        // Modules other than :app have small suites; three forks let their classes run side by side
+        // (:app sets its own count in app/build.gradle).
+        if (project.path != ':app') maxParallelForks = 3
 
         // Robolectric extracts its native runtime — the .so, the ICU data and the fonts, ~200 MB —
         // into java.io.tmpdir, and only its shutdown hook removes it again. A fork that is killed

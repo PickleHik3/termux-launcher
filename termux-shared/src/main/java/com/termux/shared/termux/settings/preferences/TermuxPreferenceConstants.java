@@ -171,10 +171,10 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_APP_LAUNCHER_WIDGET_PANE_ENABLED = true;
 
-        /** How the launcher's own widgets are drawn: {@code tonal} or {@code pane}. */
+        /** The numerals of the launcher's own widgets: {@code sans} or {@code mono}. */
         public static final String KEY_APP_LAUNCHER_BUILTIN_WIDGET_STYLE =
             "app_launcher_builtin_widget_style";
-        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "tonal";
+        public static final String DEFAULT_APP_LAUNCHER_BUILTIN_WIDGET_STYLE = "sans";
 
         /** The widget pane's grid: how many columns across and rows down a page has. */
         public static final String KEY_APP_LAUNCHER_WIDGET_GRID_COLUMNS = "app_launcher_widget_grid_columns";
@@ -194,14 +194,10 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_APP_LAUNCHER_WIDGET_GRID_ROWS = 12;
 
         /**
-         * Defines the key for the embedded Linux display: the wall's Display page, the
-         * {@code termux-x11} command the launcher writes into the prefix, and the display
-         * settings. Off until the user asks for it — a home screen that never wants a display
-         * should pay nothing for one.
+         * The retired Display switch: the display comes up on demand now (ADR 0008). Removed by
+         * {@code WallReworkMigration}; nothing reads it.
          */
         public static final String KEY_X11_DISPLAY_ENABLED = "x11_display_enabled";
-
-        public static final boolean DEFAULT_X11_DISPLAY_ENABLED = false;
 
         /** Command line the "Start display" button and the start-up opt-in run. */
         public static final String KEY_X11_DISPLAY_COMMAND = "x11_display_command";
@@ -213,10 +209,13 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_DISPLAY_AUTOSTART = false;
 
-        /** Put {@code DISPLAY} into new shells while a display is running. Off, as Termux:X11 never did it. */
+        /**
+         * Put {@code DISPLAY} into new shells while a display is running. On: an X app started
+         * from a launcher terminal finds the display rather than running with no window.
+         */
         public static final String KEY_X11_SET_DISPLAY_ENV = "x11_set_display_env";
 
-        public static final boolean DEFAULT_X11_SET_DISPLAY_ENV = false;
+        public static final boolean DEFAULT_X11_SET_DISPLAY_ENV = true;
 
         /** The X screen's dots per inch when the launcher starts the server; 0 leaves it to the server. */
         public static final String KEY_X11_DISPLAY_DPI = "x11_display_dpi";
@@ -249,15 +248,45 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_FORCE_BGRA = false;
 
+        /** Whether launcherctl may restart the phone (restart, recovery, bootloader). */
+        public static final String KEY_LAUNCHERCTL_ROOT_REBOOT = "launcherctl_root_reboot";
+        public static final boolean DEFAULT_LAUNCHERCTL_ROOT_REBOOT = false;
+
         /** List the prefix's Linux apps in the app drawer, to be run on the display. */
         public static final String KEY_X11_DRAWER_APPS = "x11_drawer_apps";
 
         public static final boolean DEFAULT_X11_DRAWER_APPS = true;
 
+        /**
+         * The launcher's own PulseAudio server for every terminal session, Linux app and proot
+         * distro, started when something first may want sound.
+         */
+        public static final String KEY_LAUNCHER_SOUND = "launcher_sound";
+
+        public static final boolean DEFAULT_LAUNCHER_SOUND = true;
+
+        /** Mirror Linux media players into Android's media controls, and hold audio focus. */
+        public static final String KEY_LAUNCHER_MEDIA_CONTROLS = "launcher_media_controls";
+
+        public static final boolean DEFAULT_LAUNCHER_MEDIA_CONTROLS = true;
+
         /** The window manager the launcher starts with the server, so windows open full size. Empty for none. */
         public static final String KEY_X11_WINDOW_MANAGER = "x11_window_manager";
 
         public static final String DEFAULT_X11_WINDOW_MANAGER = "openbox";
+
+        /**
+         * What the display starts with when it comes up: empty for nothing, {@code desktop:<distro>}
+         * for that distro's XFCE desktop, or {@code command} for {@link #KEY_X11_START_WITH_COMMAND}.
+         */
+        public static final String KEY_X11_START_WITH = "x11_start_with";
+
+        public static final String DEFAULT_X11_START_WITH = "";
+
+        /** The shell command the display starts with when {@link #KEY_X11_START_WITH} is {@code command}. */
+        public static final String KEY_X11_START_WITH_COMMAND = "x11_start_with_command";
+
+        public static final String DEFAULT_X11_START_WITH_COMMAND = "";
 
         /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
         public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
@@ -291,16 +320,58 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_RUNTIME_BADGE = "termux";
 
-        /** The place the pane wall last rested on; the home screen comes back to it. */
+        /**
+         * The place the pane wall last rested on; read by nothing since Start in (ADR 0008), kept
+         * so {@code WallReworkMigration} can remove it.
+         */
         public static final String KEY_WALL_LAST_PAGE = "wall_last_page";
 
         /**
-         * Defines the key for the usage mode the user picked: the terminal alone, the terminal
-         * with the home screen, or both with the Linux display. Stored rather than derived from
-         * the surface switches: the surfaces stay individually settable after a mode is picked,
-         * and a derived mode would jump between presets the moment one is flipped. The value
-         * {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older two-way switch wrote;
-         * it is read once and mapped by {@code LauncherUseCaseMode}, never written again.
+         * Set once the Assistant page's own extra-keys row has been written to termux.properties
+         * (every page follows Global unless it has a row, so Assistant keeps the row it had built
+         * in). Never cleared: a user who later makes Assistant follow Global stays that way.
+         */
+        public static final String KEY_EXTRA_KEYS_ASSISTANT_ROW_WRITTEN = "extra_keys_assistant_row_written";
+
+        /** The version {@code WallReworkMigration} last brought this install to; absent is 0. */
+        public static final String KEY_WALL_MIGRATION_VERSION = "wall_migration_version";
+
+        /**
+         * Start in: the page a cold start shows, Home, the Terminal (ADR 0008) or the display
+         * window, which only holds while the display starts with the launcher.
+         */
+        public static final String KEY_LAUNCHER_START_IN = "app_launcher_start_in";
+        public static final String LAUNCHER_START_IN_HOME = "home";
+        public static final String LAUNCHER_START_IN_TERMINAL = "workspace";
+        public static final String LAUNCHER_START_IN_DISPLAY = "display";
+        public static final String DEFAULT_LAUNCHER_START_IN = LAUNCHER_START_IN_HOME;
+
+        /**
+         * Use as: the launcher is the phone's Home screen ({@code home}: Home pages, widgets and
+         * the Terminal) or the terminal only ({@code terminal}: no Home page, no Home settings,
+         * no Home in Start in). Asked on the welcome sheet's first page; an install that never
+         * answered is Home screen. Independent of whether the app is the system's home app.
+         */
+        public static final String KEY_USE_AS = "use_as";
+        public static final String USE_AS_HOME = "home";
+        public static final String USE_AS_TERMINAL = "terminal";
+        public static final String DEFAULT_USE_AS = USE_AS_HOME;
+
+        /**
+         * The palette gesture on Home: the keyboard swipe up from a Home page's bottom edge opens
+         * the command palette with the keyboard ({@code swipe_up}, the default), or nothing
+         * ({@code off}).
+         */
+        public static final String KEY_HOME_PALETTE_GESTURE = "app_launcher_home_palette_gesture";
+        public static final String HOME_PALETTE_GESTURE_SWIPE_UP = "swipe_up";
+        public static final String HOME_PALETTE_GESTURE_OFF = "off";
+        public static final String DEFAULT_HOME_PALETTE_GESTURE = HOME_PALETTE_GESTURE_SWIPE_UP;
+
+        /**
+         * The retired usage mode: the terminal alone, the terminal with the home screen, or both
+         * with the Linux display; {@link #APP_LAUNCHER_USE_CASE_MODE_LAUNCHER} is what the older
+         * two-way switch wrote. Read once by {@code WallReworkMigration}, which maps it to Start in
+         * and removes it; nothing else reads or writes it (ADR 0008).
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_MODE = "app_launcher_use_case_mode";
 
@@ -308,18 +379,13 @@ public final class TermuxPreferenceConstants {
         public static final String APP_LAUNCHER_USE_CASE_MODE_TERMINAL = "terminal";
         public static final String APP_LAUNCHER_USE_CASE_MODE_HOME = "home";
         public static final String APP_LAUNCHER_USE_CASE_MODE_DISPLAY = "display";
-        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_MODE =
-            APP_LAUNCHER_USE_CASE_MODE_HOME;
 
         /**
-         * Defines the key holding the launcher surface states captured when the user switched to
-         * terminal-only mode, so switching back restores the layout they had. Encoded by
-         * {@code LauncherUseCaseMode}; an empty value means nothing was captured yet.
+         * The retired usage mode's snapshot of the home surfaces, taken on the way into the
+         * terminal alone. Removed by {@code WallReworkMigration}; nothing reads it.
          */
         public static final String KEY_APP_LAUNCHER_USE_CASE_SNAPSHOT =
             "app_launcher_use_case_snapshot";
-
-        public static final String DEFAULT_APP_LAUNCHER_USE_CASE_SNAPSHOT = "";
 
         /**
          * Defines the key for showing active-notification dots on apps bar icons.
@@ -378,6 +444,13 @@ public final class TermuxPreferenceConstants {
 
         public static final float DEFAULT_APP_LAUNCHER_BAR_HEIGHT = 2.18f;
 
+        /**
+         * Defines the keys for where the Home pill rests: its centre as a fraction of the window's
+         * width and height. Absent means the default first spot.
+         */
+        public static final String KEY_HOME_PILL_X = "home_pill_x";
+        public static final String KEY_HOME_PILL_Y = "home_pill_y";
+
         public static final float MIN_APP_LAUNCHER_BAR_HEIGHT = 0.4f;
 
         public static final float MAX_APP_LAUNCHER_BAR_HEIGHT = 3.0f;
@@ -418,26 +491,57 @@ public final class TermuxPreferenceConstants {
         /** Set once the Style migration has renamed the style values and dropped the retired keys. */
         public static final String KEY_LAYOUT_STYLE_MIGRATED = "layout_style_migrated";
 
+        /**
+         * Home's own Style, Corners and Margin (ADR 0008): what the Home pages' chrome wears, apart
+         * from the Terminal's {@link #KEY_APP_LAUNCHER_DOCK_STYLE},
+         * {@link #KEY_SURFACE_GLOBAL_CORNER_RADIUS} and {@link #KEY_SURFACE_GLOBAL_SIDE_GAP}, in the same
+         * stored forms. While one is unset it reads the Terminal's value, so an upgrade changes
+         * nothing on screen; the first write to it pins it.
+         */
+        public static final String KEY_HOME_LAYOUT_STYLE = "home_layout_style";
+        public static final String KEY_HOME_SURFACE_CORNER_RADIUS = "home_surface_corner_radius";
+        public static final String KEY_HOME_SURFACE_SIDE_GAP = "home_surface_side_gap";
+
         /** Custom capsule corner radius in dp, or -1 to follow the selected dock style. */
         public static final String KEY_APP_LAUNCHER_DOCK_CORNER_RADIUS =
             "app_launcher_dock_corner_radius";
         public static final int DEFAULT_APP_LAUNCHER_DOCK_CORNER_RADIUS = -1;
         public static final int MAX_APP_LAUNCHER_DOCK_CORNER_RADIUS = 40;
 
-        /**
-         * Defines the key for enabling the full-screen app launcher drawer.
-         */
-        public static final String KEY_APP_LAUNCHER_DRAWER_ENABLED = "app_launcher_drawer_enabled";
+        /** Whether swiping up on a badged dock icon opens its quick reply. */
+        public static final String KEY_APP_LAUNCHER_QUICK_REPLY_SWIPE = "app_launcher_quick_reply_swipe";
 
-        public static final boolean DEFAULT_APP_LAUNCHER_DRAWER_ENABLED = true;
+        public static final boolean DEFAULT_APP_LAUNCHER_QUICK_REPLY_SWIPE = true;
 
         public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE =
             "app_launcher_drawer_view_type";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL = "vertical";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_HORIZONTAL = "horizontal";
         public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_CATEGORIES = "categories";
+        public static final String APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT = "default";
         public static final String DEFAULT_APP_LAUNCHER_DRAWER_VIEW_TYPE =
-            APP_LAUNCHER_DRAWER_VIEW_TYPE_VERTICAL;
+            APP_LAUNCHER_DRAWER_VIEW_TYPE_DEFAULT;
+        /** One-time marker: existing installs without a stored drawer type were pinned to Vertical. */
+        public static final String KEY_APP_LAUNCHER_DRAWER_VIEW_TYPE_PINNED =
+            "app_launcher_drawer_view_type_pinned";
+
+        /**
+         * Drawer icon size, columns and rows: "auto" or a number as text. Auto is the sizing the
+         * drawer always had; the numbers are the steps Settings offers.
+         */
+        public static final String KEY_APP_LAUNCHER_DRAWER_ICON_SIZE = "app_launcher_drawer_icon_size";
+        public static final String KEY_APP_LAUNCHER_DRAWER_COLUMNS = "app_launcher_drawer_columns";
+        public static final String KEY_APP_LAUNCHER_DRAWER_ROWS = "app_launcher_drawer_rows";
+        public static final String APP_LAUNCHER_DRAWER_GRID_AUTO = "auto";
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_ICON_SIZE = APP_LAUNCHER_DRAWER_GRID_AUTO;
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_COLUMNS = APP_LAUNCHER_DRAWER_GRID_AUTO;
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_ROWS = APP_LAUNCHER_DRAWER_GRID_AUTO;
+
+        /** Default drawer type's remembered section: "apps" or "categories". Remembered state, not a setting. */
+        public static final String KEY_APP_LAUNCHER_DRAWER_SECTION = "app_launcher_drawer_section";
+        public static final String APP_LAUNCHER_DRAWER_SECTION_APPS = "apps";
+        public static final String APP_LAUNCHER_DRAWER_SECTION_CATEGORIES = "categories";
+        public static final String DEFAULT_APP_LAUNCHER_DRAWER_SECTION = APP_LAUNCHER_DRAWER_SECTION_APPS;
 
         /**
          * Defines the key for opening the keyboard as soon as the app drawer opens, so the drawer
@@ -502,7 +606,7 @@ public final class TermuxPreferenceConstants {
          * Corner radius (dp) of the two chips on the status row — the sessions indicator and the
          * window pills — which wear one shape between them.
          *
-         * <p>Outside the Base cascade, like the terminal frame's radius: this is the shape of two
+         * <p>Outside the Global cascade, like the terminal frame's radius: this is the shape of two
          * pieces of content inside the status surface, not the shape of a surface. {@code -1} is
          * the shipped "follow the bar" state, which is square while Docked and the capsule's own
          * radius while Floating; any value the user dials in holds in both styles.
@@ -513,7 +617,7 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_STATUS_INDICATOR_CORNER_RADIUS = 16;
 
         /**
-         * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Base
+         * Corner radius (dp) of the Docked terminal's bordered frame. Not part of the Global
          * cascade: Floating derives the frame radius from the capsule, so this only exists where
          * the user can actually see it act — Docked with the border on. Defaults to the flush
          * square frame Docked always drew.
@@ -533,6 +637,28 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_TERMINAL_GLASS_GRAIN = 18;
 
         /**
+         * The Terminal's Background (ADR 0031 §4): the panes' Opacity and Blur and the Wallpaper
+         * dim of the Terminal's pages (Display and Assistant pages included). Keys of their own,
+         * outside the look grid: nothing set on Global or by a preset reaches them, and an unset
+         * key reads the Terminal's shipped value below, never Global's.
+         */
+        public static final String KEY_TERMINAL_BG_OPACITY = "terminal_bg_opacity";
+        /**
+         * The Terminal's shipped pane Opacity, percent. Provisional (#287): clearly darker than
+         * Global's shipped glass (10% on a fresh install), so a fresh terminal reads darker than
+         * the bars; the developer picks the real number on pong.
+         */
+        public static final int DEFAULT_TERMINAL_BG_OPACITY = 40;
+        public static final String KEY_TERMINAL_BG_BLUR = "terminal_bg_blur";
+        /** The Terminal's shipped pane Blur, dp. */
+        public static final int DEFAULT_TERMINAL_BG_BLUR = DEFAULT_TERMINAL_GLASS_BLUR_RADIUS;
+        /** The pane Blur's ceiling, dp: what a pane can render. */
+        public static final int MAX_TERMINAL_BG_BLUR = 48;
+        public static final String KEY_TERMINAL_WALLPAPER_DIM = "terminal_wallpaper_dim";
+        /** The Terminal's shipped Wallpaper dim, percent: the wallpaper as it is. */
+        public static final int DEFAULT_TERMINAL_WALLPAPER_DIM = 0;
+
+        /**
          * Legacy key for the wallpaper backdrop, counted as the wallpaper's own visibility: 100
          * showed the wallpaper as-is and lower values dimmed it. Read only to migrate; every
          * reader now uses {@link #KEY_WALLPAPER_BACKDROP_DIM}, which counts the way the slider
@@ -550,20 +676,14 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_WALLPAPER_BACKDROP_DIM = 0;
 
         /**
-         * Extra magnification (percent) applied to the wallpaper copy the glass surfaces blur, so
-         * it lands where the system draws the wallpaper behind the app. 100 means no compensation.
-         *
-         * <p>It is a setting rather than a constant because the magnification a ROM applies at
-         * composite time turned out to depend on the wallpaper: a stored 1328x2654 wallpaper needed
-         * 103 on Nothing OS, a 1400x3100 one about 108. The shipped defaults are the measured
-         * per-manufacturer starting points, resolved by
-         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}.
+         * Magnification (percent) of the wallpaper copy the glass surfaces blur while the system
+         * draws the wallpaper, so it lands where the ROM composites it. Not a setting: the ROM's
+         * measured zoom, resolved by
+         * {@link TermuxAppSharedPreferences#defaultWallpaperRenderZoom(String)}. Nothing OS
+         * measured 103 for one wallpaper and about 108 for another; 103 is the closer common case.
          */
-        public static final String KEY_WALLPAPER_RENDER_ZOOM = "wallpaper_render_zoom";
         public static final int DEFAULT_WALLPAPER_RENDER_ZOOM = 100;
         public static final int DEFAULT_WALLPAPER_RENDER_ZOOM_NOTHING_OS = 103;
-        public static final int MIN_WALLPAPER_RENDER_ZOOM = 90;
-        public static final int MAX_WALLPAPER_RENDER_ZOOM = 120;
 
         /**
          * Gap between tiled terminal panes in dp — the surface editor's Inner padding. The old
@@ -573,6 +693,22 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_PANE_GAP = "terminal_pane_gap";
         public static final int DEFAULT_TERMINAL_PANE_GAP = 4;
         public static final int MAX_TERMINAL_PANE_GAP = 24;
+
+        /**
+         * Pane border colour choices, terminal panes only. A mode id (outline, primary, secondary,
+         * tertiary, custom; the glow also takes same_as_border) and, for custom, a stored ARGB.
+         */
+        public static final String KEY_TERMINAL_PANE_BORDER_COLOUR = "terminal_pane_border_colour";
+        public static final String DEFAULT_TERMINAL_PANE_BORDER_COLOUR = "outline";
+        public static final String KEY_TERMINAL_PANE_BORDER_CUSTOM = "terminal_pane_border_custom";
+        public static final String KEY_TERMINAL_PANE_FOCUS_COLOUR = "terminal_pane_focus_colour";
+        public static final String DEFAULT_TERMINAL_PANE_FOCUS_COLOUR = "primary";
+        public static final String KEY_TERMINAL_PANE_FOCUS_CUSTOM = "terminal_pane_focus_custom";
+        public static final String KEY_TERMINAL_PANE_GLOW = "terminal_pane_glow";
+        public static final boolean DEFAULT_TERMINAL_PANE_GLOW = false;
+        public static final String KEY_TERMINAL_PANE_GLOW_COLOUR = "terminal_pane_glow_colour";
+        public static final String DEFAULT_TERMINAL_PANE_GLOW_COLOUR = "same_as_border";
+        public static final String KEY_TERMINAL_PANE_GLOW_CUSTOM = "terminal_pane_glow_custom";
 
         /**
          * Symmetric left/right inset in dp between a surface and the physical screen edges. The
@@ -600,8 +736,26 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
         public static final boolean DEFAULT_STATUS_WIDGET_CPU = false;
 
+        /** The GPU load in the status bar: off by default, shown only where a phone reports it. */
+        public static final String KEY_STATUS_WIDGET_GPU = "status_widget_gpu";
+        public static final boolean DEFAULT_STATUS_WIDGET_GPU = false;
+
+        /** The Compact font toggle in the status bar: off by default, shown where a pane has focus. */
+        public static final String KEY_STATUS_WIDGET_FONT_TOGGLE = "status_widget_font_toggle";
+        public static final boolean DEFAULT_STATUS_WIDGET_FONT_TOGGLE = false;
+
+        /**
+         * The order the status bar's row draws its items in: a comma list of item keys
+         * ({@code StatusRowOrder}). Empty, the default, is the shipped order.
+         */
+        public static final String KEY_STATUS_ROW_ORDER = "status_row_order";
+        public static final String DEFAULT_STATUS_ROW_ORDER = "";
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
+
+        public static final String KEY_STATUS_WIDGET_BATTERY = "status_widget_battery";
+        public static final boolean DEFAULT_STATUS_WIDGET_BATTERY = false;
 
         /**
          * Whether the media row may take the status bar's widget slot while something plays. On by
@@ -616,6 +770,71 @@ public final class TermuxPreferenceConstants {
         /** Show weather temperatures in Fahrenheit instead of the default Celsius. */
         public static final String KEY_STATUS_WIDGET_WEATHER_FAHRENHEIT = "status_widget_weather_fahrenheit";
         public static final boolean DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT = false;
+
+        /**
+         * Whether the status bar shows a small bell, with the count, while notifications are
+         * waiting: the same notifications the dock badges its icons with. Off by default.
+         */
+        public static final String KEY_STATUS_WIDGET_NOTIFICATIONS = "status_widget_notifications";
+        public static final boolean DEFAULT_STATUS_WIDGET_NOTIFICATIONS = false;
+
+        /**
+         * Whether the status bar's clock draws its seconds (the bar's own clock, the clock the Wall
+         * strip borrows from it, and the editor's preview of them). On by default: the bar has
+         * always drawn them.
+         */
+        public static final String KEY_STATUS_CLOCK_SECONDS = "status_clock_seconds";
+        public static final boolean DEFAULT_STATUS_CLOCK_SECONDS = true;
+
+        /** Whether the status bar shows its clock (the Status bar card's Clock toggle). */
+        public static final String KEY_STATUS_CLOCK_SHOWN = "status_clock_shown";
+        public static final boolean DEFAULT_STATUS_CLOCK_SHOWN = true;
+
+        /**
+         * Whose box the status row leaves its camera gap for when it shares the camera's band
+         * (#163): {@link #STATUS_BAR_CUTOUT_AUTO} follows Android's display cutout,
+         * {@link #STATUS_BAR_CUTOUT_CUSTOM} Android's shape nudged by the values below, {@link #STATUS_BAR_CUTOUT_OFF}
+         * leaves none.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_MODE = "status_bar_cutout_mode";
+        public static final String STATUS_BAR_CUTOUT_AUTO = "auto";
+        public static final String STATUS_BAR_CUTOUT_CUSTOM = "custom";
+        public static final String STATUS_BAR_CUTOUT_OFF = "off";
+        public static final String DEFAULT_STATUS_BAR_CUTOUT_MODE = STATUS_BAR_CUTOUT_AUTO;
+
+        /**
+         * The camera gap's nudges on Android's shape, Custom only: sideways in dp (left negative),
+         * down in dp, and size in percent. The margin is the air kept from the camera on each side
+         * and below, for Auto and Custom alike.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_OFFSET_X = "status_bar_cutout_offset_x";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_OFFSET_X = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_OFFSET_X = -200;
+        public static final int MAX_STATUS_BAR_CUTOUT_OFFSET_X = 200;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_OFFSET_Y = "status_bar_cutout_offset_y";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_OFFSET_Y = 0;
+        public static final int MIN_STATUS_BAR_CUTOUT_OFFSET_Y = -24;
+        public static final int MAX_STATUS_BAR_CUTOUT_OFFSET_Y = 24;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_SCALE = "status_bar_cutout_scale";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_SCALE = 100;
+        public static final int MIN_STATUS_BAR_CUTOUT_SCALE = 50;
+        public static final int MAX_STATUS_BAR_CUTOUT_SCALE = 200;
+
+        public static final String KEY_STATUS_BAR_CUTOUT_MARGIN = "status_bar_cutout_margin";
+        public static final int DEFAULT_STATUS_BAR_CUTOUT_MARGIN = 4;
+        public static final int MIN_STATUS_BAR_CUTOUT_MARGIN = 0;
+        public static final int MAX_STATUS_BAR_CUTOUT_MARGIN = 24;
+
+        /**
+         * The camera gap's first centre and width (dp from the screen's centre; full width). No
+         * longer read: {@link #KEY_STATUS_BAR_CUTOUT_MIGRATED} says they were turned into the
+         * nudges above, once.
+         */
+        public static final String KEY_STATUS_BAR_CUTOUT_CENTER = "status_bar_cutout_center";
+        public static final String KEY_STATUS_BAR_CUTOUT_WIDTH = "status_bar_cutout_width";
+        public static final String KEY_STATUS_BAR_CUTOUT_MIGRATED = "status_bar_cutout_migrated";
 
         /**
          * The label of a place picked in Settings ("Salmiya, Hawalli") that the weather is fetched
@@ -637,25 +856,55 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CURSOR_TRAIL = "terminal_cursor_trail";
         public static final boolean DEFAULT_TERMINAL_CURSOR_TRAIL = true;
 
-        /**
-         * Paint the empty band between a pane's text grid and its rounded border with the
-         * background colour of the nearest edge cell (Ghostty's {@code window-padding-color =
-         * extend}), so a full-screen app that paints its own background reaches the pane's border.
-         */
-        public static final String KEY_TERMINAL_PADDING_FILL = "terminal_padding_fill";
-        public static final boolean DEFAULT_TERMINAL_PADDING_FILL = true;
-
         /** Cursor trail style id (default, motion_blur, railgun, torpedo, pixiedust, comet). */
         public static final String KEY_TERMINAL_CURSOR_TRAIL_STYLE = "terminal_cursor_trail_style";
         public static final String DEFAULT_TERMINAL_CURSOR_TRAIL_STYLE = "default";
 
-        /** Retro terminal effect id (none, crt, crt_green, crt_amber, tft). Global, API 33+. */
+        /** Retro terminal effect id (none, crt, crt_green, crt_amber, crt_material, tft). Global, API 33+. */
         public static final String KEY_TERMINAL_RETRO_EFFECT = "terminal_retro_effect";
         public static final String DEFAULT_TERMINAL_RETRO_EFFECT = "none";
+
+        /**
+         * Engine for panes opened from now on: standard or ghostty. Standard for every install, new
+         * and existing, so nothing is adopted or migrated.
+         */
+        public static final String KEY_TERMINAL_ENGINE = "terminal_engine";
+        public static final String DEFAULT_TERMINAL_ENGINE = "standard";
+
+        /**
+         * Whether CRT panes play their short screen events (bell tear, power on, focus wobble,
+         * death static). Default true.
+         */
+        public static final String KEY_TERMINAL_SCREEN_EVENTS = "terminal_screen_events";
+        public static final boolean DEFAULT_VALUE_TERMINAL_SCREEN_EVENTS = true;
+
+        /**
+         * Whether CRT panes blend neighbouring pixels sideways like a composite video cable, so
+         * dithering and pixel art read as shades. Default false.
+         */
+        public static final String KEY_TERMINAL_RETRO_COMPOSITE = "terminal_retro_composite";
+        public static final boolean DEFAULT_VALUE_TERMINAL_RETRO_COMPOSITE = false;
+
+        /**
+         * Whether CRT panes play their ambient parts (a gentle flicker, a tear every few
+         * minutes) while nothing happens. Costs battery. Default false.
+         */
+        public static final String KEY_IDLE_ANIMATIONS = "idle_animations";
+        public static final boolean DEFAULT_VALUE_IDLE_ANIMATIONS = false;
+
+        /**
+         * How often an idle CRT pane plays its ambient tear under Idle animations: "rare" (every
+         * 2 to 5 minutes), "sometimes" (30 to 90 seconds) or "often" (10 to 30 seconds).
+         */
+        public static final String KEY_IDLE_TEAR_RATE = "idle_tear_rate";
+        public static final String DEFAULT_VALUE_IDLE_TEAR_RATE = "rare";
 
         /** Whether an OSC 52 query ("ESC ] 52 ; c ; ? BEL") may read the Android clipboard. */
         public static final String KEY_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = "terminal_osc52_clipboard_read_enabled";
         public static final boolean DEFAULT_TERMINAL_OSC52_CLIPBOARD_READ_ENABLED = true;
+
+        /** The names of the programs the user chose to always let read the clipboard (a string set). */
+        public static final String KEY_TERMINAL_CLIPBOARD_READ_ALWAYS = "terminal_clipboard_read_always";
 
         /**
          * Whether copy drops a line's trailing spaces and tabs and trailing blank lines, and a
@@ -746,6 +995,8 @@ public final class TermuxPreferenceConstants {
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_OFF = "off";
 
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU = "shizuku";
+
+        public static final String APP_LAUNCHER_AZ_LOCK_METHOD_ROOT = "root";
 
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY = "accessibility";
 
@@ -1129,6 +1380,16 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_IN_APP_KEYBOARD_KEY_OPACITY = 100;
 
         /**
+         * Defines whether the Appearance editor moves the keyboard's key opacity and its
+         * background opacity together: a move of either slider moves the other by the same
+         * amount. Unlinking leaves both values where they are.
+         */
+        public static final String KEY_IN_APP_KEYBOARD_OPACITY_LINKED =
+            "in_app_keyboard_opacity_linked";
+
+        public static final boolean DEFAULT_IN_APP_KEYBOARD_OPACITY_LINKED = false;
+
+        /**
          * Defines the opacity in percent of the keyboard's own background surface — the glass
          * tint, or the color-scheme background override when one is set. Independent of the key
          * caps ({@link #KEY_IN_APP_KEYBOARD_KEY_OPACITY}); 100 keeps the surface as the theme
@@ -1145,7 +1406,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * The keyboard's own blur radius (dp), read only while the KEYBOARD slot's blur is detached
-         * from Base. Legacy installs stored {@code -1} here for "same as the dock".
+         * from Global. Legacy installs stored {@code -1} here for "same as the dock".
          */
         public static final String KEY_IN_APP_KEYBOARD_BLUR_RADIUS = "in_app_keyboard_blur_radius";
 
@@ -1157,7 +1418,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * The keyboard's own film-grain strength (percent), read only while the KEYBOARD slot's
-         * grain is detached from Base. Legacy installs stored {@code -1} here for "same as the dock".
+         * grain is detached from Global. Legacy installs stored {@code -1} here for "same as the dock".
          */
         public static final String KEY_IN_APP_KEYBOARD_GRAIN = "in_app_keyboard_grain";
 
@@ -1260,6 +1521,23 @@ public final class TermuxPreferenceConstants {
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS = true;
 
         /**
+         * Live blur: the glass shows a live, blurred picture of whatever is drawn beneath it
+         * (pages, widgets, the terminal) instead of the stored wallpaper frame. Off by default; it
+         * costs a re-blur on every frame that draws under the glass. Takes effect only where
+         * Glass refraction does (see {@code LiveBlurPolicy}).
+         */
+        public static final String KEY_LIVE_BLUR = "live_blur";
+        public static final boolean DEFAULT_VALUE_LIVE_BLUR = false;
+
+        /**
+         * Live windows while swiping: the windows beside the one in front are kept ready and
+         * slide in live as the wall is dragged between windows. Off, a swipe shows them only
+         * once it lands.
+         */
+        public static final String KEY_LIVE_WINDOWS_WHILE_SWIPING = "live_windows_while_swiping";
+        public static final boolean DEFAULT_VALUE_LIVE_WINDOWS_WHILE_SWIPING = true;
+
+        /**
          * How far the wallpaper is bent under a glass rim, in dp of displacement. The three
          * refraction knobs are global: one look for every glass surface, never per surface. Their
          * defaults are exactly the numbers the dock's refraction always used, so switching Fancier
@@ -1314,6 +1592,20 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_FANCIER_GLASS_CLARITY = 100;
 
         /**
+         * Clear's face terms, a Look's own and not a slider (no settings page shows them; each is
+         * a percentage and 0, the default, draws the glass as it always was). Face clarity: how
+         * much of the clearer picture the face shows where one is handed in. Dim: the dark layer
+         * over a bright backdrop and the faint light lift over a dark one. Size lens: larger
+         * surfaces bend and reach more.
+         */
+        public static final String KEY_FANCIER_GLASS_FACE_CLARITY = "fancier_glass_face_clarity";
+        public static final String KEY_FANCIER_GLASS_DIM = "fancier_glass_dim";
+        public static final String KEY_FANCIER_GLASS_SIZE_LENS = "fancier_glass_size_lens";
+        public static final int DEFAULT_VALUE_FANCIER_GLASS_FACE_TERM = 0;
+        public static final int MIN_FANCIER_GLASS_FACE_TERM = 0;
+        public static final int MAX_FANCIER_GLASS_FACE_TERM = 100;
+
+        /**
          * Living glass (the key keeps its first name, Motion light): a glass pane's bend lags it
          * on a spring as it moves, thicker on the edge that leads and thinner behind, rocks back
          * once as it lands, and a press dents the glass under the finger until it lifts; all of
@@ -1323,6 +1615,14 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_FANCIER_GLASS_MOTION_LIGHT = "fancier_glass_motion_light";
         public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
+
+        /**
+         * Widgets on glass: whether the built-in widgets wear the Look's glass (Global's values).
+         * A widget's own Glass choice (on or off) still overrides it. On by default, for existing
+         * installs too: the key is deliberately not pinned in adoptShippedSurfaceDefaults.
+         */
+        public static final String KEY_WIDGETS_ON_GLASS = "widgets_on_glass";
+        public static final boolean DEFAULT_VALUE_WIDGETS_ON_GLASS = true;
 
         /**
          * Whether holding a keybind prefix (Ctrl+Alt) automatically shows the key-hint strip.
@@ -1344,12 +1644,25 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_AGENT_PANES_ENABLED = "pane_agent_api";
         public static final boolean DEFAULT_AGENT_PANES_ENABLED = true;
 
+        /**
+         * Whether a sideways swipe on a terminal window's text pages the wall's row, as its
+         * border does (TerminalBodySwipe in the app).
+         */
+        public static final String KEY_TERMINAL_BODY_SWIPE = "terminal_body_swipe";
+        public static final boolean DEFAULT_TERMINAL_BODY_SWIPE = true;
+
+
         /** Clock renderer shown in the modular widget slot above the terminal window row. */
         public static final String KEY_TOP_PANE_CLOCK_STYLE = "top_pane_clock_style";
 
         public static final String TOP_PANE_CLOCK_STYLE_FLIP = "flip";
         public static final String TOP_PANE_CLOCK_STYLE_LCD = "lcd";
         public static final String TOP_PANE_CLOCK_STYLE_MINIMAL = "minimal";
+        /**
+         * Minimal in a medium weight, for busy wallpapers (#111): set through Minimal's Weight row
+         * in the Look's clock picker, never a face row of its own.
+         */
+        public static final String TOP_PANE_CLOCK_STYLE_MINIMAL_MEDIUM = "minimal_medium";
         public static final String TOP_PANE_CLOCK_STYLE_LED = "led";
         public static final String TOP_PANE_CLOCK_STYLE_TAPE = "tape";
         public static final String TOP_PANE_CLOCK_STYLE_SLAB = "slab";
@@ -1384,6 +1697,8 @@ public final class TermuxPreferenceConstants {
          * Defines the key for font size of termux terminal view.
          */
         public static final String KEY_FONTSIZE = "fontsize";
+        /** The size the font toggle switches a pane to, in the font size's own unit; 0 derives it. */
+        public static final String KEY_COMPACT_FONTSIZE = "compact_fontsize";
 
         /**
          * Defines the key for current termux terminal session.
@@ -1479,14 +1794,14 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_BORDER_ENABLED = "terminal_border_enabled";
         /*
          * Surface inheritance. Five properties are shared across the surfaces; each surface either
-         * follows the Base value or holds an override of its own. The per-surface value keys already
+         * follows the Global value or holds an override of its own. The per-surface value keys already
          * exist above and keep their meaning - they are simply only consulted once a surface has
          * detached. Replaces the old all-or-nothing normalize flag, which could not
          * express "the same everywhere except this one thing".
          */
-        public static final String KEY_SURFACE_BASE_BLUR = "surface_base_blur";
-        public static final String KEY_SURFACE_BASE_OPACITY = "surface_base_opacity";
-        public static final String KEY_SURFACE_BASE_GRAIN = "surface_base_grain";
+        public static final String KEY_SURFACE_GLOBAL_BLUR = "surface_base_blur";
+        public static final String KEY_SURFACE_GLOBAL_OPACITY = "surface_base_opacity";
+        public static final String KEY_SURFACE_GLOBAL_GRAIN = "surface_base_grain";
         /**
          * How much accent colour is mixed into the glass, percent: 0 is the Look's own colour
          * untouched, 35 the Material blend (the Tint Look), 100 the accent's container. Until the
@@ -1494,30 +1809,30 @@ public final class TermuxPreferenceConstants {
          * 100 the shipped tint; until format 2 100 was the Material blend. The app's
          * {@code GlassControlsMigration} maps every stored value once per format.
          */
-        public static final String KEY_SURFACE_BASE_TINT = "surface_base_tint";
-        public static final String KEY_SURFACE_BASE_CORNER_RADIUS = "surface_base_corner_radius";
-        public static final String KEY_SURFACE_BASE_SIDE_GAP = "surface_base_side_gap";
+        public static final String KEY_SURFACE_GLOBAL_TINT = "surface_base_tint";
+        public static final String KEY_SURFACE_GLOBAL_CORNER_RADIUS = "surface_base_corner_radius";
+        public static final String KEY_SURFACE_GLOBAL_SIDE_GAP = "surface_base_side_gap";
 
         /**
          * The shared layer's shipped values. Deliberately its own set rather than an alias of the
          * dock's: the shipped look gives the dock a slightly denser opacity than the surfaces that
-         * follow Base, and folding the two together would drag every other surface along with it.
+         * follow Global, and folding the two together would drag every other surface along with it.
          */
-        public static final int DEFAULT_SURFACE_BASE_BLUR = 8;
-        public static final int DEFAULT_SURFACE_BASE_OPACITY = 34;
-        public static final int DEFAULT_SURFACE_BASE_GRAIN = 18;
-        public static final int DEFAULT_SURFACE_BASE_TINT = 0;
-        /** Each surface's own tint amount, consulted once it has detached from Base. */
+        public static final int DEFAULT_SURFACE_GLOBAL_BLUR = 8;
+        public static final int DEFAULT_SURFACE_GLOBAL_OPACITY = 34;
+        public static final int DEFAULT_SURFACE_GLOBAL_GRAIN = 18;
+        public static final int DEFAULT_SURFACE_GLOBAL_TINT = 0;
+        /** Each surface's own tint amount, consulted once it has detached from Global. */
         public static final String KEY_DOCK_TINT_STRENGTH = "dock_tint_strength";
         public static final String KEY_STATUS_BAR_TINT_STRENGTH = "status_bar_tint_strength";
         public static final String KEY_TERMINAL_TINT_STRENGTH = "terminal_tint_strength";
         public static final String KEY_IN_APP_KEYBOARD_TINT_STRENGTH = "in_app_keyboard_tint_strength";
-        public static final int DEFAULT_SURFACE_BASE_CORNER_RADIUS = 24;
-        public static final int DEFAULT_SURFACE_BASE_SIDE_GAP = 12;
+        public static final int DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS = 24;
+        public static final int DEFAULT_SURFACE_GLOBAL_SIDE_GAP = 12;
 
         /**
-         * The Base glass triple said as one decision: a material family plus how much of it.
-         * The editor's macro writes blur/opacity/grain through the Base setters like anything
+         * The Global glass triple said as one decision: a material family plus how much of it.
+         * The editor's macro writes blur/opacity/grain through the Global setters like anything
          * else; these two keys only remember which point on which family's curve the triple came
          * from, so the control can show that point again — or "Custom" once the triple no longer
          * matches any point, which is how hand-tuned installs are left untouched.
@@ -1527,7 +1842,7 @@ public final class TermuxPreferenceConstants {
         public static final String SURFACE_MATERIAL_SOLID = "solid";
         public static final String SURFACE_MATERIAL_GLASS = "glass";
         public static final String SURFACE_MATERIAL_FROST = "frost";
-        /** Glass at 50 reproduces the shipped Base triple exactly (8 / 34 / 18). */
+        /** Glass at 50 reproduces the shipped Global triple exactly (8 / 34 / 18). */
         public static final String DEFAULT_SURFACE_MATERIAL = SURFACE_MATERIAL_GLASS;
         public static final int DEFAULT_SURFACE_MATERIAL_INTENSITY = 50;
 
@@ -1544,7 +1859,7 @@ public final class TermuxPreferenceConstants {
         public static final String GLASS_TINT_OBSIDIAN = "obsidian";
         /**
          * Glass in Material colours. Legacy: since the glass controls' format 1 the Material blend
-         * is the tint amount ({@link #KEY_SURFACE_BASE_TINT}) on the scheme tint, so a stored
+         * is the tint amount ({@link #KEY_SURFACE_GLOBAL_TINT}) on the scheme tint, so a stored
          * {@code material} is read as {@code scheme} and migrated to it once.
          */
         public static final String GLASS_TINT_MATERIAL = "material";
@@ -1567,7 +1882,20 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_SURFACE_GLASS_VIBRANCY = 150;
 
         /**
-         * Where the Look editor's Glass slider was left, 0 to 100: Base's under this key, each
+         * Text size: one multiplier, in percent, on the type the launcher draws itself. The
+         * terminal font, the keyboard's key legends and the chrome labels are each drawn at their
+         * own size times this, so each surface's own size (the terminal font and pane zoom, Home's
+         * label size) stays an offset from the shared one. Never move the default: 100 is what
+         * every install that has not touched the slider reads, so it keeps exactly the sizes it
+         * had; ship another size by writing it for fresh installs only, as the Clear look is.
+         */
+        public static final String KEY_TEXT_SIZE_PERCENT = "text_size_percent";
+        public static final int DEFAULT_TEXT_SIZE_PERCENT = 100;
+        public static final int MIN_TEXT_SIZE_PERCENT = 80;
+        public static final int MAX_TEXT_SIZE_PERCENT = 150;
+
+        /**
+         * Where the Look editor's Glass slider was left, 0 to 100: Global's under this key, each
          * surface's under the key plus {@code _} and the surface's name. Blur and grain stay the
          * stored glass; this only says which of the positions that write the same pair the slider
          * stood at, and is read only while the pair is still the one it writes. Absent reads as
@@ -1601,10 +1929,8 @@ public final class TermuxPreferenceConstants {
          */
         public static final String KEY_SURFACE_CUSTOM_PRESET = "surface_custom_preset";
 
-        /** Prefix for the per-(surface, property) detach flags: {@code surface_inherit_dock_blur}. */
-        public static final String KEY_SURFACE_INHERIT_PREFIX = "surface_inherit_";
-        /** A surface follows Base until the user moves that one control. */
-        public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_BASE = true;
+        /** A surface follows Global until the user moves that one control. */
+        public static final boolean DEFAULT_VALUE_SURFACE_INHERITS_GLOBAL = true;
 
         /** Set once the one-time inheritance migration has folded the old per-surface values in. */
         public static final String KEY_SURFACE_INHERITANCE_MIGRATED = "surface_inheritance_migrated";
@@ -1619,7 +1945,7 @@ public final class TermuxPreferenceConstants {
 
         /**
          * Set once the keyboard-opacity rows detached at the old sentinel default have been
-         * relinked to Base. Before the tuned Docked look, {@code 100} on
+         * relinked to Global. Before the tuned Docked look, {@code 100} on
          * {@link #KEY_IN_APP_KEYBOARD_BACKGROUND_OPACITY} meant "never touched — render the shared
          * dock material", and the inheritance fold turned that sentinel into a detached override.
          * When the default then changed, those installs silently lost the unified
@@ -1654,7 +1980,8 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
             "wallpaper_enabled_terminal_background_opacity";
 
-        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY = 34;
+        public static final int DEFAULT_VALUE_WALLPAPER_ENABLED_TERMINAL_BACKGROUND_OPACITY =
+            DEFAULT_TERMINAL_BG_OPACITY;
 
         /**
          * Stores the user's preferred dock opacity while wallpaper mode is enabled so it can be
@@ -1701,6 +2028,77 @@ public final class TermuxPreferenceConstants {
         public static final String VALUE_WALLPAPER_LOCK_SAME_AS_HOME = "same_as_home";
         public static final String VALUE_WALLPAPER_LOCK_PHOTO = "photo";
         public static final String DEFAULT_VALUE_WALLPAPER_LOCK_CHOICE = VALUE_WALLPAPER_LOCK_SAME_AS_HOME;
+
+        /**
+         * What moves behind the launcher: {@code ""} (a photo), {@code shader:<id>} (a shader under
+         * {@code files/wallpaper/shaders/<id>/}) or {@code video:<name>} (a file under
+         * {@code files/wallpaper/video/}). See {@code WallpaperMotion}.
+         */
+        public static final String KEY_WALLPAPER_MOTION = "wallpaper_motion";
+        public static final String DEFAULT_VALUE_WALLPAPER_MOTION = "";
+
+        /**
+         * Retired with the AGSL scenes: read once at start by {@code WallpaperMotion.Migration},
+         * which clears it and the four keys below.
+         * The live wallpaper scene the launcher drew behind everything: {@code aurora},
+         * {@code contour-waves}, {@code nebula}, {@code bloom}, {@code particles} or {@code coastal-sunset}; empty is none.
+         * An unknown value reads as none (see {@code LiveWallpaperChoice}).
+         */
+        public static final String KEY_LIVE_WALLPAPER_SCENE = "live_wallpaper_scene";
+        public static final String DEFAULT_VALUE_LIVE_WALLPAPER_SCENE = "";
+
+        /** The live scene's speed, 0.25 to 2.0 times. */
+        public static final String KEY_LIVE_WALLPAPER_SPEED = "live_wallpaper_speed";
+        public static final float DEFAULT_VALUE_LIVE_WALLPAPER_SPEED = 1f;
+        public static final float MIN_LIVE_WALLPAPER_SPEED = 0.25f;
+        public static final float MAX_LIVE_WALLPAPER_SPEED = 2f;
+
+        /** The live scene's frame rate in Hz: 15, 30 or 60. */
+        public static final String KEY_LIVE_WALLPAPER_RATE_HZ = "live_wallpaper_rate_hz";
+        public static final int DEFAULT_VALUE_LIVE_WALLPAPER_RATE_HZ = 30;
+
+        /** The live scene's density, -1 (sparser) to 1 (denser); only some scenes have it. */
+        public static final String KEY_LIVE_WALLPAPER_DENSITY = "live_wallpaper_density";
+        public static final float DEFAULT_VALUE_LIVE_WALLPAPER_DENSITY = 0f;
+        public static final float MIN_LIVE_WALLPAPER_DENSITY = -1f;
+        public static final float MAX_LIVE_WALLPAPER_DENSITY = 1f;
+
+        /** The live scene's palette, 0 to 2; only some scenes have it. */
+        public static final String KEY_LIVE_WALLPAPER_PALETTE = "live_wallpaper_palette";
+        public static final int DEFAULT_VALUE_LIVE_WALLPAPER_PALETTE = 0;
+        public static final int MAX_LIVE_WALLPAPER_PALETTE = 2;
+
+        /**
+         * The launcher wears a picture of its own: the managed exact copy, set from the picker
+         * while the launcher was not the home app, which Android's home and lock screens never got.
+         * While it is set (and the copy is on disk) the launcher draws that copy itself and the
+         * glass treats it as the managed wallpaper, whatever Android shows.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY = "wallpaper_app_only";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_APP_ONLY = false;
+
+        /**
+         * The Material seed colour taken from the app-only picture when it was set, so the theme
+         * can wear the picture's colours without decoding it at activity creation. 0 means none
+         * could be taken. Only meaningful while {@link #KEY_WALLPAPER_APP_ONLY_SEED_STAMP} matches
+         * the exact copy on disk.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY_SEED = "wallpaper_app_only_seed";
+        public static final int DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED = 0;
+
+        /**
+         * The exact copy the seed above was taken from, as its {@code lastModified()} and
+         * {@code length()} folded together; 0 when no seed was ever taken.
+         */
+        public static final String KEY_WALLPAPER_APP_ONLY_SEED_STAMP = "wallpaper_app_only_seed_stamp";
+        public static final long DEFAULT_VALUE_WALLPAPER_APP_ONLY_SEED_STAMP = 0L;
+
+        /**
+         * The picker's "Also set as phone wallpaper", remembered. Offered only while the launcher
+         * is not the home app; ticked, a pick goes to Android's wallpapers as well.
+         */
+        public static final String KEY_WALLPAPER_ALSO_SET_PHONE = "wallpaper_also_set_phone";
+        public static final boolean DEFAULT_VALUE_WALLPAPER_ALSO_SET_PHONE = false;
         
         /**
          * Defines the key for whether terminal colors should follow Material dynamic colors.
@@ -1708,6 +2106,19 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_DYNAMIC_COLORS_ENABLED = "terminal_dynamic_colors_enabled";
 
         public static final boolean DEFAULT_VALUE_TERMINAL_DYNAMIC_COLORS_ENABLED = true;
+
+        /** Whether motion events are logged (tag TermuxMotion and the in-memory ring buffer). */
+        public static final String KEY_MOTION_LOG_ENABLED = "motion_log_enabled";
+
+        public static final boolean DEFAULT_VALUE_MOTION_LOG_ENABLED = false;
+
+        /**
+         * How Home's page bar draws its glass, a developer switch on no settings page
+         * ({@code launcherctl pagebar-glass concave|well}): "concave" or "well".
+         */
+        public static final String KEY_PAGE_BAR_GLASS_STYLE = "page_bar_glass_style";
+
+        public static final String DEFAULT_VALUE_PAGE_BAR_GLASS_STYLE = "concave";
 
         /*
          * There is no key for the launcher chrome's colour source any more. It was a second name
@@ -1721,6 +2132,11 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_TERMINAL_CONTRAST_LEVEL = "terminal_contrast_level";
 
         public static final String DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL = "default";
+
+        /** Whether each glass item measures the wallpaper behind itself instead of the one measurement of the whole picture (#297). */
+        public static final String KEY_ADAPTIVE_LEGIBILITY = "adaptive_legibility";
+
+        public static final boolean DEFAULT_VALUE_ADAPTIVE_LEGIBILITY = false;
 
         /**
          * Defines the key for which shipped theme templates the user has turned on, as a set of
@@ -1811,39 +2227,13 @@ public final class TermuxPreferenceConstants {
             "first_boot_tour_completed_version";
         public static final int DEFAULT_FIRST_BOOT_TOUR_COMPLETED_VERSION = 0;
 
-        /**
-         * The version of the run an unfinished tour belongs to, or 0 for one started before the
-         * version was recorded. The card number alone says nothing across an update: card 3 of
-         * one run and card 3 of the next are different lessons.
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_RUN_VERSION = "first_boot_tour_run_version";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_RUN_VERSION = 0;
+        /** The setup wizard version the user has finished or skipped, or 0 for never. */
+        public static final String KEY_SETUP_WIZARD_VERSION = "setup_wizard_version";
+        public static final int DEFAULT_SETUP_WIZARD_VERSION = 0;
 
-        /**
-         * The card an unfinished run is on, or -1. The launcher is the home screen and is killed
-         * and restarted under the user constantly, so the run is written through on every move and
-         * resumes where it was rather than starting over.
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_STEP = "first_boot_tour_step";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP = -1;
-
-        /** How many of the current card's gestures have been observed. */
-        public static final String KEY_FIRST_BOOT_TOUR_STEP_STAGE = "first_boot_tour_step_stage";
-        public static final int DEFAULT_FIRST_BOOT_TOUR_STEP_STAGE = 0;
-
-        /** Whether the user skipped past a card in the run they are on. */
-        public static final String KEY_FIRST_BOOT_TOUR_SKIPPED = "first_boot_tour_skipped";
-        public static final boolean DEFAULT_FIRST_BOOT_TOUR_SKIPPED = false;
-
-        /**
-         * Whether the one-time migration that folds a completed run of the removed footage
-         * onboarding into {@link #KEY_FIRST_BOOT_TOUR_COMPLETED_VERSION} has already run. Guarded
-         * by its own flag, never by the completed version itself, since Replay legitimately zeroes
-         * that version and must not be read back as "never migrated".
-         */
-        public static final String KEY_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED =
-            "first_boot_tour_legacy_onboarding_migrated";
-        public static final boolean DEFAULT_FIRST_BOOT_TOUR_LEGACY_ONBOARDING_MIGRATED = false;
+        /** Whether the Appearance editor's "theme, colours and glass" hint has been dismissed. */
+        public static final String KEY_APPEARANCE_THEME_HINT_SEEN = "first_run_appearance_theme_hint_seen";
+        public static final boolean DEFAULT_APPEARANCE_THEME_HINT_SEEN = false;
     }
 
     /**

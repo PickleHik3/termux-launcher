@@ -1,0 +1,9 @@
+# Pong's Home, page 1 of 2 with glass widgets (clock, weather, calendar, messages), keyboard down
+# (1080x2412). Swipe to page 2 and back across the wallpaper right of the widget column, below the
+# Messages card, five times. Live blur's gate (project-docs/active/live-glass-2026-11-03.md).
+repeat 5
+swipe 850 700 150 700 300
+sleep 1
+swipe 150 700 850 700 300
+sleep 1
+end

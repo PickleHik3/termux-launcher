@@ -20,22 +20,30 @@ import java.util.TimeZone;
 
 /** What the analog and digital clocks share: the clock they read, dates, the tap, the second. */
 final class ClockWidgetSupport {
-    /** The design's sample moment, which the picker card shows: 13:40 on Tue 6 Oct in Kuwait. */
-    static final ZonedDateTime SAMPLE_NOW =
-        ZonedDateTime.of(2026, 10, 6, 13, 40, 12, 0, ZoneId.of("Asia/Kuwait"));
+    /** The design's sample time of day, which the picker card shows: 13:40:12. */
+    static final java.time.LocalTime SAMPLE_TIME = java.time.LocalTime.of(13, 40, 12);
+
+    /**
+     * The sample moment: today at {@link #SAMPLE_TIME} in the phone's zone. A fixed day (it was
+     * Tue 6 Oct) read as a stale real date on the picker card once that day had passed.
+     */
+    @NonNull static ZonedDateTime sampleNow() {
+        return java.time.LocalDate.now(ZoneId.systemDefault()).atTime(SAMPLE_TIME)
+            .atZone(ZoneId.systemDefault());
+    }
     static final String SAMPLE_SUNRISE = "05:38";
     static final String SAMPLE_SUNSET = "17:22";
 
     /** The Nerd glyphs the clocks use: a clock face, the sun, the moon. */
-    static final String GLYPH_CLOCK = "";
-    static final String GLYPH_SUN = "";
-    static final String GLYPH_MOON = "";
+    static final String GLYPH_CLOCK = WidgetIcons.CLOCK;
+    static final String GLYPH_SUN = WidgetIcons.SUN;
+    static final String GLYPH_MOON = WidgetIcons.MOON;
 
     private ClockWidgetSupport() { }
 
     /** Now in the phone's zone, or the sample moment for a picker card. */
     @NonNull static ZonedDateTime now(boolean preview) {
-        return preview ? SAMPLE_NOW : ZonedDateTime.now(ZoneId.systemDefault());
+        return preview ? sampleNow() : ZonedDateTime.now(ZoneId.systemDefault());
     }
 
     /**

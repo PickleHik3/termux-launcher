@@ -31,6 +31,22 @@ public final class SliderPreference extends Preference {
     private int mValue;
     private boolean mShowValue;
     @Nullable private String mValueSuffix;
+    @Nullable private Tracking mTracking;
+
+    /** A finger on the slider, for a page that shows what the value does while it moves. */
+    public interface Tracking {
+        void onTrackingStart();
+
+        /** The value changed and is stored; read it back from the preference. */
+        void onTrackingChange();
+
+        /** The finger lifted, or the gesture was cancelled. */
+        void onTrackingStop();
+    }
+
+    public void setTracking(@Nullable Tracking tracking) {
+        mTracking = tracking;
+    }
 
     public SliderPreference(@NonNull Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -140,6 +156,18 @@ public final class SliderPreference extends Preference {
         if (!(sliderView instanceof Slider)) return;
         Slider slider = (Slider) sliderView;
         slider.clearOnChangeListeners();
+        slider.clearOnSliderTouchListeners();
+        slider.addOnSliderTouchListener(new Slider.OnSliderTouchListener() {
+            @Override
+            public void onStartTrackingTouch(@NonNull Slider s) {
+                if (mTracking != null) mTracking.onTrackingStart();
+            }
+
+            @Override
+            public void onStopTrackingTouch(@NonNull Slider s) {
+                if (mTracking != null) mTracking.onTrackingStop();
+            }
+        });
         slider.setValueFrom(mMin);
         slider.setValueTo(sliderTo(mMin, mMax));
         slider.setStepSize(1f);
@@ -162,6 +190,7 @@ public final class SliderPreference extends Preference {
             mValue = next;
             persistInt(next);
             if (readout != null) readout.setText(formatValue(next));
+            if (mTracking != null) mTracking.onTrackingChange();
         });
     }
 }

@@ -57,7 +57,14 @@ import java.util.concurrent.Executors;
  * rows readable.
  */
 @Keep
-public class KeyboardLayoutEditorFragment extends Fragment {
+public class KeyboardLayoutEditorFragment extends Fragment
+    implements com.termux.app.fragments.settings.SettingsUnsavedChanges {
+
+    @Override
+    public boolean hasUnsavedChanges() {
+        return mBackCallback.isEnabled();
+    }
+
 
     /** The layout id to edit. */
     public static final String ARG_LAYOUT_ID = "keyboard_layout_id";

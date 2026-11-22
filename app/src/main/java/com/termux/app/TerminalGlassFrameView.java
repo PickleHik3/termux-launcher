@@ -34,6 +34,43 @@ public final class TerminalGlassFrameView extends View {
         invalidate();
     }
 
+    private int mTopGapStartPx;
+    private int mTopGapEndPx;
+    private int mTopGapDepthPx;
+
+    /**
+     * Breaks the line's top over {@code [startPx, endPx)} (this view's own x), down
+     * {@code depthPx}, where the camera stands over it; {@code endPx <= startPx} restores it.
+     */
+    public void setTopGap(int startPx, int endPx, int depthPx) {
+        if (endPx <= startPx) {
+            startPx = 0;
+            endPx = 0;
+            depthPx = 0;
+        }
+        if (startPx == mTopGapStartPx && endPx == mTopGapEndPx && depthPx == mTopGapDepthPx) return;
+        mTopGapStartPx = startPx;
+        mTopGapEndPx = endPx;
+        mTopGapDepthPx = depthPx;
+        invalidate();
+    }
+
+    /** The view draws nothing but its line, so the gap cuts the background and the rim alike. */
+    @Override
+    public void draw(Canvas canvas) {
+        if (mTopGapEndPx <= mTopGapStartPx) {
+            super.draw(canvas);
+            return;
+        }
+        int save = canvas.save();
+        try {
+            canvas.clipOutRect(mTopGapStartPx, 0, mTopGapEndPx, mTopGapDepthPx);
+            super.draw(canvas);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);

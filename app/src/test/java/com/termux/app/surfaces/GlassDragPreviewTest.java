@@ -17,7 +17,7 @@ import com.termux.R;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.Slot;
-import com.termux.app.surfaces.AppearanceLooks.Control;
+import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -32,14 +32,15 @@ import org.robolectric.util.ReflectionHelpers;
 import java.lang.reflect.Proxy;
 import java.util.EnumMap;
 import java.util.Map;
+import android.app.Application;
 
 /**
- * A Frost or Tint drag in the Look editor: each tick is one light glass pass at most, and the
+ * A Blur or Tint drag on a card: each tick is one light glass pass at most, and the
  * work a tick cannot afford (the full glass pass with its backdrop re-cut, keyboard face sampling
  * and palette, and the window bar's full refresh) runs not at all until the release, then once.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = Build.VERSION_CODES.P)
+@Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class GlassDragPreviewTest {
 
     private static final int TICKS = 12;
@@ -87,14 +88,14 @@ public class GlassDragPreviewTest {
         activity.setContentView(activityRoot, new ViewGroup.LayoutParams(1080, 2000));
 
         controller = new SurfaceEditorController(host(themed));
-        controller.present(EditorMode.LOOK, null, null, 0f, 0f, null);
+        controller.present(EditorCard.DOCK, null, null);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         resetCounts();
     }
 
     @Test
     public void aTintDragTicksLightAndTheReleasePaysTheFullPassOnce() {
-        drag(Control.TINT, 10);
+        drag(Row.TINT, 10);
 
         assertTrue("the preview follows the drag", lightGlassPasses >= 1);
         assertTrue("one light pass per tick at most, was " + lightGlassPasses,
@@ -112,10 +113,10 @@ public class GlassDragPreviewTest {
 
     @Test
     public void aFrostDragTicksLightAndTheReleasePaysTheFullPassOnce() {
-        drag(Control.GLASS, 5);
+        drag(Row.FROST, 5);
 
         assertTrue(lightGlassPasses >= 1);
-        // Frost writes Blur and Grain each tick; the two still share the tick's one pass.
+        // Each tick is one pass at most.
         assertTrue("one light pass per tick at most, was " + lightGlassPasses,
             lightGlassPasses <= TICKS);
         assertEquals(0, fullGlassPasses);
@@ -130,7 +131,8 @@ public class GlassDragPreviewTest {
 
     @Test
     public void aTapOnTheSliderIsAFullPass() {
-        listener().onSlider(Control.TINT, 60, false);
+        model().onValue(Row.TINT, 60, false);
+        model().onReleased(Row.TINT);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
 
         assertFalse(light);
@@ -140,21 +142,23 @@ public class GlassDragPreviewTest {
 
     // ------------------------------------------------------------------------------- the drive
 
-    private void drag(Control control, int from) {
+    private void drag(Row row, int from) {
+        mDragged = row;
         for (int i = 0; i < TICKS; i++) {
-            listener().onSlider(control, from + i * 3, true);
+            model().onValue(row, from + i * 3, true);
             ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
         }
     }
 
     private void release() {
-        listener().onSliderReleased();
+        model().onReleased(mDragged);
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
     }
 
-    private AppearanceEditorPanel.Listener listener() {
-        Object panel = ReflectionHelpers.getField(controller, "mPanel");
-        return ReflectionHelpers.getField(panel, "mListener");
+    private Row mDragged = Row.TINT;
+
+    private EditorCardSheet.Model model() {
+        return ReflectionHelpers.getField(controller, "mModel");
     }
 
     private void resetCounts() {

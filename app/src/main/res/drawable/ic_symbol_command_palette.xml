@@ -1,0 +1,6 @@
+<!-- Material Symbols Rounded command_palette — terminal More sheet, “Command palette”. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="24dp" android:height="24dp" android:viewportWidth="960" android:viewportHeight="960" android:tint="?attr/colorControlNormal">
+    <group android:translateY="960">
+        <path android:fillColor="@android:color/white" android:pathData="M200,-720H760Q840,-720 840,-640V-320Q840,-240 760,-240H200Q120,-240 120,-320V-640Q120,-720 200,-720ZM200,-640V-320H760V-640H200ZM280,-600L400,-480L280,-360L224,-416L288,-480L224,-544L280,-600ZM440,-440H600V-360H440V-440Z"/>
+    </group>
+</vector>

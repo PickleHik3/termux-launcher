@@ -23,9 +23,12 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /** The history lives in its own locked file, so a stale copy in one process cannot resurrect cleared entries. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiRuntimeHistoryFileTest {
 
     private Context context;

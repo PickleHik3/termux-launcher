@@ -27,10 +27,22 @@ public final class PaneBorderStyle {
     public static final class Palette {
         public final int focus;
         public final int attention;
+        /** The resolved border colour for the rim, or {@link #NO_COLOUR} for the rim's own. */
+        public final int rim;
+        /** Whether rim and focus borders carry a steady glow, and its colour. */
+        public final boolean glow;
+        public final int glowColour;
 
         public Palette(int focus, int attention) {
+            this(focus, attention, NO_COLOUR, false, NO_COLOUR);
+        }
+
+        public Palette(int focus, int attention, int rim, boolean glow, int glowColour) {
             this.focus = focus;
             this.attention = attention;
+            this.rim = rim;
+            this.glow = glow;
+            this.glowColour = glowColour;
         }
     }
 
@@ -38,19 +50,29 @@ public final class PaneBorderStyle {
     public static final class Decision {
         public final Kind kind;
         public final int colour;
+        /** A steady glow over a RIM or FOCUS border; never set for ATTENTION. */
+        public final boolean glow;
+        public final int glowColour;
 
         Decision(@NonNull Kind kind, int colour) {
+            this(kind, colour, false, NO_COLOUR);
+        }
+
+        Decision(@NonNull Kind kind, int colour, boolean glow, int glowColour) {
             this.kind = kind;
             this.colour = colour;
+            this.glow = glow;
+            this.glowColour = glow ? glowColour : NO_COLOUR;
         }
 
         @Override public boolean equals(Object o) {
             return o instanceof Decision && ((Decision) o).kind == kind
-                && ((Decision) o).colour == colour;
+                && ((Decision) o).colour == colour && ((Decision) o).glow == glow
+                && ((Decision) o).glowColour == glowColour;
         }
 
         @Override public int hashCode() {
-            return kind.hashCode() * 31 + colour;
+            return ((kind.hashCode() * 31 + colour) * 31 + (glow ? 1 : 0)) * 31 + glowColour;
         }
     }
 
@@ -62,8 +84,10 @@ public final class PaneBorderStyle {
     public static Decision decide(int paneCount, boolean focused, boolean attention,
                                   @NonNull Palette palette) {
         if (attention) return new Decision(Kind.ATTENTION, palette.attention);
-        if (paneCount > 1 && focused) return new Decision(Kind.FOCUS, palette.focus);
-        return new Decision(Kind.RIM, NO_COLOUR);
+        if (paneCount > 1 && focused) {
+            return new Decision(Kind.FOCUS, palette.focus, palette.glow, palette.glowColour);
+        }
+        return new Decision(Kind.RIM, palette.rim, palette.glow, palette.glowColour);
     }
 
     /** The decision for a page that is alone by construction (Widgets, Display). */

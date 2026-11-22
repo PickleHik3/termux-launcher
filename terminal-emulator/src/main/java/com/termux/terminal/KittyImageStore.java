@@ -86,6 +86,11 @@ final class KittyImageStore {
 
     /** The budget every live terminal shares. Tests construct their own store with a private one. */
     private static final FrameBudget SHARED_FRAME_BUDGET = new FrameBudget();
+
+    /** The budget every live terminal shares, for the Ghostty core's bitmaps (GhosttyImageCache). */
+    static FrameBudget sharedFrameBudget() {
+        return SHARED_FRAME_BUDGET;
+    }
     static final int MAX_FRAMES_PER_IMAGE = 512;
     /** The gap kitty gives a transmitted frame that did not specify one. */
     static final int DEFAULT_FRAME_GAP_MS = 40;

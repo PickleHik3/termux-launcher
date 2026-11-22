@@ -59,22 +59,29 @@ public final class AppDrawerHorizontalGridMetrics {
         AppDrawerGridMetrics cells = AppDrawerGridMetrics.resolve(width, density,
             labelHeightPx, requestedColumns, requestedIconDp);
         float naturalRowHeight = Math.max(1f, finiteOrOne(cells.rowHeightPx));
-        int physicallyFit = Math.max(1, (int) Math.floor(height / naturalRowHeight));
         int rows;
         if (requestedRows == 0) {
-            rows = physicallyFit;
+            rows = Math.max(1, (int) Math.floor(height / naturalRowHeight));
         } else {
+            // Chosen rows are bounded by what fits a row of the Automatic icon, so a larger icon
+            // shrinks to the rows asked for (below) instead of taking rows away.
+            AppDrawerGridMetrics autoIcon = requestedIconDp == 0 ? cells
+                : AppDrawerGridMetrics.resolve(width, density, labelHeightPx, requestedColumns, 0);
+            int physicallyFit = Math.max(1, (int) Math.floor(
+                height / Math.max(1f, finiteOrOne(autoIcon.rowHeightPx))));
             int explicit = Math.max(MIN_ROWS, Math.min(MAX_ROWS, requestedRows));
             rows = Math.max(1, Math.min(explicit, physicallyFit));
         }
-        // Fill the usable height only when it is taller than the cells need. A short height keeps
-        // the natural row finite and relies on clipping rather than producing a zero-sized cell.
-        float rowHeight = height > 0f ? Math.min(naturalRowHeight, height / rows) : naturalRowHeight;
+        // The rows share the page's height: the leftover under a whole row spreads between them
+        // instead of collecting under the last one. A height shorter than one row gives that row
+        // the height there is and relies on clipping; no height keeps the natural row.
+        float rowHeight = height > 0f ? height / rows : naturalRowHeight;
         return new AppDrawerHorizontalGridMetrics(cells.columns, rows, width, height,
             cells.cellWidthPx, Math.min(cells.iconPx,
                 Math.max(0f, rowHeight - Math.max(0f, labelHeightPx)
-                    - (AppDrawerGridMetrics.LABEL_GAP_DP + AppDrawerGridMetrics.ROW_BOTTOM_DP)
-                    * (density > 0f ? density : 1f))), rowHeight);
+                    - (AppDrawerGridMetrics.rowTopPx(density)
+                        + AppDrawerGridMetrics.LABEL_GAP_DP * (density > 0f ? density : 1f)
+                        + AppDrawerGridMetrics.rowBottomPx(density)))), rowHeight);
     }
 
     private static float finiteOrZero(float value) {

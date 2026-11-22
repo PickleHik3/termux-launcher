@@ -28,6 +28,7 @@ import java.util.EnumSet;
 import java.util.List;
 import java.util.concurrent.TimeUnit;
 
+import juloo.keyboard2.KeyModifier;
 import juloo.keyboard2.KeyValue;
 import juloo.keyboard2.Pointers;
 
@@ -578,6 +579,99 @@ public class TerminalKeyEventHandlerTest {
     }
 
     @Test
+    public void aBoundChordFiresAndNeverReachesTheInterceptor() {
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('k'), mods(KeyValue.Modifier.CTRL));
+        mHandler.key_up(KeyValue.makeCharKey('k'), mods(KeyValue.Modifier.ALT));
+
+        assertEquals(2, mHost.bindingsRan);
+        assertEquals(0, intercepted.size());
+        assertEquals(0, mTerminal.codePoints.size());
+    }
+
+    @Test
+    public void anUnboundChordStillReachesTheInterceptor() {
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('j'), mods(KeyValue.Modifier.CTRL));
+
+        assertEquals(1, mHost.offeredChords.size());
+        assertEquals(1, intercepted.size());
+        assertEquals(0, mHost.bindingsRan);
+    }
+
+    @Test
+    public void aPlainLetterIsNotOfferedToBindings() {
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('k'), Pointers.Modifiers.EMPTY);
+
+        assertEquals(0, mHost.offeredChords.size());
+        assertEquals(1, intercepted.size());
+    }
+
+    @Test
+    public void aSurfaceNeedingTheRawChordKeepsFirstRefusal() {
+        // Binding capture and the X11 bridge answer false from yieldsToBindings.
+        mHost.boundKeyCode = KeyEvent.KEYCODE_K;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor(new TerminalKeyEventHandler.KeyValueInterceptor() {
+            @Override public boolean interceptKeyValue(KeyValue value, boolean ctrl, boolean alt,
+                                                       boolean shift) {
+                intercepted.add(value);
+                return true;
+            }
+
+            @Override public boolean yieldsToBindings() {
+                return false;
+            }
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('k'), mods(KeyValue.Modifier.CTRL));
+
+        assertEquals(0, mHost.offeredChords.size());
+        assertEquals(1, intercepted.size());
+        assertEquals(0, mHost.bindingsRan);
+    }
+
+    @Test
+    public void aTwoStrokeBindingCompletesAcrossTheInterceptor() {
+        mHost.sequenceFirst = KeyEvent.KEYCODE_A;
+        mHost.sequenceSecond = KeyEvent.KEYCODE_B;
+        List<KeyValue> intercepted = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            intercepted.add(value);
+            return true;
+        });
+
+        mHandler.key_up(KeyValue.makeCharKey('a'), mods(KeyValue.Modifier.CTRL));
+        // The second stroke is a bare letter, offered only because a sequence is pending.
+        mHandler.key_up(KeyValue.makeCharKey('b'), Pointers.Modifiers.EMPTY);
+        // With the sequence over, a bare letter types again.
+        mHandler.key_up(KeyValue.makeCharKey('b'), Pointers.Modifiers.EMPTY);
+
+        assertEquals(1, mHost.bindingsRan);
+        assertEquals(1, intercepted.size());
+        assertEquals(2, mHost.offeredChords.size());
+    }
+
+    @Test
     public void aSlidersFirstTickIsOfferedToTheInterceptorToo() {
         // A space-bar swipe on the Display place must not leave its first arrow in the shell.
         List<KeyValue> intercepted = new ArrayList<>();
@@ -663,6 +757,269 @@ public class TerminalKeyEventHandlerTest {
         assertTrue(mTerminal.codePointCalls.isEmpty());
     }
 
+    /**
+     * Whatever field has the keyboard, the keyboard's own keys act on the keyboard and never reach
+     * the field: the interceptor here takes everything it is offered, as every field's does.
+     */
+    @Test
+    public void keyboardOwnedEventsPassAFieldThatTakesEverythingAndTheActionKeyDoesNot() {
+        List<KeyValue> offered = new ArrayList<>();
+        mHandler.setKeyValueInterceptor((value, ctrl, alt, shift) -> {
+            offered.add(value);
+            return true;
+        });
+        for (KeyValue.Event event : KeyValue.Event.values()) {
+            int hostActions = mHost.totalActions();
+            int logs = mHost.logs.size();
+            offered.clear();
+            mHandler.key_up(event(event), Pointers.Modifiers.EMPTY);
+            if (event == KeyValue.Event.ACTION) {
+                assertEquals(1, offered.size());
+            } else {
+                assertTrue(event + " is not the field's", offered.isEmpty());
+                assertTrue(event + " acts on the keyboard",
+                    mHost.totalActions() + mHost.logs.size() > hostActions + logs);
+            }
+        }
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mTerminal.codePoints.isEmpty());
+    }
+
+    @Test
+    public void inlineRenameFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.rename.InlineRenameController rename =
+            new com.termux.app.terminal.rename.InlineRenameController(clip);
+        rename.begin("ab", 40, new com.termux.app.terminal.rename.InlineRenameController.Host() {
+            @Override public void onDraftChanged(
+                com.termux.app.terminal.rename.InlineRenameModel model) {}
+            @Override public void onRenameEnded(boolean committed, String committedName) {}
+        });
+        assertFieldFollowsTheRule(rename, () -> rename.model().text(), clip, true);
+    }
+
+    @Test
+    public void folderRenameFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.launcher.folder.FolderRenameController rename =
+            new com.termux.app.launcher.folder.FolderRenameController(clip);
+        rename.begin(1L, "f", "ab", new com.termux.app.launcher.folder.FolderRenameController.Host() {
+            @Override public com.termux.app.launcher.data.LauncherConfigRepository.MutationResult
+                commit(long revision, String folderId, String title) {
+                return com.termux.app.launcher.data.LauncherConfigRepository.MutationResult.APPLIED;
+            }
+            @Override public void onDraftChanged(com.termux.app.launcher.folder.FolderRenameModel m) {}
+            @Override public void onRenameEnded(boolean committed) {}
+        });
+        assertFieldFollowsTheRule(rename, () -> rename.model().text(), clip, true);
+    }
+
+    @Test
+    public void dictationEditorFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.inappkeyboard.voice.VoiceEditController edit =
+            new com.termux.app.terminal.inappkeyboard.voice.VoiceEditController(clip);
+        edit.begin("ab", 2, new com.termux.app.terminal.inappkeyboard.voice.VoiceEditController.Host() {
+            @Override public void onDraftChanged(
+                com.termux.app.terminal.inappkeyboard.voice.VoiceEditModel model) {}
+            @Override public int offsetOnAdjacentLine(int caretUtf16, int direction) { return -1; }
+            @Override public void onEditEnded(String text) {}
+        });
+        assertFieldFollowsTheRule(edit, () -> edit.model().text(), clip, true);
+    }
+
+    @Test
+    public void drawerSearchFollowsTheFieldRule() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.launcher.drawer.AppDrawerSearchController search =
+            new com.termux.app.launcher.drawer.AppDrawerSearchController(clip);
+        search.setHost(new com.termux.app.launcher.drawer.AppDrawerSearchController.Host() {
+            @Override public boolean isSearchActive() { return true; }
+            @Override public void onSearchCommitRequested() {}
+            @Override public void onSearchDismissRequested() {}
+        });
+        search.replaceQuery("ab", 2);
+        assertFieldFollowsTheRule(search, search::query, clip, true);
+    }
+
+    /** Find keeps its own Ctrl+V (a block selection on the matches); the paste key still pastes. */
+    @Test
+    public void findFollowsTheFieldRuleAndKeepsItsOwnCtrlV() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.find.TerminalFindController find =
+            new com.termux.app.terminal.find.TerminalFindController(clip);
+        find.begin(Arrays.asList(new com.termux.app.terminal.find.TerminalFindModel.Line(0, "ab pq")),
+            new com.termux.app.terminal.find.TerminalFindController.Host() {
+                @Override public void onFindChanged(
+                    com.termux.app.terminal.find.TerminalFindModel model) {}
+                @Override public void onFindEnded(String yankedText) {}
+            });
+        find.handleCodePoint('a', false);
+        find.handleCodePoint('b', false);
+        assertFieldFollowsTheRule(find, () -> find.model().query(), clip, false);
+
+        ctrl('v');
+        assertTrue("Ctrl+V left the query for the copy mode",
+            find.model().mode() != com.termux.app.terminal.find.TerminalFindModel.Mode.TYPING);
+        assertTrue(mTerminal.codePoints.isEmpty());
+    }
+
+    /**
+     * One field holding "ab", installed in the keyboard: the keyboard's own keys reach the host,
+     * the edit keys and Ctrl chords act on the field's text, an unmapped chord and a tool key do
+     * nothing, and nothing at all reaches the terminal.
+     */
+    private void assertFieldFollowsTheRule(TerminalKeyEventHandler.KeyValueInterceptor field,
+                                           java.util.function.Supplier<String> text,
+                                           FieldEditorTest.Clip clip, boolean ctrlVPastes) {
+        mHandler.setKeyValueInterceptor(field);
+
+        up("config");
+        up("switch_clipboard");
+        up("switch_forward");
+        assertEquals("the settings key opens settings", 1, mHost.settings);
+        assertEquals("the clipboard pane opens", 1, mHost.clipboardPanels);
+        assertEquals("the layout switches", 1, mHost.nextLayouts);
+        assertEquals("ab", text.get());
+
+        up("copy");
+        assertEquals("ab", clip.last());
+        up("selectAll");
+        mHandler.key_up(KeyValue.makeCharKey('n'), Pointers.Modifiers.EMPTY);
+        assertEquals("select all, then a letter, replaces the text", "n", text.get());
+
+        ctrl('a');
+        ctrl('x');
+        assertEquals("", text.get());
+        assertEquals("n", clip.last());
+        clip.text = "pq";
+        if (ctrlVPastes) ctrl('v');
+        else up("paste");
+        assertEquals("pq", text.get());
+        ctrl('z');
+        assertEquals("", text.get());
+        ctrl('y');
+        assertEquals("pq", text.get());
+        up("undo");
+        assertEquals("", text.get());
+        up("redo");
+        assertEquals("pq", text.get());
+        up("cut");
+        assertEquals("", text.get());
+        up("pasteAsPlainText");
+        assertEquals("pq", text.get());
+        ctrl('c');
+        assertEquals("pq", clip.last());
+
+        int written = clip.written.size();
+        ctrl('q');
+        mHandler.key_up(KeyValue.makeLauncherToolKey("app.command_palette", "⌘", 0),
+            Pointers.Modifiers.EMPTY);
+        assertEquals("pq", text.get());
+        assertEquals(written, clip.written.size());
+        assertTrue("a tool key does nothing", mHost.launcherTools.isEmpty());
+
+        assertTrue("nothing reaches the shell", mTerminal.codePoints.isEmpty());
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mTerminal.writes.isEmpty());
+        assertEquals(0, mHost.pastes + mHost.clipboardPastes + mHost.copies + mHost.cuts
+            + mHost.selectAlls);
+    }
+
+    /**
+     * Typed "se", then latched Ctrl + a, then x: the field holds "x", as the developer typed it on
+     * pong. Then Ctrl+C, Ctrl+V, Ctrl+X, Ctrl+Z and Ctrl+Shift+Z on that text, each struck the way
+     * the keyboard strikes it ({@link #strike}).
+     */
+    private void assertCtrlChordsEditTypedText(TerminalKeyEventHandler.KeyValueInterceptor field,
+                                               java.util.function.Supplier<String> text,
+                                               FieldEditorTest.Clip clip) {
+        mHandler.setKeyValueInterceptor(field);
+        strike('s');
+        strike('e');
+        assertEquals("se", text.get());
+        ctrl('a');
+        assertEquals("Ctrl+A types nothing", "se", text.get());
+        strike('x');
+        assertEquals("Ctrl+A, then a letter, replaces the text", "x", text.get());
+
+        ctrl('c');
+        assertEquals("x", clip.last());
+        clip.text = clip.last();
+        ctrl('v');
+        assertEquals("xx", text.get());
+        ctrl('x');
+        assertEquals("", text.get());
+        assertEquals("xx", clip.last());
+        ctrl('z');
+        assertEquals("xx", text.get());
+        strike('z', KeyValue.Modifier.CTRL, KeyValue.Modifier.SHIFT);
+        assertEquals("Ctrl+Shift+Z redoes", "", text.get());
+        ctrl('z');
+        ctrl('y');
+        assertEquals("Ctrl+Y redoes", "", text.get());
+
+        assertTrue("nothing reaches the shell", mTerminal.codePoints.isEmpty());
+        assertTrue(mTerminal.keyCodes.isEmpty());
+        assertTrue(mTerminal.writes.isEmpty());
+        assertEquals(0, mHost.pastes + mHost.clipboardPastes + mHost.copies + mHost.cuts
+            + mHost.selectAlls);
+    }
+
+    @Test
+    public void drawerSearchCtrlChordsEditTypedText() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.launcher.drawer.AppDrawerSearchController search =
+            new com.termux.app.launcher.drawer.AppDrawerSearchController(clip);
+        search.setHost(new com.termux.app.launcher.drawer.AppDrawerSearchController.Host() {
+            @Override public boolean isSearchActive() { return true; }
+            @Override public void onSearchCommitRequested() {}
+            @Override public void onSearchDismissRequested() {}
+        });
+        assertCtrlChordsEditTypedText(search, search::query, clip);
+    }
+
+    @Test
+    public void inlineRenameCtrlChordsEditTypedText() {
+        FieldEditorTest.Clip clip = new FieldEditorTest.Clip();
+        com.termux.app.terminal.rename.InlineRenameController rename =
+            new com.termux.app.terminal.rename.InlineRenameController(clip);
+        rename.begin("", 40, new com.termux.app.terminal.rename.InlineRenameController.Host() {
+            @Override public void onDraftChanged(
+                com.termux.app.terminal.rename.InlineRenameModel model) {}
+            @Override public void onRenameEnded(boolean committed, String committedName) {}
+        });
+        assertCtrlChordsEditTypedText(rename, () -> rename.model().text(), clip);
+    }
+
+    /** What latched Ctrl + a really delivers: the keyboard has made it a key event. */
+    @Test
+    public void latchedCtrlOnALetterArrivesAsAKeyEvent() {
+        KeyValue struck = KeyModifier.modify(KeyValue.makeCharKey('a'),
+            mods(KeyValue.Modifier.CTRL), null);
+        assertEquals(KeyValue.Kind.Keyevent, struck.getKind());
+        assertEquals(KeyEvent.KEYCODE_A, struck.getKeyevent());
+    }
+
+    private void up(String name) {
+        mHandler.key_up(KeyValue.getKeyByName(name), Pointers.Modifiers.EMPTY);
+    }
+
+    private void ctrl(char c) {
+        strike(c, KeyValue.Modifier.CTRL);
+    }
+
+    /**
+     * A character key tapped under latched modifiers, delivered as the keyboard delivers it:
+     * {@code Pointers} stores {@code Keyboard2View.modifyKey} of the key (that is,
+     * {@link KeyModifier#modify} with the pointer's modifiers and the layout's modmap, none here),
+     * then hands that value and the same modifiers to {@code key_up}.
+     */
+    private void strike(char c, KeyValue.Modifier... modifiers) {
+        Pointers.Modifiers held = mods(modifiers);
+        mHandler.key_up(KeyModifier.modify(KeyValue.makeCharKey(c), held, null), held);
+    }
+
     private static final class KeyCall {
 
         private final int keyCode;
@@ -742,6 +1099,41 @@ public class TerminalKeyEventHandlerTest {
         private final List<String> suggestions = new ArrayList<>();
         private final List<String> logs = new ArrayList<>();
         private final List<String> launcherTools = new ArrayList<>();
+        private final List<KeyEvent> offeredChords = new ArrayList<>();
+        /** Key codes that count as bound under Ctrl or Alt; A then B is a two-stroke binding. */
+        private int boundKeyCode = -1;
+        private int sequenceFirst = -1;
+        private int sequenceSecond = -1;
+        private boolean sequencePending;
+        private int bindingsRan;
+
+        @Override
+        public boolean offerBindingChord(android.view.KeyEvent down) {
+            offeredChords.add(down);
+            int code = down.getKeyCode();
+            if (sequencePending) {
+                sequencePending = false;
+                if (code == sequenceSecond) {
+                    bindingsRan++;
+                    return true;
+                }
+                return true;
+            }
+            if (code == sequenceFirst && down.isCtrlPressed()) {
+                sequencePending = true;
+                return true;
+            }
+            if (code == boundKeyCode && (down.isCtrlPressed() || down.isAltPressed())) {
+                bindingsRan++;
+                return true;
+            }
+            return false;
+        }
+
+        @Override
+        public boolean isBindingSequencePending() {
+            return sequencePending;
+        }
 
         @Override
         public void runLauncherTool(String toolId) {

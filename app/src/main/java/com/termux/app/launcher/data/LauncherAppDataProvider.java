@@ -89,6 +89,8 @@ public final class LauncherAppDataProvider {
                 public LauncherIconStore.Artwork loadArtwork(@NonNull AppRef ref) {
                     if (com.termux.app.x11.X11Apps.isLinuxApp(ref))
                         return LauncherIconStore.Artwork.kept(linuxAppIcon(ref));
+                    if (com.termux.app.launcher.LauncherEntries.isEntry(ref))
+                        return LauncherIconStore.Artwork.kept(launcherEntryIcon(ref));
                     LauncherIconResolver.ResolvedIcon resolved = iconResolver.resolveDetailed(ref, null, null);
                     return resolved.provisional ? LauncherIconStore.Artwork.standIn(resolved.drawable)
                         : LauncherIconStore.Artwork.kept(resolved.drawable);
@@ -96,6 +98,100 @@ public final class LauncherAppDataProvider {
             });
         // A pack the main thread drew stand-ins for has been parsed: every surface draws again.
         this.iconPackRepository.setPackLandedListener(this::onIconPackLanded);
+        watchIconSizes();
+    }
+
+    /** Held so the preferences' weak reference to it lives as long as the provider. */
+    private final android.content.SharedPreferences.OnSharedPreferenceChangeListener iconSizeListener =
+        (prefs, key) -> {
+            if (com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                    .KEY_APP_LAUNCHER_DRAWER_ICON_SIZE.equals(key)) {
+                // A raised cap dropped the store; the renders and catalogue made from the old
+                // artwork are stale with it.
+                if (applyIconSizes(prefs)) invalidateIconArtwork(true);
+            }
+        };
+
+    /**
+     * Keeps the store's artwork cap on the largest icon any surface will draw: the drawer's Icon
+     * size step (Auto is 48dp) and Home's size preset, never less than the dock's 48dp. A larger
+     * icon on a dense screen needs more pixels than the base cap keeps.
+     */
+    private void watchIconSizes() {
+        android.content.SharedPreferences prefs = context.getSharedPreferences(
+            com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE);
+        applyIconSizes(prefs);
+        prefs.registerOnSharedPreferenceChangeListener(iconSizeListener);
+        // Home draws IconSizeCap.effective(layout size, published cap): the cap is published after
+        // layout and the layout size can change on its own, so both re-run the policy, off the
+        // layout pass, coalesced.
+        com.termux.app.dock.IconSizeCap.setPublishListener(publishListener);
+        com.termux.app.place.layout.LayoutStore.shared(context).addListener(layoutListener);
+    }
+
+    private final Runnable publishListener = this::scheduleIconSizeRefresh;
+    private final com.termux.app.place.layout.LayoutStore.Listener layoutListener =
+        layouts -> scheduleIconSizeRefresh();
+
+    /**
+     * Test-only: drops the shared instance and the listeners it registered, so a test that
+     * builds a fresh provider leaves none behind on a dead one. The app keeps one for the process.
+     */
+    @androidx.annotation.VisibleForTesting
+    public static synchronized void resetForTest() {
+        if (instance == null) return;
+        instance.stopWatchingIconSizes();
+        instance = null;
+    }
+
+    private void stopWatchingIconSizes() {
+        context.getSharedPreferences(
+            com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+            Context.MODE_PRIVATE).unregisterOnSharedPreferenceChangeListener(iconSizeListener);
+        com.termux.app.dock.IconSizeCap.clearPublishListener(publishListener);
+        com.termux.app.place.layout.LayoutStore.shared(context).removeListener(layoutListener);
+        iconSizeHandler.removeCallbacks(iconSizeRefresh);
+        executor.shutdown();
+    }
+
+    private final android.os.Handler iconSizeHandler =
+        new android.os.Handler(android.os.Looper.getMainLooper());
+    private final Runnable iconSizeRefresh = this::refreshIconSizes;
+
+    private void refreshIconSizes() {
+        if (applyIconSizes(context.getSharedPreferences(
+                com.termux.shared.termux.TermuxConstants.TERMUX_DEFAULT_PREFERENCES_FILE_BASENAME_WITHOUT_EXTENSION,
+                Context.MODE_PRIVATE))) {
+            invalidateIconArtwork(true);
+        }
+    }
+
+    private void scheduleIconSizeRefresh() {
+        iconSizeHandler.removeCallbacks(iconSizeRefresh);
+        iconSizeHandler.post(iconSizeRefresh);
+    }
+
+    /** @return true when the store's cap rose and it was dropped. */
+    private boolean applyIconSizes(@NonNull android.content.SharedPreferences prefs) {
+        float largest = com.termux.app.launcher.widget.HomeIconSize.DOCK_ICON_DP;
+        try {
+            String drawer = prefs.getString(com.termux.shared.termux.settings.preferences
+                .TermuxPreferenceConstants.TERMUX_APP.KEY_APP_LAUNCHER_DRAWER_ICON_SIZE, null);
+            if (drawer != null) largest = Math.max(largest, Integer.parseInt(drawer.trim()));
+        } catch (RuntimeException ignored) {
+            // "auto" and garbage read as Auto's 48dp.
+        }
+        try {
+            // The size Home really draws (layout size held to the dock's published cap).
+            largest = Math.max(largest,
+                com.termux.app.launcher.home.HomeSettings.iconStyle(context).iconDp);
+        } catch (RuntimeException ignored) {
+            // An unreadable Home size draws at the dock's.
+        }
+        boolean raised = iconStore.setLargestIconDp(largest);
+        iconResolver.setArtworkCapPx(iconStore.capPx());
+        return raised;
     }
 
     /**
@@ -149,20 +245,138 @@ public final class LauncherAppDataProvider {
         return androidx.core.content.ContextCompat.getDrawable(context, com.termux.R.drawable.ic_symbol_terminal);
     }
 
+    /** The mark the launcher's own entries wear: a prompt for Terminal, a screen for Display. */
+    @Nullable
+    private Drawable launcherEntryIcon(@NonNull AppRef ref) {
+        String id = com.termux.app.launcher.LauncherEntries.idOf(ref);
+        int icon = com.termux.app.launcher.LauncherEntries.DISPLAY.equals(id)
+            ? com.termux.R.drawable.ic_symbol_desktop_windows
+            : com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(id)
+                ? com.termux.R.drawable.ic_symbol_smart_toy : com.termux.R.drawable.ic_symbol_terminal;
+        return androidx.core.content.ContextCompat.getDrawable(context, icon);
+    }
+
     /**
-     * The Linux apps in the prefix and in every installed distro container, when the display is
-     * switched on and the user wants them listed. They
-     * are catalogue entries like any other — ranked, pinnable, searchable — under the reserved
-     * package {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display.
+     * The launcher's own entries, listed with the Linux apps (ADR 0008): Terminal always, and
+     * Display wherever Linux apps are listed — a build with the server and Show Linux apps in
+     * drawer on.
+     */
+    private void addLauncherEntries(@NonNull Snapshot snapshot) {
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.terminal(),
+            context.getString(com.termux.R.string.launcher_entry_terminal));
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.assistant(),
+            context.getString(com.termux.R.string.launcher_entry_assistant));
+        if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return;
+        addLauncherEntry(snapshot, com.termux.app.launcher.LauncherEntries.display(),
+            context.getString(com.termux.R.string.launcher_entry_display));
+    }
+
+    /** Show Linux apps in drawer, at its default when the preferences cannot be read. */
+    private boolean showLinuxApps() {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
+        return prefs == null
+            ? com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
+                .DEFAULT_X11_DRAWER_APPS
+            : prefs.isX11DrawerAppsEnabled();
+    }
+
+    /**
+     * Whether the catalogue lists Linux apps and the Display entry: a build with the server and
+     * Show Linux apps in drawer on. Nothing else decides it — not whether a display runs (ADR 0008).
+     */
+    static boolean listsLinuxApps(boolean x11Server, boolean showLinuxApps) {
+        return x11Server && showLinuxApps;
+    }
+
+    /**
+     * What the desktop files looked like when the catalogue last listed the Linux apps, as
+     * {@link com.termux.app.x11.LinuxAppCatalog#signature}; {@link #UNLISTED} before any listing.
+     */
+    private volatile long linuxAppsSignature = UNLISTED;
+    private static final long UNLISTED = Long.MIN_VALUE;
+
+    /**
+     * Whether desktop files came or went since the catalogue listed the Linux apps. A loaded
+     * catalogue only; a build without the server, or with Show Linux apps off, is never stale.
+     * File work (a stat per directory): call off the main thread.
+     */
+    boolean linuxAppsStale() {
+        synchronized (this) {
+            if (!loaded) return false;
+        }
+        if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return false;
+        return com.termux.app.x11.LinuxAppCatalog.signature(
+            com.termux.app.x11.LinuxAppCatalog.roots()) != linuxAppsSignature;
+    }
+
+    /**
+     * Re-list the catalogue in the background if desktop files changed since it last listed the
+     * Linux apps — a {@code pkg install} in a pane leaves no broadcast and no resume behind — and
+     * run {@code onChanged} on the main thread once the new catalogue is in. Nothing happens when
+     * nothing changed, so a surface about to show the catalogue (the palette) can ask every time.
+     */
+    public void refreshIfLinuxAppsChanged(@Nullable Runnable onChanged) {
+        if (!com.termux.app.x11.X11ServerSupport.isAvailable(context)) return;
+        executor.execute(() -> {
+            if (linuxAppsStale()) {
+                // The same change may be a distro that was just installed: it needs its sound.
+                com.termux.app.sound.LauncherSound.get(context).onContainersMaybeChanged();
+                refreshAsync(null, onChanged);
+            }
+        });
+    }
+
+    /**
+     * {@link #getAllAppsBlocking()}, re-listed first when desktop files changed since the last
+     * listing, for a caller that resolves one app by name now (launcherctl) and must not answer
+     * "not found" for one installed a moment ago. Blocks on the scan; never call it on the main
+     * thread.
+     */
+    @NonNull
+    public List<LauncherAppEntry> getAllAppsWithCurrentLinuxAppsBlocking() {
+        List<LauncherAppEntry> apps = getAllAppsBlocking();
+        if (!linuxAppsStale()) return apps;
+        Snapshot snapshot = loadSnapshot();
+        synchronized (this) {
+            // A newer load is not overtaken; this one simply lands first.
+            applySnapshotLocked(snapshot);
+            return visibleOnly(cachedApps);
+        }
+    }
+
+    private void addLauncherEntry(@NonNull Snapshot snapshot, @NonNull AppRef ref,
+                                  @NonNull String label) {
+        if (snapshot.byId.containsKey(ref.stableId())) return;
+        iconStore.prime(ref, launcherEntryIcon(ref));
+        LauncherAppEntry entry = new LauncherAppEntry(ref, label, null, false,
+            ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        snapshot.apps.add(entry);
+        snapshot.byId.put(ref.stableId(), entry);
+        char key = normalizeLetter(label.isEmpty() ? '#' : label.charAt(0));
+        List<LauncherAppEntry> bucket = snapshot.letterBuckets.get(key);
+        if (bucket == null) {
+            bucket = new ArrayList<>();
+            snapshot.letterBuckets.put(key, bucket);
+        }
+        bucket.add(entry);
+    }
+
+    /**
+     * The Linux apps in the prefix and in every installed distro container, when the user wants
+     * them listed (Show Linux apps in drawer); nothing else decides it. They are catalogue entries
+     * like any other — ranked, pinnable, searchable — under the reserved package
+     * {@link com.termux.app.x11.X11Apps#PACKAGE}; a tap runs them on the display, opening a
+     * display window if none is up.
      */
     private void addLinuxApps(@NonNull Snapshot snapshot) {
         linuxAppsById = Collections.emptyMap();
-        if (!com.termux.app.x11.X11ServerSupport.isAvailable(context)) return;
-        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context);
-        if (prefs == null || !prefs.isX11DisplayEnabled() || !prefs.isX11DrawerAppsEnabled()) return;
+        if (!listsLinuxApps(com.termux.app.x11.X11ServerSupport.isAvailable(context), showLinuxApps())) return;
+        List<com.termux.app.x11.LinuxAppCatalog.Root> roots = com.termux.app.x11.LinuxAppCatalog.roots();
+        // Read before the scan: a file landing during it shows as a change next time, not as none.
+        linuxAppsSignature = com.termux.app.x11.LinuxAppCatalog.signature(roots);
         Map<String, com.termux.app.x11.LinuxAppCatalog.LinuxApp> byId = new HashMap<>();
         for (com.termux.app.x11.LinuxAppCatalog.LinuxApp app
-                : com.termux.app.x11.LinuxAppCatalog.scan(com.termux.app.x11.LinuxAppCatalog.roots())) {
+                : com.termux.app.x11.LinuxAppCatalog.scan(roots)) {
             byId.put(app.id, app);
             AppRef ref = com.termux.app.x11.X11Apps.ref(app.id);
             if (snapshot.byId.containsKey(ref.stableId())) continue;
@@ -247,6 +461,7 @@ public final class LauncherAppDataProvider {
     public synchronized void invalidate() {
         refreshGeneration++;
         iconPackIdentity = null;
+        terminalEntry = null;
         loading = false;
         loaded = false;
         refreshing = false;
@@ -333,6 +548,22 @@ public final class LauncherAppDataProvider {
 
     public synchronized boolean hasLoadedApps() {
         return loaded;
+    }
+
+    /**
+     * Test-only: starts the catalogue scan and returns once it has run, so the warm-up callbacks
+     * are already posted and {@link #hasLoadedApps()} holds. A test then drains the main looper
+     * once and nothing from the scan can land later.
+     */
+    @androidx.annotation.VisibleForTesting
+    public void loadBlockingForTest() {
+        warmAsync(null);
+        try {
+            // One worker, FIFO: this runs after the scan.
+            executor.submit(() -> { }).get(10, TimeUnit.SECONDS);
+        } catch (Exception e) {
+            throw new IllegalStateException("catalogue scan did not finish", e);
+        }
     }
 
     public void warmAsync(@Nullable Runnable callback) {
@@ -558,7 +789,37 @@ public final class LauncherAppDataProvider {
     @Nullable
     public synchronized LauncherAppEntry findByRef(@NonNull AppRef ref) {
         LauncherAppEntry entry = cachedById.get(ref.stableId());
+        if (entry == null && com.termux.app.launcher.LauncherEntries.isAlwaysListed(ref)) {
+            // Terminal is in every catalogue, so it resolves even while none is loaded (before
+            // the first load, after an invalidate): the dock's prune of unresolvable pins must
+            // never take the way back to the Terminal off the row.
+            entry = com.termux.app.launcher.LauncherEntries.ASSISTANT.equals(
+                com.termux.app.launcher.LauncherEntries.idOf(ref)) ? assistantEntry() : terminalEntry();
+        }
         return entry;
+    }
+
+    @Nullable private LauncherAppEntry terminalEntry;
+    @Nullable private LauncherAppEntry assistantEntry;
+
+    @NonNull
+    private LauncherAppEntry assistantEntry() {
+        if (assistantEntry == null) {
+            assistantEntry = new LauncherAppEntry(com.termux.app.launcher.LauncherEntries.assistant(),
+                context.getString(com.termux.R.string.launcher_entry_assistant), null, false,
+                ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        }
+        return assistantEntry;
+    }
+
+    @NonNull
+    private LauncherAppEntry terminalEntry() {
+        if (terminalEntry == null) {
+            terminalEntry = new LauncherAppEntry(com.termux.app.launcher.LauncherEntries.terminal(),
+                context.getString(com.termux.R.string.launcher_entry_terminal), null, false,
+                ApplicationInfo.CATEGORY_UNDEFINED, 0L);
+        }
+        return terminalEntry;
     }
 
     @Nullable
@@ -665,6 +926,7 @@ public final class LauncherAppDataProvider {
         addProfileApps(snapshot, packageManager, defaultComponentsByPackage,
             previousById, changedPackages);
         addLinuxApps(snapshot);
+        addLauncherEntries(snapshot);
         return snapshot;
     }
 

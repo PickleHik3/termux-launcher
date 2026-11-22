@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The editor's source dot for a value this page holds: the place ink, amber. -->
+    <color name="editor_source_page">#8A5100</color>
+</resources>

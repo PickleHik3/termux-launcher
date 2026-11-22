@@ -133,6 +133,11 @@ public final class MenuRowFactory {
 
     /** Paints a row as idle or as the one under the finger. */
     public void styleRow(@NonNull TextView row, boolean highlighted, int tintBase) {
+        // An App menu row keeps its own shaped surface; only its state layer changes.
+        if (row.getBackground() instanceof AppMenuRowDrawable) {
+            ((AppMenuRowDrawable) row.getBackground()).setHighlighted(highlighted);
+            return;
+        }
         MaterialShapeDrawable bg = M3.surface(context,
             com.google.android.material.R.attr.shapeAppearanceCornerSmall,
             highlighted ? armedFill(M3.onSurface(context)) : 0x00000000);

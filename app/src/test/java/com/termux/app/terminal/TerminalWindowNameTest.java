@@ -13,7 +13,7 @@ import org.junit.Test;
 import java.util.Collections;
 import java.util.List;
 
-/** Window names: the policy caps, the tab label, and the workspace round trip. */
+/** Window names: the policy caps, the tab label, and the Terminal round trip. */
 public class TerminalWindowNameTest {
 
     @Test
@@ -57,7 +57,7 @@ public class TerminalWindowNameTest {
         saved.validate();
 
         JSONObject json = saved.toJson();
-        assertEquals(3, json.optInt("version"));
+        assertEquals(TerminalWorkspace.VERSION, json.optInt("version"));
         TerminalWorkspace loaded = TerminalWorkspace.fromJson(json);
         List<TerminalWorkspace.Window> windows = loaded.sessions.get(0).windows;
         assertEquals(1, windows.size());

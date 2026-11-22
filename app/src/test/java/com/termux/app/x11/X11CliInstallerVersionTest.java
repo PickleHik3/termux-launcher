@@ -16,9 +16,11 @@ import java.security.MessageDigest;
  */
 public class X11CliInstallerVersionTest {
 
-    private static final int VERSION_OF_THESE_ASSETS = 1016;
+    private static final int VERSION_OF_THESE_ASSETS = 22;
     private static final String GPU_SETUP_SHA256 =
-        "6a5418858375cd48a3b438e826508aef917eda14a2cbd7cabbff629a9d182f07";
+        "b2199bc57990082b7ead929984247dc4d2a8b335071c09dc40e497a7ff90b240";
+    private static final String IM_FOCUS_SHA256 =
+        "f6230da91c3215ff6a43bec3107e5b3cde25f911c01d239623ad6bc5f4918405";
 
     private static String sha256(String asset) throws Exception {
         byte[] digest = MessageDigest.getInstance("SHA-256")
@@ -31,6 +33,7 @@ public class X11CliInstallerVersionTest {
     @Test public void editedScriptAssetsComeWithAVersionBump() throws Exception {
         String bump = "a shipped X11 script changed: bump X11CliInstaller.VERSION and record the new hash here";
         assertEquals(bump, GPU_SETUP_SHA256, sha256("x11/x11-gpu-setup.sh"));
+        assertEquals(bump, IM_FOCUS_SHA256, sha256("x11/x11-im-focus.sh"));
         assertEquals("VERSION changed: record the current asset hashes with it",
             VERSION_OF_THESE_ASSETS, X11CliInstaller.VERSION);
     }

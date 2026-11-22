@@ -13,6 +13,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 
 import com.termux.R;
+import com.termux.app.launcher.popup.AnchoredMenuGeometry;
 import com.termux.app.material.M3;
 
 /**
@@ -25,6 +26,35 @@ public final class WidgetGridSizePopup {
     /** Told the size the wheels now read. */
     public interface Listener {
         void onGridSizeChanged(int columns, int rows);
+    }
+
+    /**
+     * One wheel: numbers within a policy, or a pick from words. A pick reports its stop's index
+     * (0 for the first word), which the caller maps back to what the stop stands for.
+     */
+    public static final class WheelSpec {
+        @NonNull final GridSizeWheelPolicy policy;
+        final int value;
+        @androidx.annotation.Nullable final String[] labels;
+
+        private WheelSpec(@NonNull GridSizeWheelPolicy policy, int value,
+                          @androidx.annotation.Nullable String[] labels) {
+            this.policy = policy;
+            this.value = value;
+            this.labels = labels;
+        }
+
+        @NonNull
+        public static WheelSpec numbers(@NonNull GridSizeWheelPolicy policy, int value) {
+            return new WheelSpec(policy, value, null);
+        }
+
+        /** A wheel of {@code labels.length} stops, standing on stop {@code index}. */
+        @NonNull
+        public static WheelSpec choices(@NonNull String[] labels, int index) {
+            return new WheelSpec(new GridSizeWheelPolicy(0, Math.max(0, labels.length - 1)),
+                index, labels);
+        }
     }
 
     @NonNull private final PopupWindow mPopup;
@@ -48,6 +78,19 @@ public final class WidgetGridSizePopup {
     public static WidgetGridSizePopup show(@NonNull View page, @NonNull RectF tab,
                                            int columns, int rows, @NonNull WidgetGridCaps caps,
                                            @NonNull Listener listener) {
+        return show(page, tab, WheelSpec.numbers(GridSizeWheelPolicy.columns(caps), columns),
+            WheelSpec.numbers(GridSizeWheelPolicy.rows(caps), rows), listener);
+    }
+
+    /**
+     * The wheels as the caller describes them; {@code rows} null leaves the rows wheel and the
+     * {@code ×} out, and the listener then hears 0 for rows.
+     */
+    @NonNull
+    public static WidgetGridSizePopup show(@NonNull View page, @NonNull RectF tab,
+                                           @NonNull WheelSpec columns,
+                                           @androidx.annotation.Nullable WheelSpec rows,
+                                           @NonNull Listener listener) {
         Context context = page.getContext();
         float density = context.getResources().getDisplayMetrics().density;
         int onSurfaceVariant = M3.onSurfaceVariant(context);
@@ -58,32 +101,36 @@ public final class WidgetGridSizePopup {
         int pad = Math.round(14f * density);
         shell.setPadding(pad, pad, pad, pad);
 
-        GridSizeWheelView columnsWheel = new GridSizeWheelView(context,
-            GridSizeWheelPolicy.columns(caps), columns);
-        GridSizeWheelView rowsWheel = new GridSizeWheelView(context,
-            GridSizeWheelPolicy.rows(caps), rows);
-        GridSizeWheelView.Listener relay = value ->
-            listener.onGridSizeChanged(columnsWheel.value(), rowsWheel.value());
+        GridSizeWheelView columnsWheel = new GridSizeWheelView(context, columns.policy,
+            columns.value);
+        columnsWheel.setLabels(columns.labels);
+        GridSizeWheelView rowsWheel = rows == null ? null
+            : new GridSizeWheelView(context, rows.policy, rows.value);
+        if (rowsWheel != null) rowsWheel.setLabels(rows.labels);
+        GridSizeWheelView.Listener relay = value -> listener.onGridSizeChanged(
+            columnsWheel.value(), rowsWheel == null ? 0 : rowsWheel.value());
         columnsWheel.setListener(relay);
-        rowsWheel.setListener(relay);
+        if (rowsWheel != null) rowsWheel.setListener(relay);
 
         shell.addView(wheelColumn(context, columnsWheel,
             context.getString(R.string.widget_grid_size_columns), onSurfaceVariant, density));
-        TextView times = new TextView(context);
-        times.setText(R.string.widget_grid_size_separator);
-        times.setTextColor(onSurfaceVariant);
-        M3.textAppearance(times, com.google.android.material.R.attr.textAppearanceTitleMedium);
-        times.setTextColor(onSurfaceVariant);
-        LinearLayout.LayoutParams timesParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        timesParams.leftMargin = Math.round(6f * density);
-        timesParams.rightMargin = Math.round(6f * density);
-        // The × belongs beside the numbers, not beside the labels under them.
-        timesParams.bottomMargin = Math.round(18f * density);
-        timesParams.gravity = Gravity.CENTER_VERTICAL;
-        shell.addView(times, timesParams);
-        shell.addView(wheelColumn(context, rowsWheel,
-            context.getString(R.string.widget_grid_size_rows), onSurfaceVariant, density));
+        if (rowsWheel != null) {
+            TextView times = new TextView(context);
+            times.setText(R.string.widget_grid_size_separator);
+            times.setTextColor(onSurfaceVariant);
+            M3.textAppearance(times, com.google.android.material.R.attr.textAppearanceTitleMedium);
+            times.setTextColor(onSurfaceVariant);
+            LinearLayout.LayoutParams timesParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            timesParams.leftMargin = Math.round(6f * density);
+            timesParams.rightMargin = Math.round(6f * density);
+            // The × belongs beside the numbers, not beside the labels under them.
+            timesParams.bottomMargin = Math.round(18f * density);
+            timesParams.gravity = Gravity.CENTER_VERTICAL;
+            shell.addView(times, timesParams);
+            shell.addView(wheelColumn(context, rowsWheel,
+                context.getString(R.string.widget_grid_size_rows), onSurfaceVariant, density));
+        }
 
         shell.measure(View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
             View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED));
@@ -108,7 +155,12 @@ public final class WidgetGridSizePopup {
             Math.max(pageOnScreen[0], pageOnScreen[0] + page.getWidth() - width));
         int y = clamp(Math.round(pageOnScreen[1] + tab.bottom + 4f * density), pageOnScreen[1],
             Math.max(pageOnScreen[1], pageOnScreen[1] + page.getHeight() - height));
-        popup.showAtLocation(page, Gravity.TOP | Gravity.LEFT, x, y);
+        // showAtLocation wants the parent window's coordinates, not the screen's (split screen).
+        int[] windowOrigin = new int[2];
+        page.getRootView().getLocationOnScreen(windowOrigin);
+        popup.showAtLocation(page, Gravity.TOP | Gravity.LEFT,
+            AnchoredMenuGeometry.toWindowX(x, windowOrigin[0]),
+            AnchoredMenuGeometry.toWindowY(y, windowOrigin[1]));
 
         return new WidgetGridSizePopup(popup);
     }
@@ -120,7 +172,7 @@ public final class WidgetGridSizePopup {
         LinearLayout column = new LinearLayout(context);
         column.setOrientation(LinearLayout.VERTICAL);
         column.setGravity(Gravity.CENTER_HORIZONTAL);
-        wheel.setContentDescription(label + " " + wheel.value());
+        wheel.setContentDescription(label + " " + wheel.valueText());
         column.addView(wheel, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         TextView caption = new TextView(context);

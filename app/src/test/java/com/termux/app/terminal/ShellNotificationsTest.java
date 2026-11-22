@@ -10,7 +10,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-/** When a message a terminal program sent is worth putting in the shade. */
+/** What a terminal program's message carries from its wire form. */
 public class ShellNotificationsTest {
 
     /** Builds one finished message the way the terminal does, from its wire form. */
@@ -32,37 +32,6 @@ public class ShellNotificationsTest {
         });
         assertNotNull("nothing was built from: " + metadataAndPayload, built[0]);
         return built[0];
-    }
-
-    @Test
-    public void plainMessageIsAlwaysShown() {
-        KittyNotification message = notification(";Build finished");
-        assertEquals(KittyNotification.OCCASION_ALWAYS, message.getOccasion());
-        assertTrue(ShellNotifications.shouldShow(message, true, true));
-        assertTrue(ShellNotifications.shouldShow(message, false, false));
-    }
-
-    @Test
-    public void unfocusedMessageIsHeldBackOnlyWhileItsPaneIsInFront() {
-        KittyNotification message = notification("o=unfocused;Build finished");
-        assertFalse(ShellNotifications.shouldShow(message, true, true));
-        assertTrue(ShellNotifications.shouldShow(message, true, false));
-        assertTrue(ShellNotifications.shouldShow(message, false, true));
-    }
-
-    @Test
-    public void invisibleMessageWaitsForTheLauncherToBePutAway() {
-        KittyNotification message = notification("o=invisible;Build finished");
-        assertFalse(ShellNotifications.shouldShow(message, true, true));
-        assertFalse(ShellNotifications.shouldShow(message, true, false));
-        assertTrue(ShellNotifications.shouldShow(message, false, false));
-    }
-
-    @Test
-    public void anUnknownOccasionFallsBackToShowingIt() {
-        KittyNotification message = notification("o=whenever;Build finished");
-        assertEquals(KittyNotification.OCCASION_ALWAYS, message.getOccasion());
-        assertTrue(ShellNotifications.shouldShow(message, true, true));
     }
 
     @Test

@@ -2,9 +2,9 @@ package com.termux.app.place;
 
 import androidx.annotation.NonNull;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
-import com.termux.app.wall.PaneWallPage;
 
 /**
  * When an open keyboard floats over the place instead of shrinking it, and what that does to the
@@ -29,10 +29,64 @@ public final class KeyboardOverlayPolicy {
     private KeyboardOverlayPolicy() {}
 
     /** Whether an open keyboard floats over the place on screen rather than shrinking it. */
-    public static boolean overlays(@NonNull PaneWallPage place, @NonNull PlaceLayout layout) {
+    public static boolean overlays(@NonNull PageKind place, @NonNull PlaceLayout layout) {
         if (layout.keyboardForm == KeyboardForm.FLOATING) return true;
-        if (place == PaneWallPage.WIDGETS) return true;
-        return place == PaneWallPage.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
+        if (place == PageKind.HOME) return true;
+        return place == PageKind.DISPLAY && layout.keyboardMode == KeyboardMode.OVERLAY;
+    }
+
+    /**
+     * The place a keyboard question is asked of, derived from what is in front now: the display's
+     * place is the Terminal with a display window in front of it, so a committed
+     * {@link PageKind#DISPLAY} stands only while that window is the one in front. Whatever
+     * left it unrecorded (a window closed, another window brought forward, the display gone), the
+     * answer is the terminal's again, and the stored Overlay/Resize choice, which is the display's
+     * alone, is not read. Only a stale display is demoted: arriving at one is the settle's to
+     * commit, never a pass mid-slide.
+     */
+    @NonNull
+    public static PageKind keyboardPlace(@NonNull PageKind committed,
+                                             boolean displayWindowInFront) {
+        return committed == PageKind.DISPLAY && !displayWindowInFront
+            ? PageKind.TERMINAL : committed;
+    }
+
+    /** {@link #overlays(PageKind, PlaceLayout)} for the place {@link #keyboardPlace} derives. */
+    public static boolean overlays(@NonNull PageKind committed, boolean displayWindowInFront,
+                                   @NonNull PlaceLayout layout) {
+        return overlays(keyboardPlace(committed, displayWindowInFront), layout);
+    }
+
+    /** Read once: {@code Element.values()} copies its array on every call. */
+    private static final Element[] ELEMENTS = Element.values();
+
+    /**
+     * Whether the content behind an overlaying keyboard's bed runs under the whole of it, top to
+     * bottom: true while no band stands over the keyboard along the bottom. The bands over it
+     * take their room at rest, below the content, and the keyboard rises from the top of them, so
+     * the strip of bed in front of their rest room has the wallpaper behind it, not the content.
+     * Bands standing under the keyboard stay under its bed and leave the content reaching it.
+     * Allocates nothing: asked on every keyboard material pass.
+     */
+    public static boolean contentUnderWholeBed(@NonNull PlaceLayout layout) {
+        for (Element element : ELEMENTS) {
+            if (EdgeStackPolicy.claimsBand(layout, element)
+                && EdgeStackPolicy.edgeOf(layout, element) == PlaceLayout.Edge.BOTTOM
+                && !EdgeStackPolicy.standsUnderKeyboard(layout, element))
+                return false;
+        }
+        return true;
+    }
+
+    /**
+     * Whether a move from {@code from} to {@code to} changes whether the keyboard floats, and so
+     * the room the content keeps: the pass that settles the move has to lay the content out again
+     * even when no slide held it, as when the display window goes off the Terminal and a
+     * terminal window takes its place.
+     */
+    public static boolean changesBetween(@NonNull PageKind from, @NonNull PageKind to,
+                                         @NonNull PlaceLayout layout) {
+        return overlays(from, layout) != overlays(to, layout);
     }
 
     /**
@@ -42,11 +96,111 @@ public final class KeyboardOverlayPolicy {
      * <p>Applied as a negative bottom margin on the content root, this hands back exactly the room
      * the keyboard took, so the content keeps the bounds it has with the keyboard closed and the
      * stack — the keyboard and the dock rows riding on top of it — draws over it. The dock's own
-     * rows still take their room from the content, in overlay mode as in resize mode.
+     * rows still take their room from the content, in overlay mode as in resize mode, except on a
+     * Home page ({@link #overlapPx}).
      */
     public static int contentOverlapPx(boolean overlays, boolean keyboardShown,
                                        int keyboardHeightPx) {
         return overlays && keyboardShown ? Math.max(0, keyboardHeightPx) : 0;
+    }
+
+    /**
+     * How far the content root reaches past the top of the accessory stack once the dock is
+     * counted too: on a Home page, where the dock floats over the grid, the whole stack and the
+     * margin under it, so the widget grid keeps its full height and the dock and the keyboard draw
+     * over it; everywhere else the keyboard's share alone, as {@link #contentOverlapPx} says.
+     */
+    public static int overlapPx(boolean dockOverlays, int stackHeightPx, int stackBottomMarginPx,
+                                int keyboardOverlapPx) {
+        return overlapPx(dockOverlays, stackHeightPx, stackBottomMarginPx, keyboardOverlapPx, 0);
+    }
+
+    /**
+     * The same, with the system keyboard's take on the content root counted
+     * ({@link #systemImeTakePx}): on a Home page the content reaches past it too, so the widget
+     * grid keeps the height it has with the keyboard down and the system keyboard, with the dock
+     * riding on it, covers the grid instead of squeezing it. Everywhere else the take stays the
+     * content's to give up, as it always was: the text there wants the room.
+     */
+    public static int overlapPx(boolean dockOverlays, int stackHeightPx, int stackBottomMarginPx,
+                                int keyboardOverlapPx, int systemImeTakePx) {
+        if (!dockOverlays) return Math.max(0, keyboardOverlapPx);
+        return Math.max(0, stackHeightPx) + Math.max(0, stackBottomMarginPx)
+            + Math.max(0, systemImeTakePx);
+    }
+
+    /**
+     * How much shorter the system keyboard leaves the content root. The root fits the system
+     * windows: a window that resizes for the keyboard pads its bottom by the keyboard
+     * ({@code rootFitBottomPx}, the legacy system-window inset) where it would otherwise pad it by
+     * the bars ({@code restFitBottomPx}, the navigation bar and any cutout below); a keyboard the
+     * insets miss is answered by the root's own bottom margin instead
+     * ({@code rootBottomMarginPx}). The sum is how far the root's bottom stands above where it
+     * stands with the keyboard down; 0 with it down.
+     */
+    public static int systemImeTakePx(int rootFitBottomPx, int restFitBottomPx,
+                                      int rootBottomMarginPx) {
+        return Math.max(0, rootFitBottomPx - Math.max(0, restFitBottomPx))
+            + Math.max(0, rootBottomMarginPx);
+    }
+
+    /**
+     * Where the dock's top stands on screen with no system keyboard under it, given the bottom of
+     * the accessory stack as the next layout leaves it ({@code stackBottomPx}) and how far a
+     * system keyboard has pushed the stack up ({@code imePushPx}). Home floats are laid out above
+     * this: the system keyboard, like the in-app one, is no resize of their room.
+     */
+    public static int homeDockRestTopPx(int stackBottomPx, int dockPx, int imePushPx) {
+        return stackBottomPx + Math.max(0, imePushPx) - Math.max(0, dockPx);
+    }
+
+    /**
+     * The band at the bottom of the widget pane the dock takes at rest (#104): on a Home page,
+     * where the content reaches under the whole stack ({@link #overlapPx}) and the dock floats over
+     * the grid, the dock's rows ({@code dockRestPx}, what the dock's layout reports for them, a
+     * bottom status band included) and the edge gap under them; the grid's rows end above it.
+     * Zero on the Terminal half, whose content already ends at the stack's top, and zero with no
+     * dock rows on screen.
+     *
+     * <p>The rest height, not the stack's: a keyboard, the system's or the in-app one, still floats
+     * over the grid with the dock riding on it, so it never re-cuts a widget on its way in or out.
+     * With the dock the same on both halves the last row stands in the same place either side of
+     * the seam.
+     */
+    public static int homeGridDockReservePx(boolean dockOverlays, int dockRestPx, int edgeGapPx) {
+        if (!dockOverlays || dockRestPx <= 0) return 0;
+        return dockRestPx + Math.max(0, edgeGapPx);
+    }
+
+    /**
+     * The top of what covers Home from below while a keyboard is up, on screen, or -1 while none
+     * is: the keyboard's true top, since the dock no longer rides it on Home
+     * ({@link HomeKeyboardCover}). For the in-app keyboard ({@code inAppKeyboardShown}) it is the
+     * top of its column: the keyboard and the bands under it, {@code keyboardColumnPx} high
+     * counting its bottom margin above the stack's bottom ({@code stackBottomPx}). For a system
+     * keyboard that pushes the stack up ({@code imePushPx}) it is the keyboard's own top
+     * ({@code systemImeTopPx}). Floats and terminal widgets on Home meet this edge, whichever
+     * keyboard it is.
+     */
+    public static int homeKeyboardTopPx(boolean inAppKeyboardShown, int imePushPx,
+                                        int stackBottomPx, int keyboardColumnPx,
+                                        int systemImeTopPx) {
+        if (inAppKeyboardShown) return Math.max(0, stackBottomPx - Math.max(0, keyboardColumnPx));
+        if (imePushPx > 0) return systemImeTopPx;
+        return -1;
+    }
+
+    /**
+     * The top of the stack while a keyboard is up, the dock riding on it.
+     *
+     * @deprecated The dock no longer rides the keyboard on Home (#309): slice 4 moves the caller
+     * to the five-argument form, which gives the keyboard's true top.
+     */
+    @Deprecated
+    public static int homeKeyboardTopPx(boolean inAppKeyboardShown, int imePushPx,
+                                        int stackBottomPx, int stackPx) {
+        if (!inAppKeyboardShown && imePushPx <= 0) return -1;
+        return Math.max(0, stackBottomPx - Math.max(0, stackPx));
     }
 
     /**
@@ -71,6 +225,19 @@ public final class KeyboardOverlayPolicy {
     public static int restReservationPx(int dockContentPx, int flushPaddingPx,
                                         boolean keyboardShown, boolean keyboardOverlays,
                                         int keyboardPx, int bottomMarginPx) {
+        return restReservationPx(false, dockContentPx, flushPaddingPx, keyboardShown,
+            keyboardOverlays, keyboardPx, bottomMarginPx);
+    }
+
+    /**
+     * The same, for a page whose dock may float over the content: a Home page's chrome takes no
+     * room at all, keyboard up or down.
+     */
+    public static int restReservationPx(boolean dockOverlays, int dockContentPx,
+                                        int flushPaddingPx, boolean keyboardShown,
+                                        boolean keyboardOverlays, int keyboardPx,
+                                        int bottomMarginPx) {
+        if (dockOverlays) return 0;
         int keyboard = keyboardShown ? Math.max(0, keyboardPx) : 0;
         int stackPx = Math.max(0, dockContentPx) + Math.max(0, flushPaddingPx) + keyboard;
         return contentReservationPx(stackPx, bottomMarginPx,

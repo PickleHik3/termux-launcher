@@ -1,7 +1,10 @@
 package com.termux.app.terminal;
 
 import android.app.Application;
+import androidx.test.core.app.ApplicationProvider;
 import android.os.Build;
+
+import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 
 import org.junit.Rule;
 import org.junit.Test;
@@ -109,5 +112,37 @@ public class MaterialColorExportWriteTest {
     public void aMissingFileNeverMatches() {
         assertFalse(MaterialTerminalColorScheme.alreadyOnDisk(
             new File(folder.getRoot(), "absent.properties").getAbsolutePath(), "a=1\n"));
+    }
+
+    /**
+     * The exported files describe exactly the palette the terminal was given: the solver's pair
+     * table moves slots 1, 4, 7 and 15, and a writer that re-derived them would hand shells and
+     * kitty a palette the contract test never saw. Checked on the properties text and the noctalia
+     * aliases, for the grid's seeds.
+     */
+    @Test
+    public void exportedAnsiValuesEqualTheSolvedPalette() {
+        MaterialTerminalColorScheme.Seeds[] seeds = {
+            new MaterialTerminalColorScheme.Seeds(0xFF0C141B, 0xFFDCE3ED, 0xFF93CCFF, 0xFFF2B8B5),
+            new MaterialTerminalColorScheme.Seeds(0xFFF8F9FF, 0xFF191C20, 0xFF3A608F, 0xFFBA1A1A)};
+        String[] ansiNames = {"black", "red", "green", "yellow", "blue", "magenta", "cyan", "white"};
+        for (MaterialTerminalColorScheme.Seeds seed : seeds) {
+            for (TerminalContrastLevel level : TerminalContrastLevel.values()) {
+                Properties palette = MaterialTerminalColorScheme.build(seed, level, 0, null);
+                Properties roles = MaterialTerminalColorScheme.createMaterialRoleProperties(
+                    ApplicationProvider.getApplicationContext(), palette, level);
+                String text = MaterialTerminalColorScheme.toPropertiesText(roles);
+                for (int slot = 0; slot < 16; slot++) {
+                    String solved = palette.getProperty("color" + slot);
+                    assertEquals("color" + slot + " at " + level.value, solved,
+                        roles.getProperty("terminal_color" + slot));
+                    assertTrue("color" + slot + " in the written text",
+                        text.contains("terminal_color" + slot + "=" + solved + "\n"));
+                    String alias = (slot < 8 ? "terminal_normal_" : "terminal_bright_")
+                        + ansiNames[slot % 8];
+                    assertEquals(alias + " at " + level.value, solved, roles.getProperty(alias));
+                }
+            }
+        }
     }
 }

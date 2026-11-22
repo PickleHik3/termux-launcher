@@ -18,6 +18,8 @@ import java.util.LinkedHashSet;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * An explicit load the runtime would refuse does not refuse a model that is already resident: the
@@ -26,6 +28,7 @@ import static org.junit.Assert.assertTrue;
  * and the memory budget are consulted rather than skipped by the injected-runtime shortcut.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TaiManagerResidentLoadTest {
     private static final String MODEL = "resident-chat";
 
@@ -44,8 +47,7 @@ public class TaiManagerResidentLoadTest {
         new TaiModelStore(context).upsertUserModel(chatModel(MODEL, "/nonexistent/tai-test/" + MODEL + ".litertlm"));
         manager = TaiManager.getInstance(context);
         runtime = new StubRuntime();
-        setField(manager, "runtimeProcess", true);
-        setField(manager, "runtime", runtime);
+        manager.useLocalRuntimeForTesting(runtime, true);
     }
 
     @Test
@@ -101,12 +103,6 @@ public class TaiManagerResidentLoadTest {
         );
     }
 
-    private static void setField(Object target, String name, Object value) throws Exception {
-        Field field = target.getClass().getDeclaredField(name);
-        field.setAccessible(true);
-        field.set(target, value);
-    }
-
     private static final class StubRuntime implements TaiRuntime {
         volatile String loadedModelId;
         int loads;
@@ -123,12 +119,7 @@ public class TaiManagerResidentLoadTest {
         @Override public JSONObject unload() throws JSONException { loadedModelId = null; return ok(); }
         @Override public JSONObject keepWarm(TaiModelSpec modelSpec, TaiRuntimeOptions options, int minutes) throws JSONException { return ok(); }
         @Override public JSONObject cancel() throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
+        @Override public JSONObject generate(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
 
         private static JSONObject ok() throws JSONException {
             return new JSONObject().put("ok", true);

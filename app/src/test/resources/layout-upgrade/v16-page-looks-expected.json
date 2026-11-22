@@ -1,0 +1,17 @@
+{
+  "prefs": {
+    "look.opacity@kind:home": 55,
+    "look.opacity@8": 10,
+    "look.opacity@1": 40,
+    "look.margin@1": 9
+  },
+  "prefs_absent": [
+    "look.corners.dock@kind:home",
+    "look.tint@kind:home",
+    "look.frost@kind:terminal",
+    "look.frost@kind:display",
+    "look.opacity@kind:terminal",
+    "look.opacity@kind:display",
+    "look.margin@kind:home"
+  ]
+}

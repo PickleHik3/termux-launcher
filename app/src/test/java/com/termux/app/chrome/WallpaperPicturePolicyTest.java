@@ -46,4 +46,18 @@ public class WallpaperPicturePolicyTest {
         assertTrue(WallpaperPicture.BEST_EFFORT.showsHint());
         assertTrue(WallpaperPicture.NO_STILL.showsHint());
     }
+
+    @Test
+    public void withShowWallpaperOffNoPictureIsSampled() {
+        for (WallpaperPicture picture : WallpaperPicture.values()) {
+            assertFalse(WallpaperPicturePolicy.sampleable(false, picture));
+        }
+    }
+
+    @Test
+    public void withShowWallpaperOnOnlyTheReadablePicturesAreSampled() {
+        assertTrue(WallpaperPicturePolicy.sampleable(true, WallpaperPicture.MATCHES_SCREEN));
+        assertTrue(WallpaperPicturePolicy.sampleable(true, WallpaperPicture.BEST_EFFORT));
+        assertFalse(WallpaperPicturePolicy.sampleable(true, WallpaperPicture.NO_STILL));
+    }
 }

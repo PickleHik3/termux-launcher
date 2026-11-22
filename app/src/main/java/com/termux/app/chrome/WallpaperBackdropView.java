@@ -124,6 +124,11 @@ public final class WallpaperBackdropView extends View {
      * dresses the glass, so the opacity sliders would otherwise show a pass late on the backdrop
      * while the root's background under it had already moved.
      */
+    /** The dim drawn over the frame now; a live recording of this view carries it. */
+    public int dimColor() {
+        return getVisibility() == VISIBLE && mFrame != null ? mDimColor : android.graphics.Color.TRANSPARENT;
+    }
+
     public void setDimColor(int dimColor) {
         if (mDimColor == dimColor) return;
         mDimColor = dimColor;
@@ -205,6 +210,9 @@ public final class WallpaperBackdropView extends View {
             && getWidth() > 0 && getHeight() > 0;
     }
 
+    /** Frame-source counter for the idle audit: wallpaperCrossfade. */
+    private static final com.termux.terminal.FrameProbe.Source FRAMES = com.termux.terminal.FrameProbe.source("wallpaperCrossfade");
+
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         Bitmap frame = mFrame;
@@ -222,6 +230,7 @@ public final class WallpaperBackdropView extends View {
             // geometry held, never across a rotation — so one dest rect draws either of them.
             drawFrame(canvas, previous, 255);
             drawFrame(canvas, frame, Math.round(255f * progress));
+            FRAMES.tick();
             postInvalidateOnAnimation();
         } else {
             mPreviousFrame = null;
@@ -231,7 +240,11 @@ public final class WallpaperBackdropView extends View {
         if (Color.alpha(mDimColor) > 0) canvas.drawRect(mDest, mDimPaint);
     }
 
-    private void drawFrame(@NonNull Canvas canvas, @NonNull Bitmap frame, int alpha) {
+    private void drawFrame(@NonNull Canvas canvas, @NonNull Bitmap held, int alpha) {
+        // A software canvas (a page picture, a snapshot) cannot draw a HARDWARE frame: it gets
+        // the frame's small software copy, scaled up to the same rect.
+        Bitmap frame = canvas.isHardwareAccelerated() ? held : HardwareFrame.readable(held);
+        if (frame == null) return;
         boolean sameSize = frame.getWidth() == mDest.width() && frame.getHeight() == mDest.height();
         // The frame was captured at exactly this size; drawing it 1:1 skips the filter, same as
         // before there was an alpha to set at all.

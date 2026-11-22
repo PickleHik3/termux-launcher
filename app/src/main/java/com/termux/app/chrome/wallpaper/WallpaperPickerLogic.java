@@ -57,6 +57,17 @@ public final class WallpaperPickerLogic {
         return !sameChoice(pending, stored);
     }
 
+    /**
+     * Whether Done does anything on the one card the page shows while the launcher is not the home
+     * app: a picture that differs from the stored Home one, or, with Also set as phone wallpaper
+     * ticked, the stored app-only picture itself, which then goes to the phone as well.
+     */
+    public static boolean launcherCardApplies(@Nullable WallpaperSlots.Choice pending,
+                                              @NonNull WallpaperSlots.State stored, boolean alsoPhone) {
+        if (pendingApplies(WallpaperSlots.Slot.HOME, pending, stored.home)) return true;
+        return alsoPhone && stored.appOnly && photoWithPicture(pending) && sameChoice(pending, stored.home);
+    }
+
     /** The Same as Home tile leads the strip only while the Lock preview is centred. */
     public static boolean showsSameAsHome(@NonNull WallpaperSlots.Slot centred) {
         return centred == WallpaperSlots.Slot.LOCK;

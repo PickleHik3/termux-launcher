@@ -60,9 +60,17 @@ public final class PlaceChromePolicy {
     }
 
     /**
-     * Whether the index is on screen, which is what keeps the scrub, the catalogue and the
-     * letters' ink alive. Since the minimised pull tab went, this is {@link #azRowShown}; both
-     * names stay because the callers ask two different questions.
+     * The alphabets index standing as its pull tab (the Dock card's A–Z Show, Pull tab): a tab
+     * on the screen's edge that brings the letters out over the content while it is held. It
+     * never rides the apps row, so its matches ride the floating strip.
+     */
+    public static boolean azTabShown(@NonNull PlaceLayout layout) {
+        return EdgeStackPolicy.isShown(layout, Element.AZ) && layout.azTab;
+    }
+
+    /**
+     * Whether the index is on screen in either form, a band or the pull tab, which is what keeps
+     * the scrub, the catalogue and the letters' ink alive.
      */
     public static boolean azIndexShown(@NonNull PlaceLayout layout) {
         return EdgeStackPolicy.isShown(layout, Element.AZ);

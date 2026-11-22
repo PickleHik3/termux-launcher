@@ -4,6 +4,7 @@ import android.annotation.SuppressLint;
 import android.content.ClipData;
 import android.content.ClipDescription;
 import android.content.ClipboardManager;
+import android.content.ContentResolver;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Matrix;
@@ -12,6 +13,7 @@ import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.ColorDrawable;
+import android.net.Uri;
 import android.opengl.GLES20;
 import android.os.Build;
 import android.os.Handler;
@@ -43,7 +45,12 @@ import androidx.core.math.MathUtils;
 import com.termux.x11.input.InputStub;
 import com.termux.x11.utils.SamsungDexUtils;
 
+import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.ThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.regex.PatternSyntaxException;
 
 import static java.nio.charset.StandardCharsets.UTF_8;
@@ -91,6 +98,8 @@ public class LorieView extends SurfaceView implements InputStub {
     private float inputSourceLeft = 0.f, inputSourceTop = 0.f;
     private float inputSourceWidth = 0.f, inputSourceHeight = 0.f;
     private boolean dimensionsFrozen = false;
+    /** Only a window change unlike the last one sent reaches the server; see UPSTREAM.md. */
+    private final WindowChangeGate windowChangeGate = new WindowChangeGate();
     boolean commitedText = false;
     private final InputConnection mConnection = new BaseInputConnection(this, false) {
         private CharSequence currentComposingText = null;
@@ -168,6 +177,8 @@ public class LorieView extends SurfaceView implements InputStub {
         }
 
         void sendKey(int k) {
+            // A launcher layer open over the display types first, as over a terminal.
+            if (activity != null && activity.offerKeyToLauncher(k)) return;
             LorieView.this.sendKeyEvent(0, k, true);
             LorieView.this.sendKeyEvent(0, k, false);
         }
@@ -205,6 +216,12 @@ public class LorieView extends SurfaceView implements InputStub {
          * But we can simply send text we want and erase it in the case if user does not need it.
          *
          * @noinspection SameReturnValue*/
+        /** Text for X, less whatever a launcher layer open over the display takes. */
+        void sendText(CharSequence text) {
+            String rest = activity == null ? text.toString() : activity.textLeftForX(text.toString());
+            if (!rest.isEmpty()) sendTextEvent(rest.getBytes(UTF_8));
+        }
+
         boolean replaceText(CharSequence newText, boolean reuse) {
             int oldLen = currentComposingText != null ? currentComposingText.length() : 0;
             int newLen = newText != null ? newText.length() : 0;
@@ -213,12 +230,12 @@ public class LorieView extends SurfaceView implements InputStub {
                 for (int i=0; i < oldLen - newLen; i++)
                     sendKey(KeyEvent.KEYCODE_DEL);
                 for (int i=oldLen; i<newLen; i++)
-                    sendTextEvent(String.valueOf(newText.charAt(i)).getBytes(UTF_8));
+                    sendText(String.valueOf(newText.charAt(i)));
             } else {
                 for (int i = 0; i < oldLen; i++)
                     sendKey(KeyEvent.KEYCODE_DEL);
                 if (newText != null)
-                    sendTextEvent(newText.toString().getBytes(UTF_8));
+                    sendText(newText);
             }
 
             currentComposingText = reuse ? newText : null;
@@ -347,8 +364,16 @@ public class LorieView extends SurfaceView implements InputStub {
     }
 
     public void triggerCallback() {
-        requestFocus();
+        takeFocus();
         updateViewport();
+    }
+
+    /**
+     * The view's own grab for the focus. The launcher can have something typed into open over the
+     * display — a layer, a text field — and the focus is then not ours to take back.
+     */
+    private void takeFocus() {
+        if (activity == null || activity.mayTakeFocus()) requestFocus();
     }
 
     /** Shows or hides the soft keyboard for this view, the same way focusing an editable field would. */
@@ -440,6 +465,8 @@ public class LorieView extends SurfaceView implements InputStub {
         else
             name = "external";
 
+        if (!windowChangeGate.shouldSend(p.x, p.y, framerate, name))
+            return;
         sendWindowChange(mNativeContext, p.x, p.y, framerate, name);
     }
 
@@ -662,6 +689,107 @@ public class LorieView extends SurfaceView implements InputStub {
             Log.d("CLIP", "sending clipboard contents: " + text);
     }
 
+    /**
+     * Reads and converts clipboard pictures for X, one at a time. Its thread ends when idle, so
+     * a launcher that never pastes a picture into X never keeps one.
+     */
+    private static final ThreadPoolExecutor CLIPBOARD_IMAGE_EXECUTOR = new ThreadPoolExecutor(
+            1, 1, 10, TimeUnit.SECONDS, new LinkedBlockingQueue<>(),
+            r -> new Thread(r, "X11ClipboardImage"));
+    static { CLIPBOARD_IMAGE_EXECUTOR.allowCoreThreadTimeOut(true); }
+
+    private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
+
+    /**
+     * An X client asked for the clipboard picture as {@code target} (called from native, on the
+     * main thread); {@code serial} names the clip the server was holding, and goes back with every
+     * chunk so the server can drop an answer for a clip that has since changed. The picture is
+     * read, and converted to PNG when that is what was asked and it is something else, off the
+     * main thread; the bytes are sent and dropped, never kept. The requester blocks on the answer,
+     * so every path answers, with no bytes when there is no picture to give.
+     */
+    @Keep void requestClipboardImage(String target, int serial) {
+        if (!connected() || target == null)
+            return;
+        ClipData clip = clipboardSyncEnabled ? clipboard.getPrimaryClip() : null;
+        String imageType = ClipboardImageTargets.imageType(mimeTypesOf(clip == null ? null : clip.getDescription()));
+        Uri uri = ClipboardImageTargets.offers(imageType, target) ? firstUriOf(clip) : null;
+        ContentResolver resolver = getContext().getContentResolver();
+        // A refusal goes through the executor too: answers must reach the server one after
+        // another, and one for another target in the middle of a picture would abandon it.
+        CLIPBOARD_IMAGE_EXECUTOR.execute(() -> {
+            byte[] bytes = uri == null ? new byte[0]
+                    : ClipboardImageTargets.bytesFor(resolver, uri, imageType, target);
+            sendClipboardImageInChunks(target, serial, bytes);
+        });
+    }
+
+    /**
+     * Sends {@code bytes} as chunks, one per main-thread message, so the main thread never writes
+     * more than one chunk at a time and its other events go between them in order. Runs on
+     * {@link #CLIPBOARD_IMAGE_EXECUTOR} and waits for the last chunk, so the next picture's chunks
+     * never interleave with these and the next picture is not read while these are held. Every
+     * step either posts the next one or ends the wait, so the wait always ends.
+     */
+    private void sendClipboardImageInChunks(String target, int serial, byte[] bytes) {
+        CountDownLatch done = new CountDownLatch(1);
+        MAIN_HANDLER.post(new Runnable() {
+            private int offset = 0;
+
+            @Override
+            public void run() {
+                boolean more = false;
+                try {
+                    if (!connected())
+                        return;
+                    int length = ClipboardImageTargets.chunkLength(bytes.length, offset);
+                    boolean last = offset + length >= bytes.length;
+                    // False: the chunk was cut short and the connection dropped; send no more.
+                    if (sendClipboardImageChunk(mNativeContext, target, serial, bytes, offset, length, last) && !last) {
+                        offset += length;
+                        more = MAIN_HANDLER.post(this);
+                    }
+                } finally {
+                    if (!more)
+                        done.countDown();
+                }
+            }
+        });
+        boolean interrupted = false;
+        while (true) {
+            try {
+                done.await();
+                break;
+            } catch (InterruptedException e) {
+                interrupted = true;
+            }
+        }
+        if (interrupted)
+            Thread.currentThread().interrupt();
+    }
+
+    @Nullable
+    private static String[] mimeTypesOf(@Nullable ClipDescription desc) {
+        if (desc == null)
+            return null;
+        String[] types = new String[desc.getMimeTypeCount()];
+        for (int i = 0; i < types.length; i++)
+            types[i] = desc.getMimeType(i);
+        return types;
+    }
+
+    @Nullable
+    private static Uri firstUriOf(@Nullable ClipData clip) {
+        if (clip == null)
+            return null;
+        for (int i = 0; i < clip.getItemCount(); i++) {
+            Uri uri = clip.getItemAt(i).getUri();
+            if (uri != null)
+                return uri;
+        }
+        return null;
+    }
+
     public void handleClipboardChange() {
         checkForClipboardChange();
     }
@@ -675,22 +803,28 @@ public class LorieView extends SurfaceView implements InputStub {
         // Below API 26 the clipboard carries no timestamp, so every change looks like a new one.
         long timestamp = desc == null || Build.VERSION.SDK_INT < Build.VERSION_CODES.O ? lastClipboardTimestamp + 1 : desc.getTimestamp();
         // Anything carrying text is offered to X. Upstream demands exactly one MIME type, which
-        // silently drops every copy from a browser (text/plain plus text/html).
-        if (clipboardSyncEnabled && desc != null &&
-                lastClipboardTimestamp < timestamp &&
-                (desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_PLAIN) ||
-                        desc.hasMimeType(ClipDescription.MIMETYPE_TEXT_HTML))) {
-            lastClipboardTimestamp = timestamp;
+        // silently drops every copy from a browser (text/plain plus text/html). A picture is
+        // offered too, as its own type and PNG; text alone keeps upstream's announce.
+        if (!clipboardSyncEnabled || desc == null || lastClipboardTimestamp >= timestamp)
+            return;
+        String[] types = mimeTypesOf(desc);
+        boolean hasText = ClipboardImageTargets.hasText(types);
+        List<String> imageTargets = ClipboardImageTargets.targetsFor(ClipboardImageTargets.imageType(types));
+        if (!hasText && imageTargets.isEmpty())
+            return;
+        lastClipboardTimestamp = timestamp;
+        if (imageTargets.isEmpty())
             sendClipboardAnnounce(mNativeContext);
-            Log.d("CLIP", "sending clipboard announce");
-        }
+        else
+            sendClipboardAnnounceTargets(mNativeContext, hasText, ClipboardImageTargets.announceList(imageTargets));
+        Log.d("CLIP", "sending clipboard announce" + (imageTargets.isEmpty() ? "" : " with " + imageTargets));
     }
 
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
 
-        requestFocus();
+        takeFocus();
 
         // Registration belongs to the page (setClipboardSyncActive), so a window that loses and
         // regains focus — the screen going off, a dialog over the wall — only re-checks what the
@@ -779,6 +913,9 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative private native void setClipboardSyncEnabled(long ptr, boolean enabled, boolean ignored);
     @FastNative private native void sendClipboardAnnounce(long ptr);
     @FastNative private native void sendClipboardEvent(long ptr, byte[] text);
+    // Plain natives: they may wait on a full socket and drop the connection (see UPSTREAM.md).
+    private native void sendClipboardAnnounceTargets(long ptr, boolean hasText, String imageTargets);
+    private native boolean sendClipboardImageChunk(long ptr, String target, int serial, byte[] data, int offset, int length, boolean last);
     @FastNative private native void sendWindowChange(long ptr, int width, int height, int framerate, String name);
     @FastNative private native void setViewport(long ptr, int x, int y, int width, int height, int expectedWidth, int expectedHeight, int hiddenBottom);
     @FastNative private native void setRendererZoom(long ptr, int percent);
@@ -788,7 +925,11 @@ public class LorieView extends SurfaceView implements InputStub {
     @FastNative private native void sendSync(long ptr, int serial);
 
     // Public API stays free of the native pointer; it's threaded through to an overload below.
-    public void connect(int fd) { connect(mNativeContext, fd); }
+    public void connect(int fd) {
+        // A new connection (or none) has heard no size yet.
+        windowChangeGate.forget();
+        connect(mNativeContext, fd);
+    }
     @FastNative private static native void connect(long ptr, int fd);
 
     // The zero check is the launcher's: a page of the pane wall is asked whether it is connected

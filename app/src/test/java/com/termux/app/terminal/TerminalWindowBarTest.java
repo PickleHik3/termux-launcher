@@ -29,6 +29,57 @@ import static org.junit.Assert.assertTrue;
 public class TerminalWindowBarTest {
 
     @Test
+    public void aMinimisedChipWearsASolidDotInItsTopEndCorner() {
+        android.content.Context context = ApplicationProvider.getApplicationContext();
+        TextView chip = new TextView(context);
+        chip.setTextColor(android.graphics.Color.argb(148, 200, 200, 200));
+        MinimisedDotDrawable.wear(chip, true);
+        android.graphics.drawable.Drawable dot = chip.getForeground();
+        assertTrue(dot instanceof MinimisedDotDrawable);
+        assertSame(dot, wearAgain(chip));
+        chip.measure(android.view.View.MeasureSpec.makeMeasureSpec(120, android.view.View.MeasureSpec.EXACTLY),
+            android.view.View.MeasureSpec.makeMeasureSpec(40, android.view.View.MeasureSpec.EXACTLY));
+        chip.layout(0, 0, 120, 40);
+        final float[] circle = new float[4];
+        final int[] drawn = {0};
+        chip.draw(new android.graphics.Canvas() {
+            @Override public void drawCircle(float cx, float cy, float r,
+                                             android.graphics.Paint paint) {
+                drawn[0]++;
+                circle[0] = cx; circle[1] = cy; circle[2] = r; circle[3] = paint.getAlpha();
+            }
+        });
+        assertEquals(1, drawn[0]);
+        assertFalse(dot.getBounds().isEmpty());
+        float density = context.getResources().getDisplayMetrics().density;
+        assertEquals(TerminalWindowBar.WindowItem.MINIMISED_DOT_DP * density / 2f, circle[2], 0.01f);
+        assertTrue(circle[0] > 60f && circle[1] < 20f);
+        assertEquals(255f, circle[3], 0f);
+        MinimisedDotDrawable.wear(chip, false);
+        assertEquals(null, chip.getForeground());
+    }
+
+    private static android.graphics.drawable.Drawable wearAgain(TextView chip) {
+        MinimisedDotDrawable.wear(chip, true);
+        return chip.getForeground();
+    }
+
+    @Test
+    public void aMinimisedFloatsChipIsDimmedAndSurvivesTheCopies() {
+        TerminalWindowBar.WindowItem open = new TerminalWindowBar.WindowItem("~", "home")
+            .withHomeFloat(0, "Home float, page 1");
+        TerminalWindowBar.WindowItem parked = open.withMinimised(true);
+        org.junit.Assert.assertEquals(1f, open.restAlpha(), 0f);
+        org.junit.Assert.assertEquals(TerminalWindowBar.WindowItem.MINIMISED_ALPHA,
+            parked.restAlpha(), 0f);
+        org.junit.Assert.assertNotEquals("the dot is part of what a chip draws", open, parked);
+        org.junit.Assert.assertTrue(parked.withBusy(true).withAttention(true).withDone(true)
+            .withProgress(5, false).withIcon(null).minimised);
+        org.junit.Assert.assertSame(parked, parked.withMinimised(true));
+        org.junit.Assert.assertFalse(parked.withMinimised(false).minimised);
+    }
+
+    @Test
     public void setWindows_marksSelectionAndDispatchesClicks() {
         TerminalWindowBar bar = new TerminalWindowBar(ApplicationProvider.getApplicationContext(), null);
         assertTrue(bar.getClipToPadding());
@@ -90,7 +141,7 @@ public class TerminalWindowBarTest {
         assertEquals(add.getPaddingTop(), add.getPaddingBottom());
         assertEquals(add.getHeight() / 2f, (add.getTop() + add.getBottom()) / 2f, .01f);
         assertEquals(add.getDrawable().getIntrinsicWidth(), add.getDrawable().getIntrinsicHeight());
-        assertEquals(Math.round(10f * bar.getResources().getDisplayMetrics().density),
+        assertEquals(Math.round(TerminalWindowBar.WINDOW_ICON_DP * bar.getResources().getDisplayMetrics().density),
             add.getDrawable().getIntrinsicWidth());
         assertEquals(0f, add.getTranslationY(), .01f);
     }
@@ -1041,6 +1092,59 @@ public class TerminalWindowBarTest {
         int rowHeight = Math.round(24f * bar.getResources().getDisplayMetrics().density);
         bar.measure(exact(240), exact(rowHeight));
         bar.layout(0, 0, 240, rowHeight);
+    }
+
+    @Test
+    public void markFollowsProgramStatusBeforeAnythingElse() {
+        TerminalWindowBar.WindowItem busyBell = new TerminalWindowBar.WindowItem("a", "a", true, true)
+            .withDone(true, true);
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, TerminalWindowBar.markFor(busyBell));
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, TerminalWindowBar.markFor(
+            busyBell.withStatus(status(TerminalWindowBar.WindowItem.Status.Kind.WORKING))));
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, TerminalWindowBar.markFor(
+            new TerminalWindowBar.WindowItem("a", "a").withStatus(
+                status(TerminalWindowBar.WindowItem.Status.Kind.BLOCKED))));
+        assertEquals(ChipWatermarkDrawable.Mark.FAILED, TerminalWindowBar.markFor(
+            new TerminalWindowBar.WindowItem("a", "a").withStatus(
+                status(TerminalWindowBar.WindowItem.Status.Kind.ERROR))));
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, TerminalWindowBar.markFor(
+            new TerminalWindowBar.WindowItem("a", "a").withStatus(
+                status(TerminalWindowBar.WindowItem.Status.Kind.DONE))));
+    }
+
+    @Test
+    public void markWithoutStatusIsUnchanged() {
+        assertEquals(ChipWatermarkDrawable.Mark.ATTENTION, TerminalWindowBar.markFor(
+            new TerminalWindowBar.WindowItem("a", "a", false, true)));
+        assertEquals(ChipWatermarkDrawable.Mark.DONE, TerminalWindowBar.markFor(
+            new TerminalWindowBar.WindowItem("a", "a").withDone(true, false)));
+        assertEquals(ChipWatermarkDrawable.Mark.NONE, TerminalWindowBar.markFor(
+            new TerminalWindowBar.WindowItem("a", "a")));
+    }
+
+    @Test
+    public void windowItemEqualityCoversStatus() {
+        TerminalWindowBar.WindowItem plain = new TerminalWindowBar.WindowItem("a", "a");
+        TerminalWindowBar.WindowItem working = plain.withStatus(
+            new TerminalWindowBar.WindowItem.Status(
+                TerminalWindowBar.WindowItem.Status.Kind.WORKING, "claude working"));
+        TerminalWindowBar.WindowItem same = plain.withStatus(
+            new TerminalWindowBar.WindowItem.Status(
+                TerminalWindowBar.WindowItem.Status.Kind.WORKING, "claude working"));
+        TerminalWindowBar.WindowItem other = plain.withStatus(
+            new TerminalWindowBar.WindowItem.Status(
+                TerminalWindowBar.WindowItem.Status.Kind.WORKING, "claude working 5%"));
+        assertFalse(plain.equals(working));
+        assertTrue(working.equals(same));
+        assertEquals(working.hashCode(), same.hashCode());
+        assertFalse(working.equals(other));
+        assertSame(plain, plain.withStatus(null));
+        assertSame(working, working.withStatus(same.status));
+    }
+
+    private static TerminalWindowBar.WindowItem.Status status(
+        TerminalWindowBar.WindowItem.Status.Kind kind) {
+        return new TerminalWindowBar.WindowItem.Status(kind, "x");
     }
 
     private static int exact(int size) {

@@ -64,7 +64,7 @@ public class BuiltinWidgetRangeClipTest {
         metrics.densityDpi = 420;
 
         List<String> clips = new ArrayList<>();
-        for (BuiltinWidgetStyle.Direction direction : BuiltinWidgetStyle.Direction.values()) {
+        for (BuiltinWidgetStyle.Numerals direction : BuiltinWidgetStyle.Numerals.values()) {
             BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(context, direction, false, null);
             for (BuiltinWidgetKind kind : BuiltinWidgetKind.values()) {
                 for (BuiltinWidgetSpan span : BuiltinWidgetSpan.values()) {
@@ -93,6 +93,57 @@ public class BuiltinWidgetRangeClipTest {
             }
         }
         assertTrue("clipped views:\n" + String.join("\n", clips), clips.isEmpty());
+    }
+
+    /**
+     * A tall Notes card on a tall cell is not zoomed: its text stays at its roles, the body at
+     * Body (emulator, build 7dbf41b90: the empty note's "Tap to write" drew near twice Body).
+     */
+    @Test public void aTallNotesCardKeepsItsTextAtItsRoles() {
+        Context context = RuntimeEnvironment.getApplication();
+        DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        metrics.density = DENSITY;
+        metrics.scaledDensity = DENSITY;
+        metrics.densityDpi = 420;
+        BuiltinWidgetStyle style = BuiltinWidgetStyle.resolve(context,
+            BuiltinWidgetStyle.Numerals.values()[0], false, null);
+        for (BuiltinWidgetSpan span : new BuiltinWidgetSpan[] {BuiltinWidgetSpan.TWO_BY_TWO,
+            BuiltinWidgetSpan.FOUR_BY_TWO}) {
+            BuiltinWidgetServices services = new BuiltinWidgetServices(context, HOST);
+            BuiltinWidgetView view = BuiltinWidgetFactory.create(context, BuiltinWidgetKind.NOTES,
+                services, style);
+            view.setPreview(true);
+            view.setCells(span.columns, span.rows);
+            view.bind(null);
+            int w = Math.round(span.widthDp * DENSITY);
+            int h = Math.round(span.heightDp * 1.6f * DENSITY);
+            view.measure(View.MeasureSpec.makeMeasureSpec(w, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(h, View.MeasureSpec.EXACTLY));
+            view.layout(0, 0, w, h);
+            float zoom = view.content().getScaleY();
+            assertEquals(span + ": not zoomed", 1f, zoom, 0f);
+            List<android.widget.TextView> texts = new ArrayList<>();
+            collectTexts(view, texts);
+            float title = WidgetTokens.Role.TITLE.sp * DENSITY;
+            for (android.widget.TextView text : texts) {
+                assertTrue(span + ": \"" + text.getText() + "\" at " + text.getTextSize() * zoom
+                    + "px", text.getTextSize() * zoom <= title + 0.5f);
+            }
+            services.destroy();
+        }
+    }
+
+    private static void collectTexts(@NonNull ViewGroup parent,
+                                     @NonNull List<android.widget.TextView> out) {
+        for (int i = 0; i < parent.getChildCount(); i++) {
+            View child = parent.getChildAt(i);
+            if (child.getVisibility() == View.GONE) continue;
+            if (child instanceof android.widget.TextView && !"GlyphView".equals(
+                child.getClass().getSimpleName())) {
+                out.add((android.widget.TextView) child);
+            }
+            if (child instanceof ViewGroup) collectTexts((ViewGroup) child, out);
+        }
     }
 
     private static void collectClips(@NonNull ViewGroup parent, @NonNull String where,

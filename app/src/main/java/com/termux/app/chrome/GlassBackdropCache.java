@@ -8,7 +8,10 @@ import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.color.utilities.ColorUtils;
+
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.EnumMap;
 import java.util.Map;
 
@@ -85,6 +88,14 @@ public final class GlassBackdropCache {
          * moves.
          */
         KEYBOARD,
+        /**
+         * A Home widget's card, one rect per widget like {@link #TERMINAL_PANE}. Its inks are the
+         * card's own roles on the page's ink polarity, so the widget takes that polarity and
+         * answers with a veil of its card's colour; it casts no vote of its own, since the card's
+         * light or dark follows the polarity it would be voting on. Memoised per rect by
+         * {@code ChromeInk}.
+         */
+        WIDGET,
     }
 
     /** Reads the pixels behind a band. Implemented by the chrome renderer, faked in tests. */
@@ -111,6 +122,16 @@ public final class GlassBackdropCache {
         @ColorInt
         default int sampleWallpaper(@NonNull Rect screenRect, int blurRadiusDp) {
             return sampleWallpaper(screenRect);
+        }
+
+        /**
+         * The lightness statistics of the wallpaper under {@code screenRect} ({@link Lightness}),
+         * read before the frost filter, which is what the even-out stage maps; null when nothing
+         * can be read or the sampler keeps no statistics. Never throws.
+         */
+        @Nullable
+        default Lightness sampleLightness(@NonNull Rect screenRect) {
+            return null;
         }
     }
 
@@ -170,6 +191,89 @@ public final class GlassBackdropCache {
     @ColorInt private int mFallbackWallpaper = Color.TRANSPARENT;
     private int mGeneration;
 
+    /**
+     * Asked before every read of the wallpaper: true while measuring is not allowed (a crossing).
+     * Frozen, the cache reads nothing: a band keeps the sample it holds, whatever rect it is now
+     * asked at, a band with none answers the fallback, and the uncached reads answer nothing; the
+     * next ask after the freeze lifts measures as it always did.
+     */
+    public interface Freeze {
+        boolean frozen();
+    }
+
+    @Nullable private Freeze mFreeze;
+
+    /**
+     * Which rectangle legibility reads (#297): {@link #adaptive()} true reads each item's own
+     * rect, false reads {@link #wholePicture()} once for everything ({@link LegibilityScope}).
+     */
+    public interface Scope {
+        boolean adaptive();
+
+        /** The whole still picture in the sampler's space; empty while nothing can be read. */
+        @NonNull Rect wholePicture();
+    }
+
+    @Nullable private Scope mScope;
+
+    /** The whole-picture memo, a few numbers: kept across {@link #invalidate} on purpose. */
+    @NonNull private final Rect mWholeRect = new Rect();
+    @ColorInt private int mWholeMean = UNREADABLE;
+    @Nullable private Lightness mWholeLightness;
+
+    /** Null is the per-rect behaviour: every read goes to the sampler at the rect it was asked at. */
+    public void setScope(@Nullable Scope scope) {
+        mScope = scope;
+    }
+
+    /**
+     * Drops the whole-picture memo: the wallpaper, the scheme or the scope moved. It survives
+     * {@link #invalidate}, which also runs on page changes.
+     */
+    public void forgetWholePicture() {
+        mWholeMean = UNREADABLE;
+        mWholeLightness = null;
+    }
+
+    private boolean shared() {
+        return mScope != null && !mScope.adaptive();
+    }
+
+    /** The scope's whole picture, the memo dropped when it is a different rect than last time. */
+    @NonNull
+    private Rect wholePicture() {
+        Rect whole = mScope.wholePicture();
+        if (!whole.equals(mWholeRect)) {
+            mWholeRect.set(whole);
+            forgetWholePicture();
+        }
+        return mWholeRect;
+    }
+
+    /** The mean the sampler reads for {@code rect}, or for the memoised whole picture when shared. */
+    private int readMean(@NonNull Sampler sampler, @NonNull Rect rect, int blurRadiusDp) {
+        if (!shared()) {
+            return blurRadiusDp < 0 ? sampler.sampleWallpaper(rect)
+                : sampler.sampleWallpaper(rect, blurRadiusDp);
+        }
+        Rect whole = wholePicture();
+        if (whole.isEmpty()) return UNREADABLE;
+        if (Color.alpha(mWholeMean) == 0) {
+            int read = sampler.sampleWallpaper(whole);
+            if (Color.alpha(read) == 0) return UNREADABLE;
+            mWholeMean = read;
+        }
+        return mWholeMean;
+    }
+
+    public void setFreeze(@Nullable Freeze freeze) {
+        mFreeze = freeze;
+    }
+
+    private boolean frozen() {
+        return mFreeze != null && mFreeze.frozen();
+    }
+
     /** The sampler to read pixels through; null parks the cache on its fallback. */
     public void setSampler(@Nullable Sampler sampler) {
         if (mSampler == sampler) return;
@@ -221,9 +325,30 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public int sampleUncached(@NonNull Rect rect) {
-        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
-        int read = mSampler.sampleWallpaper(rect);
+        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
+        int read = readMean(mSampler, rect, -1);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
+    }
+
+    /** {@link Sampler#sampleLightness}, remembered nowhere; null when there is nothing to read. */
+    @Nullable
+    public Lightness sampleLightnessUncached(@NonNull Rect rect) {
+        if (frozen()) return null;
+        return sampleLightnessPastFreeze(rect);
+    }
+
+    /**
+     * {@link #sampleLightnessUncached} even while frozen: the one read a crossing asks for as it
+     * begins (the arriving page's even-out, by then already frozen), never one per frame.
+     */
+    @Nullable
+    public Lightness sampleLightnessPastFreeze(@NonNull Rect rect) {
+        if (mSampler == null || rect.isEmpty()) return null;
+        if (!shared()) return mSampler.sampleLightness(rect);
+        Rect whole = wholePicture();
+        if (whole.isEmpty()) return null;
+        if (mWholeLightness == null) mWholeLightness = mSampler.sampleLightness(whole);
+        return mWholeLightness;
     }
 
     /**
@@ -233,8 +358,8 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public int sampleUncached(@NonNull Rect rect, int blurRadiusDp) {
-        if (mSampler == null || rect.isEmpty()) return UNREADABLE;
-        int read = mSampler.sampleWallpaper(rect, blurRadiusDp);
+        if (mSampler == null || rect.isEmpty() || frozen()) return UNREADABLE;
+        int read = readMean(mSampler, rect, blurRadiusDp);
         return Color.alpha(read) == 0 ? UNREADABLE : OnGlass.opaque(read);
     }
 
@@ -377,13 +502,14 @@ public final class GlassBackdropCache {
             entry = new Entry();
             entry.wallpaper = mFallbackWallpaper;
             mEntries.put(band, entry);
-        } else if (entry.sampled && entry.rect.equals(screenRect)) {
+            if (frozen()) return entry;
+        } else if (frozen() || (entry.sampled && entry.rect.equals(screenRect))) {
             return entry;
         }
         entry.rect.set(screenRect);
         int read = UNREADABLE;
         if (mSampler != null && !screenRect.isEmpty()) {
-            read = mSampler.sampleWallpaper(screenRect);
+            read = readMean(mSampler, screenRect, -1);
         }
         boolean sampled = Color.alpha(read) != 0;
         int wallpaper = sampled ? OnGlass.opaque(read) : mFallbackWallpaper;
@@ -434,14 +560,96 @@ public final class GlassBackdropCache {
      */
     @ColorInt
     public static int sampleBitmapRegion(@Nullable Bitmap bitmap, @NonNull Rect region) {
-        if (bitmap == null || bitmap.isRecycled()) return UNREADABLE;
+        return sampleBitmapRegion(bitmap, region, SAMPLE_GRID);
+    }
+
+    /** {@link #sampleBitmapRegion(Bitmap, Rect)} on a grid of at most {@code grid}&sup2; pixels. */
+    @ColorInt
+    public static int sampleBitmapRegion(@Nullable Bitmap bitmap, @NonNull Rect region, int grid) {
+        int[] pixels = readGrid(bitmap, region, grid);
+        if (pixels == null) return UNREADABLE;
+        return averageColor(pixels, 0, pixels.length);
+    }
+
+    /**
+     * The lightness of a band as the even-out stage needs it: the 2nd and 98th percentile and the
+     * mean of the pixels' HCT tone (CIE L*), and the mean colour. Read on the same grid, with the
+     * same clamping, as {@link #sampleBitmapRegion}; null where that gives {@link #UNREADABLE}.
+     */
+    @Nullable
+    public static Lightness sampleBitmapLightness(@Nullable Bitmap bitmap, @NonNull Rect region) {
+        return sampleBitmapLightness(bitmap, region, SAMPLE_GRID);
+    }
+
+    /** {@link #sampleBitmapLightness(Bitmap, Rect)} on a grid of at most {@code grid}&sup2; pixels. */
+    @Nullable
+    public static Lightness sampleBitmapLightness(@Nullable Bitmap bitmap, @NonNull Rect region,
+                                                  int grid) {
+        int[] pixels = readGrid(bitmap, region, grid);
+        if (pixels == null) return null;
+        int mean = averageColor(pixels, 0, pixels.length);
+        if (mean == UNREADABLE) return null;
+        double[] tones = new double[pixels.length];
+        int seen = 0;
+        double sum = 0d;
+        for (int pixel : pixels) {
+            if (Color.alpha(pixel) == 0) continue;
+            double tone = ColorUtils.lstarFromArgb(pixel);
+            tones[seen++] = tone;
+            sum += tone;
+        }
+        Arrays.sort(tones, 0, seen);
+        return new Lightness(percentile(tones, seen, 0.02d), sum / seen,
+            percentile(tones, seen, 0.98d), mean);
+    }
+
+    private static double percentile(@NonNull double[] sorted, int count, double fraction) {
+        double position = fraction * (count - 1);
+        int low = (int) Math.floor(position);
+        int high = Math.min(count - 1, low + 1);
+        return sorted[low] + (sorted[high] - sorted[low]) * (position - low);
+    }
+
+    /**
+     * A band's wallpaper lightness: the tail percentiles rather than the min and max, so one
+     * specular pixel does not set the range the even-out stage compresses.
+     */
+    public static final class Lightness {
+        public final double p2;
+        public final double mean;
+        public final double p98;
+        /** The mean colour, whose hue and chroma the even-out stage keeps. */
+        @ColorInt public final int meanColor;
+
+        public Lightness(double p2, double mean, double p98, @ColorInt int meanColor) {
+            this.p2 = p2;
+            this.mean = mean;
+            this.p98 = p98;
+            this.meanColor = meanColor;
+        }
+    }
+
+    /**
+     * The grid of ARGB pixels over {@code region}, or null for a recycled bitmap or empty region.
+     * A {@code HARDWARE} frame is read through its small sampling copy ({@link HardwareFrame}),
+     * over the same part of the picture; one with no copy reads as nothing.
+     */
+    @Nullable
+    private static int[] readGrid(@Nullable Bitmap frame, @NonNull Rect frameRegion, int grid) {
+        Bitmap bitmap = HardwareFrame.readable(frame);
+        if (bitmap == null) return null;
+        Rect region = frameRegion;
+        if (bitmap != frame) {
+            region = new Rect();
+            HardwareFrame.mapToReadable(frame, bitmap, frameRegion, region);
+        }
         int left = Math.max(0, region.left);
         int top = Math.max(0, region.top);
         int right = Math.min(bitmap.getWidth(), region.right);
         int bottom = Math.min(bitmap.getHeight(), region.bottom);
-        if (right <= left || bottom <= top) return UNREADABLE;
-        int columns = Math.min(SAMPLE_GRID, right - left);
-        int rows = Math.min(SAMPLE_GRID, bottom - top);
+        if (right <= left || bottom <= top) return null;
+        int columns = Math.min(grid, right - left);
+        int rows = Math.min(grid, bottom - top);
         int[] pixels = new int[columns * rows];
         int index = 0;
         for (int row = 0; row < rows; row++) {
@@ -453,6 +661,6 @@ public final class GlassBackdropCache {
                 pixels[index++] = bitmap.getPixel(x, y);
             }
         }
-        return averageColor(pixels, 0, pixels.length);
+        return pixels;
     }
 }

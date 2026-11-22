@@ -22,9 +22,29 @@ public interface ClipboardText {
     @Nullable
     String read();
 
-    /** Reads through {@link ShareUtils}, the same path the terminal's own paste already uses. */
+    /**
+     * A copy or cut made in a launcher text field. A source that only reads (a test's lambda)
+     * keeps nothing.
+     */
+    default void write(@NonNull String text) {}
+
+    /**
+     * Reads through {@link ShareUtils}, the same path the terminal's own paste already uses, and
+     * writes through {@link ClipboardHistory#copy}, as the terminal's own copy key does.
+     */
     @NonNull
     static ClipboardText forContext(@NonNull Context context) {
-        return () -> ShareUtils.getTextStringFromClipboardIfSet(context, true);
+        return new ClipboardText() {
+            @Nullable
+            @Override
+            public String read() {
+                return ShareUtils.getTextStringFromClipboardIfSet(context, true);
+            }
+
+            @Override
+            public void write(@NonNull String text) {
+                ClipboardHistory.copy(context, text);
+            }
+        };
     }
 }

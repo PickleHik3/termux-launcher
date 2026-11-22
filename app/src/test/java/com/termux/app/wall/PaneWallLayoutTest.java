@@ -2,6 +2,7 @@ package com.termux.app.wall;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -10,6 +11,7 @@ import android.os.Build;
 import android.view.View;
 import android.widget.FrameLayout;
 
+import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.Robolectric;
@@ -20,6 +22,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import android.app.Application;
+import com.termux.app.page.PageKind;
 
 /**
  * Page positions. Every place is laid out at the host's size and only ever moved, so a page
@@ -27,7 +31,7 @@ import java.util.List;
  * exact bounds it had before the wall existed.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 public class PaneWallLayoutTest {
 
     private static final int WIDTH = 1080;
@@ -38,6 +42,15 @@ public class PaneWallLayoutTest {
     private View widgets;
     private View terminal;
     private View display;
+
+    /**
+     * Every drag and swipe here starts from a new velocity tracker: a recycled one can carry an
+     * earlier test's movements under Robolectric ({@link FreshVelocityTrackers}).
+     */
+    @Before
+    public void freshVelocityTrackers() {
+        FreshVelocityTrackers.drainPool();
+    }
 
     private void build(Activity activity, boolean widgetsPage, boolean displayPage) {
         wall = new PaneWallLayout(activity);
@@ -51,51 +64,90 @@ public class PaneWallLayoutTest {
         wall.setPages(PaneWallPolicy.availablePages(!widgetsPage, widgetsPage, displayPage));
         // Every page view is registered whether or not the install has that place: a view whose
         // page is switched off must go away, not sit on top of the terminal.
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
-        wall.setPageView(PaneWallPage.WIDGETS, widgets);
-        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.setPageView(PageKind.TERMINAL, terminal);
+        wall.setPageView(PageKind.HOME, widgets);
+        wall.setPageView(PageKind.DISPLAY, display);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
     }
 
     @Test
-    public void aJumpAcrossTheRingBringsThePageInFromTheSideItSitsOn() {
-        // Widgets, Terminal, Display make a ring. From Display, Widgets is the place to the
-        // right, so a jump straight to it starts with the wall a whole width to the right - the
-        // page slides in from the right edge; from Widgets, Display is the place to the left and
-        // comes in from the left. The same sides a swipe reaches them from.
+    public void aFarJumpArrivesOneWidthOffOnTheSideItsCellLies() {
+        // Home, the Terminal page and the Display page are a line. From Display, Home is two
+        // cells to the left: a jump straight to it stands one width to the left and slides in
+        // from there (ADR 0016 §4, W3), never the real distance; from Home, Display arrives one
+        // width from the right. The same sides a swipe reaches them from.
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
-        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.goTo(PageKind.DISPLAY, false);
         assertEquals(0f, display.getTranslationX(), EPS);
 
-        wall.goTo(PaneWallPage.WIDGETS, true);
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
-        assertEquals("Widgets starts a width to the right and slides in from there",
-            WIDTH, wall.offsetPx(), EPS);
-        wall.goTo(PaneWallPage.DISPLAY, false);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
-
-        wall.goTo(PaneWallPage.WIDGETS, false);
-        wall.goTo(PaneWallPage.DISPLAY, true);
-        assertEquals("Display starts a width to the left and slides in from there",
+        wall.goTo(PageKind.HOME, true);
+        assertEquals(PageKind.HOME, wall.currentPage());
+        assertEquals("Home stands one width to the left and slides in from there",
             -WIDTH, wall.offsetPx(), EPS);
+        wall.goTo(PageKind.DISPLAY, false);
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
+
+        wall.goTo(PageKind.HOME, false);
+        wall.goTo(PageKind.DISPLAY, true);
+        assertEquals("Display stands one width to the right and slides in from there",
+            WIDTH, wall.offsetPx(), EPS);
 
         // Between neighbours the side is the plain one: from the terminal, Widgets is to the left
         // and Display to the right.
-        wall.goTo(PaneWallPage.TERMINAL, false);
-        wall.goTo(PaneWallPage.WIDGETS, true);
+        wall.goTo(PageKind.TERMINAL, false);
+        wall.goTo(PageKind.HOME, true);
         assertEquals(-WIDTH, wall.offsetPx(), EPS);
-        wall.goTo(PaneWallPage.TERMINAL, false);
-        wall.goTo(PaneWallPage.DISPLAY, true);
+        wall.goTo(PageKind.TERMINAL, false);
+        wall.goTo(PageKind.DISPLAY, true);
         assertEquals(WIDTH, wall.offsetPx(), EPS);
+    }
+
+    @Test
+    public void eachPageEndsAboveTheBottomByItsOwnInsetAndACrossingChangesNone() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.setPageBottomInsetPx(PageKind.TERMINAL, 300);
+        wall.setPageBottomInsetPx(PageKind.HOME, 0);
+        wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+        wall.layout(0, 0, WIDTH, HEIGHT);
+        PageKind[] pages = {PageKind.HOME, PageKind.DISPLAY, PageKind.TERMINAL};
+        int[] first = new int[3];
+        View[] views = {widgets, display, terminal};
+        // The display window stands in the Terminal's room (PageKind#roomKind).
+        int[] insets = {0, 300, 300};
+        // Each page stands above the bottom by its own inset, once it is the one on screen.
+        for (int i = 0; i < pages.length; i++) {
+            wall.goTo(pages[i], false);
+            wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+            wall.layout(0, 0, WIDTH, HEIGHT);
+            first[i] = views[i].getHeight();
+            assertEquals(pages[i].name(), HEIGHT - insets[i], first[i]);
+        }
+        // Across the seam and back, none moves: no page's height, hence no pane's size, changes.
+        for (int round = 0; round < 2; round++) {
+            for (int i = 0; i < pages.length; i++) {
+                wall.goTo(pages[i], false);
+                wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
+                wall.layout(0, 0, WIDTH, HEIGHT);
+                assertEquals(first[i], views[i].getHeight());
+            }
+        }
+        // A rest that did not change asks for no layout.
+        wall.layout(0, 0, WIDTH, HEIGHT);
+        wall.setPageBottomInsetPx(PageKind.TERMINAL, 300);
+        assertEquals(false, wall.isLayoutRequested());
+        assertEquals(300, wall.pageBottomInsetPx(PageKind.TERMINAL));
     }
 
     @Test
     public void theTerminalRestsOnScreenAndItsNeighboursRestOffIt() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
         assertEquals(0f, terminal.getTranslationX(), EPS);
         assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
         assertEquals(WIDTH, display.getTranslationX(), EPS);
@@ -115,14 +167,14 @@ public class PaneWallLayoutTest {
     @Test
     public void theTerminalPageStaysVisibleAndFadesInsteadOfGoingInvisible() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertEquals(View.VISIBLE, terminal.getVisibility());
         assertEquals(0f, terminal.getAlpha(), EPS);
         // The place actually on screen is unaffected: it is fully opaque, same as before.
         assertEquals(View.VISIBLE, widgets.getVisibility());
         assertEquals(1f, widgets.getAlpha(), EPS);
 
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         assertEquals(View.VISIBLE, terminal.getVisibility());
         assertEquals(1f, terminal.getAlpha(), EPS);
     }
@@ -144,19 +196,19 @@ public class PaneWallLayoutTest {
         // leave for the first time when the wall actually moves off it.
         assertTrue(reports.isEmpty());
 
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertEquals(Collections.singletonList(true), reports);
 
         // Moving between the two pages that are not the Terminal reports nothing new.
-        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.goTo(PageKind.DISPLAY, false);
         assertEquals(Collections.singletonList(true), reports);
 
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         assertEquals(Arrays.asList(true, false), reports);
     }
 
     /** Brings {@code page} on screen and runs the layout pass that follows. */
-    private void showAndLayOut(PaneWallPage page) {
+    private void showAndLayOut(PageKind page) {
         wall.goTo(page, false);
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
@@ -167,7 +219,7 @@ public class PaneWallLayoutTest {
     public void everyPageIsLaidOutAtTheHostsSize() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         // Pages parked off screen skip layout; each is laid out once it is on screen.
-        PaneWallPage[] pages = {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
+        PageKind[] pages = {PageKind.HOME, PageKind.TERMINAL, PageKind.DISPLAY};
         View[] views = {widgets, terminal, display};
         for (int i = 0; i < pages.length; i++) {
             showAndLayOut(pages[i]);
@@ -180,7 +232,7 @@ public class PaneWallLayoutTest {
     }
 
     @Test
-    public void theTerminalPagesMarginsAreEveryPagesMargins() {
+    public void theTerminalPagesMarginsAreEveryFramedPagesMargins() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         // The activity writes the surface editor's frame insets into the pane host's margins,
         // and checks they are margin params first — a plain ViewGroup's are not.
@@ -198,8 +250,8 @@ public class PaneWallLayoutTest {
         // The pages still sit one full wall width apart, frame and all.
         assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
         assertEquals(WIDTH, display.getTranslationX(), EPS);
-        PaneWallPage[] pages = {PaneWallPage.WIDGETS, PaneWallPage.TERMINAL, PaneWallPage.DISPLAY};
-        View[] views = {widgets, terminal, display};
+        PageKind[] pages = {PageKind.TERMINAL, PageKind.DISPLAY};
+        View[] views = {terminal, display};
         for (int i = 0; i < pages.length; i++) {
             showAndLayOut(pages[i]);
             View page = views[i];
@@ -208,10 +260,17 @@ public class PaneWallLayoutTest {
             assertEquals(WIDTH - 24, page.getRight());
             assertEquals(HEIGHT - 30, page.getBottom());
         }
+        // A Home page has no frame: it reaches the wall's edges, and its grid's rim is the
+        // Margin, so the opening's Margin is not paid twice.
+        showAndLayOut(PageKind.HOME);
+        assertEquals(0, widgets.getLeft());
+        assertEquals(0, widgets.getTop());
+        assertEquals(WIDTH, widgets.getRight());
+        assertEquals(HEIGHT, widgets.getBottom());
     }
 
     @Test
-    public void theOtherPagesStandAtTheFrameWhileTheTerminalKeepsItsBordersAir() {
+    public void theDisplayStandsAtTheFrameAndHomeAtTheWallsEdge() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         android.view.ViewGroup.MarginLayoutParams margins =
             (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
@@ -223,17 +282,19 @@ public class PaneWallLayoutTest {
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         wall.layout(0, 0, WIDTH, HEIGHT);
 
-        showAndLayOut(PaneWallPage.TERMINAL);
+        showAndLayOut(PageKind.TERMINAL);
         assertEquals(27, terminal.getLeft());
         assertEquals(13, terminal.getTop());
-        showAndLayOut(PaneWallPage.WIDGETS);
-        assertEquals(24, widgets.getLeft());
-        assertEquals(10, widgets.getTop());
-        assertEquals(WIDTH - 24, widgets.getRight());
-        assertEquals(HEIGHT - 30, widgets.getBottom());
-        showAndLayOut(PaneWallPage.DISPLAY);
+        showAndLayOut(PageKind.HOME);
+        assertEquals("Home stands at the wall's edge, not at the frame", 0, widgets.getLeft());
+        assertEquals(0, widgets.getTop());
+        assertEquals(WIDTH, widgets.getRight());
+        assertEquals(HEIGHT, widgets.getBottom());
+        showAndLayOut(PageKind.DISPLAY);
         assertEquals(24, display.getLeft());
+        assertEquals(10, display.getTop());
         assertEquals(WIDTH - 24, display.getRight());
+        assertEquals(HEIGHT - 30, display.getBottom());
     }
 
     @Test
@@ -244,6 +305,27 @@ public class PaneWallLayoutTest {
         assertEquals(-200f, terminal.getTranslationX(), EPS);
         assertEquals(WIDTH - 200f, display.getTranslationX(), EPS);
         assertTrue("a page sliding in has to be drawing", display.getVisibility() == View.VISIBLE);
+    }
+
+    @Test
+    public void anOffRestWallLogsEachPagePoseAndARestingWallLogsNone() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        com.termux.app.chrome.MotionLog.setEnabled(true);
+        com.termux.app.chrome.MotionLog.clear();
+        try {
+            wall.beginDrag();
+            wall.dragTo(-200f);
+            List<String> moving = com.termux.app.chrome.MotionLog.dump();
+            assertTrue(moving.toString(), moving.stream().anyMatch(l -> l.contains(" page-pose ")));
+            com.termux.app.chrome.MotionLog.clear();
+            wall.dragTo(0f);
+            for (String l : com.termux.app.chrome.MotionLog.dump()) {
+                assertFalse(l, l.contains(" page-pose "));
+            }
+        } finally {
+            com.termux.app.chrome.MotionLog.setEnabled(false);
+            com.termux.app.chrome.MotionLog.clear();
+        }
     }
 
     /**
@@ -273,7 +355,7 @@ public class PaneWallLayoutTest {
         wall.beginDrag();
         wall.dragTo(-100f);
         wall.endDrag(0f);
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
         assertEquals(0f, terminal.getTranslationX(), EPS);
     }
 
@@ -283,51 +365,100 @@ public class PaneWallLayoutTest {
         wall.beginDrag();
         wall.dragTo(-WIDTH * 0.5f);
         wall.endDrag(0f);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         assertEquals(0f, display.getTranslationX(), EPS);
         assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
     }
 
     @Test
-    public void threePagesWrapSoTheOuterPageHasANeighbourOnBothSides() {
+    public void aDragTowardAnotherWindowKeepsTheNextViewOutOfSight() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        wall.goTo(PaneWallPage.DISPLAY, false);
-        // From the rightmost place the Widgets page waits on the right, the shorter way round.
-        assertEquals(WIDTH, widgets.getTranslationX(), EPS);
-        assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
+        // Window 2 of 3: one more window on each side, inside the Terminal's view.
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public boolean hasInnerPage(PageKind page, int steps) {
+                return page == PageKind.TERMINAL;
+            }
+        });
+        wall.goTo(PageKind.TERMINAL, false);
         wall.beginDrag();
-        wall.dragTo(-200f);
-        assertEquals("the wrapped page slides in one to one, no rubber band",
-            WIDTH - 200f, widgets.getTranslationX(), EPS);
-        assertEquals(View.VISIBLE, widgets.getVisibility());
-        wall.endDrag(-10_000f);
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
-        assertEquals(0f, widgets.getTranslationX(), EPS);
+        wall.dragTo(-300f);
+        assertEquals("the drag moves one to one toward the next window", -300f,
+            terminal.getTranslationX(), EPS);
+        assertEquals("the Display page waits beyond the window coming in", 2 * WIDTH - 300f,
+            display.getTranslationX(), EPS);
+        wall.dragTo(300f);
+        assertEquals("and Home beyond the window before", -2 * WIDTH + 300f,
+            widgets.getTranslationX(), EPS);
+        wall.cancelDrag();
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test
-    public void aPageChangeAcrossTheRingSlidesTheShortWayRound() {
+    public void threePagesAreALineSoTheOuterPageResists() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        wall.goTo(PageKind.DISPLAY, false);
+        // From the rightmost page, Home waits two widths to the left: the row does not wrap.
+        assertEquals(-2 * WIDTH, widgets.getTranslationX(), EPS);
+        assertEquals(-WIDTH, terminal.getTranslationX(), EPS);
+        wall.beginDrag();
+        wall.dragTo(-200f);
+        assertEquals("a drag past the row's end rubber-bands",
+            -200f * PaneWallPolicy.EDGE_RESISTANCE, display.getTranslationX(), EPS);
+        wall.endDrag(-10_000f);
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
+        assertEquals(0f, display.getTranslationX(), EPS);
+    }
+
+    @Test
+    public void realCellsReplacingAKindOnlyListOfTheSameKindsAnnounceNothing() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
+        final int[] changes = {0};
+        wall.setListener(new PaneWallLayout.Listener() {
+            @Override public void onWallPageChanged(PageKind page) { changes[0]++; }
+        });
+        wall.setCells(java.util.Arrays.asList(
+            new PaneWallLayout.Cell(1, PageKind.HOME, "Home"),
+            new PaneWallLayout.Cell(2, PageKind.TERMINAL, "Terminal"),
+            new PaneWallLayout.Cell(3, PageKind.DISPLAY, "Display")));
+        assertEquals("the kind is unchanged, so nothing is announced", 0, changes[0]);
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
+        assertEquals(2, wall.currentPageId());
+
+        // A list without the current kind hands the wall over, and says so once.
+        wall.setCells(java.util.Arrays.asList(
+            new PaneWallLayout.Cell(1, PageKind.HOME, "Home"),
+            new PaneWallLayout.Cell(3, PageKind.DISPLAY, "Display")));
+        assertEquals(1, changes[0]);
+        assertEquals(PageKind.HOME, wall.currentPage());
+    }
+
+    @Test
+    public void aFarJumpSlidesOnlyThePageLeftAndThePageArriving() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertEquals(0f, widgets.getTranslationX(), EPS);
 
-        // Widgets -> Display: one step to the left on the ring, so the Display page starts one
-        // width to the left and the Widgets page slides off to the right.
-        wall.goTo(PaneWallPage.DISPLAY, true);
+        // Home -> Display: two cells to the right, but the Display page stands one width to the
+        // right of Home and the two slide as neighbours; the Terminal page between is out of the
+        // slide (ADR 0016 §4, W3).
+        wall.goTo(PageKind.DISPLAY, true);
         assertTrue(wall.isMoving());
-        assertEquals(-WIDTH, display.getTranslationX(), EPS);
+        assertEquals(WIDTH, display.getTranslationX(), EPS);
         assertEquals(0f, widgets.getTranslationX(), EPS);
+        assertTrue("the page between is never on screen",
+            terminal.getAlpha() == 0f || Math.abs(terminal.getTranslationX()) >= WIDTH);
     }
 
     @Test
     public void aTwoPageWallStillRubberBandsAtItsEnd() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), false, true);
-        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.goTo(PageKind.DISPLAY, false);
         wall.beginDrag();
         wall.dragTo(-WIDTH);
         wall.endDrag(-10_000f);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         assertEquals(0f, display.getTranslationX(), EPS);
     }
 
@@ -338,15 +469,15 @@ public class PaneWallLayoutTest {
         wall.dragTo(-200f);
 
         // A tile tap, wall.go or Home lands mid-drag.
-        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.goTo(PageKind.DISPLAY, false);
 
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         assertEquals(0f, display.getTranslationX(), EPS);
         // The rest of that finger is nobody's: the wall neither moves for it nor settles on it.
         wall.dragTo(300f);
         assertEquals(0f, display.getTranslationX(), EPS);
         wall.endDrag(-10_000f);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
     }
 
     @Test
@@ -367,16 +498,16 @@ public class PaneWallLayoutTest {
         wall.beginDrag();
         wall.dragTo(WIDTH * 0.5f);
         wall.endDrag(0f);
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test
     public void aPageThatGoesAwayHandsTheWallBackToTheTerminal() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        wall.goTo(PaneWallPage.WIDGETS, false);
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        wall.goTo(PageKind.HOME, false);
+        assertEquals(PageKind.HOME, wall.currentPage());
         wall.setPages(PaneWallPolicy.availablePages(true, false, false));
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
         assertEquals(0f, terminal.getTranslationX(), EPS);
     }
 
@@ -397,7 +528,7 @@ public class PaneWallLayoutTest {
     /** Ask for Widgets with a spring, then cut the spring before its first frame. */
     private void cutASlideToWidgets() {
         wall.setReducedMotion(false);
-        assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
+        assertTrue(wall.goTo(PageKind.HOME, true));
         assertTrue(wall.isMoving());
         wall.onDetachedFromWindow();
     }
@@ -408,19 +539,19 @@ public class PaneWallLayoutTest {
         cutASlideToWidgets();
         // At rest, the record names Widgets, but the terminal page never moved.
         assertFalse(wall.isMoving());
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(PageKind.HOME, wall.currentPage());
         assertEquals(0f, terminal.getTranslationX(), EPS);
         assertTrue(wall.isRestingOffPage());
-        assertTrue(wall.isPageOnScreen(PaneWallPage.TERMINAL));
-        assertFalse(wall.isPageOnScreen(PaneWallPage.WIDGETS));
+        assertTrue(wall.isPageOnScreen(PageKind.TERMINAL));
+        assertFalse(wall.isPageOnScreen(PageKind.HOME));
     }
 
     @Test
     public void theNextLayoutFinishesACutSlideAndSaysSo() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        final PaneWallPage[] settled = {null};
+        final PageKind[] settled = {null};
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public void onWallPageSettled(PaneWallPage page) { settled[0] = page; }
+            @Override public void onWallPageSettled(PageKind page) { settled[0] = page; }
         });
         cutASlideToWidgets();
         assertEquals(null, settled[0]);
@@ -433,15 +564,15 @@ public class PaneWallLayoutTest {
 
         assertFalse(wall.isRestingOffPage());
         assertEquals(0f, wall.offsetPx(), EPS);
-        assertEquals(PaneWallPage.WIDGETS, settled[0]);
+        assertEquals(PageKind.HOME, settled[0]);
         assertEquals(WIDTH, terminal.getTranslationX(), EPS);
         // The Terminal page stays VISIBLE off screen and is faded instead, so its display lists
         // survive the trip away (see PaneWallLayout#applyPagePositions and 707920f7).
         assertEquals(View.VISIBLE, terminal.getVisibility());
         assertEquals(0f, terminal.getAlpha(), EPS);
         assertEquals(0f, widgets.getTranslationX(), EPS);
-        assertTrue(wall.isPageOnScreen(PaneWallPage.WIDGETS));
-        assertFalse(wall.isPageOnScreen(PaneWallPage.TERMINAL));
+        assertTrue(wall.isPageOnScreen(PageKind.HOME));
+        assertFalse(wall.isPageOnScreen(PageKind.TERMINAL));
     }
 
     @Test
@@ -461,7 +592,7 @@ public class PaneWallLayoutTest {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         final int[] ended = {0};
         wall.setReducedMotion(false);
-        wall.nudgePage(PaneWallPage.TERMINAL, 300f, 380L, null, () -> ended[0]++);
+        wall.nudgePage(PageKind.TERMINAL, 300f, 380L, null, () -> ended[0]++);
         // The first frame has the page beside its place and the neighbours where they were.
         assertEquals(300f, terminal.getTranslationX(), EPS);
         assertEquals(-WIDTH, widgets.getTranslationX(), EPS);
@@ -472,12 +603,56 @@ public class PaneWallLayoutTest {
         assertEquals(1, ended[0]);
     }
 
+    /** A gate that only opens when the test says: on a view in a window, never drawn here. */
+    private static FirstDrawGate heldGate() {
+        Activity other = Robolectric.buildActivity(Activity.class).setup().get();
+        View content = new View(other);
+        other.setContentView(content);
+        FirstDrawGate gate = FirstDrawGate.afterNextDraw(content);
+        assertFalse(gate.isOpen());
+        return gate;
+    }
+
+    @Test
+    public void aHeldNudgeStandsAtItsStartUntilTheArrivingPageHasDrawn() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        FirstDrawGate gate = heldGate();
+        wall.nudgePage(PageKind.TERMINAL, 300f, 380L, null, () -> ended[0]++, gate);
+        assertEquals(300f, terminal.getTranslationX(), EPS);
+        assertEquals(0, ended[0]);
+        // The clock starts when the gate opens, and runs its whole course from there.
+        gate.open();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
+    @Test
+    public void aHeldNudgeCutShortEndsOnceAndItsGateDoesNotStartIt() {
+        build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
+        final int[] ended = {0};
+        wall.setReducedMotion(false);
+        FirstDrawGate gate = heldGate();
+        wall.nudgePage(PageKind.TERMINAL, 300f, 380L, null, () -> ended[0]++, gate);
+        wall.beginDrag();
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+        gate.open();
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(1, ended[0]);
+    }
+
     @Test
     public void aNudgeOnAPageTheWallHasPutAwayLeavesItAway() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
-        assertTrue(wall.goTo(PaneWallPage.WIDGETS, false));
+        assertTrue(wall.goTo(PageKind.HOME, false));
         final int[] ended = {0};
-        wall.nudgePage(PaneWallPage.TERMINAL, -WIDTH, 380L, null, () -> ended[0]++);
+        wall.nudgePage(PageKind.TERMINAL, -WIDTH, 380L, null, () -> ended[0]++);
         assertEquals(1, ended[0]);
         assertEquals(WIDTH, terminal.getTranslationX(), EPS);
         assertEquals(View.VISIBLE, terminal.getVisibility());
@@ -488,7 +663,7 @@ public class PaneWallLayoutTest {
     public void aNudgeOnAPageTheWallDoesNotHaveJustRunsItsEnding() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), false, true);
         final int[] ended = {0};
-        wall.nudgePage(PaneWallPage.WIDGETS, 300f, 380L, null, () -> ended[0]++);
+        wall.nudgePage(PageKind.HOME, 300f, 380L, null, () -> ended[0]++);
         assertEquals(1, ended[0]);
         assertEquals(0f, terminal.getTranslationX(), EPS);
     }
@@ -508,12 +683,12 @@ public class PaneWallLayoutTest {
         buildWithContent();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         // A flat drag with no press: the same leave, but nothing tips.
         wall.beginDrag();
         assertTrue(wall.tiltPages().isEmpty());
-        assertTrue(wall.goTo(PaneWallPage.TERMINAL, false));
+        assertTrue(wall.goTo(PageKind.TERMINAL, false));
 
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
         letTheHoldElapse();
@@ -528,7 +703,7 @@ public class PaneWallLayoutTest {
         // A plain Display page here, parked the whole drag: it has no stand-in to tip.
         assertEquals("the Display page never tips", 0f, display.getRotationY(), EPS);
         // A jump lands the wall at rest: flat, and the layer gone.
-        assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
+        assertTrue(wall.goTo(PageKind.DISPLAY, false));
         assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
@@ -536,9 +711,9 @@ public class PaneWallLayoutTest {
 
     /** Lays every page out once, as the pages a finger has visited are: a plank needs a size. */
     private void layOutEveryPage() {
-        showAndLayOut(PaneWallPage.WIDGETS);
-        showAndLayOut(PaneWallPage.DISPLAY);
-        showAndLayOut(PaneWallPage.TERMINAL);
+        showAndLayOut(PageKind.HOME);
+        showAndLayOut(PageKind.DISPLAY);
+        showAndLayOut(PageKind.TERMINAL);
     }
 
     @Test
@@ -547,7 +722,7 @@ public class PaneWallLayoutTest {
         layOutEveryPage();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         // Held by the left border and pulled right: the Widgets page comes in from the left, and
         // the finger stands on the seam between the two.
@@ -575,7 +750,7 @@ public class PaneWallLayoutTest {
             3016L));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 404f, HEIGHT / 2f,
             3032L));
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(PageKind.HOME, wall.currentPage());
         assertTrue(wall.isMoving());
         assertTrue("still tipped as the settle starts", Math.abs(terminal.getRotationY()) > 1f);
         assertTrue(Math.signum(terminal.getRotationY()) == Math.signum(leavingAtLift));
@@ -589,32 +764,6 @@ public class PaneWallLayoutTest {
         assertEquals(View.LAYER_TYPE_NONE, widgets.getLayerType());
     }
 
-    /**
-     * Changed with the Display's stand-in (2026-09-29): the listener no longer refuses the Display
-     * a tip, the wall decides. A Display page that cannot stand a copy in for its surface — a
-     * plain view here, as a page that is not a {@link SurfacePage} — keeps what a SurfaceView
-     * allows: no tilt, no layer. The stand-in's own tests are further down.
-     */
-    @Test
-    public void theDisplayPageNeverTipsNorTakesALayerEvenWithLeave() {
-        buildWithContent();
-        layOutEveryPage();
-        wall.setReducedMotion(false);
-        wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
-        });
-        // Held by the right border and pulled left: the Display page comes in from the right.
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
-            HEIGHT / 2f, 0L));
-        letTheHoldElapse();
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH - 304f,
-            HEIGHT / 2f, 400L));
-        assertTrue(terminal.getRotationY() > 0f);
-        assertFalse(wall.tiltPages().contains(display));
-        assertEquals(0f, display.getRotationY(), EPS);
-        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
-    }
-
     @Test
     public void theSlideCarriesOnFromTheReleaseAndNeverPassesItsRest() {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
@@ -622,7 +771,7 @@ public class PaneWallLayoutTest {
         wall.beginDrag();
         wall.dragTo(-300f);
         wall.endDrag(-3000f);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         // The commit moved the record a width on; the pixels are where the finger left them.
         assertEquals(WIDTH - 300f, wall.offsetPx(), EPS);
         assertEquals(-300f, terminal.getTranslationX(), EPS);
@@ -652,11 +801,11 @@ public class PaneWallLayoutTest {
         assertEquals(-300f, terminal.getTranslationX(), EPS);
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
-        assertTrue(wall.goTo(PaneWallPage.TERMINAL, false));
+        assertTrue(wall.goTo(PageKind.TERMINAL, false));
 
         // With leave but the phone told to hold still, the same: reduced motion tips nothing.
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         wall.setReducedMotion(true);
         wall.beginDrag();
@@ -721,26 +870,26 @@ public class PaneWallLayoutTest {
         wall.setGesturesEnabled(true);
         assertEquals(expected, wall.getSystemGestureExclusionRects());
 
-        // The stretches follow the page that is up. With the terminal's own frame air on, the
-        // other places stand that much nearer the wall, so Display's zone is MARGIN - AIR wide;
-        // and a page change re-lays nothing, so the change itself has to republish.
+        // The stretches follow the page that is up. A Display page owns its picture to its rim
+        // since A3b (BorderReach.ownsContent), so its borders keep to the air beside it and its
+        // stretch is narrower than the terminal's; and a page change re-lays nothing, so the
+        // change itself has to republish.
         final int air = 4;
         wall.setTerminalFrameAirPx(air);
         relayout();
         assertEquals(expected, wall.getSystemGestureExclusionRects());
-        wall.goTo(PaneWallPage.DISPLAY, false);
+        wall.goTo(PageKind.DISPLAY, false);
         relayout();
         List<android.graphics.Rect> onDisplay = Arrays.asList(
-            new android.graphics.Rect(0, centre - 72, MARGIN - air + SIDE_REACH, centre + 72),
-            new android.graphics.Rect(WIDTH - MARGIN + air - SIDE_REACH, centre - 72, WIDTH,
-                centre + 72));
+            new android.graphics.Rect(0, centre - 72, MARGIN - air, centre + 72),
+            new android.graphics.Rect(WIDTH - MARGIN + air, centre - 72, WIDTH, centre + 72));
         assertEquals(onDisplay, wall.getSystemGestureExclusionRects());
         // Back to the terminal: no layout runs, and the stretches still come back to its zone.
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         assertEquals(expected, wall.getSystemGestureExclusionRects());
 
         // A wall of one place has nowhere to page to, so the back swipe keeps the edge.
-        wall.setPages(Collections.singletonList(PaneWallPage.TERMINAL));
+        wall.setPages(Collections.singletonList(PageKind.TERMINAL));
         assertTrue(wall.getSystemGestureExclusionRects().isEmpty());
     }
 
@@ -775,9 +924,9 @@ public class PaneWallLayoutTest {
         wall.addView(display);
         wall.setReducedMotion(true);
         wall.setPages(PaneWallPolicy.availablePages(false, true, true));
-        wall.setPageView(PaneWallPage.TERMINAL, terminal);
-        wall.setPageView(PaneWallPage.WIDGETS, widgets);
-        wall.setPageView(PaneWallPage.DISPLAY, display);
+        wall.setPageView(PageKind.TERMINAL, terminal);
+        wall.setPageView(PageKind.HOME, widgets);
+        wall.setPageView(PageKind.DISPLAY, display);
         android.view.ViewGroup.MarginLayoutParams margins =
             (android.view.ViewGroup.MarginLayoutParams) terminal.getLayoutParams();
         margins.setMargins(marginPx, marginPx, marginPx, marginPx);
@@ -813,7 +962,7 @@ public class PaneWallLayoutTest {
         assertEquals(-600f, terminal.getTranslationX(), EPS);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 600f,
             40f, 420L));
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         assertTrue("the page's content never heard the finger", content.actions.isEmpty());
     }
 
@@ -860,7 +1009,7 @@ public class PaneWallLayoutTest {
         }
         assertTrue(keyboardSwipes.isEmpty());
         assertTrue(statusSwipes.isEmpty());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     /**
@@ -884,7 +1033,7 @@ public class PaneWallLayoutTest {
                 android.view.MotionEvent.ACTION_CANCEL), content.actions);
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, x, HEIGHT / 2f,
                 t + 2000L));
-            assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+            assertEquals(PageKind.TERMINAL, wall.currentPage());
             t += 5000L;
         }
         float[] past = {terminal.getLeft() + 3f, terminal.getRight() - 4f};
@@ -928,7 +1077,7 @@ public class PaneWallLayoutTest {
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 600f,
             40f, 420L));
         assertEquals(2, content.actions.size());
-        assertEquals("past the commit distance: the place on the right", PaneWallPage.DISPLAY,
+        assertEquals("past the commit distance: the place on the right", PageKind.DISPLAY,
             wall.currentPage());
         assertFalse(wall.isDragging());
         assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
@@ -952,7 +1101,7 @@ public class PaneWallLayoutTest {
             android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_MOVE,
             android.view.MotionEvent.ACTION_UP), content.actions);
         assertEquals("the wall never moved", 0f, terminal.getTranslationX(), EPS);
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test
@@ -995,7 +1144,7 @@ public class PaneWallLayoutTest {
         letTheHoldElapse();
         assertTrue(wall.isDragging());
         // A key or wall.go lands mid-drag.
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertEquals(BorderDrag.Claim.ABANDONED, wall.borderDragClaim());
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f - 300f,
             HEIGHT - 1f, 400L));
@@ -1003,7 +1152,7 @@ public class PaneWallLayoutTest {
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 300f,
             HEIGHT - 1f, 420L));
         assertTrue("and reaches no content", content.actions.isEmpty());
-        assertEquals(PaneWallPage.WIDGETS, wall.currentPage());
+        assertEquals(PageKind.HOME, wall.currentPage());
         assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
     }
 
@@ -1019,7 +1168,7 @@ public class PaneWallLayoutTest {
             420L));
         assertFalse(wall.isDragging());
         assertEquals(0f, terminal.getTranslationX(), EPS);
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     // ---- The slide off the top and bottom borders ---------------------------------------------
@@ -1043,7 +1192,7 @@ public class PaneWallLayoutTest {
         assertEquals(-600f, terminal.getTranslationX(), EPS);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, x - 700f, y - 300f,
             120L));
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         assertFalse(wall.isDragging());
         assertEquals(BorderDrag.Claim.NONE, wall.borderDragClaim());
         assertTrue("the page's content never heard the finger", content.actions.isEmpty());
@@ -1065,26 +1214,31 @@ public class PaneWallLayoutTest {
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, x + 700f, y, 100L));
         assertEquals(600f, terminal.getTranslationX(), EPS);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, x + 700f, y, 120L));
-        assertEquals("pulled right: the place on the left", PaneWallPage.WIDGETS,
+        assertEquals("pulled right: the place on the left", PageKind.HOME,
             wall.currentPage());
 
         // Short and slow, by the same rules a held drag lands by: back where it was.
-        wall.goTo(PaneWallPage.TERMINAL, false);
+        wall.goTo(PageKind.TERMINAL, false);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, x, y, 1000L));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, x - 100f, y, 1050L));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, x - 150f, y, 2000L));
         assertEquals(-50f, terminal.getTranslationX(), EPS);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, x - 150f, y, 3000L));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, x - 150f, y, 4000L));
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
         assertEquals(0f, terminal.getTranslationX(), EPS);
         assertTrue(statusSwipes.isEmpty());
     }
 
+    /**
+     * The swipe back from a window: a plain sideways drag off a side border, in the air beside
+     * the page or its clearance, takes the wall at once with no hold. Past the clearance, where
+     * the minimum band reaches into a flush page's text, the drag stays the content's.
+     */
     @Test
-    public void aSidewaysStartFromASideBorderStillWaitsForTheHold() {
+    public void aSidewaysStartFromASideBorderPagesAtOnce() {
         buildWithContent();
-        float[] xs = {4f, WIDTH - 4f};
+        float[] xs = {4f, MARGIN + SIDE_REACH - 1f, WIDTH - 4f, WIDTH - MARGIN - SIDE_REACH};
         long t = 0L;
         for (float x : xs) {
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, x, HEIGHT / 2f, t));
@@ -1092,23 +1246,37 @@ public class PaneWallLayoutTest {
             float to = x < WIDTH / 2f ? x + 200f : x - 200f;
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, to, HEIGHT / 2f,
                 t + 50L));
-            assertEquals("the back swipe's edge: given up", BorderDrag.Claim.ABANDONED,
+            assertEquals(x + ": the wall's, no hold", BorderDrag.Claim.PAGING,
                 wall.borderDragClaim());
-            assertFalse(wall.isDragging());
-            letTheHoldElapse();
-            assertFalse(wall.isDragging());
+            assertTrue(wall.isDragging());
             wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, to, HEIGHT / 2f,
                 t + 1000L));
-            assertEquals(0f, terminal.getTranslationX(), EPS);
+            letTheMotionSettle();
+            wall.goTo(PageKind.TERMINAL, false);
             t += 5000L;
         }
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+
+        buildWithContent(0);
+        float inText = SIDE_REACH + 2f;
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, inText, HEIGHT / 2f,
+            t));
+        assertEquals(BorderDrag.Claim.PENDING, wall.borderDragClaim());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, inText + 200f,
+            HEIGHT / 2f, t + 50L));
+        assertEquals("the band over the text: given up", BorderDrag.Claim.ABANDONED,
+            wall.borderDragClaim());
+        letTheHoldElapse();
+        assertFalse(wall.isDragging());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, inText + 200f,
+            HEIGHT / 2f, t + 1000L));
+        assertEquals(0f, terminal.getTranslationX(), EPS);
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test
     public void aWallOfOnePlaceNeverSlidesButStillSwipes() {
         buildWithContent();
-        wall.setPages(Collections.singletonList(PaneWallPage.TERMINAL));
+        wall.setPages(Collections.singletonList(PageKind.TERMINAL));
         listenForKeyboardSwipes();
         float y = HEIGHT - MARGIN / 2f;
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, y, 0L));
@@ -1131,7 +1299,7 @@ public class PaneWallLayoutTest {
         buildWithContent();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         float y = HEIGHT - MARGIN / 2f;
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, y, 0L));
@@ -1151,7 +1319,7 @@ public class PaneWallLayoutTest {
     public void theBorderDragEngagesThePlankAndAFlatDragDoesNot() {
         buildWithContent();
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         // A flat drag with no press: the page slides flat.
         wall.beginDrag();
@@ -1187,8 +1355,8 @@ public class PaneWallLayoutTest {
         final List<Float> frameScales = new ArrayList<>();
         // No plank: the sink is not a Fancier Glass motion.
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public void onPageSinkChanged(PaneWallPage page, float scale) {
-                if (page == PaneWallPage.TERMINAL) frameScales.add(scale);
+            @Override public void onPageSinkChanged(PageKind page, float scale) {
+                if (page == PageKind.TERMINAL) frameScales.add(scale);
             }
         });
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
@@ -1214,7 +1382,7 @@ public class PaneWallLayoutTest {
         assertEquals(1f, terminal.getScaleX(), EPS);
         assertEquals(1f, terminal.getScaleY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
         // The terminal's frame line was told every step, and told it was back at rest.
         assertTrue(frameScales.contains(PageSink.SCALE));
         assertEquals(1f, frameScales.get(frameScales.size() - 1), EPS);
@@ -1225,7 +1393,7 @@ public class PaneWallLayoutTest {
         buildWithContent();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         // The right border, half way down.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
@@ -1255,39 +1423,11 @@ public class PaneWallLayoutTest {
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
     }
 
-    /**
-     * A Display page with no stand-in (a plain view, not a {@link SurfacePage}) sinks by scale
-     * alone, as it did before there was one: its picture would be a SurfaceView a layer strands.
-     * With a stand-in up it takes the layer and the dim (see
-     * {@link #theDisplaysStandInSinksOnALayerAndTheRestGivesTheSurfaceBack}).
-     */
-    @Test
-    public void theDisplayPageSinksWithoutALayer() {
-        buildWithContent();
-        // Parked off screen at the first layout, the Display page is laid out once it is shown.
-        showAndLayOut(PaneWallPage.DISPLAY);
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
-        wall.setReducedMotion(false);
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
-        letTheHoldElapse();
-        letTheMotionSettle();
-        assertEquals(display, wall.sinkPage());
-        assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
-        assertEquals("its picture is a SurfaceView a layer would strand", View.LAYER_TYPE_NONE,
-            display.getLayerType());
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
-            3000L));
-        letTheMotionSettle();
-        assertNull(wall.sinkPage());
-        assertEquals(1f, display.getScaleX(), EPS);
-        assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
-    }
-
     @Test
     public void reducedMotionSinksNothing() {
         buildWithContent();
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         // buildWithContent leaves motion reduced.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
@@ -1309,7 +1449,7 @@ public class PaneWallLayoutTest {
         letTheHoldElapse();
         letTheMotionSettle();
         assertEquals(terminal, wall.sinkPage());
-        assertTrue(wall.goTo(PaneWallPage.WIDGETS, false));
+        assertTrue(wall.goTo(PageKind.HOME, false));
         assertNull(wall.sinkPage());
         assertEquals(1f, terminal.getScaleX(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
@@ -1433,14 +1573,14 @@ public class PaneWallLayoutTest {
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 600f,
             HEIGHT - 300f, 420L));
         assertTrue(keyboardSwipes.isEmpty());
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
     }
 
     @Test
     public void aWallOfOnePlaceStillHasTheKeyboardSwipeAndLeavesHoldsToTheContent() {
         // Margin 0, where the band reaches over the content's last row.
         buildWithContent(0);
-        wall.setPages(Collections.singletonList(PaneWallPage.TERMINAL));
+        wall.setPages(Collections.singletonList(PageKind.TERMINAL));
         listenForKeyboardSwipes();
         // The swipe.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
@@ -1510,7 +1650,7 @@ public class PaneWallLayoutTest {
             android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_UP),
             content.actions);
         assertTrue(keyboardSwipes.isEmpty());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
 
         // A swipe up from the same row is the content's scroll, never the keyboard's.
         content.actions.clear();
@@ -1552,7 +1692,7 @@ public class PaneWallLayoutTest {
         assertEquals(-600f, terminal.getTranslationX(), EPS);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f - 600f, y,
             420L));
-        assertEquals(PaneWallPage.DISPLAY, wall.currentPage());
+        assertEquals(PageKind.DISPLAY, wall.currentPage());
         assertTrue(keyboardSwipes.isEmpty());
     }
 
@@ -1768,7 +1908,7 @@ public class PaneWallLayoutTest {
             HEIGHT - 4f - 600f, 3000L));
         assertTrue(wall.isKeyboardRevealEngaged());
         // A tile or wall.go before the settle lands: the keyboard lands first, where it was going.
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertEquals(Collections.singletonList(true), revealEnds);
         assertEquals(1f, lastReveal(), EPS);
         assertFalse(wall.isKeyboardRevealEngaged());
@@ -1909,7 +2049,7 @@ public class PaneWallLayoutTest {
             android.view.MotionEvent.ACTION_MOVE, android.view.MotionEvent.ACTION_UP),
             content.actions);
         assertTrue(statusSwipes.isEmpty());
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
 
         // A swipe down from the same row is the content's scroll, never the status bar's.
         content.actions.clear();
@@ -2069,7 +2209,7 @@ public class PaneWallLayoutTest {
             1000L));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, WIDTH / 2f, 4f + 120f,
             1050L));
-        assertTrue(wall.goTo(PaneWallPage.DISPLAY, false));
+        assertTrue(wall.goTo(PageKind.DISPLAY, false));
         assertEquals(Arrays.asList(false, false), foldEnds);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, WIDTH / 2f, 4f + 120f,
             1100L));
@@ -2189,7 +2329,7 @@ public class PaneWallLayoutTest {
         assertTrue(statusSwipes.isEmpty());
         assertTrue(foldBegins.isEmpty());
         assertEquals(0f, terminal.getTranslationX(), EPS);
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test
@@ -2309,10 +2449,10 @@ public class PaneWallLayoutTest {
         build(Robolectric.buildActivity(Activity.class).setup().get(), true, true);
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage page) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind page) { return true; }
         });
         // A tile, a key or wall.go slides the wall with no finger on it: no plank.
-        assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
+        assertTrue(wall.goTo(PageKind.HOME, true));
         assertTrue(wall.tiltPages().isEmpty());
         assertEquals(0f, terminal.getRotationY(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, terminal.getLayerType());
@@ -2376,7 +2516,7 @@ public class PaneWallLayoutTest {
         FakeSurfacePage page = new FakeSurfacePage(wall.getContext());
         wall.removeView(display);
         wall.addView(page);
-        wall.setPageView(PaneWallPage.DISPLAY, page);
+        wall.setPageView(PageKind.DISPLAY, page);
         display = page;
         wall.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
@@ -2387,12 +2527,17 @@ public class PaneWallLayoutTest {
     @Test
     public void theDisplaysStandInSinksOnALayerAndTheRestGivesTheSurfaceBack() {
         FakeSurfacePage page = buildWithSurfaceDisplay();
-        showAndLayOut(PaneWallPage.DISPLAY);
+        showAndLayOut(PageKind.DISPLAY);
         wall.setReducedMotion(false);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
         letTheHoldElapse();
         letTheMotionSettle();
         assertTrue("the hold asked for the stand-in", page.holds > 0);
+        com.termux.app.window.Hold still = wall.stillHold(PageKind.DISPLAY);
+        assertNotNull("the wall's wait on the still is a named hold", still);
+        assertEquals(PaneWallLayout.STILL_HOLD, still.name());
+        assertEquals("a copy that lands at once ends it by its signal",
+            com.termux.app.window.Hold.SIGNAL, still.releaseReason());
         assertEquals(display, wall.sinkPage());
         assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
         assertEquals("the stand-in is a plain view: dimmed on a layer like any page",
@@ -2413,12 +2558,14 @@ public class PaneWallLayoutTest {
     public void aCopyLandingMidSinkTakesTheLayerAndTheDimFromThere() {
         FakeSurfacePage page = buildWithSurfaceDisplay();
         page.landsAtOnce = false;
-        showAndLayOut(PaneWallPage.DISPLAY);
+        showAndLayOut(PageKind.DISPLAY);
         wall.setReducedMotion(false);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
         letTheHoldElapse();
         letTheMotionSettle();
         // The copy is on its way: today's sink, a scale on the live surface and no layer.
+        assertTrue("the wall's still wait is open while the copy is on its way",
+            wall.stillHold(PageKind.DISPLAY).isOpen());
         assertEquals(PageSink.SCALE, display.getScaleX(), EPS);
         assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
         page.land();
@@ -2436,14 +2583,15 @@ public class PaneWallLayoutTest {
     public void aCopyThatNeverLandsLeavesTheDisplaysMotionAsItWas() {
         FakeSurfacePage page = buildWithSurfaceDisplay();
         page.landsAtOnce = false;
-        showAndLayOut(PaneWallPage.DISPLAY);
+        showAndLayOut(PageKind.DISPLAY);
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage place) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind place) { return true; }
         });
         // The left border, pulled right: the held Display page would tip if it could.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         letTheHoldElapse();
+        com.termux.app.window.Hold still = wall.stillHold(PageKind.DISPLAY);
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 304f, HEIGHT / 2f,
             400L));
         assertFalse(wall.tiltPages().contains(display));
@@ -2457,6 +2605,8 @@ public class PaneWallLayoutTest {
         letTheMotionSettle();
         assertEquals("rest still tells it, so a copy landing late is only kept", 1,
             page.releases);
+        assertEquals("the rest ends the wall's wait that no copy answered",
+            com.termux.app.window.Hold.LANDING, still.releaseReason());
     }
 
     @Test
@@ -2465,7 +2615,7 @@ public class PaneWallLayoutTest {
         layOutEveryPage();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage place) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind place) { return true; }
         });
         // Held by the right border and pulled left: the Display page comes in from the right.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
@@ -2498,7 +2648,7 @@ public class PaneWallLayoutTest {
         layOutEveryPage();
         wall.setReducedMotion(false);
         wall.setListener(new PaneWallLayout.Listener() {
-            @Override public boolean isPlankTiltEnabled(PaneWallPage place) { return true; }
+            @Override public boolean isPlankTiltEnabled(PageKind place) { return true; }
         });
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
             HEIGHT / 2f, 0L));
@@ -2516,17 +2666,17 @@ public class PaneWallLayoutTest {
         FakeSurfacePage page = buildWithSurfaceDisplay();
         wall.setReducedMotion(false);
         // Terminal to Widgets: the Display stays parked the whole way.
-        assertTrue(wall.goTo(PaneWallPage.WIDGETS, true));
+        assertTrue(wall.goTo(PageKind.HOME, true));
         assertEquals(0, page.holds);
         letTheMotionSettle();
         assertEquals(0, page.releases);
         // Widgets to Display: it lands on the Display, which is asked, and told at rest.
-        assertTrue(wall.goTo(PaneWallPage.DISPLAY, true));
+        assertTrue(wall.goTo(PageKind.DISPLAY, true));
         assertEquals(1, page.holds);
         letTheMotionSettle();
         assertEquals(1, page.releases);
         // And off it again: the Display leaving is on screen as the slide starts.
-        assertTrue(wall.goTo(PaneWallPage.TERMINAL, true));
+        assertTrue(wall.goTo(PageKind.TERMINAL, true));
         assertEquals(2, page.holds);
         letTheMotionSettle();
         assertEquals(2, page.releases);
@@ -2535,14 +2685,14 @@ public class PaneWallLayoutTest {
     @Test
     public void reducedMotionAsksForNoStandIn() {
         FakeSurfacePage page = buildWithSurfaceDisplay();
-        showAndLayOut(PaneWallPage.DISPLAY);
+        showAndLayOut(PageKind.DISPLAY);
         // buildWithContent leaves motion reduced.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f, 2f, 0L));
         letTheHoldElapse();
         assertTrue(wall.isDragging());
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_CANCEL, WIDTH / 2f, 4f,
             3000L));
-        assertTrue(wall.goTo(PaneWallPage.TERMINAL, true));
+        assertTrue(wall.goTo(PageKind.TERMINAL, true));
         assertEquals(0, page.holds);
         assertEquals(View.LAYER_TYPE_NONE, display.getLayerType());
     }
@@ -2550,7 +2700,7 @@ public class PaneWallLayoutTest {
     @Test
     public void theDisplayLeavingTheWallDropsItsStandIn() {
         FakeSurfacePage page = buildWithSurfaceDisplay();
-        wall.setPageView(PaneWallPage.DISPLAY, null);
+        wall.setPageView(PageKind.DISPLAY, null);
         assertEquals(1, page.drops);
         assertTrue(wall.stillPlaces().isEmpty());
     }
@@ -2563,11 +2713,11 @@ public class PaneWallLayoutTest {
 
     @Test
     public void aHoldThatCanPageLightsItsBorderAtOnceAndFillsUntilItTakes() {
-        buildWithContent();
+        // Margin 0: the left border's band reaches past the clearance, where only the hold pages.
+        buildWithContent(0);
         wall.setReducedMotion(false);
         BorderGlow glow = wall.borderGlow();
         assertFalse(glow.isShowing());
-        // In the air beside the page: the left border, whose hold pages.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         assertTrue(glow.isHeld());
         assertEquals(BorderDrag.Border.LEFT, glow.side());
@@ -2643,7 +2793,7 @@ public class PaneWallLayoutTest {
             letTheMotionSettle();
             t += 10000L;
         }
-        assertEquals(PaneWallPage.TERMINAL, wall.currentPage());
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
     }
 
     @Test
@@ -2666,12 +2816,12 @@ public class PaneWallLayoutTest {
         buildWithContent();
         wall.setReducedMotion(false);
         BorderGlow glow = wall.borderGlow();
-        // Set off sideways past the slop from a side border, where only the hold pages.
+        // Set off up or down past the slop from a side border: no gesture of the wall's.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         assertTrue(glow.isHeld());
         assertEquals(BorderDrag.Border.LEFT, glow.side());
-        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 204f, HEIGHT / 2f,
-            50L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 4f,
+            HEIGHT / 2f + 200f, 50L));
         assertEquals(BorderDrag.Claim.ABANDONED, wall.borderDragClaim());
         assertFalse(glow.isHeld());
         idle(BorderGlow.FADE_MS + 20L);
@@ -2710,7 +2860,7 @@ public class PaneWallLayoutTest {
         letTheHoldElapse();
         assertTrue(wall.isDragging());
         assertTrue(glow.isHeld());
-        wall.goTo(PaneWallPage.WIDGETS, false);
+        wall.goTo(PageKind.HOME, false);
         assertFalse(glow.isHeld());
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, HEIGHT / 2f, 400L));
     }
@@ -2729,7 +2879,7 @@ public class PaneWallLayoutTest {
             terminal.getBottom() - 1f, 50L));
 
         // A wall of one place: the bottom border carries the keyboard's swipe and nothing else.
-        wall.setPages(Collections.singletonList(PaneWallPage.TERMINAL));
+        wall.setPages(Collections.singletonList(PageKind.TERMINAL));
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH / 2f,
             HEIGHT - 4f, 1000L));
         assertEquals(BorderDrag.Claim.PENDING, wall.borderDragClaim());

@@ -44,10 +44,17 @@ public final class PrivilegedCatalog {
         @NonNull public final String name;
         /** Lower-case hex sha256 of the binary, as the catalog carries it. */
         @NonNull public final String digest;
+        /** Lower-case hex digests from {@code <abi>:digest=<hex>} options; each names the same binary. */
+        @NonNull public final List<String> abiDigests;
 
-        Row(@NonNull String name, @NonNull String digest) {
+        Row(@NonNull String name, @NonNull String digest, @NonNull List<String> abiDigests) {
             this.name = name;
             this.digest = digest;
+            this.abiDigests = abiDigests;
+        }
+
+        boolean hasDigest(@NonNull String wanted) {
+            return digest.equals(wanted) || abiDigests.contains(wanted);
         }
     }
 
@@ -62,7 +69,7 @@ public final class PrivilegedCatalog {
     public Row findByDigest(@NonNull String digest) {
         String wanted = digest.toLowerCase(Locale.ROOT);
         for (Row row : rows) {
-            if (row.digest.equals(wanted)) return row;
+            if (row.hasDigest(wanted)) return row;
         }
         return null;
     }
@@ -148,7 +155,20 @@ public final class PrivilegedCatalog {
         String name = fields[COLUMN_NAME];
         String digest = fields[COLUMN_DIGEST].toLowerCase(Locale.ROOT);
         if (name.isEmpty() || !isHexDigest(digest)) return null;
-        return new Row(name, digest);
+        return new Row(name, digest, abiDigests(fields[COLUMN_OPTIONS]));
+    }
+
+    /** Every well-formed {@code <abi>:digest=<hex>} option; malformed values are skipped. */
+    @NonNull
+    static List<String> abiDigests(@NonNull String options) {
+        List<String> found = new ArrayList<>();
+        for (String entry : options.split(";")) {
+            int at = entry.indexOf(":digest=");
+            if (at <= 0) continue;
+            String value = entry.substring(at + ":digest=".length()).toLowerCase(Locale.ROOT);
+            if (isHexDigest(value)) found.add(value);
+        }
+        return found.isEmpty() ? Collections.<String>emptyList() : Collections.unmodifiableList(found);
     }
 
     /** The engine's {@code opt}: the value of the first {@code key=} entry among {@code ;}-separated options. */

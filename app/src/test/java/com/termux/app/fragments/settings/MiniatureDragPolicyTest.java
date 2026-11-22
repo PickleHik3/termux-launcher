@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Bar;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Slot;
 import com.termux.app.fragments.settings.MiniatureDragPolicy.Targets;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -16,7 +17,6 @@ import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
 import com.termux.app.place.PlaceOrientation;
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -45,7 +45,7 @@ public class MiniatureDragPolicyTest {
     }
 
     private static Targets targets(Bar bar, PlaceOrientation orientation, PlaceLayout layout) {
-        return MiniatureDragPolicy.targets(PaneWallPage.TERMINAL, orientation, layout, bar);
+        return MiniatureDragPolicy.targets(PageKind.TERMINAL, orientation, layout, bar);
     }
 
     private static List<Edge> edges(Targets targets) {

@@ -9,7 +9,7 @@ import java.util.Map;
 public class ExtraKeysConstants {
 
     /**
-     * Defines the repetitive keys that can be passed to {@link ExtraKeysView#setRepetitiveKeys(List)}.
+     * Defines the repetitive keys that can be passed to the extra keys.
      */
     public static List<String> PRIMARY_REPETITIVE_KEYS = Arrays.asList("UP", "DOWN", "LEFT", "RIGHT", "BKSP", "DEL", "PGUP", "PGDN");
 
@@ -80,13 +80,13 @@ public class ExtraKeysConstants {
             {
                 // classic arrow keys (for ◀ ▶ ▲ ▼ @see arrowVariationDisplay)
                 // U+2190 ← LEFTWARDS ARROW
-                put("LEFT", "←");
+                put("LEFT", ExtraKeyIcons.string(ExtraKeyIcons.ARROW_LEFT));
                 // U+2192 → RIGHTWARDS ARROW
-                put("RIGHT", "→");
+                put("RIGHT", ExtraKeyIcons.string(ExtraKeyIcons.ARROW_RIGHT));
                 // U+2191 ↑ UPWARDS ARROW
-                put("UP", "↑");
+                put("UP", ExtraKeyIcons.string(ExtraKeyIcons.ARROW_UP));
                 // U+2193 ↓ DOWNWARDS ARROW
-                put("DOWN", "↓");
+                put("DOWN", ExtraKeyIcons.string(ExtraKeyIcons.ARROW_DOWN));
             }
         };
 
@@ -95,22 +95,22 @@ public class ExtraKeysConstants {
             {
                 // well known characters // https://en.wikipedia.org/wiki/{Enter_key, Tab_key, Delete_key}
                 // U+21B2 ↲ DOWNWARDS ARROW WITH TIP LEFTWARDS
-                put("ENTER", "↲");
+                put("ENTER", ExtraKeyIcons.string(ExtraKeyIcons.ENTER));
                 // U+21B9 ↹ LEFTWARDS ARROW TO BAR OVER RIGHTWARDS ARROW TO BAR
-                put("TAB", "↹");
+                put("TAB", ExtraKeyIcons.string(ExtraKeyIcons.TAB));
                 // U+232B ⌫ ERASE TO THE LEFT sometimes seen and easy to understand
-                put("BKSP", "⌫");
+                put("BKSP", ExtraKeyIcons.string(ExtraKeyIcons.BACKSPACE));
                 // U+2326 ⌦ ERASE TO THE RIGHT not well known but easy to understand
-                put("DEL", "⌦");
+                put("DEL", ExtraKeyIcons.string(ExtraKeyIcons.DELETE_FORWARD));
                 // U+2630 ☰ TRIGRAM FOR HEAVEN not well known but easy to understand
-                put("DRAWER", "☰");
-                // U+F097B nf-md-keyboard_outline, drawn with the bundled symbols face: the
-                // stock U+2328 ⌨ renders as a hairline outline at cap size on most system fonts.
-                put("KEYBOARD", "\uDB82\uDD7B");
+                put("DRAWER", ExtraKeyIcons.string(ExtraKeyIcons.MENU));
+                // The keys drawn as Roundline icons: the app registers a drawable for each code point
+                // (ExtraKeyIcons), and a label goes through NerdFontSpans to draw it.
+                put("KEYBOARD", ExtraKeyIcons.string(ExtraKeyIcons.KEYBOARD));
                 // U+2398
-                put("PASTE", "⎘");
+                put("PASTE", ExtraKeyIcons.string(ExtraKeyIcons.PASTE));
                 // U+21F3
-                put("SCROLL", "⇳");
+                put("SCROLL", ExtraKeyIcons.string(ExtraKeyIcons.SCROLL));
             }
         };
 
@@ -120,13 +120,13 @@ public class ExtraKeysConstants {
                 // https://en.wikipedia.org/wiki/{Home_key, End_key, Page_Up_and_Page_Down_keys}
                 // home key can mean "goto the beginning of line" or "goto first page" depending on context, hence the diagonal
                 // from IEC 9995 // U+21F1 ⇱ NORTH WEST ARROW TO CORNER
-                put("HOME", "⇱");
+                put("HOME", ExtraKeyIcons.string(ExtraKeyIcons.KEY_HOME));
                 // from IEC 9995 // ⇲ // U+21F2 ⇲ SOUTH EAST ARROW TO CORNER
-                put("END", "⇲");
+                put("END", ExtraKeyIcons.string(ExtraKeyIcons.KEY_END));
                 // no ISO character exists, U+21D1 ⇑ UPWARDS DOUBLE ARROW will do the trick
-                put("PGUP", "⇑");
+                put("PGUP", ExtraKeyIcons.string(ExtraKeyIcons.PAGE_UP));
                 // no ISO character exists, U+21D3 ⇓ DOWNWARDS DOUBLE ARROW will do the trick
-                put("PGDN", "⇓");
+                put("PGDN", ExtraKeyIcons.string(ExtraKeyIcons.PAGE_DOWN));
             }
         };
 

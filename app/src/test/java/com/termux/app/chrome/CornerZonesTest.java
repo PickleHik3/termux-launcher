@@ -14,6 +14,8 @@ import org.robolectric.RobolectricTestRunner;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The squares a frame keeps and the edges it gives away. Everything the wall's frames decide on a
@@ -22,6 +24,7 @@ import java.util.List;
  * the panes on both sides of it.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class CornerZonesTest {
 
     private static final float SIZE = 32f;

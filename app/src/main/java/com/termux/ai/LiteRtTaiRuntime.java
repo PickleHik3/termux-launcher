@@ -284,63 +284,9 @@ public final class LiteRtTaiRuntime implements TaiRuntime {
 
     @NonNull
     @Override
-    public JSONObject chat(
-        @NonNull String modelId,
-        @NonNull String systemPrompt,
-        @NonNull String userPrompt,
-        @NonNull TaiRuntimeOptions options
-    ) throws JSONException {
-        return generate(modelId, "chat", TaiChatRequest.simple(systemPrompt, userPrompt), options, null);
-    }
-
-    @NonNull
-    @Override
-    public JSONObject chat(
-        @NonNull String modelId,
-        @NonNull String systemPrompt,
-        @NonNull String userPrompt,
-        @NonNull TaiRuntimeOptions options,
-        @NonNull TaiGenerationCallback callback
-    ) throws JSONException {
-        return generate(modelId, "chat", TaiChatRequest.simple(systemPrompt, userPrompt), options, callback);
-    }
-
-    @NonNull
-    @Override
-    public JSONObject chat(
-        @NonNull String modelId,
-        @NonNull TaiChatRequest request,
-        @NonNull TaiRuntimeOptions options
-    ) throws JSONException {
-        return generate(modelId, "chat", request, options, null);
-    }
-
-    @NonNull
-    @Override
-    public JSONObject chat(
-        @NonNull String modelId,
-        @NonNull TaiChatRequest request,
-        @NonNull TaiRuntimeOptions options,
-        @NonNull TaiGenerationCallback callback
-    ) throws JSONException {
-        return generate(modelId, "chat", request, options, callback);
-    }
-
-    @NonNull
-    @Override
-    public JSONObject complete(@NonNull String modelId, @NonNull String prompt, @NonNull TaiRuntimeOptions options) throws JSONException {
-        return generate(modelId, "completion", TaiChatRequest.oneShot("", prompt), options, null);
-    }
-
-    @NonNull
-    @Override
-    public JSONObject complete(
-        @NonNull String modelId,
-        @NonNull String prompt,
-        @NonNull TaiRuntimeOptions options,
-        @NonNull TaiGenerationCallback callback
-    ) throws JSONException {
-        return generate(modelId, "completion", TaiChatRequest.oneShot("", prompt), options, callback);
+    public JSONObject generate(@NonNull String modelId, @NonNull TaiChatRequest request, @NonNull TaiRuntimeOptions options,
+                               @Nullable TaiGenerationCallback callback) throws JSONException {
+        return generate(modelId, request.mode(), request, options, callback);
     }
 
     @NonNull

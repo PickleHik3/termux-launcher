@@ -1,0 +1,27 @@
+# A split divider dragged with pauses, for ADR 0019 (resize on pause). Pong's Terminal page,
+# keyboard down, one window split top/bottom at half (1080x2412). Coordinates are thousandths of
+# the screen; re-measure the divider's gap from a screenshot when the layout changes (y=508 is
+# the half split's gap on pong's Floating style, 2026-11-01 — measured from a screenshot).
+#
+# Set up once, from `ssh termux`, before running (the top pane carries a long scrollback, the
+# bottom one a kitty image, so the frames include a reflow over history and an image):
+#   top=$(launcherctl pane current | jq -r .id)     # or the focused pane's id
+#   launcherctl pane write "$top" --enter 'seq 1 4000'
+#   bot=$(launcherctl pane open --print-id --direction down --size 0.5)
+#   launcherctl pane write "$bot" --enter 'timg -pk -g 30x15 ~/logo.png'
+#
+# One drag up and back, per run: down on the gap (y=508), move, hold still 400 ms (past the
+# 100 ms pause, so the pause-resize fires on builds that have it), move on, hold, back to the
+# start, release. One drag per run because a release does not leave the gap exactly where it was,
+# so a second press can miss it; reset the split to half before every run:
+#   launcherctl pane resize <top> --size 0.5; launcherctl keyboard hide
+# Play with ON_DEVICE=1 ROUNDS=1 over a relayed link.
+down 500 508
+move 500 430
+sleep 0.4
+move 500 340
+sleep 0.4
+move 500 508 6
+sleep 0.3
+up
+sleep 1

@@ -17,6 +17,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * Parity tests for the registry-driven binding table.
@@ -27,6 +29,7 @@ import static org.junit.Assert.assertTrue;
  * moving the table into the registry did not change what any stroke does.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TerminalKeyBindingResolverTest {
 
     private static final int CTRL_ALT = KeyEvent.META_CTRL_ON | KeyEvent.META_ALT_ON;

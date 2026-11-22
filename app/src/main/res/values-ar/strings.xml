@@ -67,7 +67,6 @@
     <string name="termux_plugin_error_notifications_enabled_title">إشعارات خطأ الإضافة</string>
     <string name="termux_crash_report_notifications_enabled_title">إشعارات تقارير الأعطال</string>
     <string name="termux_crash_report_notifications_enabled_off">تعطيل الإشعارات لتقارير الأعطال.</string>
-    <string name="termux_style_preferences_title">مظهر &TERMUX_APP_NAME;</string>
     <string name="bootstrap_error_installed_on_portable_sd">&TERMUX_APP_NAME; لا يمكن تثبيته على بطاقة SD المحمولة/الخارجية/القابلة للإزالة على جهازك. تم تجميع الملفات التنفيذية للتهيئة الخاصة بـ &TERMUX_APP_NAME; بمسار $PREFIX مدمج ولا يمكن تثبيتها تحت أي مسار آخر غير: %1$s.</string>
     <string name="error_termux_service_execution_command_shell_name_unset">اسم الطرفية غير مضبوط ولكن وضع إنشاء الطرفية `%1$s` تم تمريره</string>
     <string name="error_run_command_service_invalid_intent_action">إجراء النواية غير صالح لخدمة RunCommand: `%1$s`</string>

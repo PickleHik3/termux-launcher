@@ -34,6 +34,12 @@ public class DeviceControlRoutesTest {
         assertFalse(DeviceControlRoutes.handles("POST", "/v1/battery"));
         assertFalse(DeviceControlRoutes.handles("DELETE", "/v1/volume"));
         assertFalse(DeviceControlRoutes.handles("POST", "/v1/notify"));
+        assertTrue(DeviceControlRoutes.handles("GET", "/v1/motion-log"));
+        assertTrue(DeviceControlRoutes.handles("POST", "/v1/motion-log/clear"));
+        assertTrue(DeviceControlRoutes.handles("POST", "/v1/look"));
+        assertFalse(DeviceControlRoutes.handles("GET", "/v1/look"));
+        assertFalse(DeviceControlRoutes.handles("POST", "/v1/motion-log"));
+        assertFalse(DeviceControlRoutes.handles("GET", "/v1/motion-log/clear"));
     }
 
     @Test
@@ -59,7 +65,7 @@ public class DeviceControlRoutesTest {
         Map<?, ?> limiters = (Map<?, ?>) field.get(server);
         for (String key : new String[]{"POST:/v1/vibrate", "POST:/v1/torch", "GET:/v1/battery",
                 "GET:/v1/volume", "POST:/v1/volume", "POST:/v1/toast", "POST:/v1/wallpaper",
-                "GET:/v1/wallpaper"}) {
+                "GET:/v1/wallpaper", "GET:/v1/pagebar-glass", "POST:/v1/pagebar-glass"}) {
             assertTrue(key, limiters.containsKey(key));
         }
         assertFalse(limiters.containsKey("GET:/v1/wallpaper/builtins"));
@@ -107,5 +113,97 @@ public class DeviceControlRoutesTest {
         assertEquals("bad_request", alone.getString("error"));
         org.json.JSONObject none = DeviceControlRoutes.handle(null, "POST", "/v1/wallpaper", "{}");
         assertEquals(400, none.getInt("_statusCode"));
+    }
+
+    // ------------------------------------------------------------------------------- root routes
+
+    /** A fake phone: root on or off, restarts allowed or not, and the commands it was asked to run. */
+    private static final class FakeRoot implements DeviceControlRoutes.RootAccess {
+        final boolean active;
+        final boolean rebootAllowed;
+        final java.util.List<String> ran = new java.util.ArrayList<>();
+        String output = "";
+
+        FakeRoot(boolean active, boolean rebootAllowed) {
+            this.active = active;
+            this.rebootAllowed = rebootAllowed;
+        }
+
+        @Override public boolean isActive() { return active; }
+        @Override public boolean rebootAllowed(android.content.Context context) { return rebootAllowed; }
+        @Override public String run(String command, long timeoutMs) {
+            ran.add(command);
+            return output;
+        }
+    }
+
+    private static org.json.JSONObject root(String path, String body, FakeRoot fake) throws Exception {
+        DeviceControlRoutes.RootAccess before = DeviceControlRoutes.rootAccess;
+        DeviceControlRoutes.rootAccess = fake;
+        try {
+            return DeviceControlRoutes.handle(null, "POST", path, body);
+        } finally {
+            DeviceControlRoutes.rootAccess = before;
+        }
+    }
+
+    @Test
+    public void rootRoutes_arePostOnly() {
+        for (String path : new String[]{"/v1/root/lock", "/v1/root/reboot", "/v1/root/wifi",
+                "/v1/root/data", "/v1/root/airplane", "/v1/root/dnd"}) {
+            assertTrue(path, DeviceControlRoutes.handles("POST", path));
+            assertFalse(path, DeviceControlRoutes.handles("GET", path));
+        }
+        assertFalse(DeviceControlRoutes.handles("POST", "/v1/root/shell"));
+    }
+
+    @Test
+    public void rootToggles_needABooleanOn() throws Exception {
+        for (String path : new String[]{"/v1/root/wifi", "/v1/root/data", "/v1/root/airplane",
+                "/v1/root/dnd"}) {
+            FakeRoot fake = new FakeRoot(true, true);
+            assertEquals(path, 400, root(path, "{}", fake).getInt("_statusCode"));
+            assertEquals(path, 400, root(path, "{\"on\":\"yes\"}", fake).getInt("_statusCode"));
+            assertTrue(path, fake.ran.isEmpty());
+        }
+    }
+
+    @Test
+    public void rootRoutes_answer409WithoutRoot() throws Exception {
+        FakeRoot fake = new FakeRoot(false, true);
+        org.json.JSONObject answer = root("/v1/root/lock", "", fake);
+        assertEquals(409, answer.getInt("_statusCode"));
+        assertEquals("root_unavailable", answer.getString("error"));
+        assertEquals(409, root("/v1/root/wifi", "{\"on\":true}", fake).getInt("_statusCode"));
+        assertTrue(fake.ran.isEmpty());
+    }
+
+    @Test
+    public void reboot_needsTheOptIn() throws Exception {
+        FakeRoot fake = new FakeRoot(true, false);
+        org.json.JSONObject answer = root("/v1/root/reboot", "", fake);
+        assertEquals(403, answer.getInt("_statusCode"));
+        assertEquals("reboot_not_allowed", answer.getString("error"));
+        assertTrue(fake.ran.isEmpty());
+    }
+
+    @Test
+    public void reboot_rejectsAnUnknownTarget() throws Exception {
+        FakeRoot fake = new FakeRoot(true, true);
+        assertEquals(400, root("/v1/root/reboot", "{\"target\":\"fastboot\"}", fake)
+            .getInt("_statusCode"));
+        assertTrue(fake.ran.isEmpty());
+    }
+
+    @Test
+    public void rootRoutes_runTheirCommand() throws Exception {
+        FakeRoot fake = new FakeRoot(true, true);
+        assertTrue(root("/v1/root/reboot", "{\"target\":\"recovery\"}", fake).getBoolean("ok"));
+        assertTrue(root("/v1/root/reboot", "", fake).getBoolean("ok"));
+        assertTrue(root("/v1/root/dnd", "{\"on\":false}", fake).getBoolean("ok"));
+        assertEquals(Arrays.asList("svc power reboot recovery || reboot recovery",
+            "svc power reboot || reboot", "cmd notification set_dnd off"), fake.ran);
+        fake.output = "Error: su died";
+        assertEquals(500, root("/v1/root/lock", "", fake).getInt("_statusCode"));
     }
 }

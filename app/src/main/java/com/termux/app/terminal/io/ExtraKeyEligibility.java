@@ -3,7 +3,7 @@ package com.termux.app.terminal.io;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.extrakeys.ExtraKeysConstants;
 
@@ -76,9 +76,9 @@ public final class ExtraKeyEligibility {
             this.display = display;
         }
 
-        public boolean worksOn(@NonNull PaneWallPage place) {
+        public boolean worksOn(@NonNull PageKind place) {
             switch (place) {
-                case WIDGETS: return widgets;
+                case HOME: return widgets;
                 case DISPLAY: return display;
                 default: return terminal;
             }
@@ -112,6 +112,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WALL_WIDGETS, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_TERMINAL, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_WALL_DISPLAY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_WALL_ASSISTANT, Band.LAUNCHER);
         // The keyboard is the launcher's, not the terminal's: a widget's own text field needs one
         // as much as a shell does.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD, Band.LAUNCHER);
@@ -126,6 +127,8 @@ public final class ExtraKeyEligibility {
         // Dictation types wherever the keyboard would, a Home search or a display as much as a
         // shell, and copies where nothing takes typing.
         tools.put(LauncherToolRegistry.TOOL_VOICE_DICTATE, Band.LAUNCHER);
+        // Minimal mode is the windows', but the switch is the launcher's, on every page.
+        tools.put(LauncherToolRegistry.TOOL_MINIMAL_TOGGLE, Band.LAUNCHER);
         // The dock and the key row are chrome every place wears.
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_EXTRA_KEYS_EDIT, Band.LAUNCHER);
@@ -135,6 +138,8 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APPS_BAR, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_COMMAND_PALETTE, Band.LAUNCHER);
+        // The page switcher key opens the switcher above whichever bar it sits on, Home's included.
+        tools.put(LauncherToolRegistry.TOOL_APP_PAGE_SWITCHER, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_LAUNCH, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_CONTACT_OPEN, Band.LAUNCHER);
         tools.put(LauncherToolRegistry.TOOL_APP_KEY_INSPECTOR, Band.LAUNCHER);
@@ -174,6 +179,11 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEW, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_CLOSE, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_SELECT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_LEFT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_WINDOW_MOVE_RIGHT, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_PANE_CONSUME, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_PANE_EXPEL, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_RENAME_PROMPT, Band.MULTIPLEX);
         tools.put(LauncherToolRegistry.TOOL_SESSION_NEW, Band.MULTIPLEX);
@@ -198,6 +208,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_RESET, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_DECREASE, Band.TERMINAL_TOOL);
+        tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_URL, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_AT_CURSOR, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_ALL, Band.TERMINAL_TOOL);
@@ -219,6 +230,12 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEXT, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_PREVIOUS, Band.TERMINAL_TOOL);
 
+        // The root shell is a pane; the restarts belong to the phone, not to a page.
+        tools.put(LauncherToolRegistry.TOOL_PANE_ROOT_SHELL, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART_RECOVERY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART_BOOTLOADER, Band.LAUNCHER);
+
         TOOLS = Collections.unmodifiableMap(tools);
     }
 
@@ -230,16 +247,31 @@ public final class ExtraKeyEligibility {
      * that cannot act. The shipped row drops such keys before they are built
      * ({@link ExtraKeysDefaultRow}); this is for a row the user wrote.
      */
-    public static boolean isUsable(@Nullable String keyValue, @NonNull PaneWallPage place,
-                                   @NonNull List<PaneWallPage> pages) {
+    public static boolean isUsable(@Nullable String keyValue, @NonNull PageKind place,
+                                   @NonNull List<PageKind> pages) {
         if (!isUsable(keyValue, place)) return false;
         if (keyValue == null || keyValue.indexOf(' ') >= 0) return true;
-        PaneWallPage target = placeSwitchTarget(keyValue);
-        return target == null || pages.contains(target);
+        PageKind target = placeSwitchTarget(keyValue);
+        // The Assistant key stays live with no page: it adds the page (AssistantEntry).
+        return target == null || target == PageKind.ASSISTANT || pages.contains(target);
+    }
+
+    /**
+     * The place a key row is dressed for: the half the stack wears ({@code stackDressPage}, the
+     * other half's while a crossing stands its rows) or else where the wall rests
+     * ({@code restingPlace}). Asked on every crossing frame and at the settle alike, so a toolbar a
+     * crossing brings up rises already drawn live where it lands (and its place switch for the
+     * place it lands on already in front) rather than dead in the leaving place's terms until the
+     * settle restates it.
+     */
+    @NonNull
+    public static PageKind rowPlace(@NonNull PageKind restingPlace,
+                                        @Nullable PageKind stackDressPage) {
+        return stackDressPage != null ? stackDressPage : restingPlace;
     }
 
     /** Whether the key sending {@code keyValue} can act on {@code place}. */
-    public static boolean isUsable(@Nullable String keyValue, @NonNull PaneWallPage place) {
+    public static boolean isUsable(@Nullable String keyValue, @NonNull PageKind place) {
         if (keyValue == null || keyValue.isEmpty())
             return true;
         // A macro is only as usable as its least usable step: half a sequence is not a shortcut.
@@ -284,14 +316,15 @@ public final class ExtraKeyEligibility {
      * place in front at full strength; {@code wall.go} counts when it names its place outright.
      */
     @Nullable
-    public static PaneWallPage placeSwitchTarget(@Nullable String keyValue) {
+    public static PageKind placeSwitchTarget(@Nullable String keyValue) {
         if (keyValue == null
                 || !keyValue.startsWith(TermuxTerminalExtraKeys.LAUNCHER_TOOL_KEY_PREFIX))
             return null;
         switch (toolNameOf(keyValue)) {
-            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PaneWallPage.WIDGETS;
-            case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PaneWallPage.TERMINAL;
-            case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PaneWallPage.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_WIDGETS: return PageKind.HOME;
+            case LauncherToolRegistry.TOOL_WALL_TERMINAL: return PageKind.TERMINAL;
+            case LauncherToolRegistry.TOOL_WALL_DISPLAY: return PageKind.DISPLAY;
+            case LauncherToolRegistry.TOOL_WALL_ASSISTANT: return PageKind.ASSISTANT;
             case LauncherToolRegistry.TOOL_WALL_GO: return namedPlace(keyValue);
             default: return null;
         }
@@ -299,13 +332,16 @@ public final class ExtraKeyEligibility {
 
     /** The place a {@code tool:wall.go:place=<name>} key names, or null when it names none. */
     @Nullable
-    private static PaneWallPage namedPlace(@NonNull String keyValue) {
+    private static PageKind namedPlace(@NonNull String keyValue) {
         for (String argument : keyValue.split(":")) {
             if (!argument.startsWith("place="))
                 continue;
             String name = argument.substring("place=".length());
-            for (PaneWallPage place : PaneWallPage.values()) {
-                if (place.toolName().equals(name))
+            // "widgets" is the old name of Home, kept for keys already written.
+            if (name.equals("widgets"))
+                return PageKind.HOME;
+            for (PageKind place : PageKind.values()) {
+                if (place.name().toLowerCase(java.util.Locale.ROOT).equals(name))
                     return place;
             }
         }

@@ -114,7 +114,6 @@
     <!-- Terminal View Margin Adjustment -->
     <!-- Terminal View Activity Remove Task -->
     <!-- Termux Style Preferences -->
-    <string name="termux_style_preferences_title">Aparência de &TERMUX_APP_NAME;</string>
     <!-- Background Category -->
     <!-- Background Image -->
     <!-- Termux:API App Preferences -->

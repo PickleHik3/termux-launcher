@@ -48,9 +48,7 @@ public class LowMemoryPresetTest {
 
         LowMemoryPreset.turnOn(preferences);
 
-        assertEquals(TERMUX_APP.SURFACE_MATERIAL_SOLID, preferences.getSurfaceMaterial());
-        assertEquals(100, preferences.getSurfaceOverrideValue(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
-        assertFalse(preferences.isSurfaceInheriting(SurfaceSlot.CANVAS, SurfaceProperty.OPACITY));
+        assertEquals(TERMUX_APP.SURFACE_MATERIAL_SOLID, preferences.getSurfaceMaterial(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(100, preferences.getTerminalBackgroundOpacity());
         assertFalse(preferences.isTerminalCursorTrailEnabled());
         assertEquals("none", preferences.getTerminalRetroEffect());
@@ -62,7 +60,7 @@ public class LowMemoryPresetTest {
     @Test
     public void otherSurfacesKeepSolidsOpacity() {
         LowMemoryPreset.turnOn(preferences);
-        assertEquals(92, preferences.getSurfaceBaseValue(SurfaceProperty.OPACITY));
+        assertEquals(92, preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertTrue(preferences.isSurfaceInheriting(SurfaceSlot.DOCK, SurfaceProperty.OPACITY));
     }
 

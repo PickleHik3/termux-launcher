@@ -321,14 +321,14 @@ public class GlassMotionLightTest {
         }
         assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;"));
         // The resting expressions are untouched, and every live term sits behind its gate.
-        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(uStrength, min(b.x, b.y)) * edge;"));
-        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - n * pull;"));
+        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
+        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
         assertTrue(agsl.contains("float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;"));
-        assertTrue(agsl.contains("float2 sn = n;"));
+        assertTrue(agsl.contains("float2 sn = nb;"));
         int liveGate = agsl.indexOf("if (live) {");
         assertTrue(liveGate > 0);
         assertTrue(agsl.indexOf("pull = bent;") > liveGate);
-        assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : n;") > agsl.lastIndexOf("if (live) {"));
+        assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : nb;") > agsl.lastIndexOf("if (live) {"));
         // The constants are the Java ones.
         assertConst(agsl, "kLagMaxDp", GlassMotionLight.LAG_MAX_DP);
         assertConst(agsl, "kLagLean", GlassRefraction.LAG_LEAN_GAIN);
@@ -420,10 +420,11 @@ public class GlassMotionLightTest {
         // liveK is set only inside the live gate, and is 0 otherwise.
         assertTrue(agsl.contains("float liveK = 0.0;"));
         assertTrue(agsl.indexOf("liveK = clamp(") > agsl.indexOf("if (live) {"));
-        // Before the samples, so it reuses them: no new eval of either picture.
-        assertTrue(agsl.indexOf(gate) < agsl.indexOf("content.eval("));
+        // Before the samples, so it reuses them: no new eval of either picture. (The concave
+        // lens's one tap comes earlier and returns; it never reaches this gate.)
+        assertTrue(agsl.indexOf(gate) < agsl.indexOf("half4 g = content.eval(fg);"));
         assertEquals(4, agsl.split("sharp\\.eval\\(", -1).length - 1);
-        assertEquals(4, agsl.split("content\\.eval\\(", -1).length - 1);
+        assertEquals(5, agsl.split("content\\.eval\\(", -1).length - 1);
         assertConst(agsl, "kLiveReach", GlassRefraction.LIVE_CLARITY_REACH);
     }
 

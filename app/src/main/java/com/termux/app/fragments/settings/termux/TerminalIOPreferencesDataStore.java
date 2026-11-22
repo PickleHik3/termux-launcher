@@ -72,11 +72,23 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "pane_agent_api":
                 mPreferences.setAgentPanesEnabled(value);
                 break;
+            case "terminal_body_swipe":
+                mPreferences.setTerminalBodySwipeEnabled(value);
+                break;
             case "status_widget_cpu":
                 mPreferences.setStatusWidgetCpuEnabled(value);
                 break;
+            case "status_widget_gpu":
+                mPreferences.setStatusWidgetGpuEnabled(value);
+                break;
+            case "status_widget_font_toggle":
+                mPreferences.setStatusWidgetFontToggleEnabled(value);
+                break;
             case "status_widget_ram":
                 mPreferences.setStatusWidgetRamEnabled(value);
+                break;
+            case "status_widget_battery":
+                mPreferences.setStatusWidgetBatteryEnabled(value);
                 break;
             case "status_widget_media":
                 mPreferences.setStatusWidgetMediaEnabled(value);
@@ -123,10 +135,18 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isFocusedPaneGrowsEnabled();
             case "pane_agent_api":
                 return mPreferences.isAgentPanesEnabled();
+            case "terminal_body_swipe":
+                return mPreferences.isTerminalBodySwipeEnabled();
             case "status_widget_cpu":
                 return mPreferences.isStatusWidgetCpuEnabled();
+            case "status_widget_gpu":
+                return mPreferences.isStatusWidgetGpuEnabled();
+            case "status_widget_font_toggle":
+                return mPreferences.isStatusWidgetFontToggleEnabled();
             case "status_widget_ram":
                 return mPreferences.isStatusWidgetRamEnabled();
+            case "status_widget_battery":
+                return mPreferences.isStatusWidgetBatteryEnabled();
             case "status_widget_media":
                 return mPreferences.isStatusWidgetMediaEnabled();
             case "status_widget_weather":
@@ -149,6 +169,8 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             mPreferences.setTopPaneClockStyle(value);
         } else if ("top_pane_clock_alignment".equals(key)) {
             mPreferences.setTopPaneClockAlignment(value);
+        } else if ("status_bar_cutout_mode".equals(key)) {
+            mPreferences.setStatusBarCutoutMode(value);
         }
     }
 
@@ -161,6 +183,33 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
         if ("top_pane_clock_alignment".equals(key)) {
             return mPreferences.getTopPaneClockAlignment();
         }
+        if ("status_bar_cutout_mode".equals(key)) {
+            return mPreferences.getStatusBarCutoutMode();
+        }
+        return defValue;
+    }
+
+    @Override
+    public void putInt(String key, int value) {
+        if (mPreferences == null || key == null) return;
+        if ("status_bar_cutout_offset_x".equals(key)) {
+            mPreferences.setStatusBarCutoutOffsetX(value);
+        } else if ("status_bar_cutout_offset_y".equals(key)) {
+            mPreferences.setStatusBarCutoutOffsetY(value);
+        } else if ("status_bar_cutout_scale".equals(key)) {
+            mPreferences.setStatusBarCutoutScale(value);
+        } else if ("status_bar_cutout_margin".equals(key)) {
+            mPreferences.setStatusBarCutoutMargin(value);
+        }
+    }
+
+    @Override
+    public int getInt(String key, int defValue) {
+        if (mPreferences == null || key == null) return defValue;
+        if ("status_bar_cutout_offset_x".equals(key)) return mPreferences.getStatusBarCutoutOffsetX();
+        if ("status_bar_cutout_offset_y".equals(key)) return mPreferences.getStatusBarCutoutOffsetY();
+        if ("status_bar_cutout_scale".equals(key)) return mPreferences.getStatusBarCutoutScale();
+        if ("status_bar_cutout_margin".equals(key)) return mPreferences.getStatusBarCutoutMargin();
         return defValue;
     }
 }

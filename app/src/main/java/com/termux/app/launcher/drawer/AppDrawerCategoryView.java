@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.drawer.AppDrawerCategoryTouchRegions.Part;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -87,10 +88,16 @@ public final class AppDrawerCategoryView extends ViewGroup
     @Nullable private Runnable frameRequestListener;
     @Nullable private Runnable popupDismissCallback;
     @NonNull private List<AppDrawerCategoryBucket> buckets = Collections.emptyList();
+    /** {@link #setCatalogueLoaded}: false while the catalogue (re)loads. */
+    private boolean catalogueLoaded = true;
     @Nullable private AppDrawerCategoryBucket selectedBucket;
     @NonNull private Part streamPart = Part.OUTSIDE;
     private boolean streamFinalized;
     private float downRawY;
+    /** See {@link #setBottomInsetPx}; zero until the controller sets it. */
+    private int bottomInset;
+    /** The band at the top the floating chrome holds; see {@link #setTopInsetPx}. */
+    private int topInset;
     private float collapseStartProgress = 1f;
     private float headerDownX;
     private float headerDownY;
@@ -116,7 +123,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         tileAdapter.setExpansionListener(this);
         tileAdapter.setClickGate(clickGate);
         overviewLayout = new GridLayoutManager(context, 1);
-        overview = new RecyclerView(context);
+        overview = new AppDrawerFadingList(context);
         overview.setLayoutManager(overviewLayout);
         overview.setAdapter(tileAdapter);
         overview.setHasFixedSize(true);
@@ -125,7 +132,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         // paid all of that again on the way back, on the scroll frame itself.
         overview.setItemAnimator(null);
         overview.setOverScrollMode(OVER_SCROLL_NEVER);
-        overview.setClipToPadding(true);
+        overview.setClipToPadding(false);
         overview.setOutlineProvider(ViewOutlineProvider.BOUNDS);
         overview.setClipToOutline(true);
         overview.addItemDecoration(tileSpacing);
@@ -135,7 +142,10 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailAdapter = new AppDrawerCategoryDetailAdapter(dock);
         detailAdapter.setClickGate(clickGate);
         detailLayout = new GridLayoutManager(context, AppDrawerGridMetrics.MIN_COLUMNS);
-        detailList = new RecyclerView(context);
+        AppDrawerFadingList detailFade = new AppDrawerFadingList(context);
+        // The list starts under its own header: only the card's bottom edge dissolves rows.
+        detailFade.setFadeEdges(false, true);
+        detailList = detailFade;
         detailList.setLayoutManager(detailLayout);
         detailList.setAdapter(detailAdapter);
         detailList.setHasFixedSize(true);
@@ -246,6 +256,21 @@ public final class AppDrawerCategoryView extends ViewGroup
         addView(morph);
     }
 
+    /**
+     * Whether the catalogue behind the buckets has finished loading. While it (re)loads the
+     * buckets may be empty for no reason the user should see, so "Nothing here yet" waits for it.
+     */
+    public void setCatalogueLoaded(boolean loaded) {
+        if (catalogueLoaded == loaded) return;
+        catalogueLoaded = loaded;
+        applyEmptyState();
+    }
+
+    /** "Nothing here yet" only once the catalogue has loaded and holds nothing to show. */
+    private void applyEmptyState() {
+        emptyState.setVisibility(buckets.isEmpty() && catalogueLoaded ? VISIBLE : GONE);
+    }
+
     public void setDock(@Nullable SuggestionBarView dock) {
         tileAdapter.setDock(dock);
         detailAdapter.setDock(dock);
@@ -306,14 +331,62 @@ public final class AppDrawerCategoryView extends ViewGroup
         // edge, so in landscape — where a second row only half fits — the tiles read as clipped by
         // the plane rather than as a list that scrolls. One row gap of overscroll says the
         // difference, and the tiles still paint into it while dragging.
-        int bottom = Math.max(0, Math.round(metrics.itemGapPx + metrics.itemBottomGapPx));
-        overview.setPadding(horizontal, 0, horizontal, bottom);
+        overview.setPadding(horizontal, topInset, horizontal, overviewBottomPaddingPx());
         overview.setClipToPadding(false);
         tileSpacing.setMetrics(metrics);
         overview.invalidateItemDecorations();
         tileAdapter.setMetrics(metrics);
         detailAdapter.setMetrics(metrics);
         requestLayout();
+    }
+
+    /**
+     * The band at the top the floating search chrome holds. The view spans the card; the overview
+     * starts its rows below the band (as padding, not clipped, so scrolled tiles pass under the
+     * capsule) and the opened category's header and list stand below it. Compared before it is
+     * set; not per frame.
+     */
+    public int getTopInsetPx() {
+        return topInset;
+    }
+
+    public void setTopInsetPx(int topInsetPx) {
+        int inset = Math.max(0, topInsetPx);
+        if (inset == topInset) return;
+        topInset = inset;
+        if (overview.getPaddingTop() != inset) {
+            overview.setPadding(overview.getPaddingLeft(), inset, overview.getPaddingRight(),
+                overview.getPaddingBottom());
+        }
+        requestLayout();
+    }
+
+    /**
+     * Ends the last overview card and the opened category's last row {@code bottomInsetPx} above
+     * the card's usable bottom. Each tile and row already carries its own trailing gap, which the
+     * padding gives back. Not per frame.
+     */
+    public void setBottomInsetPx(int bottomInsetPx) {
+        int inset = Math.max(0, bottomInsetPx);
+        if (inset == bottomInset) return;
+        bottomInset = inset;
+        int detail = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset,
+            AppDrawerGridMetrics.rowBottomPx(getResources().getDisplayMetrics().density));
+        if (detailList.getPaddingBottom() != detail) {
+            detailList.setPadding(0, 0, 0, detail);
+            detailList.setClipToPadding(false);
+        }
+        int overviewBottom = overviewBottomPaddingPx();
+        if (overview.getPaddingBottom() != overviewBottom) {
+            overview.setPadding(overview.getPaddingLeft(), overview.getPaddingTop(),
+                overview.getPaddingRight(), overviewBottom);
+        }
+    }
+
+    private int overviewBottomPaddingPx() {
+        AppDrawerCategoryGridMetrics current = metrics;
+        return AppDrawerContentInsetPolicy.listBottomPaddingPx(bottomInset,
+            current == null ? 0f : current.itemBottomGapPx);
     }
 
     public void submitBuckets(@NonNull List<AppDrawerCategoryBucket> newBuckets) {
@@ -351,7 +424,7 @@ public final class AppDrawerCategoryView extends ViewGroup
             int position = positionOfCategory(firstCategoryId);
             if (position >= 0) overviewLayout.scrollToPositionWithOffset(position, firstOffset);
         }
-        emptyState.setVisibility(buckets.isEmpty() ? VISIBLE : GONE);
+        applyEmptyState();
         overview.setVisibility(buckets.isEmpty() ? GONE : VISIBLE);
         requestLayout();
     }
@@ -551,13 +624,27 @@ public final class AppDrawerCategoryView extends ViewGroup
         morph.setClickable(false);
         overview.setAlpha(1f);
         overview.setVisibility(buckets.isEmpty() ? GONE : VISIBLE);
-        emptyState.setVisibility(buckets.isEmpty() ? VISIBLE : GONE);
+        applyEmptyState();
     }
 
     private void abortToOverview() {
         expansion.teardown();
         expansionSpring.reset(0f);
         tileAdapter.rebindAttachedPreviews();
+        finishAtOverview();
+        cancelGesture();
+    }
+
+    /**
+     * Stops the category transition for a drawer on its way out and keeps the tiles: the card keeps
+     * what it shows until it is gone, then {@link #reset} empties it.
+     */
+    public void stopForClose() {
+        clickGate.suppress();
+        expansion.teardown();
+        expansionSpring.reset(0f);
+        detailAdapter.releaseAttached(detailList);
+        selectedBucket = null;
         finishAtOverview();
         cancelGesture();
     }
@@ -640,7 +727,8 @@ public final class AppDrawerCategoryView extends ViewGroup
             return false;
         gesturePolicy.finishOnce();
         boolean commit = !cancelled && AppDrawerCommitPolicy.decide(expansion.progress(),
-            velocityPxPerSec, AppDrawerCommitPolicy.Direction.CLOSING)
+            velocityPxPerSec, AppDrawerCommitPolicy.Direction.CLOSING,
+            getResources().getDisplayMetrics().density)
             == AppDrawerCommitPolicy.Decision.COMMIT_CLOSE;
         expansion.finishCollapseDrag(commit);
         expansionSpring.value = expansion.progress();
@@ -677,6 +765,9 @@ public final class AppDrawerCategoryView extends ViewGroup
             || state == AppDrawerCategoryExpansionModel.State.COLLAPSE_DRAGGING)
             return Part.TRANSITION_BODY;
         if (state == AppDrawerCategoryExpansionModel.State.EXPANDED) {
+            // The band above the header is the floating chrome's, as it was when the view started
+            // below it: a pull there closes the drawer.
+            if (y < topInset) return Part.OUTSIDE;
             // The whole header band — chevron, title and count — is one collapse affordance.
             if (contains(detailHeader, x, y) || contains(collapseChevron, x, y)
                 || contains(detailCount, x, y)) return Part.COLLAPSE_ACTION;
@@ -784,6 +875,343 @@ public final class AppDrawerCategoryView extends ViewGroup
             return overview;
         return null;
     }
+    /**
+     * The app a finger at this view's local ({@code x}, {@code y}) is on: a row of the open
+     * category, or one of a tile's launch icons. Null anywhere else.
+     */
+    @Nullable public LauncherAppEntry appEntryAt(float x, float y) {
+        RecyclerView active = activeRecyclerView();
+        if (active == null || getVisibility() != VISIBLE) return null;
+        float localX = x - active.getLeft();
+        float localY = y - active.getTop();
+        View child = active.findChildViewUnder(localX, localY);
+        if (child == null) return null;
+        if (active == detailList) {
+            int position = active.getChildAdapterPosition(child);
+            List<LauncherAppEntry> entries = detailAdapter.entries();
+            return position >= 0 && position < entries.size() ? entries.get(position) : null;
+        }
+        if (!(child instanceof AppDrawerCategoryTileView)) return null;
+        return ((AppDrawerCategoryTileView) child).launchEntryAt(
+            localX - child.getLeft(), localY - child.getTop());
+    }
+    // ------------------------------------------------------------------ tile reorder
+
+    /** Told once, on a drop that changes the order: {@code what} now sits in front of {@code before}. */
+    public interface ReorderListener {
+        void onReordered(@NonNull AppDrawerCategory what, @Nullable AppDrawerCategory before);
+    }
+
+    /** How large the carried tile grows. */
+    private static final float REORDER_LIFT_SCALE = 1.04f;
+    static final long REORDER_SETTLE_MS = 160L;
+    /** Edge auto-scroll: the zone at the overview's top and bottom, and the fastest step per frame. */
+    private static final float REORDER_EDGE_ZONE_DP = 64f;
+    private static final float REORDER_EDGE_MAX_STEP_DP = 14f;
+
+    private final AppDrawerCategoryReorderPolicy reorderPolicy = new AppDrawerCategoryReorderPolicy();
+    @Nullable private ReorderListener reorderListener;
+    private int reorderSource = -1;
+    private int reorderCount;
+    private int reorderColumns = 1;
+    private float reorderPadLeft;
+    private float reorderCellW;
+    private float reorderCellH;
+    private float reorderStartCx;
+    private float reorderStartCy;
+    private float reorderDownX;
+    private float reorderDownY;
+    private float reorderLastX;
+    private float reorderLastY;
+    private int reorderScrollAtLift;
+    private float reorderCarryDx;
+    private float reorderCarryDy;
+    private boolean reorderDropping;
+    private int reorderEdgeDirection;
+    /** Per shown index: where its offset was when the target last changed and where it settles. */
+    private float[] reorderFromX = new float[0];
+    private float[] reorderFromY = new float[0];
+    private float[] reorderToX = new float[0];
+    private float[] reorderToY = new float[0];
+    private float reorderT = 1f;
+    @Nullable private android.animation.ValueAnimator reorderSettle;
+    /** Drives the edge scroll only while the finger sits in the edge zone; cancelled otherwise. */
+    @Nullable private android.animation.ValueAnimator reorderEdgeTicker;
+    private int reorderLiftedChild = -1;
+    /** Draws the lifted tile after its neighbours, with no Z involved. */
+    private final RecyclerView.ChildDrawingOrderCallback reorderDrawOrder = this::reorderDrawIndex;
+
+    private int reorderDrawIndex(int childCount, int i) {
+        if (i == 0) {
+            reorderLiftedChild = -1;
+            if (reorderSource >= 0) {
+                for (int c = 0; c < childCount; c++) {
+                    if (overview.getChildAdapterPosition(overview.getChildAt(c)) == reorderSource) {
+                        reorderLiftedChild = c;
+                        break;
+                    }
+                }
+            }
+        }
+        int lifted = reorderLiftedChild;
+        if (lifted < 0) return i;
+        if (i == childCount - 1) return lifted;
+        return i >= lifted ? i + 1 : i;
+    }
+
+    private void stepReorderEdgeScroll() {
+        {
+            if (reorderSource < 0 || reorderDropping || reorderEdgeDirection == 0) {
+                stopReorderEdgeScroll();
+                return;
+            }
+            float density = getResources().getDisplayMetrics().density;
+            float zone = REORDER_EDGE_ZONE_DP * density;
+            float depth = reorderEdgeDirection < 0
+                ? (zone - reorderLastY) / zone : (reorderLastY - (overview.getHeight() - zone)) / zone;
+            int step = Math.round(Math.min(1f, Math.max(0f, depth))
+                * REORDER_EDGE_MAX_STEP_DP * density) * reorderEdgeDirection;
+            if (step == 0 || !overview.canScrollVertically(reorderEdgeDirection)) {
+                reorderEdgeDirection = 0;
+                stopReorderEdgeScroll();
+                return;
+            }
+            overview.scrollBy(0, step);
+            updateReorderCarry();
+        }
+    }
+
+    private void startReorderEdgeScroll() {
+        android.animation.ValueAnimator ticker = reorderEdgeTicker;
+        if (ticker == null) {
+            ticker = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            ticker.setDuration(1000L);
+            ticker.setRepeatCount(android.animation.ValueAnimator.INFINITE);
+            ticker.setInterpolator(new android.view.animation.LinearInterpolator());
+            ticker.addUpdateListener(animator -> stepReorderEdgeScroll());
+            reorderEdgeTicker = ticker;
+        }
+        if (!ticker.isRunning()) ticker.start();
+    }
+
+    private void stopReorderEdgeScroll() {
+        android.animation.ValueAnimator ticker = reorderEdgeTicker;
+        if (ticker != null && ticker.isRunning()) ticker.cancel();
+    }
+
+    /** The tile under a point of this view while the overview shows, or null. */
+    @Nullable public AppDrawerCategoryTileView tileViewAt(float x, float y) {
+        if (!isOverview() || getVisibility() != VISIBLE || overview.getVisibility() != VISIBLE)
+            return null;
+        View child = overview.findChildViewUnder(x - overview.getLeft(), y - overview.getTop());
+        return child instanceof AppDrawerCategoryTileView ? (AppDrawerCategoryTileView) child : null;
+    }
+
+    /**
+     * Lifts {@code tile}; the finger is at ({@code x}, {@code y}) in this view's coordinates.
+     *
+     * @return false when nothing could be lifted (not the overview, a lift already running)
+     */
+    public boolean beginReorder(@NonNull AppDrawerCategoryTileView tile, float x, float y,
+                                @NonNull ReorderListener listener) {
+        if (!isOverview() || reorderSource >= 0 || buckets.size() < 1) return false;
+        int position = overview.getChildAdapterPosition(tile);
+        if (position < 0 || position >= buckets.size()) return false;
+        overview.stopScroll();
+        reorderListener = listener;
+        reorderSource = position;
+        reorderDropping = false;
+        reorderCount = buckets.size();
+        reorderColumns = Math.max(1, overviewLayout.getSpanCount());
+        reorderPadLeft = overview.getPaddingLeft();
+        reorderCellW = Math.max(1f, (overview.getWidth() - overview.getPaddingLeft()
+            - overview.getPaddingRight()) / (float) reorderColumns);
+        reorderCellH = Math.max(1f, tile.getHeight());
+        reorderScrollAtLift = overview.computeVerticalScrollOffset();
+        reorderStartCx = slotX(position) + reorderCellW / 2f;
+        reorderStartCy = slotY(position) + reorderCellH / 2f;
+        reorderDownX = x - overview.getLeft();
+        reorderDownY = y - overview.getTop();
+        reorderLastX = reorderDownX;
+        reorderLastY = reorderDownY;
+        reorderPolicy.begin(reorderCount, reorderColumns, reorderPadLeft, 0f, reorderCellW,
+            reorderCellH, 0f, 0f, position);
+        if (reorderFromX.length < reorderCount) {
+            reorderFromX = new float[reorderCount];
+            reorderFromY = new float[reorderCount];
+            reorderToX = new float[reorderCount];
+            reorderToY = new float[reorderCount];
+        }
+        java.util.Arrays.fill(reorderFromX, 0, reorderCount, 0f);
+        java.util.Arrays.fill(reorderFromY, 0, reorderCount, 0f);
+        java.util.Arrays.fill(reorderToX, 0, reorderCount, 0f);
+        java.util.Arrays.fill(reorderToY, 0, reorderCount, 0f);
+        reorderT = 1f;
+        reorderCarryDx = 0f;
+        reorderCarryDy = 0f;
+        overview.setChildDrawingOrderCallback(reorderDrawOrder);
+        tile.setScaleX(REORDER_LIFT_SCALE);
+        tile.setScaleY(REORDER_LIFT_SCALE);
+        overview.addOnScrollListener(reorderScrollListener);
+        applyReorderTransforms();
+        return true;
+    }
+
+    public void moveReorder(float x, float y) {
+        if (reorderSource < 0 || reorderDropping) return;
+        reorderLastX = x - overview.getLeft();
+        reorderLastY = y - overview.getTop();
+        updateReorderCarry();
+        updateReorderEdge();
+    }
+
+    /** The finger lifted: the tile settles into its place, then a changed order is reported once. */
+    public void dropReorder(float x, float y) {
+        if (reorderSource < 0 || reorderDropping) return;
+        moveReorder(x, y);
+        reorderDropping = true;
+        reorderEdgeDirection = 0;
+        stopReorderEdgeScroll();
+        final boolean commit = !reorderPolicy.isNoOp();
+        final int source = reorderSource;
+        final int before = reorderPolicy.before();
+        final int slot = AppDrawerCategoryReorderPolicy.slotOf(source, source, before, reorderCount);
+        View tile = attachedTile(source);
+        if (tile == null) {
+            finishReorder(commit, source, before);
+            return;
+        }
+        // The carried tile glides to the slot it will own; the others are already there.
+        float tx = commit ? slotX(slot) - slotX(source) : 0f;
+        float ty = commit ? slotY(slot) - slotY(source) : 0f;
+        tile.animate().translationX(tx).translationY(ty).scaleX(1f).scaleY(1f)
+            .setDuration(REORDER_SETTLE_MS)
+            .withEndAction(() -> finishReorder(commit, source, before)).start();
+    }
+
+    /** The stream was taken away or edit mode ended: everything goes back, nothing is written. */
+    public void cancelReorder() {
+        if (reorderSource < 0) return;
+        View tile = attachedTile(reorderSource);
+        if (tile != null) tile.animate().cancel();
+        finishReorder(false, reorderSource, AppDrawerCategoryReorderPolicy.END);
+    }
+
+    private void finishReorder(boolean commit, int source, int before) {
+        if (reorderSource < 0) return;
+        stopReorderEdgeScroll();
+        overview.setChildDrawingOrderCallback(null);
+        overview.removeOnScrollListener(reorderScrollListener);
+        if (reorderSettle != null) reorderSettle.cancel();
+        AppDrawerCategory what = source < buckets.size() ? buckets.get(source).category : null;
+        AppDrawerCategory target = before == AppDrawerCategoryReorderPolicy.END
+            || before >= buckets.size() ? null : buckets.get(before).category;
+        reorderSource = -1;
+        reorderDropping = false;
+        reorderEdgeDirection = 0;
+        for (int i = 0; i < overview.getChildCount(); i++) {
+            View child = overview.getChildAt(i);
+            child.animate().cancel();
+            child.setTranslationX(0f);
+            child.setTranslationY(0f);
+            child.setScaleX(1f);
+            child.setScaleY(1f);
+        }
+        ReorderListener listener = reorderListener;
+        reorderListener = null;
+        if (commit && what != null && listener != null) listener.onReordered(what, target);
+    }
+
+    private final RecyclerView.OnScrollListener reorderScrollListener =
+        new RecyclerView.OnScrollListener() {
+            @Override public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
+                if (reorderSource >= 0 && !reorderDropping) applyReorderTransforms();
+            }
+        };
+
+    private float slotX(int slot) {
+        return reorderPadLeft + (slot % reorderColumns) * reorderCellW;
+    }
+
+    private float slotY(int slot) {
+        return (slot / reorderColumns) * reorderCellH;
+    }
+
+    @Nullable private View attachedTile(int position) {
+        for (int i = 0; i < overview.getChildCount(); i++) {
+            View child = overview.getChildAt(i);
+            if (overview.getChildAdapterPosition(child) == position) return child;
+        }
+        return null;
+    }
+
+    /** The carried tile's centre moved or the list scrolled under it: ask the policy again. */
+    private void updateReorderCarry() {
+        int scroll = overview.computeVerticalScrollOffset();
+        reorderCarryDx = reorderLastX - reorderDownX;
+        reorderCarryDy = reorderLastY - reorderDownY + (scroll - reorderScrollAtLift);
+        if (reorderPolicy.hover(reorderStartCx + reorderCarryDx, reorderStartCy + reorderCarryDy))
+            retargetReorder();
+        applyReorderTransforms();
+    }
+
+    /** The target changed: every other tile glides to the slot it now has. */
+    private void retargetReorder() {
+        int before = reorderPolicy.before();
+        for (int i = 0; i < reorderCount; i++) {
+            reorderFromX[i] = reorderFromX[i] + (reorderToX[i] - reorderFromX[i]) * reorderT;
+            reorderFromY[i] = reorderFromY[i] + (reorderToY[i] - reorderFromY[i]) * reorderT;
+            int slot = AppDrawerCategoryReorderPolicy.slotOf(i, reorderSource, before, reorderCount);
+            reorderToX[i] = i == reorderSource ? 0f : slotX(slot) - slotX(i);
+            reorderToY[i] = i == reorderSource ? 0f : slotY(slot) - slotY(i);
+        }
+        reorderT = 0f;
+        android.animation.ValueAnimator settle = reorderSettle;
+        if (settle == null) {
+            settle = android.animation.ValueAnimator.ofFloat(0f, 1f);
+            settle.setDuration(REORDER_SETTLE_MS);
+            settle.setInterpolator(new android.view.animation.DecelerateInterpolator());
+            settle.addUpdateListener(animator -> {
+                reorderT = (float) animator.getAnimatedValue();
+                if (reorderSource >= 0) applyReorderTransforms();
+            });
+            reorderSettle = settle;
+        }
+        settle.cancel();
+        settle.start();
+    }
+
+    /** Draw-time translations only: the carried tile follows the finger, the others hold their slot. */
+    private void applyReorderTransforms() {
+        for (int i = 0; i < overview.getChildCount(); i++) {
+            View child = overview.getChildAt(i);
+            int position = overview.getChildAdapterPosition(child);
+            if (position < 0 || position >= reorderCount) continue;
+            if (position == reorderSource) {
+                if (!reorderDropping) {
+                    child.setTranslationX(reorderCarryDx);
+                    child.setTranslationY(reorderCarryDy);
+                }
+                continue;
+            }
+            child.setTranslationX(reorderFromX[position]
+                + (reorderToX[position] - reorderFromX[position]) * reorderT);
+            child.setTranslationY(reorderFromY[position]
+                + (reorderToY[position] - reorderFromY[position]) * reorderT);
+        }
+    }
+
+    /** Starts the edge scroll while the finger is in the top or bottom zone; it stops by itself. */
+    private void updateReorderEdge() {
+        float zone = REORDER_EDGE_ZONE_DP * getResources().getDisplayMetrics().density;
+        int direction = reorderLastY < zone ? -1
+            : reorderLastY > overview.getHeight() - zone ? 1 : 0;
+        if (direction == reorderEdgeDirection) return;
+        reorderEdgeDirection = direction;
+        if (direction != 0) startReorderEdgeScroll();
+        else stopReorderEdgeScroll();
+    }
+
     public boolean isOverview() {
         return expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW;
     }
@@ -840,7 +1268,8 @@ public final class AppDrawerCategoryView extends ViewGroup
         float listHeight = 0f;
         if (current != null) {
             int count = selectedBucket == null ? detailAdapter.getItemCount() : selectedBucket.size();
-            listHeight = current.resolveDetail(count, height, headerBandPx()).listHeightPx;
+            listHeight = current.resolveDetail(count, Math.max(0, height - topInset),
+                headerBandPx()).listHeightPx;
         }
         detailList.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(Math.max(0, Math.round(listHeight)), MeasureSpec.EXACTLY));
@@ -910,11 +1339,12 @@ public final class AppDrawerCategoryView extends ViewGroup
             return;
         }
         int count = selectedBucket == null ? detailAdapter.getItemCount() : selectedBucket.size();
-        AppDrawerCategoryGridMetrics.DetailLayout layout = current.resolveDetail(count, height,
-            headerBandPx());
-        int headerTop = Math.round(layout.headerTopPx);
-        int headerBottom = Math.round(layout.headerBottomPx);
-        int listTop = Math.round(layout.listTopPx);
+        // The opened category stands below the floating chrome's band: solved in what is left.
+        AppDrawerCategoryGridMetrics.DetailLayout layout = current.resolveDetail(count,
+            Math.max(0, height - topInset), headerBandPx());
+        int headerTop = topInset + Math.round(layout.headerTopPx);
+        int headerBottom = topInset + Math.round(layout.headerBottomPx);
+        int listTop = topInset + Math.round(layout.listTopPx);
         // Header row: chevron circle at the leading inset, count at the trailing inset, title
         // between them. The circle is centred in the band because it is a shape, but the two runs
         // of text are placed on a shared baseline rather than each centred in its own box — a 17sp

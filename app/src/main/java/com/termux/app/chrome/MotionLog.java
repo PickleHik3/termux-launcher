@@ -1,0 +1,190 @@
+package com.termux.app.chrome;
+
+import android.content.Context;
+import android.os.SystemClock;
+import android.util.Log;
+
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.window.CrossingWindow;
+import com.termux.app.window.Counters;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.view.TerminalView;
+
+import java.util.ArrayDeque;
+import java.util.ArrayList;
+import java.util.List;
+
+/**
+ * The motion log (Settings › Debugging › Motion log): one line per motion event under logcat tag
+ * {@link #TAG} and in a ring buffer of the last {@link #CAPACITY} lines, so a bug report can say
+ * what a page change did and in what order. Off, an event costs one static boolean read: callers
+ * guard on {@link #enabled} before they build the key=value string.
+ *
+ * <pre>
+ * if (MotionLog.enabled) MotionLog.log("crossing-begin", "to=" + id);
+ * </pre>
+ */
+public final class MotionLog {
+
+    public static final String TAG = "TermuxMotion";
+    public static final int CAPACITY = 2000;
+
+    /** Read at every event site before any string is built. */
+    public static volatile boolean enabled;
+
+    /** The event a broken invariant is recorded under: {@code INVARIANT <name> <kv>}. */
+    static final String INVARIANT = "INVARIANT";
+
+    private static MotionInvariants sInvariants; // guarded by BUFFER; created on the first event
+    private static final java.util.concurrent.atomic.AtomicInteger sInvariantCount =
+        new java.util.concurrent.atomic.AtomicInteger();
+
+    private static final ArrayDeque<String> BUFFER = new ArrayDeque<>();
+
+    /** Delimits the counter table after the ring in a dump. */
+    public static final String COUNTERS_HEADER = "--- counters ---";
+
+    /** Hands the terminal's resizes and draws to the crossing window (CrossingWindow). */
+    private static final TerminalView.CrossingProbe CROSSING_PROBE = new TerminalView.CrossingProbe() {
+        @Override public void onResize(String pane, String from, String to, String cause) {
+            CrossingWindow.shared().resized(SystemClock.uptimeMillis(), shortId(pane), from, to, cause);
+        }
+
+        @Override public void onDraw(String pane, long durationNanos) {
+            CrossingWindow window = CrossingWindow.shared();
+            long now = SystemClock.uptimeMillis();
+            // Only a slow draw names its pane; a fast one builds nothing.
+            window.drew(now, durationNanos > CrossingWindow.SLOW_DRAW_NANOS ? shortId(pane) : "", durationNanos);
+        }
+    };
+
+    private static String shortId(String handle) {
+        return handle.length() > 8 ? handle.substring(0, 8) : handle;
+    }
+
+    private MotionLog() {
+    }
+
+    /** Records {@code t=<uptime ms> <event> <kv>}; a no-op while the switch is off. */
+    public static void log(@NonNull String event, @Nullable String kv) {
+        if (!enabled) return;
+        record(SystemClock.uptimeMillis(), event, kv);
+    }
+
+    /**
+     * The {@code kv} of a {@code page-pose} line: one per page on screen during a crossing, for a
+     * transition review. {@code still} is left out for a page that has no still.
+     */
+    @NonNull
+    public static String poseKv(@NonNull String kind, int pageId, @NonNull String effect,
+            float slidePx, int width, float translationX, float scale, float alpha,
+            float rotationY, @Nullable Boolean still) {
+        float progress = width <= 0 ? 0f : slidePx / width;
+        String line = String.format(java.util.Locale.ROOT,
+            "kind=%s page=%d effect=%s slide=%.1f progress=%.3f tx=%.1f scale=%.3f alpha=%.3f"
+                + " rotY=%.2f", kind, pageId, effect, slidePx, progress, translationX, scale,
+            alpha, rotationY);
+        return still == null ? line : line + " still=" + still;
+    }
+
+    static void record(long uptimeMs, @NonNull String event, @Nullable String kv) {
+        String line = "t=" + uptimeMs + " " + event
+            + (kv == null || kv.isEmpty() ? "" : " " + kv);
+        synchronized (BUFFER) {
+            if (BUFFER.size() >= CAPACITY) BUFFER.pollFirst();
+            BUFFER.addLast(line);
+        }
+        Log.d(TAG, line);
+        if (INVARIANT.equals(event)) {
+            countInvariant(kv);
+            return;
+        }
+        List<MotionInvariants.Violation> broken;
+        synchronized (BUFFER) {
+            if (sInvariants == null) sInvariants = new MotionInvariants();
+            broken = sInvariants.onEvent(uptimeMs, event, kv);
+        }
+        for (MotionInvariants.Violation v : broken) {
+            sInvariantCount.incrementAndGet();
+            record(uptimeMs, INVARIANT, v.toString());
+        }
+    }
+
+    /** An invariant is tallied by its name (the first word) in the table the ring's rollover spares. */
+    private static void countInvariant(@Nullable String kv) {
+        String text = kv == null ? "" : kv;
+        int space = text.indexOf(' ');
+        Counters.count(space < 0 ? text : text.substring(0, space), space < 0 ? "" : text.substring(space + 1));
+    }
+
+    /**
+     * The counter table (holds, guards, invariants), one line per name. It outlives the ring and
+     * is reset by {@link #clear}; the dump ends with it under {@link #COUNTERS_HEADER}.
+     */
+    @NonNull
+    public static List<String> counterLines() {
+        return Counters.lines();
+    }
+
+    /** Lets a crossing's window close when no event follows its settle; posted once per settle. */
+    public static void tick() {
+        if (!enabled) return;
+        synchronized (BUFFER) {
+            if (sInvariants != null) sInvariants.tick(SystemClock.uptimeMillis());
+        }
+    }
+
+    /** Violations counted since the process started or the log was last cleared. */
+    public static int invariantCount() {
+        return sInvariantCount.get();
+    }
+
+    /** The first {@code count} frames above the caller, as {@code Class.method:line>...}. */
+    @NonNull
+    public static String callers(int count) {
+        StackTraceElement[] stack = new Throwable().getStackTrace();
+        StringBuilder out = new StringBuilder();
+        // 0 is this method, 1 the logging caller; the callers above it are what a line needs.
+        for (int i = 2; i < stack.length && i < 2 + count; i++) {
+            if (out.length() > 0) out.append('>');
+            String cls = stack[i].getClassName();
+            out.append(cls.substring(cls.lastIndexOf('.') + 1)).append('.')
+                .append(stack[i].getMethodName()).append(':').append(stack[i].getLineNumber());
+        }
+        return out.toString();
+    }
+
+    /** The buffered lines, oldest first. */
+    @NonNull
+    public static List<String> dump() {
+        synchronized (BUFFER) {
+            return new ArrayList<>(BUFFER);
+        }
+    }
+
+    public static void clear() {
+        synchronized (BUFFER) {
+            BUFFER.clear();
+            sInvariants = null;
+            sInvariantCount.set(0);
+        }
+        Counters.clear();
+    }
+
+    /** Turns the log on or off, here and in the terminal view's own events. */
+    public static void setEnabled(boolean on) {
+        enabled = on;
+        Counters.enable(on, on ? MotionLog::log : null);
+        TerminalView.sMotionLogEnabled = on;
+        TerminalView.setMotionSink(on ? MotionLog::log : null);
+        TerminalView.setCrossingProbe(on ? CROSSING_PROBE : null);
+    }
+
+    /** Applies the stored switch; called once as the activity starts. */
+    public static void syncFromPreferences(@NonNull Context context) {
+        TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
+        setEnabled(prefs != null && prefs.isMotionLogEnabled());
+    }
+}

@@ -22,24 +22,18 @@ public class DefaultExtraKeysTest {
         ExtraKeyButton[][] matrix = info.getMatrix();
         assertEquals(1, matrix.length);
         // The row carries what no key on the in-app keyboard reaches: the keyboard toggle (with
-        // the keyboard type on its swipe), mouse mode, the wall's three places, a new pane — Ctrl+Alt+Enter's split, along the longer side — (with a
+        // the keyboard type on its swipe), mouse mode, a new pane — Ctrl+Alt+Enter's split, along the longer side — (with a
         // new window on its swipe) and the session browser (with a new session on its swipe). Window and session switching live on the
         // keyboard's space-bar swipes; workspaces, search, prompt jumps and the scratchpad have
         // chords and the palette.
         String[] expectedKeys = {
             "KEYBOARD",
             "tool:mouse.toggle",
-            "tool:wall.widgets",
-            "tool:wall.terminal",
-            "tool:wall.display",
             "tool:pane.split",
             "tool:session.browser",
         };
         String[] expectedPopups = {
             "tool:keyboard.cycle_form",
-            null,
-            null,
-            null,
             null,
             "tool:window.new",
             "tool:session.new",
@@ -49,6 +43,25 @@ public class DefaultExtraKeysTest {
             assertEquals(expectedKeys[i], matrix[0][i].getKey());
             assertEquals(expectedPopups[i],
                 matrix[0][i].getPopup() == null ? null : matrix[0][i].getPopup().getKey());
+        }
+    }
+
+    @Test
+    public void assistantDefaultParsesAndSharesGlobalsKeyboardAndMouseKeys() throws Exception {
+        ExtraKeyButton[] global = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS,
+            TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES)
+            .getMatrix()[0];
+        ExtraKeyButton[] assistant = new ExtraKeysInfo(TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_ASSISTANT,
+            TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS_STYLE, ExtraKeysConstants.CONTROL_CHARS_ALIASES)
+            .getMatrix()[0];
+        String[] assistantKeys = {"KEYBOARD", "tool:voice.dictate", "tool:clipboard.paste"};
+        assertEquals(assistantKeys.length, assistant.length);
+        for (int i = 0; i < assistantKeys.length; i++) assertEquals(assistantKeys[i], assistant[i].getKey());
+        // Same definitions, so the caps are the same keys when the bar changes set.
+        for (ExtraKeyButton[] row : new ExtraKeyButton[][]{assistant}) {
+            assertEquals(global[0].getDisplay(), row[0].getDisplay());
+            assertEquals(global[0].getPopup().getKey(), row[0].getPopup().getKey());
+            assertEquals(global[0].getPopup().getDisplay(), row[0].getPopup().getDisplay());
         }
     }
 

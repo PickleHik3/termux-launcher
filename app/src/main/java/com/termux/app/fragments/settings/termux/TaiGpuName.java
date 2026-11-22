@@ -16,7 +16,7 @@ import androidx.annotation.WorkerThread;
  * context; this costs a few tens of milliseconds the first time, so call it off the main thread.
  * {@code null} when EGL is unavailable or refuses (emulators without GL, Robolectric).
  */
-final class TaiGpuName {
+public final class TaiGpuName {
     private static volatile boolean read;
     @Nullable private static volatile String cached;
 
@@ -25,7 +25,7 @@ final class TaiGpuName {
 
     @Nullable
     @WorkerThread
-    static String get() {
+    public static String get() {
         if (read) return cached;
         synchronized (TaiGpuName.class) {
             if (!read) {
