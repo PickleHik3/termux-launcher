@@ -32482,19 +32482,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ghost.setRotationY(pose.rotationY);
             ghost.setPivotX(pageLeft + pose.pivotXFraction * pageWidth);
             ghost.setPivotY(pivotY);
-            // DIAG #316 gap-ground: remove once the switch-gap shade cause is known.
-            if (MotionLog.enabled) logSwitchGapGround(ghost, page, surfaceHost, effect, arriving);
         };
-        // DIAG #316 gap-ground: the ground's state once per switch, with who started it.
-        if (MotionLog.enabled) {
-            MotionLog.log("gap-ground-start", "effect=" + effect + " offset=" + offset
-                + " beneath=" + (index >= 0) + " shift=" + shift + " from=" + from
-                + " passthrough=" + shouldUseWallpaperPassthroughMode()
-                + " glassPane=" + mGroundGlassPane + " dimPct=" + terminalWallpaperDimPercent()
-                + " wallGround=" + Integer.toHexString(mWallGroundColor)
-                + " scene=" + (com.termux.app.chrome.scene.LiveSceneFrame.current() != null)
-                + " callers=" + MotionLog.callers(6));
-        }
         travel.addUpdateListener(poseCard);
         // The gap the turn opens between the card and the arriving window shows the glass's frost,
         // not the sharp wallpaper (#316). Taken away by this travel's end, which a cancel runs too.
@@ -32580,76 +32568,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (frost == null) return;
         frost.removeCallbacks(mSwitchFrostBackstop);
         frost.hide();
-    }
-
-    // DIAG #316 gap-ground: scratch for logSwitchGapGround; remove with it.
-    private final int[] mDiagGapAt = new int[2];
-
-    /**
-     * DIAG #316 gap-ground: one line per frame of a turning switch: the card's and the arriving
-     * page's screen spans and poses, and the ground strip's state and colour at the gap between
-     * them. Runs only with the motion log on. Remove once the cause is known.
-     */
-    private void logSwitchGapGround(@NonNull View ghost, @Nullable View page,
-                                    @NonNull View surfaceHost,
-                                    @NonNull com.termux.app.launcher.home.HomePageTransition effect,
-                                    float arriving) {
-        android.graphics.RectF card = new android.graphics.RectF(0f, 0f, ghost.getWidth(),
-            ghost.getHeight());
-        ghost.getMatrix().mapRect(card);
-        surfaceHost.getLocationOnScreen(mDiagGapAt);
-        card.offset(mDiagGapAt[0], mDiagGapAt[1]);
-        android.graphics.RectF arrive = new android.graphics.RectF();
-        if (page != null) {
-            arrive.set(0f, 0f, page.getWidth(), page.getHeight());
-            page.getMatrix().mapRect(arrive);
-            View parent = (View) page.getParent();
-            if (parent != null) {
-                parent.getLocationOnScreen(mDiagGapAt);
-                arrive.offset(mDiagGapAt[0] + page.getLeft(), mDiagGapAt[1] + page.getTop());
-            }
-        }
-        float gapX = arriving > 0f ? (card.right + arrive.left) / 2f
-            : (arrive.right + card.left) / 2f;
-        StringBuilder kv = new StringBuilder(320);
-        kv.append("effect=").append(effect).append(" arriving=").append(arriving)
-            .append(" card=").append(card.left).append(',').append(card.right)
-            .append(" cardAlpha=").append(ghost.getAlpha())
-            .append(" cardScale=").append(ghost.getScaleX())
-            .append(" cardRotY=").append(ghost.getRotationY())
-            .append(" page=").append(arrive.left).append(',').append(arrive.right);
-        if (page != null) {
-            kv.append(" pageAlpha=").append(page.getAlpha())
-                .append(" pageScale=").append(page.getScaleX())
-                .append(" pageRotY=").append(page.getRotationY())
-                .append(" pageVis=").append(page.getVisibility());
-        }
-        kv.append(" gapX=").append(gapX);
-        com.termux.app.chrome.GroundStripView strip = mGroundStrip;
-        if (strip == null) {
-            kv.append(" strip=null");
-        } else {
-            strip.getLocationOnScreen(mDiagGapAt);
-            kv.append(" stripVis=").append(strip.getVisibility())
-                .append(" stripAlpha=").append(strip.getAlpha())
-                .append(" stripAt=").append(mDiagGapAt[0]).append(',').append(mDiagGapAt[1])
-                .append(" stripW=").append(strip.getWidth())
-                .append(" bands=").append(strip.bandCount());
-            View wall = mGroundWall;
-            if (wall != null) {
-                wall.getLocationOnScreen(mDiagGapAt);
-                kv.append(" wallAt=").append(mDiagGapAt[0])
-                    .append(" groundAtGap=")
-                    .append(Integer.toHexString(strip.groundAtWallX(gapX - mDiagGapAt[0])));
-            }
-            View layer = (View) strip.getParent();
-            if (layer != null) {
-                kv.append(" layerVis=").append(layer.getVisibility())
-                    .append(" layerAlpha=").append(layer.getAlpha())
-                    .append(" layerTx=").append(layer.getTranslationX());
-            }
-        }
-        MotionLog.log("gap-ground", kv.toString());
     }
 
     // Creation used to settle in place (fade + a whisper of scale); it now rides the same wall
