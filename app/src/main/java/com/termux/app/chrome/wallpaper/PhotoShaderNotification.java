@@ -15,7 +15,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.widget.Toast;
 
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
@@ -390,7 +389,8 @@ public final class PhotoShaderNotification {
         final Uri copied = uri;
         MAIN.post(() -> {
             if (copied == null) {
-                Toast.makeText(app, R.string.shader_texture_failed, Toast.LENGTH_SHORT).show();
+                // No launcher window is in front: the notification itself says so, with the same buttons.
+                if (holds(id)) showAsking(app, id, R.string.photo_shader_notification_image_failed);
                 return;
             }
             try {

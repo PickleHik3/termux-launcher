@@ -24,6 +24,7 @@
     <string name="photo_shader_notification_copy_image">Copy image</string>
     <string name="photo_shader_notification_copy_prompt">Copy prompt</string>
     <string name="photo_shader_notification_paste">Paste shader</string>
+    <string name="photo_shader_notification_image_failed">Couldn\'t make the image. Copy the prompt and attach the photo yourself.</string>
     <string name="photo_shader_notification_paste_hint">Paste the shader</string>
     <string name="photo_shader_notification_applied_title">Wallpaper applied</string>
     <string name="photo_shader_notification_applied_text">Undo to go back to the one before.</string>
