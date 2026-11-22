@@ -159,7 +159,9 @@ public final class PhotoShaderNotification {
             .setContentTitle(app.getString(R.string.photo_shader_notification_title))
             .setContentText(text)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
-            .setOngoing(true)
+            // Its three slots hold Copy image, Copy prompt and Paste, so a swipe is the only way to
+            // close it: ongoing only where a swipe still dismisses an ongoing notification (14+).
+            .setOngoing(Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE)
             .setDeleteIntent(broadcast(app, ACTION_CLOSE, id, 5, null))
             .addAction(action(app, R.string.photo_shader_notification_copy_image,
                 broadcast(app, ACTION_COPY_IMAGE, id, 1, null)))
