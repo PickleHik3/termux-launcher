@@ -11,6 +11,15 @@ final class PageLayerRefresh {
     /** The shortest time between two captures of one surface's pages layer. */
     static final long REFRESH_INTERVAL_MS = 250L;
 
+    /**
+     * Whether an invalidation under the wall's pages means the pages' content changed. Not when
+     * the glass itself caused it: the scene published a frame to the glass, or the recorder woke
+     * its own surface to collect a capture. Otherwise every capture would ask for the next one.
+     */
+    static boolean isContentChange(boolean glassOwnInvalidation) {
+        return !glassOwnInvalidation;
+    }
+
     private boolean mRequested;
     private boolean mTaken;
     private long mLastTakenMs;
