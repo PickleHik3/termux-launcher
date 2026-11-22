@@ -82,10 +82,23 @@ public final class HardwareNodes {
     private final List<Node> socTemp = new ArrayList<>();
     private final List<ClusterNodes> clusters = new ArrayList<>();
 
+    /** Set when a directory or classifying file could not be read, so root may know more. */
+    private boolean needsPrivilegedDiscovery;
+
     private HardwareNodes() {}
 
-    /** Walks the tree once. */
+    /** Walks the tree once, with the app's own reads only. */
     public static HardwareNodes discover(Fs fs) {
+        return discover(fs, null);
+    }
+
+    /**
+     * Walks the tree once. With {@code listing}, the answer of {@link #privilegedDiscoveryCommand()},
+     * what the app could not list or read is filled in from it; those nodes are then read through
+     * the per-poll batch like any other node the app cannot read.
+     */
+    public static HardwareNodes discover(Fs direct, Listing listing) {
+        Fs fs = listing == null ? direct : new OverlayFs(direct, listing);
         HardwareNodes n = new HardwareNodes();
         String devfreqGpu = n.findDevfreqGpu(fs);
 
@@ -109,7 +122,135 @@ public final class HardwareNodes {
 
         n.findThermalZones(fs);
         n.findClusters(fs);
+        if (listing == null) {
+            boolean thermalBlind = isBlank(direct.list(THERMAL)) || n.unclassifiedZone;
+            boolean cpufreqBlind = isBlank(direct.list(CPUFREQ)) || n.unclassifiedPolicy;
+            boolean gpuBlind = isBlank(direct.list(DEVFREQ)) && (n.gpuBusy == null || n.gpuCur == null);
+            n.needsPrivilegedDiscovery = thermalBlind || cpufreqBlind || gpuBlind;
+        }
         return n;
+    }
+
+    private static boolean isBlank(List<String> names) {
+        return names == null || names.isEmpty();
+    }
+
+    private boolean unclassifiedZone;
+    private boolean unclassifiedPolicy;
+
+    /** True when one privileged discovery could still find nodes the app could not see. */
+    public boolean needsPrivilegedDiscovery() {
+        return needsPrivilegedDiscovery;
+    }
+
+    static final String M_ZONES = "@@HWD_Z";
+    static final String M_DEVFREQ = "@@HWD_D";
+    static final String M_POLICIES = "@@HWD_P";
+    static final String M_EXISTS = "@@HWD_E";
+
+    /**
+     * One shell fragment that lists what the app could not: each thermal zone's type as
+     * {@code zonepath=type}, the devfreq names, each cpufreq policy's related_cpus as
+     * {@code policypath=cpus}, and which candidate node files exist.
+     */
+    public static String privilegedDiscoveryCommand() {
+        StringBuilder sb = new StringBuilder();
+        sb.append("echo ").append(M_ZONES).append("; for d in ").append(THERMAL)
+            .append("thermal_zone*; do printf '%s=' \"$d\"; { cat \"$d/type\" 2>/dev/null; echo; }; done; ");
+        sb.append("echo ").append(M_DEVFREQ).append("; ls ").append(DEVFREQ).append(" 2>/dev/null; ");
+        sb.append("echo ").append(M_POLICIES).append("; for d in ").append(CPUFREQ)
+            .append("policy*; do printf '%s=' \"$d\"; { cat \"$d/related_cpus\" 2>/dev/null; echo; }; done; ");
+        sb.append("echo ").append(M_EXISTS).append("; for f in")
+            .append(' ').append(KGSL).append("gpu_busy_percentage")
+            .append(' ').append(KGSL).append("gpuclk")
+            .append(' ').append(KGSL).append("max_gpuclk")
+            .append(' ').append(KERNEL_GPU).append("gpu_busy")
+            .append(' ').append(KERNEL_GPU).append("gpu_clock")
+            .append(' ').append(KERNEL_GPU).append("gpu_max_clock")
+            .append(' ').append(DEVFREQ).append("*/load")
+            .append(' ').append(DEVFREQ).append("*/cur_freq")
+            .append(' ').append(DEVFREQ).append("*/max_freq")
+            .append(' ').append(THERMAL).append("thermal_zone*/temp")
+            .append(' ').append(CPUFREQ).append("policy*/scaling_cur_freq")
+            .append(' ').append(CPUFREQ).append("policy*/cpuinfo_max_freq")
+            .append("; do [ -e \"$f\" ] && echo \"$f\"; done; ");
+        return sb.toString();
+    }
+
+    /** What {@link #privilegedDiscoveryCommand()} printed. */
+    public static final class Listing {
+        final Map<String, String> zoneTypes = new LinkedHashMap<>();
+        final List<String> devfreq = new ArrayList<>();
+        final Map<String, String> policyCpus = new LinkedHashMap<>();
+        final Set<String> existing = new HashSet<>();
+    }
+
+    private static String lastSegment(String path) {
+        String p = path.endsWith("/") ? path.substring(0, path.length() - 1) : path;
+        return p.substring(p.lastIndexOf('/') + 1);
+    }
+
+    /** Parses the discovery output; unknown sections, blanks and unmatched globs are ignored. */
+    public static Listing parseDiscoveryOutput(String output) {
+        Listing l = new Listing();
+        if (output == null) return l;
+        String section = "";
+        for (String raw : output.split("\n")) {
+            String line = raw.trim();
+            if (line.startsWith("@@")) { section = line; continue; }
+            if (line.isEmpty() || line.indexOf('*') >= 0) continue;
+            switch (section) {
+                case M_ZONES:
+                case M_POLICIES: {
+                    int eq = line.indexOf('=');
+                    if (eq <= 0 || eq == line.length() - 1) break;
+                    String name = lastSegment(line.substring(0, eq));
+                    String value = line.substring(eq + 1).trim();
+                    (section.equals(M_ZONES) ? l.zoneTypes : l.policyCpus).put(name, value);
+                    break;
+                }
+                case M_DEVFREQ: l.devfreq.add(line); break;
+                case M_EXISTS: l.existing.add(line); break;
+                default: break;
+            }
+        }
+        return l;
+    }
+
+    /** The app's reads, with what root listed filling the gaps. */
+    private static final class OverlayFs implements Fs {
+        private final Fs direct;
+        private final Listing listing;
+
+        OverlayFs(Fs direct, Listing listing) {
+            this.direct = direct;
+            this.listing = listing;
+        }
+
+        @Override public List<String> list(String dir) {
+            List<String> r = direct.list(dir);
+            if (!isBlank(r)) return r;
+            if (dir.equals(THERMAL)) return new ArrayList<>(listing.zoneTypes.keySet());
+            if (dir.equals(DEVFREQ)) return listing.devfreq;
+            if (dir.equals(CPUFREQ)) return new ArrayList<>(listing.policyCpus.keySet());
+            return r;
+        }
+
+        @Override public String read(String path) {
+            String v = direct.read(path);
+            if (v != null) return v;
+            if (path.startsWith(THERMAL) && path.endsWith("/type")) {
+                return listing.zoneTypes.get(lastSegment(path.substring(0, path.length() - 5)));
+            }
+            if (path.startsWith(CPUFREQ) && path.endsWith("/related_cpus")) {
+                return listing.policyCpus.get(lastSegment(path.substring(0, path.length() - 13)));
+            }
+            return null;
+        }
+
+        @Override public boolean exists(String path) {
+            return direct.exists(path) || listing.existing.contains(path);
+        }
     }
 
     private static Freq freq(Node node, HardwareStats.Unit unit) {
@@ -145,7 +286,7 @@ public final class HardwareNodes {
         for (String name : sorted) {
             if (!name.startsWith("thermal_zone")) continue;
             String type = fs.read(THERMAL + name + "/type");
-            if (type == null) continue;   // cannot be classified, so it is not used
+            if (type == null) { unclassifiedZone = true; continue; }   // not classifiable, not used
             String lower = type.trim().toLowerCase(Locale.ROOT);
             List<Node> into = lower.contains("gpu") ? gpuTemp
                 : lower.contains("cpu") ? cpuTemp
@@ -164,7 +305,8 @@ public final class HardwareNodes {
             String dir = CPUFREQ + name + "/";
             int[] cpus = HardwareStats.parseRelatedCpus(fs.read(dir + "related_cpus"));
             Node cur = node(fs, dir + "scaling_cur_freq");
-            if (cpus == null || cur == null) continue;
+            if (cpus == null) { unclassifiedPolicy = true; continue; }
+            if (cur == null) continue;
             clusters.add(new ClusterNodes(cpus[0], cpus[1], cur, node(fs, dir + "cpuinfo_max_freq")));
         }
         Collections.sort(clusters, (a, b) -> Integer.compare(a.firstCpu, b.firstCpu));

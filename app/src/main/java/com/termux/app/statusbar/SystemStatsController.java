@@ -205,6 +205,8 @@ public final class SystemStatsController {
     private int mDirectCpu;
     /** Discovered on the worker the first time hardware is wanted, then kept for the process. */
     @Nullable private static volatile HardwareNodes sHardwareNodes;
+    /** The one privileged discovery has been started; it is never repeated. */
+    private static volatile boolean sPrivilegedDiscoveryStarted;
 
     // Previous CPU tick totals per line ("cpu", "cpu0", ...) for delta-based utilisation.
     @Nullable private long[] mPrevTotal;
@@ -386,6 +388,26 @@ public final class SystemStatsController {
         // command at all; only the card's process list does.
         final boolean wantHardware = mWantHardware;
         HardwareNodes hardwareNodes = wantHardware ? hardwareNodes() : null;
+        if (hardwareNodes != null && privilegedAvailable && !sPrivilegedDiscoveryStarted
+            && hardwareNodes.needsPrivilegedDiscovery()) {
+            // Once per process, as this poll's one privileged command: ask root what the app could
+            // not list, then rediscover with the answer.
+            sPrivilegedDiscoveryStarted = true;
+            mInFlight = true;
+            mInFlightStartedAtMs = now;
+            final int generation = mSampleGeneration;
+            manager.executeSharedReadCommand(HardwareNodes.privilegedDiscoveryCommand())
+                .whenComplete((output, error) -> mWorker.post(() -> {
+                    if (generation != mSampleGeneration) return;
+                    mInFlight = false;
+                    if (error == null && output != null) {
+                        sHardwareNodes = HardwareNodes.discover(HARDWARE_FS,
+                            HardwareNodes.parseDiscoveryOutput(output));
+                    }
+                    publish();
+                }));
+            return;
+        }
         if (!wantHardware) mLatest.hardware = null;
         if (!mWantTop && mDirectCpu >= 0) {
             if (readDirectFallback()) {
