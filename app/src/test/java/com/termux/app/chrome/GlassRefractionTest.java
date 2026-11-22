@@ -53,21 +53,55 @@ public class GlassRefractionTest {
         assertEquals("the three-knob constructor leaves them off",
             new GlassRefraction.Look(12, 30, 50), new GlassRefraction.Look(12, 30, 50, 0, 0));
         assertEquals(0, look.clarityPercent);
-        assertEquals(0f, look.clarity(), 0f);
         assertEquals("the five-knob constructor leaves clarity off",
             new GlassRefraction.Look(12, 30, 50, 3, 4), new GlassRefraction.Look(12, 30, 50, 3, 4, 0));
     }
 
     @Test
-    public void clarityMapsToItsUniformAndIsClamped() {
-        // uClarity: how much of the clearer picture the rim shows.
-        assertEquals(0.6f * GlassRefraction.Look.MAX_CLARITY,
-            new GlassRefraction.Look(9, 20, 18, 0, 0, 60).clarity(), 1e-4f);
-        assertEquals(GlassRefraction.Look.MAX_CLARITY,
-            new GlassRefraction.Look(9, 20, 18, 0, 0, 100).clarity(), 1e-4f);
-        assertEquals(GlassRefraction.Look.MAX_CLARITY,
-            new GlassRefraction.Look(9, 20, 18, 0, 0, 400).clarity(), 1e-4f);
-        assertEquals(0f, new GlassRefraction.Look(9, 20, 18, 0, 0, -5).clarity(), 0f);
+    public void theEdgeReadsTheSharpPictureWhollyWhereOneIsBoundAndTheFaceKeepsItsShare() {
+        // A clearer picture of its own bound: the rim shows it whole, whatever the stored clarity.
+        float edge = GlassRefraction.sharpEdge(true, true);
+        assertEquals(1f, edge, 0f);
+        for (boolean soft : new boolean[] {false, true}) {
+            assertEquals(1f, GlassRefraction.sharpMix(0f, soft, edge, 0f), 0f);
+            // Half way at the band's middle, and none at its inner edge or on the face.
+            assertEquals(0.5f, GlassRefraction.sharpMix(0.5f, soft, edge, 0f), 1e-6f);
+            assertEquals(0f, GlassRefraction.sharpMix(1f, soft, edge, 0f), 0f);
+        }
+        // The frost bound in its place, or nothing bound: no sharp share, no second sample.
+        assertEquals(0f, GlassRefraction.sharpEdge(true, false), 0f);
+        assertEquals(0f, GlassRefraction.sharpEdge(false, false), 0f);
+        assertEquals(0f, GlassRefraction.sharpMix(0f, false, GlassRefraction.sharpEdge(true, false), 0f), 0f);
+        // The face's share is Clear's face clarity, unchanged: 0 for a look without it, its own
+        // share for Clear, and only where a picture of its own is bound.
+        GlassRefraction.Look frosted = new GlassRefraction.Look(24, 16, 10, 0, 0, 0);
+        GlassRefraction.Look clear = new GlassRefraction.Look(27, 18, 10, 0, 40, 76)
+            .withFaceTerms(100, 0, 100);
+        assertEquals(0f, GlassRefraction.faceClarity(frosted, true, true), 0f);
+        assertEquals(1f, GlassRefraction.faceClarity(clear, true, true), 0f);
+        assertEquals(0f, GlassRefraction.faceClarity(clear, true, false), 0f);
+        assertEquals(0f, GlassRefraction.faceClarity(null, true, true), 0f);
+        assertEquals(0.3f, GlassRefraction.sharpMix(1f, false, edge, 0.3f), 1e-6f);
+        assertEquals(1f, GlassRefraction.sharpMix(0f, false, edge, 0.3f), 1e-6f);
+        // The stored clarity no longer reaches the program: two looks apart only in it draw alike.
+        assertEquals(GlassRefraction.faceClarity(new GlassRefraction.Look(9, 20, 18, 0, 0, 0), true, true),
+            GlassRefraction.faceClarity(new GlassRefraction.Look(9, 20, 18, 0, 0, 100), true, true), 0f);
+    }
+
+    @Test
+    public void theProgramMixesTheSharpPictureByTheEdgeShareAndTheFaceShareAlone() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("float edgeK = x > 0.0 ? (softB > 0.0 ? x * x * x * (x * (x * 6.0 - 15.0) + 10.0)"));
+        assertTrue(agsl.contains(": x * x * (3.0 - 2.0 * x)) : 0.0;"));
+        assertTrue(agsl.contains("float clarityK = edgeK * uSharpEdge;"));
+        assertTrue(agsl.contains("clarityK = mix(clarityK, 1.0, faceMix);"));
+        // No knob scales the edge, and nothing raises it while the slab moves.
+        assertFalse(agsl.contains("uClarity"));
+        assertFalse(agsl.contains("uLiveClarity"));
+        assertFalse(agsl.contains("kLiveReach"));
+        // The live edge pass: the face reads nothing, and the band is faded by its share.
+        assertTrue(agsl.contains("if (uEdgeOnly > 0.0 && edgeK <= 0.0) {"));
+        assertTrue(agsl.contains("col = col * half(edgeK);"));
     }
 
     @Test
@@ -125,8 +159,8 @@ public class GlassRefractionTest {
             "uFrameScale", "uFrameOffset", "uLocalX", "uLocalY", "uLocalW", "uRectMin", "uRectMax",
             "uRadius", "uBand", "uStrength", "uDisp", "uDensity",
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
-            "uClarity", "uTouchActive", "uTouch", "uTouchRadius", "uTouchLens",
-            "uKeyLight", "uLiveClarity", "uSoftRim", "uShelf",
+            "uSharpEdge", "uEdgeOnly", "uFaceClarity", "uTouchActive", "uTouch", "uTouchRadius",
+            "uTouchLens", "uKeyLight", "uSoftRim", "uShelf",
             "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap", "uConcave",
         };
         for (String name : written) {
@@ -403,7 +437,6 @@ public class GlassRefractionTest {
         assertEquals(faint.strengthPx(DENSITY), loud.strengthPx(DENSITY), 0f);
         assertEquals(faint.bandPx(DENSITY), loud.bandPx(DENSITY), 0f);
         assertEquals(faint.dispersion(), loud.dispersion(), 0f);
-        assertEquals(faint.clarity(), loud.clarity(), 0f);
     }
 
     @Test

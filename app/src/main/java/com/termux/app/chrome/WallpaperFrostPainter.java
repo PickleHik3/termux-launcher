@@ -438,9 +438,9 @@ public final class WallpaperFrostPainter {
     @NonNull private ElementOn sheets() { return new ElementOn(null, mSurfaces.stackLookPage()); }
 
     /**
-     * The clearer frame Fancier Glass's edge clarity shows through the bend
-     * ({@link SharedFrameDrawable#setClearFrame}), or none. Wanted only while the look asks for
-     * clarity and the surface's own frost is blurrier than the clear frame would be; a surface
+     * The sharp frame the glass's edge shows through the bend
+     * ({@link SharedFrameDrawable#setClearFrame}), or none. Wanted wherever the glass bends (a
+     * look) and the surface's own frost is blurrier than the clear frame would be; a surface
      * already that clear has nothing clearer to show. The frame is the cache's one rect at
      * {@link GlassRefraction#CLARITY_RADIUS_DP}, so it lines up with the frost wherever it is
      * sampled. Null while that blur is still in flight: the edge shows the frost until it lands,
@@ -459,8 +459,7 @@ public final class WallpaperFrostPainter {
      * under-keyboard card, and the pane slabs.
      */
     public static boolean wantsClearFrame(@Nullable GlassRefraction.Look look, int blurRadiusDp) {
-        return look != null && look.clarityPercent > 0
-            && blurRadiusDp > GlassRefraction.CLARITY_RADIUS_DP;
+        return look != null && !look.concave && blurRadiusDp > GlassRefraction.CLARITY_RADIUS_DP;
     }
 
     /**

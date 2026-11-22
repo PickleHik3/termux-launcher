@@ -175,7 +175,8 @@ public class WallpaperFrostPainterOffDockTest {
         assertTrue("the clear frame counts as on screen, so the cache keeps it",
             drawable.shows(clear));
 
-        // An unchanged pass keeps the very same frame; no clarity takes it away again.
+        // An unchanged pass keeps the very same frame; so does a look whose stored clarity is 0:
+        // the edge reads the sharp frame whatever that knob held.
         assertTrue(chrome.frost().applyOffDockSheet(frost,
             SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
         assertSame(clear, drawable.clearFrame());
@@ -183,6 +184,11 @@ public class WallpaperFrostPainterOffDockTest {
         assertTrue(chrome.frost().applyOffDockSheet(frost,
             SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
         assertSame(drawable, SharedFrameDrawable.of(frost.getDrawable()));
+        assertSame(clear, drawable.clearFrame());
+        // No look, no bend: the frame goes.
+        surfaces.look = null;
+        assertTrue(chrome.frost().applyOffDockSheet(frost,
+            SurfaceDirtyLedger.FrostRect.OFF_DOCK_PLANK, 20f));
         assertNull(drawable.clearFrame());
     }
 
@@ -206,7 +212,10 @@ public class WallpaperFrostPainterOffDockTest {
 
         assertTrue(WallpaperFrostPainter.wantsClearFrame(lookWithClarity(1),
             GlassRefraction.CLARITY_RADIUS_DP + 1));
-        assertFalse(WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0), 25));
+        assertTrue("the edge is sharp whatever the stored clarity",
+            WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0), 25));
+        assertFalse("the concave well has no sharp edge",
+            WallpaperFrostPainter.wantsClearFrame(lookWithClarity(0).withConcave(true), 25));
         assertFalse(WallpaperFrostPainter.wantsClearFrame(null, 25));
     }
 
