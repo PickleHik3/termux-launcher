@@ -534,6 +534,10 @@ public final class AppDrawerContentView extends FrameLayout
         mGrid.setAdapter(mAdapter);
         mGrid.setHasFixedSize(true);
         mGrid.setItemViewCacheSize(AppDrawerGridMetrics.MIN_COLUMNS * 2);
+        // The pool's default of five per type drops most of a screenful whenever the list is
+        // rebound, and the next layout builds them all again.
+        mGrid.getRecycledViewPool().setMaxRecycledViews(AppDrawerAppsAdapter.VIEW_TYPE_APP,
+            AppDrawerGridMetrics.GRID_POOL_CELLS);
         // The spring below is the only overscroll this surface has; the platform's glow (and, on
         // RecyclerView 1.2+, its stretch) would otherwise sit on top of it.
         mGrid.setOverScrollMode(OVER_SCROLL_NEVER);

@@ -26,6 +26,8 @@ public final class AppDrawerGridMetrics {
     public static final float TARGET_CELL_DP = 84f;
     public static final int MIN_COLUMNS = 4;
     public static final int MAX_COLUMNS = 6;
+    /** Recycled app cells kept for a full screen of the widest grid plus a row of slack. */
+    public static final int GRID_POOL_CELLS = MAX_COLUMNS * 9;
     /** Ceiling on the rendered icon, which is also the largest key the drawer puts in the icon cache. */
     public static final float MAX_ICON_DP = 48f;
     /** Share of the cell an icon may take before the label has no room left to be read. */
@@ -84,6 +86,24 @@ public final class AppDrawerGridMetrics {
         this.cellWidthPx = cellWidthPx;
         this.iconPx = iconPx;
         this.rowHeightPx = rowHeightPx;
+    }
+
+    /** Value equality, so a re-resolve of unchanged inputs can be told from a real change. */
+    @Override public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof AppDrawerGridMetrics)) return false;
+        AppDrawerGridMetrics m = (AppDrawerGridMetrics) o;
+        return columns == m.columns && Float.compare(cellWidthPx, m.cellWidthPx) == 0
+            && Float.compare(iconPx, m.iconPx) == 0
+            && Float.compare(rowHeightPx, m.rowHeightPx) == 0;
+    }
+
+    @Override public int hashCode() {
+        int h = columns;
+        h = 31 * h + Float.floatToIntBits(cellWidthPx);
+        h = 31 * h + Float.floatToIntBits(iconPx);
+        h = 31 * h + Float.floatToIntBits(rowHeightPx);
+        return h;
     }
 
     /** The column count alone, for callers that only need to know whether a rebind changed it. */
