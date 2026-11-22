@@ -77,10 +77,15 @@ fails when the catalogue has gone stale.
   automatic exclusion), the activity-embedded view registers its own
   view-local `setSystemGestureExclusionRects` in `onLayout` and
   `onApplyWindowInsets` (SDK >= 29) so edge-column swipes are not recognized
-  as system Back gestures. It asks only for the two side strips, each as wide
-  as the window's system-gesture inset on that side: an exclusion that
-  reaches the navigation handle turns off the system's sideways swipe to the
-  previous app. The host may
+  as system Back gestures. It asks for the two side strips, each as wide as
+  the window's system-gesture inset on that side, and for its rows between
+  them down to the last row's bottom: Quickstep takes a sideways drag that
+  lands in the navigation handle's band for its quick switch unless the touch
+  is inside an exclusion, which stole the space bar's cursor slide wherever
+  the bottom row reached that band. The bottom margin under the last row is
+  left out, so the handle's sideways swipe still works where only the margin
+  reaches it; a sideways swipe that starts on a key in the band slides or
+  types instead of switching apps. The host may
   also apply a live height scale; measurement multiplies `Config.rowHeightPx`
   and derives the height cap from `maxKeyboardHeightFraction` by the same factor
   so enlarged keyboards are not silently limited by the unscaled cap. An
