@@ -32513,6 +32513,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSwitchFrostHold.expire(android.os.SystemClock.uptimeMillis())) hideSwitchFrost();
     };
 
+    /** The front window's glass face tint, which the switch gap's frost wears too. */
+    private int switchGapTint() {
+        return com.termux.app.terminal.TerminalSurfacePolicy.switchGapTint(
+            paneSurfaceStyle().paneGlassTintColor());
+    }
+
     /**
      * Shows the frost under the ground strip for a turning switch of {@code travelMs}, from the
      * frame the panes' glass samples now (the scene's live frame, else the stored frame already
@@ -32522,12 +32528,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return the ticket that takes it away again ({@link #endSwitchFrost}), 0 for none
      */
-    private int switchGapTint() {
-        // The face of the front window's glass: the tint its slab lays over the frost.
-        return com.termux.app.terminal.TerminalSurfacePolicy.switchGapTint(
-            paneSurfaceStyle().paneGlassTintColor());
-    }
-
     private int showSwitchFrost(long travelMs) {
         if (mGroundFrost == null) mGroundFrost = findViewById(R.id.ground_frost);
         com.termux.app.chrome.GroundFrostView frost = mGroundFrost;
