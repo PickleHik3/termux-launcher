@@ -167,6 +167,22 @@ public class GlassStackTest {
     }
 
     @Test
+    public void glassRefractionOffIsFlatFrostedGlassWithNoLens() {
+        // Glass refraction off hands the frame no look: no program, so no lens zone, no bend and
+        // no slab light; the frame draws plain and the stack keeps its drawn rim (#317).
+        Bitmap frame = Bitmap.createBitmap(4, 4, Bitmap.Config.ARGB_8888);
+        SharedFrameDrawable backdrop = new SharedFrameDrawable(frame, new Rect(0, 0, 40, 40), null,
+            out -> { out[0] = 0; out[1] = 0; });
+        backdrop.setRefraction(null, 2f, 0f, 0);
+
+        assertFalse(backdrop.refracts());
+        assertEquals(null, backdrop.refractionLook());
+        // A stack over a frame drawn plain keeps the frost under its gradient rim.
+        Drawable stack = GlassStack.build(glass, keyboardSpec(null), 2f, backdrop, b -> false);
+        assertEquals(1, rimsIn(stack));
+    }
+
+    @Test
     public void aStackWhoseBackdropRefractsLaysNoRim() {
         // The JVM runs no program, so a refracting frame is stood in through the probe: what
         // build() does with the answer is what is pinned here.

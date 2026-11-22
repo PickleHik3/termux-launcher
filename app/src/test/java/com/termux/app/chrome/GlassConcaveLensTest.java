@@ -111,29 +111,35 @@ public class GlassConcaveLensTest {
         // A pixel in the upper band, half way along: the outward normal is straight up.
         float py = -by + GlassRefraction.concaveLipPx(GlassRefraction.concaveBandPx(density, 2f * by));
         GlassRefraction.concaveOffset(concave, 0f, py, bx, by, by, density);
-        GlassRefraction.restBendOffset(convex, 0f, py, bx, by, by, look.bandPx(density),
-            look.strengthPx(density), 0f, 0f, GlassRefraction.Look.rimWidthPx(density));
+        GlassRefraction.restBendOffset(convex, 0f, py, bx, by, by, look.thicknessPx(density),
+            0f, 0f, density);
         assertTrue("concave samples further out (up)", concave[1] < 0f);
         assertTrue("convex samples further in (down)", convex[1] > 0f);
         assertEquals(1, GlassRefraction.CONCAVE_SIGN);
         assertEquals(-1, GlassRefraction.CONVEX_SIGN);
     }
 
-    /** What streaked before: the convex bend on this slab falls faster than a px per px and folds. */
+    /**
+     * What streaked before: a convex bend on this slab falls faster than a px per px and folds.
+     * The slab's lens still does, in its outermost px where the bevel stands up (a thick slab's
+     * edge mirrors what is just inside it); the page bar keeps the concave lens.
+     */
     @Test
     public void theConvexBendOnThisSlabFoldsWhichIsWhatStreaked() {
         float density = 2.75f;
         float hs = SLAB_DP * density / 2f;
         GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
-        float rim = GlassRefraction.Look.rimWidthPx(density);
+        GlassSlab slab = GlassSlab.DEFAULT;
+        float w = GlassRefraction.lensZonePx(slab, hs, density, 1f, 0f, 0f, 0f);
+        float t = GlassRefraction.lensThicknessPx(slab, look.thicknessPx(density), hs, density, 1f, 0f);
         float last = 0f;
         boolean folds = false;
         for (float y = STEP; y < hs; y += STEP) {
-            float sample = y + GlassRefraction.pullPx(y, look.bandPx(density), look.strengthPx(density), hs, rim);
+            float sample = y + slab.shiftPx(y, w, t);
             if (sample < last) folds = true;
             last = sample;
         }
-        assertTrue("the old bend folds the picture back on this slab", folds);
+        assertTrue("the convex bend folds the picture back on this slab", folds);
     }
 
     @Test

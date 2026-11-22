@@ -287,18 +287,19 @@ public class GlassMotionLightTest {
 
     @Test
     public void theLiveBendThickensTheLeadingEdgeAndThinsTheTrailingOne() {
-        float band = 18f * DENSITY, strength = 27f * DENSITY, big = 1000f;
-        float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
-        for (float inside : new float[] {rimW, band * 0.25f, band * 0.6f}) {
-            float rest = GlassRefraction.pullPx(inside, band, strength, big, rimW);
-            assertEquals("lean 0 is the resting pull, bit for bit", rest,
-                GlassRefraction.livePullPx(inside, band, strength, big, rimW, 0f), 0f);
-            assertTrue(GlassRefraction.livePullPx(inside, band, strength, big, rimW, 1f) > rest);
-            assertTrue(GlassRefraction.livePullPx(inside, band, strength, big, rimW, -1f) < rest);
+        GlassSlab slab = GlassSlab.DEFAULT;
+        float zone = slab.lensPx(DENSITY), thick = 9f * DENSITY, big = 1000f;
+        for (float inside : new float[] {1f, zone * 0.25f, zone * 0.6f}) {
+            float rest = slab.shiftPx(inside, zone, thick);
+            assertEquals("lean 0 is the resting shift, bit for bit", rest,
+                GlassRefraction.liveShiftPx(slab, inside, zone, thick, big, 0f), 0f);
+            assertTrue(GlassRefraction.liveShiftPx(slab, inside, zone, thick, big, 1f) > rest);
+            assertTrue(GlassRefraction.liveShiftPx(slab, inside, zone, thick, big, -1f) < rest);
         }
-        // Still held at the half short side.
+        // Still held: the deepest live bend on a small piece stays near its half short side.
         float small = 10f * DENSITY;
-        assertTrue(GlassRefraction.livePullPx(rimW, band, strength, small, rimW, 1f)
+        float held = GlassRefraction.lensThicknessPx(slab, 30f * DENSITY, small, DENSITY, 1f, 0f);
+        assertTrue(GlassRefraction.liveShiftPx(slab, 1f, Math.min(zone, small), held, small, 0f)
             <= small + 1e-4f);
         // The lean: a whole lag facing the edge is 1, behind it -1, across it 0.
         float whole = GlassMotionLight.LAG_MAX_DP * DENSITY;
@@ -321,14 +322,14 @@ public class GlassMotionLightTest {
         }
         assertTrue(agsl.contains("bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;"));
         // The resting expressions are untouched, and every live term sits behind its gate.
-        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
-        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
-        assertTrue(agsl.contains("float split = uDisp > 0.0 ? pull * uDisp * kSplitWeight : 0.0;"));
-        assertTrue(agsl.contains("float2 sn = nb;"));
+        assertTrue(agsl.contains("            shiftG = tl * snellTan(slope, kIor);\n"));
+        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * shiftG;"));
+        assertTrue(agsl.contains("    float2 oR = nb * (shiftG - shiftR);\n"));
+        assertTrue(agsl.contains("    float2 oB = nb * (shiftG - shiftB);\n"));
         int liveGate = agsl.indexOf("if (live) {");
         assertTrue(liveGate > 0);
-        assertTrue(agsl.indexOf("pull = bent;") > liveGate);
-        assertTrue(agsl.indexOf("sn = split > 0.0 ? sv / split : nb;") > agsl.lastIndexOf("if (live) {"));
+        assertTrue(agsl.indexOf("tl = slabT * (1.0 + kLagBend * lean);") > liveGate);
+        assertTrue(agsl.indexOf("float2 sv = bendV * max(uDisp, kLiveDisp);") > agsl.lastIndexOf("if (live) {"));
         // The constants are the Java ones.
         assertConst(agsl, "kLagMaxDp", GlassMotionLight.LAG_MAX_DP);
         assertConst(agsl, "kLagLean", GlassRefraction.LAG_LEAN_GAIN);
@@ -358,16 +359,16 @@ public class GlassMotionLightTest {
     @Test
     public void aLiveBendMovesFurtherThanTheClearerFramesBlur() {
         // Research recommendation 2: the bend's change while moving should pass the blur of the
-        // frame the rim samples. At the press rig's 1.1 degrees on Clear (27 dp over 18), a couple
-        // of dp in, the leaned bend moves the picture further than CLARITY_RADIUS_DP.
+        // frame the rim samples. At the press rig's 1.1 degrees on a 27 dp Depth, a couple of dp
+        // in, the leaned bend moves the picture further than CLARITY_RADIUS_DP.
         float d = 2.625f;
         GlassRefraction.Look clear = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
-        float rimW = GlassRefraction.Look.rimWidthPx(d);
+        GlassSlab slab = GlassSlab.DEFAULT;
         float lean = GlassRefraction.tiltLean(-1f, 0f, (float) Math.sin(Math.toRadians(1.1)), 0f);
         float inside = 2f * d;
-        float rest = GlassRefraction.pullPx(inside, clear.bandPx(d), clear.strengthPx(d), 1000f, rimW);
-        float live = GlassRefraction.livePullPx(inside, clear.bandPx(d), clear.strengthPx(d), 1000f,
-            rimW, lean);
+        float rest = slab.shiftPx(inside, slab.lensPx(d), clear.thicknessPx(d));
+        float live = GlassRefraction.liveShiftPx(slab, inside, slab.lensPx(d), clear.thicknessPx(d),
+            1000f, lean);
         assertTrue((live - rest) / d + " dp", live - rest > GlassRefraction.CLARITY_RADIUS_DP * d);
     }
 

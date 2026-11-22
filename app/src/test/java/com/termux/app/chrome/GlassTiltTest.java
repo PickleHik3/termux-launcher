@@ -258,10 +258,11 @@ public class GlassTiltTest {
         assertEquals(1f, GlassRefraction.liveLean(-1f, 0f, -whole, 0f, sin(6f), 0f, DENSITY), 0f);
         // A lag one way and a tilt the other cancel rather than stack.
         assertEquals(0f, GlassRefraction.liveLean(-1f, 0f, whole * tl, 0f, sin(1.1f), 0f, DENSITY), 1e-5f);
-        // The leaned pull thickens the near edge's bend as the lag's lean does.
-        float band = 20f * DENSITY, strength = 9f * DENSITY, rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
-        float rest = GlassRefraction.pullPx(rimW, band, strength, 1000f, rimW);
-        assertTrue(GlassRefraction.livePullPx(rimW, band, strength, 1000f, rimW, tl) > rest);
+        // The leaned slab thickens the near edge's bend as the lag's lean does.
+        GlassSlab slab = GlassSlab.DEFAULT;
+        float zone = slab.lensPx(DENSITY), thick = 9f * DENSITY, inside = 4f * DENSITY;
+        float rest = slab.shiftPx(inside, zone, thick);
+        assertTrue(GlassRefraction.liveShiftPx(slab, inside, zone, thick, 1000f, tl) > rest);
     }
 
     @Test
@@ -443,20 +444,22 @@ public class GlassTiltTest {
         // Every tilt term sits behind its gate, and the resting expressions are untouched.
         int gate = agsl.indexOf("bool tilted =");
         assertTrue(agsl.indexOf("tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);") > gate);
-        assertTrue(agsl.contains("        if (tilted) {\n"
-            + "            tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n"
-            + "            lean = lean + tiltLean;\n"
-            + "        }\n"
-            + "        lean = clamp(lean, -1.0, 1.0);\n"));
+        assertTrue(agsl.contains("            if (tilted) {\n"
+            + "                lean = lean + clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n"
+            + "            }\n"
+            + "            lean = clamp(lean, -1.0, 1.0);\n"));
+        assertTrue(agsl.contains("    if (tilted) {\n"
+            + "        tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n"
+            + "    }\n"));
         assertTrue(agsl.contains("    if (tilted) {\n"
             + "        sampleCoord = sampleCoord + tiltOffset(p, b, inside, rimW);\n"
             + "    }\n"));
-        assertTrue(agsl.contains("        if (tilted) {\n"
-            + "            lobe = lobe * (1.0 + kTiltLight * tiltLean);\n"
-            + "        }\n"));
-        assertTrue(agsl.contains("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
-        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
-        assertTrue(agsl.contains("        float lobe = rimLobe(rc);\n"));
+        assertTrue(agsl.contains("            if (tilted) {\n"
+            + "                lobe = lobe * (1.0 + kTiltLight * tiltLean);\n"
+            + "            }\n"));
+        assertTrue(agsl.contains("            shiftG = tl * snellTan(slope, kIor);\n"));
+        assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * shiftG;"));
+        assertTrue(agsl.contains("            float lobe = rimLobe(rc);\n"));
         // The face is moved before the finger's light, and takes one sample: no new eval.
         assertTrue(agsl.indexOf("tiltOffset(p, b, inside, rimW)") < agsl.indexOf("if (uTouchActive > 0.001) {"));
         // The mirror's arithmetic.

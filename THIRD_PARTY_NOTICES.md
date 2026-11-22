@@ -43,6 +43,13 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   and `fluted-glass.glsl` under `app/src/main/assets/shaders/examples/`. Mirage itself is not a
   dependency. The shaders use fixed settings and a built-in picture, and each file's header states
   the changes.
+- **[LiquidGlass](https://github.com/shayann07/liquidglass)** — Apache-2.0 — LiquidGlass
+  contributors. The glass slab's superellipse lens profile and its self-bounding Snell shift (the
+  tangent-difference form of `snellShift`) in `app/.../chrome/GlassSlab.java` and the AGSL in
+  `GlassRefraction.java` are adapted from `GlassShaderSource.kt` at commit `9effb52` (lines
+  278-305), with Schlick's Fresnel as at lines 778-782. The adaptation measures the lens zone on
+  one rounded-box distance field, scales it with the surface's size and lights it in linear
+  light; the measured iOS fold maps are not used.
 - **Terminal Emulator for Android** — Apache-2.0 — Copyright Jack Palevich and contributors.
 - **Android Open Source Project / Launcher3** — Apache-2.0 — portions of terminal compatibility,
   `termux-am-library`, and launcher gesture navigation.
