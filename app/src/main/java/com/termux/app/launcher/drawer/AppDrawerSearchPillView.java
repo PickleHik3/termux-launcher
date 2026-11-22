@@ -92,6 +92,8 @@ public final class AppDrawerSearchPillView extends View {
     private float mFold;
     private float mDrawnLeft;
     private float mDrawnRight;
+    /** Whether the glass slab laid under this view is drawing the capsule's body. */
+    private boolean mGlassShown;
     /** True while a DOWN that landed on the clear affordance is still live. */
     private boolean mClearPressed;
 
@@ -152,6 +154,27 @@ public final class AppDrawerSearchPillView extends View {
         if (changed) invalidate();
     }
 
+    /**
+     * Whether glass (Live or the wallpaper's frost) is laid under this view and draws the body.
+     * Without it the capsule draws its own solid body, the card's surface colour, so the rows
+     * beneath never show through the text; with it the body is the glass alone.
+     */
+    public void setGlassShown(boolean shown) {
+        if (mGlassShown == shown) return;
+        mGlassShown = shown;
+        invalidate();
+    }
+
+    /** The capsule's left edge in the view's own coordinates (the glass slab's outline). */
+    public float capsuleLeftPx() {
+        return drawnLeft();
+    }
+
+    /** The capsule's right edge in the view's own coordinates. */
+    public float capsuleRightPx() {
+        return drawnRight();
+    }
+
     /** The capsule actually drawn, in the parent's coordinates: what a touch or a hold sees. */
     public void getDrawnRect(@NonNull RectF out) {
         float originX = getLeft() + getTranslationX();
@@ -191,8 +214,15 @@ public final class AppDrawerSearchPillView extends View {
         float right = drawnRight();
         float fold = Math.max(0f, Math.min(1f, mFold));
         mBounds.set(left + inset, inset, right - inset, height - inset);
-        mFill.setColor(ColorUtils.setAlphaComponent(onSurface, FILL_ALPHA));
-        canvas.drawRoundRect(mBounds, radius, radius, mFill);
+        if (!mGlassShown) {
+            // No glass: the card's own surface, solid, under the wash.
+            mFill.setColor(MaterialColors.getColor(this,
+                com.google.android.material.R.attr.colorSurface,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_panel)));
+            canvas.drawRoundRect(mBounds, radius, radius, mFill);
+            mFill.setColor(ColorUtils.setAlphaComponent(onSurface, FILL_ALPHA));
+            canvas.drawRoundRect(mBounds, radius, radius, mFill);
+        }
         mStroke.setColor(ColorUtils.setAlphaComponent(onSurface, STROKE_ALPHA));
         canvas.drawRoundRect(mBounds, radius, radius, mStroke);
 
@@ -262,7 +292,8 @@ public final class AppDrawerSearchPillView extends View {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
                 // Folded, the view still stands where the full bar was; only the circle answers.
-                if (event.getX() < drawnLeft() || event.getX() >= drawnRight()) return false;
+                if (!AppDrawerFloatingList.capsuleContains(event.getX(), event.getY(), drawnLeft(),
+                    drawnRight(), getHeight())) return false;
                 mClearPressed = hasQuery() && isOverClear(event.getX());
                 return true;
             case MotionEvent.ACTION_UP: {

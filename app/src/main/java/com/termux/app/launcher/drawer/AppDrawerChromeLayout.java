@@ -107,27 +107,17 @@ public final class AppDrawerChromeLayout {
         /** The inset under the content whatever the fold: the pages' dots keep to it. */
         public final int restInsetPx;
         /**
-         * The band a bar at the bottom holds under the list. The list (grid, category view) is laid
-         * out to the card's bottom edge whatever the fold and only its drawn and touchable bottom
-         * edge rises by this much while the bar is full, so folding grows the visible list with the
-         * fold fraction and never re-lays it. Zero with the bar on top.
+         * The band a bar at the bottom holds under the list: the list's end padding. The list
+         * (grid, category view) runs to the card's bottom edge and the capsule floats over it, so
+         * rows pass under the capsule and the last row rests above it. Zero with the bar on top.
          */
         public final int foldBandPx;
-        /**
-         * The band a bar on top holds above the list: from the section switch (or the card's top
-         * edge without one) down to where the rows start. The list is laid out this much taller
-         * with the band as start padding and only its drawn and touchable top edge falls by it
-         * while the bar is full; zero with the bar at the bottom.
-         */
-        public final int topFoldBandPx;
 
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
                int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
                int barLeftPx, int barTopPx, int buttonLeftPx, int buttonTopPx,
-               int buttonSizePx, int restInsetPx, int foldBandPx,
-               int topFoldBandPx) {
-            this.topFoldBandPx = topFoldBandPx;
+               int buttonSizePx, int restInsetPx, int foldBandPx) {
             this.restInsetPx = restInsetPx;
             this.foldBandPx = foldBandPx;
             this.barLeftPx = barLeftPx;
@@ -178,18 +168,16 @@ public final class AppDrawerChromeLayout {
             // the full bar, and rows are visible down to the card's edge only while folded.
             return new Result(side, switchTop, switchHeight, betweenMargins, 0, searchHeight,
                 searchWidth, in.bottomInsetPx, topChrome, band, 0, barLeft, barTop,
-                buttonLeft, buttonTop, searchHeight, 0, band, 0);
+                buttonLeft, buttonTop, searchHeight, 0, band);
         }
         // The bar on top: the round button floats over the list's last rows, so a folded bar has
         // the list keep that much under its last row. The top band is kept as it is.
         int clearance = buttonBottom + searchHeight + gap;
         int inner = in.collapsed ? Math.max(in.bottomInsetPx, clearance) : in.bottomInsetPx;
         int contentTop = topChrome + searchHeight + gap;
-        // Folded, the rows reach up to the switch's own gap, or the card's edge without a switch.
-        int topBand = contentTop - (in.switchShown ? topChrome : 0);
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
             searchWidth, 0, contentTop, 0, inner, barLeft, topChrome,
-            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0, topBand);
+            buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0);
     }
 
     /**

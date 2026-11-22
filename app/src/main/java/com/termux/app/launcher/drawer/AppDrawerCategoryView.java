@@ -96,8 +96,8 @@ public final class AppDrawerCategoryView extends ViewGroup
     private float downRawY;
     /** See {@link #setBottomInsetPx}; zero until the controller sets it. */
     private int bottomInset;
-    /** The band at the bottom a full search bar still hides; see {@link #setHiddenBottomPx}. */
-    private int hiddenBottom;
+    /** The band at the top the floating chrome holds; see {@link #setTopInsetPx}. */
+    private int topInset;
     private float collapseStartProgress = 1f;
     private float headerDownX;
     private float headerDownY;
@@ -123,7 +123,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         tileAdapter.setExpansionListener(this);
         tileAdapter.setClickGate(clickGate);
         overviewLayout = new GridLayoutManager(context, 1);
-        overview = new RecyclerView(context);
+        overview = new AppDrawerFadingList(context);
         overview.setLayoutManager(overviewLayout);
         overview.setAdapter(tileAdapter);
         overview.setHasFixedSize(true);
@@ -132,7 +132,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         // paid all of that again on the way back, on the scroll frame itself.
         overview.setItemAnimator(null);
         overview.setOverScrollMode(OVER_SCROLL_NEVER);
-        overview.setClipToPadding(true);
+        overview.setClipToPadding(false);
         overview.setOutlineProvider(ViewOutlineProvider.BOUNDS);
         overview.setClipToOutline(true);
         overview.addItemDecoration(tileSpacing);
@@ -142,7 +142,10 @@ public final class AppDrawerCategoryView extends ViewGroup
         detailAdapter = new AppDrawerCategoryDetailAdapter(dock);
         detailAdapter.setClickGate(clickGate);
         detailLayout = new GridLayoutManager(context, AppDrawerGridMetrics.MIN_COLUMNS);
-        detailList = new RecyclerView(context);
+        AppDrawerFadingList detailFade = new AppDrawerFadingList(context);
+        // The list starts under its own header: only the card's bottom edge dissolves rows.
+        detailFade.setFadeEdges(false, true);
+        detailList = detailFade;
         detailList.setLayoutManager(detailLayout);
         detailList.setAdapter(detailAdapter);
         detailList.setHasFixedSize(true);
@@ -328,7 +331,7 @@ public final class AppDrawerCategoryView extends ViewGroup
         // edge, so in landscape — where a second row only half fits — the tiles read as clipped by
         // the plane rather than as a list that scrolls. One row gap of overscroll says the
         // difference, and the tiles still paint into it while dragging.
-        overview.setPadding(horizontal, 0, horizontal, overviewBottomPaddingPx());
+        overview.setPadding(horizontal, topInset, horizontal, overviewBottomPaddingPx());
         overview.setClipToPadding(false);
         tileSpacing.setMetrics(metrics);
         overview.invalidateItemDecorations();
@@ -338,24 +341,31 @@ public final class AppDrawerCategoryView extends ViewGroup
     }
 
     /**
+     * The band at the top the floating search chrome holds. The view spans the card; the overview
+     * starts its rows below the band (as padding, not clipped, so scrolled tiles pass under the
+     * capsule) and the opened category's header and list stand below it. Compared before it is
+     * set; not per frame.
+     */
+    public int getTopInsetPx() {
+        return topInset;
+    }
+
+    public void setTopInsetPx(int topInsetPx) {
+        int inset = Math.max(0, topInsetPx);
+        if (inset == topInset) return;
+        topInset = inset;
+        if (overview.getPaddingTop() != inset) {
+            overview.setPadding(overview.getPaddingLeft(), inset, overview.getPaddingRight(),
+                overview.getPaddingBottom());
+        }
+        requestLayout();
+    }
+
+    /**
      * Ends the last overview card and the opened category's last row {@code bottomInsetPx} above
      * the card's usable bottom. Each tile and row already carries its own trailing gap, which the
      * padding gives back. Not per frame.
      */
-    public void setHiddenBottomPx(int hiddenPx) {
-        hiddenBottom = Math.max(0, hiddenPx);
-    }
-
-    /** Rows under the bottom band a full search bar still holds take no touch. */
-    @Override
-    public boolean dispatchTouchEvent(android.view.MotionEvent ev) {
-        if (ev.getActionMasked() == android.view.MotionEvent.ACTION_DOWN && hiddenBottom > 0
-            && ev.getY() >= getHeight() - hiddenBottom) {
-            return false;
-        }
-        return super.dispatchTouchEvent(ev);
-    }
-
     public void setBottomInsetPx(int bottomInsetPx) {
         int inset = Math.max(0, bottomInsetPx);
         if (inset == bottomInset) return;
@@ -368,8 +378,8 @@ public final class AppDrawerCategoryView extends ViewGroup
         }
         int overviewBottom = overviewBottomPaddingPx();
         if (overview.getPaddingBottom() != overviewBottom) {
-            overview.setPadding(overview.getPaddingLeft(), 0, overview.getPaddingRight(),
-                overviewBottom);
+            overview.setPadding(overview.getPaddingLeft(), overview.getPaddingTop(),
+                overview.getPaddingRight(), overviewBottom);
         }
     }
 
@@ -755,6 +765,9 @@ public final class AppDrawerCategoryView extends ViewGroup
             || state == AppDrawerCategoryExpansionModel.State.COLLAPSE_DRAGGING)
             return Part.TRANSITION_BODY;
         if (state == AppDrawerCategoryExpansionModel.State.EXPANDED) {
+            // The band above the header is the floating chrome's, as it was when the view started
+            // below it: a pull there closes the drawer.
+            if (y < topInset) return Part.OUTSIDE;
             // The whole header band — chevron, title and count — is one collapse affordance.
             if (contains(detailHeader, x, y) || contains(collapseChevron, x, y)
                 || contains(detailCount, x, y)) return Part.COLLAPSE_ACTION;
@@ -1255,7 +1268,8 @@ public final class AppDrawerCategoryView extends ViewGroup
         float listHeight = 0f;
         if (current != null) {
             int count = selectedBucket == null ? detailAdapter.getItemCount() : selectedBucket.size();
-            listHeight = current.resolveDetail(count, height, headerBandPx()).listHeightPx;
+            listHeight = current.resolveDetail(count, Math.max(0, height - topInset),
+                headerBandPx()).listHeightPx;
         }
         detailList.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
             MeasureSpec.makeMeasureSpec(Math.max(0, Math.round(listHeight)), MeasureSpec.EXACTLY));
@@ -1325,11 +1339,12 @@ public final class AppDrawerCategoryView extends ViewGroup
             return;
         }
         int count = selectedBucket == null ? detailAdapter.getItemCount() : selectedBucket.size();
-        AppDrawerCategoryGridMetrics.DetailLayout layout = current.resolveDetail(count, height,
-            headerBandPx());
-        int headerTop = Math.round(layout.headerTopPx);
-        int headerBottom = Math.round(layout.headerBottomPx);
-        int listTop = Math.round(layout.listTopPx);
+        // The opened category stands below the floating chrome's band: solved in what is left.
+        AppDrawerCategoryGridMetrics.DetailLayout layout = current.resolveDetail(count,
+            Math.max(0, height - topInset), headerBandPx());
+        int headerTop = topInset + Math.round(layout.headerTopPx);
+        int headerBottom = topInset + Math.round(layout.headerBottomPx);
+        int listTop = topInset + Math.round(layout.listTopPx);
         // Header row: chevron circle at the leading inset, count at the trailing inset, title
         // between them. The circle is centred in the band because it is a shape, but the two runs
         // of text are placed on a shared baseline rather than each centred in its own box — a 17sp

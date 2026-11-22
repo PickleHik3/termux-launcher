@@ -138,6 +138,25 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             return null;
         }
 
+        /**
+         * The search capsule's Live picture for {@code slab} at {@code blurDp}: the slab registers
+         * as the glass service's drawer search surface, wanting Live; null while another kind is
+         * granted (the slab then draws the wallpaper frame). {@code redress} runs when that moves.
+         */
+        @Nullable
+        default com.termux.app.chrome.LivePicture drawerSearchGlassWear(@NonNull View slab,
+                int blurDp, @Nullable Runnable redress) {
+            return null;
+        }
+
+        /** The capsule's slab gave its glass back: its registry entry and picture are let go. */
+        default void drawerSearchGlassDrop(@NonNull View slab) {}
+
+        /** The card's own blur radius in dp, the capsule's blur; zero where there is none. */
+        default int drawerSearchGlassBlurDp() {
+            return 0;
+        }
+
         /** The style a terminal pane's corner tab is dressed with; null where the app has none. */
         @Nullable
         default com.termux.app.terminal.PaneSurfaceStyle drawerTabStyle() {
@@ -1380,6 +1399,20 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
             mHost.suggestionBar());
         content.setCallbacks(this);
         content.setSwitchGlassSource(mHost::drawerSwitchGlass);
+        content.setSearchGlassHost(new AppDrawerContentView.SearchGlassHost() {
+            @Nullable @Override public com.termux.app.chrome.LivePicture wear(@NonNull View slab,
+                    int blurDp, @Nullable Runnable redress) {
+                return mHost.drawerSearchGlassWear(slab, blurDp, redress);
+            }
+
+            @Override public void drop(@NonNull View slab) {
+                mHost.drawerSearchGlassDrop(slab);
+            }
+
+            @Override public int blurDp() {
+                return mHost.drawerSearchGlassBlurDp();
+            }
+        });
         content.setTabStyleSource(new AppDrawerContentView.TabStyleSource() {
             @Nullable @Override public com.termux.app.terminal.PaneSurfaceStyle style() {
                 return mHost.drawerTabStyle();
