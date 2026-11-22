@@ -151,10 +151,10 @@ public final class GlassRefraction {
         // wallpaper as a red band, not a split).
 
         /**
-         * How far red and blue part from green at 100%, as a share of the local pull, at a corner;
-         * nothing at the middle of a straight edge ({@link GlassRefraction#cornerWeight}). Up to
+         * How far red and blue part from green at 100%, as a share of the local pull, at every
+         * outline pixel alike ({@link #SPLIT_WEIGHT}). Up to
          * Glint's 40% the share grows along {@link #GLINT_SLOPE} (Clear's 40% is Haze Clear's
-         * 0.02, a glint at the corners, not a rainbow); past it, on to 0.08 at 100%. The share
+         * 0.02, a glint, not a rainbow); past it, on to 0.08 at 100%. The share
          * past Glint's also sets how strong the bold edge's two fringes are
          * ({@link GlassRefraction#boldShare}).
          */
@@ -203,12 +203,20 @@ public final class GlassRefraction {
 
         /**
          * How far red's and blue's gathered light part at a corner at the full share, per unit
-         * of Glint's part ({@code kRimSplitDp}): 25 dp per unit of share, so Glint (0.02) half a
-         * dp at a corner, a glint, and nothing along a straight edge. The light fades over
+         * of Glint's part ({@code kRimSplitDp}), before {@link #SPLIT_WEIGHT}: 25 dp per unit of
+         * share, so Glint (0.02) half a dp at full weight, a glint. The light fades over
          * {@link #GLOW_DP}, so Glint's half dp moves one channel's light by about two fifths
          * against green's at the corner.
          */
         static final float RIM_SPLIT_DP = 2f;
+
+        /**
+         * The share of the colour split every outline pixel takes ({@code kSplitWeight}): the mean
+         * of the weight the split once had, 0 at the middle of a straight edge to 1 at a corner,
+         * so the split is the same all round and as strong on average as before. It follows the
+         * bend ({@code pull}), not the position.
+         */
+        static final float SPLIT_WEIGHT = 0.5f;
 
         /**
          * The bold edge past Glint, the outline's light split as a lens splits it
@@ -838,6 +846,7 @@ public final class GlassRefraction {
         "const float kMaxDisp = 0.08;\n" +
         "const float kGlintDisp = " + Look.GLINT_SHARE + ";\n" +
         "const float kRimSplitDp = 2.0;\n" +
+        "const float kSplitWeight = 0.5;\n" +
         "const float kSharpClarity = 0.76;\n" +
         // Clear's face terms: Look.DIM_MAX, DIM_FROM, DIM_TO, FACE_LIFT, SIZE_REF_DP, SIZE_MIN and
         // SIZE_MAX in Java.
@@ -971,12 +980,6 @@ public final class GlassRefraction {
         "float softProfile(float t) {\n" +
         "    return 1.0 - t * t * t * (t * (t * 6.0 - 15.0) + 10.0);\n" +
         "}\n" +
-        // How much of the colour split a pixel at p (from the centre) of a surface of half size b
-        // takes: nothing on the two axes, so nothing at the middle of a straight edge, all of it
-        // at a corner (Kyant's and Haze's weight). cornerWeight in Java.
-        "float cornerWeight(float2 p, float2 b) {\n" +
-        "    return min(abs(p.x * p.y) / max(b.x * b.y, 1.0), 1.0);\n" +
-        "}\n" +
         // How much of the gathered light the outline with outward normal n takes at rest: the
         // ambient share all round, the rest on the fixed key light's wide lobe. The rest look,
         // exactly as before the travelling glint. gatherShare in Java.
@@ -1081,9 +1084,11 @@ public final class GlassRefraction {
         "    if (beads && inside < -1.0) {\n" +
         "        return half4(0.0);\n" +
         "    }\n" +
-        // The light's normal eases round the corner on an arc wider than the drawn one (1.5x,
-        // held under the half size), so the gathered light never snaps where two edges meet.
-        "    float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));\n" +
+        // The light's normal turns on the drawn corner (held under the half size), the arc the
+        // view's clip outline follows, so the light's bright line runs round the corner the
+        // surface is cut to and joins the straights without a step. The bend's normal below keeps
+        // its wider arc.
+        "    float2 n = rectNormal(p, b, min(cr, min(b.x, b.y)));\n" +
         // Whether the slab moves (its lag) or tips (its tilt); both 0 at rest. Asked here, before
         // the bend's normal, because a live band reaches deeper (see the live block below).
         "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
@@ -1260,12 +1265,13 @@ public final class GlassRefraction {
         "    if (faceMix > 0.0) {\n" +
         "        clarityK = mix(clarityK, 1.0, faceMix);\n" +
         "    }\n" +
-        // The colour split, at the corners only and in step with the pull there: red reads the
+        // The colour split, evenly round the outline and in step with the pull there (the pull is
+        // the bend, so the split follows it round a corner and along a straight alike): red reads the
         // picture bent a little less, blue a little more, green as bent (three taps, Haze's
         // Simple). Where a clearer picture shows through, it is split the same way, so the fringe
-        // survives at the rim. A pixel with no split, every straight-edge middle and every face
-        // pixel among them, takes the one sample.
-        "    float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;\n" +
+        // survives at the rim. A pixel with no split, every face pixel (no pull) among them, takes
+        // the one sample.
+        "    float split = uDisp > 0.0 ? pull * uDisp * kSplitWeight : 0.0;\n" +
         // Living glass parts the colours where it bends further than at rest, in step with that
         // extra bend and along it (the rim's inward), so the colour follows the glass. sn is the
         // split's way: the normal at rest.
@@ -1276,13 +1282,13 @@ public final class GlassRefraction {
         "        sn = split > 0.0 ? sv / split : nb;\n" +
         "    }\n" +
         // The same split laid on the gathered light, which is sharp at the outline however frosted
-        // the picture is: at the corners only, red's light as it stands a little further in and
+        // the picture is: all round the outline, red's light as it stands a little further in and
         // blue's a little further out. A frosted rim (clarity 0, Mist and Tint) blurs the sampled
         // split away, so there this one carries the fringe. Up to Glint's share it gives way as
         // the clearer picture takes over and is gone at Clear's clarity, whose sampled fringe is
         // the glint already. Past Glint the bold edge below adds its own split all the way round.
         // rimSplitPx and boldShare in Java.
-        "    float rimCw = uDisp > 0.0 ? cornerWeight(p, b) : 0.0;\n" +
+        "    float rimCw = uDisp > 0.0 ? kSplitWeight : 0.0;\n" +
         "    float boldS = uDisp > kGlintDisp ? (uDisp - kGlintDisp) / (kMaxDisp - kGlintDisp) : 0.0;\n" +
         "    float rimSplit = uDisp > 0.0 ? min(uDisp, kGlintDisp) / kMaxDisp * rimCw * kRimSplitDp * uDensity\n" +
         "        * (1.0 - clamp(uClarity / kSharpClarity, 0.0, 1.0)) : 0.0;\n" +
@@ -1711,11 +1717,6 @@ public final class GlassRefraction {
         out[1] = -n[1] * pull;
     }
 
-    /** The program's {@code cornerWeight}, for a pixel at {@code (px, py)} from the centre of a surface of half size {@code (bx, by)}. */
-    static float cornerWeight(float px, float py, float bx, float by) {
-        return Math.min(Math.abs(px * py) / Math.max(bx * by, 1f), 1f);
-    }
-
     /**
      * The program's {@code gatherShare}, the rest look: how much of the gathered light the outline
      * with outward normal {@code (nx, ny)} takes, {@link Look#AMBIENT} all round and the rest on
@@ -1888,18 +1889,18 @@ public final class GlassRefraction {
 
     /**
      * The program's {@code rimSplit}: how far red's and blue's gathered light part, in px, at a
-     * pixel taking {@code cornerWeight} of the split ({@link #cornerWeight}), for the look's
+     * pixel taking {@code splitWeight} of the split ({@link Look#SPLIT_WEIGHT} in the program), for the look's
      * {@code dispersion} ({@code uDisp}) and the {@code clarity} the program is given
      * ({@code uClarity}). Nothing without dispersion. The part up to Glint's share
-     * ({@link Look#GLINT_SHARE}) lives at the corners and fades to nothing at
+     * ({@link Look#GLINT_SHARE}) is the same all round and fades to nothing at
      * {@link Look#SHARP_CLARITY}, where the sampled fringe carries Glint by itself; past it the
      * light's split stays Glint's, and the bold edge is its own term ({@link #boldFringe}). At or
      * under Glint the arithmetic is the old one term for term.
      */
-    static float rimSplitPx(float dispersion, float clarity, float cornerWeight, float density) {
+    static float rimSplitPx(float dispersion, float clarity, float splitWeight, float density) {
         if (dispersion <= 0f) return 0f;
         float sharp = Math.max(0f, Math.min(1f, clarity / Look.SHARP_CLARITY));
-        return Math.min(dispersion, Look.GLINT_SHARE) / Look.MAX_DISPERSION_SHARE * cornerWeight
+        return Math.min(dispersion, Look.GLINT_SHARE) / Look.MAX_DISPERSION_SHARE * splitWeight
                 * Look.RIM_SPLIT_DP * density * (1f - sharp);
     }
 

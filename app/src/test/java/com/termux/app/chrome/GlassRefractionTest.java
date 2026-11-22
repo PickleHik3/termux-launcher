@@ -88,28 +88,21 @@ public class GlassRefractionTest {
     }
 
     @Test
-    public void theColourSplitLivesAtTheCornersAndScalesWithThePull() {
+    public void theColourSplitIsEvenRoundTheOutlineAndScalesWithThePull() {
         float bx = 540f, by = 90f; // a dock-sized surface's half size
-        assertEquals("nothing at the middle of the top edge", 0f,
-            GlassRefraction.cornerWeight(0f, -by, bx, by), 0f);
-        assertEquals("nothing at the middle of a side", 0f,
-            GlassRefraction.cornerWeight(bx, 0f, bx, by), 0f);
-        assertEquals("all of it at a corner", 1f, GlassRefraction.cornerWeight(-bx, -by, bx, by), 1e-6f);
-        assertEquals("held at one past the corner", 1f,
-            GlassRefraction.cornerWeight(-bx - 10f, -by - 10f, bx, by), 0f);
-        float last = -1f;
-        for (int i = 0; i <= 10; i++) {
-            float w = GlassRefraction.cornerWeight(-bx * i / 10f, -by, bx, by);
-            assertTrue("grows toward the corner", w >= last);
-            last = w;
-        }
-        // The split the program takes is pull * uDisp * weight: about a px at Clear's corner,
+        // The weight is the mean of the old corner-only ramp (0 at the middle of an edge, 1 at a
+        // corner), so the split is as strong on average as before; it no longer depends on where
+        // the pixel is, only on the pull.
+        assertEquals(0.5f, GlassRefraction.Look.SPLIT_WEIGHT, 0f);
+        assertConst("kSplitWeight", GlassRefraction.Look.SPLIT_WEIGHT);
+        assertFalse(GlassRefraction.AGSL.contains("cornerWeight"));
+        // The split the program takes is pull * uDisp * weight: about half a px round Clear's rim,
         // a hairline in, and none where nothing is bent.
         GlassRefraction.Look clear = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
         float rimW = GlassRefraction.Look.rimWidthPx(DENSITY);
         float rimPull = GlassRefraction.pullPx(rimW, clear.bandPx(DENSITY), clear.strengthPx(DENSITY), by, rimW);
-        float cornerSplit = rimPull * clear.dispersion() * GlassRefraction.cornerWeight(-bx, -by, bx, by);
-        assertTrue("about a px at Clear's corner: " + cornerSplit, cornerSplit > 0.5f && cornerSplit < 2f);
+        float cornerSplit = rimPull * clear.dispersion() * GlassRefraction.Look.SPLIT_WEIGHT;
+        assertTrue("about half a px round Clear's rim: " + cornerSplit, cornerSplit > 0.25f && cornerSplit < 1f);
         float facePull = GlassRefraction.pullPx(clear.bandPx(DENSITY), clear.bandPx(DENSITY),
             clear.strengthPx(DENSITY), by, rimW);
         assertEquals(0f, facePull * clear.dispersion(), 0f);
@@ -160,7 +153,7 @@ public class GlassRefractionTest {
         assertTrue(agsl.contains("bool beads = uBead.y > 0.0;"));
         assertTrue(agsl.contains("center = float2(nearestBead(fragCoord.x), uBead.x);"));
         assertTrue(agsl.contains("float inside = -sdRoundRect(p, b, cr);"));
-        assertTrue(agsl.contains("float2 n = rectNormal(p, b, min(cr * 1.5, min(b.x, b.y)));"));
+        assertTrue(agsl.contains("float2 n = rectNormal(p, b, min(cr, min(b.x, b.y)));"));
         // A pixel clear of every bead reads nothing; a bead's outline is anti-aliased.
         assertTrue(agsl.contains("if (beads && inside < -1.0) {"));
         assertTrue(agsl.contains("col = col * half(clamp(inside + 0.5, 0.0, 1.0));"));
@@ -1024,7 +1017,7 @@ public class GlassRefractionTest {
         assertConst("kSharpClarity", GlassRefraction.Look.SHARP_CLARITY);
         assertConst("kGlintDisp", GlassRefraction.Look.GLINT_SHARE);
         String agsl = GlassRefraction.AGSL;
-        assertTrue(agsl.contains("float rimCw = uDisp > 0.0 ? cornerWeight(p, b) : 0.0;"));
+        assertTrue(agsl.contains("float rimCw = uDisp > 0.0 ? kSplitWeight : 0.0;"));
         assertTrue(agsl.contains(
             "float boldS = uDisp > kGlintDisp ? (uDisp - kGlintDisp) / (kMaxDisp - kGlintDisp) : 0.0;"));
         assertTrue(agsl.contains(

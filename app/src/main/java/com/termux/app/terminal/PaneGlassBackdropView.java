@@ -1172,7 +1172,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 mGrain.setBounds(0, 0, width, height);
                 mGrain.draw(canvas);
             }
-            if (mRim != null) {
+            // The slab's program draws its own rim when it draws the edge; the stroke is the
+            // fallback for a slab with no program (software canvas, API < 33, refraction off).
+            if (mRim != null && !drawsEdge()) {
                 mRim.setBounds(0, 0, width, height);
                 mRim.draw(canvas);
             }
