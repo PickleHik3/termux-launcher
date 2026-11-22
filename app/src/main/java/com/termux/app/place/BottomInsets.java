@@ -57,6 +57,20 @@ public final class BottomInsets {
         return Math.max(0, fitPx - Math.max(0, restPx));
     }
 
+    /**
+     * How far the stack's rows are lifted above where the root's padding leaves them, for a system
+     * keyboard reaching {@code imeBottomPx} up from the screen's bottom: the band of it neither the
+     * navigation bar {@code navBottomPx} nor the root's padding with the keyboard up
+     * ({@link #rootPaddingPx}{@code (true, fitPx, restPx)}) already clears. A window resized for
+     * the keyboard pads the root by all of it and lifts nothing; one that is not lifts the rows by
+     * the whole keyboard. Both numbers come from the same insets, so the rows always stand on the
+     * keyboard's top: {@code rootPaddingPx + systemImeLiftPx} is the keyboard's reach.
+     */
+    public static int systemImeLiftPx(int imeBottomPx, int navBottomPx, int fitPx, int restPx) {
+        int cleared = Math.max(Math.max(0, navBottomPx), rootPaddingPx(true, fitPx, restPx));
+        return Math.max(0, imeBottomPx - cleared);
+    }
+
     /** What the content keeps clear below itself: the part of the fit the root no longer pads. */
     public static int keptPx(boolean imeVisible, int fitPx, int restPx) {
         return Math.max(0, fitPx) - rootPaddingPx(imeVisible, fitPx, restPx);
