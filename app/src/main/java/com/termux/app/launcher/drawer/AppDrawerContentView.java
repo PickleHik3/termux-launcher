@@ -3,6 +3,7 @@ package com.termux.app.launcher.drawer;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.SystemClock;
@@ -99,7 +100,7 @@ public final class AppDrawerContentView extends FrameLayout
     implements NestedScrollingParent3, Choreographer.FrameCallback,
     AppDrawerPlaneView.CloseDragGate, AppDrawerSearchController.ResultsListener,
     AppDrawerSearchPillView.Callbacks, AppDrawerRopeColumnView.Callbacks,
-    AppDrawerDragController.Host {
+    AppDrawerDragController.Host, com.termux.app.chrome.LiveBackdrop.Container {
 
     /** Raw close-drag reports, in the plane's own vocabulary. The controller interprets them. */
     public interface Callbacks {
@@ -179,18 +180,9 @@ public final class AppDrawerContentView extends FrameLayout
     private final AppDrawerChromeLayout.Morph mSearchMorph = new AppDrawerChromeLayout.Morph();
     @Nullable private AppDrawerChromeLayout.Result mChromeResult;
     private final android.graphics.RectF mPillRect = new android.graphics.RectF();
-    /** The band of the lists' bottom the full bar still hides, and the reused clip that shows it. */
-    private int mListHiddenPx;
-    private final android.graphics.Rect mListClip = new android.graphics.Rect();
-    private final java.util.ArrayList<View> mListClipped = new java.util.ArrayList<>(2);
-    /** Re-clips a list whose size changed (the card's height moves with the keyboard). */
-    private final View.OnLayoutChangeListener mListClipOnLayout =
-        (v, l, t, r, b, ol, ot, or, ob) -> {
-            if (b - t != ob - ot || r - l != or - ol) applyListClip(v);
-        };
     private final TextView mResultsLabel;
     private final TextView mNoResults;
-    private final RecyclerView mGrid;
+    private final AppDrawerFadingList mGrid;
     private final AppDrawerHorizontalPagerView mHorizontalPager;
     private final AppDrawerPageIndicatorView mPageIndicator;
     private final AppDrawerCategoryView mCategoryView;
@@ -537,21 +529,15 @@ public final class AppDrawerContentView extends FrameLayout
 
         mAdapter = new AppDrawerAppsAdapter(dock);
         mLayoutManager = new GridLayoutManager(context, AppDrawerGridMetrics.MIN_COLUMNS);
-        mGrid = new RecyclerView(context) {
-            @Override
-            public boolean dispatchTouchEvent(MotionEvent ev) {
-                // Rows hidden under a full bar's band take no touch (see applyListFold).
-                if (ev.getActionMasked() == MotionEvent.ACTION_DOWN && mListHiddenPx > 0
-                    && ev.getY() >= getHeight() - mListHiddenPx) {
-                    return false;
-                }
-                return super.dispatchTouchEvent(ev);
-            }
-        };
+        mGrid = new AppDrawerFadingList(context);
         mGrid.setLayoutManager(mLayoutManager);
         mGrid.setAdapter(mAdapter);
         mGrid.setHasFixedSize(true);
         mGrid.setItemViewCacheSize(AppDrawerGridMetrics.MIN_COLUMNS * 2);
+        // The pool's default of five per type drops most of a screenful whenever the list is
+        // rebound, and the next layout builds them all again.
+        mGrid.getRecycledViewPool().setMaxRecycledViews(AppDrawerAppsAdapter.VIEW_TYPE_APP,
+            AppDrawerGridMetrics.GRID_POOL_CELLS);
         // The spring below is the only overscroll this surface has; the platform's glow (and, on
         // RecyclerView 1.2+, its stretch) would otherwise sit on top of it.
         mGrid.setOverScrollMode(OVER_SCROLL_NEVER);
@@ -581,13 +567,14 @@ public final class AppDrawerContentView extends FrameLayout
                 // Back at the top (a scroll up, or the A-Z strip's jump), the bar is back too.
                 // (A layout's own dy of 0 is not a scroll.)
                 if (dy < 0 && mSearchCollapsed) unfoldSearchAtTop(recyclerView);
+                foldAfterARow(dy);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
                     if (!mGridUserScrolling) {
-                        notifyListDragStarted(recyclerView.computeVerticalScrollRange()
+                        notifyListDragStarted(recyclerView, recyclerView.computeVerticalScrollRange()
                             > recyclerView.computeVerticalScrollExtent());
                         // Decided once, as the drag starts: a list that fits has no scroll to give.
                         mGridDragHidesKeyboard = AppDrawerKeyboardScrollHide.armsOnDrag(
@@ -598,6 +585,7 @@ public final class AppDrawerContentView extends FrameLayout
                     mGridUserScrolling = true;
                 } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
                     mGridUserScrolling = false;
+                    mFoldDragArmed = false;
                     if (mSearchCollapsed) unfoldSearchAtTop(recyclerView);
                     KeyboardScrollListener keyboard = mKeyboardScrollListener;
                     if (keyboard != null) keyboard.onListScrollIdle();
@@ -607,8 +595,10 @@ public final class AppDrawerContentView extends FrameLayout
         mColumnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
-        gridParams.topMargin = chrome.contentTopPx;
-        mGridBaseTopMarginPx = gridParams.topMargin;
+        // The list spans the card; the chrome's band is its start padding (applyGridTop).
+        gridParams.topMargin = 0;
+        mGridBaseTopMarginPx = chrome.contentTopPx;
+        mGrid.setPadding(0, chrome.contentTopPx, 0, 0);
         gridParams.bottomMargin = 0;
         // The letters are not an overlay: the grid gives up exactly the strip's width so no cell
         // ever sits under one, and the column count the controller resolves is computed from the
@@ -645,7 +635,7 @@ public final class AppDrawerContentView extends FrameLayout
         });
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
-        pagerParams.topMargin = gridParams.topMargin;
+        pagerParams.topMargin = chrome.contentTopPx;
         pagerParams.bottomMargin = Math.round(pagerBottomBandPx(0));
         mHorizontalPager.setVisibility(GONE);
         addView(mHorizontalPager, pagerParams);
@@ -661,12 +651,11 @@ public final class AppDrawerContentView extends FrameLayout
             this::showCategoryOverrideDialog);
         LayoutParams categoryParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
-        categoryParams.topMargin = gridParams.topMargin;
+        categoryParams.topMargin = 0;
+        mCategoryView.setTopInsetPx(chrome.contentTopPx);
         categoryParams.bottomMargin = 0;
         mCategoryView.setVisibility(GONE);
         addView(mCategoryView, categoryParams);
-        mGrid.addOnLayoutChangeListener(mListClipOnLayout);
-        mCategoryView.addOnLayoutChangeListener(mListClipOnLayout);
 
         // The categories search chrome: a quiet mono "N RESULTS" band between the pill and the
         // rows, and a centred no-results state. Both exist only while that presentation is up.
@@ -711,7 +700,7 @@ public final class AppDrawerContentView extends FrameLayout
         // rope's lean carries them out of their own strip while the column is fading in.
         LayoutParams columnParams = new LayoutParams(Math.round(mColumnWidthPx),
             LayoutParams.MATCH_PARENT, Gravity.END);
-        columnParams.topMargin = gridParams.topMargin;
+        columnParams.topMargin = chrome.contentTopPx;
         columnParams.bottomMargin = 0;
         addView(mColumn, columnParams);
 
@@ -756,8 +745,9 @@ public final class AppDrawerContentView extends FrameLayout
         mDragOverlay.setVisibility(INVISIBLE);
         addView(mDragOverlay, new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT));
-        // Chrome stays last for its ordinary elevation/shadow language. Content safety does not
-        // depend on that ordering: each scrolling surface clips at the top margin below the pill.
+        // The lists span the card and the chrome floats over them: the switch, then the capsule,
+        // stand last in Z so rows scroll under both.
+        com.termux.app.window.WindowLayers.raiseWithin(mSectionSwitch);
         com.termux.app.window.WindowLayers.raiseWithin(mPill);
         applyViewType();
     }
@@ -943,12 +933,52 @@ public final class AppDrawerContentView extends FrameLayout
         default void onListDragStarted() {}
     }
 
-    /** A list the finger started dragging: the keyboard's cue. Shared by every list. */
+    /**
+     * A page strip or the A-Z index the finger started dragging: the keyboard's cue, and the
+     * search bar folds into its round button, the user browsing now.
+     */
     private void notifyListDragStarted(boolean scrollable) {
         KeyboardScrollListener keyboard = mKeyboardScrollListener;
         if (keyboard != null) keyboard.onListDragStarted();
-        // The same cue folds the search bar into its round button: the user is browsing now.
         foldSearchForBrowse(scrollable);
+    }
+
+    /**
+     * A vertical list the finger started dragging: the keyboard's cue at once, the bar's fold
+     * once the drag has scrolled the list down one full row ({@link #foldAfterARow}).
+     */
+    private void notifyListDragStarted(@NonNull RecyclerView list, boolean scrollable) {
+        KeyboardScrollListener keyboard = mKeyboardScrollListener;
+        if (keyboard != null) keyboard.onListDragStarted();
+        mFoldDragScrollable = scrollable;
+        mFoldDragScrolledPx = 0;
+        mFoldDragRowPx = rowHeightPx(list);
+        mFoldDragArmed = !mSearchCollapsed;
+    }
+
+    /** This drag folds the bar once it has scrolled the list a row; cleared as the list rests. */
+    private boolean mFoldDragArmed;
+    private boolean mFoldDragScrollable;
+    private int mFoldDragScrolledPx;
+    private int mFoldDragRowPx;
+
+    /** A dragged list scrolled {@code dy}: the bar folds once the drag has gone a full row down. */
+    private void foldAfterARow(int dy) {
+        if (!mFoldDragArmed || dy == 0) return;
+        mFoldDragScrolledPx += dy;
+        if (!AppDrawerSearchCollapsePolicy.browsedARow(mFoldDragScrolledPx, mFoldDragRowPx)) {
+            return;
+        }
+        mFoldDragArmed = false;
+        foldSearchForBrowse(mFoldDragScrollable);
+    }
+
+    /** One row of {@code list}'s grid as laid out now, its decorations included; 0 with none. */
+    private static int rowHeightPx(@NonNull RecyclerView list) {
+        RecyclerView.LayoutManager layout = list.getLayoutManager();
+        View row = list.getChildCount() > 0 ? list.getChildAt(0) : null;
+        if (layout == null || row == null) return 0;
+        return layout.getDecoratedMeasuredHeight(row);
     }
 
     /**
@@ -960,14 +990,16 @@ public final class AppDrawerContentView extends FrameLayout
             @Override
             public void onScrolled(@NonNull RecyclerView recyclerView, int dx, int dy) {
                 if (dy < 0 && mSearchCollapsed) unfoldSearchAtTop(recyclerView);
+                foldAfterARow(dy);
             }
 
             @Override
             public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
                 if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
-                    notifyListDragStarted(recyclerView.canScrollVertically(1)
+                    notifyListDragStarted(recyclerView, recyclerView.canScrollVertically(1)
                         || recyclerView.canScrollVertically(-1));
                 } else if (newState == RecyclerView.SCROLL_STATE_IDLE) {
+                    mFoldDragArmed = false;
                     unfoldSearchAtTop(recyclerView);
                 }
             }
@@ -1124,11 +1156,13 @@ public final class AppDrawerContentView extends FrameLayout
         int inset = r.foldBandPx > 0 ? r.foldBandPx : r.innerBottomInsetPx;
         float rowTrailing = AppDrawerGridMetrics.rowBottomPx(mDensity);
         // A bar at the bottom: the list runs to the card's edge and keeps the bar's band as end
-        // padding (the band is the button's clearance too), so the last row rests where it did
-        // above the full bar; only the drawn and touchable edge follows the fold (applyListFold).
+        // padding (the band is the button's clearance too), so the last row rests above the
+        // capsule; scrolled rows pass under it, the capsule floating over the list.
         int listPadding = r.foldBandPx > 0 ? r.foldBandPx
             : AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
-        if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
+        if (mGrid.getPaddingBottom() != listPadding) {
+            mGrid.setPadding(0, mGrid.getPaddingTop(), 0, listPadding);
+        }
         int listBottom = r.foldBandPx > 0 ? 0 : r.contentBottomPx;
         setBottomMargin(mGrid, listBottom);
         setBottomMargin(mColumn, r.contentBottomPx);
@@ -1142,52 +1176,37 @@ public final class AppDrawerContentView extends FrameLayout
         applySearchBarParams(mPill, r, gravity);
         applySearchBarParams(mInput, r, gravity);
         mChromeResult = r;
+        applyGridTop();
         applySearchMorph();
     }
 
     // ------------------------------------------------------------------ search bar fold
 
-    /** Moves and redraws the pill for the current fold; no layout, no allocation. */
+    /**
+     * Lays the grid out over the whole card: no top margin, and the chrome's band (and the results
+     * band and the lowered start) as start padding, so the first row rests where it always did and
+     * scrolled rows pass under the floating capsule. Compared before it is set; runs where the
+     * band changes, never per frame.
+     */
+    private void applyGridTop() {
+        LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
+        if (gridParams.topMargin != 0) {
+            gridParams.topMargin = 0;
+            mGrid.setLayoutParams(gridParams);
+        }
+        int top = gridTopMargin();
+        if (mGrid.getPaddingTop() != top) {
+            mGrid.setPadding(0, top, 0, mGrid.getPaddingBottom());
+        }
+    }
+
+    /** Moves and redraws the pill and its glass for the current fold; no layout, no allocation. */
     private void applySearchMorph() {
         AppDrawerChromeLayout.Result r = mChromeResult;
         if (r == null) return;
         AppDrawerChromeLayout.morph(r, mSearchFold, mSearchMorph);
         mPill.applyMorph(mSearchFold, mSearchMorph);
-        applyListFold();
-    }
-
-    /** How far the full bar's band still hides the list's bottom: the band times the unfolded share. */
-    private int hiddenBandPx() {
-        AppDrawerChromeLayout.Result r = mChromeResult;
-        if (r == null || r.foldBandPx <= 0) return 0;
-        return Math.round(r.foldBandPx * (1f - Math.max(0f, Math.min(1f, mSearchFold))));
-    }
-
-    /**
-     * Raises the list's drawn bottom edge by the band the full bar still holds: a draw-time clip
-     * that follows the fold fraction (the layout never changes), identical to the old layout at 0
-     * and the card's edge at 1. A touch that starts in the hidden band reaches neither list.
-     */
-    private void applyListFold() {
-        mListHiddenPx = hiddenBandPx();
-        mCategoryView.setHiddenBottomPx(mListHiddenPx);
-        applyListClip(mGrid);
-        applyListClip(mCategoryView);
-    }
-
-    private void applyListClip(@NonNull View list) {
-        int h = list.getHeight();
-        if (mListHiddenPx <= 0 || h <= 0) {
-            if (mListClipped.contains(list)) {
-                list.setClipBounds(null);
-                mListClipped.remove(list);
-            }
-            return;
-        }
-        android.graphics.Rect clip = mListClip;
-        clip.set(0, 0, list.getWidth(), Math.max(0, h - mListHiddenPx));
-        list.setClipBounds(clip);
-        if (!mListClipped.contains(list)) mListClipped.add(list);
+        applySearchGlassMorph();
     }
 
     /** The round button parks away from the A-Z strip: on the strip's far side, else the end side. */
@@ -1559,7 +1578,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (shown) setTopMargin(mSectionSwitch, r.switchTopPx);
         mGridBaseTopMarginPx = r.contentTopPx;
         setTopMargin(mHorizontalPager, r.contentTopPx);
-        setTopMargin(mCategoryView, r.contentTopPx);
+        mCategoryView.setTopInsetPx(r.contentTopPx);
         setTopMargin(mResultsLabel, r.contentTopPx);
         setTopMargin(mNoResults, r.contentTopPx + dp(NO_RESULTS_BELOW_CONTENT_DP));
         applyBottomChrome(r);
@@ -1627,8 +1646,8 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     private int gridTopMargin() {
-        return mGridBaseTopMarginPx + (mCategorySearchPresentation ? dp(RESULTS_LABEL_BAND_DP) : 0)
-            + mLowerStartPx;
+        return AppDrawerFloatingList.topPaddingPx(mGridBaseTopMarginPx,
+            mCategorySearchPresentation ? dp(RESULTS_LABEL_BAND_DP) : 0, mLowerStartPx);
     }
 
     /**
@@ -1644,11 +1663,8 @@ public final class AppDrawerContentView extends FrameLayout
             : AppDrawerLowerStartPolicy.offsetPx(mLowerStart, portrait, searching, getHeight(),
                 mGridBaseTopMarginPx);
         int top = gridTopMargin();
-        LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
-        if (gridParams.topMargin != top) {
-            gridParams.topMargin = top;
-            mGrid.setLayoutParams(gridParams);
-        }
+        // The letter strip keeps its own extent; only the grid reaches up into the bar's band.
+        applyGridTop();
         LayoutParams columnParams = (LayoutParams) mColumn.getLayoutParams();
         if (columnParams.topMargin != top) {
             columnParams.topMargin = top;
@@ -1736,9 +1752,7 @@ public final class AppDrawerContentView extends FrameLayout
         if (mCategorySearchPresentation != active) {
             mCategorySearchPresentation = active;
             mAdapter.setSearchRowPresentation(active, active ? this::categoryLabelFor : null);
-            LayoutParams gridParams = (LayoutParams) mGrid.getLayoutParams();
-            gridParams.topMargin = gridTopMargin();
-            mGrid.setLayoutParams(gridParams);
+            applyGridTop();
         }
         mLayoutManager.setSpanCount(active ? 1 : mVerticalColumns);
         boolean empty = mVisibleResults.isEmpty();
@@ -2675,14 +2689,14 @@ public final class AppDrawerContentView extends FrameLayout
     private AppDrawerTouchRegions.Region regionAt(float localX, float localY) {
         switch (presentedType()) {
             case VERTICAL:
-                return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid),
+                return AppDrawerTouchRegions.resolve(localX, localY, gridBounds(),
                     boundsOf(mColumn), mInteractive, isColumnActive());
             case HORIZONTAL:
                 return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mHorizontalPager),
                     null, mInteractive, false);
             case CATEGORIES:
                 if (hasQuery())
-                    return AppDrawerTouchRegions.resolve(localX, localY, boundsOf(mGrid), null,
+                    return AppDrawerTouchRegions.resolve(localX, localY, gridBounds(), null,
                         mInteractive, false);
                 float x = localX - mCategoryView.getLeft();
                 float y = localY - mCategoryView.getTop();
@@ -2691,6 +2705,17 @@ public final class AppDrawerContentView extends FrameLayout
             default:
                 return AppDrawerTouchRegions.Region.CHROME;
         }
+    }
+
+    /**
+     * The grid's rectangle: the card's width and height below the chrome's own top margin, so a
+     * row beside the capsule scrolls and the strip above the chrome still closes the drawer.
+     */
+    @NonNull
+    private Frame gridBounds() {
+        return new Frame(mGrid.getLeft(),
+            mGrid.getTop() + Math.min(mGrid.getHeight(), dp(AppDrawerChromeLayout.TOP_MARGIN_DP)),
+            mGrid.getRight(), mGrid.getBottom());
     }
 
     @NonNull
@@ -3381,7 +3406,8 @@ public final class AppDrawerContentView extends FrameLayout
         AppDrawerCategoryTouchRegions.Part part = AppDrawerCategoryTouchRegions.Part.OUTSIDE;
         if (settling) {
             // Mid-motion the pages are off their layout: any point over them is the pages'.
-            target = y >= mGrid.getTop() ? AppDrawerSectionGesturePolicy.Target.APPS_GRID
+            target = y >= mGrid.getTop()
+                ? AppDrawerSectionGesturePolicy.Target.APPS_GRID
                 : AppDrawerSectionGesturePolicy.Target.CHROME;
         } else if (mSection == AppDrawerSection.APPS) {
             AppDrawerTouchRegions.Region region = regionAt(x, y);
@@ -3822,8 +3848,18 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     @Override
+    protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        // Back in a window while the drawer is open: the capsule's glass goes up again.
+        if (mDrawerOpenForGlass) applySwitchGlass();
+    }
+
+    @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        // A closed or torn-down drawer holds no Live slot and no picture; dressed again on attach.
+        releaseSearchGlass();
+        mSwitchGlassKey = null;
         leaveEdit(AppDrawerEditModel.Leave.DRAWER_CLOSED);
         mCornerTab.reset();
         stopOverpullSpring();
@@ -3868,11 +3904,62 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mSwitchGlassWanted;
     private boolean mDrawerOpenForGlass;
 
+    /** Where the search capsule's glass takes its Live picture and gives it back. */
+    public interface SearchGlassHost {
+        /**
+         * The slab's Live picture at {@code blurDp}, registered as the glass service's drawer
+         * search surface; null while the service grants Wallpaper. {@code redress} runs when that
+         * kind moves.
+         */
+        @Nullable com.termux.app.chrome.LivePicture wear(@NonNull View slab, int blurDp,
+                                                         @Nullable Runnable redress);
+
+        /** The slab gave its glass back: its entry and its picture are let go. */
+        void drop(@NonNull View slab);
+
+        /** The blur radius, in dp, of the card's own glass: the capsule's blur. */
+        int blurDp();
+    }
+
+    /**
+     * The search capsule's glass (the folded round button is the same slab, narrowed): one surface
+     * that changes shape, one registry entry. Built when the drawer opens, dropped when it closes.
+     */
+    @Nullable private com.termux.app.terminal.PaneGlassBackdropView mSearchGlass;
+    @Nullable private SearchGlassHost mSearchGlassHost;
+    private float mSearchGlassLeft;
+    private float mSearchGlassRight = -1f;
+    private final Runnable mSearchGlassRedress = this::syncSearchGlassLive;
+    private final ViewOutlineProvider mSearchGlassOutline = new ViewOutlineProvider() {
+        @Override public void getOutline(View view, android.graphics.Outline out) {
+            float right = mSearchGlassRight < 0f ? view.getWidth() : mSearchGlassRight;
+            out.setRoundRect(Math.round(mSearchGlassLeft), 0, Math.round(right), view.getHeight(),
+                view.getHeight() / 2f);
+        }
+    };
+
+    /** Reused by the capsule's ink solve, which runs on a dress pass and on a new size only. */
+    private final com.termux.app.wall.pageswitch.PageBarGlass.Ink mSearchInk =
+        new com.termux.app.wall.pageswitch.PageBarGlass.Ink();
+    private final com.termux.app.chrome.WidgetBody.Answer mSearchBody =
+        new com.termux.app.chrome.WidgetBody.Answer();
+    private final int[] mSearchOrigin = new int[2];
+    private final int[] mSearchRoot = new int[2];
+    private final android.graphics.Rect mSearchInkRect = new android.graphics.Rect();
+    private final android.graphics.Rect mSearchInkScratch = new android.graphics.Rect();
+    private final android.graphics.Rect mSearchInkSolved = new android.graphics.Rect();
+    @Nullable private com.termux.app.chrome.DrawerCardGlassStyle mSearchInkLook;
+    private boolean mSearchGlassShown;
+
+    public void setSearchGlassHost(@Nullable SearchGlassHost host) {
+        mSearchGlassHost = host;
+    }
+
     public void setSwitchGlassSource(@Nullable SwitchGlassSource source) {
         mSwitchGlassSource = source;
     }
 
-    /** The drawer opened or closed: the glass is built for an open Default drawer and dropped after. */
+    /** The drawer opened or closed: the glass is built for an open drawer and dropped after. */
     public void setDrawerOpenForGlass(boolean open) {
         mDrawerOpenForGlass = open;
         applySwitchGlass();
@@ -3885,29 +3972,41 @@ public final class AppDrawerContentView extends FrameLayout
     }
 
     /**
-     * Dresses the glass under the switch as the page bar's pill is dressed, or drops it. The slab
-     * and the frame it holds exist only while the open drawer is on the Default type. Compared by
-     * the style's key, so a pass with nothing moved does no work; never per frame.
+     * Dresses the glass under the switch (Default type only) and under the search capsule (every
+     * type) as the page bar's pill is dressed, or drops it. The slabs and the frame the style
+     * holds exist only while the drawer is open. Compared by the style's key, so a pass with
+     * nothing moved does no work; never per frame.
      */
     private void applySwitchGlass() {
         SwitchGlassSource source = mSwitchGlassSource;
-        boolean wanted = source != null
-            && AppDrawerSectionSwitchGlass.wanted(mViewType, mDrawerOpenForGlass);
-        if (!wanted) {
+        boolean open = source != null && mDrawerOpenForGlass;
+        boolean switchWanted = open && AppDrawerSectionSwitchGlass.wanted(mViewType, true);
+        if (!open) {
             if (mSwitchGlassWanted && source != null) source.style(false);
             mSwitchGlassWanted = false;
             releaseSwitchGlass();
+            releaseSearchGlass();
             return;
         }
         com.termux.app.chrome.DrawerCardGlassStyle look = source.style(true);
         mSwitchGlassWanted = true;
         if (look == null) {
             releaseSwitchGlass();
+            releaseSearchGlass();
             return;
         }
         Object key = look.key();
-        if (mSwitchGlass != null && key.equals(mSwitchGlassKey)) return;
+        if (mSearchGlass != null && key.equals(mSwitchGlassKey)
+            && (mSwitchGlass != null) == switchWanted) {
+            return;
+        }
+        if (switchWanted) dressSwitchGlass(look);
+        else releaseSwitchGlass();
+        dressSearchGlass(look);
         mSwitchGlassKey = key;
+    }
+
+    private void dressSwitchGlass(@NonNull com.termux.app.chrome.DrawerCardGlassStyle look) {
         com.termux.app.terminal.PaneGlassBackdropView glass = mSwitchGlass;
         if (glass == null) {
             glass = new com.termux.app.terminal.PaneGlassBackdropView(getContext());
@@ -3943,6 +4042,128 @@ public final class AppDrawerContentView extends FrameLayout
         removeView(glass);
     }
 
+    /**
+     * Lays the capsule's glass under the pill and asks the glass service for Live. The slab is
+     * the concave glass the page bar's pill wears, so Live shows the rows passing under it,
+     * refracted; when the service grants Wallpaper it draws the frosted wallpaper frame instead.
+     */
+    private void dressSearchGlass(@NonNull com.termux.app.chrome.DrawerCardGlassStyle look) {
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
+        if (glass == null) {
+            glass = new com.termux.app.terminal.PaneGlassBackdropView(getContext());
+            glass.setClipToOutline(true);
+            glass.setOutlineProvider(mSearchGlassOutline);
+            com.termux.app.terminal.PaneGlass.followLayout(glass);
+            glass.setVisibility(GONE);
+            // Under the pill in Z, over the list the capsule floats on.
+            addView(glass, indexOfChild(mPill), new LayoutParams(
+                LayoutParams.WRAP_CONTENT, LayoutParams.WRAP_CONTENT));
+            mSearchGlass = glass;
+        }
+        float radius = AppDrawerSectionSwitchGlass.radiusPx(Math.round(
+            AppDrawerSearchPillView.HEIGHT_DP * mDensity));
+        boolean shown = com.termux.app.wall.pageswitch.PageBarGlass.dress(getContext(), look,
+            this, glass, radius, com.termux.app.wall.pageswitch.PageBarGlassStyle.CONCAVE);
+        mPill.setGlassShown(shown);
+        mSearchGlassShown = shown;
+        mSearchInkLook = look;
+        mSearchInkSolved.setEmpty();
+        solveSearchInk();
+        if (shown) glass.requestLayout();
+        syncSearchGlassLive();
+        applySearchGlassMorph();
+    }
+
+    /**
+     * Asks for Live while the slab is shown and gives the entry back otherwise: the kind is the
+     * glass service's answer, so with Live blur off the slab simply draws the stored frame.
+     */
+    private void syncSearchGlassLive() {
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
+        SearchGlassHost host = mSearchGlassHost;
+        if (glass == null) return;
+        if (host != null && glass.getVisibility() == VISIBLE) {
+            glass.setLivePicture(host.wear(glass, host.blurDp(), mSearchGlassRedress));
+        } else {
+            if (glass.livePicture() != null) glass.setLivePicture(null);
+            if (host != null) host.drop(glass);
+        }
+    }
+
+    /**
+     * Solves the capsule's ink on what it stands on, by Home's page bar pill's recipe: a widget's
+     * card on the sheets' glass, at the sheets' floored opacity, with the veil the band asks for
+     * and the even-out the slab is drawn through. The full bar's rect, where the pill is laid out;
+     * on a dress pass and when that rect moves, never per frame.
+     */
+    private void solveSearchInk() {
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
+        com.termux.app.chrome.DrawerCardGlassStyle look = mSearchInkLook;
+        if (glass == null || look == null) return;
+        if (!mSearchGlassShown) {
+            mPill.setSolvedInk(android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT);
+            glass.setEvenOut(null);
+            return;
+        }
+        mSearchInkRect.set(mPill.getLeft(), mPill.getTop(), mPill.getRight(), mPill.getBottom());
+        if (mSearchInkRect.isEmpty() || mSearchInkRect.equals(mSearchInkSolved)) return;
+        mSearchInkSolved.set(mSearchInkRect);
+        int accent = com.google.android.material.color.MaterialColors.getColor(mPill,
+            androidx.appcompat.R.attr.colorPrimary, android.graphics.Color.WHITE);
+        mSearchInk.veil = android.graphics.Color.TRANSPARENT;
+        mSearchInk.ink = android.graphics.Color.WHITE;
+        mSearchBody.evenOut = null;
+        // The concave glass draws no floor shade: the ink is solved on the bare glass.
+        com.termux.app.wall.pageswitch.PageBarGlass.measure(this, mSearchInkRect, look, accent,
+            true, mSearchInk, mSearchBody, glass, 0.5f, 0.5f, false, mSearchOrigin, mSearchRoot,
+            mSearchInkScratch);
+        mPill.setSolvedInk(mSearchInk.ink, mSearchInk.accent, mSearchInk.veil);
+    }
+
+    /** The glass follows the pill's fold: its translation and the capsule edges it is cut to. */
+    private void applySearchGlassMorph() {
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
+        if (glass == null) return;
+        if (glass.getTranslationX() != mSearchMorph.translationX) {
+            glass.setTranslationX(mSearchMorph.translationX);
+        }
+        if (glass.getTranslationY() != mSearchMorph.translationY) {
+            glass.setTranslationY(mSearchMorph.translationY);
+        }
+        float left = mPill.capsuleLeftPx();
+        float right = mPill.capsuleRightPx();
+        if (left != mSearchGlassLeft || right != mSearchGlassRight) {
+            mSearchGlassLeft = left;
+            mSearchGlassRight = right;
+            glass.invalidateOutline();
+        }
+    }
+
+    private void releaseSearchGlass() {
+        mPill.setGlassShown(false);
+        mPill.setSolvedInk(android.graphics.Color.TRANSPARENT,
+            android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT);
+        mSearchGlassShown = false;
+        mSearchInkLook = null;
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
+        if (glass == null) return;
+        mSearchGlass = null;
+        SearchGlassHost host = mSearchGlassHost;
+        glass.setLivePicture(null);
+        if (host != null) host.drop(glass);
+        removeView(glass);
+    }
+
+    /**
+     * The search capsule's Live picture records the rows beneath it through here: the lists, the
+     * letters and whatever else this view draws before the capsule's slab, at their transforms.
+     */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
@@ -3953,6 +4174,30 @@ public final class AppDrawerContentView extends FrameLayout
             glass.layout(mSectionSwitch.getLeft(), mSectionSwitch.getTop(),
                 mSectionSwitch.getRight(), mSectionSwitch.getBottom());
         }
+        com.termux.app.terminal.PaneGlassBackdropView searchGlass = mSearchGlass;
+        // The pill's laid-out rect, the full bar; folding moves it by translation, not layout.
+        if (searchGlass != null && searchGlass.getVisibility() != GONE
+            && mPill.getVisibility() == VISIBLE) {
+            searchGlass.layout(mPill.getLeft(), mPill.getTop(), mPill.getRight(),
+                mPill.getBottom());
+            solveSearchInk();
+        }
+        applyCapsuleFadeGaps();
+    }
+
+    /**
+     * The list's fade at the card edge the capsule stands by stops where the capsule starts, so
+     * the rows under the capsule's glass are whole. On a layout, never per frame.
+     */
+    private void applyCapsuleFadeGaps() {
+        int top = -1;
+        int bottom = -1;
+        if (mPill.getVisibility() == VISIBLE && mGrid.getHeight() > 0) {
+            boolean atTop = mPill.getTop() + mPill.getBottom() < mGrid.getTop() + mGrid.getBottom();
+            if (atTop) top = Math.max(0, mPill.getTop() - mGrid.getTop());
+            else bottom = Math.max(0, mGrid.getBottom() - mPill.getBottom());
+        }
+        mGrid.setCapsuleGaps(top, bottom);
     }
 
     /** @return the shipped vertical app grid */

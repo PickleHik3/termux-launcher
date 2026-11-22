@@ -208,6 +208,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_RESET, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_DECREASE, Band.TERMINAL_TOOL);
+        tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_URL, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_AT_CURSOR, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_ALL, Band.TERMINAL_TOOL);
@@ -228,6 +229,12 @@ public final class ExtraKeyEligibility {
         // why they are not filed with the rest of the window tools.
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEXT, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_PREVIOUS, Band.TERMINAL_TOOL);
+
+        // The root shell is a pane; the restarts belong to the phone, not to a page.
+        tools.put(LauncherToolRegistry.TOOL_PANE_ROOT_SHELL, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART_RECOVERY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART_BOOTLOADER, Band.LAUNCHER);
 
         TOOLS = Collections.unmodifiableMap(tools);
     }

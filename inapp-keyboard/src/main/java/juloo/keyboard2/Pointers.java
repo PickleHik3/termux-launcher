@@ -268,21 +268,41 @@ public final class Pointers implements Handler.Callback
     _handler.onPointerFlagsChanged(true);
   }
 
-  /** Commit every live pointer as if it was released instead of aborting.
-      Embedded in an activity (not an IME window), the only source of
-      ACTION_CANCEL is the system pilfering the pointer stream for a
-      navigation gesture; aborting would silently drop the key the user was
-      pressing or swiping. */
-  public void onTouchCancelCommit()
+  /** A cancelled stream: a live pointer that went down left of [commitBeforeX]
+      or at or right of [commitFromX] is committed as if released; every other
+      live pointer is dropped without a key. Embedded in an activity, a cancel
+      is the system or the host taking the stream. Inside the side strips that
+      is a back swipe the exclusion budget denied, and aborting would silently
+      drop the key the user was pressing; anywhere else it is a gesture that
+      is not the keyboard's (home, quick switch to the previous app, a page
+      swipe), and committing would type a key the user never tapped, such as
+      a space at the start of a cursor slide on the space bar.
+      Local addition, see UPSTREAM.md. */
+  public void onTouchCancelCommit(float commitBeforeX, float commitFromX)
   {
     // onTouchUp mutates _ptrs; collect real pointer ids first. Latched/fake
     // pointers (pointerId == -1) are state, not live touches — keep them.
-    java.util.ArrayList<Integer> live = new java.util.ArrayList<Integer>();
+    java.util.ArrayList<Pointer> live = new java.util.ArrayList<Pointer>();
     for (Pointer p : _ptrs)
       if (p.pointerId != -1)
-        live.add(p.pointerId);
-    for (int pointerId : live)
-      onTouchUp(pointerId);
+        live.add(p);
+    boolean dropped = false;
+    for (Pointer p : live)
+    {
+      // A slide's release types nothing, so it ends the usual way.
+      if (p.hasFlagsAny(FLAG_P_SLIDING) || p.downX < commitBeforeX
+          || p.downX >= commitFromX)
+        onTouchUp(p.pointerId);
+      else
+      {
+        stopLongPress(p);
+        removePtr(p);
+        previewUp(p.pointerId);
+        dropped = true;
+      }
+    }
+    if (dropped)
+      _handler.onPointerFlagsChanged(false);
   }
 
   /* Whether an other pointer is down on a non-special key. */

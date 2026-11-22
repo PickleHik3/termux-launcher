@@ -120,6 +120,14 @@ public final class ShaderEditorLogic {
             || !java.util.Objects.equals(d.depth, savedMeta.depth);
     }
 
+    /** Whether draft {@code now} differs from {@code shown}, the same shader as it opened: its text, name, knobs or images. */
+    public static boolean edited(@NonNull ShaderEditorPage.Draft shown, @NonNull ShaderEditorPage.Draft now) {
+        return !now.source.equals(shown.source) || !now.name.equals(shown.name)
+            || now.quality != shown.quality || now.rateHz != shown.rateHz
+            || !java.util.Objects.equals(now.texture, shown.texture)
+            || !java.util.Objects.equals(now.depth, shown.depth);
+    }
+
     /**
      * The depth image the draft keeps once its photo changed or went: one made from the old photo
      * goes (null), one picked by hand stays and is flagged "may not match" by the page.

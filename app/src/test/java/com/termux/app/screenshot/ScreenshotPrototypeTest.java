@@ -143,7 +143,7 @@ public class ScreenshotPrototypeTest {
         activity.setContentView(root);
         LiveBackdrop recorder = new LiveBackdrop(root);
         controller.start().resume().visible();
-        LivePicture picture = recorder.attach(surface, 60f, true);
+        LivePicture picture = recorder.attach(surface, 60f);
         System.out.println("SHOT " + name + " picture=" + picture);
         if (picture != null) surface.setImageDrawable(picture.drawable());
         settle();

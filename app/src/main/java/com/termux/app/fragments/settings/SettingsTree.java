@@ -337,7 +337,7 @@ public final class SettingsTree {
             "app_launcher_home_label_two_lines", "app_launcher_home_label_shadow",
             "app_launcher_home_folder_density", "app_launcher_builtin_widget_style",
             "app_launcher_home_page_indicator", "wallpaper_parallax",
-            "top_pane_clock_am_pm", "status_widget_cpu", "status_widget_ram", "status_widget_battery",
+            "top_pane_clock_am_pm", "status_widget_cpu", "status_widget_gpu", "status_widget_font_toggle", "status_row_order", "status_widget_ram", "status_widget_battery",
             "status_widget_media", "status_widget_weather", "status_widget_weather_fahrenheit",
             "terminal_cursor_trail_style", "terminal_retro_effect", "terminal_screen_events",
             "terminal_retro_composite", "split_pane_controls", "pane_dwindle_default",

@@ -38,7 +38,8 @@ import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
  * 1.15x slop" means one thing in this app and not two. The plane reports raw screen-Y to
  * {@link Callbacks}; the controller owns every decision about what that Y means.
  */
-public final class AppDrawerPlaneView extends FrameLayout {
+public final class AppDrawerPlaneView extends FrameLayout
+    implements com.termux.app.chrome.LiveBackdrop.Container {
 
     /** Raw touch reports from the plane's close drag. The controller interprets them. */
     public interface Callbacks {
@@ -125,7 +126,8 @@ public final class AppDrawerPlaneView extends FrameLayout {
                     (int) Math.floor(mFrame.right), (int) Math.floor(mFrame.bottom), mRadiusPx);
             }
         });
-        mContent = new FrameLayout(context);
+        // A container the search capsule's Live picture records the drawer's rows through.
+        mContent = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
         // B-1 ships the plane empty. The grid, search pill and A-Z rope are B-2/B-3 and go in here;
         // they inherit the outline clip, so they need no rounding of their own.
         addView(mContent, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
@@ -232,6 +234,12 @@ public final class AppDrawerPlaneView extends FrameLayout {
         // worst regression on this surface. The flip is the second of the two guards; the first is
         // the controller clearing setInteractive(false) on close.
         mContent.setVisibility(contentAlpha <= 0.01f ? INVISIBLE : VISIBLE);
+    }
+
+    /** On the search capsule's path to the window's root, as its content wrapper is. */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 
     @Override

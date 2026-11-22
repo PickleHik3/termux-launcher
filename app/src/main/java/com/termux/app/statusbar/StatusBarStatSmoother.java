@@ -121,6 +121,11 @@ public final class StatusBarStatSmoother {
             MIN_PUBLISH_INTERVAL_MS);
     }
 
+    /** The bar's GPU load reading: damped and stepped as the CPU's is, as it spikes the same way. */
+    public static StatusBarStatSmoother forGpuPercent() {
+        return forCpuPercent();
+    }
+
     /** The bar's memory reading: lightly damped, whole percent. */
     public static StatusBarStatSmoother forMemoryPercent() {
         return new StatusBarStatSmoother(MEMORY_SAMPLE_WEIGHT, MEMORY_STEP_PERCENT,

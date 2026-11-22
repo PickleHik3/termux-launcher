@@ -105,7 +105,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_touch_app, "app_launcher_row_haptics", "keyboard_sub_typing", "touchMode");
         key(R.drawable.ic_ms_battery_saver, "performance_link");
         key(R.drawable.ic_ms_settings_backup_restore, "backup_restore");
-        key(R.drawable.ic_ms_admin_panel_settings, "services_permissions", "priv_master_enabled");
+        key(R.drawable.ic_ms_admin_panel_settings, "services_permissions");
         key(R.drawable.ic_ms_troubleshoot, "advanced_diagnostics");
         key(R.drawable.ic_ms_home, "app_launcher_set_home");
         key(R.drawable.ic_ms_restart_alt, "app_launcher_restart", "in_app_keyboard_tap_correction_reset");
@@ -116,7 +116,11 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_deployed_code, "gui_apps_distro");
         key(R.drawable.ic_ms_public, "gui_apps_starter_browser");
         key(R.drawable.ic_ms_folder, "gui_apps_starter_files");
-        key(R.drawable.ic_ms_developer_board, "x11_gpu", "status_widget_cpu");
+        key(R.drawable.ic_ms_developer_board, "x11_gpu");
+        key(R.drawable.ic_rl_cpu, "status_widget_cpu");
+        key(R.drawable.ic_rl_gpu, "status_widget_gpu");
+        key(R.drawable.ic_rl_text_size, "status_widget_font_toggle");
+        key(R.drawable.ic_drag_indicator_24, "status_row_order");
         key(R.drawable.ic_ms_apps, "display", "x11_drawer_apps");
         key(R.drawable.ic_ms_volume_up, "launcher_sound", "launcher_sound_status");
         key(R.drawable.ic_ms_play_circle, "launcher_media_controls");
@@ -139,8 +143,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_edit, "displayResolutionCustom");
         key(R.drawable.ic_ms_tune, "displayFilteringMode", "tai_parameters_defaults", "keyboard_voice_polish_level");
         key(R.drawable.ic_ms_density_small, "x11_display_dpi");
-        key(R.drawable.ic_ms_terminal, "x11_display_command", "priv_allow_shell_fallback",
-            "keyboard_voice_details_shell");
+        key(R.drawable.ic_ms_terminal, "x11_display_command", "keyboard_voice_details_shell");
         key(R.drawable.ic_ms_link, "x11_set_display_env", "tai_endpoint_copy", "tai_remote_base_url");
         key(R.drawable.ic_ms_brush, "x11_legacy_drawing");
         key(R.drawable.ic_ms_swap_horiz, "x11_force_bgra");
@@ -268,7 +271,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_pause, "keyboard_voice_pause_ms");
 
         // Privileged access
-        key(R.drawable.ic_ms_verified_user, "priv_prefer_shizuku");
+        key(R.drawable.ic_ms_verified_user, "priv_backend");
         key(R.drawable.ic_ms_lock_open, "priv_request_shizuku_permission");
         key(R.drawable.ic_ms_route, "priv_lane_enabled");
 

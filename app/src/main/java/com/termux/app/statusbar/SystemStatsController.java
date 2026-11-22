@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import com.termux.privileged.PrivilegedBackendManager;
 
 import java.io.BufferedReader;
+import java.io.File;
 import java.io.FileReader;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -87,6 +88,12 @@ public final class SystemStatsController {
          * reading of zero.
          */
         public boolean stale;
+        /** GPU, clocks and temperatures; null unless a consumer asked for them (the open card). */
+        @Nullable public HardwareStats hardware;
+        /** Whether the app read {@code /proc/stat} itself: 0 not tried, 1 it did, -1 refused. */
+        public int directCpu;
+        /** Whether the GPU load reads, needs a backend, or is not there; unknown until probed. */
+        @NonNull public StatusStatNeedsPolicy.Access gpuAccess = StatusStatNeedsPolicy.Access.UNKNOWN;
 
         /** A copy that shares nothing writable with this one. */
         @NonNull
@@ -106,6 +113,9 @@ public final class SystemStatsController {
             copy.swapFreeKb = swapFreeKb;
             copy.top = Collections.unmodifiableList(new ArrayList<>(top));
             copy.stale = stale;
+            copy.hardware = hardware;   // immutable, so shared
+            copy.directCpu = directCpu;
+            copy.gpuAccess = gpuAccess;
             return copy;
         }
     }
@@ -121,6 +131,7 @@ public final class SystemStatsController {
     private static final String M_LOAD = "@@LOAD";
     private static final String M_TOP = "@@TOP";
     private static final String M_PS = "@@PS";
+    private static final String M_HW = HardwareNodes.MARKER;
     private static final int MAX_PROCESS_BUFFER = 32;
     /** How long to wait between privileged-backend re-initialization attempts while it is down. */
     private static final long BACKEND_RETRY_INTERVAL_MS = 30_000L;
@@ -167,6 +178,7 @@ public final class SystemStatsController {
     private volatile boolean mRunning;
     private volatile long mIntervalMs = 4000L;
     private volatile boolean mWantTop;
+    private volatile boolean mWantHardware;
     /** Whether the start being posted switched the card's process list on; read by {@link #mStart}. */
     private volatile boolean mStartTopTurnedOn;
     /**
@@ -197,6 +209,10 @@ public final class SystemStatsController {
      * Where it can, no privileged command runs at all unless the card wants its process list.
      */
     private int mDirectCpu;
+    /** Discovered on the worker the first time hardware is wanted, then kept for the process. */
+    @Nullable private static volatile HardwareNodes sHardwareNodes;
+    /** The one privileged discovery has been started; it is never repeated. */
+    private static volatile boolean sPrivilegedDiscoveryStarted;
 
     // Previous CPU tick totals per line ("cpu", "cpu0", ...) for delta-based utilisation.
     @Nullable private long[] mPrevTotal;
@@ -231,13 +247,24 @@ public final class SystemStatsController {
      * says, measured from the previous sample.
      */
     public void start(long intervalMs, boolean wantTop) {
+        start(intervalMs, wantTop, false);
+    }
+
+    /**
+     * As {@link #start(long, boolean)}; {@code wantHardware} also reads GPU load, clocks and
+     * temperatures (the open stats card). With it false no hardware node is touched.
+     */
+    public void start(long intervalMs, boolean wantTop, boolean wantHardware) {
         long period = Math.max(StatsPollCadence.MIN_PERIOD_MS, intervalMs);
-        if (!StatsPollCadence.startChangesSchedule(mRunning, mIntervalMs, mWantTop, period, wantTop)) {
+        if (!StatsPollCadence.startChangesSchedule(mRunning, mIntervalMs, mWantTop, mWantHardware,
+            period, wantTop, wantHardware)) {
             return;
         }
-        mStartTopTurnedOn = wantTop && !(mRunning && mWantTop);
+        mStartTopTurnedOn = (wantTop && !(mRunning && mWantTop))
+            || (wantHardware && !(mRunning && mWantHardware));
         mIntervalMs = period;
         mWantTop = wantTop;
+        mWantHardware = wantHardware;
         mRunning = true;
         mWorker.removeCallbacks(mTick);
         mWorker.removeCallbacks(mStart);
@@ -365,10 +392,50 @@ public final class SystemStatsController {
         mSawPrivilegedAvailable = privilegedAvailable;
         // Where the app may read /proc/stat itself, CPU, memory and load need no privileged
         // command at all; only the card's process list does.
+        final boolean wantHardware = mWantHardware;
+        HardwareNodes hardwareNodes = wantHardware ? hardwareNodes() : null;
+        if (hardwareNodes != null && privilegedAvailable && !sPrivilegedDiscoveryStarted
+            && hardwareNodes.needsPrivilegedDiscovery()) {
+            // Once per process, as this poll's one privileged command: ask root what the app could
+            // not list, then rediscover with the answer.
+            sPrivilegedDiscoveryStarted = true;
+            mInFlight = true;
+            mInFlightStartedAtMs = now;
+            final int generation = mSampleGeneration;
+            manager.executeSharedReadCommand(HardwareNodes.privilegedDiscoveryCommand())
+                .whenComplete((output, error) -> mWorker.post(() -> {
+                    if (generation != mSampleGeneration) return;
+                    mInFlight = false;
+                    if (error == null && output != null) {
+                        sHardwareNodes = HardwareNodes.discover(HARDWARE_FS,
+                            HardwareNodes.parseDiscoveryOutput(output));
+                    }
+                    publish();
+                }));
+            return;
+        }
+        if (!wantHardware) mLatest.hardware = null;
         if (!mWantTop && mDirectCpu >= 0) {
             if (readDirectFallback()) {
                 mDirectCpu = 1;
                 mLatest.stale = false;
+                // The batch is this poll's one privileged command, and only when some node needs it.
+                if (hardwareNodes != null && privilegedAvailable && hardwareNodes.needsPrivilege()) {
+                    mInFlight = true;
+                    mInFlightStartedAtMs = now;
+                    final int generation = mSampleGeneration;
+                    final HardwareNodes nodes = hardwareNodes;
+                    manager.executeSharedReadCommand(nodes.privilegedReadCommand())
+                        .whenComplete((output, error) -> mWorker.post(() -> {
+                            if (generation != mSampleGeneration) return;
+                            mInFlight = false;
+                            mLatest.hardware = nodes.collect(HARDWARE_FS, output == null || error != null
+                                ? null : parseHardwareOutput(output));
+                            publish();
+                        }));
+                    return;
+                }
+                if (hardwareNodes != null) mLatest.hardware = hardwareNodes.collect(HARDWARE_FS, null);
                 publish();
                 return;
             }
@@ -379,16 +446,21 @@ public final class SystemStatsController {
             mInFlightStartedAtMs = now;
             final boolean wantTop = mWantTop;
             final int generation = mSampleGeneration;
-            manager.executeSharedReadCommand(buildCommand(wantTop)).whenComplete((output, error) -> {
+            final HardwareNodes nodes = hardwareNodes;
+            manager.executeSharedReadCommand(buildCommand(wantTop,
+                hardwareFragment(wantHardware, nodes))).whenComplete((output, error) -> {
                 mWorker.post(() -> {
                     if (generation != mSampleGeneration) return;   // abandoned; do not corrupt state
                     mInFlight = false;
+                    Map<String, String> hardwareValues = null;
                     if (error != null || output == null) {
                         mLatest.stale = true;
                         Log.w(LOG_TAG, "Privileged stats read failed", error);
                     } else {
                         mLatest.stale = !parsePrivileged(output, wantTop);
+                        if (nodes != null) hardwareValues = parseHardwareOutput(output);
                     }
+                    if (nodes != null) mLatest.hardware = nodes.collect(HARDWARE_FS, hardwareValues);
                     publish();
                 });
             });
@@ -398,6 +470,7 @@ public final class SystemStatsController {
             // while ActivityManager memory keeps updating — mark that honestly instead of
             // presenting a frozen CPU reading and an old process list as fresh.
             mLatest.stale = !readDirectFallback();
+            if (hardwareNodes != null) mLatest.hardware = hardwareNodes.collect(HARDWARE_FS, null);
             publish();
         }
     }
@@ -441,6 +514,9 @@ public final class SystemStatsController {
 
     /** Posts a snapshot of the working copy to main; worker thread. */
     private void publish() {
+        mLatest.directCpu = mDirectCpu;
+        HardwareNodes probed = sHardwareNodes;
+        if (probed != null) mLatest.gpuAccess = probed.gpuAccess();
         Stats snapshot = mLatest.snapshot();
         mMainHandler.post(() -> {
             mPublished = snapshot;
@@ -450,8 +526,57 @@ public final class SystemStatsController {
         });
     }
 
+    /** The hardware batch for a poll: empty unless it is wanted and some node needs privilege. */
     @NonNull
-    private static String buildCommand(boolean wantTop) {
+    static String hardwareFragment(boolean wantHardware, @Nullable HardwareNodes nodes) {
+        return wantHardware && nodes != null ? nodes.privilegedReadCommand() : "";
+    }
+
+    /** The batch's {@code path=value} lines out of a privileged reply. */
+    @NonNull
+    private static Map<String, String> parseHardwareOutput(@NonNull String output) {
+        List<String> lines = new ArrayList<>();
+        boolean in = false;
+        for (String raw : output.split("\n")) {
+            String line = raw.trim();
+            if (line.startsWith("@@")) { in = line.equals(M_HW); continue; }
+            if (in) lines.add(line);
+        }
+        return HardwareNodes.parsePrivilegedLines(lines);
+    }
+
+    @NonNull
+    private static HardwareNodes hardwareNodes() {
+        HardwareNodes nodes = sHardwareNodes;
+        if (nodes == null) {
+            nodes = HardwareNodes.discover(HARDWARE_FS);
+            sHardwareNodes = nodes;
+        }
+        return nodes;
+    }
+
+    /** The app's own view of sysfs for {@link HardwareNodes}. */
+    private static final HardwareNodes.Fs HARDWARE_FS = new HardwareNodes.Fs() {
+        @Override public List<String> list(String dir) {
+            String[] names = new File(dir).list();
+            return names == null ? null : java.util.Arrays.asList(names);
+        }
+
+        @Override public String read(String path) {
+            try (BufferedReader r = new BufferedReader(new FileReader(path))) {
+                return r.readLine();
+            } catch (Exception e) {
+                return null;
+            }
+        }
+
+        @Override public boolean exists(String path) {
+            return new File(path).exists();
+        }
+    };
+
+    @NonNull
+    static String buildCommand(boolean wantTop, @NonNull String hardwareFragment) {
         StringBuilder sb = new StringBuilder();
         sb.append("echo ").append(M_STAT).append("; grep '^cpu' /proc/stat 2>/dev/null; ");
         sb.append("echo ").append(M_MEM).append("; cat /proc/meminfo 2>/dev/null; ");
@@ -464,6 +589,7 @@ public final class SystemStatsController {
             sb.append("echo ").append(M_TOP)
                 .append("; top -b -n 1 -m 32 2>/dev/null; ");
         }
+        sb.append(hardwareFragment);
         return sb.toString();
     }
 
@@ -486,6 +612,7 @@ public final class SystemStatsController {
             if (line.equals(M_LOAD)) { section = M_LOAD; continue; }
             if (line.equals(M_TOP)) { section = M_TOP; continue; }
             if (line.equals(M_PS)) { section = M_PS; continue; }
+            if (line.equals(M_HW)) { section = M_HW; continue; }
             if (line.isEmpty()) continue;
             switch (section) {
                 case M_STAT: statLines.add(line); break;

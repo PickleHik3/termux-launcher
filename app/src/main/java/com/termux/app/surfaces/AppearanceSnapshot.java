@@ -112,6 +112,8 @@ final class AppearanceSnapshot {
      * 12-hour, seconds, °F weather, and the CPU, RAM, weather, media and notifications indicators.
      */
     private final boolean[] mStatusSwitches;
+    /** The status row's order, in its one spelling ({@code StatusRowOrder#normalize}). */
+    private final String mStatusRowOrder;
     /**
      * Every half's own key as stored (ADR 0013): a key absent here is absent in the store, so a
      * half that followed the shared value at open follows it again after a restore.
@@ -195,6 +197,8 @@ final class AppearanceSnapshot {
         mClockStyle = prefs.getTopPaneClockStyle();
         mClockAlignment = prefs.getTopPaneClockAlignment();
         mStatusSwitches = statusSwitches(prefs);
+        mStatusRowOrder = com.termux.app.statusbar.StatusRowOrder.normalize(
+            prefs.getStatusRowOrder());
         mHalfKeys = halfKeys(prefs);
         mGridCells = gridCells(prefs);
     }
@@ -208,7 +212,8 @@ final class AppearanceSnapshot {
             prefs.isStatusWidgetMediaEnabled(), prefs.isStatusWidgetNotificationsEnabled(),
             prefs.isStatusClockShown(), prefs.isCompatibilityModeEnabled(),
             prefs.isDwindleDefaultLayoutEnabled(), prefs.isFocusedPaneGrowsEnabled(),
-            prefs.isStatusWidgetBatteryEnabled()};
+            prefs.isStatusWidgetBatteryEnabled(), prefs.isStatusWidgetGpuEnabled(),
+            prefs.isStatusWidgetFontToggleEnabled()};
     }
 
     /** Writes back the status bar's switches that differ from the store's now. */
@@ -229,6 +234,8 @@ final class AppearanceSnapshot {
         if (now[10] != kept[10]) prefs.setDwindleDefaultLayoutEnabled(kept[10]);
         if (now[11] != kept[11]) prefs.setFocusedPaneGrowsEnabled(kept[11]);
         if (now[12] != kept[12]) prefs.setStatusWidgetBatteryEnabled(kept[12]);
+        if (now[13] != kept[13]) prefs.setStatusWidgetGpuEnabled(kept[13]);
+        if (now[14] != kept[14]) prefs.setStatusWidgetFontToggleEnabled(kept[14]);
     }
 
     private static boolean isKeyboardBlur(@NonNull SurfaceEditorRows.Row row) {
@@ -306,6 +313,9 @@ final class AppearanceSnapshot {
         prefs.setTopPaneClockStyle(mClockStyle);
         prefs.setTopPaneClockAlignment(mClockAlignment);
         restoreStatusSwitches(prefs, mStatusSwitches);
+        if (!mStatusRowOrder.equals(com.termux.app.statusbar.StatusRowOrder.normalize(
+                prefs.getStatusRowOrder())))
+            prefs.setStatusRowOrder(mStatusRowOrder);
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
         restoreGridCells(prefs, mGridCells);
@@ -346,6 +356,7 @@ final class AppearanceSnapshot {
             .append('|').append(mKeyboardFloatingHeight).append('|').append(mKeyboardSplitGap)
             .append('|').append(mClockAlignment)
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
+            .append('|').append(mStatusRowOrder)
             .append('|').append(mHalfKeys).append('|').append(mGridCells)
             .toString();
     }

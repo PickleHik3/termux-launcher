@@ -275,7 +275,18 @@ public final class SliderRow {
         int clamped = Math.max(track.from, Math.min(track.to, value));
         if (item.slider.getValue() != clamped)
             item.slider.setValue(clamped);
-        RowKit.setText(item.value, track.readout.format(clamped));
+        showReadout(item.value, track.readout.format(clamped));
+    }
+
+    /**
+     * Prints a readout: numbers in the fixed-width face the row sizes them in, a note in the
+     * row's own text face. The face changes only when the kind of readout does.
+     */
+    static void showReadout(@NonNull TextView value, @NonNull String text) {
+        RowKit.setText(value, text);
+        Typeface face = SliderRowFit.isNote(text) ? Typeface.DEFAULT : Typeface.MONOSPACE;
+        if (value.getTypeface() != face)
+            value.setTypeface(face);
     }
 
     private static void setVisible(@NonNull View view, boolean shown) {
@@ -357,6 +368,8 @@ public final class SliderRow {
         value.setTextColor(RowKit.color(context,
             com.google.android.material.R.attr.colorOnSurfaceVariant));
         value.setTypeface(Typeface.MONOSPACE);
+        value.setSingleLine(true);
+        value.setEllipsize(TextUtils.TruncateAt.END);
         value.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
         value.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
 
@@ -383,7 +396,7 @@ public final class SliderRow {
         Item item = new Item(root, glyph, name, value, slider, reset, track.name);
         slider.addOnChangeListener((s, v, fromUser) -> {
             int at = Math.round(v);
-            RowKit.setText(value, track.readout.format(at));
+            showReadout(value, track.readout.format(at));
             if (fromUser)
                 listener.onValue(index, at, s.isDragging());
         });
@@ -480,12 +493,18 @@ public final class SliderRow {
             mGlyph.measure(exactGlyph, exactGlyph);
             mName.measure(unspecified, unspecified);
             int nameNatural = mName.getMeasuredWidth();
-            mValue.measure(MeasureSpec.makeMeasureSpec(mValueWidthPx, MeasureSpec.EXACTLY),
+            String readout = mValue.getText().toString();
+            boolean note = SliderRowFit.isNote(readout);
+            int valuePx = SliderRowFit.twoLineValuePx(note, mValueWidthPx,
+                (int) Math.ceil(mValue.getPaint().measureText(readout)), column);
+            mValue.measure(MeasureSpec.makeMeasureSpec(valuePx, MeasureSpec.EXACTLY),
                 unspecified);
             Paint.FontMetrics metrics = mSlider.insetValuePaint().getFontMetrics();
             int valueLine = (int) Math.ceil(metrics.descent - metrics.ascent);
             mOneLine = SliderRowFit.oneLine(column, mMinTrackPx, mGapPx, nameNatural,
-                mInsetValueWidthPx, mValuePadPx, valueLine, mInsetTrackPx);
+                SliderRowFit.fitValuePx(note, mInsetValueWidthPx,
+                    (int) Math.ceil(mSlider.insetValuePaint().measureText(readout))),
+                mValuePadPx, valueLine, mInsetTrackPx);
             int height;
             if (mOneLine) {
                 int track = SliderRowFit.trackPx(column, mMinTrackPx);
@@ -496,7 +515,7 @@ public final class SliderRow {
                     MeasureSpec.makeMeasureSpec(mTouchPx, MeasureSpec.EXACTLY));
                 height = 2 * mOneLinePadPx + Math.max(mTouchPx, mName.getMeasuredHeight());
             } else {
-                int nameRoom = Math.max(0, column - mValueGapPx - mValueWidthPx);
+                int nameRoom = Math.max(0, column - mValueGapPx - valuePx);
                 mName.measure(MeasureSpec.makeMeasureSpec(nameRoom, MeasureSpec.AT_MOST),
                     unspecified);
                 mSlider.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),

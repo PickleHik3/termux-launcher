@@ -19,17 +19,17 @@ import com.termux.privileged.PrivilegedBackendManager;
 /**
  * The check the CPU and RAM status widgets pass through before they can be switched on.
  *
- * <p>Both widgets are far better with the privileged backend connected: it is what supplies
+ * <p>Both widgets are far better with the privileged backend (Shizuku or root) connected: it is what supplies
  * per-core CPU, detailed memory and the top-process list. Without it the CPU figure falls back to a
  * direct {@code /proc} read that a number of ROMs — Nothing OS among them — deny outright, which is
  * how the widget ends up switched on and permanently blank. So rather than let the user find that
- * out by looking at an empty readout, turning either widget on asks about Shizuku first, and points
+ * out by looking at an empty readout, turning either widget on asks about Shizuku or root first, and points
  * at the guide when it is not there.
  *
  * <p>It is a checkpoint, not a wall. The user can still turn the widget on unprivileged from the
  * same dialog — RAM in particular works fine that way — they just do it knowing what they will get.
  */
-final class StatusWidgetPrivilegedGate {
+public final class StatusWidgetPrivilegedGate {
 
     /** The Permissions page of the project wiki, which is where Shizuku setup is written up. */
     private static final String SHIZUKU_GUIDE_URL =
@@ -90,7 +90,7 @@ final class StatusWidgetPrivilegedGate {
         }
     }
 
-    private static void openPrivilegedAccessSettings(@NonNull Context context) {
+    public static void openPrivilegedAccessSettings(@NonNull Context context) {
         // Inside Settings the screen is pushed in place, so no second Settings instance stacks.
         Context unwrapped = context;
         while (unwrapped instanceof android.content.ContextWrapper

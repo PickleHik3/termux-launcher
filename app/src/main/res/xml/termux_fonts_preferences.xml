@@ -36,6 +36,12 @@
             app:title="@string/termux_fonts_weight_title"
             app:persistent="false"
             app:iconSpaceReserved="false" />
+        <Preference
+            app:key="font_toggle_compact_size"
+            app:title="@string/font_toggle_compact_size_title"
+            app:summary="@string/font_toggle_compact_size_summary"
+            app:persistent="false"
+            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

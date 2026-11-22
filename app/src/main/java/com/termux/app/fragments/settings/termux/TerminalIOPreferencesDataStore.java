@@ -78,6 +78,12 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "status_widget_cpu":
                 mPreferences.setStatusWidgetCpuEnabled(value);
                 break;
+            case "status_widget_gpu":
+                mPreferences.setStatusWidgetGpuEnabled(value);
+                break;
+            case "status_widget_font_toggle":
+                mPreferences.setStatusWidgetFontToggleEnabled(value);
+                break;
             case "status_widget_ram":
                 mPreferences.setStatusWidgetRamEnabled(value);
                 break;
@@ -133,6 +139,10 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isTerminalBodySwipeEnabled();
             case "status_widget_cpu":
                 return mPreferences.isStatusWidgetCpuEnabled();
+            case "status_widget_gpu":
+                return mPreferences.isStatusWidgetGpuEnabled();
+            case "status_widget_font_toggle":
+                return mPreferences.isStatusWidgetFontToggleEnabled();
             case "status_widget_ram":
                 return mPreferences.isStatusWidgetRamEnabled();
             case "status_widget_battery":

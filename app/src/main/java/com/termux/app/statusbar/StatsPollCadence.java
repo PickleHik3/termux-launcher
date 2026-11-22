@@ -74,7 +74,9 @@ final class StatsPollCadence {
      * it neither samples nor moves the next tick.
      */
     static boolean startChangesSchedule(boolean running, long runningPeriodMs, boolean runningTop,
-                                        long requestedPeriodMs, boolean requestedTop) {
-        return !running || runningPeriodMs != requestedPeriodMs || runningTop != requestedTop;
+                                        boolean runningHardware, long requestedPeriodMs,
+                                        boolean requestedTop, boolean requestedHardware) {
+        return !running || runningPeriodMs != requestedPeriodMs || runningTop != requestedTop
+            || runningHardware != requestedHardware;
     }
 }

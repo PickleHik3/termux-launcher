@@ -946,6 +946,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        if (mDisplay != null) com.termux.app.chrome.BackdropRecording.register(mDisplay);
         // A place can be added to the wall while the wall is resting on another one.
         syncPageOnScreen();
     }
@@ -1765,6 +1766,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        if (mDisplay != null) com.termux.app.chrome.BackdropRecording.unregister(mDisplay);
         cancelHold();
         // A frame taken off the window lets go of the display rather than leave it frozen.
         if (mNextLayoutRelease != null) {

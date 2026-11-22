@@ -248,6 +248,10 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_FORCE_BGRA = false;
 
+        /** Whether launcherctl may restart the phone (restart, recovery, bootloader). */
+        public static final String KEY_LAUNCHERCTL_ROOT_REBOOT = "launcherctl_root_reboot";
+        public static final boolean DEFAULT_LAUNCHERCTL_ROOT_REBOOT = false;
+
         /** List the prefix's Linux apps in the app drawer, to be run on the display. */
         public static final String KEY_X11_DRAWER_APPS = "x11_drawer_apps";
 
@@ -732,6 +736,21 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_CPU = "status_widget_cpu";
         public static final boolean DEFAULT_STATUS_WIDGET_CPU = false;
 
+        /** The GPU load in the status bar: off by default, shown only where a phone reports it. */
+        public static final String KEY_STATUS_WIDGET_GPU = "status_widget_gpu";
+        public static final boolean DEFAULT_STATUS_WIDGET_GPU = false;
+
+        /** The Compact font toggle in the status bar: off by default, shown where a pane has focus. */
+        public static final String KEY_STATUS_WIDGET_FONT_TOGGLE = "status_widget_font_toggle";
+        public static final boolean DEFAULT_STATUS_WIDGET_FONT_TOGGLE = false;
+
+        /**
+         * The order the status bar's row draws its items in: a comma list of item keys
+         * ({@code StatusRowOrder}). Empty, the default, is the shipped order.
+         */
+        public static final String KEY_STATUS_ROW_ORDER = "status_row_order";
+        public static final String DEFAULT_STATUS_ROW_ORDER = "";
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 
@@ -976,6 +995,8 @@ public final class TermuxPreferenceConstants {
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_OFF = "off";
 
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU = "shizuku";
+
+        public static final String APP_LAUNCHER_AZ_LOCK_METHOD_ROOT = "root";
 
         public static final String APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY = "accessibility";
 
@@ -1676,6 +1697,8 @@ public final class TermuxPreferenceConstants {
          * Defines the key for font size of termux terminal view.
          */
         public static final String KEY_FONTSIZE = "fontsize";
+        /** The size the font toggle switches a pane to, in the font size's own unit; 0 derives it. */
+        public static final String KEY_COMPACT_FONTSIZE = "compact_fontsize";
 
         /**
          * Defines the key for current termux terminal session.

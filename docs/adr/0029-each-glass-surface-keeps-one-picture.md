@@ -119,7 +119,13 @@ live.
 A surface asks for a kind. The service grants it from the Live blur policy and the slot budget at
 registration, and re-grants only when a policy input changes: the Live blur switch, battery saver,
 a memory trim or a slot freeing. The change applies at once, even mid-swipe, and is counted by the
-guards. Motion, landings and what sits above never change a kind.
+guards. Motion and landings never change a kind.
+
+What sits above changes a kind in one case only: a sheet at rest covers the surfaces it hides
+wholly (on a lower layer, and inside the sheet's rect or not shown), and a covered surface is
+granted Wallpaper until the sheet leaves rest. That frees the Live slots for what can be seen, so an
+open drawer and its search capsule always get Live (amended 2026-11-22 at the developer's decision;
+`GlassCover`, `GlassRegistry.setCovered`).
 
 ## 5. No twins
 
@@ -140,7 +146,8 @@ edge. Each surface has a pong screenshot check in light and dark.
 ## 7. See through is removed
 
 "See through: One layer" and its row in Battery & performance go. What sits above a surface never
-changes its picture. The 8-slot budget and layers-always bound the cost.
+changes its picture, apart from a sheet at rest covering it wholly (section 4). The 8-slot budget
+and layers-always bound the cost.
 
 ## 8. How shared surfaces blend
 
@@ -168,7 +175,9 @@ sampler becomes this store. The status bar and window bar get no correction in t
 
 1. The registry, with Live at its core, layers always.
 2. Terminal pane slabs read the frame snapshot instead of the activity's push.
-3. Panels (drawer, menus, palette, sheet) register as Snapshot or Live.
+3. Panels (drawer, menus, palette, sheet) register as Snapshot or Live. Done 2026-11-22: the
+   drawer, palette and sheet draw layered Live glass; menus, in their own window, keep a registered
+   Snapshot. The one-picture branch is deleted, and `LayeredGlassSourceRulesTest` keeps it out.
 4. The stored-frame bars register; their twins go with the top of the window.
 5. The foot: the slab extends under the pill and the decor strip is deleted.
 

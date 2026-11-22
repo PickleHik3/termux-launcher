@@ -200,13 +200,12 @@ public class AppDrawerChromeLayoutTest {
         assertEquals(40, fold(false, 40, true, true).restInsetPx);
     }
 
-    @Test public void aBarAtTheBottomHoldsABandTheFoldedListReclaims() {
+    @Test public void aBarAtTheBottomHoldsABandTheListEndsAbove() {
         AppDrawerChromeLayout.Result r = fold(true, 40, true, false);
         int band = 40 + Math.round(46f * 2f) + Math.round(10f * 2f);
         // Today's unfolded rect: the content ends the band above the card's edge.
         assertEquals(band, r.contentBottomPx);
-        // The list is laid out to the edge; its drawn bottom is the edge minus the band, fold 0,
-        // and the edge itself at fold 1 (the content view clips by band * (1 - fold)).
+        // The list is laid out to the edge with the band as end padding; the capsule floats over it.
         assertEquals(band, r.foldBandPx);
         // End padding equals the button's clearance: the bar's own margin + diameter + gap.
         assertEquals(40 + r.buttonSizePx + Math.round(10f * 2f), r.foldBandPx);
@@ -217,6 +216,12 @@ public class AppDrawerChromeLayoutTest {
     @Test public void aBarOnTopHoldsNoBottomBand() {
         assertEquals(0, fold(false, 40, true, false).foldBandPx);
         assertEquals(0, fold(false, 40, true, true).foldBandPx);
+    }
+
+    @Test public void theListsTopBandIsWhereTheContentStartsWhateverTheFold() {
+        // The list spans the card and rests its first row at contentTopPx: the capsule floats.
+        assertEquals(fold(false, 40, true, false).contentTopPx,
+            fold(false, 40, true, true).contentTopPx);
     }
 
     @Test public void aFoldedTopBarLeavesTheListRoomForTheButton() {

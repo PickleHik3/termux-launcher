@@ -174,8 +174,10 @@ public class AppDrawerContentCategoryGestureTest {
     private float emptyPaneY() {
         int headerTop = Math.min(categories.getDetailHeader().getTop(),
             categories.getCollapseChevron().getTop());
-        assertTrue("the folder needs an empty band above its header", headerTop > 2);
-        return categories.getTop() + headerTop / 2f;
+        int inset = categories.getTopInsetPx();
+        assertTrue("the folder needs an empty band above its header", headerTop - inset > 2);
+        // Below the floating chrome's band, above the header.
+        return categories.getTop() + inset + (headerTop - inset) / 2f;
     }
 
     @Test public void nestedFlingSignIsConvertedExactlyOnceAndDuplicateStopFinalizesOnce() {

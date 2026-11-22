@@ -3,6 +3,8 @@ package com.termux.privileged;
 import android.content.Context;
 import android.content.SharedPreferences;
 
+import androidx.annotation.NonNull;
+
 /**
  * Centralized storage for privileged backend and endpoint policy toggles.
  */
@@ -10,6 +12,9 @@ public final class PrivilegedPolicyStore {
 
     public static final String PREFS_NAME = "termux_privileged_policy";
 
+    /** auto, shizuku, root or off; see {@link PrivilegedChoice}. */
+    public static final String KEY_BACKEND = "priv_backend";
+    /** The three switches the choice replaced; read once to migrate and never written. */
     public static final String KEY_MASTER_ENABLED = "priv_master_enabled";
     public static final String KEY_PREFER_SHIZUKU = "priv_prefer_shizuku";
     public static final String KEY_ALLOW_SHELL_FALLBACK = "priv_allow_shell_fallback";
@@ -33,28 +38,29 @@ public final class PrivilegedPolicyStore {
         getPrefs(context).edit().putBoolean(KEY_LANE_ENABLED, enabled).apply();
     }
 
+    /**
+     * The backend the user allows. A phone that still holds only the old three switches is moved
+     * across once, on this first read; the old keys are never written again.
+     */
+    @NonNull
+    public static PrivilegedChoice getChoice(Context context) {
+        SharedPreferences prefs = getPrefs(context);
+        PrivilegedChoice stored = PrivilegedChoice.fromStored(prefs.getString(KEY_BACKEND, null));
+        if (stored != null) return stored;
+        PrivilegedChoice migrated = PrivilegedChoice.migrate(
+            prefs.getBoolean(KEY_MASTER_ENABLED, true),
+            prefs.getBoolean(KEY_PREFER_SHIZUKU, true),
+            prefs.getBoolean(KEY_ALLOW_SHELL_FALLBACK, true));
+        prefs.edit().putString(KEY_BACKEND, migrated.stored).apply();
+        return migrated;
+    }
+
+    public static void setChoice(Context context, @NonNull PrivilegedChoice choice) {
+        getPrefs(context).edit().putString(KEY_BACKEND, choice.stored).apply();
+    }
+
     public static boolean isMasterEnabled(Context context) {
-        return getPrefs(context).getBoolean(KEY_MASTER_ENABLED, true);
-    }
-
-    public static void setMasterEnabled(Context context, boolean enabled) {
-        getPrefs(context).edit().putBoolean(KEY_MASTER_ENABLED, enabled).apply();
-    }
-
-    public static boolean isPreferShizuku(Context context) {
-        return getPrefs(context).getBoolean(KEY_PREFER_SHIZUKU, true);
-    }
-
-    public static void setPreferShizuku(Context context, boolean enabled) {
-        getPrefs(context).edit().putBoolean(KEY_PREFER_SHIZUKU, enabled).apply();
-    }
-
-    public static boolean isShellFallbackEnabled(Context context) {
-        return getPrefs(context).getBoolean(KEY_ALLOW_SHELL_FALLBACK, true);
-    }
-
-    public static void setShellFallbackEnabled(Context context, boolean enabled) {
-        getPrefs(context).edit().putBoolean(KEY_ALLOW_SHELL_FALLBACK, enabled).apply();
+        return getChoice(context) != PrivilegedChoice.OFF;
     }
 
     private static SharedPreferences getPrefs(Context context) {

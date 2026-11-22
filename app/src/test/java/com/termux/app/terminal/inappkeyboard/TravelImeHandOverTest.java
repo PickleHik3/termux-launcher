@@ -32,4 +32,13 @@ public class TravelImeHandOverTest {
         // A field outside the keyboard typing with the phone's keyboard: the place does not hold it.
         assertFalse(TermuxInAppKeyboard.placeHoldsSystemIme(true, false, true, true, false, false));
     }
+
+    @Test
+    public void aShowRepeatsATravelShowOnlyWhileItsKeysAreStillUp() {
+        assertTrue(TermuxInAppKeyboard.showRepeatsTravelShow(true, true, true, false));
+        assertFalse(TermuxInAppKeyboard.showRepeatsTravelShow(false, true, true, false));
+        assertFalse(TermuxInAppKeyboard.showRepeatsTravelShow(true, false, true, false));
+        assertFalse(TermuxInAppKeyboard.showRepeatsTravelShow(true, true, false, false));
+        assertFalse(TermuxInAppKeyboard.showRepeatsTravelShow(true, true, true, true));
+    }
 }

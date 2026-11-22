@@ -77,10 +77,15 @@ fails when the catalogue has gone stale.
   automatic exclusion), the activity-embedded view registers its own
   view-local `setSystemGestureExclusionRects` in `onLayout` and
   `onApplyWindowInsets` (SDK >= 29) so edge-column swipes are not recognized
-  as system Back gestures. It asks only for the two side strips, each as wide
-  as the window's system-gesture inset on that side: an exclusion that
-  reaches the navigation handle turns off the system's sideways swipe to the
-  previous app. The host may
+  as system Back gestures. It asks for the two side strips, each as wide as
+  the window's system-gesture inset on that side, and for its rows between
+  them down to the last row's bottom: Quickstep takes a sideways drag that
+  lands in the navigation handle's band for its quick switch unless the touch
+  is inside an exclusion, which stole the space bar's cursor slide wherever
+  the bottom row reached that band. The bottom margin under the last row is
+  left out, so the handle's sideways swipe still works where only the margin
+  reaches it; a sideways swipe that starts on a key in the band slides or
+  types instead of switching apps. The host may
   also apply a live height scale; measurement multiplies `Config.rowHeightPx`
   and derives the height cap from `maxKeyboardHeightFraction` by the same factor
   so enlarged keyboards are not silently limited by the unscaled cap. An
@@ -93,12 +98,15 @@ fails when the catalogue has gone stale.
   The host may also apply a live legend scale (`setLabelScale`), which
   multiplies the measured label and sublabel sizes and leaves key geometry
   alone; the launcher feeds it the shared Text size.
-- `ACTION_CANCEL` commits live pointers (`Pointers.onTouchCancelCommit`)
-  instead of aborting like upstream. Embedded in an activity the only cancel
-  source is the system pilfering the stream for a navigation gesture; the
-  exclusion request above can be partially denied (the per-edge 200dp budget
-  is shared with accessibility overlays such as QuickCursor), and aborting
-  would silently drop the pressed key.
+- `ACTION_CANCEL` commits a live pointer (`Pointers.onTouchCancelCommit`)
+  only where it went down inside a side back-swipe strip, instead of aborting
+  like upstream: the exclusion request above can be partially denied (the
+  per-edge 200dp budget is shared with accessibility overlays such as
+  QuickCursor), and aborting would silently drop the pressed key. Any other
+  press or swipe is dropped without a key, since there the cancel is the
+  system or the launcher taking the stream (home, quick switch, a page swipe)
+  and committing typed keys never tapped, such as a space at the start of a
+  space-bar cursor slide. A sliding pointer ends as on release (no key).
 - `Theme.Palette` accepts resolved ARGB roles, upstream label-dimming factors,
   palette opacity, and border geometry; static keyboard styles remain a
   fallback. `Keyboard2View` exposes its resolved keyboard and label colors for

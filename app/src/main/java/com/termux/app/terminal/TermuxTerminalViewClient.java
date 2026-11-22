@@ -615,6 +615,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * supported actions to extend.
      */
     public void runLauncherTool(@NonNull String toolId) {
+        if (com.termux.launcherctl.LauncherToolRegistry.isPaletteOnly(toolId)) {
+            Logger.logWarn(LOG_TAG, "Keyboard tool " + toolId + " is palette-only");
+            return;
+        }
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
@@ -678,6 +682,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 continue;
             }
 
+            if (com.termux.launcherctl.LauncherToolRegistry.isPaletteOnly(action.value)) {
+                Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + action.value
+                    + " is palette-only");
+                continue;
+            }
             JSONObject arguments = mergeArguments(action.arguments, match.arguments);
             JSONObject result = dispatcher.execute(action.value, arguments);
             if (!result.optBoolean("ok", false)) {
@@ -1099,6 +1108,18 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
         }
         mHost.requestFlushDockGeometryUpdate();
+    }
+
+    /**
+     * The font toggle: the focused pane switches between its own size and the Compact size, and
+     * the next tap restores the size it had ({@link FontCompactPolicy}).
+     */
+    public void toggleCompactFontSize() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            mHost.preferences();
+        int compact = FontCompactPolicy.compactSize(prefs.getStoredCompactFontSize(),
+            prefs.getFontSize(), prefs.getMinFontSize(), prefs.getMaxFontSize());
+        if (mHost.toggleActivePaneCompact(compact)) mHost.requestFlushDockGeometryUpdate();
     }
 
     /**

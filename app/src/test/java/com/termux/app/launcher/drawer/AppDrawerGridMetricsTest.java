@@ -110,4 +110,13 @@ public class AppDrawerGridMetricsTest {
         assertEquals(144f, four.iconPx, EPS);
         assertEquals(104.4f, six.iconPx, EPS);
     }
+
+    @Test
+    public void resolvingTheSameInputsGivesEqualMetrics() {
+        AppDrawerGridMetrics a = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT);
+        AppDrawerGridMetrics b = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        assertFalse(a.equals(AppDrawerGridMetrics.resolve(900f, DENSITY, LABEL_HEIGHT)));
+    }
 }

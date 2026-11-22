@@ -55,7 +55,8 @@ public class TerminalActionDispatcherTest {
             "window.previous", "session.new", "session.next", "session.previous", "session.close_current",
             "session.browser", "session.clone_current",
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
-            "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
+            "terminal.font_size_decrease", "terminal.font_size_toggle_compact",
+            "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename",
             "session.rename_at_index", "terminal.reset",
             "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
@@ -107,7 +108,8 @@ public class TerminalActionDispatcherTest {
             "window.previous", "session.new", "session.next", "session.previous", "session.close_current",
             "session.browser", "session.clone_current",
             "terminal.toggle_soft_keyboard", "terminal.toggle_toolbar", "terminal.font_size_increase",
-            "terminal.font_size_decrease", "terminal.select_url", "terminal.share_transcript",
+            "terminal.font_size_decrease", "terminal.font_size_toggle_compact",
+            "terminal.select_url", "terminal.share_transcript",
             "clipboard.paste", "window.select", "window.rename", "session.rename", "terminal.reset",
             "appearance.set_wallpaper", "appearance.toggle_wallpaper", "appearance.surface_editor", "appearance.glass_lab",
             "app.command_palette", "app.open_drawer", "app.open_app_drawer", "app.close_drawer", "terminal.action_sheet",
@@ -1204,7 +1206,7 @@ public class TerminalActionDispatcherTest {
         attach();
         for (String tool : new String[]{"terminal.toggle_soft_keyboard",
                 "terminal.font_size_increase", "terminal.font_size_decrease",
-                "terminal.select_url", "terminal.hints", "terminal.search_scrollback",
+                "terminal.font_size_toggle_compact", "terminal.select_url", "terminal.hints", "terminal.search_scrollback",
                 "terminal.share_transcript", "clipboard.paste"}) {
             JSONObject result = dispatcher.execute(tool, new JSONObject());
             assertEquals(tool, 503, result.getInt("_statusCode"));
@@ -1220,6 +1222,31 @@ public class TerminalActionDispatcherTest {
         JSONObject result = dispatcher.execute("terminal.font_size_increase", new JSONObject());
         assertEquals(409, result.getInt("_statusCode"));
         assertEquals("no_session", result.getString("error"));
+    }
+
+    @Test
+    public void fontToggleSwitchesTheFocusedPaneToCompactAndBack() throws Exception {
+        FakeTerminalHost host = attach();
+        host.viewClient = new TermuxTerminalViewClient(FakeTerminalHost.testContext(), host, null);
+        host.currentSession = session();
+        host.paneFontSize = 34;
+        int compact = com.termux.app.terminal.FontCompactPolicy.compactSize(
+            host.preferences.getStoredCompactFontSize(), host.preferences.getFontSize(),
+            host.preferences.getMinFontSize(), host.preferences.getMaxFontSize());
+
+        assertTrue(dispatcher.execute("terminal.font_size_toggle_compact", new JSONObject())
+            .getBoolean("ok"));
+        assertEquals(compact, host.paneFontSize);
+        assertTrue(host.activePaneCompact());
+
+        assertTrue(dispatcher.execute("terminal.font_size_toggle_compact", new JSONObject())
+            .getBoolean("ok"));
+        assertEquals(34, host.paneFontSize);
+
+        // A zoom while Compact leaves it: the next tap goes to Compact again.
+        dispatcher.execute("terminal.font_size_toggle_compact", new JSONObject());
+        dispatcher.execute("terminal.font_size_increase", new JSONObject());
+        assertFalse(host.activePaneCompact());
     }
 
     @Test

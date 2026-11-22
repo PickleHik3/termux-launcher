@@ -4134,7 +4134,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private static int wornStop(@NonNull TermuxAppSharedPreferences prefs,
                                 @NonNull PageKind half) {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(prefs)) {
-            if (SurfacePresets.wornOn(prefs, preset, half))
+            if (SurfacePresets.wornOnGlobal(prefs, preset, half))
                 return AppearanceLooks.stopForPresetId(preset.id);
         }
         return AppearanceLooks.CUSTOM_STOP;
@@ -6026,6 +6026,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         return prefs.isStatusClockShown();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
                         return prefs.isStatusWidgetCpuEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_GPU:
+                        return prefs.isStatusWidgetGpuEnabled();
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_FONT_TOGGLE:
+                        return prefs.isStatusWidgetFontToggleEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
                         return prefs.isStatusWidgetRamEnabled();
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_WEATHER:
@@ -6055,6 +6059,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_CPU:
                         prefs.setStatusWidgetCpuEnabled(on);
                         break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_GPU:
+                        prefs.setStatusWidgetGpuEnabled(on);
+                        break;
+                    case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_FONT_TOGGLE:
+                        prefs.setStatusWidgetFontToggleEnabled(on);
+                        break;
                     case com.termux.app.surfaces.cards.StatusBarCard.INDICATOR_RAM:
                         prefs.setStatusWidgetRamEnabled(on);
                         break;
@@ -6074,6 +6084,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                         return;
                 }
                 // The bar's refresh ends in its widgets' pass, which reads every indicator.
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
+            @Override public String rowOrder() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return prefs == null ? null : prefs.getStatusRowOrder();
+            }
+
+            @Override public void setRowOrder(@NonNull String order) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || com.termux.app.statusbar.StatusRowOrder.normalize(
+                        prefs.getStatusRowOrder()).equals(
+                        com.termux.app.statusbar.StatusRowOrder.normalize(order)))
+                    return;
+                prefs.setStatusRowOrder(com.termux.app.statusbar.StatusRowOrder.normalize(order));
+                // The bar's refresh ends in its widgets' pass, which stands the row in this order.
                 mHost.refreshTerminalWindowBar();
                 syncDirty();
             }

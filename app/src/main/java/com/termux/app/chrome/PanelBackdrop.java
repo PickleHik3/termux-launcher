@@ -61,6 +61,13 @@ import com.termux.app.window.WindowLayer;
  *   for the rest of the process once a software Snapshot has failed ({@link #pictured}).</li>
  * </ul>
  *
+ * <p>A panel inside the launcher's own window on the GPU (the app drawer's card, the palette, the
+ * terminal sheet) wears the glass every other surface wears: Live is the recorder's backdrop layers
+ * (ground, pages, local) attached as a surface, at the blur the caller passes to {@link #open} (the
+ * stored frame's radius); anything else the service grants is the stored frame, which its
+ * controller lays beneath, and it never takes a Snapshot. A popup menu (a window of its own, which
+ * the recorder does not refresh) and every panel below Android 12 take the Snapshot kinds above.</p>
+ *
  * <p>A controller calls {@link #open} on each open, {@link #setMoving} as its motion starts and
  * stops, and {@link #close} once shut, which gives back every layer and buffer and the panel's
  * entry: a shut panel holds no pixels. A policy event while it is open (Live switched off,
@@ -69,10 +76,16 @@ import com.termux.app.window.WindowLayer;
  */
 public final class PanelBackdrop {
 
-    /** The app drawer plane's blur, as its {@code RealtimeBlurView} had it. */
-    public static final float DRAWER_BLUR_RADIUS_DP = 10f;
-    /** The command palette's and the terminal sheet's blur, as their {@code RealtimeBlurView}s had it. */
-    public static final float PROMPT_BLUR_RADIUS_DP = 18f;
+    /** A panel's host: the stored frame's blur its layered glass is cut at. */
+    public interface GlassBlur {
+        /**
+         * The blur of the top glass, in dp, the same the panel's frost is blurred at (0: no blur,
+         * the stored frame only).
+         */
+        default int glassBlurDp() {
+            return 0;
+        }
+    }
 
     /** The activity's recorder and switch, found through the decor view ({@link #install}). */
     public interface Source {
@@ -145,6 +158,8 @@ public final class PanelBackdrop {
     @ColorInt private int mVeilColor;
     @Nullable private ColorFilter mVeil;
     private float mRadiusPx;
+    /** The open panel wears the layered Live glass (see {@link PanelBackdropPolicy#layered}), not a Snapshot. */
+    private boolean mLayered;
 
     /** The glass service holding this panel's entry, and the kind the entry asks for; null while shut. */
     @Nullable private GlassService mGlass;
@@ -172,12 +187,6 @@ public final class PanelBackdrop {
      *                panel is beneath it and nothing of the panel is in its picture
      * @param anchor  a view in the launcher's window ({@code surface} itself unless the panel is a
      *                popup in a window of its own)
-     */
-    public PanelBackdrop(@NonNull ImageView surface, @NonNull View anchor) {
-        this(surface, anchor, "panel@" + Integer.toHexString(System.identityHashCode(surface)));
-    }
-
-    /**
      * @param element the panel's name in the glass registry ("drawer", "palette", "sheet"): one
      *                entry per element, so a panel that opens twice at once is refused the second
      */
@@ -217,8 +226,9 @@ public final class PanelBackdrop {
     }
 
     /**
-     * Opens the panel's picture at {@code blurRadiusPx} (its old {@code RealtimeBlurView} radius)
-     * and starts it moving. False when the panel shows the stored frame instead.
+     * Opens the panel's picture at {@code blurRadiusPx}: the stored frame's blur the layered glass
+     * is cut at (the dock's, for the drawer; the top glass's, for the palette and the sheet), or the
+     * Snapshot's own radius. Starts it moving. False when the panel shows the stored frame instead.
      */
     public boolean open(float blurRadiusPx) {
         mRadiusPx = Math.max(0f, blurRadiusPx);
@@ -227,8 +237,9 @@ public final class PanelBackdrop {
         boolean sameWindow = recorder != null
             && mSurface.getRootView() == recorder.root().getRootView();
         boolean pictured = recorder != null && pictured();
-        GlassKind granted = register(source == null ? null : source.glass(),
-            PanelBackdropPolicy.wants(Build.VERSION.SDK_INT, pictured, sameWindow));
+        mLayered = recorder != null && PanelBackdropPolicy.layered(Build.VERSION.SDK_INT, sameWindow);
+        GlassKind wants = PanelBackdropPolicy.wants(Build.VERSION.SDK_INT, pictured, sameWindow);
+        GlassKind granted = register(source == null ? null : source.glass(), wants);
         mMoving = true;
         return present(recorder, pictured, granted);
     }
@@ -239,19 +250,10 @@ public final class PanelBackdrop {
      */
     private boolean present(@Nullable LiveBackdrop recorder, boolean pictured,
                             @Nullable GlassKind granted) {
-        PanelBackdropPolicy.Kind kind = PanelBackdropPolicy.kind(Build.VERSION.SDK_INT, pictured,
-            granted == GlassKind.LIVE);
+        if (mLayered) return presentLayered(recorder, granted);
+        PanelBackdropPolicy.Kind kind = PanelBackdropPolicy.snapshotKind(Build.VERSION.SDK_INT, pictured);
         if (kind != mKind || recorder != mRecorder) drop();
         mRecorder = recorder;
-        if (kind == PanelBackdropPolicy.Kind.LIVE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            LivePicture picture = recorder.attach(mSurface, mRadiusPx, true);
-            if (picture != null) {
-                mKind = kind;
-                show(picture.drawable());
-                return true;
-            }
-            kind = PanelBackdropPolicy.Kind.SNAPSHOT;
-        }
         mKind = kind;
         if (kind == PanelBackdropPolicy.Kind.STORED) {
             mSurface.setImageDrawable(null);
@@ -266,6 +268,29 @@ public final class PanelBackdrop {
             return false;
         }
         return true;
+    }
+
+    /**
+     * {@link #present} for the layered glass: the recorder's layers at the stored frame's blur,
+     * attached as a surface's picture (never a panel's one picture), or the stored frame. The
+     * surface stays as it is laid out; with no picture it draws nothing over the stored frame.
+     */
+    private boolean presentLayered(@Nullable LiveBackdrop recorder, @Nullable GlassKind granted) {
+        PanelBackdropPolicy.Kind kind = PanelBackdropPolicy.layeredKind(
+            granted == GlassKind.LIVE && recorder != null, mRadiusPx > 0f);
+        if (kind != mKind || recorder != mRecorder) drop();
+        mRecorder = recorder;
+        if (kind == PanelBackdropPolicy.Kind.LIVE && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            LivePicture picture = recorder.attach(mSurface, mRadiusPx, LiveBackdrop.RANK_CHROME);
+            if (picture != null) {
+                mKind = kind;
+                show(picture.drawable());
+                return true;
+            }
+        }
+        mKind = PanelBackdropPolicy.Kind.STORED;
+        if (mSurface.getDrawable() != null) mSurface.setImageDrawable(null);
+        return false;
     }
 
     /**

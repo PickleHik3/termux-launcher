@@ -1112,6 +1112,34 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_CPU, value, false);
     }
 
+    public boolean isStatusWidgetGpuEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_GPU, TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+    }
+
+    public void setStatusWidgetGpuEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_GPU, value, false);
+    }
+
+    public boolean isStatusWidgetFontToggleEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_FONT_TOGGLE, TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
+    }
+
+    public void setStatusWidgetFontToggleEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_FONT_TOGGLE, value, false);
+    }
+
+    /** The status bar row's order as stored ({@link TERMUX_APP#KEY_STATUS_ROW_ORDER}). */
+    public String getStatusRowOrder() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_ROW_ORDER, TERMUX_APP.DEFAULT_STATUS_ROW_ORDER, false);
+    }
+
+    public void setStatusRowOrder(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_STATUS_ROW_ORDER, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
@@ -2034,6 +2062,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         switch (value.trim().toLowerCase()) {
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU:
                 return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU;
+            case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT:
+                return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ROOT;
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY:
                 return TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_ACCESSIBILITY;
             case TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_OFF:
@@ -3085,6 +3115,22 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     public void changeFontSize(boolean increase) {
         setFontSize(stepFontSize(getFontSize(), increase));
+    }
+
+    public int getMinFontSize() { return MIN_FONTSIZE; }
+
+    public int getMaxFontSize() { return MAX_FONTSIZE; }
+
+    /** The Compact size as stored: 0 while it is derived from the app-wide default. */
+    public int getStoredCompactFontSize() {
+        return Math.max(0, SharedPreferenceUtils.getIntStoredAsString(mSharedPreferences,
+            TERMUX_APP.KEY_COMPACT_FONTSIZE + getDisplayIdAsString(), 0));
+    }
+
+    /** Stores the Compact size; 0 goes back to deriving it from the app-wide default. */
+    public void setStoredCompactFontSize(int value) {
+        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences,
+            TERMUX_APP.KEY_COMPACT_FONTSIZE + getDisplayIdAsString(), Math.max(0, value), false);
     }
 
     /** {@code current} stepped one zoom increment, clamped to this display's font size limits. */
@@ -4634,5 +4680,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setAppearanceThemeHintSeen(boolean seen) {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, seen, true);
+    }
+
+    public boolean isLauncherCtlRootRebootEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT, TERMUX_APP.DEFAULT_LAUNCHERCTL_ROOT_REBOOT);
+    }
+
+    public void setLauncherCtlRootRebootEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT, value, false);
     }
 }

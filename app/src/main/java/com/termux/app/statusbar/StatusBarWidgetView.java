@@ -44,6 +44,28 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         setIconResource(R.drawable.ic_rl_cpu);
     }
 
+    /** Dresses this widget as the GPU load reading: its icon and its tier, the primary role. */
+    public void dressAsGpu() {
+        setColorRole(ColorRole.PRIMARY);
+        setIconResource(R.drawable.ic_rl_gpu);
+    }
+
+    /** The font toggle's icon now shown, 0 before it has been dressed. */
+    @DrawableRes private int mFontToggleIcon;
+
+    /**
+     * Dresses this widget as the font toggle: its tier (primary) and one of two marks, the second
+     * while the focused pane is Compact. The mark is set only when it changes.
+     */
+    public void dressAsFontToggle(boolean compact) {
+        setColorRole(ColorRole.PRIMARY);
+        int icon = compact ? R.drawable.ic_rl_text_size_compact : R.drawable.ic_rl_text_size;
+        if (mFontToggleIcon == icon) return;
+        if (mFontToggleIcon == 0) setValue("");
+        mFontToggleIcon = icon;
+        setIconResource(icon);
+    }
+
     /** Dresses this widget as the memory reading: its icon and its tier, the secondary role. */
     public void dressAsRam() {
         setColorRole(ColorRole.SECONDARY);
@@ -92,6 +114,10 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     private final TextView mValue;
     private boolean mAccent;
     private boolean mMuted;
+    /** What this stat is waiting on, or null when it shows its value; the hint takes the value's place. */
+    @Nullable private StatusStatNeedsPolicy.Hint mNeeds;
+    /** The hint's size against the value's: the bar's small type. */
+    private static final float HINT_SIZE_RATIO = 0.8f;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
     /**
      * What the chrome measured this widget's band and decided its label, its icon and its muted
@@ -203,6 +229,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
      * twenty-odd dp of nothing to the right of the glyph.
      */
     public void setValue(@NonNull CharSequence value) {
+        if (mNeeds != null) return;   // the hint holds the place; the caller re-seeds on leaving it
         boolean empty = android.text.TextUtils.isEmpty(value);
         int visibility = empty ? GONE : VISIBLE;
         if (mValue.getVisibility() != visibility) mValue.setVisibility(visibility);
@@ -226,6 +253,30 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
             setValue(value);
             mValue.animate().alpha(1f).setDuration(VALUE_FADE_MS).start();
         }).start();
+    }
+
+    /**
+     * Puts the hint of what a backend-needing stat is missing in the value's place, greyed, or
+     * (null) puts the value back; the caller then sets it. Only on a change.
+     */
+    public void setNeeds(@Nullable StatusStatNeedsPolicy.Hint hint) {
+        if (mNeeds == hint) return;
+        mNeeds = hint;
+        if (hint != null) {
+            CharSequence label = getContext().getString(hint.label);
+            if (mValue.getVisibility() != VISIBLE) mValue.setVisibility(VISIBLE);
+            if (!android.text.TextUtils.equals(mValue.getText(), label)) mValue.setText(label);
+        }
+        mValue.setEllipsize(hint == null ? null : android.text.TextUtils.TruncateAt.END);
+        applyTier();
+        applySizing();
+        applyColors();
+    }
+
+    /** What this stat is waiting on, or null when it shows its value. */
+    @Nullable
+    public StatusStatNeedsPolicy.Hint needs() {
+        return mNeeds;
     }
 
     /** How wide {@code value} draws in the value's text. */
@@ -306,6 +357,8 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
 
     private void applyColors() {
         Context context = getContext();
+        // A stat waiting on a backend is greyed the way the AI glyph's afterlife is.
+        boolean muted = mMuted || mNeeds != null;
         int primary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
             ContextCompat.getColor(context, R.color.termux_primary));
         int secondary = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorSecondary,
@@ -314,7 +367,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
             com.termux.shared.R.attr.termuxColorTertiary, primary);
         int roleColor = mColorRole == ColorRole.SECONDARY ? secondary
             : mColorRole == ColorRole.TERTIARY ? tertiary : primary;
-        if (mMuted) {
+        if (muted) {
             roleColor = MaterialColors.getColor(context,
                 com.termux.shared.R.attr.termuxColorOnSurfaceVariant, roleColor);
         }
@@ -325,7 +378,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
 
         // The deck's display window: every reading lit in the display colour, a muted one dimmed.
         if (mDeckDisplay != null) {
-            int lit = mMuted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
+            int lit = muted ? ColorUtils.setAlphaComponent(mDeckDisplay, 120) : mDeckDisplay;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(lit));
             tintWeather(lit, lit);
             mIcon.setEmptyColor(ColorUtils.setAlphaComponent(mDeckDisplay, 90));
@@ -337,10 +390,10 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         // it carries whatever alpha that leaves room for, so laying the tier's old alpha over it
         // would spend exactly the contrast it was resolved to find.
         if (mLabelInk != null && mIconInk != null && mMutedInk != null) {
-            int label = mMuted ? mMutedInk : mLabelInk;
-            int icon = mMuted ? mMutedInk : mIconInk;
+            int label = muted ? mMutedInk : mLabelInk;
+            int icon = muted ? mMutedInk : mIconInk;
             ImageViewCompat.setImageTintList(mIcon, ColorStateList.valueOf(icon));
-            tintWeather(icon, mMuted ? mMutedInk : primary);
+            tintWeather(icon, muted ? mMutedInk : primary);
             mIcon.setEmptyColor(mMutedInk);
             mValue.setTextColor(label);
             return;
@@ -349,16 +402,21 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         // A gauge's empty part is the grey the unload tail wears.
         mIcon.setEmptyColor(ColorUtils.setAlphaComponent(MaterialColors.getColor(context,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, roleColor), 120));
-        int alpha = mMuted ? 120 : mAccent ? 255 : 238;
+        int alpha = muted ? 120 : mAccent ? 255 : 238;
         ImageViewCompat.setImageTintList(mIcon,
             ColorStateList.valueOf(ColorUtils.setAlphaComponent(roleColor, alpha)));
         tintWeather(ColorUtils.setAlphaComponent(roleColor, alpha),
-            ColorUtils.setAlphaComponent(mMuted ? roleColor : primary, alpha));
+            ColorUtils.setAlphaComponent(muted ? roleColor : primary, alpha));
         mValue.setTextColor(ColorUtils.setAlphaComponent(roleColor, alpha));
     }
 
     @Override public void onTextScaleChanged() {
-        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
+        TextScale.apply(mValue, valueSizeSp());
+    }
+
+    private float valueSizeSp() {
+        float sp = StatusBarInk.textSizeSpFor(mColorRole);
+        return mNeeds == null ? sp : sp * HINT_SIZE_RATIO;
     }
 
     /**
@@ -366,7 +424,7 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
      * this is one answer applied three times; the hierarchy is hue and order.
      */
     private void applyTier() {
-        TextScale.apply(mValue, StatusBarInk.textSizeSpFor(mColorRole));
+        TextScale.apply(mValue, valueSizeSp());
         int weight = StatusBarInk.weightFor(mColorRole);
         // The two-argument form so a heavy tier would be bold even where the platform has no bold
         // cut of the medium face: TextView then asks the paint for it rather than dropping it. At

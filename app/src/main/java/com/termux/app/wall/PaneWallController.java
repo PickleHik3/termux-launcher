@@ -924,6 +924,15 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     /**
+     * The wall's ground colour moved and nothing else did. Only the Display page's corner mask
+     * reads it, so the other pages keep their dress.
+     */
+    public void applyWallGround(@Nullable PaneSurfaceStyle style) {
+        mStyle = style;
+        if (mDisplayWindow != null) mDisplayWindow.applyStyle(style);
+    }
+
+    /**
      * Dress every non-terminal page from the surface style. The terminal pages dress themselves
      * through {@code TerminalPaneController}; this is the same pass for the rest of the wall, and
      * it runs on the same triggers — a wallpaper change, a blur change, an editor slider tick.

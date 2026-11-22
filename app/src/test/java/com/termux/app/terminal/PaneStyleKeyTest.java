@@ -1,7 +1,9 @@
 package com.termux.app.terminal;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.graphics.Bitmap;
 import android.graphics.ColorFilter;
@@ -157,5 +159,37 @@ public class PaneStyleKeyTest {
         Style style = new Style();
         PaneStyleKey.of(style);
         assertEquals(0, style.grainLayersBuilt);
+    }
+
+    @Test
+    public void onlyTheWallGroundMovedIsTold() {
+        Style style = new Style();
+        PaneStyleKey before = PaneStyleKey.of(style);
+        style.wallBehindColor = 0x7f00ff00;
+        PaneStyleKey after = PaneStyleKey.of(style);
+        assertNotEquals(before, after);
+        assertTrue(after.sameButWallGround(before));
+        assertEquals("wallBehindColor", after.movedFields(before));
+    }
+
+    @Test
+    public void anotherFieldMovingToo() {
+        Style style = new Style();
+        PaneStyleKey before = PaneStyleKey.of(style);
+        style.wallBehindColor = 0x7f00ff00;
+        style.tint = 0x11223344;
+        PaneStyleKey after = PaneStyleKey.of(style);
+        assertFalse(after.sameButWallGround(before));
+        assertEquals("tint,wallBehindColor", after.movedFields(before));
+    }
+
+    @Test
+    public void equalKeysAndNullAreNotWallGroundOnly() {
+        Style style = new Style();
+        PaneStyleKey key = PaneStyleKey.of(style);
+        assertFalse(key.sameButWallGround(PaneStyleKey.of(style)));
+        assertEquals("", key.movedFields(PaneStyleKey.of(style)));
+        assertFalse(key.sameButWallGround(null));
+        assertEquals("all", key.movedFields(null));
     }
 }

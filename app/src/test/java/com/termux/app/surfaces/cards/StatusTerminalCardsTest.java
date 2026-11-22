@@ -261,17 +261,79 @@ public class StatusTerminalCardsTest {
 
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
+        // The clock and the media stand above the row: two plain tiles, the clock first.
         List<MaterialButton> indicatorTiles = buttons(indicators.view);
-        assertEquals(7, indicatorTiles.size());
+        assertEquals(2, indicatorTiles.size());
         assertEquals("Clock is the first Elements tile", "Clock",
-            indicatorTiles.get(StatusBarCard.INDICATOR_CLOCK).getText().toString());
-        assertFalse("Notifications starts off",
-            indicatorTiles.get(StatusBarCard.INDICATOR_NOTIFICATIONS).isChecked());
-        indicatorTiles.get(StatusBarCard.INDICATOR_NOTIFICATIONS).performClick();
+            indicatorTiles.get(0).getText().toString());
+        assertEquals("Media", indicatorTiles.get(1).getText().toString());
+        assertTrue(indicatorTiles.get(1).isChecked());
+        indicatorTiles.get(1).performClick();
+        assertFalse(host.indicators[StatusBarCard.INDICATOR_MEDIA]);
+
+        // The row's nine items, a line each in the bar's order, each its switch.
+        List<com.google.android.material.materialswitch.MaterialSwitch> lines =
+            switches(indicators.view);
+        String[] shipped = {"CPU", "GPU", "RAM", "Battery", "Weather", "Text size",
+            "Notifications", "AI", "Mouse"};
+        assertEquals(shipped.length, lines.size());
+        for (int i = 0; i < shipped.length; i++)
+            assertEquals(shipped[i], lines.get(i).getContentDescription().toString());
+        assertEquals("the AI shows on its own: no switch", View.INVISIBLE,
+            lines.get(7).getVisibility());
+        assertEquals(View.INVISIBLE, lines.get(8).getVisibility());
+        assertFalse("Notifications starts off", lines.get(6).isChecked());
+        lines.get(6).performClick();
         assertTrue(host.indicators[StatusBarCard.INDICATOR_NOTIFICATIONS]);
         host.indicators[StatusBarCard.INDICATOR_CPU] = false;
         indicators.restate();
-        assertFalse(indicatorTiles.get(StatusBarCard.INDICATOR_CPU).isChecked());
+        assertFalse(lines.get(0).isChecked());
+        assertFalse("the font toggle starts off", lines.get(5).isChecked());
+        lines.get(5).performClick();
+        assertTrue(host.indicators[StatusBarCard.INDICATOR_FONT_TOGGLE]);
+
+        // A stored order stands the lines in it on restate.
+        host.rowOrder = "mouse,weather";
+        indicators.restate();
+        List<com.google.android.material.materialswitch.MaterialSwitch> moved =
+            switches(indicators.view);
+        assertEquals("Mouse", moved.get(0).getContentDescription().toString());
+        assertEquals("Weather", moved.get(1).getContentDescription().toString());
+        assertEquals("CPU", moved.get(2).getContentDescription().toString());
+    }
+
+    @Test
+    public void theRowsItemsMapToTheirSwitchesAndAMoveStoresTheNewOrder() {
+        assertEquals(StatusBarCard.INDICATOR_CPU,
+            StatusBarCard.indicatorFor(com.termux.app.statusbar.StatusRowItem.CPU));
+        assertEquals(StatusBarCard.INDICATOR_FONT_TOGGLE,
+            StatusBarCard.indicatorFor(com.termux.app.statusbar.StatusRowItem.TEXT_SIZE));
+        assertEquals(-1, StatusBarCard.indicatorFor(com.termux.app.statusbar.StatusRowItem.AI));
+        assertEquals(-1, StatusBarCard.indicatorFor(com.termux.app.statusbar.StatusRowItem.MOUSE));
+        assertEquals("gpu,ram,cpu,battery,weather,text_size,notifications,ai,mouse",
+            StatusBarCard.movedOrder("", 0, 2));
+        assertEquals("mouse,cpu,gpu,ram,battery,weather,text_size,notifications,ai",
+            StatusBarCard.movedOrder(null, 8, 0));
+    }
+
+    /** Every switch under {@code root}, in view order. */
+    @NonNull
+    private static List<com.google.android.material.materialswitch.MaterialSwitch> switches(
+            @NonNull View root) {
+        List<com.google.android.material.materialswitch.MaterialSwitch> out = new ArrayList<>();
+        collectSwitches(root, out);
+        return out;
+    }
+
+    private static void collectSwitches(@NonNull View view,
+            @NonNull List<com.google.android.material.materialswitch.MaterialSwitch> out) {
+        if (view instanceof com.google.android.material.materialswitch.MaterialSwitch) {
+            out.add((com.google.android.material.materialswitch.MaterialSwitch) view);
+            return;
+        }
+        if (!(view instanceof android.view.ViewGroup)) return;
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        for (int i = 0; i < group.getChildCount(); i++) collectSwitches(group.getChildAt(i), out);
     }
 
     @Test
@@ -404,7 +466,7 @@ public class StatusTerminalCardsTest {
         int face = 5;
         int align;
         final boolean[] options = {false, false, false, true};
-        final boolean[] indicators = {true, true, true, true, false, true, false};
+        final boolean[] indicators = {true, true, false, true, true, false, true, false, false};
         int cameraGapOpened;
 
         @Override public int position() { return position; }
@@ -417,6 +479,9 @@ public class StatusTerminalCardsTest {
         @Override public void setOption(int index, boolean on) { options[index] = on; }
         @Override public boolean indicator(int index) { return indicators[index]; }
         @Override public void setIndicator(int index, boolean on) { indicators[index] = on; }
+        String rowOrder = "";
+        @Override public String rowOrder() { return rowOrder; }
+        @Override public void setRowOrder(@NonNull String order) { rowOrder = order; }
         @Override public void openCameraGap() { cameraGapOpened++; }
     }
 

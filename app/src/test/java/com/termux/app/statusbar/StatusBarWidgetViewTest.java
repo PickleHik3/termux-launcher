@@ -40,6 +40,28 @@ public class StatusBarWidgetViewTest {
         }
     }
 
+    /** A stat waiting on a backend shows its hint in the value's place, and the value back after. */
+    @Test
+    public void aNeedsHintTakesTheValuesPlaceAndGivesItBack() {
+        StatusBarWidgetView widget = new StatusBarWidgetView(
+            ApplicationProvider.getApplicationContext(), null);
+        widget.dressAsCpu();
+        widget.setValue("42%");
+        widget.setNeeds(StatusStatNeedsPolicy.Hint.START_SHIZUKU);
+        android.widget.TextView text = (android.widget.TextView) widget.getChildAt(1);
+        assertEquals("Start Shizuku", text.getText().toString());
+        assertEquals(StatusStatNeedsPolicy.Hint.START_SHIZUKU, widget.needs());
+        float hintSize = text.getTextSize();
+        // A reading arriving meanwhile does not overwrite the hint.
+        widget.setValue("57%");
+        assertEquals("Start Shizuku", text.getText().toString());
+
+        widget.setNeeds(null);
+        widget.setValue("57%");
+        assertEquals("57%", text.getText().toString());
+        assertTrue(text.getTextSize() > hintSize);
+    }
+
     /** CPU, RAM, the bell and the mouse mark are drawn icons: an image child with a drawable, no text glyph. */
     @Test
     public void cpuRamBellAndMouse_areDrawnIcons() {

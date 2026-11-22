@@ -173,6 +173,7 @@ public final class ExtraKeyActionLabels {
             case LauncherToolRegistry.TOOL_TERMINAL_TOGGLE_TOOLBAR: return icon(ExtraKeyIcons.DOCK);
             case LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE: return icon(ExtraKeyIcons.ZOOM_IN);
             case LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_DECREASE: return icon(ExtraKeyIcons.ZOOM_OUT);
+            case LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT: return icon(ExtraKeyIcons.FONT);
             case LauncherToolRegistry.TOOL_TERMINAL_SELECT_URL: return icon(ExtraKeyIcons.LINK);
             case LauncherToolRegistry.TOOL_TERMINAL_SELECT_AT_CURSOR: return icon(ExtraKeyIcons.SELECT);
             case LauncherToolRegistry.TOOL_TERMINAL_SELECT_ALL: return icon(ExtraKeyIcons.SELECT_ALL);

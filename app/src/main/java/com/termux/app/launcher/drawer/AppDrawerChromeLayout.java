@@ -107,12 +107,12 @@ public final class AppDrawerChromeLayout {
         /** The inset under the content whatever the fold: the pages' dots keep to it. */
         public final int restInsetPx;
         /**
-         * The band a bar at the bottom holds under the list. The list (grid, category view) is laid
-         * out to the card's bottom edge whatever the fold and only its drawn and touchable bottom
-         * edge rises by this much while the bar is full, so folding grows the visible list with the
-         * fold fraction and never re-lays it. Zero with the bar on top.
+         * The band a bar at the bottom holds under the list: the list's end padding. The list
+         * (grid, category view) runs to the card's bottom edge and the capsule floats over it, so
+         * rows pass under the capsule and the last row rests above it. Zero with the bar on top.
          */
         public final int foldBandPx;
+
         Result(int sideMarginPx, int switchTopPx, int switchHeightPx, int switchMaxWidthPx,
                int searchTopPx, int searchHeightPx, int searchWidthPx, int searchBottomMarginPx,
                int contentTopPx, int contentBottomPx, int innerBottomInsetPx,
@@ -174,8 +174,9 @@ public final class AppDrawerChromeLayout {
         // the list keep that much under its last row. The top band is kept as it is.
         int clearance = buttonBottom + searchHeight + gap;
         int inner = in.collapsed ? Math.max(in.bottomInsetPx, clearance) : in.bottomInsetPx;
+        int contentTop = topChrome + searchHeight + gap;
         return new Result(side, switchTop, switchHeight, betweenMargins, topChrome, searchHeight,
-            searchWidth, 0, topChrome + searchHeight + gap, 0, inner, barLeft, topChrome,
+            searchWidth, 0, contentTop, 0, inner, barLeft, topChrome,
             buttonLeft, buttonTop, searchHeight, in.bottomInsetPx, 0);
     }
 

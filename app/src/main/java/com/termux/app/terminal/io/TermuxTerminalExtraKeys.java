@@ -229,6 +229,10 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
                 }
             }
         }
+        if (com.termux.launcherctl.LauncherToolRegistry.isPaletteOnly(toolName)) {
+            Logger.logWarn(LOG_TAG, "Extra key tool '" + toolName + "' is palette-only");
+            return;
+        }
         org.json.JSONObject result = com.termux.app.terminal.TerminalActionDispatcher
             .getInstance().execute(toolName, arguments);
         if (!result.optBoolean("ok", false)) {

@@ -57,12 +57,16 @@ final class EditorCardReset {
                 prefs.setStatusWidgetWeatherFahrenheit(
                     TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT);
                 prefs.setStatusWidgetCpuEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
+                prefs.setStatusWidgetGpuEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+                prefs.setStatusWidgetFontToggleEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
                 prefs.setStatusWidgetRamEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
                 prefs.setStatusWidgetBatteryEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_BATTERY);
                 prefs.setStatusWidgetWeatherEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER);
                 prefs.setStatusWidgetNotificationsEnabled(
                     TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
                 prefs.setStatusWidgetMediaEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_MEDIA);
+                // Absent, as shipped: the row stands in its shipped order.
+                remove(prefs, TERMUX_APP.KEY_STATUS_ROW_ORDER);
                 break;
             case TERMINAL:
                 prefs.setTerminalContrastLevel(TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL);

@@ -56,7 +56,8 @@ import java.util.function.Supplier;
  * <p>It opens on Video or Shader while one is in use ({@link LiveSceneLogic#startKind}). The
  * editor is a sub-page: the sheet's back arrow and the system back go to the list first
  * ({@link #consumeBack}). A shader is written (and so starts) only by Apply, after it compiles
- * and draws one frame; a video only once it is imported. What Apply and Back to photo do to the
+ * and draws one frame, or by a paste into Send to AI's notification after the same check
+ * ({@link PhotoShaderNotification}, which this host watches); a video only once it is imported. What Apply and Back to photo do to the
  * phone's wallpaper is {@link LiveWallpaperApplier}; terminal-app mode and Also set as phone
  * wallpaper are the picker's own ({@link WallpaperPickerPage#launcherOnly}, the same remembered
  * setting).</p>
@@ -290,6 +291,10 @@ public final class WallpaperLiveHost {
                 @Override public void onDelete(@NonNull String id) {
                     deleteShader(id);
                 }
+
+                @Override public void onSendToAi(@NonNull ShaderEditorPage.Draft draft) {
+                    sendToAi(draft);
+                }
             });
             mVideo = new VideoPage(context, new VideoPage.Actions() {
                 @Override public void onChoose() {
@@ -318,6 +323,7 @@ public final class WallpaperLiveHost {
                     ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             }
             registerLaunchers();
+            PhotoShaderNotification.watch(mWatcher);
         } else {
             mList = null;
             mEditor = null;
@@ -335,6 +341,9 @@ public final class WallpaperLiveHost {
             SharedPreferences openPrefs = prefs();
             mOpenedRate = openPrefs == null ? 30 : ShaderStore.readVideoRate(openPrefs);
             showKind(LiveSceneLogic.startKind(readStored(), true));
+            // A notification's door opened the picker on one shader: its editor comes up.
+            ShaderEditorRequest waiting = ShaderEditorRequest.attach(mRequestTarget);
+            if (waiting != null) openRequested(waiting);
         }
     }
 
@@ -437,6 +446,8 @@ public final class WallpaperLiveHost {
             + ", released " + mReleased + ")");
         if (mSupported && !mCommitted && !mReleased) revertPreview();
         mReleased = true;
+        PhotoShaderNotification.unwatch(mWatcher);
+        ShaderEditorRequest.detach(mRequestTarget);
         mSwap.cancel();
         if (mPage == Page.EDITOR) discardEditor();
         if (mEditor != null) mEditor.release();
@@ -757,10 +768,14 @@ public final class WallpaperLiveHost {
         goTo(Page.EDITOR, true);
     }
 
-    /** The editor goes without applying: a new shader's folder, or a photo or depth picked and not saved, is dropped. */
+    /**
+     * The editor goes without applying: a new shader's folder, or a photo or depth picked and not
+     * saved, is dropped; not while Send to AI's notification holds it, whose close drops it then.
+     */
     private void discardEditor() {
-        if (mEditor == null || mEditorSaved) return;
+        if (mEditor == null) return;
         final String id = mEditor.id();
+        if (!PhotoShaderHandoff.editorDrops(mEditorSaved, PhotoShaderNotification.holds(id))) return;
         final String unsaved = mEditor.unsavedTexture();
         final String unsavedDepth = mEditor.unsavedDepth();
         final Context app = mContext.getApplicationContext();
@@ -771,6 +786,128 @@ public final class WallpaperLiveHost {
                 ShaderStore.removeTexture(app, id, unsavedDepth);
             });
         }
+    }
+
+    // --- Send to AI ---
+
+    /** What the notification asks of the picker while it is open. */
+    private final PhotoShaderNotification.Watcher mWatcher = new PhotoShaderNotification.Watcher() {
+        @Override public boolean isEditing(@NonNull String id) {
+            return !mReleased && mPage == Page.EDITOR && mEditor != null && id.equals(mEditor.id());
+        }
+
+        @Override public void onMotionApplied(@NonNull WallpaperMotion motion) {
+            appliedFromNotification(motion);
+        }
+
+        @Override public void onUndone(@NonNull String id) {
+            undoneFromNotification(id);
+        }
+
+        @Override public void onSystemWallpaperChanged() {
+            if (!mReleased) mListener.onSystemWallpaperChanged();
+        }
+
+        @NonNull @Override public Context context() {
+            return mContext;
+        }
+    };
+
+    /**
+     * Send to AI: the notification takes the shader from here. Its folder keeps the photo, the
+     * depth image and the settings the paste is saved with; with notifications off, the prompt
+     * alone goes on the clipboard.
+     */
+    private void sendToAi(@NonNull ShaderEditorPage.Draft draft) {
+        if (mEditor == null || mReleased || draft.texture == null) return;
+        final Context app = mContext.getApplicationContext();
+        if (!PhotoShaderNotification.post(app, draft.id)) {
+            boolean copied = mEditor.copyPrompt(draft.depth != null);
+            mEditor.showSendNote(copied ? R.string.photo_shader_send_blocked : 0);
+            return;
+        }
+        mEditor.showSendNote(R.string.photo_shader_sent);
+        // Only a shader never saved: a saved one's settings change on Apply alone.
+        if (!draft.isNew || mEditorSaved) return;
+        final ShaderStore.Meta meta = new ShaderStore.Meta(draft.name, draft.quality, draft.rateHz, draft.texture,
+            draft.depth);
+        IO.execute(() -> {
+            try {
+                ShaderStore.writeMeta(app, draft.id, meta);
+            } catch (IOException | RuntimeException e) {
+                Logger.logStackTraceWithMessage(LOG_TAG, "Keeping the shader for the notification failed", e);
+            }
+        });
+    }
+
+    /**
+     * The notification made {@code motion} the wallpaper (a paste or its Undo), the one apply
+     * outside Done. It becomes what this sheet opened with, so neither Done nor closing without it
+     * writes the old choice back; an editor open on the pasted shader goes to the list, as after
+     * Apply, so no stale draft is left to save over it.
+     */
+    private void appliedFromNotification(@NonNull WallpaperMotion motion) {
+        if (mReleased) return;
+        mOpened = motion;
+        SharedPreferences prefs = prefs();
+        if (prefs != null) mOpenedRate = ShaderStore.readVideoRate(prefs);
+        mDraftApplied = false;
+        mPhotoStale = true;
+        boolean moves = motion.moves();
+        if (mEditor != null) mEditor.setBackToPhotoVisible(moves);
+        if (mVideo != null) mVideo.setBackToPhotoVisible(moves);
+        if (mPage == Page.EDITOR && mEditor != null && motion.kind == WallpaperMotion.Kind.SHADER
+            && mEditor.id().equals(motion.id)) {
+            mEditorSaved = true;
+            showList();
+        } else if (mPage == Page.LIST && mList != null) {
+            mList.bind(readStored());
+        }
+    }
+
+    /**
+     * The notification's Undo put shader {@code id}'s earlier source back (and the earlier
+     * wallpaper, through {@link #appliedFromNotification}). An editor open on it holds the undone
+     * code: it goes to the list as after an apply, so nothing saves that code back. The shader
+     * stays saved.
+     */
+    private void undoneFromNotification(@NonNull String id) {
+        if (mReleased) return;
+        if (mPage == Page.EDITOR && mEditor != null && id.equals(mEditor.id())) {
+            mEditorSaved = true;
+            showList();
+        } else if (mPage == Page.LIST && mList != null) {
+            mList.bind(readStored());
+        }
+    }
+
+    /** Where Send to AI's Edit and body tap reach this picker ({@link ShaderEditorRequest}). */
+    private final ShaderEditorRequest.Target mRequestTarget = this::openRequested;
+
+    /**
+     * Opens the editor on the shader a notification named, on the Shader side. An editor open on
+     * another shader with changes stays, and says so; a shader that is gone shows the list.
+     */
+    private void openRequested(@NonNull ShaderEditorRequest request) {
+        if (!mSupported || mReleased || mList == null || mEditor == null) return;
+        boolean editorOpen = mPage == Page.EDITOR;
+        boolean exists = ShaderStore.sourceFile(mContext, request.id).isFile()
+            || (request.photoFlow && ShaderStore.metaFile(mContext, request.id).isFile());
+        ShaderEditorRequest.Landing landing = ShaderEditorRequest.landing(editorOpen,
+            request.id.equals(mEditor.id()), editorOpen && mEditor.hasUnsavedEdits(), exists);
+        Logger.logInfo(LOG_TAG, "shader door " + request.id + " (photo flow " + request.photoFlow + "): " + landing);
+        switch (landing) {
+            case STAYS:
+                return;
+            case KEEPS_EDITS:
+                toast(R.string.shader_open_kept_edits);
+                return;
+            default:
+                break;
+        }
+        if (mKind != WallpaperMotion.Kind.SHADER) showKind(WallpaperMotion.Kind.SHADER);
+        else if (mPage != Page.LIST) showList();
+        if (landing == ShaderEditorRequest.Landing.EDITOR) openShader(request.id, request.photoFlow);
     }
 
     @Nullable

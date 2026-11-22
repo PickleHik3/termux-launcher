@@ -1497,10 +1497,29 @@ public final class SurfacePresets {
      */
     public static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
                                  @NonNull Preset preset, @NonNull PageKind half) {
+        return wornOn(prefs, preset, half, false);
+    }
+
+    /**
+     * {@link #wornOn(TermuxAppSharedPreferences, Preset, PageKind)} as a Look picked on Global
+     * writes it ({@link #applyGlobalLook}): the status bar's, the dock's and the keyboard's own
+     * Opacity, Blur and Grain are left out, as the write leaves them, so a Look read back is the
+     * Look that was picked while those surfaces keep their own values.
+     */
+    public static boolean wornOnGlobal(@NonNull TermuxAppSharedPreferences prefs,
+                                       @NonNull Preset preset, @NonNull PageKind half) {
+        return wornOn(prefs, preset, half, true);
+    }
+
+    private static boolean wornOn(@NonNull TermuxAppSharedPreferences prefs,
+                                  @NonNull Preset preset, @NonNull PageKind half,
+                                  boolean keepOwn) {
         Preset look = halfOf(preset, half);
         boolean scoped = false;
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property) || !touchesCell(row.slot, row.property, half, false))
+                continue;
+            if (keepOwn && GlobalGlass.ownsStay(row.slot) && ownable(row.property))
                 continue;
             if (scoped && TermuxAppSharedPreferences.isPerPage(row.slot, row.property)) {
                 if (cellValue(prefs, row.slot, row.property, pageOf(half))

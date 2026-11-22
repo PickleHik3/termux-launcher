@@ -1067,8 +1067,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final Matrix mSoftMatrix = new Matrix();
 
     /** The frame through the frost and even-out filter, aimed as the plain draw aims it. */
-    private void drawFramePlain(@NonNull Canvas canvas, int width, int height) {
-        Bitmap frame = mFrame;
+    private void drawFramePlain(@NonNull Canvas canvas, int width, int height,
+                                @Nullable Bitmap frame, @Nullable Rect frameRect,
+                                float parallaxPx) {
         if (frame == null) return;
         // A HARDWARE frame is drawn from its small software copy, scaled back up to the frame.
         Bitmap readable = com.termux.app.chrome.HardwareFrame.readable(frame);
@@ -1078,8 +1079,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             mSoftShaderFrame = readable;
         }
         GlassAnchor.place(this, mPlacement);
-        mAim.set(mPlacement.toScreen, mFrameRect, frame.getWidth(), frame.getHeight(),
-            mParallax == null ? 0f : mParallax.offsetPx());
+        mAim.set(mPlacement.toScreen, frameRect, frame.getWidth(), frame.getHeight(), parallaxPx);
         mAim.shaderMatrix(mSoftMatrix);
         if (readable != frame) {
             mSoftMatrix.preScale(frame.getWidth() / (float) readable.getWidth(),
@@ -1128,6 +1128,57 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             + " scene=" + (LiveSceneFrame.current() != null) + " look=" + (mLook != null));
     }
 
+    /**
+     * Whether the frame is left out of this draw: the live scene frame is a hardware bitmap,
+     * which a software canvas (the departure card's) refuses. Pure.
+     */
+    static boolean skipsFrame(boolean liveFrame, boolean hardwareCanvas) {
+        return liveFrame && !hardwareCanvas;
+    }
+
+    /**
+     * Whether the departure card's software canvas draws the scene's live frame plain through the
+     * slab's own filter (the even-out matrix is what makes the pane at rest darker than the raw
+     * wallpaper): a slab, not a corner mask, whose frame has a software-readable copy. Pure.
+     */
+    static boolean drawsSceneFramePlain(boolean liveFrame, boolean hardwareCanvas,
+                                        boolean cornerMask, boolean readable) {
+        return skipsFrame(liveFrame, hardwareCanvas) && !cornerMask && readable;
+    }
+
+    /** What goes over the frame: tint, veil, grain, rim; the corner mask's own colour instead. */
+    private void drawDressing(@NonNull Canvas canvas, int width, int height) {
+        // A corner mask stands in for what is behind the page, so it takes neither the pane
+        // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
+        // the wall's own colour over the frame - the dim the root wears - or alone.
+        if (mCornerMaskRadiusPx > 0f) {
+            if (android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
+                mTintPaint.setColor(mCornerMaskFallbackColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+        } else {
+            if (android.graphics.Color.alpha(mTintColor) > 0) {
+                mTintPaint.setColor(mTintColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+            // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
+            // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
+            // that did not move costs one walk up the tree.
+            if (android.graphics.Color.alpha(mVeilColor) > 0) {
+                mTintPaint.setColor(mVeilColor);
+                canvas.drawRect(0f, 0f, width, height, mTintPaint);
+            }
+            if (mGrain != null) {
+                mGrain.setBounds(0, 0, width, height);
+                mGrain.draw(canvas);
+            }
+            if (mRim != null) {
+                mRim.setBounds(0, 0, width, height);
+                mRim.draw(canvas);
+            }
+        }
+    }
+
     @Override
     protected void onDraw(Canvas canvas) {
         int width = getWidth();
@@ -1150,7 +1201,19 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // one), so the refracted frame sits that pass out; it only feeds another view's blur.
         LiveSceneFrame.Frame liveFrame = LiveSceneFrame.current();
         // The live frame is a hardware bitmap, which a software canvas refuses outright.
-        if (liveFrame != null && !canvas.isHardwareAccelerated()) return;
+        if (skipsFrame(liveFrame != null, canvas.isHardwareAccelerated())) {
+            // Only the frame sits out: the tint, veil, grain and rim still go over the ground the
+            // departure card painted, so the card is as dark as the pane it replaces. The frame
+            // goes under them plain, through the slab's own filter, aimed as the live frame is.
+            if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+                    && drawsSceneFramePlain(true, false, mCornerMaskRadiusPx > 0f,
+                        com.termux.app.chrome.HardwareFrame.readable(liveFrame.bitmap) != null)) {
+                drawFramePlain(canvas, width, height, liveFrame.bitmap, LiveSceneFrame.rect(), 0f);
+            }
+            drawDressing(canvas, width, height);
+            canvas.restoreToCount(save);
+            return;
+        }
         // The scene went off: the still frame goes back on the paint.
         if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
@@ -1163,7 +1226,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated(),
                     hardwareFrame)) {
-            drawFramePlain(canvas, width, height);
+            drawFramePlain(canvas, width, height, mFrame, mFrameRect,
+                mParallax == null ? 0f : mParallax.offsetPx());
         }
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsOnPaint(mProgram != null, canvas.isHardwareAccelerated(), hardwareFrame)) {
@@ -1277,35 +1341,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 canvas.drawRect(0f, 0f, width, height, mFramePaint);
             }
         }
-        // A corner mask stands in for what is behind the page, so it takes neither the pane
-        // tint nor the grain: those belong to a pane's own slab, and the page has none. It takes
-        // the wall's own colour over the frame - the dim the root wears - or alone.
-        if (mCornerMaskRadiusPx > 0f) {
-            if (android.graphics.Color.alpha(mCornerMaskFallbackColor) > 0) {
-                mTintPaint.setColor(mCornerMaskFallbackColor);
-                canvas.drawRect(0f, 0f, width, height, mTintPaint);
-            }
-        } else {
-            if (android.graphics.Color.alpha(mTintColor) > 0) {
-                mTintPaint.setColor(mTintColor);
-                canvas.drawRect(0f, 0f, width, height, mTintPaint);
-            }
-            // A pane that moved or resized (a split, a divider drag, the keyboard) re-asks for its
-            // veil here: none of those re-dress it, and the veil is memoised per rect, so a pane
-            // that did not move costs one walk up the tree.
-            if (android.graphics.Color.alpha(mVeilColor) > 0) {
-                mTintPaint.setColor(mVeilColor);
-                canvas.drawRect(0f, 0f, width, height, mTintPaint);
-            }
-            if (mGrain != null) {
-                mGrain.setBounds(0, 0, width, height);
-                mGrain.draw(canvas);
-            }
-            if (mRim != null) {
-                mRim.setBounds(0, 0, width, height);
-                mRim.draw(canvas);
-            }
-        }
+        drawDressing(canvas, width, height);
         canvas.restoreToCount(save);
     }
     /** Rebuilt only when the size or the radius changes, never per draw. */

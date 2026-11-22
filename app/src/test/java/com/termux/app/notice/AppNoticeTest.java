@@ -86,6 +86,8 @@ public class AppNoticeTest {
     @Test
     public void statusWidgetsThatNeedShizukuDefaultOff() {
         assertFalse(TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
+        assertFalse(TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+        assertFalse(TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
         assertFalse(TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
     }
 

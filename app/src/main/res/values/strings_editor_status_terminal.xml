@@ -36,12 +36,22 @@
     <!-- Pinned notifications ↗: where the page stands in Settings. -->
     <string name="editor_link_pinned_notifications_summary">Settings › Notifications</string>
     <string name="editor_st_indicator_cpu">CPU</string>
+    <string name="editor_st_indicator_gpu">GPU</string>
+    <string name="editor_st_indicator_font_toggle">Text size</string>
     <string name="editor_st_indicator_ram">RAM</string>
     <string name="editor_st_indicator_battery">Battery</string>
     <string name="editor_st_indicator_weather">Weather</string>
     <string name="editor_st_indicator_notifications">Notifications</string>
     <string name="editor_st_indicator_notifications_hint">Notifications: a bell with the count while notifications wait</string>
     <string name="editor_st_indicator_media">Media</string>
+    <!-- The status row's items with no switch: each shows on its own while it is in use. -->
+    <string name="editor_st_indicator_ai">AI</string>
+    <string name="editor_st_indicator_mouse">Mouse</string>
+    <!-- The search hit for the Elements list, whose lines are dragged to set the bar's order. -->
+    <string name="editor_st_row_order">Status bar order</string>
+    <!-- A reorderable line's actions for a screen reader. -->
+    <string name="editor_reorder_up">Move up</string>
+    <string name="editor_reorder_down">Move down</string>
     <string name="editor_st_notifications_indicator_description">Notifications waiting</string>
 
     <!-- Terminal card -->

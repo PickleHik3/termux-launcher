@@ -71,8 +71,10 @@ public class LauncherToolRegistryTest {
         // voice.dictate, the Dictate key that starts a dictation on any place, and by window.move
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
-        // the palette's door to minimal mode, and by wall.assistant, the Assistant key.
-        assertEquals(92, registry.getUiTools().size());
+        // the palette's door to minimal mode, and by wall.assistant, the Assistant key, and by
+        // pane.root_shell and the three device.restart tools, which need root.
+        // terminal.font_size_toggle_compact, the font toggle, makes 97.
+        assertEquals(97, registry.getUiTools().size());
     }
 
     @Test
@@ -390,7 +392,8 @@ public class LauncherToolRegistryTest {
     @Test
     public void terminalViewActions_areRegistered() {
         String[] viewActions = {"terminal.toggle_soft_keyboard", "terminal.toggle_toolbar",
-            "terminal.font_size_increase", "terminal.font_size_decrease", "terminal.select_url",
+            "terminal.font_size_increase", "terminal.font_size_decrease",
+            "terminal.font_size_toggle_compact", "terminal.select_url",
             "terminal.hints", "terminal.search_scrollback",
             "terminal.share_transcript", "clipboard.paste"};
         for (String name : viewActions) {
@@ -429,6 +432,33 @@ public class LauncherToolRegistryTest {
                 tool.availabilityIn(off).available);
             assertTrue(name + " needs a reason string", tool.availabilityIn(off).reasonRes != 0);
             assertTrue(name + " must be available with splits on", tool.availabilityIn(on).available);
+        }
+    }
+
+    @Test
+    public void rootShell_isAPaneToolThatNeedsRoot() {
+        LauncherToolRegistry.ToolMetadata tool = registry.getTool("pane.root_shell");
+        assertNotNull(tool);
+        assertEquals("pane", tool.category);
+        assertEquals(LauncherToolRegistry.ToolRisk.MEDIUM, tool.risk);
+        assertFalse(tool.requiresConfirmation);
+        assertTrue(tool.defaultBindings.isEmpty());
+        assertTrue(tool.titleRes != 0);
+        LauncherToolRegistry.Availability noRoot = tool.availabilityIn(context(true, true));
+        assertFalse("no root shell without root", noRoot.available);
+        assertTrue(noRoot.reasonRes != 0);
+    }
+
+    @Test
+    public void restartTools_areConfirmedUnboundAndNeedRoot() {
+        for (String name : new String[]{"device.restart", "device.restart_recovery",
+                "device.restart_bootloader"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertTrue(name, tool.requiresConfirmation);
+            assertEquals(name, LauncherToolRegistry.ToolRisk.HIGH, tool.risk);
+            assertTrue(name + " has no default key", tool.defaultBindings.isEmpty());
+            assertFalse(name + " needs root", tool.availabilityIn(context(true, true)).available);
         }
     }
 

@@ -64,6 +64,22 @@ public final class AppearanceEditorEntry {
         return intent;
     }
 
+    /**
+     * The shader the wallpaper picker opens its editor on, as
+     * {@link com.termux.app.chrome.wallpaper.ShaderEditorRequest#encode} writes it.
+     */
+    public static final String EXTRA_SHADER = "com.termux.app.extra.EDITOR_SHADER";
+
+    /**
+     * The intent that brings the launcher forward with the wallpaper picker up and its shader
+     * editor open on shader {@code id}; {@code photoFlow} opens it as a shader from a photo.
+     */
+    @NonNull
+    public static Intent shaderIntent(@NonNull Context context, @NonNull String id, boolean photoFlow) {
+        return intent(context, null, false)
+            .putExtra(EXTRA_SHADER, com.termux.app.chrome.wallpaper.ShaderEditorRequest.encode(id, photoFlow));
+    }
+
     /** Opens the editor on {@code card} from any context. */
     public static void open(@NonNull Context context, @Nullable EditorCard card) {
         Intent intent = intent(context, card, false);

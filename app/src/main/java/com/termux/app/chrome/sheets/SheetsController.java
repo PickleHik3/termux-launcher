@@ -959,12 +959,34 @@ public final class SheetsController {
             com.termux.app.launcher.drawer.AppDrawerPullGeometry.seedFor(edge));
     }
 
-    /** Whether the swipe up on a Home page opens the palette (Settings › Home › Gestures). */
+    /**
+     * Whether the swipe up on a Home page opens the palette (Settings › Home › Gestures). The
+     * wall's grabber asks before every frame, so the answer is kept and read again only after a
+     * write to that row.
+     */
     public boolean isHomePaletteGestureEnabled() {
-        return com.termux.app.launcher.home.HomeSettings.gestureAction(mHost.activity(),
+        Boolean kept = mHomePaletteGesture;
+        if (kept != null) return kept;
+        if (mHomeGestureWatch == null) {
+            mHomeGestureWatch = (store, key) -> {
+                if (com.termux.app.launcher.home.HomeGestures.movedBy(key,
+                        com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP))
+                    mHomePaletteGesture = null;
+            };
+            com.termux.app.launcher.home.HomeSettings.watch(mHost.activity(), mHomeGestureWatch);
+        }
+        boolean enabled = com.termux.app.launcher.home.HomeSettings.gestureAction(mHost.activity(),
                 com.termux.app.launcher.home.HomeGestures.Gesture.SWIPE_UP)
             == com.termux.app.launcher.home.HomeGestures.Action.PALETTE;
+        mHomePaletteGesture = enabled;
+        return enabled;
     }
+
+    /** {@link #isHomePaletteGestureEnabled}'s kept answer; null reads the row again. */
+    @Nullable private Boolean mHomePaletteGesture;
+    /** Clears that answer on a write to the row; held here because the store holds it weakly. */
+    @Nullable private android.content.SharedPreferences.OnSharedPreferenceChangeListener
+        mHomeGestureWatch;
 
     /** The keyboard the Home palette raised goes down with it. */
     public void lowerHomePaletteKeyboard() {

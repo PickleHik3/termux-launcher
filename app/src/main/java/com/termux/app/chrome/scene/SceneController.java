@@ -13,6 +13,7 @@ import android.os.SystemClock;
 import android.util.Log;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -36,8 +37,9 @@ import java.util.List;
  * choice is {@link TERMUX_APP#KEY_WALLPAPER_MOTION} ({@link WallpaperMotion}); with a photo chosen
  * and {@code debug.tl.shader_file} unset every entry point is a field read, and no view exists.
  *
- * <p>The layer is a SurfaceView inserted into the terminal root container directly above the
- * wallpaper backdrop and below everything else the container holds (panes, chrome, widgets), sized
+ * <p>The layer is a SurfaceView inserted into the wallpaper backdrop's own parent (the ground
+ * layer) directly above the backdrop and below everything else the window holds (the ground strip,
+ * panes, chrome, widgets), sized
  * and offset by margins to the whole decor. Its surface sits behind the window; the view punches a
  * transparent hole in the window where it is, so everything drawn before it in the tree (the
  * backdrop, the root's background) is cleared there and the scene replaces the system-wallpaper
@@ -448,13 +450,16 @@ public final class SceneController implements LatencyProbe.CommitListener {
         SceneLayerView layer = new SceneLayerView(mActivity, spec, mHost::lazyMode,
             reason -> onLayerReverted(spec, reason));
         FrameLayout.LayoutParams lp = new FrameLayout.LayoutParams(0, 0);
-        int index = mBackdrop == null ? 0 : mContainer.indexOfChild(mBackdrop) + 1;
+        // The backdrop's own parent holds the layer, so it sits directly above the backdrop wherever
+        // the backdrop lives (the ground layer; the root container before the window layers).
+        ViewGroup host = hostFor(mContainer, mBackdrop);
+        int index = insertIndex(host, mBackdrop);
         mLayer = layer;
         watchPower();
         layer.setPowerHold(mPowerHold);
         pushLook(layer);
         layer.setPageOffset(mPageOffset);
-        mContainer.addView(layer, Math.max(0, index), lp);
+        host.addView(layer, index, lp);
         mContainer.addOnLayoutChangeListener(mPlace);
         place();
         installInvalTrace(layer);
@@ -543,8 +548,26 @@ public final class SceneController implements LatencyProbe.CommitListener {
         mContainer.removeOnLayoutChangeListener(mPlace);
         removeInvalTrace();
         layer.destroy();
-        mContainer.removeView(layer);
+        if (layer.getParent() instanceof ViewGroup) ((ViewGroup) layer.getParent()).removeView(layer);
         LiveSceneFrame.clear();
+    }
+
+    /**
+     * The view that holds the layer: the backdrop's parent when that is a FrameLayout, else the
+     * container. A layer added to the container while the backdrop sits one level down would go
+     * under the backdrop's whole parent, and the backdrop would paint over the scene.
+     */
+    @NonNull
+    static ViewGroup hostFor(@NonNull FrameLayout container, @Nullable View backdrop) {
+        if (backdrop != null && backdrop.getParent() instanceof FrameLayout) {
+            return (FrameLayout) backdrop.getParent();
+        }
+        return container;
+    }
+
+    /** The child index directly above the backdrop in {@code host}; 0 when it is not a child. */
+    static int insertIndex(@NonNull ViewGroup host, @Nullable View backdrop) {
+        return backdrop == null ? 0 : host.indexOfChild(backdrop) + 1;
     }
 
     /** The running layer's hold reason for the detail page ({@link ShaderSafety#REASON_TOO_HEAVY}), or null. */
@@ -604,8 +627,9 @@ public final class SceneController implements LatencyProbe.CommitListener {
     private void place() {
         SceneLayerView layer = mLayer;
         if (layer == null) return;
-        View root = mContainer.getRootView();
-        mContainer.getLocationOnScreen(mLoc);
+        View origin = layer.getParent() instanceof View ? (View) layer.getParent() : mContainer;
+        View root = origin.getRootView();
+        origin.getLocationOnScreen(mLoc);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) layer.getLayoutParams();
         int w = root.getWidth(), h = root.getHeight();
         int left = -mLoc[0], top = -mLoc[1];

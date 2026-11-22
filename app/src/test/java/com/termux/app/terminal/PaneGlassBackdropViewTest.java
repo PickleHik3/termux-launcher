@@ -520,4 +520,23 @@ public class PaneGlassBackdropViewTest {
         backdrop.setEvenOut(null);
         assertSame(plain, backdrop.frameFilterForTest());
     }
+
+    @Test
+    public void onlyTheLiveFrameOnASoftwareCanvasSitsOut() {
+        // The departure card draws on a software canvas: the live scene frame sits out there, and
+        // the tint, veil, grain and rim are still drawn (onDraw), so the card is as dark as the pane.
+        assertTrue(PaneGlassBackdropView.skipsFrame(true, false));
+        assertFalse(PaneGlassBackdropView.skipsFrame(true, true));
+        assertFalse(PaneGlassBackdropView.skipsFrame(false, false));
+        assertFalse(PaneGlassBackdropView.skipsFrame(false, true));
+    }
+
+    @Test
+    public void theSceneFrameIsDrawnPlainOnlyOnASoftwareSlabWithAReadableCopy() {
+        assertTrue(PaneGlassBackdropView.drawsSceneFramePlain(true, false, false, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(true, true, false, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(false, false, false, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(true, false, true, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(true, false, false, false));
+    }
 }
