@@ -2257,7 +2257,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
 
     /**
      * The plane's glass is the glass every other surface wears
-     * ({@link com.termux.app.chrome.PanelBackdrop#setLayered}): while the glass service grants the
+     * ({@link com.termux.app.chrome.PanelBackdrop}): while the glass service grants the
      * card Live, the recorder's backdrop layers (the stored frame as ground, the pages, and what is
      * beneath in the window, live) at the card's own blur, the dock's; otherwise the crop of the
      * shared pre-blurred wallpaper frame that stands beneath it, as the dock shows. Without the crop
@@ -2278,14 +2278,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         TermuxAppSharedPreferences preferences = mHost.preferences();
         boolean wallpaperMode = preferences != null && preferences.isUseSystemWallpaperEnabled();
         boolean wanted = frosted || !wallpaperMode;
-        // The card's blur is the dock's, the stored frame's radius the layers' ground is cut at.
-        mBackdrop.setLayered(com.termux.shared.view.ViewUtils.dpToPx(mHost.context(),
-            Math.max(0, mHost.drawerSearchGlassBlurDp())));
         if (wanted) blur.setVisibility(View.VISIBLE);
         // Not Live: the entry stays, so a policy event that grants Live puts the layers up; the
         // surface draws nothing over the stored frame until then.
+        // The card's blur is the dock's, the stored frame's radius the layers' ground is cut at.
         boolean pictured = wanted && mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(
-            mHost.context(), com.termux.app.chrome.PanelBackdrop.DRAWER_BLUR_RADIUS_DP));
+            mHost.context(), Math.max(0, mHost.drawerSearchGlassBlurDp())));
         if (!wanted) {
             mGlassCovering = false;
             mBackdrop.close();

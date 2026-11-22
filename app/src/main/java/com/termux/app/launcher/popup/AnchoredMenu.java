@@ -536,14 +536,15 @@ public final class AnchoredMenu {
             popupRoot.setBackground(plate);
             popupRoot.setClipToOutline(true);
             // What the launcher's window draws beneath the menu, blurred once it is laid out
-            // (a Snapshot: the menu is a window of its own, which Live does not refresh). Where
+            // (a Snapshot: the menu is a window of its own, which the layered Live glass cannot serve). Where
             // nothing can be recorded the plate's tint stands alone.
             android.widget.ImageView blurView = new android.widget.ImageView(host.getContext());
             blurView.setScaleType(android.widget.ImageView.ScaleType.FIT_XY);
             blurView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
             popupRoot.addView(blurView, new FrameLayout.LayoutParams(desiredWidth, desiredHeight));
             com.termux.app.chrome.PanelBackdrop backdrop =
-                new com.termux.app.chrome.PanelBackdrop(blurView, host);
+                new com.termux.app.chrome.PanelBackdrop(blurView, host,
+                    "menu@" + Integer.toHexString(System.identityHashCode(blurView)));
             float blurRadiusPx = Math.max(0f, (float) dp(theme.blurRadiusDp()));
             // Taken each time the menu's window shows, and gone with it however it is dismissed,
             // its buffers with it.

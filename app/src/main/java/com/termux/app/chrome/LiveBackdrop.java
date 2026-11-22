@@ -46,14 +46,14 @@ import java.util.ArrayList;
  * ground is the wallpaper and ground strip views inside the root). Without it a recording is only
  * as opaque as the views in it, and the live screen shows through the glass.</p>
  *
- * <p><b>Layers, always.</b> A surface other than a panel draws its backdrop layers
+ * <p><b>Layers, always.</b> A surface draws its backdrop layers
  * ({@link BackdropLayers}) at rest and while the wall moves alike (ADR 0029 section 3): the ground
  * (the stored pre-blurred frame, or the scene's), the local layer (everything else beneath, drawn
  * from the views' own display lists and blurred) and, beneath the wall, a frozen picture of the
  * pages ({@link PageLayerCapture}) moved by their travel, at rest and moving alike. It is taken
  * again behind the old one when the pages change ({@link PageLayerRefresh}), so a landing has
- * nothing to swap. The app drawer's card wears these layers too ({@link PanelBackdrop#setLayered});
- * the other panels (the palette, the terminal sheet, the menus) still keep one picture.</p>
+ * nothing to swap. Every panel in the window (the app drawer's card, the palette, the terminal
+ * sheet) wears these layers as a surface does ({@link PanelBackdrop}); there is no panel branch.</p>
  *
  * <p><b>When.</b> Layers are recorded again in a pre-draw of a frame that is already being drawn
  * (the glass commit, the frame table's last step), and only when their own trigger fires: the local
@@ -321,17 +321,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
      */
     @Nullable
     public LivePicture attach(@NonNull View surface, float blurRadiusPx) {
-        return attach(surface, blurRadiusPx, false);
-    }
-
-    /**
-     * {@link #attach(View, float)} for a panel ({@link PanelBackdrop}): {@code blurRadiusPx} is the
-     * panel's {@code RealtimeBlurView} radius when {@code panelRadius}, calibrated by
-     * {@link LivePicture#panelQuarterRadius}, so the panel keeps the strength it had.
-     */
-    @Nullable
-    public LivePicture attach(@NonNull View surface, float blurRadiusPx, boolean panelRadius) {
-        return attach(surface, blurRadiusPx, panelRadius, RANK_CHROME);
+        return attach(surface, blurRadiusPx, RANK_CHROME);
     }
 
     /**
@@ -343,12 +333,6 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
      */
     @Nullable
     public LivePicture attach(@NonNull View surface, float blurRadiusPx, int rank) {
-        return attach(surface, blurRadiusPx, false, rank);
-    }
-
-    @Nullable
-    private LivePicture attach(@NonNull View surface, float blurRadiusPx, boolean panelRadius,
-                               int rank) {
         LivePicture picture = find(surface);
         if (picture == null) {
             if (mPictures.size() >= MAX_LIVE_SURFACES) {
@@ -361,7 +345,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
                 // Its view draws the stored frame again on its next draw; ask for that draw.
                 evicted.mSurface.invalidate();
             }
-            picture = new LivePicture(surface, blurRadiusPx, panelRadius);
+            picture = new LivePicture(surface, blurRadiusPx);
             picture.setStoredParity(recordedDim(surface), mBakeVibrancy, mBakeFrameTint);
             mPictures.add(picture);
             mPlanStamp++;
@@ -379,7 +363,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
 
     /**
      * The Vibrancy and frame tint the stored frames are baked at now
-     * ({@code WallpaperBlurCache}), which every picture but a panel's then takes after its blur,
+     * ({@code WallpaperBlurCache}), which every picture then takes after its blur,
      * so the glass looks the same on either route ({@link LiveStoredParity}).
      */
     public void setStoredBake(int vibrancyPercent, int frameTint) {
@@ -622,13 +606,6 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             if (!collectPlanned(picture.mMotionPlan, surface, moving)) continue;
             int margin = picture.marginPx();
             int reach = picture.reachTopPx();
-            if (picture.panelRadius()) {
-                // The palette, the terminal sheet and the menus keep one picture; the drawer's
-                // card is attached as a surface and draws its layers below.
-                picture.setRecordedDim(dimBeneath());
-                recordOne(picture, surface, margin, reach);
-                continue;
-            }
             BackdropLayers.Mode mode = pageLayerMode(picture, surface, margin, reach);
             if (!moving && picture.capturing()) wakeAfter(0L);
             int plan = layersPlan(picture, surface, margin, reach, mode);
@@ -646,9 +623,8 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     }
 
     /**
-     * Records {@code picture} as one picture of everything beneath, blurred: a panel's, and a
-     * surface whose layers cannot be drawn this frame. Recorded again only when what is beneath
-     * moved.
+     * Records {@code picture} as one picture of everything beneath, blurred, for a surface whose
+     * layers cannot be drawn this frame. Recorded again only when what is beneath moved.
      */
     @RequiresApi(Build.VERSION_CODES.S)
     private void recordOne(@NonNull LivePicture picture, @NonNull View surface, int margin,

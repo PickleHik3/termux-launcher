@@ -120,11 +120,11 @@ public class PanelBackdropGlassTest {
     }
 
     @Test
-    public void aPanelNotGrantedLiveIsASnapshotAndFollowsAPolicyEventWhileOpen() {
+    public void aPanelNotGrantedLiveShowsTheStoredFrameAndFollowsAPolicyEventWhileOpen() {
         glass.setLiveOn(false);
         PanelBackdrop panel = new PanelBackdrop(surface(), root, "sheet");
-        assertTrue(panel.open(20f));
-        assertEquals(PanelBackdropPolicy.Kind.SNAPSHOT, panel.kind());
+        assertFalse(panel.open(20f));
+        assertEquals(PanelBackdropPolicy.Kind.STORED, panel.kind());
         assertEquals(0, recorder.size());
         // Live comes on while the panel is open: it is put up again as Live, at the next commit.
         glass.setLiveOn(true);
@@ -132,36 +132,36 @@ public class PanelBackdropGlassTest {
         assertEquals(GlassKind.LIVE, glass.granted("sheet"));
         assertEquals(PanelBackdropPolicy.Kind.LIVE, panel.kind());
         assertEquals(1, recorder.size());
-        // And a trim takes it off again.
+        // And a trim takes it off again: the stored frame, never a Snapshot.
         glass.setMemoryShort(true);
         shadowOf(Looper.getMainLooper()).idle();
-        assertEquals(PanelBackdropPolicy.Kind.SNAPSHOT, panel.kind());
+        assertEquals(PanelBackdropPolicy.Kind.STORED, panel.kind());
         assertEquals(0, recorder.size());
         panel.close();
     }
 
     @Test
-    public void theDrawersLayeredGlassIsASurfacesPictureAndTheStoredFrameWhenNotLive() {
+    public void aPanelsLayeredGlassIsASurfacesPictureAtTheBlurItIsOpenedWith() {
         ImageView surface = surface();
         PanelBackdrop panel = new PanelBackdrop(surface, root, "drawer");
-        panel.setLayered(30f);
-        assertTrue(panel.open(20f));
+        assertTrue(panel.open(30f));
         assertEquals(PanelBackdropPolicy.Kind.LIVE, panel.kind());
-        // Attached as a surface at the stored frame's blur: it draws the backdrop layers, not a
-        // panel's one picture.
+        // Attached as a surface at the stored frame's blur: it draws the backdrop layers.
         LivePicture picture = (LivePicture) ReflectionHelpers.callInstanceMethod(recorder, "find",
             ReflectionHelpers.ClassParameter.from(View.class, surface));
         assertNotNull(picture);
-        assertFalse(picture.panelRadius());
         assertEquals(30f, picture.radiusPx(), 0f);
         assertEquals(WindowLayer.SHEETS, glass.entry("drawer").layer);
+        // No blur at all: the stored frame only.
+        panel.close();
+        assertFalse(panel.open(0f));
+        assertEquals(PanelBackdropPolicy.Kind.STORED, panel.kind());
+        panel.close();
         // Live off: the stored frame, as every other surface; never a Snapshot.
         glass.setLiveOn(false);
-        shadowOf(Looper.getMainLooper()).idle();
-        assertEquals(PanelBackdropPolicy.Kind.STORED, panel.kind());
+        assertFalse(panel.open(30f));
         assertNull(surface.getDrawable());
         assertEquals(0, recorder.size());
-        // And back on, while it is open.
         glass.setLiveOn(true);
         shadowOf(Looper.getMainLooper()).idle();
         assertEquals(PanelBackdropPolicy.Kind.LIVE, panel.kind());

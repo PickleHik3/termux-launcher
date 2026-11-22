@@ -10,12 +10,14 @@ import com.termux.app.glass.GlassKind;
  * window; {@link PanelBackdrop} applies the answers.
  *
  * <ul>
- *   <li><b>Live</b>: the glass service granted the panel Live (Live blur is on, memory is not
- *   short and a slot is free) and it is in the launcher's own window: the recorded picture
- *   refreshes on frames where something beneath it changed.</li>
- *   <li><b>Snapshot</b>: the same recording, blurred once when the panel opens and again when it
- *   settles, and frozen while it moves: on the GPU from Android 12, and below it (no
- *   {@code RenderEffect}, so no Live either) drawn in software and blurred by RenderScript.</li>
+ *   <li><b>Live</b>: a panel in the launcher's own window on the GPU ({@link #layered}) that the
+ *   glass service granted Live (Live blur is on, memory is not short and a slot is free): the
+ *   layered glass every surface wears, refreshed on frames where something beneath it changed.
+ *   Not granted, it shows the stored frame.</li>
+ *   <li><b>Snapshot</b>: for a panel that cannot be layered, a popup menu in a window of its own,
+ *   and every panel below Android 12 (no {@code RenderEffect}), the recording blurred once when the
+ *   panel opens and again when it settles, and frozen while it moves; below Android 12 it is drawn
+ *   in software and blurred by RenderScript.</li>
  *   <li><b>Stored</b>: with no recorder, or below Android 12 once the software blur has failed: the
  *   panel shows the stored pre-blurred wallpaper frame instead.</li>
  * </ul>
@@ -67,34 +69,25 @@ public final class PanelBackdropPolicy {
     }
 
     /**
-     * The picture a panel shows: Live when the service granted it Live, a Snapshot when it did not
-     * (Live is off, memory is short, or no slot is free), the stored frame when it cannot record.
-     *
-     * @param recorderAvailable the window has a recorder to record with
-     * @param liveGranted       the glass service granted this panel Live
+     * Whether a panel wears the layered Live glass every glass surface wears: on the GPU, inside
+     * the launcher's own window. A popup menu (a window of its own, which the recorder does not
+     * refresh) and every panel below Android 12 take a Snapshot instead.
      */
-    public static Kind kind(int sdkInt, boolean recorderAvailable, boolean liveGranted) {
-        if (!canRecord(sdkInt) || !recorderAvailable) return Kind.STORED;
-        if (!onGpu(sdkInt)) return Kind.SNAPSHOT;
-        return liveGranted ? Kind.LIVE : Kind.SNAPSHOT;
+    public static boolean layered(int sdkInt, boolean sameWindow) {
+        return onGpu(sdkInt) && sameWindow;
     }
 
     /**
-     * What a panel wearing the glass surfaces' layered Live glass asks the service for (the app
-     * drawer's card): Live where the GPU records and the panel is in the launcher's own window,
-     * else nothing, and it shows the stored frame as every other glass surface does.
-     */
-    public static GlassKind layeredWants(int sdkInt, boolean recorderAvailable,
-                                         boolean sameWindow) {
-        return onGpu(sdkInt) && recorderAvailable && sameWindow ? GlassKind.LIVE : null;
-    }
-
-    /**
-     * The picture such a panel shows: its Live layers when the service granted Live and it has a
-     * blur to draw them with; the stored frame for anything else, never a Snapshot.
+     * The picture a layered panel shows: its Live layers when the service granted Live and it has
+     * a blur to draw them with; the stored frame for anything else, never a Snapshot.
      */
     public static Kind layeredKind(boolean liveGranted, boolean blurred) {
         return liveGranted && blurred ? Kind.LIVE : Kind.STORED;
+    }
+
+    /** The picture a panel that is not layered shows: a Snapshot, or the stored frame when it cannot record. */
+    public static Kind snapshotKind(int sdkInt, boolean recorderAvailable) {
+        return canRecord(sdkInt) && recorderAvailable ? Kind.SNAPSHOT : Kind.STORED;
     }
 
     /**

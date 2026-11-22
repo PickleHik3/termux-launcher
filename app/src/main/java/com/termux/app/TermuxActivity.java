@@ -20458,6 +20458,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mSheets.applyCommandPaletteWallpaperFrost(frost);
         }
 
+        @Override public int glassBlurDp() {
+            return mChrome.frost().topGlassFrostRadiusDp();
+        }
+
         @Override public int commandPaletteCornersDp() {
             return mSheets.commandPaletteCornersDp();
         }
@@ -20527,6 +20531,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public boolean applyWallpaperFrost(@NonNull ImageView frost) {
             return mSheets.applyTerminalSheetWallpaperFrost(frost);
+        }
+
+        @Override public int glassBlurDp() {
+            return mChrome.frost().topGlassFrostRadiusDp();
         }
 
         @NonNull @Override public Drawable sheetSurface() {

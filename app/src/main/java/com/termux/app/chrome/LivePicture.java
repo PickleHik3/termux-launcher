@@ -56,8 +56,6 @@ public final class LivePicture implements GlassPicture {
     private int mReachTopPx;
     private float mRadiusPx;
     private int mMarginPx;
-    /** The radius is a panel's {@code RealtimeBlurView} radius, not the stored frame's. */
-    private boolean mPanelRadius;
     @Nullable private ColorFilter mFilter;
     /** The wall's dim the last recording was made under ({@link LiveStoredParity}). */
     private int mParityDim;
@@ -196,9 +194,8 @@ public final class LivePicture implements GlassPicture {
      */
     @NonNull private final Runnable mDiscardRetired = this::discardRetired;
 
-    LivePicture(@NonNull View surface, float blurRadiusPx, boolean panelRadius) {
+    LivePicture(@NonNull View surface, float blurRadiusPx) {
         mSurface = surface;
-        mPanelRadius = panelRadius;
         setBlurRadiusPx(blurRadiusPx);
     }
 
@@ -269,11 +266,9 @@ public final class LivePicture implements GlassPicture {
     /**
      * What the stored frame bakes that a recording does not have ({@link LiveStoredParity}): the
      * wall's dim the recording carries, to be taken back out, and the Vibrancy and frame tint the
-     * stored frames are baked at. A panel's picture matches its old {@code RealtimeBlurView}, which
-     * recorded the window as this does, so it takes none of it. Rebuilds the effect only on a change.
+     * stored frames are baked at. Rebuilds the effect only on a change.
      */
     void setStoredParity(int dimColor, int vibrancyPercent, int frameTint) {
-        if (mPanelRadius) return;
         if (dimColor == mParityDim && vibrancyPercent == mParityVibrancy
             && frameTint == mParityFrameTint) return;
         mParityDim = dimColor;
@@ -307,7 +302,7 @@ public final class LivePicture implements GlassPicture {
         mRadiusPx = radius;
         mMarginPx = Math.max(1, (int) Math.ceil(radius));
         forgetRecording();
-        if (blursMoved && !mPanelRadius) rebuildParity();
+        if (blursMoved) rebuildParity();
         else if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
     }
 
@@ -335,7 +330,7 @@ public final class LivePicture implements GlassPicture {
      * scale, so the page's edge fades into the slot's clear border as it does in one picture.
      */
     int slotGutterPx() {
-        float r = mPanelRadius ? panelQuarterRadius(mRadiusPx) : renderEffectRadius(mRadiusPx) / SCALE;
+        float r = renderEffectRadius(mRadiusPx) / SCALE;
         return ((int) Math.ceil(3f * Math.max(0f, r)) + 1) * SCALE;
     }
 
@@ -390,7 +385,7 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     @Nullable
     private RenderEffect layerEffect() {
-        float r = mPanelRadius ? panelQuarterRadius(mRadiusPx) : renderEffectRadius(mRadiusPx) / SCALE;
+        float r = renderEffectRadius(mRadiusPx) / SCALE;
         RenderEffect effect = r > 0f
             ? RenderEffect.createBlurEffect(r, r, Shader.TileMode.CLAMP) : null;
         // The stored frame's colours (the dim out, Vibrancy and the frame tint in), then the frost.
@@ -836,11 +831,6 @@ public final class LivePicture implements GlassPicture {
     /** Whether the holders draw the layers now, not the one picture. */
     boolean layered() {
         return mLayered;
-    }
-
-    /** Whether this is a panel's picture: panels never take backdrop layers. */
-    boolean panelRadius() {
-        return mPanelRadius;
     }
 
     /** The blur radius at full scale, in px. */

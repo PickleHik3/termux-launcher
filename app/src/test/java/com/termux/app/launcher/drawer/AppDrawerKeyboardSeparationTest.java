@@ -265,7 +265,7 @@ public class AppDrawerKeyboardSeparationTest {
      */
     @Test public void thePictureIsFrozenWhileThePlaneMoves() {
         com.termux.app.chrome.PanelBackdrop backdrop = new com.termux.app.chrome.PanelBackdrop(
-            new android.widget.ImageView(plane.getContext()), plane);
+            new android.widget.ImageView(plane.getContext()), plane, "drawer");
         ReflectionHelpers.setField(controller, "mBackdrop", backdrop);
         Object progress = ReflectionHelpers.getField(controller, "mProgress");
         ReflectionHelpers.setField(controller, "mOpen", true);

@@ -83,7 +83,7 @@ public class PanelBackdropSoftwareSnapshotTest {
         });
         controller.start().resume().visible();
         shadowOf(Looper.getMainLooper()).idle();
-        mBackdrop = new PanelBackdrop(mSurface, mSurface);
+        mBackdrop = new PanelBackdrop(mSurface, mSurface, "menu");
     }
 
     @After
@@ -160,8 +160,7 @@ public class PanelBackdropSoftwareSnapshotTest {
         assertTrue(mBackdrop.open(20f));
         assertEquals(1, mGlass.size());
         // Below Android 12 it is a Snapshot panel: asked for and granted, and never Live.
-        assertEquals(com.termux.app.glass.GlassKind.SNAPSHOT, mGlass.granted("panel@"
-            + Integer.toHexString(System.identityHashCode(mSurface))));
+        assertEquals(com.termux.app.glass.GlassKind.SNAPSHOT, mGlass.granted("menu"));
         // Opening again while open changes nothing.
         assertTrue(mBackdrop.open(20f));
         assertEquals(1, mGlass.size());
