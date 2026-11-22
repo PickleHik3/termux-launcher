@@ -111,6 +111,10 @@ public class Keyboard2View extends View
   private float _marginRight;
   private float _marginLeft;
   private float _marginBottom;
+  /** The side back-swipe strips last published ({@link #publishBackExclusion}), in px; a
+      cancelled press commits only from inside them ({@link #onTouch}). */
+  private int _backStripLeftPx;
+  private int _backStripRightPx;
 
   private Theme _theme;
   private Theme.Computed _tc;
@@ -1820,7 +1824,11 @@ public class Keyboard2View extends View
       case MotionEvent.ACTION_CANCEL:
         reportCancelledTaps();
         finishAllTouchFx();
-        _pointers.onTouchCancelCommit();
+        // Only a press in a side strip is committed: there the cancel is a back swipe the
+        // exclusion budget denied, and dropping it would lose the key. Anywhere else a cancel is
+        // the system or the launcher taking the stream (home, quick switch, a parent's gesture),
+        // and the press was never a tap.
+        _pointers.onTouchCancelCommit(_backStripLeftPx, getWidth() - _backStripRightPx);
         _trails.clear();
         requestDisallowIntercept(false);
         break;
@@ -2204,13 +2212,16 @@ public class Keyboard2View extends View
 
   /**
    * Unlike an IME window, an activity-embedded keyboard gets no automatic system-gesture
-   * exclusion, so edge-column swipes would be recognized as Back gestures and cancelled. Only the
-   * two side strips the back swipe starts in are asked for: an exclusion anywhere else does
-   * nothing for Back, and where it reaches the navigation handle it turns off the system's
-   * sideways swipe to the previous app (Quickstep disables quick switch for a touch that lands
-   * inside an app's exclusion). Upstream had an equivalent SDK-29 block over the whole view in
-   * parent-relative coordinates, which only worked because the IME view sat at (0,0); exclusion
-   * rects are in view-local coordinates.
+   * exclusion, so edge-column swipes would be recognized as Back gestures and cancelled. The view
+   * asks for the two side strips the back swipe starts in, and for its rows between them: Back
+   * reads only the side strips, but Quickstep also takes a sideways drag that lands in the
+   * navigation handle's band for its quick switch to the previous app unless the touch is inside
+   * an exclusion, and where the bottom row reaches that band the space bar's cursor slide would
+   * be stolen (a cancel, then the window sliding away). The bottom margin under the last row is
+   * left to the system, so the handle's sideways swipe still works where only the margin reaches
+   * it. Upstream had an equivalent SDK-29 block over the whole view in parent-relative
+   * coordinates, which only worked because the IME view sat at (0,0); exclusion rects are in
+   * view-local coordinates.
    */
   private void publishBackExclusion()
   {
@@ -2224,30 +2235,43 @@ public class Keyboard2View extends View
     {
       // Not attached yet: keep the old whole-view request until the insets arrive.
       rects = Collections.singletonList(new Rect(0, 0, width, height));
+      _backStripLeftPx = 0;
+      _backStripRightPx = 0;
     }
     else
     {
       android.graphics.Insets gestures = insets.getSystemGestureInsets();
-      rects = backExclusionRects(width, height, gestures.left, gestures.right);
+      _backStripLeftPx = gestures.left;
+      _backStripRightPx = gestures.right;
+      int keysBottom = height - (int)Math.ceil(_marginBottom);
+      rects = backExclusionRects(width, height, gestures.left, gestures.right, keysBottom);
     }
     setSystemGestureExclusionRects(rects);
   }
 
   /**
-   * The view-local strips a keyboard {@code width} x {@code height} asks the back swipe to leave
-   * it: one along each side, as wide as that side's system-gesture inset. A keyboard away from
-   * the screen edge asks for a strip of its own keys no back swipe reaches, which costs nothing.
+   * The view-local rects a keyboard {@code width} x {@code height} asks the system gestures to
+   * leave it: one strip along each side, as wide as that side's back-swipe inset and as tall as
+   * the view, and between them the rows down to {@code keysBottom} (the last row's bottom). The
+   * middle rect touches neither side's inset, so it costs nothing of the per-edge exclusion
+   * budget. A keyboard away from the screen edge asks for strips no back swipe reaches, which
+   * costs nothing either.
    */
   static java.util.List<Rect> backExclusionRects(int width, int height, int leftInset,
-      int rightInset)
+      int rightInset, int keysBottom)
   {
-    java.util.List<Rect> rects = new ArrayList<>(2);
+    java.util.List<Rect> rects = new ArrayList<>(3);
     if (width <= 0 || height <= 0)
       return rects;
+    int left = Math.min(width, Math.max(0, leftInset));
+    int right = Math.max(0, width - Math.max(0, rightInset));
     if (leftInset > 0)
-      rects.add(new Rect(0, 0, Math.min(width, leftInset), height));
+      rects.add(new Rect(0, 0, left, height));
     if (rightInset > 0)
-      rects.add(new Rect(Math.max(0, width - rightInset), 0, width, height));
+      rects.add(new Rect(right, 0, width, height));
+    int bottom = Math.min(height, keysBottom);
+    if (right > left && bottom > 0)
+      rects.add(new Rect(left, 0, right, bottom));
     return rects;
   }
 
