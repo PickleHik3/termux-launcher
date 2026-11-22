@@ -35,6 +35,14 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   `scripts/tts-eval/` and `scripts/parakeet_replay_server.py` use the same upstream work.
   The adaptations change language, runtime integration, chunking and decoding; their comments
   describe the changes. This code ships in the APK; the model weights described below do not.
+- **[Paper Design shaders](https://github.com/paper-design/shaders)** — Apache-2.0 — Paper Design
+  contributors; reached through **[Mirage](https://github.com/AndroidPoet/mirage)** — Apache-2.0 —
+  Copyright 2026 Ranbir Singh (AndroidPoet), whose AGSL port at commit
+  `9da9b00f678d57ce9989838ac513ffa88a11b038` (`MeshGradient.kt`, `Water.kt`, `FlutedGlass.kt`,
+  `core/Agsl.kt`) was adapted into the example wallpaper shaders `mesh-gradient.glsl`, `water.glsl`
+  and `fluted-glass.glsl` under `app/src/main/assets/shaders/examples/`. Mirage itself is not a
+  dependency. The shaders use fixed settings and a built-in picture, and each file's header states
+  the changes.
 - **Terminal Emulator for Android** — Apache-2.0 — Copyright Jack Palevich and contributors.
 - **Android Open Source Project / Launcher3** — Apache-2.0 — portions of terminal compatibility,
   `termux-am-library`, and launcher gesture navigation.
