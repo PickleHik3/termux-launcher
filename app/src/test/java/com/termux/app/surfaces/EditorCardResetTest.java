@@ -93,6 +93,7 @@ public class EditorCardResetTest {
         prefs.setStatusClockSecondsEnabled(!TERMUX_APP.DEFAULT_STATUS_CLOCK_SECONDS);
         prefs.setStatusWidgetCpuEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
         prefs.setStatusWidgetGpuEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+        prefs.setStatusWidgetFontToggleEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
         prefs.setStatusWidgetNotificationsEnabled(!TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS);
         EditorCardReset.resetStore(prefs, EditorCard.STATUS, TermuxAppSharedPreferences.terminalPageId());
         assertEquals(TERMUX_APP.DEFAULT_TOP_PANE_CLOCK_STYLE, prefs.getTopPaneClockStyle());
@@ -101,6 +102,8 @@ public class EditorCardResetTest {
         assertEquals(TERMUX_APP.DEFAULT_STATUS_CLOCK_SECONDS, prefs.isStatusClockSecondsEnabled());
         assertEquals(TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU, prefs.isStatusWidgetCpuEnabled());
         assertEquals(TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU, prefs.isStatusWidgetGpuEnabled());
+        assertEquals(TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE,
+            prefs.isStatusWidgetFontToggleEnabled());
         assertEquals(TERMUX_APP.DEFAULT_STATUS_WIDGET_NOTIFICATIONS,
             prefs.isStatusWidgetNotificationsEnabled());
     }

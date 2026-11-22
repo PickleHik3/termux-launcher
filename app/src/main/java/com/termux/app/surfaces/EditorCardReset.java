@@ -58,6 +58,7 @@ final class EditorCardReset {
                     TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER_FAHRENHEIT);
                 prefs.setStatusWidgetCpuEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_CPU);
                 prefs.setStatusWidgetGpuEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_GPU);
+                prefs.setStatusWidgetFontToggleEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
                 prefs.setStatusWidgetRamEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
                 prefs.setStatusWidgetBatteryEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_BATTERY);
                 prefs.setStatusWidgetWeatherEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_WEATHER);

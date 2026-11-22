@@ -97,6 +97,7 @@ public class TerminalPreferencesFragmentTest {
             assertNull(screen.findPreference("top_pane_clock_style"));
             assertNull(screen.findPreference("status_widget_cpu"));
             assertNull(screen.findPreference("status_widget_gpu"));
+            assertNull(screen.findPreference("status_widget_font_toggle"));
         }
     }
 

@@ -740,6 +740,10 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_WIDGET_GPU = "status_widget_gpu";
         public static final boolean DEFAULT_STATUS_WIDGET_GPU = false;
 
+        /** The Compact font toggle in the status bar: off by default, shown where a pane has focus. */
+        public static final String KEY_STATUS_WIDGET_FONT_TOGGLE = "status_widget_font_toggle";
+        public static final boolean DEFAULT_STATUS_WIDGET_FONT_TOGGLE = false;
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 
@@ -1688,9 +1692,6 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_FONTSIZE = "fontsize";
         /** The size the font toggle switches a pane to, in the font size's own unit; 0 derives it. */
         public static final String KEY_COMPACT_FONTSIZE = "compact_fontsize";
-        /** Whether the terminal's window bar shows the font toggle. */
-        public static final String KEY_FONT_TOGGLE_SHOWN = "font_toggle_shown";
-        public static final boolean DEFAULT_VALUE_FONT_TOGGLE_SHOWN = true;
 
         /**
          * Defines the key for current termux terminal session.

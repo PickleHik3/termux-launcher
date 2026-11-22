@@ -76,17 +76,53 @@ final class StatusBarWidgets {
         }
         if (shown)
             mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
-        boolean anyStatBefore = mHost.preferences() != null && (mHost.preferences().isStatusWidgetCpuEnabled()
-            || mHost.preferences().isStatusWidgetGpuEnabled()
-            || mHost.preferences().isStatusWidgetRamEnabled()
-            || mHost.preferences().isStatusWidgetBatteryEnabled()
-            || mHost.preferences().isStatusWidgetWeatherEnabled());
+        boolean anyStatBefore = anyStatEnabled() || fontToggleVisible();
         int visibility = shown ? View.VISIBLE : View.GONE;
         boolean changed = mark.getVisibility() != visibility;
         mark.setVisibility(visibility);
         dot.setVisibility(shown && anyStatBefore ? View.VISIBLE : View.GONE);
         dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
         if (changed) syncStatusBarInk();
+    }
+
+    /** Whether any of the stat readings (CPU, GPU, RAM, battery, weather) has its switch on. */
+    private boolean anyStatEnabled() {
+        return mHost.preferences() != null && (mHost.preferences().isStatusWidgetCpuEnabled()
+            || mHost.preferences().isStatusWidgetGpuEnabled()
+            || mHost.preferences().isStatusWidgetRamEnabled()
+            || mHost.preferences().isStatusWidgetBatteryEnabled()
+            || mHost.preferences().isStatusWidgetWeatherEnabled());
+    }
+
+    private boolean fontToggleVisible() {
+        View pill = mHost.findViewById(R.id.terminal_status_widget_font_toggle);
+        return pill != null && pill.getVisibility() == View.VISIBLE;
+    }
+
+    /**
+     * Shows or hides the font toggle's pill, with the mark for the focused pane's state, and the
+     * dot that parts it from the stats before it. Only a change is written. True when its
+     * visibility changed, so the marks that count it as a neighbour (the notifications bell, the
+     * mouse) can redraw their dots.
+     */
+    boolean syncFontToggle(boolean shown, boolean compact) {
+        com.termux.app.statusbar.StatusBarWidgetView pill =
+            mHost.findViewById(R.id.terminal_status_widget_font_toggle);
+        com.termux.app.statusbar.MaterialDotSeparatorView dot =
+            mHost.findViewById(R.id.terminal_status_dot_font_toggle);
+        if (pill == null || dot == null) return false;
+        if (shown) pill.dressAsFontToggle(compact);
+        int visibility = shown ? View.VISIBLE : View.GONE;
+        boolean changed = pill.getVisibility() != visibility;
+        if (changed) pill.setVisibility(visibility);
+        int dotVisibility = shown && anyStatEnabled() ? View.VISIBLE : View.GONE;
+        if (dot.getVisibility() != dotVisibility) dot.setVisibility(dotVisibility);
+        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
+        if (changed) {
+            showStatusNotificationsMark();
+            syncStatusBarInk();
+        }
+        return changed;
     }
 
     // ---- What the status bar's content is drawn in, measured against what it is standing on ----
@@ -97,6 +133,7 @@ final class StatusBarWidgets {
         R.id.terminal_status_widget_ram, R.id.terminal_status_widget_battery,
         R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
         R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
+        R.id.terminal_status_widget_font_toggle,
     };
 
     private static final int[] STATUS_INK_DOT_IDS = {
@@ -104,7 +141,7 @@ final class StatusBarWidgets {
         R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
         R.id.terminal_status_dot_battery_weather,
         R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
-        R.id.terminal_status_dot_mouse,
+        R.id.terminal_status_dot_mouse, R.id.terminal_status_dot_font_toggle,
     };
 
     /** The bar's own rect on screen: one measurement, and every ink in the bar comes out of it. */
@@ -502,6 +539,8 @@ final class StatusBarWidgets {
 
         mHost.ensureAiIndicatorController();
         syncStatusNotificationsMark();
+        // The pill's dot depends on which stats are on, so it is dressed again with them.
+        mHost.syncFontToggle();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
     }

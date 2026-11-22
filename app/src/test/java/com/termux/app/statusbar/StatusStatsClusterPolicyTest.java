@@ -60,6 +60,18 @@ public class StatusStatsClusterPolicyTest {
         assertFalse(StatusStatsClusterPolicy.cpuRamDotVisible(true, true, true, true, true));
     }
 
+    @Test public void theFontToggleShowsOnlyWithItsSwitchOnHomeOrTheTerminalOverAPane() {
+        assertTrue(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.TERMINAL, true));
+        assertTrue(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.HOME, true));
+        // Off by switch, or no pane to toggle (Home with no window, the scratchpad).
+        assertFalse(StatusStatsClusterPolicy.fontToggleShown(false, PageKind.TERMINAL, true));
+        assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.TERMINAL, false));
+        assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.HOME, false));
+        // Pages with no terminal pane of their own.
+        assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.DISPLAY, true));
+        assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.ASSISTANT, true));
+    }
+
     @Test public void gpuShowsOnlyWithItsSwitchAndAReading() {
         assertTrue(StatusStatsClusterPolicy.gpuShown(true, true));
         assertFalse(StatusStatsClusterPolicy.gpuShown(true, false));

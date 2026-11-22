@@ -283,22 +283,6 @@
                             android:background="@android:color/transparent"
                             android:contentDescription="@string/termux_window_bar_content_description" />
 
-                        <!-- The font toggle: Aa at the pane's size, aA while it is Compact. Inked
-                             like the plus (TerminalWindowBar.setInkCompanion). -->
-                        <TextView
-                            android:id="@+id/terminal_font_toggle"
-                            android:layout_width="48dp"
-                            android:layout_height="match_parent"
-                            android:gravity="center"
-                            android:includeFontPadding="false"
-                            android:maxLines="1"
-                            android:textSize="12sp"
-                            android:textStyle="bold"
-                            android:minWidth="48dp"
-                            android:visibility="gone"
-                            android:importantForAccessibility="yes"
-                            android:contentDescription="@string/font_toggle_content_description" />
-
                         <!-- The same window list for a bar standing in a column, where a pill
                              carrying a whole label does not fit: one chip per window, stacked.
                              Only one of the two is ever shown. -->
@@ -459,6 +443,25 @@
                         android:paddingEnd="3dp"
                         android:clipChildren="false"
                         android:clipToPadding="false">
+
+                        <!-- The Compact font toggle (status_widget_font_toggle): a mark for the
+                             focused pane's size, there while its switch is on and a pane is
+                             focused on Home or the Terminal. -->
+                        <com.termux.app.statusbar.MaterialDotSeparatorView
+                            android:id="@+id/terminal_status_dot_font_toggle"
+                            android:layout_width="3dp"
+                            android:layout_height="3dp"
+                            android:layout_gravity="center_vertical"
+                            android:layout_marginHorizontal="1dp"
+                            android:visibility="gone" />
+
+                        <com.termux.app.statusbar.StatusBarWidgetView
+                            android:id="@+id/terminal_status_widget_font_toggle"
+                            android:layout_width="wrap_content"
+                            android:layout_height="match_parent"
+                            android:layout_marginStart="3dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/font_toggle_content_description" />
 
                         <!-- The notifications mark (status_widget_notifications): a bell and the
                              count while notifications wait, the ones the dock badges; gone with

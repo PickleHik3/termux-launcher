@@ -1272,8 +1272,7 @@
     <string name="font_toggle_compact_size_value">%1$d dp</string>
     <string name="font_toggle_compact_size_auto">Auto, %1$d dp</string>
     <string name="font_toggle_compact_size_reset">Auto</string>
-    <string name="font_toggle_show_title">Font toggle</string>
-    <string name="font_toggle_show_summary">Show the font toggle on the window bar</string>
+    <string name="settings_font_toggle_title">Compact font</string>
                 <!-- What an AI coding agent in a pane is doing. Shown on the window chips and in
                      the sessions browser; also spoken after the window's name. -->
                 <string name="termux_agent_state_working">Working</string>

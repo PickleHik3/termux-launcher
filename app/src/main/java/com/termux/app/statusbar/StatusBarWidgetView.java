@@ -50,6 +50,22 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         setIconResource(R.drawable.ic_ms_developer_board);
     }
 
+    /** The font toggle's icon now shown, 0 before it has been dressed. */
+    @DrawableRes private int mFontToggleIcon;
+
+    /**
+     * Dresses this widget as the font toggle: its tier (primary) and one of two marks, the second
+     * while the focused pane is Compact. The mark is set only when it changes.
+     */
+    public void dressAsFontToggle(boolean compact) {
+        setColorRole(ColorRole.PRIMARY);
+        int icon = compact ? R.drawable.ic_rl_text_size_compact : R.drawable.ic_rl_text_size;
+        if (mFontToggleIcon == icon) return;
+        if (mFontToggleIcon == 0) setValue("");
+        mFontToggleIcon = icon;
+        setIconResource(icon);
+    }
+
     /** Dresses this widget as the memory reading: its icon and its tier, the secondary role. */
     public void dressAsRam() {
         setColorRole(ColorRole.SECONDARY);

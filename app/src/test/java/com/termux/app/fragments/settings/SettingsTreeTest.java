@@ -121,6 +121,7 @@ public class SettingsTreeTest {
         {"TerminalPreferencesFragment", "terminal_margin_adjustment"},
         {"TerminalStatusPreferencesFragment", "status_widget_cpu"},
         {"TerminalStatusPreferencesFragment", "status_widget_gpu"},
+        {"TerminalStatusPreferencesFragment", "status_widget_font_toggle"},
         {"TerminalStatusPreferencesFragment", "lazy_mode"},
         {"KeyboardPreferencesFragment", "in_app_keyboard_haptics_enabled"},
         {"KeyboardPreferencesFragment", "keyboard_voice_engine"},

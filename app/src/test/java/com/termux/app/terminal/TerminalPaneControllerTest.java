@@ -1782,6 +1782,15 @@ public class TerminalPaneControllerTest {
     }
 
     @Test
+    public void fontToggle_hasNoPaneToActOnBeforeAWindowIsShown() {
+        TerminalPaneController controller = newSplittingController();
+        assertFalse(controller.canToggleActivePaneCompact());
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+        assertTrue(controller.canToggleActivePaneCompact());
+    }
+
+    @Test
     public void fontToggle_switchesAndRestoresAndLeavesCompactOnZoom() {
         TerminalPaneController controller = newSplittingController();
         TerminalPaneController.Window window = controller.newWindow(terminal());

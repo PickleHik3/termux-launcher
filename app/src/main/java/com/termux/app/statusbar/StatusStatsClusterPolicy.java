@@ -83,6 +83,17 @@ public final class StatusStatsClusterPolicy {
         return gpuEnabled && gpuKnown;
     }
 
+    /**
+     * Whether the font toggle shows: its switch is on, the page is Home or the Terminal, and the
+     * focused pane is one it can toggle. On the Display and the Assistant, or with no terminal
+     * pane focused, it is hidden rather than left to do nothing.
+     */
+    public static boolean fontToggleShown(boolean enabled, @NonNull PageKind page,
+                                          boolean paneToggleable) {
+        return enabled && paneToggleable
+            && (page == PageKind.HOME || page == PageKind.TERMINAL);
+    }
+
     /** The dot between CPU and GPU: on only when both show. */
     public static boolean cpuGpuDotVisible(boolean cpuOn, boolean gpuOn) {
         return cpuOn && gpuOn;

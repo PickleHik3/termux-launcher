@@ -60,7 +60,7 @@ public class StatusBarPreferencesFragmentTest {
         assertNull(screen.findPreference("top_pane_clock_alignment"));
         // One home per setting: the clock's 12-hour choice, the indicator and weather switches and
         // the unit are the editor's Status bar card; the page keeps one Appearance row.
-        for (String moved : new String[] {"top_pane_clock_am_pm", "status_widget_cpu", "status_widget_gpu", "status_widget_ram",
+        for (String moved : new String[] {"top_pane_clock_am_pm", "status_widget_cpu", "status_widget_gpu", "status_widget_font_toggle", "status_widget_ram",
             "status_widget_battery", "status_widget_media", "status_widget_weather",
             "status_widget_weather_fahrenheit"}) {
             assertNull(moved, screen.findPreference(moved));

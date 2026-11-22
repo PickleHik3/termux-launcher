@@ -494,7 +494,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
     private int mGlassGeneration = -1;
     @NonNull private final android.graphics.Rect mGlassBandRect = new android.graphics.Rect();
     @NonNull private final android.graphics.Rect mGlassMeasuredRect = new android.graphics.Rect();
-    @Nullable private TextView mInkCompanion;
     /** Whether the strip ends with the plus that opens a new window. */
     private boolean mCreateButtonShown = true;
     @Nullable private ValueAnimator mSelectionAnimator;
@@ -2507,25 +2506,6 @@ public final class TerminalWindowBar extends HorizontalScrollView {
         mTabs.setHighlightStyle(mSelectedFillColor, mSelectedStrokeColor,
             mStatusBarRadiusPx, dp(1));
         applyChipWatermarks();
-        applyCompanionInk(primary);
-    }
-
-    /**
-     * A view that stands beside the chips and is inked like the plus: the place's accent, tuned on
-     * the measured band. The font toggle on the window bar is one.
-     */
-    public void setInkCompanion(@Nullable TextView companion) {
-        mInkCompanion = companion;
-        applyCompanionInk(mPlaceAccent != null ? mPlaceAccent
-            : MaterialColors.getColor(getContext(), com.termux.shared.R.attr.termuxColorPrimary,
-                ContextCompat.getColor(getContext(), R.color.termux_primary)));
-    }
-
-    private void applyCompanionInk(int accent) {
-        TextView companion = mInkCompanion;
-        if (companion == null) return;
-        int ink = plusTint(accent);
-        if (companion.getCurrentTextColor() != ink) companion.setTextColor(ink);
     }
 
     private void applyTabSurfaceStyle() {

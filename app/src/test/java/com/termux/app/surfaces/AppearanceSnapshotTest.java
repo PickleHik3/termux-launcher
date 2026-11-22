@@ -58,6 +58,21 @@ public class AppearanceSnapshotTest {
     }
 
     @Test
+    public void undoPutsBackTheFontToggleSwitchAndTheSignatureSeesIt() {
+        assertFalse(preferences.isStatusWidgetFontToggleEnabled());
+        AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
+        String signature = entry.signature();
+
+        preferences.setStatusWidgetFontToggleEnabled(true);
+        assertNotEquals("the font toggle switch moves the signature", signature,
+            AppearanceSnapshot.capture(preferences).signature());
+
+        entry.restore(preferences);
+        assertFalse(preferences.isStatusWidgetFontToggleEnabled());
+        assertEquals(signature, AppearanceSnapshot.capture(preferences).signature());
+    }
+
+    @Test
     public void undoPutsBackEveryValueTheEditorWrites() {
         SurfacePresets.apply(preferences, SurfacePresets.presets().get(1));
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
