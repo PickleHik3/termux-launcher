@@ -3,6 +3,7 @@ package com.termux.app.launcher.drawer;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.content.res.Resources;
+import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.os.SystemClock;
@@ -99,7 +100,7 @@ public final class AppDrawerContentView extends FrameLayout
     implements NestedScrollingParent3, Choreographer.FrameCallback,
     AppDrawerPlaneView.CloseDragGate, AppDrawerSearchController.ResultsListener,
     AppDrawerSearchPillView.Callbacks, AppDrawerRopeColumnView.Callbacks,
-    AppDrawerDragController.Host {
+    AppDrawerDragController.Host, com.termux.app.chrome.LiveBackdrop.Container {
 
     /** Raw close-drag reports, in the plane's own vocabulary. The controller interprets them. */
     public interface Callbacks {
@@ -181,7 +182,7 @@ public final class AppDrawerContentView extends FrameLayout
     private final android.graphics.RectF mPillRect = new android.graphics.RectF();
     private final TextView mResultsLabel;
     private final TextView mNoResults;
-    private final RecyclerView mGrid;
+    private final AppDrawerFadingList mGrid;
     private final AppDrawerHorizontalPagerView mHorizontalPager;
     private final AppDrawerPageIndicatorView mPageIndicator;
     private final AppDrawerCategoryView mCategoryView;
@@ -4106,6 +4107,15 @@ public final class AppDrawerContentView extends FrameLayout
         removeView(glass);
     }
 
+    /**
+     * The search capsule's Live picture records the rows beneath it through here: the lists, the
+     * letters and whatever else this view draws before the capsule's slab, at their transforms.
+     */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
+    }
+
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
@@ -4124,6 +4134,22 @@ public final class AppDrawerContentView extends FrameLayout
                 mPill.getBottom());
             solveSearchInk();
         }
+        applyCapsuleFadeGaps();
+    }
+
+    /**
+     * The list's fade at the card edge the capsule stands by stops where the capsule starts, so
+     * the rows under the capsule's glass are whole. On a layout, never per frame.
+     */
+    private void applyCapsuleFadeGaps() {
+        int top = -1;
+        int bottom = -1;
+        if (mPill.getVisibility() == VISIBLE && mGrid.getHeight() > 0) {
+            boolean atTop = mPill.getTop() + mPill.getBottom() < mGrid.getTop() + mGrid.getBottom();
+            if (atTop) top = Math.max(0, mPill.getTop() - mGrid.getTop());
+            else bottom = Math.max(0, mGrid.getBottom() - mPill.getBottom());
+        }
+        mGrid.setCapsuleGaps(top, bottom);
     }
 
     /** @return the shipped vertical app grid */

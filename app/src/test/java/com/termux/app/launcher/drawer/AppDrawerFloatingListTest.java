@@ -44,4 +44,14 @@ public class AppDrawerFloatingListTest {
         assertFalse(AppDrawerFloatingList.capsuleContains(61f, 1f, 60f, 100f, 40f));
         assertFalse(AppDrawerFloatingList.capsuleContains(5f, 5f, 10f, 10f, 40f));
     }
+
+    @Test public void theFadeStopsWhereTheCapsuleStarts() {
+        // The shipped capsule: 12dp from the card's top under a 24dp fade, at 3x.
+        int fade = AppDrawerFloatingList.fadeLengthPx(3f);
+        assertEquals(0.5f, AppDrawerFloatingList.fadeStrengthCap(36, fade), 1e-6f);
+        assertEquals(0f, AppDrawerFloatingList.fadeStrengthCap(0, fade), 1e-6f);
+        // A capsule further in than the fade leaves it whole; an edge without one fades in full.
+        assertEquals(1f, AppDrawerFloatingList.fadeStrengthCap(fade * 2, fade), 1e-6f);
+        assertEquals(1f, AppDrawerFloatingList.fadeStrengthCap(-1, fade), 1e-6f);
+    }
 }

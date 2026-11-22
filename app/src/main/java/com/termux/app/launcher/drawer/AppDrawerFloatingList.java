@@ -42,6 +42,17 @@ public final class AppDrawerFloatingList {
     }
 
     /**
+     * How much of the fade the card's edge nearest the capsule may use, 0..1: the fade ends where
+     * the capsule starts, so rows passing under the capsule (and so in its glass) are never faded.
+     * {@code gapPx} is from that card edge to the capsule; negative for an edge the capsule does not
+     * stand at, which fades in full.
+     */
+    public static float fadeStrengthCap(int gapPx, int fadeLengthPx) {
+        if (gapPx < 0 || fadeLengthPx <= 0) return 1f;
+        return Math.min(1f, gapPx / (float) fadeLengthPx);
+    }
+
+    /**
      * Whether a touch at ({@code x}, {@code y}) is inside the capsule drawn between
      * {@code left} and {@code right} (a full-round capsule of {@code height}): the capsule takes
      * touches only inside its own shape, so the list under its corners and its folded-away part

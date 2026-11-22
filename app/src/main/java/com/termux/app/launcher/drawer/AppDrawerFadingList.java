@@ -15,6 +15,8 @@ public class AppDrawerFadingList extends RecyclerView {
 
     private boolean mFadeTop = true;
     private boolean mFadeBottom = true;
+    private float mTopCap = 1f;
+    private float mBottomCap = 1f;
 
     public AppDrawerFadingList(@NonNull Context context) {
         super(context);
@@ -29,14 +31,29 @@ public class AppDrawerFadingList extends RecyclerView {
         mFadeBottom = bottom;
     }
 
+    /**
+     * The capsule's gap from the card's top and bottom, in px, negative for an edge it does not
+     * stand at: the fade there stops where the capsule starts
+     * ({@link AppDrawerFloatingList#fadeStrengthCap}). Set on a layout, compared first.
+     */
+    public void setCapsuleGaps(int topGapPx, int bottomGapPx) {
+        int length = getVerticalFadingEdgeLength();
+        float top = AppDrawerFloatingList.fadeStrengthCap(topGapPx, length);
+        float bottom = AppDrawerFloatingList.fadeStrengthCap(bottomGapPx, length);
+        if (top == mTopCap && bottom == mBottomCap) return;
+        mTopCap = top;
+        mBottomCap = bottom;
+        invalidate();
+    }
+
     @Override
     protected float getTopFadingEdgeStrength() {
-        return mFadeTop ? super.getTopFadingEdgeStrength() : 0f;
+        return mFadeTop ? Math.min(mTopCap, super.getTopFadingEdgeStrength()) : 0f;
     }
 
     @Override
     protected float getBottomFadingEdgeStrength() {
-        return mFadeBottom ? super.getBottomFadingEdgeStrength() : 0f;
+        return mFadeBottom ? Math.min(mBottomCap, super.getBottomFadingEdgeStrength()) : 0f;
     }
 
     @Override
