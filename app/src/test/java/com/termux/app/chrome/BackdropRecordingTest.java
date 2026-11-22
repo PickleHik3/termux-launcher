@@ -59,4 +59,30 @@ public class BackdropRecordingTest {
         }
         assertFalse(BackdropRecording.holdsSurface(inner));
     }
+
+    /** #316: the switch's frost stands in for the ground on screen only; a recording skips it. */
+    @Test
+    public void aViewLeftOutIsSkippedAndItsContainerDescendedUntilKeptIn() {
+        Context context = RuntimeEnvironment.getApplication();
+        android.widget.FrameLayout ground = new android.widget.FrameLayout(context);
+        View frost = new View(context);
+        ground.addView(frost);
+        assertTrue(BackdropRecording.mayRecord(frost));
+        assertFalse(BackdropRecording.holdsSurface(ground));
+        BackdropRecording.leaveOut(frost);
+        try {
+            assertFalse(BackdropRecording.mayRecord(frost));
+            assertTrue(BackdropRecording.holdsSurface(ground));
+            BackdropRecording.begin();
+            try {
+                assertTrue(BackdropRecording.skips(frost));
+            } finally {
+                BackdropRecording.end();
+            }
+        } finally {
+            BackdropRecording.keepIn(frost);
+        }
+        assertTrue(BackdropRecording.mayRecord(frost));
+        assertFalse(BackdropRecording.holdsSurface(ground));
+    }
 }

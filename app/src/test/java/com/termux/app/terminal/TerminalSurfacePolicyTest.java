@@ -129,4 +129,35 @@ public class TerminalSurfacePolicyTest {
             : Math.pow((channel + 0.055d) / 1.055d, 2.4d);
         return (linear + 0.05d) / 0.05d;
     }
+
+    /**
+     * #316: a turning switch's gap shows the frost the windows' glass samples, under the same
+     * ground; the wall at rest keeps the wallpaper as it is.
+     */
+    @Test
+    public void aTurningSwitchShowsTheGlassFrostUnderTheGroundAndRestShowsTheWallpaper() {
+        assertEquals(TerminalSurfacePolicy.UnderGround.FROST,
+            TerminalSurfacePolicy.underGround(true, 350L, true, true, true));
+        assertEquals(TerminalSurfacePolicy.UnderGround.WALLPAPER,
+            TerminalSurfacePolicy.underGround(false, 350L, true, true, true));
+        // The ground over either is the page's own: the dim alone with glass, as at rest.
+        int dim = TerminalSurfacePolicy.dimColor(13);
+        assertEquals(dim, TerminalSurfacePolicy.pageGround(true, true, 0x80FFFFFF, dim));
+    }
+
+    @Test
+    public void noFrostWithoutGlassAFrameOrATravel() {
+        // Glass off: there is no frost to show.
+        assertEquals(TerminalSurfacePolicy.UnderGround.WALLPAPER,
+            TerminalSurfacePolicy.underGround(true, 350L, true, false, true));
+        // Opaque mode: the wallpaper is not seen.
+        assertEquals(TerminalSurfacePolicy.UnderGround.WALLPAPER,
+            TerminalSurfacePolicy.underGround(true, 350L, false, true, true));
+        // No frame held: nothing is captured for it.
+        assertEquals(TerminalSurfacePolicy.UnderGround.WALLPAPER,
+            TerminalSurfacePolicy.underGround(true, 350L, true, true, false));
+        // Animation speed Off: no turn, no gap.
+        assertEquals(TerminalSurfacePolicy.UnderGround.WALLPAPER,
+            TerminalSurfacePolicy.underGround(true, 0L, true, true, true));
+    }
 }

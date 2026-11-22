@@ -84,8 +84,8 @@ public class WindowLayoutTest {
     @Test
     public void everyTopLevelViewSitsInANamedLayerHost() throws Exception {
         Element container = byId(root(), "terminal_root_container");
-        assertEquals(Arrays.asList("wallpaper_backdrop", "ground_strip", "docked_frame_glass",
-            "terminal_status_bar_background", "deck_status_band"),
+        assertEquals(Arrays.asList("wallpaper_backdrop", "ground_frost", "ground_strip",
+            "docked_frame_glass", "terminal_status_bar_background", "deck_status_band"),
             ids(children(byId(container, "window_layer_ground"))));
         assertEquals(Arrays.asList("home_pill_layer", "page_switch_layer"),
             ids(children(byId(container, "window_layer_chrome"))));
