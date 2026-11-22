@@ -1676,6 +1676,11 @@ public final class TermuxPreferenceConstants {
          * Defines the key for font size of termux terminal view.
          */
         public static final String KEY_FONTSIZE = "fontsize";
+        /** The size the font toggle switches a pane to, in the font size's own unit; 0 derives it. */
+        public static final String KEY_COMPACT_FONTSIZE = "compact_fontsize";
+        /** Whether the terminal's window bar shows the font toggle. */
+        public static final String KEY_FONT_TOGGLE_SHOWN = "font_toggle_shown";
+        public static final boolean DEFAULT_VALUE_FONT_TOGGLE_SHOWN = true;
 
         /**
          * Defines the key for current termux terminal session.

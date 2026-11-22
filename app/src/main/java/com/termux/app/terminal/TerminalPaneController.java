@@ -117,6 +117,8 @@ public class TerminalPaneController {
     private static final String STATE_NODE_TYPE = "type";
     private static final String STATE_NODE_SESSION = "session";
     private static final String STATE_NODE_FONT_SIZE = "font_size";
+    /** The size the font toggle returns to while the pane is Compact ({@link FontCompactPolicy}). */
+    private static final String STATE_NODE_COMPACT_RETURN = "font_compact_return";
     private static final String STATE_NODE_ORIENTATION = "orientation";
     private static final String STATE_NODE_WEIGHT_A = "weight_a";
     private static final String STATE_NODE_WEIGHT_B = "weight_b";
@@ -340,6 +342,11 @@ public class TerminalPaneController {
          * changing — so zooming one pane can't move any other.
          */
         int fontSize;
+        /**
+         * What the font toggle restores while this pane is Compact: 0 for following the default,
+         * else the pinned size it had; {@link FontCompactPolicy#NOT_COMPACT} otherwise.
+         */
+        int compactReturn = FontCompactPolicy.NOT_COMPACT;
         /** This float's size and spot in each orientation, while the process lives. */
         @Nullable HomeFloatPolicy.ShapeMemory shapeMemory;
         Leaf(TerminalSession session) { this.session = session; }
@@ -1168,6 +1175,8 @@ public class TerminalPaneController {
                     floatState.putFloat(STATE_FLOAT_RESTORE_HEIGHT, restore.height());
                 }
                 if (leaf.fontSize > 0) floatState.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
+                if (FontCompactPolicy.isCompact(leaf.compactReturn))
+                    floatState.putInt(STATE_NODE_COMPACT_RETURN, leaf.compactReturn);
                 floats.add(floatState);
             }
             state.putParcelableArrayList(STATE_WINDOW_FLOATS, floats);
@@ -1230,6 +1239,8 @@ public class TerminalPaneController {
         state.putBoolean(STATE_HOME_FLOAT_MINIMISED, window.minimised);
         if (window.name != null) state.putString(STATE_WINDOW_NAME, window.name);
         if (leaf.fontSize > 0) state.putInt(STATE_NODE_FONT_SIZE, leaf.fontSize);
+        if (FontCompactPolicy.isCompact(leaf.compactReturn))
+            state.putInt(STATE_NODE_COMPACT_RETURN, leaf.compactReturn);
         Boolean laidOut = leaf.shapeMemory == null ? null : leaf.shapeMemory.orientation();
         boolean landscape = laidOut != null ? laidOut : isLandscapeScreen();
         state.putBoolean(STATE_HOME_FLOAT_LANDSCAPE, landscape);
@@ -1297,6 +1308,8 @@ public class TerminalPaneController {
         Leaf leaf = window.active;
         if (leaf != null) {
             leaf.fontSize = Math.max(0, state.getInt(STATE_NODE_FONT_SIZE, 0));
+            leaf.compactReturn = FontCompactPolicy.restore(
+                state.getInt(STATE_NODE_COMPACT_RETURN, FontCompactPolicy.NOT_COMPACT));
             RectF restore = stateFrac(state, STATE_FLOAT_RESTORE_LEFT, STATE_FLOAT_RESTORE_TOP,
                 STATE_FLOAT_RESTORE_WIDTH, STATE_FLOAT_RESTORE_HEIGHT);
             // Maximised, it stays so: its Restore returns to the shape it had before.
@@ -1329,6 +1342,8 @@ public class TerminalPaneController {
             state.putString(STATE_NODE_SESSION, ((Leaf) node).session.mHandle);
             if (((Leaf) node).fontSize > 0)
                 state.putInt(STATE_NODE_FONT_SIZE, ((Leaf) node).fontSize);
+            if (FontCompactPolicy.isCompact(((Leaf) node).compactReturn))
+                state.putInt(STATE_NODE_COMPACT_RETURN, ((Leaf) node).compactReturn);
             return state;
         }
         Split split = (Split) node;
@@ -1351,6 +1366,8 @@ public class TerminalPaneController {
             if (session == null || windowOf(session) != null) return null;
             Leaf leaf = new Leaf(session);
             leaf.fontSize = Math.max(0, state.getInt(STATE_NODE_FONT_SIZE, 0));
+            leaf.compactReturn = FontCompactPolicy.restore(
+                state.getInt(STATE_NODE_COMPACT_RETURN, FontCompactPolicy.NOT_COMPACT));
             return leaf;
         }
         Node a = restoreNode(state.getBundle(STATE_NODE_A), sessionsByHandle);
@@ -1398,6 +1415,8 @@ public class TerminalPaneController {
                     floatState.getFloat(STATE_FLOAT_RESTORE_HEIGHT, Float.NaN));
             }
             leaf.fontSize = Math.max(0, floatState.getInt(STATE_NODE_FONT_SIZE, 0));
+            leaf.compactReturn = FontCompactPolicy.restore(
+                floatState.getInt(STATE_NODE_COMPACT_RETURN, FontCompactPolicy.NOT_COMPACT));
             floats.add(leaf);
         }
         return floats;
@@ -6223,8 +6242,33 @@ public class TerminalPaneController {
     public boolean setActivePaneFontSize(int size) {
         if (mActiveWindow == null || mActiveWindow.active == null || size <= 0) return false;
         mActiveWindow.active.fontSize = size;
+        // A size set by hand is the pane's own, so it leaves Compact.
+        mActiveWindow.active.compactReturn =
+            FontCompactPolicy.afterManualChange(mActiveWindow.active.compactReturn);
         // Through the host, which draws the pane's own size at the shared Text size.
         refreshAttachedPaneView(mActiveWindow.active.session);
+        return true;
+    }
+
+    /** Whether the focused pane is at the Compact size the font toggle gave it. */
+    public boolean isActivePaneCompact() {
+        return mActiveWindow != null && mActiveWindow.active != null
+            && FontCompactPolicy.isCompact(mActiveWindow.active.compactReturn);
+    }
+
+    /**
+     * The font toggle on the focused pane: its own size and Compact, back and forth, through the
+     * same per-pane size the zoom pins, so the shell restarts nothing and a TUI gets the normal
+     * resize. The scratchpad keeps its own size and is left alone.
+     */
+    public boolean toggleActivePaneCompact(int compactSize) {
+        Leaf leaf = mActiveWindow == null ? null : mActiveWindow.active;
+        if (leaf == null || compactSize <= 0 || isScratchpadLeaf(leaf)) return false;
+        FontCompactPolicy.Next next =
+            FontCompactPolicy.toggle(leaf.fontSize, leaf.compactReturn, compactSize);
+        leaf.fontSize = next.pinnedSize;
+        leaf.compactReturn = next.returnSize;
+        refreshAttachedPaneView(leaf.session);
         return true;
     }
 

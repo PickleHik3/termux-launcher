@@ -34,7 +34,9 @@ import com.termux.app.fonts.FontSettings;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
+import com.termux.app.terminal.FontCompactPolicy;
 import com.termux.shared.termux.font.FileTypefaces;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
 import java.util.HashMap;
@@ -60,6 +62,10 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
     implements FontInstallCoordinator.Listener {
 
     private static final String ROW_KEY_PREFIX = "fonts_family_";
+
+    /** The Compact size row, which the window bar's font toggle opens this screen on. */
+    public static final String KEY_COMPACT_SIZE = "font_toggle_compact_size";
+    private static final String KEY_FONT_TOGGLE_SHOWN = "font_toggle_shown";
 
     /**
      * Installed families render their own row title as a live preview. Parsed faces are cached
@@ -161,6 +167,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 return true;
             });
         }
+        configureFontToggleRows(context);
         Preference useFontTtf = findPreference("fonts_use_font_ttf");
         if (useFontTtf != null) {
             useFontTtf.setOnPreferenceClickListener(preference -> {
@@ -168,6 +175,82 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 return true;
             });
         }
+    }
+
+    /** The font toggle's two settings live with the app's other terminal preferences. */
+    private void configureFontToggleRows(@NonNull Context context) {
+        TermuxAppSharedPreferences app = TermuxAppSharedPreferences.build(context);
+        if (app == null) return;
+        Preference size = findPreference(KEY_COMPACT_SIZE);
+        if (size != null) {
+            refreshCompactSizeRow(context, size, app);
+            size.setOnPreferenceClickListener(preference -> {
+                showCompactSizeDialog(context, preference, app);
+                return true;
+            });
+        }
+        SwitchPreferenceCompat shown = findPreference(KEY_FONT_TOGGLE_SHOWN);
+        if (shown != null) {
+            shown.setChecked(app.isFontToggleShown());
+            shown.setOnPreferenceChangeListener((preference, value) -> {
+                app.setFontToggleShown(Boolean.TRUE.equals(value));
+                return true;
+            });
+        }
+    }
+
+    private int compactSizePx(@NonNull TermuxAppSharedPreferences app) {
+        return FontCompactPolicy.compactSize(app.getStoredCompactFontSize(), app.getFontSize(),
+            app.getMinFontSize(), app.getMaxFontSize());
+    }
+
+    private void refreshCompactSizeRow(@NonNull Context context, @NonNull Preference row,
+                                       @NonNull TermuxAppSharedPreferences app) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int dp = Math.round(compactSizePx(app) / density);
+        row.setSummary(app.getStoredCompactFontSize() > 0
+            ? getString(R.string.font_toggle_compact_size_value, dp)
+            : getString(R.string.font_toggle_compact_size_auto, dp));
+    }
+
+    /** A slider in dp, the size the terminal text is read at; Auto goes back to the derived size. */
+    private void showCompactSizeDialog(@NonNull Context context, @NonNull Preference row,
+                                       @NonNull TermuxAppSharedPreferences app) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int minDp = Math.max(1, Math.round(app.getMinFontSize() / density));
+        int maxDp = Math.max(minDp + 1, Math.round(app.getMaxFontSize() / density));
+        int currentDp = Math.max(minDp, Math.min(maxDp, Math.round(compactSizePx(app) / density)));
+        int padding = Math.round(16 * density);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding / 2, padding, 0);
+        TextView label = new TextView(context);
+        label.setText(getString(R.string.font_toggle_compact_size_value, currentDp));
+        Slider slider = new Slider(context);
+        slider.setValueFrom(minDp);
+        slider.setValueTo(maxDp);
+        slider.setStepSize(1f);
+        slider.setValue(currentDp);
+        final int[] picked = {currentDp};
+        slider.addOnChangeListener((changed, value, fromUser) -> {
+            picked[0] = Math.round(value);
+            label.setText(getString(R.string.font_toggle_compact_size_value, picked[0]));
+        });
+        layout.addView(label);
+        layout.addView(slider);
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.font_toggle_compact_size_title)
+            .setView(layout)
+            .setPositiveButton(R.string.termux_fonts_weight_apply, (dialog, which) -> {
+                app.setStoredCompactFontSize(Math.round(picked[0] * density));
+                refreshCompactSizeRow(context, row, app);
+            })
+            .setNeutralButton(R.string.font_toggle_compact_size_reset, (dialog, which) -> {
+                app.setStoredCompactFontSize(0);
+                refreshCompactSizeRow(context, row, app);
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void refresh(@NonNull Context context) {

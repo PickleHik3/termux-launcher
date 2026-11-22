@@ -1781,6 +1781,70 @@ public class TerminalPaneControllerTest {
         assertEquals(40, restored.floating.get(0).fontSize);
     }
 
+    @Test
+    public void fontToggle_switchesAndRestoresAndLeavesCompactOnZoom() {
+        TerminalPaneController controller = newSplittingController();
+        TerminalPaneController.Window window = controller.newWindow(terminal());
+        controller.showWindow(window);
+
+        // Following the default: compact, then back to following it.
+        assertFalse(controller.isActivePaneCompact());
+        assertTrue(controller.toggleActivePaneCompact(20));
+        assertEquals(20, controller.getActivePaneFontSize());
+        assertTrue(controller.isActivePaneCompact());
+        assertTrue(controller.toggleActivePaneCompact(20));
+        assertEquals(0, controller.getActivePaneFontSize());
+        assertFalse(controller.isActivePaneCompact());
+
+        // A pinch-zoomed size comes back exactly.
+        assertTrue(controller.setActivePaneFontSize(34));
+        assertTrue(controller.toggleActivePaneCompact(20));
+        assertTrue(controller.setActivePaneFontSize(22));
+        assertFalse("a zoom while Compact leaves it", controller.isActivePaneCompact());
+        assertTrue(controller.toggleActivePaneCompact(20));
+        assertTrue(controller.toggleActivePaneCompact(20));
+        assertEquals(22, controller.getActivePaneFontSize());
+    }
+
+    @Test
+    public void fontToggle_rememberedSizeSurvivesSavedStateIncludingFloats() {
+        TerminalPaneController source = newController();
+        TerminalSession first = terminal();
+        TerminalSession second = terminal();
+        TerminalSession floater = terminal();
+        TerminalPaneController.Leaf firstLeaf = new TerminalPaneController.Leaf(first);
+        firstLeaf.fontSize = 20;
+        firstLeaf.compactReturn = 36;
+        TerminalPaneController.Leaf secondLeaf = new TerminalPaneController.Leaf(second);
+        secondLeaf.fontSize = 20;
+        secondLeaf.compactReturn = 0;
+        TerminalPaneController.Split root = new TerminalPaneController.Split();
+        root.orientation = LinearLayout.HORIZONTAL;
+        root.a = firstLeaf;
+        root.b = secondLeaf;
+        firstLeaf.parent = root;
+        secondLeaf.parent = root;
+        TerminalPaneController.Window window = new TerminalPaneController.Window(firstLeaf);
+        window.root = root;
+        TerminalPaneController.Leaf floatLeaf = new TerminalPaneController.Leaf(floater);
+        floatLeaf.floatFrac = new RectF(.1f, .1f, .6f, .6f);
+        floatLeaf.fontSize = 20;
+        floatLeaf.compactReturn = 44;
+        window.floating.add(floatLeaf);
+
+        Bundle saved = source.saveWindow(window);
+        Map<String, TerminalSession> sessions = new HashMap<>();
+        sessions.put(first.mHandle, first);
+        sessions.put(second.mHandle, second);
+        sessions.put(floater.mHandle, floater);
+        TerminalPaneController.Window restored = newController().restoreWindow(saved, sessions);
+
+        TerminalPaneController.Split restoredRoot = (TerminalPaneController.Split) restored.root;
+        assertEquals(36, ((TerminalPaneController.Leaf) restoredRoot.a).compactReturn);
+        assertEquals(0, ((TerminalPaneController.Leaf) restoredRoot.b).compactReturn);
+        assertEquals(44, restored.floating.get(0).compactReturn);
+    }
+
     // --- Columns: consume and expel (Niri's words; the row's windows are the columns) ---
 
     @Test
