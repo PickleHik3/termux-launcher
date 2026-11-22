@@ -14910,21 +14910,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return;
         }
-        String method = mPreferences.getAppLauncherAzLockMethod();
-        if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU.equals(method)) {
-            // A-Z lock needs Shizuku specifically, so it keeps the shizuku-only mode rather than
-            // letting the manager settle on su/rish.
-            PrivilegedBackendManager.getInstance().initializeShizukuOnly(this)
-                .exceptionally(throwable -> {
-                    Logger.logWarn(LOG_TAG, "A-Z Shizuku backend refresh failed: " + throwable.getMessage());
-                    return false;
-                });
-            return;
-        }
-        // Everything else that needs privileges (the CPU card's ticks and process list, the
+        // Everything that needs privileges (the CPU card's ticks and process list, the
         // foreground-window resolver) only ever *reads* isPrivilegedAvailable(), so without this
-        // the backend stayed UNINITIALIZED on every start unless the A-Z lock happened to be set
-        // to Shizuku or the user opened the privileged-access settings screen and pressed Connect.
+        // the backend stayed UNINITIALIZED on every start unless the user opened the
+        // privileged-access settings screen and pressed Connect.
         // Initializing here also registers the Shizuku binder-received listener, which is what
         // lets a later Shizuku start recover on its own.
         PrivilegedBackendManager.getInstance().initializeIfNeeded(this)
@@ -14936,13 +14925,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void lockScreenWithShizuku() {
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        if (manager.isPrivilegedAvailable()) {
+            executePrivilegedLockCommand(manager);
+            return;
+        }
         manager.initializeShizukuOnly(this)
             .thenAccept(available -> {
                 if (!available || !manager.isPrivilegedAvailable()) {
                     manager.requestPrivilegedPermission(ShizukuBackend.PERMISSION_REQUEST_CODE);
                     return;
                 }
-                executeShizukuLockCommand(manager);
+                executePrivilegedLockCommand(manager);
             })
             .exceptionally(throwable -> {
                 Logger.logWarn(LOG_TAG, "A-Z Shizuku lock initialization failed: " + throwable.getMessage());
@@ -14950,7 +14943,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
     }
 
-    private void executeShizukuLockCommand(@NonNull PrivilegedBackendManager manager) {
+    private void executePrivilegedLockCommand(@NonNull PrivilegedBackendManager manager) {
         manager.executeCommand("input keyevent 223")
             .thenAccept(output -> {
                 if (isSuccessfulPrivilegedCommandOutput(output)) {
