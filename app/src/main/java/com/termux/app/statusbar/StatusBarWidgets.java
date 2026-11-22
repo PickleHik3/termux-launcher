@@ -450,7 +450,7 @@ final class StatusBarWidgets {
             boolean cardShowing = mHost.statusCardHost().isShowing() && mHost.statsCardView() != null;
             mHost.ensureStatsController().start(
                 mHost.statsInterval(cardShowing ? mHost.statsCardIntervalMs() : mHost.statsBarIntervalMs()),
-                cardShowing);
+                cardShowing, cardShowing);
             // The sampler pauses while nothing shows its numbers (StatsPollCadence).
             mHost.statsController().setConsumerVisible(mHost.statsConsumerVisible());
         } else if (mHost.statsController() != null) {

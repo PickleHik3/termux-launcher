@@ -69,10 +69,17 @@ public class StatsPollCadenceTest {
 
     @Test
     public void aStartRepeatingTheRunningSettingsChangesNothing() {
-        assertFalse(StatsPollCadence.startChangesSchedule(true, 6000L, false, 6000L, false));
-        assertTrue(StatsPollCadence.startChangesSchedule(false, 6000L, false, 6000L, false));
-        assertTrue(StatsPollCadence.startChangesSchedule(true, 6000L, false, 2000L, true));
-        assertTrue(StatsPollCadence.startChangesSchedule(true, 6000L, false, 18000L, false));
-        assertTrue(StatsPollCadence.startChangesSchedule(true, 2000L, true, 2000L, false));
+        assertFalse(StatsPollCadence.startChangesSchedule(true, 6000L, false, false, 6000L, false, false));
+        assertFalse(StatsPollCadence.startChangesSchedule(true, 2000L, true, true, 2000L, true, true));
+        assertTrue(StatsPollCadence.startChangesSchedule(false, 6000L, false, false, 6000L, false, false));
+        assertTrue(StatsPollCadence.startChangesSchedule(true, 6000L, false, false, 2000L, true, false));
+        assertTrue(StatsPollCadence.startChangesSchedule(true, 6000L, false, false, 18000L, false, false));
+        assertTrue(StatsPollCadence.startChangesSchedule(true, 2000L, true, false, 2000L, false, false));
+    }
+
+    @Test
+    public void aHardwareChangeAloneChangesTheSchedule() {
+        assertTrue(StatsPollCadence.startChangesSchedule(true, 2000L, true, false, 2000L, true, true));
+        assertTrue(StatsPollCadence.startChangesSchedule(true, 2000L, true, true, 2000L, true, false));
     }
 }

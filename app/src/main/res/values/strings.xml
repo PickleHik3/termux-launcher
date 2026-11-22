@@ -3815,4 +3815,10 @@
     <string name="setup_guide_panes_caption">New terminals tile next to the current one. Tap a pane to focus it.</string>
     <string name="setup_guide_desktop_title">Open a desktop app</string>
     <string name="setup_guide_desktop_caption">A desktop app opens as a normal window. The display starts when it\'s needed.</string>
+    <string name="stats_hw_gpu">GPU</string>
+    <string name="stats_hw_load">%1$d%%</string>
+    <string name="stats_hw_mhz">%1$d MHz</string>
+    <string name="stats_hw_mhz_of">%1$d/%2$d MHz</string>
+    <string name="stats_hw_ghz">%1$s GHz</string>
+    <string name="stats_hw_temp">%1$d°</string>
 </resources>

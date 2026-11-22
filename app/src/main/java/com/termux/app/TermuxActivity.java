@@ -31766,7 +31766,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         detachFromParent(mStatsCardView);
         mStatsCardView.bind(ensureStatsController().latest());
-        ensureStatsController().start(statsInterval(STATS_CARD_INTERVAL_MS), true);
+        ensureStatsController().start(statsInterval(STATS_CARD_INTERVAL_MS), true, true);
         setWidgetAccent(anchor, true);
         mStatusCardHost.setDropEdge(findViewById(R.id.terminal_window_bar_host));
         mStatusCardHost.setEdge(mStatusBar.statusBarEdge());

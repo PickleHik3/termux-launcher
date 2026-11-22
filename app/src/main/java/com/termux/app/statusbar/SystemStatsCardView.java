@@ -41,6 +41,8 @@ public final class SystemStatsCardView extends LinearLayout {
 
     private final TextView mCpuHeader;
     private final LinearLayout mCoreColumn;
+    private final TextView mClockLine;
+    private final TextView mGpuLine;
     private final TextView mMemHeader;
     private final BarView mMemBar;
     private final LinearLayout mMemMetrics;
@@ -81,6 +83,10 @@ public final class SystemStatsCardView extends LinearLayout {
         mCoreColumn = new LinearLayout(context);
         mCoreColumn.setOrientation(HORIZONTAL);
         addView(mCoreColumn, lp(dp(4)));
+        mClockLine = hardwareLine();
+        addView(mClockLine, lp(dp(4)));
+        mGpuLine = hardwareLine();
+        addView(mGpuLine, lp(dp(2)));
 
         mMemHeader = sectionHeader("Memory", mSecondary);
         addView(mMemHeader, lp(dp(10)));
@@ -137,6 +143,8 @@ public final class SystemStatsCardView extends LinearLayout {
             mCoreColumn.addView(left, new LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f));
         }
 
+        bindHardware(stats.hardware);
+
         double totalGb = stats.memTotalKb / 1048576.0;
         double usedGb = stats.memUsedKb / 1048576.0;
         mMemHeader.setText(String.format(Locale.ROOT, "Memory  %.1f / %.1f GB", usedGb, totalGb));
@@ -182,6 +190,62 @@ public final class SystemStatsCardView extends LinearLayout {
             mProcesses = new ArrayList<>(stats.top);
             rebuildProcesses();
         }
+    }
+
+    private TextView hardwareLine() {
+        TextView line = mono(9, mOnSurfaceVariant);
+        line.setSingleLine(true);
+        line.setEllipsize(TextUtils.TruncateAt.END);
+        line.setVisibility(GONE);
+        return line;
+    }
+
+    /** Cluster clocks with CPU temperature, and the GPU line; a line with nothing known is gone. */
+    private void bindHardware(@androidx.annotation.Nullable HardwareStats hw) {
+        StringBuilder clocks = new StringBuilder();
+        StringBuilder gpu = new StringBuilder();
+        if (hw != null) {
+            StringBuilder ghz = new StringBuilder();
+            for (HardwareStats.Cluster c : hw.clusters) {
+                if (ghz.length() > 0) ghz.append(" \u00b7 ");
+                ghz.append(String.format(Locale.ROOT, "%.1f", c.curMhz / 1000.0));
+            }
+            if (ghz.length() > 0) clocks.append(getContext().getString(R.string.stats_hw_ghz, ghz));
+            appendTemp(clocks, hw.cpuTempC);
+
+            if (hw.gpuBusyPercent >= 0) {
+                appendPart(gpu, getContext().getString(R.string.stats_hw_load, hw.gpuBusyPercent));
+            }
+            if (hw.gpuCurMhz >= 0) {
+                appendPart(gpu, hw.gpuMaxMhz >= 0
+                    ? getContext().getString(R.string.stats_hw_mhz_of, hw.gpuCurMhz, hw.gpuMaxMhz)
+                    : getContext().getString(R.string.stats_hw_mhz, hw.gpuCurMhz));
+            }
+            appendTemp(gpu, hw.gpuTempC);
+            // The SoC sensor stands in only where neither CPU nor GPU has a temperature of its own.
+            if (Float.isNaN(hw.cpuTempC) && Float.isNaN(hw.gpuTempC)) appendTemp(gpu, hw.socTempC);
+            if (gpu.length() > 0) {
+                gpu.insert(0, getContext().getString(R.string.stats_hw_gpu) + "  ");
+            }
+        }
+        setLine(mClockLine, clocks);
+        setLine(mGpuLine, gpu);
+    }
+
+    private void appendTemp(StringBuilder sb, float tempC) {
+        if (Float.isNaN(tempC)) return;
+        appendPart(sb, getContext().getString(R.string.stats_hw_temp, Math.round(tempC)));
+    }
+
+    private static void appendPart(StringBuilder sb, String part) {
+        if (sb.length() > 0) sb.append("  ");
+        sb.append(part);
+    }
+
+    private static void setLine(TextView view, CharSequence text) {
+        int visibility = text.length() == 0 ? GONE : VISIBLE;
+        if (view.getVisibility() != visibility) view.setVisibility(visibility);
+        if (visibility == VISIBLE && !TextUtils.equals(view.getText(), text)) view.setText(text);
     }
 
     private LinearLayout coreList() {
