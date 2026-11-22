@@ -103,6 +103,14 @@ public final class HomeGestures {
         return gesture == Gesture.SWIPE_UP ? Action.PALETTE : Action.NONE;
     }
 
+    /**
+     * Whether a write to the preferences under {@code key} may have moved {@code gesture}'s action:
+     * its own key, or null, which is the whole store cleared.
+     */
+    public static boolean movedBy(@Nullable String key, @NonNull Gesture gesture) {
+        return key == null || gesture.key.equals(key);
+    }
+
     /** The action a stored value names for {@code gesture}; unknown or unset is the default. */
     @NonNull
     public static Action parse(@NonNull Gesture gesture, @Nullable String stored) {

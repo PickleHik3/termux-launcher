@@ -132,6 +132,16 @@ public final class HomeSettings {
         return HomeGestures.parse(gesture, getString(context, gesture.key, null));
     }
 
+    /**
+     * Tells {@code listener} of every write to the store these rows live in, so a reader asked
+     * before each frame keeps its answer and reads again only when {@link HomeGestures#movedBy}
+     * says the write was its gesture's. The store holds listeners weakly: the caller keeps its own.
+     */
+    public static void watch(@NonNull Context context,
+                             @NonNull SharedPreferences.OnSharedPreferenceChangeListener listener) {
+        preferences(context).registerOnSharedPreferenceChangeListener(listener);
+    }
+
     public static void setGestureAction(@NonNull Context context, @NonNull HomeGestures.Gesture gesture,
                                         @NonNull HomeGestures.Action action) {
         putString(context, gesture.key, HomeGestures.storedValue(gesture, action));
