@@ -32298,7 +32298,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @NonNull
     private android.graphics.ColorFilter glassGroundFilter(boolean scene) {
-        int opacity = mPreferences != null ? mPreferences.getAppBarOpacity(restingPage()) : 100;
+        int opacity = mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100;
         if (!scene) return com.termux.app.chrome.GlassFilters.frost(opacity);
         com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
         return com.termux.app.chrome.LiveStoredParity.sceneGroundFilter(opacity,
@@ -32522,6 +32522,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return the ticket that takes it away again ({@link #endSwitchFrost}), 0 for none
      */
+    private int switchGapTint() {
+        // The face of the front window's glass: the tint its slab lays over the frost.
+        return com.termux.app.terminal.TerminalSurfacePolicy.switchGapTint(
+            paneSurfaceStyle().paneGlassTintColor());
+    }
+
     private int showSwitchFrost(long travelMs) {
         if (mGroundFrost == null) mGroundFrost = findViewById(R.id.ground_frost);
         com.termux.app.chrome.GroundFrostView frost = mGroundFrost;
@@ -32544,11 +32550,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return 0;
         }
         if (scene) {
-            frost.showScene(glassGroundFilter(true));
+            frost.showScene(glassGroundFilter(true), switchGapTint());
         } else {
             mChrome.blurCache().copyFrameRect(mSwitchFrostRect);
             frost.showFrame(stored, mSwitchFrostRect, mWallpaperParallax.offsetPx(),
-                glassGroundFilter(false));
+                glassGroundFilter(false), switchGapTint());
         }
         int ticket = mSwitchFrostHold.begin(android.os.SystemClock.uptimeMillis(), travelMs,
             com.termux.app.wall.FirstDrawGate.TIMEOUT_MS);

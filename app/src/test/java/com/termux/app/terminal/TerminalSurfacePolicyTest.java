@@ -160,4 +160,22 @@ public class TerminalSurfacePolicyTest {
         assertEquals(TerminalSurfacePolicy.UnderGround.WALLPAPER,
             TerminalSurfacePolicy.underGround(true, 0L, true, true, true));
     }
+
+    /**
+     * The gap wears what the pane's slab lays over its frost: the look's flat tint of the
+     * Terminal's surface colour, with its alpha (Opacity), for a light and a Material You surface.
+     */
+    @Test
+    public void switchGapTintIsThePaneFacesTint() {
+        int[] surfaces = {0xB3F5F5F5, 0x99DDE3EA, 0x66000000};
+        for (String look : new String[] {"scheme", "obsidian"}) {
+            com.termux.app.chrome.GlassLook glass = com.termux.app.chrome.GlassLook.of(look, null);
+            for (int surface : surfaces) {
+                int paneTint = glass.flatTint(surface);
+                assertEquals(paneTint, TerminalSurfacePolicy.switchGapTint(paneTint));
+                assertEquals(paneTint >>> 24, TerminalSurfacePolicy.switchGapTint(paneTint) >>> 24);
+            }
+        }
+        assertEquals(0, TerminalSurfacePolicy.switchGapTint(0x00FFFFFF) >>> 24);
+    }
 }

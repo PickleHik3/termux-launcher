@@ -90,6 +90,16 @@ public final class TerminalSurfacePolicy {
     }
 
     /**
+     * The tint a turning switch's frosted gap wears (#316): the panes' own glass tint, colour and
+     * alpha as the slab lays it over its frost, so the gap reads as the same glass as the windows.
+     *
+     * @param paneGlassTint {@code PaneSurfaceStyle.paneGlassTintColor()} of the Terminal, ARGB
+     */
+    public static int switchGapTint(int paneGlassTint) {
+        return paneGlassTint;
+    }
+
+    /**
      * A wall page's wallpaper dim, percent (ADR 0031 §4): the Terminal's one dim on every page of
      * the Terminal (a terminal window, a Display page, the Assistant page), none on Home's.
      *
