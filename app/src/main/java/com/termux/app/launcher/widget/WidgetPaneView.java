@@ -233,6 +233,8 @@ public final class WidgetPaneView extends FrameLayout
     @Nullable private WidgetGridView neighbour;
     /** The page the neighbour grid is bound to; -1 for none. */
     private int neighbourPage = -1;
+    /** The wall revision the neighbour's cells were built for. */
+    private long neighbourRevision;
     /** The bound run of Home pages ({@link #setRun}); runLast -1 for every page. */
     private int runFirst = 0;
     private int runLast = -1;
@@ -989,9 +991,8 @@ public final class WidgetPaneView extends FrameLayout
                        @NonNull LauncherWidgetHostController.Capability capability, int page) {
         hideWidgetEditOverlay();
         this.repository = repository;
-        // Whatever the neighbour holds belongs to the layout this render replaces.
-        neighbourPage = -1;
         List<LauncherWidgetRecord> pageRecords = repository.recordsOnPage(page);
+        swapWithNeighbour(repository, page, pageRecords);
         boolean populated = !pageRecords.isEmpty();
         grid.refresh(repository.gridDefinition(), pageRecords);
         empty.setVisibility(populated ? GONE : VISIBLE);
@@ -1666,7 +1667,13 @@ public final class WidgetPaneView extends FrameLayout
             if (neighbour != null && neighbour.getVisibility() == VISIBLE) dropNeighbour();
             return;
         }
-        if (want != neighbourPage || neighbour == null) bindNeighbour(want);
+        if (!NeighbourBinding.reusable(neighbour != null, neighbourPage, neighbourRevision,
+            want, repository == null ? 0L : repository.revision())) {
+            bindNeighbour(want);
+        } else if (neighbour != null && neighbour.getVisibility() != VISIBLE) {
+            neighbour.setLayerType(contentLayered ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE, null);
+            neighbour.setVisibility(VISIBLE);
+        }
         WidgetGridView layer = neighbour;
         if (layer == null) return;
         float other = position + (position < 0f ? 1f : -1f);
@@ -1716,14 +1723,49 @@ public final class WidgetPaneView extends FrameLayout
         layer.setLayerType(contentLayered ? LAYER_TYPE_HARDWARE : LAYER_TYPE_NONE, null);
         layer.setVisibility(VISIBLE);
         neighbourPage = page;
+        neighbourRevision = source.revision();
     }
 
+    /**
+     * A swipe that ends where it began hides the layer and keeps its cells, bound to the page and
+     * wall revision they were built for, so the next drag toward that page builds nothing. Any
+     * render that does not turn onto that page lets them go.
+     */
     private void dropNeighbour() {
+        WidgetGridView layer = neighbour;
+        if (layer == null) { neighbourPage = -1; return; }
+        layer.setVisibility(GONE);
+    }
+
+    private void releaseNeighbour() {
         neighbourPage = -1;
         WidgetGridView layer = neighbour;
         if (layer == null) return;
         layer.clear();
         layer.setVisibility(GONE);
+    }
+
+    /**
+     * A turn onto the page the second layer holds: the two grids trade cells, the page arriving
+     * takes the layer's and the page leaving hands the layer its own. A cell moves by detaching
+     * and attaching, never leaving the window, so no built-in stops and starts inside the touch
+     * handler. Any other render drops what the layer holds, as it always did.
+     */
+    private void swapWithNeighbour(@NonNull LauncherWidgetRepository source, int page,
+                                   @NonNull List<LauncherWidgetRecord> pageRecords) {
+        WidgetGridView layer = neighbour;
+        int leaving = currentPage;
+        boolean swap = layer != null && layer.getVisibility() == VISIBLE && neighbourPage == page
+            && neighbourRevision == source.revision() && leaving != page
+            && leaving >= 0 && leaving < source.pageCount();
+        if (!swap) { releaseNeighbour(); return; }
+        List<LauncherWidgetRecord> leavingRecords = source.recordsOnPage(leaving);
+        grid.adoptCellsFrom(layer, pageRecords);
+        layer.clear();
+        layer.mirrorConfigFrom(grid);
+        layer.adoptCellsFrom(grid, leavingRecords);
+        layer.refresh(source.gridDefinition(), leavingRecords);
+        neighbourPage = leaving;
     }
 
     /** The second page layer's grid while a motion has one; for tests. */

@@ -319,6 +319,28 @@ public final class WidgetGridView extends ViewGroup {
         records = Collections.emptyList();
     }
 
+    /**
+     * Takes over the second layer's cells for {@code wanted} when a swipe lands on the page that
+     * layer holds. A cell moves by detaching and attaching, which never leaves the window, so a
+     * built-in inside it does not stop and start again in the touch handler; the {@link #refresh}
+     * that follows finds each cell already holding its content and only places it.
+     */
+    void adoptCellsFrom(@NonNull WidgetGridView other, @NonNull List<LauncherWidgetRecord> wanted) {
+        if (other == this || !isAttachedToWindow() || !other.isAttachedToWindow()) return;
+        for (LauncherWidgetRecord record : wanted) {
+            int id = record.appWidgetId;
+            WidgetCellView cell = other.cells.get(id);
+            if (cell == null || cells.containsKey(id)) continue;
+            other.cells.remove(id);
+            other.forgetSizes(id);
+            other.detachViewFromParent(cell);
+            cell.setHoldExempt(holdExempt);
+            if (!Float.isNaN(cellCornerRadius)) cell.setLookCornerRadius(cellCornerRadius);
+            cells.put(id, cell);
+            attachViewToParent(cell, getChildCount(), cell.getLayoutParams());
+        }
+    }
+
     @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
         return !inert && super.dispatchTouchEvent(event);
     }
