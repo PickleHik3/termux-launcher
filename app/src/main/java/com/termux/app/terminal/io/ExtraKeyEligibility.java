@@ -208,6 +208,7 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_RESET, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_INCREASE, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_DECREASE, Band.TERMINAL_TOOL);
+        tools.put(LauncherToolRegistry.TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_URL, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_AT_CURSOR, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_TERMINAL_SELECT_ALL, Band.TERMINAL_TOOL);

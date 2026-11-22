@@ -27394,6 +27394,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
             bar.setVisibility(windowsShown && !mStatusBar.isStatusBarVertical() ? View.VISIBLE : View.GONE);
+            // The font toggle stands beside the chips, so it is on the row, not in the column.
+            TextView fontToggle = findViewById(R.id.terminal_font_toggle);
+            if (fontToggle != null) {
+                int toggleVisibility = windowsShown && !mStatusBar.isStatusBarVertical()
+                    && mPreferences != null && mPreferences.isFontToggleShown()
+                    ? View.VISIBLE : View.GONE;
+                if (fontToggle.getVisibility() != toggleVisibility)
+                    fontToggle.setVisibility(toggleVisibility);
+            }
             // The plus opens a terminal window right after the window in front, whichever it is;
             // without split panes there are no windows to open, on either half.
             bar.setCreateButtonShown(terminal && isSplitPanesEnabled());
@@ -30740,6 +30749,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .show();
     }
 
+    /**
+     * The window bar's font toggle: a tap switches the focused pane between its size and Compact,
+     * a long press opens the settings holding the Compact size.
+     */
+    private void setUpFontToggle(@NonNull com.termux.app.terminal.TerminalWindowBar bar) {
+        TextView toggle = findViewById(R.id.terminal_font_toggle);
+        if (toggle == null) return;
+        bar.setInkCompanion(toggle);
+        toggle.setOnClickListener(v -> {
+            TermuxTerminalViewClient client = mTermuxTerminalViewClient;
+            if (client != null) client.toggleCompactFontSize();
+        });
+        toggle.setOnLongClickListener(v -> {
+            startActivity(com.termux.app.activities.SettingsActivity.createFragmentIntent(this,
+                com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment.class,
+                R.string.termux_fonts_preferences_title, null,
+                com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment
+                    .KEY_COMPACT_SIZE));
+            return true;
+        });
+        syncFontToggle();
+    }
+
+    /** The toggle's glyph and description for the focused pane: "aA" while it is Compact. */
+    private void syncFontToggle() {
+        TextView toggle = findViewById(R.id.terminal_font_toggle);
+        if (toggle == null) return;
+        boolean compact = mPaneController != null && mPaneController.isActivePaneCompact();
+        CharSequence glyph = compact ? "aA" : "Aa";
+        if (!glyph.toString().contentEquals(toggle.getText())) {
+            toggle.setText(glyph);
+            toggle.setContentDescription(getString(compact
+                ? R.string.font_toggle_restore_content_description
+                : R.string.font_toggle_content_description));
+        }
+    }
+
     private void setTerminalWindowBar() {
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (bar == null) return;
@@ -30751,6 +30797,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             onWindowChip(com.termux.app.chrome.WindowChips.Surface.BAR, index, false));
         bar.setOnWindowSelectedListener(index ->
             onWindowChip(com.termux.app.chrome.WindowChips.Surface.BAR, index, false));
+        setUpFontToggle(bar);
         // Every chip tap, not only the ones that change which window is current: the tap that
         // asks the selected chip for its close button is spent on that reveal and never reaches
         // the selection listener, and it is exactly the tap the run's window card asks for.
@@ -31116,6 +31163,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // not the Home floats' after them. The same on both halves.
         bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
         bar.setWindows(items, selected);
+        syncFontToggle();
         refreshPageGlyphsIfWindowsMoved();
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);
@@ -33690,6 +33738,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mTermuxTerminalSessionActivityClient != null)
                 mTermuxTerminalSessionActivityClient.onFrontPaneMaybeChanged();
             refreshTerminalWindowBar();
+            syncFontToggle();
         }
 
         @Override public void onActivePaneMoved() {
@@ -33875,7 +33924,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public boolean setActivePaneFontSize(int size) {
-            return TermuxActivity.this.setActivePaneFontSize(size);
+            boolean set = TermuxActivity.this.setActivePaneFontSize(size);
+            syncFontToggle();
+            return set;
+        }
+
+        @Override public boolean activePaneCompact() {
+            return mPaneController != null && mPaneController.isActivePaneCompact();
+        }
+
+        @Override public boolean toggleActivePaneCompact(int compactSize) {
+            boolean toggled = mPaneController != null
+                && mPaneController.toggleActivePaneCompact(compactSize);
+            syncFontToggle();
+            return toggled;
         }
 
         @Override public boolean refreshPaneFontSizes() {

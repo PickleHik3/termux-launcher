@@ -168,6 +168,7 @@ public final class TerminalActionDispatcher {
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
+    public static final String TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT = "terminal.font_size_toggle_compact";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
     public static final String TOOL_TERMINAL_SELECT_AT_CURSOR = "terminal.select_at_cursor";
     public static final String TOOL_TERMINAL_SELECT_ALL = "terminal.select_all";
@@ -397,6 +398,7 @@ public final class TerminalActionDispatcher {
             case TOOL_TERMINAL_TOGGLE_TOOLBAR:
             case TOOL_TERMINAL_FONT_SIZE_INCREASE:
             case TOOL_TERMINAL_FONT_SIZE_DECREASE:
+            case TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT:
             case TOOL_TERMINAL_SELECT_URL:
             case TOOL_TERMINAL_SELECT_AT_CURSOR:
             case TOOL_TERMINAL_SELECT_ALL:
@@ -1647,6 +1649,7 @@ public final class TerminalActionDispatcher {
                 case TOOL_TERMINAL_TOGGLE_SOFT_KEYBOARD:
                 case TOOL_TERMINAL_FONT_SIZE_INCREASE:
                 case TOOL_TERMINAL_FONT_SIZE_DECREASE:
+                case TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT:
                 case TOOL_TERMINAL_SELECT_URL:
                 case TOOL_TERMINAL_HINTS:
                 case TOOL_TERMINAL_SEARCH_SCROLLBACK:
@@ -1664,6 +1667,9 @@ public final class TerminalActionDispatcher {
                             break;
                         case TOOL_TERMINAL_FONT_SIZE_DECREASE:
                             viewClient.changeFontSize(false);
+                            break;
+                        case TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT:
+                            viewClient.toggleCompactFontSize();
                             break;
                         case TOOL_TERMINAL_SELECT_URL:
                             viewClient.showUrlSelection();

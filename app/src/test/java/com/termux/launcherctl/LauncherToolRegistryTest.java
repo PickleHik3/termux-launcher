@@ -72,7 +72,8 @@ public class LauncherToolRegistryTest {
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
         // the palette's door to minimal mode, and by wall.assistant, the Assistant key.
-        assertEquals(92, registry.getUiTools().size());
+        // terminal.font_size_toggle_compact, the font toggle, is the 93rd.
+        assertEquals(93, registry.getUiTools().size());
     }
 
     @Test
@@ -390,7 +391,8 @@ public class LauncherToolRegistryTest {
     @Test
     public void terminalViewActions_areRegistered() {
         String[] viewActions = {"terminal.toggle_soft_keyboard", "terminal.toggle_toolbar",
-            "terminal.font_size_increase", "terminal.font_size_decrease", "terminal.select_url",
+            "terminal.font_size_increase", "terminal.font_size_decrease",
+            "terminal.font_size_toggle_compact", "terminal.select_url",
             "terminal.hints", "terminal.search_scrollback",
             "terminal.share_transcript", "clipboard.paste"};
         for (String name : viewActions) {

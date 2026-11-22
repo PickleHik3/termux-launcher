@@ -86,6 +86,7 @@ class FakeTerminalHost implements TerminalHost {
     int toolbarToggles;
     int flushDockRequests;
     int paneFontSize;
+    int paneCompactReturn = FontCompactPolicy.NOT_COMPACT;
     boolean overlaysConsume;
 
     // Panes
@@ -370,6 +371,19 @@ class FakeTerminalHost implements TerminalHost {
 
     @Override public boolean setActivePaneFontSize(int size) {
         paneFontSize = size;
+        paneCompactReturn = FontCompactPolicy.afterManualChange(paneCompactReturn);
+        return true;
+    }
+
+    @Override public boolean activePaneCompact() {
+        return FontCompactPolicy.isCompact(paneCompactReturn);
+    }
+
+    @Override public boolean toggleActivePaneCompact(int compactSize) {
+        FontCompactPolicy.Next next =
+            FontCompactPolicy.toggle(paneFontSize, paneCompactReturn, compactSize);
+        paneFontSize = next.pinnedSize;
+        paneCompactReturn = next.returnSize;
         return true;
     }
 

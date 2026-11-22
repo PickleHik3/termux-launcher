@@ -3087,6 +3087,31 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setFontSize(stepFontSize(getFontSize(), increase));
     }
 
+    public int getMinFontSize() { return MIN_FONTSIZE; }
+
+    public int getMaxFontSize() { return MAX_FONTSIZE; }
+
+    /** The Compact size as stored: 0 while it is derived from the app-wide default. */
+    public int getStoredCompactFontSize() {
+        return Math.max(0, SharedPreferenceUtils.getIntStoredAsString(mSharedPreferences,
+            TERMUX_APP.KEY_COMPACT_FONTSIZE + getDisplayIdAsString(), 0));
+    }
+
+    /** Stores the Compact size; 0 goes back to deriving it from the app-wide default. */
+    public void setStoredCompactFontSize(int value) {
+        SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences,
+            TERMUX_APP.KEY_COMPACT_FONTSIZE + getDisplayIdAsString(), Math.max(0, value), false);
+    }
+
+    public boolean isFontToggleShown() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_FONT_TOGGLE_SHOWN,
+            TERMUX_APP.DEFAULT_VALUE_FONT_TOGGLE_SHOWN);
+    }
+
+    public void setFontToggleShown(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FONT_TOGGLE_SHOWN, value, false);
+    }
+
     /** {@code current} stepped one zoom increment, clamped to this display's font size limits. */
     public int stepFontSize(int current, boolean increase) {
         int fontSize = current + (increase ? 1 : -1) * 2;

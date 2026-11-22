@@ -472,6 +472,7 @@ public final class LauncherToolRegistry {
     public static final String TOOL_TERMINAL_TOGGLE_TOOLBAR = "terminal.toggle_toolbar";
     public static final String TOOL_TERMINAL_FONT_SIZE_INCREASE = "terminal.font_size_increase";
     public static final String TOOL_TERMINAL_FONT_SIZE_DECREASE = "terminal.font_size_decrease";
+    public static final String TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT = "terminal.font_size_toggle_compact";
     public static final String TOOL_TERMINAL_SELECT_URL = "terminal.select_url";
     public static final String TOOL_TERMINAL_SELECT_AT_CURSOR = "terminal.select_at_cursor";
     public static final String TOOL_TERMINAL_SELECT_ALL = "terminal.select_all";
@@ -962,6 +963,13 @@ public final class LauncherToolRegistry {
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_font_size_decrease, R.string.tool_desc_terminal_font_size_decrease,
             Binding.all("ctrl+alt+minus"), REQUIRES_SESSION);
+        addUi(map, TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT,
+            "Switch the focused terminal between its font size and the saved Compact size.",
+            schemaEmpty(),
+            ToolRisk.LOW, false, ToolExecutor.TERMINAL,
+            CATEGORY_TERMINAL, R.string.tool_terminal_font_size_toggle_compact,
+            R.string.tool_desc_terminal_font_size_toggle_compact,
+            null, REQUIRES_SESSION);
         addUi(map, TOOL_TERMINAL_SELECT_URL,
             "Open the URL picker for links in the terminal scrollback.",
             schemaEmpty(),

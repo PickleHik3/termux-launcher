@@ -1102,6 +1102,18 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     /**
+     * The font toggle: the focused pane switches between its own size and the Compact size, and
+     * the next tap restores the size it had ({@link FontCompactPolicy}).
+     */
+    public void toggleCompactFontSize() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            mHost.preferences();
+        int compact = FontCompactPolicy.compactSize(prefs.getStoredCompactFontSize(),
+            prefs.getFontSize(), prefs.getMinFontSize(), prefs.getMaxFontSize());
+        if (mHost.toggleActivePaneCompact(compact)) mHost.requestFlushDockGeometryUpdate();
+    }
+
+    /**
      * Called when user requests the soft keyboard to be toggled via "KEYBOARD" toggle button in
      * drawer or extra keys, or with ctrl+alt+k hardware keyboard shortcut.
      */
