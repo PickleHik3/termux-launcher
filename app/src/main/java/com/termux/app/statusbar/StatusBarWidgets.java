@@ -61,9 +61,7 @@ final class StatusBarWidgets {
     private void showStatusNotificationsMark() {
         com.termux.app.statusbar.StatusBarWidgetView mark =
             mHost.findViewById(R.id.terminal_status_widget_notifications);
-        com.termux.app.statusbar.MaterialDotSeparatorView dot =
-            mHost.findViewById(R.id.terminal_status_dot_notifications);
-        if (mark == null || dot == null) return;
+        if (mark == null) return;
         boolean enabled = mHost.preferences() != null && mHost.preferences().isStatusWidgetNotificationsEnabled();
         int count = enabled ? com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
             .countFor(com.termux.app.launcher.notifications.LauncherNotificationBadgeStore
@@ -76,73 +74,111 @@ final class StatusBarWidgets {
         }
         if (shown)
             mark.setValue(com.termux.app.statusbar.StatusNotificationsMark.label(count));
-        boolean anyStatBefore = anyStatEnabled() || fontToggleVisible();
         int visibility = shown ? View.VISIBLE : View.GONE;
         boolean changed = mark.getVisibility() != visibility;
-        mark.setVisibility(visibility);
-        dot.setVisibility(shown && anyStatBefore ? View.VISIBLE : View.GONE);
-        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        if (changed) syncStatusBarInk();
-    }
-
-    /** Whether any of the stat readings (CPU, GPU, RAM, battery, weather) has its switch on. */
-    private boolean anyStatEnabled() {
-        return mHost.preferences() != null && (mHost.preferences().isStatusWidgetCpuEnabled()
-            || mHost.preferences().isStatusWidgetGpuEnabled()
-            || mHost.preferences().isStatusWidgetRamEnabled()
-            || mHost.preferences().isStatusWidgetBatteryEnabled()
-            || mHost.preferences().isStatusWidgetWeatherEnabled());
-    }
-
-    private boolean fontToggleVisible() {
-        View pill = mHost.findViewById(R.id.terminal_status_widget_font_toggle);
-        return pill != null && pill.getVisibility() == View.VISIBLE;
+        if (changed) {
+            mark.setVisibility(visibility);
+            syncRowDots();
+            syncStatusBarInk();
+        }
     }
 
     /**
-     * Shows or hides the font toggle's pill, with the mark for the focused pane's state, and the
-     * dot that parts it from the stats before it. Only a change is written. True when its
-     * visibility changed, so the marks that count it as a neighbour (the notifications bell, the
-     * mouse) can redraw their dots.
+     * Shows or hides the font toggle's pill, with the mark for the focused pane's state. Only a
+     * change is written, and the row's dots follow it. True when its visibility changed.
      */
     boolean syncFontToggle(boolean shown, boolean compact) {
         com.termux.app.statusbar.StatusBarWidgetView pill =
             mHost.findViewById(R.id.terminal_status_widget_font_toggle);
-        com.termux.app.statusbar.MaterialDotSeparatorView dot =
-            mHost.findViewById(R.id.terminal_status_dot_font_toggle);
-        if (pill == null || dot == null) return false;
+        if (pill == null) return false;
         if (shown) pill.dressAsFontToggle(compact);
         int visibility = shown ? View.VISIBLE : View.GONE;
         boolean changed = pill.getVisibility() != visibility;
-        if (changed) pill.setVisibility(visibility);
-        int dotVisibility = shown && anyStatEnabled() ? View.VISIBLE : View.GONE;
-        if (dot.getVisibility() != dotVisibility) dot.setVisibility(dotVisibility);
-        dot.setColorRole(com.termux.app.statusbar.StatusBarWidgetView.ColorRole.PRIMARY);
         if (changed) {
-            showStatusNotificationsMark();
+            pill.setVisibility(visibility);
+            syncRowDots();
             syncStatusBarInk();
         }
         return changed;
     }
 
+    // ---- The row's order and the dots between its items ----
+
+    /** The order the row's group holds its items in now; null before the first sync. */
+    @Nullable private StatusRowItem[] mRowOrder;
+    /** Reused by {@link #syncRowDots}: each item shown, in row order, and its dot. */
+    private final boolean[] mRowShown = new boolean[StatusRowItem.values().length];
+    private final boolean[] mRowDots = new boolean[StatusRowItem.values().length];
+
+    /**
+     * Puts the row's items (each its dot, then its widget) in the order the Status bar card
+     * stores. Compared first: the group is only rebuilt when the stored order changed, never
+     * from measure, layout or draw.
+     */
+    void syncRowOrder() {
+        StatusRowItem[] order = StatusRowOrder.parse(
+            mHost.preferences() == null ? null : mHost.preferences().getStatusRowOrder());
+        if (java.util.Arrays.equals(order, mRowOrder)) return;
+        android.view.ViewGroup group = mHost.findViewById(R.id.terminal_status_stats_cluster);
+        if (group == null) return;
+        mRowOrder = order;
+        if (holdsInOrder(group, order)) return;
+        View[] pairs = new View[order.length * 2];
+        for (int i = 0; i < order.length; i++) {
+            pairs[2 * i] = group.findViewById(order[i].dotId);
+            pairs[2 * i + 1] = group.findViewById(order[i].widgetId);
+        }
+        for (View view : pairs) {
+            if (view != null) group.removeView(view);
+        }
+        // Each view keeps its own layout params; anything else in the group stays after them.
+        int at = 0;
+        for (View view : pairs) {
+            if (view != null) group.addView(view, at++);
+        }
+        syncRowDots();
+    }
+
+    /** Whether {@code group}'s children already read {@code order}'s dots and widgets. */
+    private static boolean holdsInOrder(@NonNull android.view.ViewGroup group,
+                                        @NonNull StatusRowItem[] order) {
+        int at = 0;
+        for (StatusRowItem item : order) {
+            for (int id : new int[] {item.dotId, item.widgetId}) {
+                if (group.findViewById(id) == null) continue;
+                if (at >= group.getChildCount() || group.getChildAt(at).getId() != id) return false;
+                at++;
+            }
+        }
+        return true;
+    }
+
+    /**
+     * The dots between the row's items, from which items show right now ({@link
+     * StatusRowOrder#dots}): one between two shown neighbours, none at either end. The one place
+     * a dot's visibility is written; every item that shows or hides calls it.
+     */
+    void syncRowDots() {
+        StatusRowItem[] order = mRowOrder != null ? mRowOrder : StatusRowOrder.defaults();
+        for (int i = 0; i < order.length; i++) {
+            View widget = mHost.findViewById(order[i].widgetId);
+            mRowShown[i] = widget != null && widget.getVisibility() == View.VISIBLE;
+        }
+        StatusRowOrder.dots(mRowShown, mRowDots);
+        for (int i = 0; i < order.length; i++) {
+            com.termux.app.statusbar.MaterialDotSeparatorView dot =
+                mHost.findViewById(order[i].dotId);
+            if (dot == null) continue;
+            dot.setColorRole(order[i].dotRole);
+            int visibility = mRowDots[i] ? View.VISIBLE : View.GONE;
+            if (dot.getVisibility() != visibility) dot.setVisibility(visibility);
+        }
+    }
+
     // ---- What the status bar's content is drawn in, measured against what it is standing on ----
 
-    /** The status widgets and their dots, in the order the row lays them out. */
-    private static final int[] STATUS_INK_WIDGET_IDS = {
-        R.id.terminal_status_widget_cpu, R.id.terminal_status_widget_gpu,
-        R.id.terminal_status_widget_ram, R.id.terminal_status_widget_battery,
-        R.id.terminal_status_widget_weather, R.id.terminal_status_widget_notifications,
-        R.id.terminal_status_widget_ai, R.id.terminal_status_widget_mouse,
-        R.id.terminal_status_widget_font_toggle,
-    };
-
-    private static final int[] STATUS_INK_DOT_IDS = {
-        R.id.terminal_status_dot_cpu_gpu, R.id.terminal_status_dot_gpu_ram,
-        R.id.terminal_status_dot_cpu_ram, R.id.terminal_status_dot_ram_weather,
-        R.id.terminal_status_dot_battery_weather,
-        R.id.terminal_status_dot_notifications, R.id.terminal_status_dot_ai,
-        R.id.terminal_status_dot_mouse, R.id.terminal_status_dot_font_toggle,
-    };
+    /** The row's items, whose ink slots are keyed by item ({@link StatusInkSlots}), not place. */
+    private static final StatusRowItem[] INK_ITEMS = StatusRowItem.values();
 
     /** The bar's own rect on screen: one measurement, and every ink in the bar comes out of it. */
     private final android.graphics.Rect mStatusInkRect = new android.graphics.Rect();
@@ -243,10 +279,10 @@ final class StatusBarWidgets {
             com.termux.app.statusbar.StatusBarInk.MUTED_ALPHA,
             com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
 
-        for (int i = 0; i < STATUS_INK_WIDGET_IDS.length; i++) {
+        for (int i = 0; i < INK_ITEMS.length; i++) {
             int at = StatusInkSlots.widget(i);
             com.termux.app.statusbar.StatusBarWidgetView widget =
-                mHost.findViewById(STATUS_INK_WIDGET_IDS[i]);
+                mHost.findViewById(INK_ITEMS[i].widgetId);
             if (widget == null) {
                 out[at + StatusInkSlots.WIDGET_BODY] = 0;
                 out[at + StatusInkSlots.WIDGET_LARGE] = 0;
@@ -260,9 +296,9 @@ final class StatusBarWidgets {
                 ink.inkOn(band, seed, seed, com.termux.app.chrome.OnGlass.TARGET_LARGE_TEXT);
             out[at + StatusInkSlots.WIDGET_MUTED] = muted;
         }
-        for (int i = 0; i < STATUS_INK_DOT_IDS.length; i++) {
+        for (int i = 0; i < INK_ITEMS.length; i++) {
             com.termux.app.statusbar.MaterialDotSeparatorView dot =
-                mHost.findViewById(STATUS_INK_DOT_IDS[i]);
+                mHost.findViewById(INK_ITEMS[i].dotId);
             if (dot == null) {
                 out[StatusInkSlots.dot(i)] = 0;
                 continue;
@@ -286,17 +322,17 @@ final class StatusBarWidgets {
      * the clock's theme are the scheme's, not the band's.
      */
     void applyStatusInks(@NonNull int[] inks) {
-        for (int i = 0; i < STATUS_INK_WIDGET_IDS.length; i++) {
+        for (int i = 0; i < INK_ITEMS.length; i++) {
             com.termux.app.statusbar.StatusBarWidgetView widget =
-                mHost.findViewById(STATUS_INK_WIDGET_IDS[i]);
+                mHost.findViewById(INK_ITEMS[i].widgetId);
             if (widget == null) continue;
             int at = StatusInkSlots.widget(i);
             widget.setInk(inks[at + StatusInkSlots.WIDGET_BODY],
                 inks[at + StatusInkSlots.WIDGET_LARGE], inks[at + StatusInkSlots.WIDGET_MUTED]);
         }
-        for (int i = 0; i < STATUS_INK_DOT_IDS.length; i++) {
+        for (int i = 0; i < INK_ITEMS.length; i++) {
             com.termux.app.statusbar.MaterialDotSeparatorView dot =
-                mHost.findViewById(STATUS_INK_DOT_IDS[i]);
+                mHost.findViewById(INK_ITEMS[i].dotId);
             if (dot != null) dot.setInk(inks[StatusInkSlots.dot(i)]);
         }
         com.termux.app.statusbar.StatusBarLensView lens = mHost.findViewById(R.id.terminal_status_lens);
@@ -391,22 +427,14 @@ final class StatusBarWidgets {
 
     /** Apply widget visibility from preferences, wire taps once, and drive the data controllers. */
     void updateStatusWidgets() {
+        // The user's order first, so the dots below are worked out on the row as it stands.
+        syncRowOrder();
         com.termux.app.statusbar.StatusBarWidgetView cpu = mHost.findViewById(R.id.terminal_status_widget_cpu);
         com.termux.app.statusbar.StatusBarWidgetView gpu = mHost.findViewById(R.id.terminal_status_widget_gpu);
         com.termux.app.statusbar.StatusBarWidgetView ram = mHost.findViewById(R.id.terminal_status_widget_ram);
         com.termux.app.statusbar.StatusBarWidgetView weather = mHost.findViewById(R.id.terminal_status_widget_weather);
-        com.termux.app.statusbar.MaterialDotSeparatorView cpuRamDot =
-            mHost.findViewById(R.id.terminal_status_dot_cpu_ram);
-        com.termux.app.statusbar.MaterialDotSeparatorView cpuGpuDot =
-            mHost.findViewById(R.id.terminal_status_dot_cpu_gpu);
-        com.termux.app.statusbar.MaterialDotSeparatorView gpuRamDot =
-            mHost.findViewById(R.id.terminal_status_dot_gpu_ram);
-        com.termux.app.statusbar.MaterialDotSeparatorView ramWeatherDot =
-            mHost.findViewById(R.id.terminal_status_dot_ram_weather);
         com.termux.app.statusbar.StatusBarWidgetView battery =
             mHost.findViewById(R.id.terminal_status_widget_battery);
-        com.termux.app.statusbar.MaterialDotSeparatorView batteryWeatherDot =
-            mHost.findViewById(R.id.terminal_status_dot_battery_weather);
         // The CPU reading needs privileged access; without it the widget hides rather than show a
         // dash, and comes back through mPrivilegedAvailabilityListener. The backend itself is
         // brought up (and retried) by refreshPrivilegedBackendIfNeeded() on every resume.
@@ -482,42 +510,6 @@ final class StatusBarWidgets {
             }
         }
 
-        if (cpuRamDot != null) {
-            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .cpuRamDotVisible(cpuOn, gpuOn, ramOn, batteryOn, weatherOn);
-            cpuRamDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            // The dot takes the tier it leads into: RAM, or the weather when RAM is off. Both are
-            // secondary now, so AI alone carries the tertiary role.
-            cpuRamDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-        if (cpuGpuDot != null) {
-            cpuGpuDot.setVisibility(com.termux.app.statusbar.StatusStatsClusterPolicy
-                .cpuGpuDotVisible(cpuOn, gpuOn) ? View.VISIBLE : View.GONE);
-            cpuGpuDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-        if (gpuRamDot != null) {
-            gpuRamDot.setVisibility(com.termux.app.statusbar.StatusStatsClusterPolicy
-                .gpuRamDotVisible(gpuOn, ramOn, batteryOn, weatherOn) ? View.VISIBLE : View.GONE);
-            gpuRamDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-        if (ramWeatherDot != null) {
-            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .ramWeatherDotVisible(ramOn, batteryOn, weatherOn);
-            ramWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            ramWeatherDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-        if (batteryWeatherDot != null) {
-            boolean show = com.termux.app.statusbar.StatusStatsClusterPolicy
-                .batteryWeatherDotVisible(batteryOn, weatherOn);
-            batteryWeatherDot.setVisibility(show ? View.VISIBLE : View.GONE);
-            batteryWeatherDot.setColorRole(
-                com.termux.app.statusbar.StatusBarWidgetView.ColorRole.SECONDARY);
-        }
-
         // An enabled GPU stat keeps the sampler running (and reading hardware, in the same one
         // poll) even while it is hidden for want of a reading: that is how it learns it can show.
         if (cpuOn || ramOn || gpuEnabled) {
@@ -539,8 +531,9 @@ final class StatusBarWidgets {
 
         mHost.ensureAiIndicatorController();
         syncStatusNotificationsMark();
-        // The pill's dot depends on which stats are on, so it is dressed again with them.
         mHost.syncFontToggle();
+        // Every item above may have shown or hidden: the dots follow who stands next to whom.
+        syncRowDots();
         // The tiers just moved, and a tier is which hue this widget's ink is toned from.
         syncStatusBarInk();
     }

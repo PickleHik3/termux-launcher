@@ -1130,6 +1130,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_FONT_TOGGLE, value, false);
     }
 
+    /** The status bar row's order as stored ({@link TERMUX_APP#KEY_STATUS_ROW_ORDER}). */
+    public String getStatusRowOrder() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_ROW_ORDER, TERMUX_APP.DEFAULT_STATUS_ROW_ORDER, false);
+    }
+
+    public void setStatusRowOrder(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_STATUS_ROW_ORDER, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);

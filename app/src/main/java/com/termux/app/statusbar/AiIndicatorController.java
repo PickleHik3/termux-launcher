@@ -5,7 +5,6 @@ import android.os.Handler;
 import android.os.Looper;
 import android.text.TextUtils;
 import android.view.View;
-import android.view.ViewGroup;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -43,7 +42,8 @@ public final class AiIndicatorController {
     private static final long SNAPSHOT_POLL_MS = 5_000L;
 
     private final StatusBarWidgetView widget;
-    private final MaterialDotSeparatorView dot;
+    /** Told when the glyph shows or hides, so the row's dots follow it. */
+    private final Runnable onShownChanged;
     private final Context context;
     private final Handler handler = new Handler(Looper.getMainLooper());
     private final ExecutorService reader = Executors.newSingleThreadExecutor(runnable -> {
@@ -74,14 +74,13 @@ public final class AiIndicatorController {
     private final ModelAvailability.Listener presenceListener = this::refreshSnapshot;
 
     public AiIndicatorController(@NonNull StatusBarWidgetView widget,
-                                 @NonNull MaterialDotSeparatorView dot) {
+                                 @NonNull Runnable onShownChanged) {
         this.widget = widget;
-        this.dot = dot;
+        this.onShownChanged = onShownChanged;
         this.context = widget.getContext().getApplicationContext();
         widget.setIconResource(R.drawable.ic_rl_assistant);
+        // The AI is the one tertiary mark; its dot wears the same tier (StatusRowItem.AI).
         widget.setColorRole(StatusBarWidgetView.ColorRole.TERTIARY);
-        // The dot beside the glyph is the glyph's own tier: the AI is the one tertiary mark.
-        dot.setColorRole(StatusBarWidgetView.ColorRole.TERTIARY);
     }
 
     /** Starts ticking. Safe to call repeatedly; the activity calls it from every resume. */
@@ -158,21 +157,10 @@ public final class AiIndicatorController {
     }
 
     private void show(boolean visible) {
-        widget.setVisibility(visible ? View.VISIBLE : View.GONE);
-        // The dot only earns its pixels when it separates two visible things.
-        dot.setVisibility(visible && hasVisibleSiblingBefore() ? View.VISIBLE : View.GONE);
-    }
-
-    private boolean hasVisibleSiblingBefore() {
-        ViewGroup parent = dot.getParent() instanceof ViewGroup ? (ViewGroup) dot.getParent() : null;
-        if (parent == null) return false;
-        for (int i = 0; i < parent.getChildCount(); i++) {
-            View child = parent.getChildAt(i);
-            if (child == dot) return false;
-            if (child instanceof StatusBarWidgetView && child.getVisibility() == View.VISIBLE)
-                return true;
-        }
-        return false;
+        int visibility = visible ? View.VISIBLE : View.GONE;
+        if (widget.getVisibility() == visibility) return;
+        widget.setVisibility(visibility);
+        onShownChanged.run();
     }
 
     /** The word beside the robot while there is no gauge to read: loading, or no idle timer. */

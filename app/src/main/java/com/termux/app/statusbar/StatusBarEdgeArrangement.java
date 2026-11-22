@@ -123,10 +123,10 @@ public final class StatusBarEdgeArrangement {
         if (windows != null && vertical) windows.setVisibility(View.GONE);
         if (windowColumn != null && !vertical) windowColumn.setVisibility(View.GONE);
 
+        // The row's items stand in one group, in the user's order, inside the end group: both
+        // turn, so a column reads them top to bottom in the order a row reads them start to end.
         stack(host.findViewById(R.id.terminal_status_stats_cluster), vertical);
         stack(host.findViewById(R.id.terminal_status_widgets), vertical);
-        View spacer = host.findViewById(R.id.terminal_status_stats_center_spacer);
-        if (spacer != null) stretch(spacer, vertical);
     }
 
     /** A container of stat widgets, turned to run down the bar rather than along it. */
