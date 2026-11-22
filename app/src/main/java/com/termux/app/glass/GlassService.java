@@ -68,6 +68,10 @@ public final class GlassService {
     /** Owner to the elements it registered through {@link #declare}. */
     @NonNull private final HashMap<String, Set<String>> mDeclared = new HashMap<>();
     private int mPolicyEvents;
+    /** The sheet that covers the page now ({@link #cover}), null for none, and its window rect. */
+    @Nullable private String mCoverElement;
+    @NonNull private final android.graphics.Rect mCover = new android.graphics.Rect();
+    @NonNull private final int[] mWhere = new int[2];
     @Nullable private BroadcastReceiver mPowerSave;
     private boolean mLiveHeld;
 
@@ -187,7 +191,7 @@ public final class GlassService {
         if (held != null) {
             if (held.view != entry.view) return null;
         } else {
-            mRegistry.register(entry);
+            mRegistry.register(entry, coveredNow(entry));
             arm();
             afterGrants();
             // A surface this one displaced from a Live slot lets its picture go now, before the
@@ -196,6 +200,52 @@ public final class GlassService {
         }
         if (redress != null) mRedress.put(entry.element, redress);
         return mRegistry.granted(entry.element);
+    }
+
+    /**
+     * {@code element}'s sheet stands at rest over {@code windowRect}: every surface it covers
+     * ({@link GlassCover}) gives up its Live slot until {@link #uncover}, so the sheet's own glass
+     * and what rides on it get Live first. A policy event, applied at the next commit. Read once
+     * here from the views' places, never per frame; a surface that registers meanwhile is tested
+     * as it comes.
+     */
+    public void cover(@NonNull String element, @NonNull android.graphics.Rect windowRect) {
+        if (mRegistry.entry(element) == null || windowRect.isEmpty()) {
+            uncover(element);
+            return;
+        }
+        mCoverElement = element;
+        mCover.set(windowRect);
+        HashSet<String> covered = new HashSet<>();
+        for (int i = 0; i < mRegistry.size(); i++) {
+            GlassEntry entry = mRegistry.entryAt(i);
+            if (coveredNow(entry)) covered.add(entry.element);
+        }
+        mRegistry.setCovered(covered);
+        afterGrants();
+    }
+
+    /** {@code element}'s sheet left its rest: every surface it covered may hold Live again. */
+    public void uncover(@NonNull String element) {
+        if (!element.equals(mCoverElement)) return;
+        mCoverElement = null;
+        mCover.setEmpty();
+        mRegistry.setCovered(java.util.Collections.emptySet());
+        afterGrants();
+    }
+
+    /** Whether the sheet covering the page now covers {@code entry}. */
+    private boolean coveredNow(@NonNull GlassEntry entry) {
+        String sheet = mCoverElement;
+        if (sheet == null || sheet.equals(entry.element)) return false;
+        GlassEntry cover = mRegistry.entry(sheet);
+        if (cover == null) return false;
+        View view = entry.view;
+        boolean shown = view.isShown();
+        if (shown) view.getLocationInWindow(mWhere);
+        return GlassCover.covered(entry.layer.number(), shown, mWhere[0], mWhere[1],
+            mWhere[0] + view.getWidth(), mWhere[1] + view.getHeight(), cover.layer.number(),
+            mCover.left, mCover.top, mCover.right, mCover.bottom);
     }
 
     /** The kind {@code element} holds when {@code view} registered it; null otherwise. */
@@ -208,6 +258,12 @@ public final class GlassService {
     /** Takes {@code element}'s entry out; a Live slot it held goes to the best surface waiting. */
     public void unregister(@NonNull String element) {
         if (!mRegistry.unregister(element)) return;
+        // The covering sheet going lets everything it covered back.
+        if (element.equals(mCoverElement)) {
+            mCoverElement = null;
+            mCover.setEmpty();
+            mRegistry.setCovered(java.util.Collections.emptySet());
+        }
         mRedress.remove(element);
         arm();
         afterGrants();

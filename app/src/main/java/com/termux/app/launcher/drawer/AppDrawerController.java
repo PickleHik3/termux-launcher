@@ -453,6 +453,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     private boolean mDragging;
     /** The plane's picture of what is beneath it; the settle logic freezes and retakes it. */
     @Nullable private com.termux.app.chrome.PanelBackdrop mBackdrop;
+    /** The card's name in the glass registry. */
+    private static final String DRAWER_GLASS = "drawer";
     @NonNull private AppDrawerCommitPolicy.Direction mDirection =
         AppDrawerCommitPolicy.Direction.OPENING;
     private float mDownRawY;
@@ -994,7 +996,42 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
     void applyBackdropRest() {
         com.termux.app.chrome.PanelBackdrop backdrop = mBackdrop;
         if (backdrop == null) return;
-        backdrop.setMoving(!isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value));
+        boolean settled = isSettledOpen(mOpen, mDragging, mProgress.target, mProgress.value);
+        backdrop.setMoving(!settled);
+        applyGlassCover(settled && backdrop.kind() != null);
+    }
+
+    /** The card stands at rest over the page and the glass service was told so. */
+    private boolean mGlassCovering;
+    private final int[] mCoverWhere = new int[2];
+    private final android.graphics.Rect mCoverRect = new android.graphics.Rect();
+
+    /**
+     * While the card rests open it covers what is beneath it: the glass service takes the Live
+     * slots of the surfaces it hides (Home's widgets and floats under the card), so the card and
+     * the search capsule riding it are Live first. Told once as the card comes to rest and once
+     * as it leaves (a drag, a close), never per frame.
+     */
+    private void applyGlassCover(boolean covering) {
+        if (covering == mGlassCovering) return;
+        FrameLayout host = mHostLayout;
+        AppDrawerPlaneView plane = mPlane;
+        com.termux.app.glass.GlassService glass = host == null ? null
+            : com.termux.app.glass.GlassService.of(host);
+        mGlassCovering = covering && glass != null && plane != null;
+        if (glass == null) return;
+        if (!mGlassCovering) {
+            glass.uncover(DRAWER_GLASS);
+            return;
+        }
+        Frame frame = plane.getFrame();
+        host.getLocationInWindow(mCoverWhere);
+        // Inward, as the plane's outline is cut: a surface on the edge is still seen.
+        mCoverRect.set(mCoverWhere[0] + (int) Math.ceil(frame.left),
+            mCoverWhere[1] + (int) Math.ceil(frame.top),
+            mCoverWhere[0] + (int) Math.floor(frame.right),
+            mCoverWhere[1] + (int) Math.floor(frame.bottom));
+        glass.cover(DRAWER_GLASS, mCoverRect);
     }
 
     /** True for the length of one Snapshot's recording; see {@link #mSettledScene}. */
@@ -2232,7 +2269,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean frosted = frost != null && mHost.applyWallpaperFrost(frost);
         if (!(blur instanceof ImageView)) return;
         if (mBackdrop == null) {
-            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, "drawer");
+            mBackdrop = new com.termux.app.chrome.PanelBackdrop((ImageView) blur, blur, DRAWER_GLASS);
             mBackdrop.setScene(mSettledScene);
             // The scene dim is the host's background: beneath the glass on screen, but a recording
             // holds only the views beneath, so the picture wears the settled dim itself.
@@ -2250,6 +2287,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         boolean pictured = wanted && mBackdrop.open(com.termux.shared.view.ViewUtils.dpToPx(
             mHost.context(), com.termux.app.chrome.PanelBackdrop.DRAWER_BLUR_RADIUS_DP));
         if (!wanted) {
+            mGlassCovering = false;
             mBackdrop.close();
             blur.setVisibility(View.GONE);
         }
@@ -2727,6 +2765,8 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                 mHostLayout.setAlpha(1f);
                 mHostLayout.setVisibility(View.INVISIBLE);
             }
+            // Letting the entry go lets every surface the card covered back.
+            mGlassCovering = false;
             if (mBackdrop != null) mBackdrop.close();
             startContentGate(true);
             if (mGlass != null) mGlass.setVisibility(View.INVISIBLE);

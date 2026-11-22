@@ -233,4 +233,40 @@ public class GlassRegistryTest {
         registry.unregister("slab");
         assertEquals(0, registry.frameCount());
     }
+
+    @Test
+    public void aCoveredSurfaceGivesItsLiveSlotToTheSheetOverIt() {
+        // Eight floats fill every slot; the drawer's capsule, a float's place in the budget,
+        // waits on Wallpaper: none is worse than it to give way.
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            registry.register(live("float" + i, GlassEntry.PRIORITY_FLOAT));
+        }
+        registry.register(new GlassEntry("drawer-search", view(), GlassKind.LIVE,
+            GlassEntry.PRIORITY_FLOAT, WindowLayer.SHEETS, null));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("drawer-search"));
+        // The card comes to rest over the floats: they cannot be seen, so they hold no slot, and
+        // the capsule riding the card is Live.
+        java.util.HashSet<String> covered = new java.util.HashSet<>();
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) covered.add("float" + i);
+        registry.setCovered(covered);
+        assertEquals(GlassKind.LIVE, registry.granted("drawer-search"));
+        for (int i = 0; i < GlassRegistry.LIVE_SLOTS; i++) {
+            assertEquals(GlassKind.WALLPAPER, registry.granted("float" + i));
+            assertTrue(registry.covered("float" + i));
+        }
+        assertEquals(1, registry.liveCount());
+        // The card leaves: the floats come back in budget order, the oldest first, and the
+        // capsule, the newest float, waits again.
+        registry.setCovered(java.util.Collections.emptySet());
+        assertEquals(GlassKind.LIVE, registry.granted("float0"));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("drawer-search"));
+        assertFalse(registry.covered("float0"));
+    }
+
+    @Test
+    public void aSurfaceRegisteredUnderTheSheetIsNotLive() {
+        assertTrue(registry.register(live("widget0", GlassEntry.PRIORITY_WIDGET), true));
+        assertEquals(GlassKind.WALLPAPER, registry.granted("widget0"));
+        assertEquals(0, registry.liveCount());
+    }
 }

@@ -13,13 +13,19 @@ import java.util.ArrayList;
  *
  * <p>A kind is granted at registration, from the policy and the slot budget, and granted again
  * only on a policy event: the Live switch (with battery saver and what else puts Live out), a
- * memory trim, the Compositor's availability, or a Live slot freeing. Motion, a landing and what
- * sits above a surface are not inputs, so they can never change a kind.</p>
+ * memory trim, the Compositor's availability, a Live slot freeing, or a sheet coming to rest over
+ * the page or leaving it. Motion and a landing are not inputs, so they can never change a kind;
+ * what sits above a surface counts only as a sheet at rest that hides it.</p>
  *
  * <p>At most {@link #LIVE_SLOTS} surfaces are Live, whatever they are: the dock, a panel, a float
  * or a widget all take one of the same slots, so nothing else can push a surface off Live. A
  * surface registered when every slot is taken takes the slot of the newest Live surface of a worse
  * priority, which drops to Wallpaper; with none worse it is Wallpaper until a slot frees.</p>
+ *
+ * <p>A surface a sheet covers ({@link #setCovered}, from {@link GlassCover}) cannot be seen, so
+ * it holds no Live slot while the sheet stands: it is granted Wallpaper and its slot goes to the
+ * best surface waiting, the sheet's own first. A sheet coming to rest over the page and leaving it
+ * are policy events like the others.</p>
  *
  * <p>Entries come out back to front in the window's layer order ({@link WindowLayer}); inside a
  * layer, the worse priority first, then the order of registration. That is the order the glass
@@ -35,6 +41,8 @@ public final class GlassRegistry {
         final long order;
         @NonNull GlassKind granted = GlassKind.WALLPAPER;
         boolean changed;
+        /** A sheet stands over it and it cannot be seen ({@link GlassCover}): no Live slot. */
+        boolean covered;
 
         Slot(@NonNull GlassEntry entry, long order) {
             this.entry = entry;
@@ -56,8 +64,14 @@ public final class GlassRegistry {
      * already has an entry: one entry per element, so no twin can come back.
      */
     public boolean register(@NonNull GlassEntry entry) {
+        return register(entry, false);
+    }
+
+    /** {@link #register(GlassEntry)} for a surface a sheet already covers when it comes. */
+    public boolean register(@NonNull GlassEntry entry, boolean covered) {
         if (indexOf(entry.element) >= 0) return false;
         Slot slot = new Slot(entry, mNextOrder++);
+        slot.covered = covered;
         // Back to front: after every entry of an earlier layer, and of this layer's priority or a worse one.
         int at = 0;
         while (at < mSlots.size() && behind(mSlots.get(at).entry, entry)) at++;
@@ -68,7 +82,7 @@ public final class GlassRegistry {
             budgetAt++;
         }
         mBudget.add(budgetAt, slot);
-        GlassKind kind = grantable(entry.wants);
+        GlassKind kind = grantable(slot);
         if (kind == GlassKind.LIVE && liveCount() >= LIVE_SLOTS) {
             Slot evict = newestLiveWorseThan(entry.priority);
             if (evict == null) {
@@ -114,6 +128,28 @@ public final class GlassRegistry {
         if (on == mCompositorOn) return;
         mCompositorOn = on;
         regrant();
+    }
+
+    /**
+     * Makes {@code elements} the surfaces a sheet covers now, every other one uncovered: a policy
+     * event when any moved. Empty when no sheet stands over the page.
+     */
+    public void setCovered(@NonNull java.util.Collection<String> elements) {
+        boolean moved = false;
+        for (int i = 0; i < mSlots.size(); i++) {
+            Slot slot = mSlots.get(i);
+            boolean covered = elements.contains(slot.entry.element);
+            if (covered == slot.covered) continue;
+            slot.covered = covered;
+            moved = true;
+        }
+        if (moved) regrant();
+    }
+
+    /** Whether {@code element} is covered by a sheet; false when it has no entry. */
+    public boolean covered(@NonNull String element) {
+        int at = indexOf(element);
+        return at >= 0 && mSlots.get(at).covered;
     }
 
     /** The kind granted to {@code element}; null when it has no entry. */
@@ -190,16 +226,17 @@ public final class GlassRegistry {
 
     // ---- Grants ------------------------------------------------------------------------------
 
-    /** {@code wants} under the policy now, before the slot budget. */
+    /** What {@code slot} wants under the policy now, before the slot budget. */
     @NonNull
-    private GlassKind grantable(@NonNull GlassKind wants) {
-        switch (wants) {
+    private GlassKind grantable(@NonNull Slot slot) {
+        switch (slot.entry.wants) {
             case LIVE:
-                return mLiveOn && !mMemoryShort ? GlassKind.LIVE : GlassKind.WALLPAPER;
+                return mLiveOn && !mMemoryShort && !slot.covered
+                    ? GlassKind.LIVE : GlassKind.WALLPAPER;
             case COMPOSITOR:
                 return mCompositorOn ? GlassKind.COMPOSITOR : GlassKind.WALLPAPER;
             default:
-                return wants;
+                return slot.entry.wants;
         }
     }
 
@@ -208,7 +245,7 @@ public final class GlassRegistry {
         int live = 0;
         for (int i = 0; i < mBudget.size(); i++) {
             Slot slot = mBudget.get(i);
-            GlassKind kind = grantable(slot.entry.wants);
+            GlassKind kind = grantable(slot);
             if (kind == GlassKind.LIVE) {
                 if (live < LIVE_SLOTS) live++;
                 else kind = GlassKind.WALLPAPER;
