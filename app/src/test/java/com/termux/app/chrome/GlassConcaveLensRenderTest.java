@@ -86,8 +86,8 @@ public class GlassConcaveLensRenderTest {
             GlassRefraction.concaveOffset(off, px, py, bx, by, by, DENSITY);
         } else {
             GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
-            GlassRefraction.restBendOffset(off, px, py, bx, by, by, look.bandPx(DENSITY),
-                look.strengthPx(DENSITY), 0f, 0f, GlassRefraction.Look.rimWidthPx(DENSITY));
+            GlassRefraction.restBendOffset(off, px, py, bx, by, by, look.thicknessPx(DENSITY),
+                0f, 0f, DENSITY);
         }
     }
 

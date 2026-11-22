@@ -27,40 +27,44 @@ public class PeekCardFootGlassTest {
     /** The strip under the pill on pong: 63 px under 137 px of upward overscan. */
     private static final float STRIP_HEIGHT_PX = 63f + 137f;
 
-    private static float rimW() {
-        return GlassRefraction.Look.rimWidthPx(DENSITY);
+    /** How deep a pixel {@code insidePx} in samples under the slab, on a surface of half short side {@code halfShort}. */
+    private static float depth(GlassRefraction.Look look, float insidePx, float softPx, float halfShort) {
+        GlassSlab slab = GlassSlab.DEFAULT;
+        float w = GlassRefraction.lensZonePx(slab, halfShort, DENSITY, 1f, softPx, 0f, 0f);
+        float t = GlassRefraction.lensThicknessPx(slab, look.thicknessPx(DENSITY), halfShort,
+            DENSITY, 1f, 0f);
+        return insidePx + slab.shiftPx(insidePx, w, t);
     }
 
     /** How deep the card's side samples, the soft band its design wears. */
     private static float cardDepth(GlassRefraction.Look look, float insidePx) {
-        float softPx = DockSurfaceSpec.PEEK_GLASS.softRimDp * DENSITY;
-        return insidePx + GlassRefraction.softPullPx(insidePx, look.bandPx(DENSITY), softPx,
-            look.strengthPx(DENSITY), CARD_HALF_SHORT_PX, rimW(), 0f);
+        return depth(look, insidePx, DockSurfaceSpec.PEEK_GLASS.softRimDp * DENSITY, CARD_HALF_SHORT_PX);
     }
 
-    /** How deep the strip's side samples with {@code softRimDp} on its program (0: the narrow ring). */
+    /** How deep the strip's side samples with {@code softRimDp} on its program (0: the slab's own zone). */
     private static float stripDepth(GlassRefraction.Look look, float insidePx, float softRimDp) {
         float softPx = softRimDp * DENSITY;
         float reach = GlassRefraction.seamReachPx(look, DENSITY, 0f, softPx);
         float halfShort = Math.min(508f, (STRIP_HEIGHT_PX + 2f * reach) / 2f);
-        if (softPx <= 0f) {
-            return insidePx + GlassRefraction.pullPx(insidePx, look.bandPx(DENSITY),
-                look.strengthPx(DENSITY), halfShort, rimW());
-        }
-        return insidePx + GlassRefraction.softPullPx(insidePx, look.bandPx(DENSITY), softPx,
-            look.strengthPx(DENSITY), halfShort, rimW(), 0f);
+        return depth(look, insidePx, softPx, halfShort);
+    }
+
+    /** Whether a soft band {@code softPx} wide still bends a pixel {@code insidePx} in. */
+    private static boolean softBends(GlassRefraction.Look look, float insidePx, float softPx) {
+        return depth(look, insidePx, softPx, 1000f) > insidePx;
     }
 
     @Test
     public void theNarrowRingUnderTheCardReadsTheFrostTheCardReadsPast() {
-        // The defect: 12 px in from the side, the card samples ~34 px in, past the bright frost by
-        // the side; the strip right under it, on the narrow ring, samples ~20 px in.
+        // The defect: 12 px in from the side, the card sampled ~34 px in, past the bright frost by
+        // the side; the strip right under it, on the narrow ring, ~20 px in. Under the slab the
+        // two zones (the soft band's 24 dp, the slab's 16 dp) still part, by a px or two.
         GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
         float worst = 0f;
         for (float in = 0f; in <= 70f; in += 0.5f) {
             worst = Math.max(worst, Math.abs(cardDepth(look, in) - stripDepth(look, in, 0f)));
         }
-        assertTrue("the two sides part by " + worst + " px", worst > 10f);
+        assertTrue("the two sides part by " + worst + " px", worst > 1f);
     }
 
     @Test
@@ -97,14 +101,12 @@ public class PeekCardFootGlassTest {
         float softPx = DockSurfaceSpec.PEEK_GLASS.softRimDp * DENSITY;
         GlassRefraction.Look narrow = new GlassRefraction.Look(9, 8, 100);
         float oldReach = GlassRefraction.seamReachPx(narrow, DENSITY, 0f);
-        assertTrue(GlassRefraction.softPullPx(oldReach, narrow.bandPx(DENSITY), softPx,
-            narrow.strengthPx(DENSITY), 1000f, rimW(), 0f) > 0f);
+        assertTrue(softBends(narrow, oldReach, softPx));
         for (GlassRefraction.Look look : new GlassRefraction.Look[] {GlassRefraction.Look.DEFAULT,
             narrow, new GlassRefraction.Look(0, 1, 100), new GlassRefraction.Look(60, 40, 100)}) {
             float reach = GlassRefraction.seamReachPx(look, DENSITY, 0f, softPx);
             assertTrue(look.toString(), reach >= softPx);
-            assertEquals(look.toString(), 0f, GlassRefraction.softPullPx(reach, look.bandPx(DENSITY),
-                softPx, look.strengthPx(DENSITY), 1000f, rimW(), 0f), 0f);
+            assertTrue(look.toString(), !softBends(look, reach, softPx));
             assertTrue(look.toString(), reach >= GlassRefraction.Look.rimReachPx(DENSITY));
         }
     }

@@ -135,9 +135,9 @@ public class GlassRestLookTest {
             "float rimLobe(float c) {\n"
                 + "    return c > 0.0 ? pow(c, kKeyExp) : 0.0;\n"
                 + "}\n",
-            "        float rc = dot(n, kKeyLight);\n"
-                + "        float lobe = rimLobe(rc);\n"
-                + "        float away = rc < 0.0 ? rc * rc : 0.0;\n",
+            "            float rc = dot(n, kKeyLight);\n"
+                + "            float lobe = rimLobe(rc);\n"
+                + "            float away = rc < 0.0 ? rc * rc : 0.0;\n",
         };
         for (String line : rest) assertTrue(line, agsl.contains(line));
         // The glint's weight is 0 unless the slab is live, and is set only inside the live gate.
@@ -151,11 +151,11 @@ public class GlassRestLookTest {
             agsl.split("glintW = ", -1).length - 1);
         assertTrue(agsl.contains("    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n"));
         // Every live light term is behind glintW > 0.
-        String liveLobe = "        if (glintW > 0.0) {\n"
-            + "            float lc = dot(n, uKeyLight);\n"
-            + "            lobe = mix(lobe, kKeyPeak * (liveKeyLobe(lc) + kCounter * liveKeyLobe(-lc)), glintW);\n"
-            + "            away = mix(away, lc < 0.0 ? lc * lc : 0.0, glintW);\n"
-            + "        }\n";
+        String liveLobe = "            if (glintW > 0.0) {\n"
+            + "                float lc = dot(n, uKeyLight);\n"
+            + "                lobe = mix(lobe, kKeyPeak * (liveKeyLobe(lc) + kCounter * liveKeyLobe(-lc)), glintW);\n"
+            + "                away = mix(away, lc < 0.0 ? lc * lc : 0.0, glintW);\n"
+            + "            }\n";
         assertTrue(agsl.contains(liveLobe));
         // uKeyLight is read in main once, inside that gate.
         int main = agsl.indexOf("half4 main(");
