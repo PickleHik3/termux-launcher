@@ -163,9 +163,9 @@ public class EditorScreenLookTest {
     public void aLookTileStaysSelectedWhileSurfacesKeepTheirOwnGlass() {
         // The status bar, the dock and the keyboard own their Opacity and Blur; a Global Look
         // leaves them, so the tile that was tapped is the one shown.
-        preferences.setSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY, 20);
-        preferences.setSurfaceValue(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 3);
-        preferences.setSurfaceValue(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY, 70);
+        preferences.setSurfaceValueExact(SurfaceSlot.STATUS, SurfaceProperty.OPACITY, 20);
+        preferences.setSurfaceValueExact(SurfaceSlot.DOCK, SurfaceProperty.BLUR, 3);
+        preferences.setSurfaceValueExact(SurfaceSlot.KEYBOARD, SurfaceProperty.OPACITY, 70);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         for (String id : new String[] {"solid", "frost", "minimal", "solid"}) {
@@ -179,7 +179,7 @@ public class EditorScreenLookTest {
 
     @Test
     public void aGlobalValueEditedAfterALookIsCustomEvenWithOwnSurfaceGlass() {
-        preferences.setSurfaceValue(SurfaceSlot.STATUS, SurfaceProperty.OPACITY, 20);
+        preferences.setSurfaceValueExact(SurfaceSlot.STATUS, SurfaceProperty.OPACITY, 20);
         SurfaceEditorController editor = open(EditorCard.APPEARANCE, PageKind.TERMINAL,
             TERMINAL_PAGE);
         tapLook(editor, SOLID);
