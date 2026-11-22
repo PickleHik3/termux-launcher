@@ -90,8 +90,9 @@ public final class StatusStatsClusterPolicy {
      */
     public static boolean fontToggleShown(boolean enabled, @NonNull PageKind page,
                                           boolean paneToggleable) {
-        return enabled && paneToggleable
-            && (page == PageKind.HOME || page == PageKind.TERMINAL);
+        // Terminal only: on Home the focused pane is off screen, so a tap would change a pane
+        // the user cannot see.
+        return enabled && paneToggleable && page == PageKind.TERMINAL;
     }
 
     /** The dot between CPU and GPU: on only when both show. */

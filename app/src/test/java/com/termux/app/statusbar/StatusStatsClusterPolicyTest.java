@@ -62,7 +62,7 @@ public class StatusStatsClusterPolicyTest {
 
     @Test public void theFontToggleShowsOnlyWithItsSwitchOnHomeOrTheTerminalOverAPane() {
         assertTrue(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.TERMINAL, true));
-        assertTrue(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.HOME, true));
+        assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.HOME, true));
         // Off by switch, or no pane to toggle (Home with no window, the scratchpad).
         assertFalse(StatusStatsClusterPolicy.fontToggleShown(false, PageKind.TERMINAL, true));
         assertFalse(StatusStatsClusterPolicy.fontToggleShown(true, PageKind.TERMINAL, false));
