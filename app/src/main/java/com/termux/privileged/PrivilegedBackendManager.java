@@ -115,6 +115,10 @@ public class PrivilegedBackendManager {
 
     public CompletableFuture<Boolean> initializeShizukuOnly(Context context) {
         this.applicationContext = context.getApplicationContext();
+        if (!isPreferShizuku()) {
+            // The choice forbids Shizuku: the A-Z lock reports "not available" and the backend stays as it is.
+            return CompletableFuture.completedFuture(false);
+        }
         // A healthy backend is left alone. This runs on a Shizuku lock press and the settings
         // screen's permission request; tearing down a READY backend to rebuild the same one made
         // isPrivilegedAvailable() read false for the first seconds after each home-return,
@@ -175,24 +179,23 @@ public class PrivilegedBackendManager {
                 return false;
             }
 
-            if (isPreferShizuku()) {
-                boolean hasShizuku = attemptShizukuInitialization(applicationContext);
-                if (hasShizuku) {
-                    return currentBackend.isAvailable();
-                }
-                if (isShellFallbackEnabled()) {
-                    return fallbackToShell("Shizuku unavailable at startup");
-                }
-                fallbackToNoOp("Shizuku unavailable and shell fallback disabled");
-                return false;
+            PrivilegedChoice choice = choice();
+            switch (choice.first()) {
+                case SHIZUKU:
+                    if (attemptShizukuInitialization(applicationContext)) {
+                        return currentBackend.isAvailable();
+                    }
+                    if (choice.shellAfterShizukuFailed()) {
+                        return fallbackToShell("Shizuku unavailable at startup");
+                    }
+                    fallbackToNoOp("Shizuku unavailable and the choice is Shizuku only");
+                    return false;
+                case SHELL:
+                    return fallbackToShell("Root selected by settings");
+                default:
+                    fallbackToNoOp("No privileged backend enabled by settings");
+                    return false;
             }
-
-            if (isShellFallbackEnabled()) {
-                return fallbackToShell("Shell backend selected by settings");
-            }
-
-            fallbackToNoOp("No privileged backend enabled by settings");
-            return false;
         } catch (Exception e) {
             Log.e(TAG, "Failed to initialize privileged backend", e);
             fallbackToNoOp("Initialization exception: " + e.getMessage());
@@ -235,7 +238,7 @@ public class PrivilegedBackendManager {
         }
 
         shellBackend = new ShellBackend();
-        boolean shellReady = shellBackend.initialize(applicationContext).join();
+        boolean shellReady = shellBackend.initialize(applicationContext, choice().allowsRish()).join();
         if (shellReady && shellBackend.hasPermission()) {
             applyBackend(shellBackend, BackendState.FALLBACK_SHELL, StatusReason.FALLBACK_SHELL, reason);
             return true;
@@ -556,16 +559,25 @@ public class PrivilegedBackendManager {
         return executorService;
     }
 
+    private PrivilegedChoice choice() {
+        return applicationContext == null ? PrivilegedChoice.AUTO : PrivilegedPolicyStore.getChoice(applicationContext);
+    }
+
     private boolean isMasterEnabled() {
-        return applicationContext == null || PrivilegedPolicyStore.isMasterEnabled(applicationContext);
+        return choice() != PrivilegedChoice.OFF;
     }
 
     private boolean isPreferShizuku() {
-        return applicationContext == null || PrivilegedPolicyStore.isPreferShizuku(applicationContext);
+        return choice().allowsShizuku();
     }
 
     private boolean isShellFallbackEnabled() {
-        return applicationContext == null || PrivilegedPolicyStore.isShellFallbackEnabled(applicationContext);
+        return choice().allowsRoot();
+    }
+
+    /** What the settings screen shows as running now. */
+    public PrivilegedChoice.Status currentStatus() {
+        return choice().status(getBackendState(), currentBackend instanceof ShizukuBackend);
     }
 
     private static class NoOpBackend implements PrivilegedBackend {

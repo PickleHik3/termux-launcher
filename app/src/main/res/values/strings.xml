@@ -2189,18 +2189,36 @@
 
             <string name="termux_privileged_access_overview_title">Backend status</string>
             <string name="termux_privileged_backend_status_title">Backend status</string>
-            <string name="termux_privileged_backend_status_summary">Current backend state and permission status</string>
+            <string name="termux_privileged_backend_status_summary">What is running now</string>
 
-            <string name="termux_privileged_access_backend_title">Backend policy</string>
-            <string name="termux_privileged_master_enabled_title">Enable privileged features</string>
-            <string name="termux_privileged_master_enabled_on">Privileged backend features are enabled.</string>
-            <string name="termux_privileged_master_enabled_off">All privileged backend operations are disabled.</string>
-            <string name="termux_privileged_prefer_shizuku_title">Prefer Shizuku backend</string>
-            <string name="termux_privileged_prefer_shizuku_on">Try Shizuku first, then fallback based on policy.</string>
-            <string name="termux_privileged_prefer_shizuku_off">Skip Shizuku and use shell fallback path when allowed.</string>
-            <string name="termux_privileged_allow_shell_fallback_title">Allow shell fallback</string>
-            <string name="termux_privileged_allow_shell_fallback_on">If Shizuku is unavailable, su / rish may be used.</string>
-            <string name="termux_privileged_allow_shell_fallback_off">Do not use shell fallback; remain unavailable if Shizuku is unusable.</string>
+            <string name="termux_privileged_access_backend_title">Backend</string>
+            <string name="termux_privileged_backend_title">Use</string>
+            <string name="termux_privileged_backend_auto">Automatic</string>
+            <string name="termux_privileged_backend_shizuku">Shizuku</string>
+            <string name="termux_privileged_backend_root">Root</string>
+            <string name="termux_privileged_backend_off">Off</string>
+            <string name="termux_privileged_status_using_shizuku">Using Shizuku</string>
+            <string name="termux_privileged_status_using_root">Using root</string>
+            <string name="termux_privileged_status_needs_permission">Shizuku needs your permission</string>
+            <string name="termux_privileged_status_shizuku_not_running">Shizuku is not running</string>
+            <string name="termux_privileged_status_root_denied">Root was denied</string>
+            <string name="termux_privileged_status_not_available">Not available on this phone</string>
+            <string name="termux_privileged_status_off">Off</string>
+            <string name="termux_privileged_status_checking">Checking…</string>
+            <string name="termux_privileged_lane_state_no_root">Root is not available</string>
+            <string name="termux_app_launcher_az_lock_shizuku_unavailable">Turn on Shizuku in Settings to lock the screen.</string>
+            <string-array name="termux_privileged_backend_entries">
+                <item>@string/termux_privileged_backend_auto</item>
+                <item>@string/termux_privileged_backend_shizuku</item>
+                <item>@string/termux_privileged_backend_root</item>
+                <item>@string/termux_privileged_backend_off</item>
+            </string-array>
+            <string-array name="termux_privileged_backend_values">
+                <item>auto</item>
+                <item>shizuku</item>
+                <item>root</item>
+                <item>off</item>
+            </string-array>
             <string name="termux_privileged_request_permission_title">Request Shizuku permission</string>
             <string name="termux_privileged_request_permission_summary">Request or re-check Shizuku permission now.</string>
             <string name="termux_privileged_launcherctl_reboot_title">Let launcherctl restart the phone</string>

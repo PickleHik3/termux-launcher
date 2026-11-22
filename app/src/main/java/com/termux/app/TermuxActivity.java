@@ -14934,6 +14934,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             executePrivilegedLockCommand(manager);
             return;
         }
+        if (!com.termux.privileged.PrivilegedPolicyStore.getChoice(this).allowsShizuku()) {
+            // The user's choice forbids Shizuku; the lock's own method does not override it.
+            AppNotice.show(this, R.string.termux_app_launcher_az_lock_shizuku_unavailable, false);
+            return;
+        }
         manager.initializeShizukuOnly(this)
             .thenAccept(available -> {
                 if (!available || !manager.isPrivilegedAvailable()) {
