@@ -28,13 +28,32 @@ public final class BackdropRecording {
         sSurfaces.remove(surface);
     }
 
+    private static final java.util.ArrayList<View> sLeftOut = new java.util.ArrayList<>(1);
+
     /**
-     * Whether {@code view} is a SurfaceView's ancestor, so drawing it whole would record the
-     * SurfaceView by reference. Walks each registered surface's parents; no allocation.
+     * A view that stands in for a ground only on screen (the frost under a window switch's gap,
+     * {@link GroundFrostView}): while it is left out, recordings skip it as they skip a SurfaceView,
+     * so glass beneath it keeps sampling what it sampled before. Pair with {@link #keepIn}.
+     */
+    public static void leaveOut(View view) {
+        if (!sLeftOut.contains(view)) sLeftOut.add(view);
+    }
+
+    public static void keepIn(View view) {
+        sLeftOut.remove(view);
+    }
+
+    /**
+     * Whether {@code view} is the ancestor of a SurfaceView or of a view left out, so drawing it
+     * whole would record that view by reference. Walks each one's parents; no allocation.
      */
     public static boolean holdsSurface(View view) {
-        for (int i = 0; i < sSurfaces.size(); i++) {
-            android.view.ViewParent parent = sSurfaces.get(i).getParent();
+        return holds(sSurfaces, view) || holds(sLeftOut, view);
+    }
+
+    private static boolean holds(java.util.ArrayList<? extends View> held, View view) {
+        for (int i = 0; i < held.size(); i++) {
+            android.view.ViewParent parent = held.get(i).getParent();
             while (parent != null) {
                 if (parent == view) return true;
                 parent = parent.getParent();
@@ -45,7 +64,7 @@ public final class BackdropRecording {
 
     /** Whether a recording may draw {@code view} by reference. */
     public static boolean mayRecord(View view) {
-        return !(view instanceof SurfaceView);
+        return !(view instanceof SurfaceView) && !sLeftOut.contains(view);
     }
 
     /** Opens a stretch in which a recording draws a view subtree; pair with {@link #end}. */

@@ -54,6 +54,15 @@
             android:importantForAccessibility="no"
             android:visibility="invisible" />
 
+        <!-- The frosted wallpaper under a turning window switch's gap (#316): the glass's own
+             frame, under the strip's dim. Gone at rest; shown only while a switch turns. -->
+        <com.termux.app.chrome.GroundFrostView
+            android:id="@+id/ground_frost"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:importantForAccessibility="no"
+            android:visibility="gone" />
+
         <!-- The ground strip: each wall page's own ground (wallpaper dim; on the Terminal page the
              canvas tint when it is not glass), with a soft seam that travels with the page edge.
              Painted over the window's rect, above the wallpaper and below every page. Shown only
