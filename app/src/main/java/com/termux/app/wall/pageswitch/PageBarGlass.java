@@ -184,7 +184,7 @@ public final class PageBarGlass {
      * {@code floor}: whether the well's floor shade is drawn over the slab (the concave glass
      * draws none, and its glyphs are solved on the bare glass).
      */
-    static void measure(@NonNull View view, @NonNull Rect rect, @Nullable PaneSurfaceStyle look,
+    public static void measure(@NonNull View view, @NonNull Rect rect, @Nullable PaneSurfaceStyle look,
                         @ColorInt int accent, boolean glassWorn, @NonNull Ink out,
                         @NonNull WidgetBody.Answer body, @Nullable PaneGlassBackdropView glass,
                         float glyphTopShare, float glyphBottomShare, boolean floor,

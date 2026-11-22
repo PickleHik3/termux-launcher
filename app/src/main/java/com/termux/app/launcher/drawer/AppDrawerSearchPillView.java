@@ -3,12 +3,14 @@ package com.termux.app.launcher.drawer;
 import android.annotation.SuppressLint;
 import android.content.Context;
 import android.graphics.Canvas;
+import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.view.MotionEvent;
 import android.view.View;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -92,6 +94,10 @@ public final class AppDrawerSearchPillView extends View {
     private float mFold;
     private float mDrawnLeft;
     private float mDrawnRight;
+    /** The solved inks ({@link #setSolvedInk}); transparent means the scheme's. */
+    @ColorInt private int mInk = Color.TRANSPARENT;
+    @ColorInt private int mAccent = Color.TRANSPARENT;
+    @ColorInt private int mVeil = Color.TRANSPARENT;
     /** Whether the glass slab laid under this view is drawing the capsule's body. */
     private boolean mGlassShown;
     /** True while a DOWN that landed on the clear affordance is still live. */
@@ -165,6 +171,19 @@ public final class AppDrawerSearchPillView extends View {
         invalidate();
     }
 
+    /**
+     * The inks solved on what the capsule stands on, as Home's page bar pill's are: the text and
+     * glyph ink, the caret's accent and the veil laid over the glass under the ink (transparent for
+     * none). Transparent {@code ink} puts the scheme's own ink back. Dress passes only.
+     */
+    public void setSolvedInk(@ColorInt int ink, @ColorInt int accent, @ColorInt int veil) {
+        if (mInk == ink && mAccent == accent && mVeil == veil) return;
+        mInk = ink;
+        mAccent = accent;
+        mVeil = veil;
+        invalidate();
+    }
+
     /** The capsule's left edge in the view's own coordinates (the glass slab's outline). */
     public float capsuleLeftPx() {
         return drawnLeft();
@@ -208,12 +227,19 @@ public final class AppDrawerSearchPillView extends View {
             androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(getContext(), R.color.termux_primary));
 
+        // On glass the ink is the one solved on the ground; without it, the scheme's.
+        if (mGlassShown && Color.alpha(mInk) != 0) onSurface = mInk;
+        if (mGlassShown && Color.alpha(mAccent) != 0) accent = mAccent;
         float radius = resolveRadiusPx();
         float inset = mStroke.getStrokeWidth() * 0.5f;
         float left = drawnLeft();
         float right = drawnRight();
         float fold = Math.max(0f, Math.min(1f, mFold));
         mBounds.set(left + inset, inset, right - inset, height - inset);
+        if (mGlassShown && Color.alpha(mVeil) != 0) {
+            mFill.setColor(mVeil);
+            canvas.drawRoundRect(mBounds, radius, radius, mFill);
+        }
         if (!mGlassShown) {
             // No glass: the card's own surface, solid, under the wash.
             mFill.setColor(MaterialColors.getColor(this,

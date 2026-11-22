@@ -29,7 +29,7 @@ import java.util.Arrays;
  * it ({@link #setWanted}); the frames it handed out are remembered ({@link #holds}) for the
  * cache's in-use scan.</p>
  */
-public final class DrawerCardGlassStyle implements PaneSurfaceStyle {
+public final class DrawerCardGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
 
     /** What only the activity knows. */
     public interface Host {
@@ -203,6 +203,36 @@ public final class DrawerCardGlassStyle implements PaneSurfaceStyle {
 
     @Override @Nullable public WallpaperParallax wallpaperParallax() {
         return mHost.parallax();
+    }
+
+    // ----- WidgetInkSource: the capsule's ink is solved as Home's page bar pill's is -------------
+
+    @Override @NonNull public ChromeInk.Polarity widgetPolarity() {
+        return mChrome.ink().widgetPolarity();
+    }
+
+    /** Ready when the card's own frame is resident, the frame the capsule's glass is cut from. */
+    @Override public boolean widgetFrameReady() {
+        return isPaneGlassActive();
+    }
+
+    /** Solved at the sheets' opacity, Global's with its one floor ({@link SheetGlass}). */
+    @Override @NonNull public OnGlass.Resolution widgetInk(@NonNull Rect rootRect, int body,
+                                                           int veilColor, int textInk,
+                                                           int graphicInk) {
+        TermuxAppSharedPreferences preferences = mHost.preferences();
+        int opacityPercent = preferences == null ? Math.round(opacity() * 100f)
+            : SheetGlass.of(preferences).opacityPercent;
+        return mChrome.ink().widget(rootRect, body, veilColor, textInk, graphicInk,
+            opacityPercent);
+    }
+
+    @Override @Nullable public android.graphics.ColorMatrix widgetEvenOut(@NonNull Rect rootRect) {
+        return mChrome.ink().widgetEvenOutMatrix(rootRect);
+    }
+
+    @Override public int widgetWallpaper(@NonNull Rect rootRect) {
+        return mChrome.ink().widgetWallpaper(rootRect);
     }
 
     @Override @Nullable public GlassRefraction.Look paneGlassRefraction() {

@@ -3889,6 +3889,19 @@ public final class AppDrawerContentView extends FrameLayout
         }
     };
 
+    /** Reused by the capsule's ink solve, which runs on a dress pass and on a new size only. */
+    private final com.termux.app.wall.pageswitch.PageBarGlass.Ink mSearchInk =
+        new com.termux.app.wall.pageswitch.PageBarGlass.Ink();
+    private final com.termux.app.chrome.WidgetBody.Answer mSearchBody =
+        new com.termux.app.chrome.WidgetBody.Answer();
+    private final int[] mSearchOrigin = new int[2];
+    private final int[] mSearchRoot = new int[2];
+    private final android.graphics.Rect mSearchInkRect = new android.graphics.Rect();
+    private final android.graphics.Rect mSearchInkScratch = new android.graphics.Rect();
+    private final android.graphics.Rect mSearchInkSolved = new android.graphics.Rect();
+    @Nullable private com.termux.app.chrome.DrawerCardGlassStyle mSearchInkLook;
+    private boolean mSearchGlassShown;
+
     public void setSearchGlassHost(@Nullable SearchGlassHost host) {
         mSearchGlassHost = host;
     }
@@ -4003,6 +4016,10 @@ public final class AppDrawerContentView extends FrameLayout
         boolean shown = com.termux.app.wall.pageswitch.PageBarGlass.dress(getContext(), look,
             this, glass, radius, com.termux.app.wall.pageswitch.PageBarGlassStyle.CONCAVE);
         mPill.setGlassShown(shown);
+        mSearchGlassShown = shown;
+        mSearchInkLook = look;
+        mSearchInkSolved.setEmpty();
+        solveSearchInk();
         if (shown) glass.requestLayout();
         syncSearchGlassLive();
         applySearchGlassMorph();
@@ -4022,6 +4039,37 @@ public final class AppDrawerContentView extends FrameLayout
             if (glass.livePicture() != null) glass.setLivePicture(null);
             if (host != null) host.drop(glass);
         }
+    }
+
+    /**
+     * Solves the capsule's ink on what it stands on, by Home's page bar pill's recipe: a widget's
+     * card on the sheets' glass, at the sheets' floored opacity, with the veil the band asks for
+     * and the even-out the slab is drawn through. The full bar's rect, where the pill is laid out;
+     * on a dress pass and when that rect moves, never per frame.
+     */
+    private void solveSearchInk() {
+        com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
+        com.termux.app.chrome.DrawerCardGlassStyle look = mSearchInkLook;
+        if (glass == null || look == null) return;
+        if (!mSearchGlassShown) {
+            mPill.setSolvedInk(android.graphics.Color.TRANSPARENT,
+                android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT);
+            glass.setEvenOut(null);
+            return;
+        }
+        mSearchInkRect.set(mPill.getLeft(), mPill.getTop(), mPill.getRight(), mPill.getBottom());
+        if (mSearchInkRect.isEmpty() || mSearchInkRect.equals(mSearchInkSolved)) return;
+        mSearchInkSolved.set(mSearchInkRect);
+        int accent = com.google.android.material.color.MaterialColors.getColor(mPill,
+            androidx.appcompat.R.attr.colorPrimary, android.graphics.Color.WHITE);
+        mSearchInk.veil = android.graphics.Color.TRANSPARENT;
+        mSearchInk.ink = android.graphics.Color.WHITE;
+        mSearchBody.evenOut = null;
+        // The concave glass draws no floor shade: the ink is solved on the bare glass.
+        com.termux.app.wall.pageswitch.PageBarGlass.measure(this, mSearchInkRect, look, accent,
+            true, mSearchInk, mSearchBody, glass, 0.5f, 0.5f, false, mSearchOrigin, mSearchRoot,
+            mSearchInkScratch);
+        mPill.setSolvedInk(mSearchInk.ink, mSearchInk.accent, mSearchInk.veil);
     }
 
     /** The glass follows the pill's fold: its translation and the capsule edges it is cut to. */
@@ -4045,6 +4093,10 @@ public final class AppDrawerContentView extends FrameLayout
 
     private void releaseSearchGlass() {
         mPill.setGlassShown(false);
+        mPill.setSolvedInk(android.graphics.Color.TRANSPARENT,
+            android.graphics.Color.TRANSPARENT, android.graphics.Color.TRANSPARENT);
+        mSearchGlassShown = false;
+        mSearchInkLook = null;
         com.termux.app.terminal.PaneGlassBackdropView glass = mSearchGlass;
         if (glass == null) return;
         mSearchGlass = null;
@@ -4070,6 +4122,7 @@ public final class AppDrawerContentView extends FrameLayout
             && mPill.getVisibility() == VISIBLE) {
             searchGlass.layout(mPill.getLeft(), mPill.getTop(), mPill.getRight(),
                 mPill.getBottom());
+            solveSearchInk();
         }
     }
 
