@@ -117,7 +117,7 @@ public class SettingsSearchIndexTest {
             {"12-hour time", "top_pane_clock_am_pm"},
             {"cpu usage", "status_widget_cpu"},
             {"gpu", "status_widget_gpu"},
-            {"compact font", "status_widget_font_toggle"},
+            {"text size button", "status_widget_font_toggle"},
             {"memory usage", "status_widget_ram"},
             {"battery", "status_widget_battery"},
             {"fahrenheit", "status_widget_weather_fahrenheit"},

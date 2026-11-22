@@ -1005,7 +1005,7 @@ public final class LauncherToolRegistry {
             CATEGORY_TERMINAL, R.string.tool_terminal_font_size_decrease, R.string.tool_desc_terminal_font_size_decrease,
             Binding.all("ctrl+alt+minus"), REQUIRES_SESSION);
         addUi(map, TOOL_TERMINAL_FONT_SIZE_TOGGLE_COMPACT,
-            "Switch the focused terminal between its font size and the saved Compact size.",
+            "Switch the focused terminal between its font size and your smaller saved size.",
             schemaEmpty(),
             ToolRisk.LOW, false, ToolExecutor.TERMINAL,
             CATEGORY_TERMINAL, R.string.tool_terminal_font_size_toggle_compact,

@@ -272,7 +272,7 @@ public class StatusTerminalCardsTest {
         host.indicators[StatusBarCard.INDICATOR_CPU] = false;
         indicators.restate();
         assertFalse(indicatorTiles.get(StatusBarCard.INDICATOR_CPU).isChecked());
-        assertEquals("Compact font",
+        assertEquals("Text size",
             indicatorTiles.get(StatusBarCard.INDICATOR_FONT_TOGGLE).getText().toString());
         assertFalse("the font toggle starts off",
             indicatorTiles.get(StatusBarCard.INDICATOR_FONT_TOGGLE).isChecked());

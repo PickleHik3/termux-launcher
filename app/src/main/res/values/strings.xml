@@ -1265,14 +1265,14 @@
                 <string name="termux_window_tab_failed_content_description">failed</string>
                 <string name="termux_window_tab_close_content_description">Close %1$s</string>
                 <string name="termux_window_new_content_description">New terminal window</string>
-    <string name="font_toggle_content_description">Switch to Compact text size</string>
-    <string name="font_toggle_restore_content_description">Restore text size</string>
-    <string name="font_toggle_compact_size_title">Compact size</string>
-    <string name="font_toggle_compact_size_summary">Text size the font toggle switches to</string>
+    <string name="font_toggle_content_description">Use smaller text</string>
+    <string name="font_toggle_restore_content_description">Back to your text size</string>
+    <string name="font_toggle_compact_size_title">Smaller text size</string>
+    <string name="font_toggle_compact_size_summary">What the status bar\'s text size button switches to</string>
     <string name="font_toggle_compact_size_value">%1$d dp</string>
     <string name="font_toggle_compact_size_auto">Auto, %1$d dp</string>
     <string name="font_toggle_compact_size_reset">Auto</string>
-    <string name="settings_font_toggle_title">Compact font</string>
+    <string name="settings_font_toggle_title">Text size button</string>
                 <!-- What an AI coding agent in a pane is doing. Shown on the window chips and in
                      the sessions browser; also spoken after the window's name. -->
                 <string name="termux_agent_state_working">Working</string>
@@ -2555,7 +2555,7 @@
     <string name="tool_terminal_toggle_toolbar">Toggle dock</string>
     <string name="tool_terminal_font_size_increase">Increase font size</string>
     <string name="tool_terminal_font_size_decrease">Decrease font size</string>
-    <string name="tool_terminal_font_size_toggle_compact">Toggle compact font</string>
+    <string name="tool_terminal_font_size_toggle_compact">Switch text size</string>
     <string name="tool_terminal_select_url">Select URL</string>
     <string name="tool_terminal_select_at_cursor">Select at cursor</string>
     <string name="tool_terminal_select_all">Select all</string>
@@ -2648,7 +2648,7 @@
     <string name="tool_desc_keyboard_select_layout">Switch the in-app keyboard to a named layout.</string>
     <string name="tool_desc_terminal_toggle_toolbar">Show or hide the dock.</string>
     <string name="tool_desc_terminal_font_size_increase">Make the terminal text larger.</string>
-    <string name="tool_desc_terminal_font_size_toggle_compact">Switch between this terminal\'s text size and your Compact size.</string>
+    <string name="tool_desc_terminal_font_size_toggle_compact">Switch this terminal between its text size and your smaller one.</string>
     <string name="tool_desc_terminal_font_size_decrease">Make the terminal text smaller.</string>
     <string name="tool_desc_terminal_select_url">Pick a link from the terminal scrollback.</string>
     <string name="tool_desc_terminal_select_at_cursor">Start a text selection at the shell cursor, on the word under it.</string>
