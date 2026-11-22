@@ -248,6 +248,8 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     }
 
     @NonNull private final Runnable mContentChanged = this::wallContentChanged;
+    /** The recorder is invalidating its own surfaces (the wake, a pre-draw): not a content change. */
+    private boolean mOwnInvalidation;
 
     /**
      * Something under the wall's pages invalidated: every picture's frozen pages layer is
@@ -257,6 +259,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     private void wallContentChanged() {
         ViewGroup wall = mWall;
         if (wall == null || mPictures.isEmpty() || ((Wall) wall).isMovingForBackdrop()) return;
+        if (!PageLayerRefresh.isContentChange(mOwnInvalidation || LiveSceneFrame.publishing())) return;
         for (int i = 0; i < mPictures.size(); i++) mPictures.get(i).mRefresh.request();
     }
 
@@ -512,10 +515,12 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             mPlanStamp++;
         }
         mWakeMs = -1L;
+        mOwnInvalidation = true;
         try {
             preDrawPictures(moving);
         } finally {
             mPlanning = null;
+            mOwnInvalidation = false;
         }
         scheduleWake();
         if (mPictures.isEmpty()) listen(false);
@@ -551,9 +556,16 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
 
     private void wake() {
         mWakePosted = false;
-        for (int i = 0; i < mPictures.size(); i++) {
-            LivePicture picture = mPictures.get(i);
-            if (picture.mRefresh.requested() || picture.capturing()) picture.mSurface.invalidate();
+        // A surface standing in the wall invalidates up through it; that is the glass asking for a
+        // frame, and must not ask for the next capture.
+        mOwnInvalidation = true;
+        try {
+            for (int i = 0; i < mPictures.size(); i++) {
+                LivePicture picture = mPictures.get(i);
+                if (picture.mRefresh.requested() || picture.capturing()) picture.mSurface.invalidate();
+            }
+        } finally {
+            mOwnInvalidation = false;
         }
     }
 

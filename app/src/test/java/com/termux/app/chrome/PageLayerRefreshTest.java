@@ -75,4 +75,10 @@ public class PageLayerRefreshTest {
         refresh.request();
         assertTrue(refresh.due(1001));
     }
+
+    @Test
+    public void onlyAnInvalidationTheGlassDidNotCauseIsAContentChange() {
+        assertTrue(PageLayerRefresh.isContentChange(false));
+        assertFalse(PageLayerRefresh.isContentChange(true));
+    }
 }

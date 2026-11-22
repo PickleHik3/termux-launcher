@@ -187,6 +187,18 @@ public final class LiveSceneFrame {
         main.post(INVALIDATE);
     }
 
+    /** Main thread: whether the glass surfaces are being invalidated for a new frame right now. */
+    private static boolean sPublishing;
+
+    /**
+     * Main thread. True while {@link #invalidateDrawn} invalidates the glass for a new scene
+     * frame: those invalidations reach the views above the glass without any page content having
+     * changed, so a listener of descendant invalidation can tell them from a real change.
+     */
+    public static boolean publishing() {
+        return sPublishing;
+    }
+
     private static void invalidateDrawn() {
         sInvalPending.set(false);
         Trace.beginSection("Scene.glass.publish");
@@ -199,6 +211,7 @@ public final class LiveSceneFrame {
                 if (root != null) sweep(root);
             }
             int n = sDrawnCount;
+            sPublishing = true;
             for (int i = 0; i < n; i++) {
                 Surface s = sDrawn[i];
                 sDrawn[i] = null;
@@ -206,6 +219,7 @@ public final class LiveSceneFrame {
             }
             sDrawnCount = 0;
         } finally {
+            sPublishing = false;
             Trace.endSection();
         }
     }
