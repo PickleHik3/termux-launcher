@@ -112,4 +112,35 @@ public class ShaderStoreTest {
         assertFalse(new File(dir, depth).exists());
         assertFalse(dir.exists());
     }
+
+    @Test
+    public void aKeptSourceComesBackOnce_andNothingIsKeptWithoutASource() throws IOException {
+        String id = ShaderStore.newId();
+        assertFalse(ShaderStore.keepPreviousSource(mContext, id));
+        assertFalse(ShaderStore.restorePreviousSource(mContext, id));
+        ShaderStore.writeSource(mContext, id, "old");
+        assertTrue(ShaderStore.keepPreviousSource(mContext, id));
+        ShaderStore.writeSource(mContext, id, "new");
+        assertTrue(ShaderStore.restorePreviousSource(mContext, id));
+        assertEquals("old", ShaderStore.readText(ShaderStore.sourceFile(mContext, id)));
+        assertFalse(ShaderStore.previousSourceFile(mContext, id).exists());
+
+        assertTrue(ShaderStore.keepPreviousSource(mContext, id));
+        ShaderStore.dropPreviousSource(mContext, id);
+        assertFalse(ShaderStore.previousSourceFile(mContext, id).exists());
+        assertEquals("one shader in the list, the kept copy is not another", 1,
+            countId(ShaderStore.list(mContext), id));
+        ShaderStore.delete(mContext, id);
+    }
+
+    @Test
+    public void aPictureIsNeverStoredUnderTheKeptSourcesName() {
+        assertNotEquals(ShaderStore.PREVIOUS_SOURCE_FILE, ShaderStore.textureName(ShaderStore.PREVIOUS_SOURCE_FILE));
+    }
+
+    private static int countId(java.util.List<ShaderStore.Entry> entries, String id) {
+        int n = 0;
+        for (ShaderStore.Entry e : entries) if (e.id.equals(id)) n++;
+        return n;
+    }
 }

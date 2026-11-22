@@ -57,6 +57,9 @@ import java.util.concurrent.Executors;
  * keeps the new wallpaper instead of writing back the one it opened with. While the notification
  * asks, it holds the shader's folder ({@link #holds}); closing it without an apply drops the
  * folder unless the editor still has it open ({@link PhotoShaderHandoff}).</p>
+ *
+ * <p>A paste over a saved source keeps the old one beside it; Undo puts it and the wallpaper from
+ * before the paste back and asks again, so another answer can be pasted ({@link PhotoShaderUndo}).</p>
  */
 public final class PhotoShaderNotification {
 
@@ -96,6 +99,12 @@ public final class PhotoShaderNotification {
         /** The notification made {@code motion} the wallpaper (a paste, or its Undo). */
         void onMotionApplied(@NonNull WallpaperMotion motion);
 
+        /**
+         * Undo put shader {@code id}'s earlier source back (after {@link #onMotionApplied} with the
+         * earlier wallpaper): an editor open on it must not save the undone code back.
+         */
+        void onUndone(@NonNull String id);
+
         /** The phone's Home and Lock changed after that apply. */
         void onSystemWallpaperChanged();
 
@@ -107,6 +116,8 @@ public final class PhotoShaderNotification {
     @NonNull private static WeakReference<Watcher> sWatcher = new WeakReference<>(null);
     /** The shader the asking notification holds; main thread. */
     @Nullable private static String sPendingId;
+    /** The shader the applied notification shows, whose replaced source is kept for Undo; main thread. */
+    @Nullable private static String sAppliedId;
 
     private PhotoShaderNotification() {}
 
@@ -148,11 +159,36 @@ public final class PhotoShaderNotification {
     public static boolean post(@NonNull Context context, @NonNull String id) {
         Context app = context.getApplicationContext();
         if (!canPost(app) || !validId(id)) return false;
+        hold(app, id);
+        // The applied notification and its Undo are replaced: the source Undo would restore goes.
+        String applied = sAppliedId;
+        if (applied != null) endApplied(app, applied, PhotoShaderUndo.End.NEW_ASK);
+        return showAsking(app, id, R.string.photo_shader_notification_text);
+    }
+
+    /** The asking notification holds shader {@code id}; a shader it held before goes as a close would drop it. */
+    @MainThread
+    private static void hold(@NonNull Context app, @NonNull String id) {
         String previous = sPendingId;
         sPendingId = id;
         if (previous != null && !previous.equals(id)) dropIfUnheld(app, previous);
+    }
+
+    /** The applied notification for shader {@code id} ends: its kept source goes unless Undo used it. */
+    @MainThread
+    private static void endApplied(@NonNull Context app, @NonNull String id, @NonNull PhotoShaderUndo.End end) {
+        if (id.equals(sAppliedId)) sAppliedId = null;
+        if (PhotoShaderUndo.dropsKept(end)) WORKER.execute(() -> ShaderStore.dropPreviousSource(app, id));
+    }
+
+    // --- the notification's states ---
+
+    /** Copy image, Copy prompt and the reply field, with {@code text} as its line. */
+    @MainThread
+    private static boolean showAsking(@NonNull Context app, @NonNull String id, int textRes) {
+        if (!canPost(app)) return false;
         ensureChannel(app);
-        String text = app.getString(R.string.photo_shader_notification_text);
+        String text = app.getString(textRes);
         NotificationCompat.Builder builder = base(app, editorIntent(app, id, true))
             .setContentTitle(app.getString(R.string.photo_shader_notification_title))
             .setContentText(text)
@@ -169,12 +205,11 @@ public final class PhotoShaderNotification {
         return notify(app, builder);
     }
 
-    // --- the notification's states ---
-
     /** The paste compiled and is the wallpaper: Undo, Edit, Done; no longer ongoing. */
     private static void showApplied(@NonNull Context app, @NonNull String id, @NonNull String previousMotion) {
         if (!canPost(app)) return;
         ensureChannel(app);
+        sAppliedId = id;
         Bundle undo = new Bundle();
         undo.putString(EXTRA_PREVIOUS, previousMotion);
         PendingIntent edit = editorIntent(app, id, false);
@@ -183,6 +218,8 @@ public final class PhotoShaderNotification {
             .setContentText(app.getString(R.string.photo_shader_notification_applied_text))
             .setOngoing(false)
             .setAutoCancel(true)
+            // A swipe ends it as Done does: the source Undo would restore goes.
+            .setDeleteIntent(broadcast(app, ACTION_DONE, id, 8, null))
             .addAction(action(app, R.string.photo_shader_notification_undo,
                 broadcast(app, ACTION_UNDO, id, 6, undo)))
             .addAction(action(app, R.string.photo_shader_notification_edit, edit))
@@ -413,6 +450,11 @@ public final class PhotoShaderNotification {
             ShaderStore.writeMeta(app, id, new ShaderStore.Meta(meta.name, meta.quality, meta.rateHz,
                 textureOk ? meta.texture : null, depthOk ? meta.depth : null));
         }
+        // The source this replaces is kept for Undo; with none, an older kept one goes.
+        boolean hadSource = ShaderStore.sourceFile(app, id).isFile();
+        if (!(PhotoShaderUndo.pasteKeeps(hadSource) && ShaderStore.keepPreviousSource(app, id))) {
+            ShaderStore.dropPreviousSource(app, id);
+        }
         ShaderStore.writeSource(app, id, code);
     }
 
@@ -429,6 +471,28 @@ public final class PhotoShaderNotification {
         // Saved now: the folder is a shader of its own, which no close drops.
         if (holds(id)) sPendingId = null;
         showApplied(app, id, previous);
+    }
+
+    /** Undo, off the main thread: the kept source goes back, then the wallpaper from before. */
+    @WorkerThread
+    private static void undo(@NonNull Context app, @NonNull String id, @Nullable String previousMotion) {
+        boolean kept = ShaderStore.previousSourceFile(app, id).isFile();
+        if (PhotoShaderUndo.undoRestores(kept) == PhotoShaderUndo.Restores.SOURCE_AND_WALLPAPER
+            && !ShaderStore.restorePreviousSource(app, id)) {
+            Logger.logWarn(LOG_TAG, "Putting the earlier shader back failed");
+        }
+        MAIN.post(() -> undone(app, id, WallpaperMotion.parse(previousMotion)));
+    }
+
+    /** The earlier source is back: the earlier wallpaper too, and the notification asks again. */
+    @MainThread
+    private static void undone(@NonNull Context app, @NonNull String id, @NonNull WallpaperMotion previous) {
+        endApplied(app, id, PhotoShaderUndo.End.UNDO);
+        useMotion(app, previous);
+        Watcher w = watcher();
+        if (w != null) w.onUndone(id);
+        hold(app, id);
+        showAsking(app, id, R.string.photo_shader_notification_undone_text);
     }
 
     /** Makes {@code motion} the wallpaper as Done does, and tells an open picker. */
@@ -461,12 +525,14 @@ public final class PhotoShaderNotification {
             if (ACTION_CLOSE.equals(action)) {
                 cancel(app);
                 if (holds(id)) sPendingId = null;
+                endApplied(app, id, PhotoShaderUndo.End.CLOSE);
                 dropIfUnheld(app, id);
             } else if (ACTION_DONE.equals(action)) {
                 cancel(app);
+                endApplied(app, id, PhotoShaderUndo.End.DONE);
             } else if (ACTION_UNDO.equals(action)) {
-                cancel(app);
-                useMotion(app, WallpaperMotion.parse(intent.getStringExtra(EXTRA_PREVIOUS)));
+                final String previous = intent.getStringExtra(EXTRA_PREVIOUS);
+                runAsync(() -> undo(app, id, previous));
             } else if (ACTION_COPY_ERROR.equals(action)) {
                 String report = intent.getStringExtra(EXTRA_ERRORS);
                 if (report != null) {

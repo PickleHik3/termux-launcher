@@ -800,6 +800,10 @@ public final class WallpaperLiveHost {
             appliedFromNotification(motion);
         }
 
+        @Override public void onUndone(@NonNull String id) {
+            undoneFromNotification(id);
+        }
+
         @Override public void onSystemWallpaperChanged() {
             if (!mReleased) mListener.onSystemWallpaperChanged();
         }
@@ -854,6 +858,22 @@ public final class WallpaperLiveHost {
         if (mVideo != null) mVideo.setBackToPhotoVisible(moves);
         if (mPage == Page.EDITOR && mEditor != null && motion.kind == WallpaperMotion.Kind.SHADER
             && mEditor.id().equals(motion.id)) {
+            mEditorSaved = true;
+            showList();
+        } else if (mPage == Page.LIST && mList != null) {
+            mList.bind(readStored());
+        }
+    }
+
+    /**
+     * The notification's Undo put shader {@code id}'s earlier source back (and the earlier
+     * wallpaper, through {@link #appliedFromNotification}). An editor open on it holds the undone
+     * code: it goes to the list as after an apply, so nothing saves that code back. The shader
+     * stays saved.
+     */
+    private void undoneFromNotification(@NonNull String id) {
+        if (mReleased) return;
+        if (mPage == Page.EDITOR && mEditor != null && id.equals(mEditor.id())) {
             mEditorSaved = true;
             showList();
         } else if (mPage == Page.LIST && mList != null) {

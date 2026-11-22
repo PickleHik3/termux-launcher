@@ -22,6 +22,7 @@ import java.nio.charset.StandardCharsets;
  *
  * <pre>
  * files/wallpaper/shaders/&lt;id&gt;/source.glsl   the user's text, as pasted
+ * files/wallpaper/shaders/&lt;id&gt;/source.prev.glsl  the text a Send to AI paste replaced, until its Undo, Done or Close
  * files/wallpaper/shaders/&lt;id&gt;/meta.json     {"name", "quality": full|half|quarter, "rate": 15|30|60, "texture": file name or absent, "depth": file name or absent}
  * files/wallpaper/shaders/&lt;id&gt;/&lt;texture&gt;     the iChannel0 image (the photo), when one is picked
  * files/wallpaper/shaders/&lt;id&gt;/&lt;depth&gt;       the iChannel1 image (its depth image), when there is one
@@ -37,6 +38,8 @@ public final class ShaderStore {
     static final String SHADERS_DIR = "shaders";
     public static final String SOURCE_FILE = "source.glsl";
     public static final String META_FILE = "meta.json";
+    /** The source a Send to AI paste replaced, kept for its Undo. */
+    public static final String PREVIOUS_SOURCE_FILE = "source.prev.glsl";
     static final String PENDING_FILE = "motion-pending";
     /**
      * Written by every {@link #apply} (wall time), so re-applying the shader already in use (same
@@ -159,6 +162,37 @@ public final class ShaderStore {
     public static void writeSource(@NonNull Context context, @NonNull String id, @NonNull String source)
         throws IOException {
         writeText(sourceFile(context, id), source);
+    }
+
+    @NonNull
+    public static File previousSourceFile(@NonNull Context context, @NonNull String id) {
+        return new File(shaderDir(context, id), PREVIOUS_SOURCE_FILE);
+    }
+
+    /**
+     * Keeps the saved source beside it before another replaces it, written as the source is.
+     *
+     * @return false when there was no source to keep
+     */
+    @WorkerThread
+    public static boolean keepPreviousSource(@NonNull Context context, @NonNull String id) throws IOException {
+        String source = readText(sourceFile(context, id));
+        if (source == null) return false;
+        writeText(previousSourceFile(context, id), source);
+        return true;
+    }
+
+    /** The kept source becomes the source again, in one rename. @return false when none was kept */
+    @WorkerThread
+    public static boolean restorePreviousSource(@NonNull Context context, @NonNull String id) {
+        File previous = previousSourceFile(context, id);
+        return previous.isFile() && previous.renameTo(sourceFile(context, id));
+    }
+
+    @WorkerThread
+    public static void dropPreviousSource(@NonNull Context context, @NonNull String id) {
+        //noinspection ResultOfMethodCallIgnored
+        previousSourceFile(context, id).delete();
     }
 
     /** The file's text, or null when it cannot be read. */
@@ -321,6 +355,7 @@ public final class ShaderStore {
         String n = b.toString();
         if (n.length() > 64) n = n.substring(n.length() - 64);
         if (n.isEmpty() || n.startsWith(".") || n.equals(SOURCE_FILE) || n.equals(META_FILE) || n.equals(MADE_DEPTH_FILE)
+            || n.equals(PREVIOUS_SOURCE_FILE)
             || n.endsWith(".tmp")) {
             return "texture";
         }

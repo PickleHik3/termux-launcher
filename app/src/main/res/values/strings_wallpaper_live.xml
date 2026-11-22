@@ -28,6 +28,7 @@
     <string name="photo_shader_notification_applied_title">Wallpaper applied</string>
     <string name="photo_shader_notification_applied_text">Undo to go back to the one before.</string>
     <string name="photo_shader_notification_undo">Undo</string>
+    <string name="photo_shader_notification_undone_text">Put back the wallpaper you had. Paste another answer to try again.</string>
     <string name="photo_shader_notification_edit">Edit</string>
     <string name="photo_shader_notification_done">Done</string>
     <string name="photo_shader_notification_failed_title">The shader didn\'t compile</string>
