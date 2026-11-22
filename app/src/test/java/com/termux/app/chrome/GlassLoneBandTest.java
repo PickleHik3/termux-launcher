@@ -108,9 +108,9 @@ public class GlassLoneBandTest {
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
         // live is known before the bend's normal is.
         assertTrue(agsl.indexOf("bool live = ") < agsl.indexOf("float reach = "));
-        // The gathered light keeps its normal round the drawn corner.
+        // The rim's light keeps its normal round the drawn corner.
         assertTrue(agsl.contains("float2 n = rectNormal(p, b, min(cr, min(b.x, b.y)));"));
-        assertTrue(agsl.contains("float k = glow * (gatherShare(n) + 1.5 * touchG)"));
+        assertTrue(agsl.contains("float rc = dot(n, kKeyLight);"));
     }
 
     /**

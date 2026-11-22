@@ -158,12 +158,14 @@ public class GlassFrameTintTest {
         assertEquals(0xFF808080, GlassFrameTint.apply(none.frameTint(CLEAR), 0xFF808080));
     }
 
-    /** The gathered edge's light is held under the tinted sample's headroom: nothing clips. */
+    /** The rim's light is held under the tinted sample's alpha: nothing clips. */
     @Test
-    public void theGatheredEdgeStillNeverClipsOnATintedFrame() {
+    public void theRimStillNeverClipsOnATintedFrame() {
         float density = 2.625f;
-        float nx = GlassRefraction.KEY_LIGHT_X;
-        float ny = GlassRefraction.KEY_LIGHT_Y;
+        GlassRim rim = GlassRim.DEFAULT;
+        float white = rim.white(GlassRefraction.rimLobe(GlassRefraction.KEY_LIGHT_X,
+            GlassRefraction.KEY_LIGHT_Y));
+        float dark = rim.darkening(0f);
         float[] out = new float[3];
         for (int[] theme : THEMES) {
             int tint = GlassFrameTint.of(100, 0, theme[1], theme[2]);
@@ -173,13 +175,13 @@ public class GlassFrameTintTest {
                 float g = ((sample >> 8) & 0xFF) / 255f;
                 float b = (sample & 0xFF) / 255f;
                 for (int i = 0; i <= 20; i++) {
-                    GlassRefraction.gatheredLit(r, g, b, 1f, i * 0.25f * density, density, nx, ny,
-                        out);
+                    GlassRim.lit(r, g, b, 1f, rim.weight(i * 0.25f * density, density), white,
+                        dark, out);
                     for (float channel : out)
                         assertTrue(Integer.toHexString(sample) + ": " + channel, channel <= 1f + 1e-6f);
                 }
-                GlassRefraction.gatheredLit(r * 0.5f, g * 0.5f, b * 0.5f, 0.5f, 0f, density, nx, ny,
-                    out);
+                GlassRim.lit(r * 0.5f, g * 0.5f, b * 0.5f, 0.5f, rim.weight(0f, density), white,
+                    dark, out);
                 for (float channel : out) assertTrue(channel <= 0.5f + 1e-6f);
             }
         }

@@ -18,9 +18,8 @@ import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.T
  * per frame; a change of it re-bakes the frames as a wallpaper change does. Radius 0, the
  * wallpaper as the wall shows it, never takes it: the bare wallpaper is the user's picture.
  *
- * <p>It brightens what the gathered light then multiplies, and that light is still held under
- * the headroom the brightened sample has left ({@link GlassRefraction#heldK}), so a vivid frame's
- * edge cannot clip either. The ink check samples the same baked frame, so what it measures is
+ * <p>The rim ({@link GlassRim}) lights the brightened sample in linear light under its alpha,
+ * so a vivid frame's edge cannot clip either. The ink check samples the same baked frame, so what it measures is
  * what the glass shows.</p>
  */
 public final class GlassVibrancy {
