@@ -3,8 +3,6 @@ package com.termux.ai;
 import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 import java.util.Collections;
@@ -24,7 +22,6 @@ import static org.junit.Assert.assertTrue;
  * straight to the backend while a load is blocked, and an embedding batch never holds anything a
  * status poll would wait on.
  */
-@RunWith(RobolectricTestRunner.class)
 public class MultiBackendTaiRuntimeLockingTest {
     private static final long PROMPT_MS = 2_000L;
 
@@ -102,7 +99,8 @@ public class MultiBackendTaiRuntimeLockingTest {
         AtomicReference<Throwable> failure = new AtomicReference<>();
         Thread embed = new Thread(() -> {
             try {
-                runtime.embed(embeddingModel("embed-blocked"), Collections.singletonList("hello"), 0);
+                runtime.embed(embeddingModel("embed-blocked"), Collections.singletonList("hello"), 0,
+                    LiteRtEmbeddingRuntime.INPUT_TYPE_DOCUMENT, null);
             } catch (Throwable throwable) {
                 failure.set(throwable);
             }
@@ -230,12 +228,7 @@ public class MultiBackendTaiRuntimeLockingTest {
             if (releaseOnCancel) release.countDown();
             return ok();
         }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
+        @Override public JSONObject generate(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
 
         private JSONObject ok() throws JSONException { return new JSONObject().put("ok", true); }
     }
@@ -248,12 +241,7 @@ public class MultiBackendTaiRuntimeLockingTest {
         @Override public JSONObject unload() throws JSONException { return ok(); }
         @Override public JSONObject keepWarm(TaiModelSpec modelSpec, TaiRuntimeOptions options, int minutes) throws JSONException { return ok(); }
         @Override public JSONObject cancel() throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
+        @Override public JSONObject generate(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
 
         private JSONObject ok() throws JSONException { return new JSONObject().put("ok", true); }
     }

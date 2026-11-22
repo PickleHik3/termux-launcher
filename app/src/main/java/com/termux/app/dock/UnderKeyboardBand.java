@@ -25,6 +25,20 @@ public final class UnderKeyboardBand {
 
     private UnderKeyboardBand() {}
 
+    /**
+     * Whether the bands under the keyboard wear the sheet: only while one stands there and the
+     * dock is up, and never while the Peek card stands ({@link DockPlacement#peekCardStands}). The
+     * card only stands for the apps row with nothing on the dock's glass but an A–Z row under it
+     * ({@link DockPlacement#peekRowStands}), so every band under the keyboard is then on the card,
+     * which is the dock's only glass: a sheet of its own would be a Tray's bar drawn over the
+     * card's top half. Phones never put a band there by default, so this only shows where a layout
+     * has (a wide landscape's apps row under the keyboard).
+     */
+    public static boolean wearsSheet(boolean bandsUnderKeyboard, boolean dockShown,
+                                     boolean peekCardStands) {
+        return bandsUnderKeyboard && dockShown && !peekCardStands;
+    }
+
     /** {@link #KEYBOARD_GAP_DP} in pixels. */
     public static int keyboardGapPx(float density) {
         return Math.round(Math.max(0f, density) * KEYBOARD_GAP_DP);

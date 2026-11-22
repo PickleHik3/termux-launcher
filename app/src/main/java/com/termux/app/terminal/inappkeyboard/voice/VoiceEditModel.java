@@ -161,6 +161,13 @@ public final class VoiceEditModel {
         insertAt(draft.length(), joined.substring(draft.length()));
     }
 
+    /** Replaces the whole draft (a cut, an undo) and parks the caret at its end; no mark survives. */
+    public void replaceAll(@NonNull String value) {
+        deleteRange(0, draft.length());
+        insertAt(0, value.replace("\r", ""));
+        caret = codePointCount();
+    }
+
     /** Inserts {@code value} at UTF-16 {@code at}; a mark grows only when {@code at} is strictly inside it. */
     private void insertAt(int at, @NonNull String value) {
         int length = value.length();

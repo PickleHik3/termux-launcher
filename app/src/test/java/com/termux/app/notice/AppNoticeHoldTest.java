@@ -16,6 +16,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
 
 /**
  * How long the pill keeps a notice, and which notices are not kept by a clock at all.
@@ -25,7 +26,7 @@ import static org.junit.Assert.assertTrue;
  * numbers the whole app now agrees on.
  */
 @RunWith(RobolectricTestRunner.class)
-@Config(sdk = {Build.VERSION_CODES.P})
+@Config(sdk = {Build.VERSION_CODES.P}, application = Application.class)
 @LooperMode(LooperMode.Mode.LEGACY)
 public class AppNoticeHoldTest {
 
@@ -73,9 +74,9 @@ public class AppNoticeHoldTest {
         assertTrue(host.activeItem().fleeting);
 
         host.clear();
-        AppNotice.confirm(activity, "⧉", "Copied");
+        AppNotice.confirm(activity, com.termux.R.drawable.ic_rl_copy, "Copied");
         assertEquals(AppNoticeItem.Hold.CONFIRM.ms, host.activeItem().durationMs);
-        assertEquals("⧉", host.activeItem().resolvedGlyph());
+        assertEquals(com.termux.R.drawable.ic_rl_copy, host.activeItem().resolvedIcon());
 
         host.clear();
         AppNotice.refusal(activity, "No session to split");

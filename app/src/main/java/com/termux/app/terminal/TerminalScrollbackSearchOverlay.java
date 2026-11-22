@@ -11,7 +11,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.R;
 import com.termux.app.TermuxActivity;
-import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.view.TerminalView;
 
@@ -176,13 +176,13 @@ public final class TerminalScrollbackSearchOverlay {
 
     @NonNull
     private static List<TerminalScrollbackSearchModel.Line> snapshot(TerminalEmulator emulator) {
-        TerminalBuffer screen = emulator.getScreen();
-        int first = -screen.getActiveTranscriptRows();
+        TerminalContent screen = emulator.getContent();
+        int first = -screen.historyRows();
         List<TerminalScrollbackSearchModel.Line> lines = new ArrayList<>(
-            screen.getActiveTranscriptRows() + emulator.mRows);
+            screen.historyRows() + emulator.mRows);
         for (int row = first; row < emulator.mRows; row++) {
             lines.add(new TerminalScrollbackSearchModel.Line(row,
-                screen.getSelectedText(0, row, emulator.mColumns, row, false)));
+                screen.text(0, row, emulator.mColumns, row, false, false)));
         }
         return lines;
     }

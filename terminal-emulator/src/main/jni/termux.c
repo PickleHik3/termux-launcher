@@ -212,6 +212,11 @@ JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_waitFor(JNIEnv* TERMUX_UNUSE
     }
 }
 
+JNIEXPORT jint JNICALL Java_com_termux_terminal_JNI_getForegroundProcessGroup(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint fd)
+{
+    return (jint) tcgetpgrp(fd);
+}
+
 JNIEXPORT void JNICALL Java_com_termux_terminal_JNI_close(JNIEnv* TERMUX_UNUSED(env), jclass TERMUX_UNUSED(clazz), jint fileDescriptor)
 {
     close(fileDescriptor);

@@ -56,7 +56,7 @@ public class TerminalViewTravelFillTest {
         printLines(60);
         mView.setTravelDisplacement(5 * line(), 0.5f);
         assertEquals("the resize reveals five rows above, and the travel draws them",
-            mEmulator.predictRowsOnlyResizeShift(ROWS + 5, true), mView.currentTravelFillRows());
+            mEmulator.predictRowsOnlyResizeShift(ROWS + 5), mView.currentTravelFillRows());
         assertEquals(5, mView.currentTravelFillRows());
     }
 

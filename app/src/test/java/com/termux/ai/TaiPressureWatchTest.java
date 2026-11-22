@@ -20,8 +20,8 @@ import static org.junit.Assert.assertTrue;
 public class TaiPressureWatchTest {
 
     private static final long MB = 1024L * 1024L;
-    private static final long HOLD = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED);
-    private static final long PEAK = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED);
+    private static final long HOLD = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.RELAXED, 0L);
+    private static final long PEAK = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.RELAXED, 0L);
     private static final long CRITICAL = TaiLoadBudget.criticalFloorBytes(TaiLoadBudget.Conditions.RELAXED);
     private static final long NOW = 1_700_000_000_000L;
 
@@ -92,8 +92,8 @@ public class TaiPressureWatchTest {
      */
     @Test
     public void unrestrictedLimitsLeaveTheWatchOnlyLowMemory() {
-        long hold = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED);
-        long peak = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED);
+        long hold = TaiLoadBudget.floorBytes(false, TaiLoadBudget.Conditions.UNRESTRICTED, 0L);
+        long peak = TaiLoadBudget.floorBytes(true, TaiLoadBudget.Conditions.UNRESTRICTED, 0L);
         long critical = TaiLoadBudget.criticalFloorBytes(TaiLoadBudget.Conditions.UNRESTRICTED);
         assertEquals(0L, hold);
         assertEquals(0L, peak);

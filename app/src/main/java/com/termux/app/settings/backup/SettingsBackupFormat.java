@@ -82,7 +82,9 @@ public final class SettingsBackupFormat {
         /** Terminal font choices, {@code termux_fonts}. */
         FONTS("fonts"),
         /** Privileged access switches, {@code termux_privileged_policy}. */
-        PRIVILEGED("privileged");
+        PRIVILEGED("privileged"),
+        /** The page list, {@code wall_pages}: the page ids the {@code @id} look keys name. */
+        WALL_PAGES("wall_pages");
 
         @NonNull public final String id;
 
@@ -101,6 +103,7 @@ public final class SettingsBackupFormat {
                 case AI: return aiIncludes(key);
                 case FONTS: return FONTS_KEYS.contains(key);
                 case PRIVILEGED: return PRIVILEGED_KEYS.contains(key);
+                case WALL_PAGES: return com.termux.app.wall.WallPagesStore.KEY_STATE.equals(key);
                 default: return false;
             }
         }
@@ -218,6 +221,7 @@ public final class SettingsBackupFormat {
         "active_family_id", "nerd_icons", "ligatures", "recommended_features", "weight")));
 
     static final Set<String> PRIVILEGED_KEYS = Collections.unmodifiableSet(new HashSet<>(Arrays.asList(
+        PrivilegedPolicyStore.KEY_BACKEND,
         PrivilegedPolicyStore.KEY_MASTER_ENABLED,
         PrivilegedPolicyStore.KEY_PREFER_SHIZUKU,
         PrivilegedPolicyStore.KEY_ALLOW_SHELL_FALLBACK,

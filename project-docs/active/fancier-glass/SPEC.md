@@ -248,3 +248,5 @@ A frozen pane goes through `terminal/PaneSnapshot`: on API 29+ with a hardware w
 | Display stand-in (`wall/SurfaceStandIn`) | page motion only, not a pane change | the display's picture | the picture itself is rectangular; not glass |
 
 Default mode had the same square corners on the split reveal (its slabs are glass too); with the pane glass off there is no rectangle to cut.
+
+Glass 0 is blur 0 and grain 0; with Opacity 0 the surface draws only its rim.

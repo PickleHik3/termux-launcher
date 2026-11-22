@@ -52,4 +52,27 @@ public class WidgetSizeOptionsPolicyTest {
             Configuration.ORIENTATION_PORTRAIT, 30).options.getInt(
                 AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
     }
+
+    /** One grid for both orientations (ADR 0020 §12): both sizes at once, pushed on change. */
+    @Test
+    public void bothOrientationsGiveTheUnionAndBothSizesAndOnlyAChangeIsPushed() {
+        WidgetSizeOptionsPolicy.Result first = WidgetSizeOptionsPolicy.calculateBoth(null,
+            400, 600, 700, 300, 2f, 31);
+        assertTrue(first.valid);
+        assertTrue(first.changed);
+        android.os.Bundle o = first.options;
+        assertEquals(200, o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_WIDTH));
+        assertEquals(150, o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MIN_HEIGHT));
+        assertEquals(350, o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_WIDTH));
+        assertEquals(300, o.getInt(android.appwidget.AppWidgetManager.OPTION_APPWIDGET_MAX_HEIGHT));
+        java.util.ArrayList<android.util.SizeF> sizes = o.getParcelableArrayList(
+            android.appwidget.AppWidgetManager.OPTION_APPWIDGET_SIZES);
+        assertEquals(2, sizes.size());
+        assertTrue(sizes.contains(new android.util.SizeF(200, 300)));
+        assertTrue(sizes.contains(new android.util.SizeF(350, 150)));
+        WidgetSizeOptionsPolicy.Result again = WidgetSizeOptionsPolicy.calculateBoth(o,
+            400, 600, 700, 300, 2f, 31);
+        assertFalse("the same sizes push nothing", again.changed);
+        assertTrue(WidgetSizeOptionsPolicy.calculateBoth(o, 400, 640, 700, 300, 2f, 31).changed);
+    }
 }

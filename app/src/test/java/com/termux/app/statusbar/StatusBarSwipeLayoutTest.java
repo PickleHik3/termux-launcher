@@ -52,7 +52,7 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void emptyTap_performsClickWithoutExpansionAction() {
+    public void emptyTap_performsClickAndDoesNotFold() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         AtomicInteger clicks = new AtomicInteger();
@@ -63,8 +63,69 @@ public class StatusBarSwipeLayoutTest {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 40f));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 40f));
 
-        assertEquals(0, requests.size());
+        assertTrue(requests.isEmpty());
         assertEquals(1, clicks.get());
+    }
+
+    @Test
+    public void aDragIsNotConsumedAndNeverFoldsHoldOrNot() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        List<Float> drags = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(new StatusBarSwipeLayout.Listener() {
+            @Override public void onCollapsedStateRequested(boolean collapsed) { requests.add(collapsed); }
+            @Override public void onFoldDrag(float px) { drags.add(px); }
+        });
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
+        shadowLooperAdvance(100);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f));
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 75f)));
+        assertFalse(view.onTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 75f)));
+        shadowLooperAdvance(400);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 90f));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 90f));
+        assertTrue(requests.isEmpty());
+        assertTrue(drags.isEmpty());
+        assertFalse(ticked(view));
+    }
+
+    @Test
+    public void holdingThenDraggingDoesNotTickOrFold() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(requests::add);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
+        shadowLooperAdvance(500);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f));
+        assertFalse(view.onInterceptTouchEvent(event(MotionEvent.ACTION_MOVE, 100f, 70f)));
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 100f, 70f));
+        assertTrue(requests.isEmpty());
+        assertFalse(ticked(view));
+    }
+
+    @Test
+    public void holdingToTheLongPressTimeoutWithoutMovingNeverFolds() {
+        StatusBarSwipeLayout view = createView();
+        List<Boolean> requests = new ArrayList<>();
+        view.setCollapsed(true);
+        view.setListener(requests::add);
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, 100f, 15f));
+        shadowLooperAdvance(android.view.ViewConfiguration.getLongPressTimeout() + 50);
+        // The popup's long-press cancels the view stream.
+        view.dispatchTouchEvent(event(MotionEvent.ACTION_CANCEL, 100f, 15f));
+        assertTrue(requests.isEmpty());
+    }
+
+    private static boolean ticked(View view) {
+        return Shadows.shadowOf(view).lastHapticFeedbackPerformed()
+            == android.view.HapticFeedbackConstants.CLOCK_TICK;
+    }
+
+    private static void shadowLooperAdvance(long ms) {
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(ms,
+            java.util.concurrent.TimeUnit.MILLISECONDS);
     }
 
     @Test
@@ -91,24 +152,20 @@ public class StatusBarSwipeLayoutTest {
     }
 
     @Test
-    public void aVerticalSwipeTogglesTheBarAndAnAlreadySatisfiedOneDoesNot() {
+    public void noSwipeChangesTheForm() {
         StatusBarSwipeLayout view = createView();
         List<Boolean> requests = new ArrayList<>();
         view.setCollapsed(true);
         view.setListener(requests::add);
 
-        // Compact bar, downward drag: expand. This is the only swipe that changes its form.
         swipe(view, 100f, 105f, 15f, 70f);
-        assertEquals(java.util.Collections.singletonList(false), requests);
-
-        // Compact bar, upward drag: nothing to collapse.
-        requests.clear();
+        assertEquals(0, requests.size());
         swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
-
-        // A sideways drag is nobody's, and never a form change.
-        requests.clear();
         swipe(view, 160f, 30f, 40f, 40f);
+        assertEquals(0, requests.size());
+        view.setCollapsed(false);
+        swipe(view, 100f, 105f, 70f, 15f);
         assertEquals(0, requests.size());
     }
 
@@ -145,14 +202,6 @@ public class StatusBarSwipeLayoutTest {
         Shadows.shadowOf(android.os.Looper.getMainLooper()).idleFor(Duration.ofSeconds(1));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, 40, 30));
         assertTrue(toggles.isEmpty());
-    }
-
-    @Test
-    public void pullHintColorIsTheThemeAccentNotALiteralGrey() {
-        StatusBarSwipeLayout view = createView();
-        assertNotEquals(0xFFB0B0B0, view.pullHintColor());
-        assertEquals(androidx.core.content.ContextCompat.getColor(view.getContext(),
-            R.color.termux_primary), view.pullHintColor());
     }
 
     private static StatusBarSwipeLayout createView() {
@@ -194,6 +243,7 @@ public class StatusBarSwipeLayoutTest {
     private static void swipe(StatusBarSwipeLayout view, float startX, float endX,
                               float startY, float endY) {
         view.dispatchTouchEvent(event(MotionEvent.ACTION_DOWN, startX, startY));
+        shadowLooperAdvance(260);
         view.dispatchTouchEvent(event(MotionEvent.ACTION_MOVE, endX, endY));
         view.dispatchTouchEvent(event(MotionEvent.ACTION_UP, endX, endY));
     }

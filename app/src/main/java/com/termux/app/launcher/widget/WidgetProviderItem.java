@@ -25,6 +25,10 @@ public final class WidgetProviderItem {
     public final int minimumColumnSpan;
     public final int minimumRowSpan;
     public final boolean fits;
+    /** A built-in's one-line purpose, starting with a verb; empty for an app widget. */
+    @NonNull public final String description;
+    /** A built-in's sizes grouped on its one card, "2 × 1 · 4 × 1"; empty for an app widget. */
+    @NonNull public final String sizes;
 
     public WidgetProviderItem(long profileSerial, @NonNull AppWidgetProviderInfo info,
                               @NonNull String label, int columnSpan, int rowSpan,
@@ -37,6 +41,17 @@ public final class WidgetProviderItem {
                                @Nullable String builtinKind,
                                @NonNull String label, int columnSpan, int rowSpan,
                                int minimumColumnSpan, int minimumRowSpan, boolean fits) {
+        this(profileSerial, info, builtinKind, label, columnSpan, rowSpan, minimumColumnSpan,
+            minimumRowSpan, fits, "", "");
+    }
+
+    private WidgetProviderItem(long profileSerial, @Nullable AppWidgetProviderInfo info,
+                               @Nullable String builtinKind,
+                               @NonNull String label, int columnSpan, int rowSpan,
+                               int minimumColumnSpan, int minimumRowSpan, boolean fits,
+                               @NonNull String description, @NonNull String sizes) {
+        this.description = description;
+        this.sizes = sizes;
         this.profileSerial = profileSerial;
         this.info = info;
         this.builtinKind = builtinKind;
@@ -59,6 +74,13 @@ public final class WidgetProviderItem {
                                              boolean fits) {
         return new WidgetProviderItem(profileSerial, null, kind, label, columnSpan, rowSpan,
             Math.min(minimumColumnSpan, columnSpan), Math.min(minimumRowSpan, rowSpan), fits);
+    }
+
+    /** This built-in row with its purpose and its sizes for the card. */
+    @NonNull public WidgetProviderItem withCard(@NonNull String description,
+                                                @NonNull String sizes) {
+        return new WidgetProviderItem(profileSerial, info, builtinKind, label, columnSpan,
+            rowSpan, minimumColumnSpan, minimumRowSpan, fits, description, sizes);
     }
 
     public boolean isBuiltin() { return builtinKind != null; }

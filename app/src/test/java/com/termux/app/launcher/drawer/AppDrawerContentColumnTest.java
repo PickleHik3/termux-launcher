@@ -331,7 +331,9 @@ public class AppDrawerContentColumnTest {
         assertEquals(WIDTH - Math.round(content.getColumnWidthPx()), grid.getRight());
         // The track spans the grid's own vertical extent, so a letter lines up with the run it jumps
         // to rather than with the pill above it.
-        assertEquals(grid.getTop(), column.getTop());
+        // (The grid spans the card with the chrome's band as start padding: its rows start where
+        // the strip does.)
+        assertEquals(grid.getTop() + grid.getPaddingTop(), column.getTop());
         assertEquals(grid.getBottom(), column.getBottom());
     }
 

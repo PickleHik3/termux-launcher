@@ -27,9 +27,10 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
    | Store | Budget | Test |
    |---|---|---|
    | `KittyImageStore` | 32 MB / 256 images stored; frames total RAM ÷ 48, between 64 and 256 MB | `KittyImageStoreTest` |
-   | `LauncherIconStore` | heap ÷ 16, between 4 and 16 MB; artwork kept at 192 px | `LauncherIconStoreTest` |
+   | `LauncherIconStore` | heap ÷ 16, between 4 and 16 MB, artwork kept at 192 px; where the largest icon the device draws (drawer Icon size, Home size, times density) needs more, the cap rises to that, at most 288 px, and the budget grows with the pixel area, at most 24 MB (`IconArtworkPolicy`) | `LauncherIconStoreTest`, `IconArtworkPolicyTest` |
    | `DockIconCache` | heap ÷ 8, between 8 and 32 MB | `DockIconCacheTest` |
    | `WallpaperBlurCache` (the shared frame) | 72 MB, at most 6 radii, about 1 MB per radius at quarter resolution | `WallpaperBlurCacheTest` |
+   | `GlassPagePool` (frozen pages of every glass surface, one pool) | 6 MiB at a quarter scale above 4 GiB RAM, 2 MiB at an eighth otherwise or on a low-RAM device | `GlassPagePoolTest`, `LiveBackdropBudgetTest` |
 
    Work out the cost from the pixels a drawable actually holds (AGENTS.md has the
    `AdaptiveIconDrawable` trap). A store gives memory back on `clear`, when a pane closes and under
@@ -37,8 +38,14 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
 3. **A frame does only the frame's work.** Keep allocation, I/O, decoding and layout requests out
    of `onDraw`, touch handlers and per-frame callbacks. A transition runs one geometry pass
    (`GeometryScheduler`, `KeyboardGeometryChoreographer`, and their tests). Glass samples the shared
-   frame, which is blurred once per radius (ADR 0002, 0004). Blurring per surface or per frame is
-   what these rules exist to stop.
+   frame, which is blurred once per radius (ADR 0002, 0004). Blur through `RenderEffect` on the
+   RenderThread is allowed, and so is re-recording a backdrop when the content beneath it changes
+   (ADR 0021). A software capture in a pre-draw listener, and blurring per frame at rest, are what
+   these rules exist to stop.
+   **Live budget:** at most 8 live surfaces, each a blur layer (about 1.1 MiB at most), and one
+   pages pool shared by all of them (6 MiB, or 2 MiB on 4 GiB or less; `GlassPagePool`), 15.5 MB
+   in the worst case; released when off screen and at `TRIM_MEMORY_RUNNING_LOW` and above
+   (`LiveBackdropBudgetTest`).
 4. **Heavy work runs off the main thread.** That covers wallpaper decode, blur, file and network I/O
    and package queries. Native model work runs in the `:tai_runtime` process.
 5. **Prefer many thin frames to a few fat ones.** On pong, capping the clock or throttling
@@ -60,6 +67,8 @@ measuring on pong; AGENTS.md's rule on touching a real phone applies.
 | At rest, lazy mode off | about 21 fps, from the seconds flip (an open item; any change should lower it) | `project-docs/active/perf-home-terminal-idle-handoff-2026-09-27.md` | as above |
 | Scripted gestures (`pong.txt` x 3) | 2.4% janky; p50 16 ms, p90 22 ms, p99 44 ms; about 71 frames/s | `scripts/perf-frametime.sh`, 1.1.0-pre.1, 2026-10-12 | `scripts/perf-frametime.sh` |
 | Terminal scroll (`pong-scroll.txt` x 3, drags and flings through a 4000-line transcript) | 0.1% janky; p50 8 ms, p90 11–12 ms, p95 13–14 ms, p99 17 ms; about 90 frames/s. Before the row-recording shift (adbf9dd4b): p50 9–11 ms, p90 13–16 ms, p95 14–17 ms, p99 17–19 ms | `scripts/perf-frametime.sh`, 1.1.0-pre.4+dev.c5e1ecccf, 2026-10-15, two runs each | `scripts/perf-frametime.sh scripts/perf-scenarios/pong-scroll.txt` |
+| Split divider drag with pauses (`pong-divider-drag-{up,down}.txt`, 5 each, 90 Hz) | per drag: 142.0 frames, 5.3 janky; p50 13.3 ms, p90 20.7 ms, p99 29.0 ms; the lift 1.7 ms. Before ADR 0019 (39f0faf4d): 135.4 frames, 5.8 janky, p50 12.6, p90 23.7, p99 32.3 ms. Most flagged frames are Buffer Stuffing; compare App Deadline Missed in a trace | `scripts/perf-frametime.sh`, `ON_DEVICE=1 ROUNDS=1`, 2.0.0-pre.1+dev.471ae39d8 (abb3bdf73 + debug routes), 2026-11-01 | `project-docs/active/terminal-resize-on-pause-2026-11-01.md` |
+| Glass panels, guard scenarios (`gfxbench-palette.steps`, `gfxbench-drawer.steps`, 3 cycles, keyboard up) | palette 10.3% janky before the Snapshot kind, 5.9% after; terminal sheet 8.3% to 5.4%; drawer 12.4% to 6.4% | `scripts/perf-scenarios/gfxbench.sh`, `+dev.05dbf9eac` and `+dev.3b931802d`, 2026-11-03; `project-docs/active/live-glass-2026-11-03.md` | `scripts/perf-scenarios/gfxbench.sh pong scripts/perf-scenarios/gfxbench-palette.steps 3`; a `trav` spike during motion is a capture |
 | Sliding between places | median 15–16 ms; worst page-change frame 47 ms | `707920f71`, `c6223ec76` | perfetto, `Wall.*` trace sections |
 | Pre-roll and settle frames | 30–77 ms now. Target: none above 16.7 ms | `project-docs/active/fancier-glass/SPEC.md` | perfetto |
 | Cold start | 1.33–1.54 s from force-stop to first frame, relaunched as home (about 2 s of main thread in an older trace) | `scripts/perf-baseline.sh start`, 1.1.0-pre.1, 2026-10-12 | logcat `Displayed` after `am force-stop`, three runs |

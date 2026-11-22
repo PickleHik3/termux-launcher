@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Help topics that show another topic's diagram, under their own name (HelpDiagrams). -->
+<resources>
+    <!-- The display's picture: a desktop on it is what Android's process limit stops first. -->
+    <drawable name="help_diagram_fix_process_limit">@drawable/help_diagram_fix_display</drawable>
+</resources>

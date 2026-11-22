@@ -6,29 +6,29 @@ import androidx.annotation.Nullable;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import com.termux.app.page.PageKind;
 
 /**
- * Which places the wall has, and where a horizontal drag lands. Pure and tested; the layout is
+ * Which stretches the row has, and where a horizontal drag lands. Pure and tested; the layout is
  * dumb enough to just apply the answer.
  *
- * <p>The commit thresholds are the ones the status bar's pull-down already uses, so a page swipe
- * and a status pull feel like the same gesture at the same speeds.
+ * <p>Where a released drag lands is the one page rule ({@link PagePolicy}), which the Home pages
+ * and the app drawer read too.
  */
 public final class PaneWallPolicy {
 
-    /** Fraction of a page's width past which a released drag commits to the next page. */
-    public static final float DRAG_COMMIT_FRACTION = 0.35f;
+    /** Fraction of a page's width past which a released drag commits: {@link PagePolicy}'s. */
+    public static final float DRAG_COMMIT_FRACTION = PagePolicy.COMMIT_FRACTION;
     /**
-     * Release speed, in dp per second, that commits regardless of distance: the pager's usual
-     * (ViewPager's minimum fling velocity). It used to be two page widths a second — over
-     * 700 dp/s on a phone — which a quick flick of 250 ms rarely reaches, so short flicks on the
-     * bar sprang back and only long drags past {@link #DRAG_COMMIT_FRACTION} paged (pong,
-     * 2026-09-28). In dp rather than widths, so a tablet is not asked for a faster flick.
+     * Release speed, in dp per second, that commits regardless of distance: {@link PagePolicy}'s
+     * fling. In dp rather than widths, so a tablet is not asked for a faster flick; at two widths
+     * a second (over 700 dp/s on a phone) a quick 250 ms flick rarely paged (pong, 2026-09-28).
      */
-    public static final float DRAG_COMMIT_VELOCITY_DP_PER_SEC = 400f;
+    public static final float DRAG_COMMIT_VELOCITY_DP_PER_SEC = PagePolicy.FLING_DP_PER_SEC;
     /**
      * How far a flick must have moved the wall, in dp, for its speed to count: a twitch of a
-     * held finger is not a page change, however fast it reads.
+     * held finger is not a page change, however fast it reads. The wall's own input to
+     * {@link PagePolicy#turn}.
      */
     public static final float DRAG_COMMIT_FLING_MIN_DISTANCE_DP = 25f;
     /** How much of a drag past the outer page survives as movement. */
@@ -37,67 +37,145 @@ public final class PaneWallPolicy {
      * The stretch of the way, from either rest, over which a page's outline fades. Each page draws
      * its own rounded frame, and mid-slide two of them showed side by side; the outlines go over
      * the first few percent of the slide and come back over the last, so there is one edge on
-     * screen while the wall moves and the resting look is untouched. Longer than the chrome's
-     * landing ({@code PlaceChromeTravel.LANDING}) so the fade reads as a fade and not a blink.
+     * screen while the wall moves and the resting look is untouched. A fade, not a blink: it
+     * is over well before the chrome starts to move ({@code SeamFade.START}).
      */
     public static final float OUTLINE_FADE_FRACTION = 0.12f;
 
     private PaneWallPolicy() {}
 
     /**
-     * The places this install has, in spatial order. The terminal is always there — it is the
-     * home screen. The usage mode decides the rest: terminal mode is the terminal alone; a home
-     * screen adds the Widgets place while the widget pane is on; the display mode adds the
-     * Display place. A place is on the wall only while its own switch is on — the Display place
-     * is not built at all while the display is off, whatever the build carries.
+     * The places of the old three-place wall, for the callers that still ask by usage mode (the
+     * extra keys' place switches). The wall itself is built from {@link #rowPages}, and the
+     * display is a window of the Terminal there, never a page.
      *
      * @param terminalOnly   the terminal-only usage mode: no home surfaces at all
      * @param widgetsEnabled the widget pane is switched on
      * @param displayEnabled the embedded display is built into this edition and switched on
      */
     @NonNull
-    public static List<PaneWallPage> availablePages(boolean terminalOnly, boolean widgetsEnabled,
+    public static List<PageKind> availablePages(boolean terminalOnly, boolean widgetsEnabled,
                                                     boolean displayEnabled) {
-        List<PaneWallPage> pages = new ArrayList<>(3);
-        if (widgetsEnabled && !terminalOnly) pages.add(PaneWallPage.WIDGETS);
-        pages.add(PaneWallPage.TERMINAL);
-        if (displayEnabled) pages.add(PaneWallPage.DISPLAY);
+        List<PageKind> pages = new ArrayList<>(3);
+        if (widgetsEnabled && !terminalOnly) pages.add(PageKind.HOME);
+        pages.add(PageKind.TERMINAL);
+        if (displayEnabled) pages.add(PageKind.DISPLAY);
         return Collections.unmodifiableList(pages);
     }
 
-    /** The page {@code pages} shows at rest on a cold start, and where Home returns to. */
+    /**
+     * The wall's row, by the kind of page that stands in each stretch of it (ADR 0008): the Home
+     * pages first, always there; then the Terminal's windows, only while the current session's
+     * row has one — a terminal window, or the display window (before ADR 0015 A3b). A Home page and
+     * a window are each one entry here however many of them there are: the Home pages page inside
+     * the widget grid and the windows inside the Terminal's view ({@link WallRow}), and the wall
+     * only slides between the stretches.
+     *
+     * @param hasWindow the current session's row has at least one window, the display's included
+     */
     @NonNull
-    public static PaneWallPage homePage() {
-        return PaneWallPage.TERMINAL;
+    public static List<PageKind> rowPages(boolean hasWindow) {
+        List<PageKind> pages = new ArrayList<>(2);
+        pages.add(PageKind.HOME);
+        if (hasWindow) pages.add(PageKind.TERMINAL);
+        return Collections.unmodifiableList(pages);
     }
 
     /**
-     * Whether the wall wraps. Three places make a ring — past the Display page comes the Widgets
-     * page, and the other way round — so every place is one step from every other and the two
-     * tiles in the status bar are always "the place to my left" and "the place to my right".
-     * Two places cannot form a ring (the one other page cannot be on both sides at once), so a
-     * two-page wall stays a line with an end.
+     * Whether {@code page} is a place of the Terminal: a terminal window, the display window in
+     * front, or the Assistant page. The three are one Terminal (ADR 0025): one layout, one look,
+     * one dress, and a slide between two of them is no crossing of the seam. The one test every
+     * chrome decision that used to read "not Home" asks.
      */
-    public static boolean isRing(@NonNull List<PaneWallPage> pages) {
-        return pages.size() >= 3;
+    public static boolean isTerminalPlace(@Nullable PageKind page) {
+        return page == PageKind.TERMINAL || page == PageKind.DISPLAY
+            || page == PageKind.ASSISTANT;
+    }
+
+    /** Whether {@code page} is a Home page. */
+    public static boolean isHomePlace(@Nullable PageKind page) {
+        return page == PageKind.HOME;
     }
 
     /**
-     * Where {@code page} sits relative to {@code current}, in places: negative to the left,
-     * positive to the right, zero for itself. On a ring it is the shorter way round, so on a
-     * three-page wall every other page is exactly one place away.
+     * Whether the window bar's chips (the session's windows, the add button, the stats) show on
+     * {@code page}'s bar: on every place, the Assistant page's included. A chip there is a way
+     * out to a window, and a tap travels the wall to it.
      */
-    public static int relativePosition(@NonNull List<PaneWallPage> pages,
-                                       @NonNull PaneWallPage current, @NonNull PaneWallPage page) {
-        int from = pages.indexOf(current);
-        int to = pages.indexOf(page);
-        if (from < 0 || to < 0) return 0;
-        int distance = to - from;
-        if (!isRing(pages)) return distance;
-        int count = pages.size();
-        distance = ((distance % count) + count) % count;
-        if (distance > count / 2) distance -= count;
-        return distance;
+    public static boolean showsWindowChips(@Nullable PageKind page) {
+        return true;
+    }
+
+    /**
+     * Whether a sideways swipe on the page's own content pages the wall: a terminal window's text
+     * where the terminal gives the swipe away ({@code terminalGivesAway}), and the Assistant page
+     * anywhere its view does not keep it for a sideways scroller ({@code assistantGivesAway}),
+     * and a Display page anywhere while no display runs on it ({@code displayRunning} false).
+     * Home pages page by their own plain swipe, and a running display's picture takes every touch:
+     * it pages only by its border.
+     */
+    public static boolean bodySwipePages(@NonNull PageKind page, boolean terminalGivesAway,
+                                         boolean assistantGivesAway, boolean displayRunning) {
+        if (page == PageKind.TERMINAL) return terminalGivesAway;
+        if (page == PageKind.ASSISTANT) return assistantGivesAway;
+        if (page == PageKind.DISPLAY) return !displayRunning;
+        return false;
+    }
+
+    /** The Assistant page's pane stands this far in from the wall's left and right edges (sheet 01, row 3). */
+    public static final float ASSISTANT_SIDE_INSET_DP = 12f;
+    /** The Assistant page's pane stands this far in from the wall's top and bottom (sheet 01: bottom gap 8). */
+    public static final float ASSISTANT_END_INSET_DP = 8f;
+
+    /** The stretch the home press lands on, and where a page taken away hands the wall: Home. */
+    @NonNull
+    public static PageKind homePage() {
+        return PageKind.HOME;
+    }
+
+    /**
+     * How far {@code page} stands in from the wall's edge on one side, in px, from the terminal
+     * page's margin there ({@code terminalMarginPx}, the chrome shape's opening plus the terminal
+     * border's own air) and that air ({@code terminalFrameAirPx}). A terminal window keeps its
+     * whole margin. The display window's card stands at the opening itself, the margin less the
+     * air: the wall asks for it as a page it does not know ({@code null}). A Home page
+     * has no frame, so it stands at none: it reaches the wall's
+     * edge and its content keeps Home's Margin as its own rim, the widget grid's, which makes the
+     * air from the screen's edge to the first cell exactly one Margin, as the dock's cards and the
+     * Home floats' room have it. Standing it in the opening as well had the grid's rim inside the
+     * opening's Margin: two Margins of air, and the caps worked out on a grid a Margin narrower.
+     * {@code null} is a page the wall does not know, kept at the opening: the display window's.
+     */
+    public static int pageInsetPx(@Nullable PageKind page, int terminalMarginPx,
+                                  int terminalFrameAirPx) {
+        if (page == PageKind.TERMINAL) return terminalMarginPx;
+        if (page == homePage()) return 0;
+        return Math.max(0, terminalMarginPx - Math.max(0, terminalFrameAirPx));
+    }
+
+    /**
+     * {@link #pageInsetPx(PageKind, int, int)} with the Assistant page's own pane: it stands
+     * {@link #ASSISTANT_SIDE_INSET_DP} in on the sides and {@link #ASSISTANT_END_INSET_DP} at the
+     * top and bottom, whatever the Terminal's Margin (sheet 01: x 12..400, bottom gap 8). The one
+     * owner of that geometry; the page's view adds no margins of its own.
+     *
+     * @param side true for the left and right edges, false for the top and bottom
+     */
+    public static int pageInsetPx(@Nullable PageKind page, int terminalMarginPx,
+                                  int terminalFrameAirPx, boolean side, float density) {
+        if (page == PageKind.ASSISTANT) {
+            return Math.round((side ? ASSISTANT_SIDE_INSET_DP : ASSISTANT_END_INSET_DP) * density);
+        }
+        return pageInsetPx(page, terminalMarginPx, terminalFrameAirPx);
+    }
+
+    /**
+     * Whether the wall wraps. It used to, with three places; the row is a line now, Home pages on
+     * the left and the Terminal on the right, so it never does. Kept so the arithmetic below
+     * reads the same for a line of any length.
+     */
+    public static boolean isRing(@NonNull List<PageKind> pages) {
+        return false;
     }
 
     /**
@@ -106,10 +184,21 @@ public final class PaneWallPolicy {
      * are simply skipped, so a two-page wall has no dead swipe.
      */
     @NonNull
-    public static PaneWallPage neighbour(@NonNull List<PaneWallPage> pages,
-                                         @NonNull PaneWallPage page, int steps) {
-        int index = pages.indexOf(page);
-        if (index < 0) return page;
+    public static PageKind neighbour(@NonNull List<PageKind> pages,
+                                         @NonNull PageKind page, int steps) {
+        return neighbourAt(pages, pages.indexOf(page), steps, page);
+    }
+
+    /**
+     * The page kind {@code steps} entries from entry {@code index} of {@code pages}, counted as
+     * {@link #neighbour} counts: a line stops at the outer entry. {@code fallback} when
+     * {@code index} is not in the list. For a list with one entry per cell, where a kind can
+     * stand in several cells and only the index says which one the wall is on.
+     */
+    @NonNull
+    public static PageKind neighbourAt(@NonNull List<PageKind> pages, int index,
+                                           int steps, @NonNull PageKind fallback) {
+        if (index < 0 || index >= pages.size()) return fallback;
         int count = pages.size();
         int target = isRing(pages)
             ? (((index + steps) % count) + count) % count
@@ -124,18 +213,17 @@ public final class PaneWallPolicy {
      * two-page wall it is the single other page, on whichever side it is.
      */
     @NonNull
-    public static List<PaneWallPage> tiles(@NonNull List<PaneWallPage> pages,
-                                           @NonNull PaneWallPage current) {
-        List<PaneWallPage> result = new ArrayList<>(pages.size());
-        for (PaneWallPage page : pages) if (page != current) result.add(page);
-        result.sort((a, b) -> Integer.compare(relativePosition(pages, current, a),
-            relativePosition(pages, current, b)));
+    public static List<PageKind> tiles(@NonNull List<PageKind> pages,
+                                           @NonNull PageKind current) {
+        List<PageKind> result = new ArrayList<>(pages.size());
+        for (PageKind page : pages) if (page != current) result.add(page);
+        result.sort((a, b) -> Integer.compare(pages.indexOf(a), pages.indexOf(b)));
         return Collections.unmodifiableList(result);
     }
 
     /** True while a swipe in {@code steps}'s direction has somewhere to go. */
-    public static boolean hasNeighbour(@NonNull List<PaneWallPage> pages,
-                                       @NonNull PaneWallPage page, int steps) {
+    public static boolean hasNeighbour(@NonNull List<PageKind> pages,
+                                       @NonNull PageKind page, int steps) {
         return neighbour(pages, page, steps) != page;
     }
 
@@ -167,17 +255,26 @@ public final class PaneWallPolicy {
      */
     public static int settle(float offsetPx, float velocityPxPerSec, int widthPx, float density,
                              boolean previousExists, boolean nextExists) {
+        return settle(offsetPx, velocityPxPerSec, widthPx, density, previousExists, nextExists,
+            0f);
+    }
+
+    /**
+     * {@link #settle}, for a drag that began only once the finger had already gone {@code
+     * leadPx} sideways (positive to the right): a slide off a border is claimed past the touch
+     * slop and dragged from there, so the wall never jumps by the slop. That lead counts toward
+     * the flick's least distance, which is the finger's travel, not the wall's: a quick 25 dp
+     * flick pages from a border as it does anywhere, rather than needing the slop on top.
+     */
+    public static int settle(float offsetPx, float velocityPxPerSec, int widthPx, float density,
+                             boolean previousExists, boolean nextExists, float leadPx) {
         if (widthPx <= 0) return 0;
-        float flingPx = DRAG_COMMIT_VELOCITY_DP_PER_SEC * Math.max(0f, density);
-        boolean flung = Math.abs(offsetPx) >= DRAG_COMMIT_FLING_MIN_DISTANCE_DP
-            * Math.max(0f, density);
-        // A flick decides on its own, whichever way the finger had already dragged: reversing
-        // direction at the end of a drag must not commit the page the drag was heading for.
-        if (flung && velocityPxPerSec >= flingPx) return previousExists ? -1 : 0;
-        if (flung && velocityPxPerSec <= -flingPx) return nextExists ? 1 : 0;
-        float commitPx = widthPx * DRAG_COMMIT_FRACTION;
-        if (offsetPx >= commitPx) return previousExists ? -1 : 0;
-        if (offsetPx <= -commitPx) return nextExists ? 1 : 0;
+        float d = Math.max(0f, density);
+        // Positive offset shows the page on the left.
+        int way = PagePolicy.turn(offsetPx, offsetPx + leadPx, velocityPxPerSec, widthPx, d,
+            DRAG_COMMIT_FLING_MIN_DISTANCE_DP * d);
+        if (way > 0) return previousExists ? -1 : 0;
+        if (way < 0) return nextExists ? 1 : 0;
         return 0;
     }
 
@@ -194,6 +291,14 @@ public final class PaneWallPolicy {
         if (Float.isNaN(velocityPxPerSec)) return 0f;
         boolean resisting = offsetPx > 0f ? !previousExists : offsetPx < 0f && !nextExists;
         return resisting ? velocityPxPerSec * EDGE_RESISTANCE : velocityPxPerSec;
+    }
+
+    /**
+     * Whether the wall already rests on Home page one: a Home page in front, still, whose global
+     * Home index is 0 ({@code homeIndex} is -1 when it is unknown).
+     */
+    public static boolean restsOnHomePageOne(@NonNull PageKind current, boolean moving, int homeIndex) {
+        return current == PageKind.HOME && !moving && homeIndex == 0;
     }
 
     /**
@@ -225,20 +330,61 @@ public final class PaneWallPolicy {
     }
 
     /**
+     * Whether a page whose own alpha is {@code pageAlpha}, as the wall last placed it, is being
+     * faded rather than only moved: posed by a transition that fades it (Stack, Depth, Fade), or
+     * parked off screen at 0. Its outline then goes with its fade instead of ahead of it.
+     */
+    public static boolean fadesWithPage(float pageAlpha) {
+        return pageAlpha < 1f;
+    }
+
+    /**
+     * How much of the terminal page's rims show, which its panes draw inside the page: the wall's
+     * outline fade ({@link #outlineAlpha}) while the page only moves, so two outlines never show
+     * side by side; all of them while the transition fades the page ({@link #fadesWithPage}),
+     * since they then fade with the page, as its text and its glass do. Faded on the outline's
+     * curve instead, the rims were gone a few percent into the way while the rest of the pane
+     * was still on screen, and came back only on the last few percent of an arrival.
+     */
+    public static float terminalRimAlpha(float outlineAlpha, float pageAlpha) {
+        return fadesWithPage(pageAlpha) ? 1f : outlineAlpha;
+    }
+
+    /**
+     * The same for the terminal's frame line, laid over the wall rather than drawn in the page:
+     * {@link #pageOutlineAlpha} while the page only moves, and the page's own alpha while the
+     * transition fades it, so the glass edge and what it frames come and go together.
+     */
+    public static float terminalFrameLineAlpha(float pageOutlineAlpha, float pageAlpha) {
+        return fadesWithPage(pageAlpha) ? Math.max(0f, pageAlpha) : pageOutlineAlpha;
+    }
+
+    /**
      * Whether the wall standing {@code offsetPx} from {@code current}'s rest shows two places: a
      * drag into a line's outer edge shows the page alone, resisting, and its outline stays.
      */
-    public static boolean blendsPlaces(@NonNull List<PaneWallPage> pages,
-                                       @NonNull PaneWallPage current, float offsetPx) {
+    public static boolean blendsPlaces(@NonNull List<PageKind> pages,
+                                       @NonNull PageKind current, float offsetPx) {
         if (offsetPx == 0f || Float.isNaN(offsetPx)) return false;
         // Pages sitting to the right of their rest show the place to the left of the current one.
         return hasNeighbour(pages, current, offsetPx > 0f ? -1 : 1);
     }
 
-    /** Resolves the {@code page=} argument of {@code wall.go}, or null when it names nothing. */
+    /** Whether {@code name} names Home outright ({@code home}, {@code widgets}), not a neighbour. */
+    public static boolean namesHome(@Nullable String name) {
+        if (name == null) return false;
+        String value = name.trim().toLowerCase(java.util.Locale.ROOT);
+        return "home".equals(value) || "widgets".equals(value);
+    }
+
+    /**
+     * Resolves the {@code page=} argument of {@code wall.go}, or null when it names nothing.
+     * {@code display} names a window, not a page: the activity opens or brings in the display
+     * window for it before asking here.
+     */
     @Nullable
-    public static PaneWallPage parsePage(@NonNull List<PaneWallPage> pages,
-                                         @NonNull PaneWallPage current, @Nullable String name) {
+    public static PageKind parsePage(@NonNull List<PageKind> pages,
+                                         @NonNull PageKind current, @Nullable String name) {
         if (name == null) return null;
         String value = name.trim().toLowerCase(java.util.Locale.ROOT);
         switch (value) {
@@ -246,14 +392,25 @@ public final class PaneWallPolicy {
                 return neighbour(pages, current, -1);
             case "right":
                 return neighbour(pages, current, 1);
+            case "home":
             case "widgets":
-                return pages.contains(PaneWallPage.WIDGETS) ? PaneWallPage.WIDGETS : null;
+                return pages.contains(PageKind.HOME) ? PageKind.HOME : null;
+            case "workspace":
             case "terminal":
-                return PaneWallPage.TERMINAL;
-            case "display":
-                return pages.contains(PaneWallPage.DISPLAY) ? PaneWallPage.DISPLAY : null;
+                return pages.contains(PageKind.TERMINAL) ? PageKind.TERMINAL : null;
             default:
                 return null;
         }
+    }
+
+    /**
+     * The settle of a released drag that stepped to the next window: the arriving page from
+     * {@code fromPx} beside its rest, starting at the wall's speed at the release (clamped, see
+     * {@link SettleSpring#page}), so the release is one continuous motion. Land it with
+     * {@code durationMs(SettleSpring.PAGE_REST_PX)}.
+     */
+    public static SettleSpring innerStepSettle(float fromPx, float releaseVelocityPxPerSec,
+                                               float springTime) {
+        return SettleSpring.page(fromPx, releaseVelocityPxPerSec, springTime);
     }
 }

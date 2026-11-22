@@ -26,8 +26,8 @@ import com.termux.R;
 import com.termux.app.chrome.GlassTokens;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.haptics.Haptics;
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
-import com.termux.app.wall.PaneWallPage;
 import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.Collections;
@@ -56,7 +56,7 @@ import java.util.List;
 public final class StatusBarLensView extends View {
 
     public interface Listener {
-        void onPlaceIconTapped(@NonNull PaneWallPage page);
+        void onPlaceIconTapped(@NonNull PageKind page);
     }
 
     private final Paint mTilePaint = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -67,17 +67,17 @@ public final class StatusBarLensView extends View {
     private final Paint mFadePaint = new Paint();
     private final RectF mTile = new RectF();
     private final RectF mGlow = new RectF();
-    private final RectF[] mHitRects = new RectF[PaneWallPage.values().length];
+    private final RectF[] mHitRects = new RectF[PageKind.values().length];
     /**
      * Each place's glow and dissolve, built once in unit space for the colours they carry and
      * aimed at the mark with {@link #mShaderMatrix}; rebuilt only when those colours change.
      */
-    private final RadialGradient[] mGlowShaders = new RadialGradient[PaneWallPage.values().length];
-    private final int[] mGlowInner = new int[PaneWallPage.values().length];
-    private final int[] mGlowMiddle = new int[PaneWallPage.values().length];
-    private final LinearGradient[] mFadeShaders = new LinearGradient[PaneWallPage.values().length];
-    private final int[] mFadeOuter = new int[PaneWallPage.values().length];
-    private final boolean[] mFadeVertical = new boolean[PaneWallPage.values().length];
+    private final RadialGradient[] mGlowShaders = new RadialGradient[PageKind.values().length];
+    private final int[] mGlowInner = new int[PageKind.values().length];
+    private final int[] mGlowMiddle = new int[PageKind.values().length];
+    private final LinearGradient[] mFadeShaders = new LinearGradient[PageKind.values().length];
+    private final int[] mFadeOuter = new int[PageKind.values().length];
+    private final boolean[] mFadeVertical = new boolean[PageKind.values().length];
     private final Matrix mShaderMatrix = new Matrix();
     private static final float[] GLOW_STOPS = {0.45f, 0.7f, 1f};
     private final int mTouchSlop;
@@ -92,20 +92,20 @@ public final class StatusBarLensView extends View {
     private static final double TONE_TARGET = OnGlass.TARGET_LARGE_TEXT * 1.04d;
 
     /** The colour each place's switch key wears in the extra-keys row; absent until the row says. */
-    private final int[] mRowAccents = new int[PaneWallPage.values().length];
-    private final boolean[] mHasRowAccent = new boolean[PaneWallPage.values().length];
+    private final int[] mRowAccents = new int[PageKind.values().length];
+    private final boolean[] mHasRowAccent = new boolean[PageKind.values().length];
 
     /** The opaque colour the bar is standing on, as the chrome measured it; null until it has. */
     @Nullable private Integer mBandSurface;
     /** Each place's colour toned onto {@link #mBandSurface}; rebuilt when the band moves. */
-    private final int[] mTonedAccents = new int[PaneWallPage.values().length];
+    private final int[] mTonedAccents = new int[PageKind.values().length];
     private boolean mTonedAccentsValid;
     /** Each place's glyph ink at the alphas a drag has walked it through; see {@link StatusBarInk.AlphaInkMemo}. */
     private final StatusBarInk.AlphaInkMemo[] mGlyphInks =
-        new StatusBarInk.AlphaInkMemo[PaneWallPage.values().length];
+        new StatusBarInk.AlphaInkMemo[PageKind.values().length];
 
-    @NonNull private List<PaneWallPage> mPages = Collections.singletonList(PaneWallPage.TERMINAL);
-    @NonNull private PaneWallPage mCurrent = PaneWallPage.TERMINAL;
+    @NonNull private List<PageKind> mPages = Collections.singletonList(PageKind.TERMINAL);
+    @NonNull private PageKind mCurrent = PageKind.TERMINAL;
     private float mOffsetPx;
     private int mWallWidthPx;
     /** 0 in the compact bar, 1 in the expanded one, in between while it folds. */
@@ -113,7 +113,6 @@ public final class StatusBarLensView extends View {
     /** Where the clock puts the home icon in the expanded bar: its time line and band height. */
     private float mHomeCenterYPx = -1f;
     private float mHomeSizePx = -1f;
-    private boolean mDisplayRunning;
     /** The status row's chip corner; the icons take it so they and the badge are one kit. */
     private float mChipRadiusPx = -1f;
     /** The bar stands in a column, so the icons travel down its length instead of across it. */
@@ -123,9 +122,8 @@ public final class StatusBarLensView extends View {
     private int mAlongEndPx;
     /** The bar stands along the bottom: the clock, and the line the icons share, are at its foot. */
     private boolean mBottom;
-    @NonNull private String mDisplayGlyph = "";
     @Nullable private Listener mListener;
-    @Nullable private PaneWallPage mPressed;
+    @Nullable private PageKind mPressed;
     /** The last bar the marks were laid out in, and where they are written, kept across draws. */
     @Nullable private StatusBarLensMetrics.Bar mBar;
     private final StatusBarLensMetrics.MarkBuffer mMarks = new StatusBarLensMetrics.MarkBuffer();
@@ -150,13 +148,24 @@ public final class StatusBarLensView extends View {
     public void setListener(@Nullable Listener listener) { mListener = listener; }
 
     /** The wall's places, the one on screen, and how far the wall has moved from its rest. */
-    public void setWallState(@NonNull List<PaneWallPage> pages, @NonNull PaneWallPage current,
+    public void setWallState(@NonNull List<PageKind> pages, @NonNull PageKind current,
                              float offsetPx, int wallWidthPx) {
         mPages = pages;
         mCurrent = current;
         mOffsetPx = offsetPx;
         mWallWidthPx = wallWidthPx;
         invalidate();
+    }
+
+    /**
+     * The wall's state read off its cells: {@code cells} holds one page kind per cell in cell
+     * order, and the wall stands {@code offsetPx} from the rest of cell {@code currentIndex}. The
+     * place in front is that cell's kind, whichever cell of the kind it is (ADR 0016).
+     */
+    public void setWallState(@NonNull List<PageKind> cells, int currentIndex, float offsetPx,
+                             int wallWidthPx) {
+        if (currentIndex < 0 || currentIndex >= cells.size()) return;
+        setWallState(cells, cells.get(currentIndex), offsetPx, wallWidthPx);
     }
 
     /** How far the bar is unfolded: 0 compact, 1 expanded. The icons grow and rise with it. */
@@ -224,13 +233,6 @@ public final class StatusBarLensView extends View {
         invalidate();
     }
 
-    /** The Display icon reads quieter until a display runs. */
-    public void setDisplayRunning(boolean running) {
-        if (mDisplayRunning == running) return;
-        mDisplayRunning = running;
-        invalidate();
-    }
-
     /**
      * What the chrome measured the bar's band to be, so a place's colour can be toned onto it.
      *
@@ -252,9 +254,9 @@ public final class StatusBarLensView extends View {
      * colour, and a role can be changed in the extra-keys editor. So this arrives again every time
      * the row restates its keys rather than being read once from the theme.
      */
-    public void setPlaceAccents(@Nullable java.util.Map<PaneWallPage, Integer> accents) {
+    public void setPlaceAccents(@Nullable java.util.Map<PageKind, Integer> accents) {
         boolean changed = false;
-        for (PaneWallPage page : PaneWallPage.values()) {
+        for (PageKind page : PageKind.values()) {
             Integer given = accents == null ? null : accents.get(page);
             boolean has = given != null;
             int color = has ? given : 0;
@@ -272,7 +274,7 @@ public final class StatusBarLensView extends View {
     /** The place's colour: the row's, when the row stands a switch for it. */
     @ColorInt
     @androidx.annotation.VisibleForTesting
-    int accent(@NonNull PaneWallPage page) {
+    int accent(@NonNull PageKind page) {
         return mHasRowAccent[page.ordinal()]
             ? mRowAccents[page.ordinal()] : accentFor(getContext(), page);
     }
@@ -283,11 +285,11 @@ public final class StatusBarLensView extends View {
      * redraws continuously while the wall is dragged.
      */
     @ColorInt
-    private int tonedAccent(@NonNull PaneWallPage page) {
+    private int tonedAccent(@NonNull PageKind page) {
         Integer surface = mBandSurface;
         if (surface == null) return accent(page);
         if (!mTonedAccentsValid) {
-            for (PaneWallPage candidate : PaneWallPage.values()) {
+            for (PageKind candidate : PageKind.values()) {
                 mTonedAccents[candidate.ordinal()] = OnGlass.resolveBare(surface,
                     accent(candidate), TONE_TARGET).ink;
             }
@@ -296,17 +298,14 @@ public final class StatusBarLensView extends View {
         return mTonedAccents[page.ordinal()];
     }
 
-    /** The Display place's mark: Termux X11's prompt, or the distribution the display serves. */
-    public void setDisplayGlyph(@NonNull String glyph) {
-        if (mDisplayGlyph.equals(glyph)) return;
-        mDisplayGlyph = glyph;
-        invalidate();
-    }
-
-    /** The place's accent: the same three roles the badge and chips take. */
-    public static int accentFor(@NonNull Context context, @NonNull PaneWallPage page) {
+    /**
+     * The place's accent: the same roles the badge and chips take. The display's place keeps its
+     * own for what is the display's alone — its touchpad and its help — while the bar over the
+     * display window wears the Terminal's, as over any of its windows.
+     */
+    public static int accentFor(@NonNull Context context, @NonNull PageKind page) {
         switch (page) {
-            case WIDGETS:
+            case HOME:
                 return MaterialColors.getColor(context,
                     com.termux.shared.R.attr.termuxColorTertiary,
                     ContextCompat.getColor(context, R.color.termux_secondary));
@@ -320,17 +319,13 @@ public final class StatusBarLensView extends View {
         }
     }
 
-    /** The place's mark: a grid, a prompt, a screen. */
+    /** The place's mark: a prompt. Never drawn since the bar wears no marks (#90). */
     @NonNull
-    private String glyphFor(@NonNull PaneWallPage page) {
-        switch (page) {
-            case WIDGETS: return "\uf015";
-            case DISPLAY: return mDisplayGlyph;
-            default: return "\uf120";
-        }
+    private String glyphFor(@NonNull PageKind page) {
+        return "\uf120";
     }
 
-    /** What the slot keeps clear at its start, from the bar's edge: the home icon and its gap. */
+    /** What the slot keeps clear at its start for a mark beside the clock: none since #90. */
     public static int leadingCellWidthPx(@NonNull Context context) {
         return StatusBarLensMetrics.leadingCellWidthPx(
             context.getResources().getDisplayMetrics().density);
@@ -361,7 +356,7 @@ public final class StatusBarLensView extends View {
         if (mWallWidthPx <= 0 || mPages.isEmpty()) return;
 
         List<StatusBarLensMetrics.Mark> marks = StatusBarLensMetrics.marks(bar(width, height),
-            mPages, mCurrent, mOffsetPx, mWallWidthPx, mDisplayRunning, mMarks);
+            mPages, mCurrent, mOffsetPx, mWallWidthPx, mMarks);
         for (int index = 0; index < marks.size(); index++) {
             StatusBarLensMetrics.Mark mark = marks.get(index);
             mTile.set(mark.tile.left, mark.tile.top, mark.tile.right, mark.tile.bottom);
@@ -440,7 +435,7 @@ public final class StatusBarLensView extends View {
      * colours only as often as their rounded alphas step.
      */
     @NonNull
-    private Shader glowShader(@NonNull PaneWallPage page, int inner, int middle, float centerX,
+    private Shader glowShader(@NonNull PageKind page, int inner, int middle, float centerX,
                               float centerY, float radius) {
         int i = page.ordinal();
         RadialGradient shader = mGlowShaders[i];
@@ -463,7 +458,7 @@ public final class StatusBarLensView extends View {
      * has no unit to stretch, so it is built in place as it always was.
      */
     @NonNull
-    private Shader fadeShader(@NonNull PaneWallPage page, boolean vertical, int outerColor,
+    private Shader fadeShader(@NonNull PageKind page, boolean vertical, int outerColor,
                               float outer, float inner) {
         if (inner == outer) {
             return vertical
@@ -499,7 +494,7 @@ public final class StatusBarLensView extends View {
     public boolean onTouchEvent(@NonNull MotionEvent event) {
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_DOWN: {
-                PaneWallPage hit = iconAt(event.getX(), event.getY());
+                PageKind hit = iconAt(event.getX(), event.getY());
                 if (hit == null) return false;
                 mPressed = hit;
                 mDownX = event.getX();
@@ -513,7 +508,7 @@ public final class StatusBarLensView extends View {
                 }
                 return mPressed != null;
             case MotionEvent.ACTION_UP: {
-                PaneWallPage pressed = mPressed;
+                PageKind pressed = mPressed;
                 mPressed = null;
                 if (pressed == null) return false;
                 Haptics.tick(this, HapticFeedbackConstants.CONTEXT_CLICK);
@@ -534,9 +529,9 @@ public final class StatusBarLensView extends View {
     }
 
     @Nullable
-    private PaneWallPage iconAt(float x, float y) {
+    private PageKind iconAt(float x, float y) {
         if (mWallWidthPx <= 0) return null;
-        for (PaneWallPage page : mPages) {
+        for (PageKind page : mPages) {
             if (page == mCurrent) continue;
             RectF rect = mHitRects[page.ordinal()];
             if (rect.isEmpty()) continue;

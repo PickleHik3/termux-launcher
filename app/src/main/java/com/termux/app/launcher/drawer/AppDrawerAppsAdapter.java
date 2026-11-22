@@ -46,7 +46,7 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     }
 
     private static final char[] NO_LETTERS = new char[0];
-    private static final int VIEW_TYPE_APP = 0;
+    static final int VIEW_TYPE_APP = 0;
     private static final int VIEW_TYPE_FOLDER = 1;
     private static final int VIEW_TYPE_SEARCH_ROW = 2;
 
@@ -69,6 +69,9 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     /** True while the categories view type shows ranked results as rows instead of grid cells. */
     private boolean mSearchRowPresentation;
     @Nullable private CategoryLabelLookup mCategoryLookup;
+    /** The position the arrow keys are on, or -1. */
+    private int mHighlightedPosition = AppDrawerSearchSelection.NONE;
+    private static final Object HIGHLIGHT_PAYLOAD = new Object();
 
     public AppDrawerAppsAdapter(@Nullable SuggestionBarView dock) {
         mDock = dock;
@@ -92,6 +95,22 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
 
     /** Set immediately before a list submission, so the submission remains the sole rebind. */
     public void setPickupEnabled(boolean enabled) { mPickupEnabled = enabled; }
+
+    /**
+     * Sets the highlight ahead of a list submission, which is the sole rebind and so draws it.
+     */
+    public void presetHighlight(int position) {
+        mHighlightedPosition = position;
+    }
+
+    /** Moves the highlight, rebinding only the old and new positions. */
+    public void moveHighlight(int position) {
+        int old = mHighlightedPosition;
+        if (old == position) return;
+        mHighlightedPosition = position;
+        if (old >= 0 && old < mItems.size()) notifyItemChanged(old, HIGHLIGHT_PAYLOAD);
+        if (position >= 0 && position < mItems.size()) notifyItemChanged(position, HIGHLIGHT_PAYLOAD);
+    }
 
     /**
      * Replaces the visible list. Called with the full catalogue, sorted by label, for an empty query
@@ -160,6 +179,9 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
      * pixel size that has just changed, so every holder is stale.
      */
     public void setMetrics(@Nullable AppDrawerGridMetrics metrics) {
+        // Every open re-resolves the same numbers; rebinding then would recycle every attached
+        // cell for nothing.
+        if (java.util.Objects.equals(mMetrics, metrics)) return;
         mMetrics = metrics;
         prefetchLeadingIcons();
         notifyDataSetChanged();
@@ -252,7 +274,18 @@ public final class AppDrawerAppsAdapter extends RecyclerView.Adapter<AppDrawerAp
     }
 
     @Override
+    public void onBindViewHolder(@NonNull Cell holder, int position,
+                                 @NonNull List<Object> payloads) {
+        if (!payloads.isEmpty() && payloads.get(0) == HIGHLIGHT_PAYLOAD) {
+            holder.cell.setKeyboardHighlight(position == mHighlightedPosition);
+            return;
+        }
+        super.onBindViewHolder(holder, position, payloads);
+    }
+
+    @Override
     public void onBindViewHolder(@NonNull Cell holder, int position) {
+        holder.cell.setKeyboardHighlight(position == mHighlightedPosition);
         AppDrawerItem item = mItems.get(position);
         AppDrawerGridMetrics metrics = mMetrics;
         if (item.kind == AppDrawerItem.Kind.FOLDER)

@@ -2,7 +2,9 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.graphics.Typeface;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
+import android.graphics.drawable.LayerDrawable;
 import android.graphics.drawable.StateListDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
@@ -54,7 +56,7 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
         int padH = Math.round(PAD_H_DP * density);
         int padV = Math.round(PAD_V_DP * density);
         setPadding(padH, padV, padH, padV);
-        setBackground(rowBackground(density));
+        refreshBackground();
 
         // Re-home the shared label into a two-line text column beside the icon.
         removeView(label);
@@ -91,7 +93,26 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        setBackground(rowBackground(getResources().getDisplayMetrics().density));
+        refreshBackground();
+    }
+
+    @Override
+    protected void refreshBackground() {
+        float density = getResources().getDisplayMetrics().density;
+        // The row keeps its own wash under the bead, which hugs the icon and both text lines.
+        setBackground(isKeyboardHighlighted()
+            ? new LayerDrawable(new Drawable[] {rowBackground(density), beadDrawable()})
+            : rowBackground(density));
+    }
+
+    @Override
+    protected boolean centersHighlightOnIcon() {
+        return false;
+    }
+
+    @Override
+    protected void unionExtraContent(@NonNull int[] box) {
+        unionTextBounds(category, box);
     }
 
     @NonNull

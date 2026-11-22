@@ -144,6 +144,27 @@ public final class KittyClipboard {
         handler.write("\033]5522;type=read:status=DONE:pw=" + pw + "\033\\");
     }
 
+    /**
+     * Whether the {@code OSC 5522} read in {@code textParameter} (the text after {@code 5522;})
+     * redeems a paste event's password, as {@link #handle} decides it. Used by the Fast engine,
+     * whose core parses the read but whose paste events are issued here.
+     */
+    boolean redeemsPasteEvent(String textParameter, long now) {
+        int split = textParameter.indexOf(';');
+        String metadata = split < 0 ? textParameter : textParameter.substring(0, split);
+        String type = "", pw = "", name = "";
+        for (String pair : metadata.split(":")) {
+            int equals = pair.indexOf('=');
+            if (equals < 0) continue;
+            String key = pair.substring(0, equals), value = pair.substring(equals + 1);
+            if (key.equals("type")) type = value;
+            else if (key.equals("pw")) pw = value;
+            else if (key.equals("name")) name = value;
+        }
+        return type.equals("read") && !pw.isEmpty() && !name.isEmpty()
+            && mPasteToken.redeem(decodeOrNull(pw), now);
+    }
+
     /** Handle the text after {@code 5522;}; {@code terminator} is the ST or BEL the request ended with. */
     public void handle(String textParameter, String terminator, Handler handler) {
         int split = textParameter.indexOf(';');

@@ -38,7 +38,8 @@ import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
  * 1.15x slop" means one thing in this app and not two. The plane reports raw screen-Y to
  * {@link Callbacks}; the controller owns every decision about what that Y means.
  */
-public final class AppDrawerPlaneView extends FrameLayout {
+public final class AppDrawerPlaneView extends FrameLayout
+    implements com.termux.app.chrome.LiveBackdrop.Container {
 
     /** Raw touch reports from the plane's close drag. The controller interprets them. */
     public interface Callbacks {
@@ -125,7 +126,8 @@ public final class AppDrawerPlaneView extends FrameLayout {
                     (int) Math.floor(mFrame.right), (int) Math.floor(mFrame.bottom), mRadiusPx);
             }
         });
-        mContent = new FrameLayout(context);
+        // A container the search capsule's Live picture records the drawer's rows through.
+        mContent = new com.termux.app.chrome.LiveBackdropFrameLayout(context);
         // B-1 ships the plane empty. The grid, search pill and A-Z rope are B-2/B-3 and go in here;
         // they inherit the outline clip, so they need no rounding of their own.
         addView(mContent, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
@@ -192,6 +194,9 @@ public final class AppDrawerPlaneView extends FrameLayout {
         invalidate();
     }
 
+    /** See {@link #setContentGate}; open unless an open is waiting for its picture. */
+    private float mContentGate = 1f;
+
     /**
      * The only per-frame entry point: the plane rectangle and its corner radius, in host
      * coordinates. No allocation, no layout — a bounds update, an outline invalidation and a draw.
@@ -204,16 +209,37 @@ public final class AppDrawerPlaneView extends FrameLayout {
         // subpixel and the seam shows as a lighter line.
         mSlabBounds.set((int) Math.floor(frame.left), (int) Math.floor(frame.top),
             (int) Math.ceil(frame.right), (int) Math.ceil(frame.bottom));
-        float contentAlpha = AppDrawerTransitionGeometry.ramp(progress,
-            CONTENT_FADE_START, CONTENT_FADE_END);
+        applyContentAlpha();
+        invalidateOutline();
+        invalidate();
+    }
+
+    /**
+     * The content's share of the card's material, 0..1 ({@link AppDrawerContentGate}): the content
+     * never shows before the glass picture under it is up.
+     */
+    public void setContentGate(float gate) {
+        float g = Math.max(0f, Math.min(1f, gate));
+        if (g == mContentGate) return;
+        mContentGate = g;
+        applyContentAlpha();
+    }
+
+    private void applyContentAlpha() {
+        float contentAlpha = AppDrawerTransitionGeometry.ramp(mProgress,
+            CONTENT_FADE_START, CONTENT_FADE_END) * mContentGate;
         mContent.setAlpha(contentAlpha);
         // An alpha-0 view still receives touches. Left VISIBLE, a closed drawer's full-screen grid
         // sits invisible over the terminal and eats every tap — silently, which is what makes it the
         // worst regression on this surface. The flip is the second of the two guards; the first is
         // the controller clearing setInteractive(false) on close.
         mContent.setVisibility(contentAlpha <= 0.01f ? INVISIBLE : VISIBLE);
-        invalidateOutline();
-        invalidate();
+    }
+
+    /** On the search capsule's path to the window's root, as its content wrapper is. */
+    @Override
+    public void drawChildForBackdrop(@NonNull Canvas canvas, @NonNull View child) {
+        drawChild(canvas, child, getDrawingTime());
     }
 
     @Override

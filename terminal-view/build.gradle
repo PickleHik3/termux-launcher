@@ -41,8 +41,7 @@ android {
     // As in terminal-emulator: a unit test that builds a TerminalBuffer would otherwise die on
     // SystemClock, which the buffer only reads to time its bitmap sweeps.
     testOptions {
-        unitTests.returnDefaultValues = true
-    }
+        unitTests.returnDefaultValues = true    }
 
     publishing {
         multipleVariants {
@@ -57,6 +56,16 @@ dependencies {
     testImplementation "junit:junit:4.13.2"
     // Touch handling is framework code (GestureDetector, MotionEvent); these tests run it for real.
     testImplementation "org.robolectric:robolectric:4.13"
+}
+
+// With -Pghostty=true the tests of the key routes drive the real library: the host build made by
+// terminal-emulator (see there) is handed to them the same way. Without it those tests return early.
+if ((project.findProperty('ghostty') ?: 'false').toString() == 'true') {
+    def ghosttyHostLib = project(':terminal-emulator').layout.buildDirectory.dir('ghostty/host').get().asFile
+    tasks.withType(Test).configureEach {
+        dependsOn ':terminal-emulator:buildGhosttyHost'
+        systemProperty 'termux.ghostty.libDir', new File(ghosttyHostLib, 'host').absolutePath
+    }
 }
 
 task sourceJar(type: Jar) {

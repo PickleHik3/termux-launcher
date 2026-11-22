@@ -264,4 +264,27 @@ public class GlassFrameTintTest {
     private static double f(double t) {
         return t > 0.008856 ? Math.cbrt(t) : 7.787 * t + 16d / 116d;
     }
+
+    /**
+     * Motion audit pair 7: the tint a crossing's look bakes ({@link GlassLook#frameTint}, over its
+     * amount as a fraction) is the tint the frame at rest is baked with from the stored percent
+     * ({@link GlassFrameTint#of}), for every amount and the opacities either side of the face
+     * carrying the accent. Not a layout's number: the fixtures do not enter it.
+     */
+    @Test
+    public void theCrossingsLookBakesTheTintTheRestBakes() {
+        int[] opacities = {0, CLEAR, GlassFrameTint.FACE_CARRIES_OPACITY - 1,
+            GlassFrameTint.FACE_CARRIES_OPACITY, 70, 100};
+        for (int[] theme : THEMES) {
+            for (int amount = 0; amount <= 100; amount++) {
+                GlassLook look = GlassLook.SCHEME.withAmountPercent(amount)
+                    .withAccentColors(theme[1], theme[2]);
+                for (int opacity : opacities) {
+                    assertEquals("amount " + amount + ", opacity " + opacity,
+                        GlassFrameTint.of(amount, opacity, theme[1], theme[2]),
+                        look.frameTint(opacity));
+                }
+            }
+        }
+    }
 }

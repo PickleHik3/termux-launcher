@@ -62,6 +62,8 @@ public class TermuxActivityPageIndicatorTest {
     /** The one bar, standing where the activity's own setup would have put it to begin with. */
     private SuggestionBarView lendBar(TermuxActivity activity) {
         SuggestionBarView bar = new SuggestionBarView(activity, null);
+        // The dock hands the row its icon; a row handed no size draws none (#135).
+        bar.setDockIconSizePx(Math.round(24f * bar.getResources().getDisplayMetrics().density));
         // A rail with nothing pinned claims no column at all, so the bar has to be holding
         // something for the walk to stand it anywhere but the dock.
         List<PinnedItem> pinned = new ArrayList<>();
@@ -90,6 +92,7 @@ public class TermuxActivityPageIndicatorTest {
     /** The bar standing on {@code edge}, with the strip it was handed there. */
     private SuggestionBarView standOn(TermuxActivity activity, Edge edge) {
         SuggestionBarView bar = lendBar(activity);
+        activity.wirePageTicks();
         PlaceLayout layout = layoutWithAppsOn(edge);
         activity.applyEdgeStacks(layout);
         activity.syncPinnedAppsHost(layout);
@@ -138,7 +141,7 @@ public class TermuxActivityPageIndicatorTest {
             TermuxActivity activity = inflate();
             SuggestionBarView bar = standOn(activity, edge);
 
-            PageTickStripView bound = bar.boundPageIndicator();
+            PageTickStripView bound = activity.boundPageTickStrip();
             assertNotNull("the row is fed a strip on " + edge, bound);
             // The host the bar was lent to is inside the host the strip is a band of, so the pair
             // travels together whichever edge the walk puts them on.
@@ -161,7 +164,7 @@ public class TermuxActivityPageIndicatorTest {
         for (Edge edge : Edge.values()) {
             TermuxActivity activity = inflate();
             SuggestionBarView bar = standOn(activity, edge);
-            PageTickStripView bound = bar.boundPageIndicator();
+            PageTickStripView bound = activity.boundPageTickStrip();
             LinearLayout host = (LinearLayout) bound.getParent();
 
             int rowIndex = host.indexOfChild(bandHolding(host, bar));
@@ -193,11 +196,12 @@ public class TermuxActivityPageIndicatorTest {
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
         SuggestionBarView bar = lendBar(activity);
+        activity.wirePageTicks();
         PlaceLayout layout = topRowUnderTheIndex();
         activity.applyEdgeStacks(layout);
         activity.syncPinnedAppsHost(layout);
 
-        PageTickStripView strip = bar.boundPageIndicator();
+        PageTickStripView strip = activity.boundPageTickStrip();
         assertNotNull(strip);
         LinearLayout host = (LinearLayout) strip.getParent();
         View row = bandHolding(host, bar);
@@ -243,7 +247,7 @@ public class TermuxActivityPageIndicatorTest {
         ReflectionHelpers.setField(activity, "mPreferences", preferences);
 
         SuggestionBarView bar = standOn(activity, Edge.TOP);
-        PageTickStripView strip = bar.boundPageIndicator();
+        PageTickStripView strip = activity.boundPageTickStrip();
         assertNotNull(strip);
         LinearLayout host = (LinearLayout) strip.getParent();
         View row = bandHolding(host, bar);
@@ -274,10 +278,11 @@ public class TermuxActivityPageIndicatorTest {
     }
 
     @Test
-    public void thePageBeingShownIsTheAccentAndTheRestAreItMutedOnEveryEdge() {
+    public void thePageBeingShownIsTheAccentAndTheRestAreTheNeutralInkMutedOnEveryEdge() {
         for (Edge edge : Edge.values()) {
             TermuxActivity activity = inflate();
-            PageTickStripView strip = standOn(activity, edge).boundPageIndicator();
+            standOn(activity, edge);
+            PageTickStripView strip = activity.boundPageTickStrip();
             assertNotNull(strip);
             strip.setAccentColor(Color.rgb(0x34, 0x5C, 0xA8));
             strip.setPages(3, 1f);
@@ -288,25 +293,10 @@ public class TermuxActivityPageIndicatorTest {
                 255, Color.alpha(active));
             assertEquals(edge + ": which is the strip's own accent",
                 strip.getAccentColor() & 0x00FFFFFF, active & 0x00FFFFFF);
-            assertEquals(edge + ": the ticks at rest are the same colour",
-                active & 0x00FFFFFF, resting & 0x00FFFFFF);
+            assertEquals(edge + ": the capsules at rest are the neutral ink, not the accent",
+                0x00FFFFFF, resting & 0x00FFFFFF);
             assertEquals(edge + ": muted",
                 Math.round(255f * PageTickStrip.INACTIVE_ALPHA), Color.alpha(resting));
         }
-    }
-
-    @Test
-    public void theMostUsedPagesTickKeepsItsOwnWarmTint() {
-        TermuxActivity activity = inflate();
-        PageTickStripView strip = activity.findViewById(R.id.apps_bar_indicator_band);
-        assertNotNull("the dock's own band is the strip now", strip);
-        strip.setAccentColor(Color.rgb(0x34, 0x5C, 0xA8));
-        strip.setPages(3, 2f, 2);
-        assertEquals(PageTickStrip.DYNAMIC_TICK_COLOR & 0x00FFFFFF,
-            strip.tickColorAt(2) & 0x00FFFFFF);
-        assertEquals(strip.getAccentColor() & 0x00FFFFFF, strip.tickColorAt(0) & 0x00FFFFFF);
-        // A dynamic page out of range is no dynamic page at all.
-        strip.setPages(2, 0f, 7);
-        assertEquals(-1, strip.getDynamicPageIndex());
     }
 }

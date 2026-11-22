@@ -125,6 +125,56 @@ public class AppDrawerAppCellViewTest {
         assertEquals(1, gateChecks[0]);
     }
 
+    /**
+     * Two long names side by side ran into each other, and a right-column label ended a few
+     * pixels from the card's edge: every layout's label keeps one inset of air inside its own cell
+     * on both sides, so neighbours never touch and the outer columns stand off the card's edge.
+     */
+    @Test public void everyLabelKeepsAnInsetInsideItsCell() {
+        float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics()
+            .density;
+        int inset = Math.round(AppDrawerGridMetrics.labelSideInsetPx(density));
+        assertTrue(inset > 0);
+        AppDrawerAppCellView vertical = cell();
+        AppDrawerAppCellView pages = cell();
+        AppDrawerAppCellView category = cell();
+        vertical.bind(null, entry("Obsidian Music"), AppDrawerGridMetrics.resolve(400f, 1f, 11f, 4),
+            AppDrawerAppCellView.ALLOW_CLICKS);
+        pages.bind(null, entry("Obsidian Music"), AppDrawerHorizontalGridMetrics.resolve(
+            400f, 200f, 1f, 11f, 4, 2), AppDrawerAppCellView.ALLOW_CLICKS);
+        category.bind(null, entry("Banana Native"), 37, 91, AppDrawerAppCellView.ALLOW_CLICKS);
+        for (AppDrawerAppCellView cell : new AppDrawerAppCellView[] {vertical, pages, category}) {
+            assertEquals(inset, cell.label.getPaddingLeft());
+            assertEquals(inset, cell.label.getPaddingRight());
+        }
+    }
+
+    /**
+     * The hardware renderer skips a group's own foreground when the view is flagged will-not-draw
+     * and has no background, which is what a cell is at rest: the outline must keep it drawing.
+     */
+    @Test public void aCellDrawsItsEditOutlineEvenWithoutABackground() {
+        AppDrawerAppCellView cell = cell();
+        cell.bind(null, entry("Gamma"), AppDrawerGridMetrics.resolve(400f, 1f, 11f),
+            AppDrawerAppCellView.ALLOW_CLICKS);
+        cell.measure(android.view.View.MeasureSpec.makeMeasureSpec(100,
+            android.view.View.MeasureSpec.EXACTLY), android.view.View.MeasureSpec.makeMeasureSpec(
+            100, android.view.View.MeasureSpec.EXACTLY));
+        cell.layout(0, 0, 100, 100);
+        cell.setEditOutline(true);
+        assertFalse(cell.willNotDraw());
+        // The bead comes and goes with the search highlight; the outline outlives it.
+        cell.setKeyboardHighlight(true);
+        cell.setKeyboardHighlight(false);
+        assertFalse(cell.willNotDraw());
+        assertTrue(cell.hasEditOutline());
+    }
+
+    @Test public void aFolderCellDrawsItsEditOutlineToo() {
+        assertFalse(new AppDrawerFolderCellView(RuntimeEnvironment.getApplication())
+            .willNotDraw());
+    }
+
     private static AppDrawerAppCellView cell() {
         AppDrawerAppCellView cell = new AppDrawerAppCellView(RuntimeEnvironment.getApplication());
         cell.setLayoutParams(new ViewGroup.LayoutParams(100, 100));

@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 /**
  * The app process's side of speaking aloud: "Read aloud" on a terminal selection and the voice
- * settings' "Play sample". Speech itself runs in {@code :tai_runtime} ({@link TaiManager#speak});
+ * settings' "Play sample". Speech itself runs in {@code :tai_runtime} ({@link TaiSpeech#speak});
  * this keeps the blocking calls off the main thread, remembers whether something is being read so
  * the same action can offer to stop it, and reports progress and a failure back on the main thread.
  *
@@ -301,7 +301,7 @@ public final class TaiReadAloud {
                 JSONObject result;
                 reading.setInFlight(true);
                 try {
-                    result = manager.speak(body.toString());
+                    result = manager.speech().speak(body.toString());
                 } finally {
                     reading.setInFlight(false);
                 }
@@ -346,14 +346,14 @@ public final class TaiReadAloud {
             try {
                 boolean wantPaused = reading.isPaused();
                 if (wantPaused && !runtimePaused) {
-                    runtimePaused = manager.pauseSpeaking().optBoolean("paused", false);
+                    runtimePaused = manager.speech().pauseSpeaking().optBoolean("paused", false);
                     again = !runtimePaused && reading.inFlight;
                 } else if (!wantPaused && runtimePaused) {
-                    manager.resumeSpeaking();
+                    manager.speech().resumeSpeaking();
                     runtimePaused = false;
                 }
                 if (!wantPaused && reading.inFlight && !reading.sounding.get()) {
-                    if (manager.speechState().optBoolean("sounding", false)) markSounding(reading, listener);
+                    if (manager.speech().speechState().optBoolean("sounding", false)) markSounding(reading, listener);
                     else again = true;
                 }
             } catch (JSONException | RuntimeException e) {
@@ -414,7 +414,7 @@ public final class TaiReadAloud {
         if (reading != null) reading.stop();
         lastStop = STOPPER.submit(() -> {
             try {
-                TaiManager.getInstance(app).stopSpeaking();
+                TaiManager.getInstance(app).speech().stopSpeaking();
             } catch (JSONException | RuntimeException ignored) {
                 // The runtime is gone, and with it the voice.
             }

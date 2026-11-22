@@ -34,7 +34,8 @@ The first updates the Termux package environment. The second asks Android for sh
 - [Status bar](Status_Bar.md): sessions and window chips, CPU, memory and weather, the clock.
 - [Notifications](Notifications.md): dots, pinned notification cards, history for the shell.
 - [Layout and full screen](Layout_And_Full_Screen.md): Launcher mode, the Layout tab, minimal mode, full screen.
-- [Look and themes](Look_And_Themes.md): wallpaper, the Look slider, wallpaper colours, icon packs, cursor trails and effects.
+- [Look and themes](Look_And_Themes.md): the six Appearance cards, wallpaper, wallpaper colours, icon packs, cursor trails and effects.
+- [Photo shader wallpapers](Photo_Shader_Wallpapers.md): make your own photo move, with an AI tool, and what a depth image is.
 
 ## Typing
 

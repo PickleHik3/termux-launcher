@@ -47,6 +47,11 @@
 # tai_runtime process with "JNI DETECTED ERROR: mid == null". The MNN bridge lives in the app
 # but outside com.termux.
 -keep class com.google.ai.edge.litertlm.** { *; }
+# LiteRT's own rules keep only @UsedByReflection, but liblitert_jni constructs TensorType,
+# TensorType$Layout, TensorBufferRequirements and LiteRtException through constructors no Java
+# code calls: without these, every speech model aborts tai_runtime ("Failed to get constructor").
+-keep class com.google.ai.edge.litert.** { *; }
+-keep class org.tensorflow.lite.** { *; }
 -keep class com.alibaba.mnnllm.** { *; }
 
 # Hidden platform classes the X11 server's CmdEntryPoint links against; present at runtime.

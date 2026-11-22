@@ -29,4 +29,9 @@ public final class Motion {
 
     /** Float/dock depth ramp: bounds (FLIP) and elevation move together on this clock. */
     public static final long FLOAT_DEPTH_MS = 320L;
+
+    /** {@link #FLOAT_DEPTH_MS} at General › Animation speed: the floating windows' own clock. */
+    public static long floatDepthMs(@androidx.annotation.NonNull android.content.Context context) {
+        return com.termux.app.AnimationSpeed.scale(context, FLOAT_DEPTH_MS);
+    }
 }

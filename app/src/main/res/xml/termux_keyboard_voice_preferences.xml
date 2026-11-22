@@ -16,11 +16,22 @@
             app:entryValues="@array/settings_keyboard_voice_language_values"
             app:defaultValue="auto"
             app:useSimpleSummaryProvider="true" />
+    </PreferenceCategory>
+
+    <PreferenceCategory app:title="@string/settings_keyboard_voice_model_title">
         <Preference
-            app:key="keyboard_voice_model"
+            app:key="speech_model_pick"
+            app:persistent="false" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="speech_model_accelerator"
+            app:title="@string/speech_model_accelerator_title"
+            app:entries="@array/speech_model_accelerator_entries"
+            app:entryValues="@array/speech_model_accelerator_values"
+            app:defaultValue="auto" />
+        <Preference
+            app:key="speech_model_idle_unload"
             app:persistent="false"
-            app:title="@string/settings_keyboard_voice_model_title"
-            app:summary="@string/settings_keyboard_voice_model_summary" />
+            app:title="@string/speech_model_idle_unload_title" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_voice_group_cleanup">
@@ -34,49 +45,34 @@
             app:persistent="false"
             app:dependency="keyboard_voice_polish"
             app:title="@string/settings_keyboard_voice_polish_model_title" />
-        <ListPreference
+        <com.termux.app.fragments.settings.SegmentedPillPreference
+            app:key="keyboard_voice_polish_accelerator"
+            app:persistent="false"
+            app:dependency="keyboard_voice_polish"
+            app:title="@string/speech_model_accelerator_title"
+            app:entries="@array/cleanup_accelerator_entries"
+            app:entryValues="@array/cleanup_accelerator_values"
+            app:defaultValue="cpu" />
+        <com.termux.app.fragments.settings.SegmentedPillPreference
             app:key="keyboard_voice_polish_level"
             app:dependency="keyboard_voice_polish"
             app:title="@string/settings_keyboard_voice_polish_level_title"
-            app:entries="@array/settings_keyboard_voice_polish_level_entries"
+            app:entries="@array/settings_keyboard_voice_polish_level_pill_entries"
             app:entryValues="@array/settings_keyboard_voice_polish_level_values"
-            app:defaultValue="polished"
-            app:useSimpleSummaryProvider="true" />
-        <Preference
-            app:key="keyboard_voice_details"
-            app:persistent="false"
-            app:title="@string/settings_voice_details_title"
-            app:summary="@string/settings_voice_details_summary"
-            app:fragment="com.termux.app.fragments.settings.termux.KeyboardVoiceDetailsPreferencesFragment" />
+            app:defaultValue="polished" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_voice_group_listening">
-        <ListPreference
-            app:key="keyboard_voice_pause_ms"
-            app:title="@string/settings_keyboard_voice_pause_title"
-            app:entries="@array/settings_keyboard_voice_pause_entries"
-            app:entryValues="@array/settings_keyboard_voice_pause_values"
-            app:defaultValue="600"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="keyboard_voice_mic_sensitivity"
-            app:title="@string/settings_keyboard_voice_mic_sensitivity_title"
-            app:entries="@array/settings_keyboard_voice_mic_sensitivity_entries"
-            app:entryValues="@array/settings_keyboard_voice_mic_sensitivity_values"
-            app:defaultValue="normal"
-            app:useSimpleSummaryProvider="true" />
-        <ListPreference
-            app:key="keyboard_voice_silence_timeout_ms"
-            app:title="@string/settings_keyboard_voice_silence_timeout_title"
-            app:entries="@array/settings_keyboard_voice_silence_timeout_entries"
-            app:entryValues="@array/settings_keyboard_voice_silence_timeout_values"
-            app:defaultValue="5000"
-            app:useSimpleSummaryProvider="true" />
         <SwitchPreferenceCompat
             app:key="keyboard_voice_sounds"
             app:title="@string/settings_keyboard_voice_sounds_title"
             app:summary="@string/settings_keyboard_voice_sounds_summary"
             android:defaultValue="true" />
+        <Preference
+            app:key="keyboard_voice_details"
+            app:persistent="false"
+            app:title="@string/settings_voice_details_title"
+            app:fragment="com.termux.app.fragments.settings.termux.KeyboardVoiceDetailsPreferencesFragment" />
     </PreferenceCategory>
 
 </PreferenceScreen>

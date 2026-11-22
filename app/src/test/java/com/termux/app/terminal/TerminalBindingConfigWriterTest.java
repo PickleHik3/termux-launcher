@@ -3,8 +3,6 @@ package com.termux.app.terminal;
 import com.termux.launcherctl.LauncherToolRegistry;
 
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -22,7 +20,6 @@ import static org.junit.Assert.assertTrue;
  * {@link TerminalBindingConfigTest}. Only the pure line-editing core is exercised; the temp-file
  * rename around it is a copy of TerminalWorkspaceStore.save in shape.
  */
-@RunWith(RobolectricTestRunner.class)
 public class TerminalBindingConfigWriterTest {
 
     private static final String FIREFOX = "org.mozilla.firefox";

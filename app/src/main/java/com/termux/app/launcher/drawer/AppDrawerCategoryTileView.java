@@ -67,7 +67,10 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
     @Nullable private SuggestionBarView dock;
     @Nullable private ExpansionListener expansionListener;
     @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
+    @Nullable private AppDrawerPickupDelegate pickupDelegate;
+    @NonNull private final LauncherAppEntry[] launchEntries = new LauncherAppEntry[LAUNCH_ICON_COUNT];
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
+    private boolean editOutline;
     private float tileLeft;
     private float tileSide;
     /** Label band inside the tile's top: the icon square starts below it. */
@@ -175,7 +178,16 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         @NonNull AppDrawerCategoryGridMetrics metrics, @NonNull ExpansionListener listener,
         @NonNull AppDrawerAppCellView.ClickGate clickGate,
         @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        bind(dock, bucket, metrics, listener, clickGate, categoryChoiceListener, null);
+    }
+
+    public void bind(@Nullable SuggestionBarView dock, @NonNull AppDrawerCategoryBucket bucket,
+        @NonNull AppDrawerCategoryGridMetrics metrics, @NonNull ExpansionListener listener,
+        @NonNull AppDrawerAppCellView.ClickGate clickGate,
+        @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener,
+        @Nullable AppDrawerPickupDelegate pickupDelegate) {
         unbind();
+        this.pickupDelegate = pickupDelegate;
         boolean metricsChanged = this.metrics != metrics;
         this.dock = dock;
         this.bucket = bucket;
@@ -198,11 +210,15 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         View.OnClickListener expand = view -> {
             AppDrawerCategoryBucket current = this.bucket;
             ExpansionListener currentListener = expansionListener;
-            if (!this.clickGate.suppressCellClick() && current != null && currentListener != null)
+            if (!this.clickGate.suppressCellClick() && current != null && currentListener != null
+                && !AppDrawerContentView.isEditingAround(this))
                 currentListener.onExpandRequested(current, this);
         };
         heading.setOnClickListener(expand);
         expandTarget.setOnClickListener(expand);
+        // Outside edit mode a long press on the heading starts editing with this tile in hand;
+        // in edit mode a touch already lifts, so there is nothing for the press to do.
+        heading.setOnLongClickListener(view -> AppDrawerContentView.enterEditFromTile(this));
         List<LauncherAppEntry> previews = bucket.previews();
         for (int i = 0; i < icons.length; i++) {
             ImageView icon = icons[i];
@@ -228,21 +244,20 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
                 icon.setContentDescription(entry.label);
                 icon.setOnClickListener(view -> {
                     SuggestionBarView currentDock = this.dock;
-                    if (!this.clickGate.suppressCellClick() && currentDock != null)
+                    if (!this.clickGate.suppressCellClick() && currentDock != null
+                        && !AppDrawerContentView.isEditingAround(this))
                         currentDock.launchEntryFromDrawer(view, entry);
                 });
                 // A long press reuses the dock's Material app-context popup (Category row instead
                 // of Pin) rather than jumping straight to the category picker.
                 icon.setLongClickable(true);
-                icon.setOnLongClickListener(view -> {
-                    SuggestionBarView currentDock = this.dock;
-                    AppDrawerCategoryChoiceListener choiceListener = this.categoryChoiceListener;
-                    if (this.clickGate.suppressCellClick() || currentDock == null) return false;
-                    Runnable categoryAction = choiceListener == null ? null
-                        : () -> choiceListener.onCategoryChoiceRequested(entry, view);
-                    currentDock.showDrawerAppContextPopup(view, entry, categoryAction);
-                    return true;
-                });
+                launchEntries[i] = entry;
+                AppDrawerCategoryChoiceListener choiceListener = categoryChoiceListener;
+                Runnable categoryAction = choiceListener == null ? null
+                    : () -> choiceListener.onCategoryChoiceRequested(entry, icon);
+                // Same binding as every drawer cell: a still press opens the popup, a press that
+                // then moves sideways picks the app up for Home through the drag controller.
+                dock.bindDrawerAppContextLongPress(icon, entry, pickupDelegate, categoryAction);
             } else {
                 // Display only: the mini-cluster stands for "there is more in here", so its taps
                 // fall through to the open-category target underneath.
@@ -260,6 +275,17 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         if (metricsChanged) requestLayout();
     }
 
+    /** The app behind a launch icon at tile-local ({@code x}, {@code y}), or null. */
+    @Nullable public LauncherAppEntry launchEntryAt(float x, float y) {
+        for (int i = 0; i < launchEntries.length; i++) {
+            ImageView icon = icons[i];
+            if (launchEntries[i] != null && icon.getVisibility() == VISIBLE
+                && x >= icon.getLeft() && x < icon.getRight()
+                && y >= icon.getTop() && y < icon.getBottom()) return launchEntries[i];
+        }
+        return null;
+    }
+
     /** Releases every drawable and app-specific listener while retaining the cheap holder tree. */
     public void releaseDrawables() {
         for (ImageView icon : icons) clearIcon(icon);
@@ -271,6 +297,7 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         heading.setText(null);
         heading.setContentDescription(null);
         heading.setOnClickListener(null);
+        heading.setOnLongClickListener(null);
         heading.setClickable(false);
         expandTarget.setContentDescription(null);
         expandTarget.setOnClickListener(null);
@@ -279,6 +306,8 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         dock = null;
         expansionListener = null;
         categoryChoiceListener = null;
+        pickupDelegate = null;
+        java.util.Arrays.fill(launchEntries, null);
         clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
     }
 
@@ -425,6 +454,31 @@ public final class AppDrawerCategoryTileView extends ViewGroup {
         float bottom = tileHeight();
         canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius, fillPaint);
         canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius, strokePaint);
+        if (editOutline) {
+            // The card's own stroke, restated in the drawer's ink: no animation, no per-frame state.
+            int stroke = strokePaint.getColor();
+            strokePaint.setColor(androidx.core.graphics.ColorUtils.setAlphaComponent(
+                heading.getCurrentTextColor(), AppDrawerAppCellView.EDIT_OUTLINE_ALPHA));
+            canvas.drawRoundRect(tileLeft, 0f, tileLeft + tileSide, bottom, radius, radius,
+                strokePaint);
+            strokePaint.setColor(stroke);
+        }
+    }
+
+    /** Edit mode's outline on or off; one invalidate when it changes. */
+    public void setEditOutline(boolean on) {
+        if (editOutline == on) return;
+        editOutline = on;
+        invalidate();
+    }
+
+    public boolean hasEditOutline() {
+        return editOutline;
+    }
+
+    @Override protected void onAttachedToWindow() {
+        super.onAttachedToWindow();
+        setEditOutline(AppDrawerContentView.isEditingAround(this));
     }
 
     public float tileLeft() { return tileLeft; }

@@ -2,6 +2,7 @@ package com.termux.app.fragments.settings.termux;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
@@ -57,16 +58,20 @@ public class StatusBarPreferencesFragmentTest {
         // The Appearance editor owns the clock face and position.
         assertNull(screen.findPreference("top_pane_clock_style"));
         assertNull(screen.findPreference("top_pane_clock_alignment"));
-        assertTrue(screen.findPreference("top_pane_clock_am_pm") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("status_widget_cpu") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("status_widget_ram") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("status_widget_media") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("status_widget_weather") instanceof SwitchPreferenceCompat);
-        assertTrue(screen.findPreference("status_widget_weather_fahrenheit") instanceof SwitchPreferenceCompat);
-        // Moved to the Notifications page; a link row points there instead.
+        // One home per setting: the clock's 12-hour choice, the indicator and weather switches and
+        // the unit are the editor's Status bar card; the page keeps one Appearance row.
+        for (String moved : new String[] {"top_pane_clock_am_pm", "status_widget_cpu", "status_widget_gpu", "status_widget_font_toggle", "status_widget_ram",
+            "status_widget_battery", "status_widget_media", "status_widget_weather",
+            "status_widget_weather_fahrenheit"}) {
+            assertNull(moved, screen.findPreference(moved));
+        }
+        assertNotNull(screen.findPreference("status_layout_editor"));
+        assertNotNull(screen.findPreference("status_widget_weather_location"));
+        assertNotNull(screen.findPreference("status_bar_cutout_mode"));
+        // Moved to the Notifications page, which has one home now: no link row here either.
         assertNull(screen.findPreference("top_pane_notification_access"));
         assertNull(screen.findPreference("essential_notification_rules_manage"));
-        assertTrue(screen.findPreference("status_bar_notifications_link") != null);
+        assertNull(screen.findPreference("status_bar_notifications_link"));
 
         // Moved to the Terminal page: not reachable here any more.
         assertNull(screen.findPreference("split_pane_controls"));
@@ -76,35 +81,5 @@ public class StatusBarPreferencesFragmentTest {
         assertNull(screen.findPreference("customize_status_surface"));
 
         assertEquals("Status bar", fragment.getActivity().getTitle().toString());
-    }
-
-    @Test
-    public void twelveHourAndCpuUsagePersistThroughTheSharedTerminalIoStore() {
-        StatusBarPreferencesFragment fragment = launch();
-        SwitchPreferenceCompat amPm = fragment.findPreference("top_pane_clock_am_pm");
-        SwitchPreferenceCompat cpu = fragment.findPreference("status_widget_cpu");
-
-        amPm.setChecked(true);
-        cpu.setChecked(true);
-
-        Application app = RuntimeEnvironment.getApplication();
-        TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
-        assertTrue(io.getBoolean("top_pane_clock_am_pm", false));
-        assertTrue(io.getBoolean("status_widget_cpu", false));
-    }
-
-    @Test
-    public void mediaIsOnByDefaultAndTurnsOffThroughTheSharedTerminalIoStore() {
-        StatusBarPreferencesFragment fragment = launch();
-        SwitchPreferenceCompat media = fragment.findPreference("status_widget_media");
-        assertTrue(media.isChecked());
-
-        media.setChecked(false);
-
-        Application app = RuntimeEnvironment.getApplication();
-        TerminalIOPreferencesDataStore io = TerminalIOPreferencesDataStore.getInstance(app);
-        assertFalse(io.getBoolean("status_widget_media", true));
-        media.setChecked(true);
-        assertTrue(io.getBoolean("status_widget_media", false));
     }
 }

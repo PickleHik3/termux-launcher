@@ -9,7 +9,6 @@ import android.text.Editable;
 import android.text.InputFilter;
 import android.text.InputType;
 import android.text.TextWatcher;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.inputmethod.EditorInfo;
 import android.widget.LinearLayout;
@@ -23,11 +22,8 @@ import androidx.preference.PreferenceCategory;
 import androidx.preference.PreferenceManager;
 import androidx.preference.SwitchPreferenceCompat;
 
-import com.google.android.material.button.MaterialButton;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.slider.Slider;
-import com.google.android.material.textfield.TextInputEditText;
-import com.google.android.material.textfield.TextInputLayout;
 import com.termux.app.notice.AppNotice;
 import com.termux.R;
 import com.termux.app.fonts.FontCatalog;
@@ -38,6 +34,7 @@ import com.termux.app.fonts.FontSettings;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusCardPreference;
+import com.termux.app.terminal.FontCompactPolicy;
 import com.termux.shared.termux.font.FileTypefaces;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -46,7 +43,6 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.function.BiConsumer;
 
 /**
  * The terminal font picker: a family list with per-family license text and download sizes, the
@@ -67,6 +63,9 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
     private static final String ROW_KEY_PREFIX = "fonts_family_";
 
+    /** The Compact size row, which the window bar's font toggle opens this screen on. */
+    public static final String KEY_COMPACT_SIZE = "font_toggle_compact_size";
+
     /**
      * Installed families render their own row title as a live preview. Parsed faces are cached
      * for the fragment's lifetime; a family that fails to parse caches null so a broken file is
@@ -74,8 +73,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
      */
     private final Map<String, Typeface> mPreviewTypefaces = new HashMap<>();
 
-    /** The app's own preferences, where the terminal's font size lives. */
-    @Nullable private TermuxAppSharedPreferences mPreferences;
 
     @Override
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
@@ -84,7 +81,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         PreferenceManager preferenceManager = getPreferenceManager();
         preferenceManager.setSharedPreferencesName(FontSettings.PREFS_NAME);
         setPreferencesFromResource(R.xml.termux_fonts_preferences, rootKey);
-        mPreferences = TermuxAppSharedPreferences.build(context);
         SettingsLayoutUtils.applyScreenLayout(this);
         configureStaticRows(context);
         refresh(context);
@@ -148,10 +144,12 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 return true;
             });
         }
-        Preference size = findPreference("fonts_size");
-        if (size != null) {
-            size.setOnPreferenceClickListener(preference -> {
-                showFontSizeDialog(context);
+        // The terminal's font size is the editor's Terminal card.
+        Preference appearance = findPreference("fonts_layout_editor");
+        if (appearance != null) {
+            appearance.setOnPreferenceClickListener(preference -> {
+                SettingsEditorDoors.openEditor(this, preference,
+                    com.termux.app.surfaces.EditorDoor.SETTINGS_TERMINAL);
                 return true;
             });
         }
@@ -168,6 +166,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 return true;
             });
         }
+        configureFontToggleRows(context);
         Preference useFontTtf = findPreference("fonts_use_font_ttf");
         if (useFontTtf != null) {
             useFontTtf.setOnPreferenceClickListener(preference -> {
@@ -175,6 +174,74 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 return true;
             });
         }
+    }
+
+    /** The Compact size row; the toggle itself is a Status bar card element. */
+    private void configureFontToggleRows(@NonNull Context context) {
+        TermuxAppSharedPreferences app = TermuxAppSharedPreferences.build(context);
+        if (app == null) return;
+        Preference size = findPreference(KEY_COMPACT_SIZE);
+        if (size != null) {
+            refreshCompactSizeRow(context, size, app);
+            size.setOnPreferenceClickListener(preference -> {
+                showCompactSizeDialog(context, preference, app);
+                return true;
+            });
+        }
+    }
+
+    private int compactSizePx(@NonNull TermuxAppSharedPreferences app) {
+        return FontCompactPolicy.compactSize(app.getStoredCompactFontSize(), app.getFontSize(),
+            app.getMinFontSize(), app.getMaxFontSize());
+    }
+
+    private void refreshCompactSizeRow(@NonNull Context context, @NonNull Preference row,
+                                       @NonNull TermuxAppSharedPreferences app) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int dp = Math.round(compactSizePx(app) / density);
+        row.setSummary(app.getStoredCompactFontSize() > 0
+            ? getString(R.string.font_toggle_compact_size_value, dp)
+            : getString(R.string.font_toggle_compact_size_auto, dp));
+    }
+
+    /** A slider in dp, the size the terminal text is read at; Auto goes back to the derived size. */
+    private void showCompactSizeDialog(@NonNull Context context, @NonNull Preference row,
+                                       @NonNull TermuxAppSharedPreferences app) {
+        float density = context.getResources().getDisplayMetrics().density;
+        int minDp = Math.max(1, Math.round(app.getMinFontSize() / density));
+        int maxDp = Math.max(minDp + 1, Math.round(app.getMaxFontSize() / density));
+        int currentDp = Math.max(minDp, Math.min(maxDp, Math.round(compactSizePx(app) / density)));
+        int padding = Math.round(16 * density);
+        LinearLayout layout = new LinearLayout(context);
+        layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setPadding(padding, padding / 2, padding, 0);
+        TextView label = new TextView(context);
+        label.setText(getString(R.string.font_toggle_compact_size_value, currentDp));
+        Slider slider = new Slider(context);
+        slider.setValueFrom(minDp);
+        slider.setValueTo(maxDp);
+        slider.setStepSize(1f);
+        slider.setValue(currentDp);
+        final int[] picked = {currentDp};
+        slider.addOnChangeListener((changed, value, fromUser) -> {
+            picked[0] = Math.round(value);
+            label.setText(getString(R.string.font_toggle_compact_size_value, picked[0]));
+        });
+        layout.addView(label);
+        layout.addView(slider);
+        new MaterialAlertDialogBuilder(context)
+            .setTitle(R.string.font_toggle_compact_size_title)
+            .setView(layout)
+            .setPositiveButton(R.string.termux_fonts_weight_apply, (dialog, which) -> {
+                app.setStoredCompactFontSize(Math.round(picked[0] * density));
+                refreshCompactSizeRow(context, row, app);
+            })
+            .setNeutralButton(R.string.font_toggle_compact_size_reset, (dialog, which) -> {
+                app.setStoredCompactFontSize(0);
+                refreshCompactSizeRow(context, row, app);
+            })
+            .setNegativeButton(android.R.string.cancel, null)
+            .show();
     }
 
     private void refresh(@NonNull Context context) {
@@ -206,7 +273,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
     private void refreshTuning(@NonNull Context context, @Nullable FontCatalog.Family active,
                                boolean managed) {
-        updateFontSizeSummary(context);
         boolean tunable = managed && active != null;
         SwitchPreferenceCompat icons = findPreference("nerd_icons");
         if (icons != null) icons.setEnabled(tunable);
@@ -494,172 +560,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
                 reapply(context, active, options(context, active).withWeight(0)))
             .setNegativeButton(android.R.string.cancel, null)
             .show();
-    }
-
-    /**
-     * The terminal's font size in dp, the unit every other size in the
-     * launcher speaks. The stored value is the default's own unit — pixels
-     * at this device's density, so a 12 dp default is 36 px at 3× — and a
-     * dp picked here is converted back to pixels on apply.
-     */
-    private int fontSizeDp(@NonNull Context context) {
-        TermuxAppSharedPreferences preferences = mPreferences;
-        if (preferences == null) return 0;
-        return Math.round(preferences.getFontSize()
-            / context.getResources().getDisplayMetrics().density);
-    }
-
-    private void updateFontSizeSummary(@NonNull Context context) {
-        Preference size = findPreference("fonts_size");
-        if (size != null) {
-            size.setSummary(getString(R.string.termux_fonts_size_summary, fontSizeDp(context)));
-        }
-    }
-
-    private void showFontSizeDialog(@NonNull Context context) {
-        TermuxAppSharedPreferences preferences = mPreferences;
-        if (preferences == null) return;
-        int[] bounds = TermuxAppSharedPreferences.getDefaultFontSizes(context);
-        float density = context.getResources().getDisplayMetrics().density;
-        int min = Math.max(1, Math.round(bounds[1] / density));
-        int max = Math.max(min, Math.round(bounds[2] / density));
-        int current = Math.max(min, Math.min(max, fontSizeDp(context)));
-
-        int padding = Math.round(16 * density);
-        LinearLayout layout = new LinearLayout(context);
-        layout.setOrientation(LinearLayout.VERTICAL);
-        layout.setPadding(padding, padding / 2, padding, 0);
-
-        // − [ 12 dp ] + over the slider: the buttons step one dp, the field takes an exact size,
-        // and the slider covers the whole range. All three show the same picked size.
-        LinearLayout stepper = new LinearLayout(context);
-        stepper.setOrientation(LinearLayout.HORIZONTAL);
-        stepper.setGravity(Gravity.CENTER_VERTICAL);
-        MaterialButton decrease = stepButton(context, "\u2212",
-            R.string.termux_fonts_size_decrease);
-        MaterialButton increase = stepButton(context, "+", R.string.termux_fonts_size_increase);
-        TextInputLayout field = new TextInputLayout(context, null,
-            com.google.android.material.R.attr.textInputOutlinedStyle);
-        field.setSuffixText(getString(R.string.termux_fonts_size_unit));
-        TextInputEditText input = new TextInputEditText(field.getContext());
-        input.setInputType(InputType.TYPE_CLASS_NUMBER);
-        input.setImeOptions(EditorInfo.IME_ACTION_DONE);
-        input.setGravity(Gravity.CENTER);
-        input.setSingleLine(true);
-        input.setFilters(new InputFilter[]{
-            new InputFilter.LengthFilter(String.valueOf(max).length())});
-        input.setContentDescription(getString(R.string.termux_fonts_size_title));
-        field.addView(input);
-        LinearLayout.LayoutParams fieldParams = new LinearLayout.LayoutParams(0,
-            LinearLayout.LayoutParams.WRAP_CONTENT, 1f);
-        fieldParams.setMargins(padding / 2, 0, padding / 2, 0);
-        stepper.addView(decrease);
-        stepper.addView(field, fieldParams);
-        stepper.addView(increase);
-
-        Slider slider = new Slider(context);
-        slider.setValueFrom(min);
-        slider.setValueTo(max);
-        slider.setStepSize(1f);
-        layout.addView(stepper);
-        layout.addView(slider);
-
-        final int[] picked = {current};
-        final boolean[] syncing = {false};
-        // Moves every control to {@code size}; the field is left alone while it is being typed in.
-        BiConsumer<Integer, Boolean> pick = (size, fromField) -> {
-            picked[0] = Math.max(min, Math.min(max, size));
-            syncing[0] = true;
-            slider.setValue(picked[0]);
-            if (!fromField) {
-                input.setText(String.valueOf(picked[0]));
-                input.setSelection(input.length());
-            }
-            syncing[0] = false;
-            decrease.setEnabled(picked[0] > min);
-            increase.setEnabled(picked[0] < max);
-        };
-        pick.accept(current, false);
-        slider.addOnChangeListener((changed, number, fromUser) -> {
-            if (!syncing[0]) pick.accept(Math.round(number), false);
-        });
-        decrease.setOnClickListener(v -> pick.accept(picked[0] - 1, false));
-        increase.setOnClickListener(v -> pick.accept(picked[0] + 1, false));
-        input.addTextChangedListener(new TextWatcher() {
-            @Override public void beforeTextChanged(CharSequence s, int st, int c, int a) {}
-            @Override public void onTextChanged(CharSequence s, int st, int b, int c) {}
-            @Override public void afterTextChanged(Editable text) {
-                if (syncing[0]) return;
-                Integer typed = parseSize(text);
-                boolean inRange = typed != null && typed >= min && typed <= max;
-                field.setError(typed == null || inRange ? null
-                    : getString(R.string.termux_fonts_size_out_of_range, min, max));
-                if (inRange) pick.accept(typed, true);
-            }
-        });
-        // Leaving the field, Done or Enter commits what was typed, clamped into the range, the
-        // same way Apply does; an empty field keeps the picked size.
-        Runnable commitField = () -> {
-            Integer typed = parseSize(input.getText());
-            field.setError(null);
-            pick.accept(typed == null ? picked[0] : typed, false);
-        };
-        input.setOnFocusChangeListener((v, hasFocus) -> {
-            if (!hasFocus) commitField.run();
-        });
-        input.setOnEditorActionListener((v, actionId, event) -> {
-            commitField.run();
-            return false;
-        });
-
-        new MaterialAlertDialogBuilder(context)
-            .setTitle(getString(R.string.termux_fonts_size_dialog_title, min, max))
-            .setView(layout)
-            .setPositiveButton(R.string.termux_fonts_weight_apply, (dialog, which) -> {
-                // A size typed but not confirmed still counts.
-                commitField.run();
-                preferences.setFontSize(Math.round(picked[0] * density));
-                updateFontSizeSummary(context);
-            })
-            .setNeutralButton(R.string.termux_fonts_size_reset, (dialog, which) -> {
-                preferences.setFontSize(bounds[0]);
-                updateFontSizeSummary(context);
-            })
-            .setNegativeButton(android.R.string.cancel, null)
-            .show();
-    }
-
-    @NonNull
-    private MaterialButton stepButton(@NonNull Context context, @NonNull String label,
-                                      int description) {
-        // A round 48 dp target, so the field between the two gets the width.
-        MaterialButton button = new MaterialButton(context, null,
-            com.google.android.material.R.attr.materialButtonOutlinedStyle);
-        int size = Math.round(48 * context.getResources().getDisplayMetrics().density);
-        button.setText(label);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 20);
-        button.setContentDescription(getString(description));
-        button.setMinWidth(0);
-        button.setMinimumWidth(0);
-        button.setMinHeight(0);
-        button.setMinimumHeight(0);
-        button.setInsetTop(0);
-        button.setInsetBottom(0);
-        button.setPadding(0, 0, 0, 0);
-        button.setCornerRadius(size / 2);
-        button.setLayoutParams(new LinearLayout.LayoutParams(size, size));
-        return button;
-    }
-
-    /** The whole number in {@code text}, or null when it holds none. */
-    @Nullable
-    private static Integer parseSize(@Nullable CharSequence text) {
-        if (text == null) return null;
-        try {
-            return Integer.parseInt(text.toString().trim());
-        } catch (NumberFormatException e) {
-            return null;
-        }
     }
 
     // ------------------------------------------------------------------ helpers

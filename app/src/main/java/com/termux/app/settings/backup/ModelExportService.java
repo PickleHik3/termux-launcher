@@ -26,6 +26,7 @@ import androidx.core.app.NotificationCompat;
 import androidx.core.content.ContextCompat;
 
 import com.termux.R;
+import com.termux.ai.ModelAvailability;
 import com.termux.ai.TaiModelExport;
 import com.termux.ai.TaiModelSpec;
 import com.termux.ai.TaiModelStore;
@@ -100,8 +101,7 @@ public final class ModelExportService extends Service {
     @NonNull
     public static List<TaiModelExport.Model> exportable(@NonNull Context context) {
         TaiModelStore store = new TaiModelStore(context);
-        LinkedHashMap<String, TaiModelSpec> models = new LinkedHashMap<>(store.getDownloadedReadableModels());
-        models.putAll(store.getInstalledUserModels());
+        Map<String, TaiModelSpec> models = ModelAvailability.get(context).models();
         Map<String, String> exposures = new LinkedHashMap<>();
         for (String id : models.keySet()) {
             String exposure = store.getExposure(id);

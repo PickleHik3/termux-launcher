@@ -246,6 +246,31 @@ public class GlassBackdropCacheTest {
     }
 
     @Test
+    public void sampleBitmapLightnessReadsTheTailsAndTheMeanOfTheSameGrid() {
+        Bitmap bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
+        int dark = com.google.android.material.color.utilities.Hct.from(0d, 0d, 20d).toInt();
+        int light = com.google.android.material.color.utilities.Hct.from(0d, 0d, 70d).toInt();
+        for (int y = 0; y < 64; y++) {
+            for (int x = 0; x < 64; x++) bitmap.setPixel(x, y, y < 32 ? dark : light);
+        }
+        GlassBackdropCache.Lightness all =
+            GlassBackdropCache.sampleBitmapLightness(bitmap, new Rect(0, 0, 64, 64));
+        assertEquals(20d, all.p2, 0.5d);
+        assertEquals(70d, all.p98, 0.5d);
+        assertEquals(45d, all.mean, 1d);
+        assertEquals(GlassBackdropCache.sampleBitmapRegion(bitmap, new Rect(0, 0, 64, 64)),
+            all.meanColor);
+        GlassBackdropCache.Lightness top =
+            GlassBackdropCache.sampleBitmapLightness(bitmap, new Rect(-40, -40, 64, 32));
+        assertEquals(20d, top.p2, 0.5d);
+        assertEquals(20d, top.p98, 0.5d);
+        org.junit.Assert.assertNull(
+            GlassBackdropCache.sampleBitmapLightness(bitmap, new Rect(200, 200, 300, 300)));
+        org.junit.Assert.assertNull(
+            GlassBackdropCache.sampleBitmapLightness(null, new Rect(0, 0, 10, 10)));
+    }
+
+    @Test
     public void sampleBitmapRegionReadsTheRegionAndClampsToTheBitmap() {
         Bitmap bitmap = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888);
         for (int y = 0; y < 64; y++) {

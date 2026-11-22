@@ -43,6 +43,11 @@ import java.util.Arrays;
  * whether any of them has moved since — so an animation costs a row's image node once per frame
  * of the animation rather than once per frame of the display.
  *
+ * <p>The value compare is skipped for a row that is the same object as last frame with the same
+ * {@link TerminalRow#getStamp stamp}: the stamp moves on every change to a row, so the captured
+ * values still hold. A row whose stamp moved is compared exactly as before, so a row rewritten with
+ * what it already held (the Ghostty core rewrites every row it marks dirty) is still not recorded.
+ *
  * <p>This class knows nothing about how a row is drawn or what it is drawn into — see
  * {@link TerminalRowNodes} for that half.
  */
@@ -64,6 +69,8 @@ final class RowRenderCache {
     private static final class Row {
         boolean recorded;
         @Nullable TerminalRow line;
+        /** {@link TerminalRow#getStamp} of {@link #line} when its content was last captured. */
+        long stamp;
         int spaceUsed;
         char[] text = NO_CHARS;
         byte[] widths = NO_BYTES;
@@ -256,7 +263,10 @@ final class RowRenderCache {
                        int cursorColumns, boolean cursorLastRow, int cursorShape,
                        int cursorColor, int selectionStart, int selectionEnd, int urlKey) {
         final Row state = mRows[index];
-        boolean changed = mAllDirty || !state.recorded || state.line != line;
+        // Read before the state is overwritten below: the row object and its stamp at the last capture.
+        final boolean sameRow = state.recorded && state.line == line;
+        final long stamp = line.getStamp();
+        boolean changed = mAllDirty || !sameRow;
         // The cursor's shape and colour only reach the row it is drawn on. How far it reaches
         // across the row is its own input: over a text sizing block it covers the whole block.
         if (state.cursorColumn != cursorColumn
@@ -278,6 +288,12 @@ final class RowRenderCache {
         state.selectionStart = selectionStart;
         state.selectionEnd = selectionEnd;
 
+        // Same object, same stamp: nothing the captures below read has moved since they last ran.
+        if (sameRow && state.stamp == stamp && state.styleLength == columns) {
+            if (state.hasTextSizes) mAnyTextBlocks = true;
+            return changed;
+        }
+        state.stamp = stamp;
         final int spaceUsed = line.getSpaceUsed();
         if (state.spaceUsed != spaceUsed) changed = true;
         state.spaceUsed = spaceUsed;

@@ -17,6 +17,15 @@ public class TerminalSixel {
 
     protected final TerminalSessionClient mClient;
     protected Bitmap mBitmap;
+    /**
+     * Set for a sixel decoded into plain ints (see {@link #buildHeap}) instead of a {@link Bitmap}:
+     * the Ghostty core hands the pixels on as a kitty image, and the decoder runs on a JVM too.
+     */
+    private final boolean mHeap;
+    private int[] mPixels;
+    private int mPixelsWidth;
+    private int mPixelsHeight;
+    private final long mMaxPixelBytes;
     protected int mWidth;
     protected int mHeight;
     protected int mCurX;
@@ -25,8 +34,20 @@ public class TerminalSixel {
     protected int mColor;
 
     protected TerminalSixel(TerminalSessionClient client, Bitmap bitmap) {
+        this(client, bitmap, false, 0, 0, TerminalBitmap.MAX_BITMAP_SIZE);
+    }
+
+    private TerminalSixel(TerminalSessionClient client, Bitmap bitmap, boolean heap, int width, int height,
+                          long maxPixelBytes) {
         mClient = client;
         mBitmap = bitmap;
+        mHeap = heap;
+        mMaxPixelBytes = maxPixelBytes;
+        if (heap) {
+            mPixels = new int[width * height];
+            mPixelsWidth = width;
+            mPixelsHeight = height;
+        }
         mColorMap = new int[256];
         System.arraycopy(SIXEL__INITIAL_COLOR_MAP, 0, mColorMap, 0, 16);
         mColor = mColorMap[0];
@@ -45,8 +66,84 @@ public class TerminalSixel {
         }
     }
 
+    /**
+     * A sixel whose pixels are kept as ints (transparent to begin with), growing as the bitmap one
+     * does but never past {@code maxPixelBytes}; null when that does not fit.
+     */
+    public static TerminalSixel buildHeap(TerminalSessionClient client, int width, int height, long maxPixelBytes) {
+        try {
+            if ((long) width * height * 4L > maxPixelBytes) return null;
+            return new TerminalSixel(client, null, true, width, height, maxPixelBytes);
+        } catch (Throwable t) {
+            if (t instanceof OutOfMemoryError) System.gc();
+            Logger.logError(client, LOG_TAG,
+                "Create sixel pixels for width " + width + " with height " + height + " failed: " + t.getMessage());
+            return null;
+        }
+    }
+
     public Bitmap getBitmap() {
         return mBitmap;
+    }
+
+    /** The pixels of a {@link #buildHeap} sixel, ARGB, {@link #getRasterWidth()} per row; null once dropped. */
+    public int[] getPixels() {
+        return mPixels;
+    }
+
+    /** The width of the pixel store, which is at least {@link #getWidth()}. */
+    public int getRasterWidth() {
+        return mHeap ? mPixelsWidth : mBitmap == null ? 0 : mBitmap.getWidth();
+    }
+
+    /** The height of the pixel store, which is at least {@link #getHeight()}. */
+    public int getRasterHeight() {
+        return mHeap ? mPixelsHeight : mBitmap == null ? 0 : mBitmap.getHeight();
+    }
+
+    private boolean hasRaster() {
+        return mHeap ? mPixels != null : mBitmap != null;
+    }
+
+    private void putPixel(int x, int y, int color) {
+        if (mHeap) {
+            mPixels[y * mPixelsWidth + x] = color;
+        } else {
+            mBitmap.setPixel(x, y, color);
+        }
+    }
+
+    /** Grow the pixel store to {@code w} by {@code h}, keeping what it holds; false (and gone) if that fails. */
+    private boolean growRaster(int w, int h) {
+        if (!mHeap) {
+            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, w, h);
+            return mBitmap != null;
+        }
+        long bytes = (long) w * (long) h * 4L;
+        if (bytes <= 0 || bytes > mMaxPixelBytes) {
+            Logger.logError(mClient, LOG_TAG,
+                "The new sixel bitmap after resize with width " + w + " and height " + h +
+                    " has size " + bytes + " greater than max bitmap size " + mMaxPixelBytes);
+            mPixels = null;
+            return false;
+        }
+        int[] grown;
+        try {
+            grown = new int[w * h];
+        } catch (OutOfMemoryError e) {
+            Logger.logWarn(mClient, LOG_TAG, "Out of memory resizing sixel bitmap");
+            mPixels = null;
+            return false;
+        }
+        int copyW = Math.min(mPixelsWidth, w);
+        int copyH = Math.min(mPixelsHeight, h);
+        for (int y = 0; y < copyH; y++) {
+            System.arraycopy(mPixels, y * mPixelsWidth, grown, y * w, copyW);
+        }
+        mPixels = grown;
+        mPixelsWidth = w;
+        mPixelsHeight = h;
+        return true;
     }
 
     public int getWidth() {
@@ -58,7 +155,7 @@ public class TerminalSixel {
     }
 
     public boolean readData(int codePoint, int repeat) {
-        if (mBitmap == null) {
+        if (!hasRaster()) {
             return false;
         }
 
@@ -79,39 +176,37 @@ public class TerminalSixel {
             return true;
         }
 
-        if (mBitmap.getWidth() < mCurX + repeat) {
+        if (getRasterWidth() < mCurX + repeat) {
             int newBitmapWidth = mCurX + repeat + SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION;
             if (newBitmapWidth < 0) {
                 Logger.logError(mClient, LOG_TAG, "The new sixel bitmap width overflowed");
                 return false;
             }
 
-            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, newBitmapWidth, mBitmap.getHeight());
-            if (mBitmap == null) {
+            if (!growRaster(newBitmapWidth, getRasterHeight())) {
                 return false;
             }
         }
 
-        if (mBitmap.getHeight() < mCurY + SIXEL__LINE_LEN) {
+        if (getRasterHeight() < mCurY + SIXEL__LINE_LEN) {
             int newBitmapHeight = mCurY + SIXEL__BITMAP_RESIZE_EXTRA_DIMENSION;
             if (newBitmapHeight < 0) {
                 Logger.logError(mClient, LOG_TAG, "The new sixel bitmap height overflowed");
                 return false;
             }
 
-            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, mBitmap.getWidth(), newBitmapHeight);
-            if (mBitmap == null) {
+            if (!growRaster(getRasterWidth(), newBitmapHeight)) {
                 return false;
             }
         }
 
-        if (mCurX + repeat > mBitmap.getWidth()) {
-            repeat = mBitmap.getWidth() - mCurX;
+        if (mCurX + repeat > getRasterWidth()) {
+            repeat = getRasterWidth() - mCurX;
         }
 
-        if (mCurY + SIXEL__LINE_LEN > mBitmap.getHeight()) {
+        if (mCurY + SIXEL__LINE_LEN > getRasterHeight()) {
             Logger.logError(mClient, LOG_TAG,
-                "The sixel cursor y position " + (mCurY + SIXEL__LINE_LEN) + " is greater than bitmap height " + mBitmap.getHeight());
+                "The sixel cursor y position " + (mCurY + SIXEL__LINE_LEN) + " is greater than bitmap height " + getRasterHeight());
             return false;
         }
 
@@ -124,7 +219,7 @@ public class TerminalSixel {
             while (repeat-- > 0) {
                 for (int i = 0; i < SIXEL__LINE_LEN; i++) {
                     if ((b & (1 << i)) != 0) {
-                        mBitmap.setPixel(mCurX, mCurY + i, mColor);
+                        putPixel(mCurX, mCurY + i, mColor);
                     }
                 }
 
@@ -139,15 +234,14 @@ public class TerminalSixel {
     }
 
     public boolean resize(int sixelWidth, int sixelHeight) {
-        if (mBitmap == null || sixelWidth < 1 || sixelHeight < 1) {
+        if (!hasRaster() || sixelWidth < 1 || sixelHeight < 1) {
             return false;
         }
 
-        int newBitmapWidth = Math.max(sixelWidth, mBitmap.getWidth());
-        int newBitmapHeight = Math.max(sixelHeight, mBitmap.getHeight());
-        if (newBitmapWidth > mBitmap.getWidth() || newBitmapHeight > mBitmap.getHeight()) {
-            mBitmap = TerminalBitmap.resizeBitmap(LOG_TAG, "sixel", mClient, mBitmap, newBitmapWidth, newBitmapHeight);
-            return mBitmap != null;
+        int newBitmapWidth = Math.max(sixelWidth, getRasterWidth());
+        int newBitmapHeight = Math.max(sixelHeight, getRasterHeight());
+        if (newBitmapWidth > getRasterWidth() || newBitmapHeight > getRasterHeight()) {
+            return growRaster(newBitmapWidth, newBitmapHeight);
         }
 
         return true;

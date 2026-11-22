@@ -27,6 +27,19 @@ public class SurfaceDirtyLedgerTest {
     }
 
     @Test
+    public void theDockBackdropDirtiesTheKeysCardsAndNotTheOtherWay() {
+        Rect rect = new Rect(0, 0, 10, 10);
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.ACCESSORY, 20, false, rect);
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.KEYS_CARD, 20, false, rect);
+        assertFalse(ledger.isDirty(SurfaceDirtyLedger.Backdrop.KEYS_CARD));
+        ledger.markDirty(SurfaceDirtyLedger.Backdrop.KEYS_CARD);
+        assertFalse(ledger.isDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY));
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.KEYS_CARD, 20, false, rect);
+        ledger.markDirty(SurfaceDirtyLedger.Backdrop.ACCESSORY);
+        assertTrue(ledger.isDirty(SurfaceDirtyLedger.Backdrop.KEYS_CARD));
+    }
+
+    @Test
     public void everySurfaceStartsDirtyWithNothingToMatch() {
         for (SurfaceDirtyLedger.Backdrop backdrop : SurfaceDirtyLedger.Backdrop.values()) {
             assertTrue(backdrop.name(), ledger.isDirty(backdrop));
@@ -46,8 +59,7 @@ public class SurfaceDirtyLedgerTest {
         assertEquals(12, ledger.lastRadiusDp(SurfaceDirtyLedger.Backdrop.ACCESSORY));
         assertTrue(ledger.lastManagedSource(SurfaceDirtyLedger.Backdrop.ACCESSORY));
         assertTrue(ledger.matchesLastRect(SurfaceDirtyLedger.Backdrop.ACCESSORY, rect));
-        // The other two are independent surfaces with their own crops.
-        assertTrue(ledger.isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
+        // The other one is an independent surface with its own crop.
         assertTrue(ledger.isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
     }
 
@@ -63,15 +75,15 @@ public class SurfaceDirtyLedgerTest {
 
     @Test
     public void resettingForgetsTheRadiusAndSourceTooNotJustTheGeometry() {
-        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, 20, true,
+        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, 20, true,
             new Rect(0, 0, 5, 5));
 
-        ledger.reset(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR);
+        ledger.reset(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
 
-        assertTrue(ledger.isDirty(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
-        assertEquals(-1, ledger.lastRadiusDp(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
-        assertFalse(ledger.lastManagedSource(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR));
-        assertTrue(ledger.matchesLastRect(SurfaceDirtyLedger.Backdrop.DECOR_NAV_BAR, new Rect()));
+        assertTrue(ledger.isDirty(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
+        assertEquals(-1, ledger.lastRadiusDp(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
+        assertFalse(ledger.lastManagedSource(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD));
+        assertTrue(ledger.matchesLastRect(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD, new Rect()));
     }
 
     @Test

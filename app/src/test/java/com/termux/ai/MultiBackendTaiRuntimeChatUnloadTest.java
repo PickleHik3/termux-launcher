@@ -4,8 +4,6 @@ import org.json.JSONException;
 import org.json.JSONObject;
 import org.junit.Before;
 import org.junit.Test;
-import org.junit.runner.RunWith;
-import org.robolectric.RobolectricTestRunner;
 
 import java.lang.reflect.Field;
 
@@ -18,7 +16,6 @@ import static org.junit.Assert.assertTrue;
  * nothing else. Speech in, speech out and embeddings stay resident, and a chat model that is no longer
  * the sort's is left alone.
  */
-@RunWith(RobolectricTestRunner.class)
 public class MultiBackendTaiRuntimeChatUnloadTest {
     private static final String SORT_MODEL = "sort-model";
 
@@ -155,12 +152,7 @@ public class MultiBackendTaiRuntimeChatUnloadTest {
         }
         @Override public JSONObject keepWarm(TaiModelSpec modelSpec, TaiRuntimeOptions options, int minutes) throws JSONException { return ok(); }
         @Override public JSONObject cancel() throws JSONException { cancelCalled = true; return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, String systemPrompt, String userPrompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject chat(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options) throws JSONException { return ok(); }
-        @Override public JSONObject complete(String modelId, String prompt, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
+        @Override public JSONObject generate(String modelId, TaiChatRequest request, TaiRuntimeOptions options, TaiGenerationCallback callback) throws JSONException { return ok(); }
 
         private static JSONObject ok() throws JSONException {
             return new JSONObject().put("ok", true);

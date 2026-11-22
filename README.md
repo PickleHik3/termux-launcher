@@ -30,7 +30,7 @@ Where a feature was ported from or inspired by another project, that project is 
 **The home screen**
 
 - Termux as the actual Android home launcher, the idea borrowed from [TEL](https://github.com/t-e-l/tel): the terminal is the home screen, with an app dock, a full app drawer (vertical, horizontal and category layouts, folders), Android widget pages and a Linux display beside it
-- An expandable status bar with sessions and window chips, live CPU, RAM and weather (animated [Meteocons](https://github.com/basmilius/meteocons))
+- An expandable status bar with sessions and window chips, live CPU, RAM and weather shown in the launcher's own icon family
 - Notification dots, pinned notification cards and a notification history for the shell
 - Looks and themes: Material You colours from your wallpaper (from [termux-monet](https://github.com/Termux-Monet/termux-monet)), glass surfaces with blur, edge light and corner radius you can tune per surface, icon packs, cursor trails, and theme templates (after [Noctalia](https://github.com/noctalia-dev/noctalia-shell)) so shell tools follow the wallpaper too
 - Backup and restore of your settings, config files and downloaded AI models
@@ -175,8 +175,7 @@ project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), an
 [open-source notices](THIRD_PARTY_NOTICES.md). The Android app exposes the same notices under
 **Settings > Open-source licenses**.
 
-Bundled assets carry their own licenses: the weather animations are
-[Meteocons](https://github.com/basmilius/meteocons) (MIT, Copyright 2020-present Bas Milius), the
+Bundled assets carry their own licenses: the
 voice key's speech detector is [Silero VAD](https://github.com/snakers4/silero-vad) (MIT, Copyright
 2020-present Silero Team), and the icon font is [Symbols Nerd Font Mono](https://github.com/ryanoasis/nerd-fonts) (MIT for the Symbols-only font, with separate licenses for its glyph sources).
 

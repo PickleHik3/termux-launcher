@@ -135,7 +135,8 @@ public class ExtraKeyButton {
     @NonNull
     private static String resolveDisplay(@NonNull String[] keys, @Nullable String display,
                                          @NonNull ExtraKeysConstants.ExtraKeyDisplayMap extraKeyDisplayMap) {
-        if (display != null) return display;
+        // A stored display that is the one this app once shipped for this key reads as its icon.
+        if (display != null) return ExtraKeyIcons.effectiveDisplay(keys.length == 1 ? keys[0] : null, display);
         return Arrays.stream(keys).map(key -> extraKeyDisplayMap.get(key, key)).collect(Collectors.joining(" "));
     }
 

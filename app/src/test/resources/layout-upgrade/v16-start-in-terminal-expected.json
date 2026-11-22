@@ -1,0 +1,20 @@
+{
+  "home": {
+    "portrait": {
+      "az_bar": "top"
+    }
+  },
+  "terminal": {
+    "portrait": {
+      "status_bar": "bottom"
+    },
+    "landscape": {
+      "status_bar": "top"
+    }
+  },
+  "display": {
+    "portrait": {
+      "status_bar": "bottom"
+    }
+  }
+}

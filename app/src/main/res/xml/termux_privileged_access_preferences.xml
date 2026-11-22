@@ -17,31 +17,25 @@
         app:key="privileged_access_backend"
         app:title="@string/termux_privileged_access_backend_title">
 
-        <SwitchPreferenceCompat
-            app:key="priv_master_enabled"
-            app:title="@string/termux_privileged_master_enabled_title"
-            app:summaryOn="@string/termux_privileged_master_enabled_on"
-            app:summaryOff="@string/termux_privileged_master_enabled_off"
-            app:defaultValue="true" />
-
-        <SwitchPreferenceCompat
-            app:key="priv_prefer_shizuku"
-            app:title="@string/termux_privileged_prefer_shizuku_title"
-            app:summaryOn="@string/termux_privileged_prefer_shizuku_on"
-            app:summaryOff="@string/termux_privileged_prefer_shizuku_off"
-            app:defaultValue="true" />
-
-        <SwitchPreferenceCompat
-            app:key="priv_allow_shell_fallback"
-            app:title="@string/termux_privileged_allow_shell_fallback_title"
-            app:summaryOn="@string/termux_privileged_allow_shell_fallback_on"
-            app:summaryOff="@string/termux_privileged_allow_shell_fallback_off"
-            app:defaultValue="true" />
+        <ListPreference
+            app:key="priv_backend"
+            app:title="@string/termux_privileged_backend_title"
+            app:dialogTitle="@string/termux_privileged_backend_title"
+            app:entries="@array/termux_privileged_backend_entries"
+            app:entryValues="@array/termux_privileged_backend_values"
+            app:defaultValue="auto"
+            app:useSimpleSummaryProvider="true" />
 
         <Preference
             app:key="priv_request_shizuku_permission"
             app:title="@string/termux_privileged_request_permission_title"
             app:summary="@string/termux_privileged_request_permission_summary" />
+
+        <SwitchPreferenceCompat
+            app:key="launcherctl_root_reboot"
+            app:title="@string/termux_privileged_launcherctl_reboot_title"
+            app:summary="@string/termux_privileged_launcherctl_reboot_summary"
+            app:defaultValue="false" />
 
     </PreferenceCategory>
 

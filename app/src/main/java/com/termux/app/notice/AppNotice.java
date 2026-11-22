@@ -14,6 +14,7 @@ import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.Toast;
 
+import androidx.annotation.DrawableRes;
 import androidx.annotation.MainThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -58,6 +59,10 @@ public final class AppNotice {
      * callback can still find a chip to land in. Called once, from the application object.
      */
     public static void install(@NonNull Application application) {
+        // A new application has no activity in front yet. Once per process on a phone; under
+        // Robolectric each test brings a new application, and the last test's activity (never
+        // paused) would otherwise take this test's notices and lay out a window nobody drives.
+        sForegroundActivity = null;
         application.registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
             @Override public void onActivityResumed(@NonNull Activity activity) {
                 sForegroundActivity = new WeakReference<>(activity);
@@ -99,6 +104,12 @@ public final class AppNotice {
             longDuration);
     }
 
+    /** A plain message that wears the icon of what it is about. */
+    public static void show(@Nullable Context context, @DrawableRes int icon,
+                            @Nullable CharSequence message, boolean longDuration) {
+        show(context, AppNoticeItem.Kind.INFO, icon, message, null, longDuration);
+    }
+
     // ------------------------------------------------------------------------ richer entry points
 
     /** A notice with a subtitle: the headline stays readable, the detail is what gets clipped. */
@@ -115,6 +126,15 @@ public final class AppNotice {
         raise(context, kind, title, sub, glyph, longDuration);
     }
 
+    /** As above, with an icon of the action's own instead of the kind's default. */
+    public static void show(@Nullable Context context, @NonNull AppNoticeItem.Kind kind,
+                            @DrawableRes int icon, @Nullable CharSequence title,
+                            @Nullable CharSequence sub, boolean longDuration) {
+        raise(context, kind, title, sub, null, icon,
+            longDuration ? AppNoticeHostView.HOLD_LONG_MS : AppNoticeHostView.HOLD_SHORT_MS,
+            null, false, null);
+    }
+
     /**
      * A notice about a specific shell: tapping it takes the user to that pane or window, and an
      * {@code attention} notice is drawn in its own accent because the shell is waiting on them.
@@ -124,6 +144,14 @@ public final class AppNotice {
                              boolean attention, @Nullable Runnable onActivate) {
         raise(context, attention ? AppNoticeItem.Kind.WARNING : AppNoticeItem.Kind.INFO,
             title, sub, glyph, false, onActivate, attention);
+    }
+
+    /** As above, with an icon in place of the glyph. */
+    public static void shell(@Nullable Context context, @Nullable CharSequence title,
+                             @Nullable CharSequence sub, @DrawableRes int icon,
+                             boolean attention, @Nullable Runnable onActivate) {
+        raise(context, attention ? AppNoticeItem.Kind.WARNING : AppNoticeItem.Kind.INFO,
+            title, sub, null, icon, AppNoticeHostView.HOLD_SHORT_MS, onActivate, attention, null);
     }
 
     /**
@@ -140,8 +168,22 @@ public final class AppNotice {
      */
     public static void undoable(@Nullable Context context, @Nullable CharSequence title,
                                 @Nullable CharSequence hint, @NonNull Runnable undo) {
-        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, "↺",
-            AppNoticeHostView.HOLD_UNDO_MS, undo, false, hint);
+        undoable(context, title, hint, undo, AppNoticeHostView.HOLD_UNDO_MS);
+    }
+
+    /** {@link #undoable(Context, CharSequence, CharSequence, Runnable)}, on offer for {@code holdMs}. */
+    public static void undoable(@Nullable Context context, @Nullable CharSequence title,
+                                @Nullable CharSequence hint, @NonNull Runnable undo,
+                                long holdMs) {
+        undoable(context, title, hint, undo, holdMs, R.drawable.ic_rl_undo);
+    }
+
+    /** As above, wearing the icon of what was done rather than the undo arrow. */
+    public static void undoable(@Nullable Context context, @Nullable CharSequence title,
+                                @Nullable CharSequence hint, @NonNull Runnable undo,
+                                long holdMs, @DrawableRes int icon) {
+        raise(context, AppNoticeItem.Kind.SUCCESS, title, hint, null, icon, holdMs,
+            undo, false, hint);
     }
 
     /**
@@ -163,10 +205,24 @@ public final class AppNotice {
      */
     public static void readout(@Nullable Context context, @Nullable CharSequence label,
                                long holdMs) {
+        readout(context, label, holdMs, 0);
+    }
+
+    /** As above, wearing {@code icon} (0 for none). */
+    public static void readout(@Nullable Context context, @Nullable CharSequence label,
+                               long holdMs, @DrawableRes int icon) {
         if (context == null || TextUtils.isEmpty(label)) return;
-        AppNoticeItem item = new AppNoticeItem(AppNoticeItem.Kind.INFO, label, null, null,
+        AppNoticeItem item = new AppNoticeItem(AppNoticeItem.Kind.INFO, label, null, null, icon,
             holdMs, null, false, null, true);
         post(context, item);
+    }
+
+    /** A read-out that wears an icon: the tool or setting it names. */
+    public static void readout(@Nullable Context context, @DrawableRes int icon,
+                               @Nullable CharSequence label) {
+        if (context == null || TextUtils.isEmpty(label)) return;
+        post(context, new AppNoticeItem(AppNoticeItem.Kind.INFO, label, null, null, icon,
+            AppNoticeItem.Hold.READOUT.ms, null, false, null, true));
     }
 
     /** Takes down the read-out on the pill, if a read-out is what is there; a real notice stays. */
@@ -192,6 +248,13 @@ public final class AppNotice {
     public static void confirm(@Nullable Context context, @Nullable String glyph,
                                @Nullable CharSequence message) {
         raise(context, AppNoticeItem.Kind.SUCCESS, message, null, glyph,
+            AppNoticeItem.Hold.CONFIRM.ms, null, false, null);
+    }
+
+    /** Something the user asked for, done, wearing an icon. */
+    public static void confirm(@Nullable Context context, @DrawableRes int icon,
+                               @Nullable CharSequence message) {
+        raise(context, AppNoticeItem.Kind.SUCCESS, message, null, null, icon,
             AppNoticeItem.Hold.CONFIRM.ms, null, false, null);
     }
 
@@ -259,9 +322,17 @@ public final class AppNotice {
                               @Nullable String glyph, long holdMs,
                               @Nullable Runnable onActivate, boolean attention,
                               @Nullable CharSequence actionHint) {
+        raise(context, kind, title, sub, glyph, 0, holdMs, onActivate, attention, actionHint);
+    }
+
+    private static void raise(@Nullable Context context, @NonNull AppNoticeItem.Kind kind,
+                              @Nullable CharSequence title, @Nullable CharSequence sub,
+                              @Nullable String glyph, @DrawableRes int icon, long holdMs,
+                              @Nullable Runnable onActivate, boolean attention,
+                              @Nullable CharSequence actionHint) {
         if (context == null || TextUtils.isEmpty(title)) return;
-        post(context, new AppNoticeItem(kind, title, sub, glyph, holdMs,
-            onActivate, attention, actionHint));
+        post(context, new AppNoticeItem(kind, title, sub, glyph, icon, holdMs,
+            onActivate, attention, actionHint, false));
     }
 
     /** Hands one notice to the main thread's pill, from whichever thread raised it. */
@@ -324,7 +395,7 @@ public final class AppNotice {
     }
 
     /**
-     * The window's own content root, on every screen. The terminal used to get the chip inside its
+     * The window's notices layer, on every screen. The terminal used to get the chip inside its
      * surface host instead, to hang it off the window bar — but that made it a sibling of anything
      * the terminal opens in there, and the surface editor, added later, drew straight over the
      * notice it had just raised. {@link AppNoticePlacement} lines the chip up with the chrome
@@ -332,8 +403,7 @@ public final class AppNotice {
      */
     @Nullable
     private static ViewGroup anchorFor(@NonNull Activity activity) {
-        View content = activity.findViewById(android.R.id.content);
-        return content instanceof ViewGroup ? (ViewGroup) content : null;
+        return com.termux.app.window.WindowLayers.host(activity, com.termux.app.window.WindowLayer.NOTICES);
     }
 
     @Nullable

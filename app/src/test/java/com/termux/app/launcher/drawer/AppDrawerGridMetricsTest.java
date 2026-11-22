@@ -57,12 +57,12 @@ public class AppDrawerGridMetricsTest {
     @Test
     public void rowHeightIsIconGapLabelAndBottomPadding() {
         AppDrawerGridMetrics m = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT);
-        float expected = m.iconPx
+        float expected = (AppDrawerGridMetrics.ROW_TOP_DP * DENSITY) + m.iconPx
             + (AppDrawerGridMetrics.LABEL_GAP_DP * DENSITY)
             + LABEL_HEIGHT
             + (AppDrawerGridMetrics.ROW_BOTTOM_DP * DENSITY);
         assertEquals(expected, m.rowHeightPx, EPS);
-        assertEquals(225f, m.rowHeightPx, EPS);
+        assertEquals(237f, m.rowHeightPx, EPS);
         // A taller label pushes the row and nothing else.
         AppDrawerGridMetrics taller = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT * 2f);
         assertEquals(m.iconPx, taller.iconPx, EPS);
@@ -76,7 +76,7 @@ public class AppDrawerGridMetricsTest {
         assertEquals(AppDrawerGridMetrics.MIN_COLUMNS, empty.columns);
         assertEquals(0f, empty.cellWidthPx, EPS);
         assertEquals(0f, empty.iconPx, EPS);
-        assertEquals(81f, empty.rowHeightPx, EPS);
+        assertEquals(93f, empty.rowHeightPx, EPS);
 
         AppDrawerGridMetrics noDensity = AppDrawerGridMetrics.resolve(1080f, 0f, LABEL_HEIGHT);
         assertFalse(Float.isNaN(noDensity.iconPx));
@@ -86,7 +86,7 @@ public class AppDrawerGridMetricsTest {
 
         AppDrawerGridMetrics unmeasuredLabel =
             AppDrawerGridMetrics.resolve(1080f, DENSITY, -20f);
-        assertEquals(192f, unmeasuredLabel.rowHeightPx, EPS);
+        assertEquals(204f, unmeasuredLabel.rowHeightPx, EPS);
     }
 
     @Test
@@ -109,5 +109,14 @@ public class AppDrawerGridMetricsTest {
         assertEquals(180f, six.cellWidthPx, EPS);
         assertEquals(144f, four.iconPx, EPS);
         assertEquals(104.4f, six.iconPx, EPS);
+    }
+
+    @Test
+    public void resolvingTheSameInputsGivesEqualMetrics() {
+        AppDrawerGridMetrics a = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT);
+        AppDrawerGridMetrics b = AppDrawerGridMetrics.resolve(1080f, DENSITY, LABEL_HEIGHT);
+        assertEquals(a, b);
+        assertEquals(a.hashCode(), b.hashCode());
+        assertFalse(a.equals(AppDrawerGridMetrics.resolve(900f, DENSITY, LABEL_HEIGHT)));
     }
 }

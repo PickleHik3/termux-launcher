@@ -1,0 +1,7 @@
+[
+  {"slug": "plasma", "name": "Plasma", "quality": "half", "rate": 30},
+  {"slug": "aurora", "name": "Aurora", "quality": "half", "rate": 30},
+  {"slug": "drift", "name": "Drift", "quality": "half", "rate": 30},
+  {"slug": "caustics", "name": "Caustics", "quality": "half", "rate": 30},
+  {"slug": "starfield", "name": "Starfield", "quality": "half", "rate": 30}
+]

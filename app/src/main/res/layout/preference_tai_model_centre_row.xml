@@ -20,6 +20,15 @@
         android:gravity="center_vertical"
         android:orientation="horizontal">
 
+        <!-- The leading icon, sized and tinted like preference_settings_row's. -->
+        <ImageView
+            android:id="@android:id/icon"
+            android:layout_width="@dimen/settings_row_icon"
+            android:layout_height="@dimen/settings_row_icon"
+            android:layout_marginEnd="@dimen/settings_gutter"
+            android:importantForAccessibility="no"
+            android:tint="@color/settings_row_summary" />
+
         <LinearLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"

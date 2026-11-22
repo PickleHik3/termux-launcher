@@ -35,16 +35,20 @@ public final class SurfaceDirtyLedger {
     public enum Backdrop {
         /** The shared accessory (dock + unified keyboard) crop. */
         ACCESSORY,
-        /** The under-pill gesture-nav strip in the decor overlay. */
-        DECOR_NAV_BAR,
         /** The keyboard-local crop used when the keyboard is not on the unified dock material. */
-        IN_APP_KEYBOARD
+        IN_APP_KEYBOARD,
+        /**
+         * The Terminal's extra-keys card crop (ADR 0032): the dock capsule's own glass on a view of
+         * its own, so it keeps its own record. Whatever dirties {@link #ACCESSORY} dirties it too.
+         */
+        KEYS_CARD
     }
 
     /** Wallpaper-frost crop targets. */
     public enum FrostRect {
         TOP_PANE_STATUS,
         TOP_PANE_WINDOW_BAR,
+        TOP_PANE_WINDOW_BAR_SIDE,
         COMMAND_PALETTE,
         TERMINAL_SHEET,
         APP_DRAWER,
@@ -90,6 +94,8 @@ public final class SurfaceDirtyLedger {
 
     public void markDirty(@NonNull Backdrop backdrop) {
         entry(backdrop).dirty = true;
+        // The card wears the dock capsule's glass: a re-cut of the one is a re-cut of the other.
+        if (backdrop == Backdrop.ACCESSORY) entry(Backdrop.KEYS_CARD).dirty = true;
         mDirtyGeneration++;
     }
 

@@ -17,7 +17,7 @@
             app:key="x11_set_display_env"
             app:title="@string/settings_x11_set_display_env_title"
             app:summary="@string/settings_x11_set_display_env_summary"
-            android:defaultValue="false" />
+            android:defaultValue="true" />
     </PreferenceCategory>
 
 </PreferenceScreen>

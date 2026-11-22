@@ -9,11 +9,12 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.x11.DisplayTouchpadPlacement;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.junit.Before;
@@ -48,7 +49,7 @@ public class KeyboardOverlayPolicyTest {
         return new PlaceLayoutStore(launcher);
     }
 
-    private boolean overlays(PlaceLayoutStore store, PaneWallPage place,
+    private boolean overlays(PlaceLayoutStore store, PageKind place,
                              PlaceOrientation orientation) {
         return KeyboardOverlayPolicy.overlays(place, store.resolve(orientation));
     }
@@ -62,16 +63,36 @@ public class KeyboardOverlayPolicyTest {
             RowPlacement.BOTTOM, mode, form, 4, 5);
     }
 
+    @Test
+    public void rowsOverTheKeyboardLeaveTheBedsLowerStripOutsideTheContent() {
+        PlaceLayout rows = layout(KeyboardMode.OVERLAY);
+        assertFalse("the extra keys and apps rows stand over the keyboard",
+            KeyboardOverlayPolicy.contentUnderWholeBed(rows));
+        // Nothing along the bottom at all: the content reaches the bed's bottom.
+        PlaceLayout bare = new PlaceLayout(Edge.TOP, RowPlacement.HIDDEN, false, Edge.TOP,
+            RowPlacement.HIDDEN, KeyboardMode.OVERLAY, KeyboardForm.DOCKED, 4, 5);
+        assertTrue(KeyboardOverlayPolicy.contentUnderWholeBed(bare));
+        // A status bar along the bottom always stands over the keyboard.
+        PlaceLayout status = bare.withSlot(Element.STATUS, Slot.on(Edge.BOTTOM, Element.STATUS));
+        assertFalse(KeyboardOverlayPolicy.contentUnderWholeBed(status));
+        // The extra keys under the keyboard stay under its bed.
+        PlaceLayout under = bare.withSlot(Element.EXTRA_KEYS,
+            new Slot(false, Edge.BOTTOM, 0, true));
+        assertTrue(KeyboardOverlayPolicy.contentUnderWholeBed(under));
+        // A column on a side is no band along the bottom.
+        PlaceLayout column = bare.withSlot(Element.EXTRA_KEYS, Slot.on(Edge.RIGHT, Element.EXTRA_KEYS));
+        assertTrue(KeyboardOverlayPolicy.contentUnderWholeBed(column));
+    }
+
     // ------------------------------------------------------------------ when it applies
 
     @Test
-    public void outOfTheBoxTheHomePlaceAndTheDisplayInLandscapeFloatTheKeyboard() {
+    public void outOfTheBoxEveryPlaceThatReadsTheModeFloatsTheKeyboardInBothOrientations() {
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
-                boolean expected = place == PaneWallPage.WIDGETS
-                    || (place == PaneWallPage.DISPLAY
-                        && orientation == PlaceOrientation.LANDSCAPE);
+                boolean expected = place == PageKind.HOME
+                    || place == PageKind.DISPLAY;
                 assertEquals(place + " " + orientation, expected,
                     overlays(store, place, orientation));
             }
@@ -80,15 +101,36 @@ public class KeyboardOverlayPolicyTest {
 
     /** The widget grid is laid against fixed cells; a keyboard that took room would re-cut it. */
     @Test
+    public void leavingTheDisplayForATerminalWindowChangesTheContentsRoom() {
+        PlaceLayout layout = layout(KeyboardMode.OVERLAY);
+        // The display window going off the Terminal without a slide: the terminal must get
+        // its room back from the floating keyboard, and the way back must float it again.
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PageKind.DISPLAY,
+            PageKind.TERMINAL, layout));
+        assertTrue(KeyboardOverlayPolicy.changesBetween(PageKind.TERMINAL,
+            PageKind.DISPLAY, layout));
+        assertFalse(KeyboardOverlayPolicy.changesBetween(PageKind.DISPLAY,
+            PageKind.HOME, layout));
+    }
+
+    @Test
     public void theHomePlaceFloatsTheKeyboardWhateverIsStored() {
         PlaceLayoutStore store = store();
         for (PlaceOrientation orientation : PlaceOrientation.values()) {
             store.setKeyboardMode(orientation, KeyboardMode.RESIZE);
             assertTrue(String.valueOf(orientation),
-                overlays(store, PaneWallPage.WIDGETS, orientation));
+                overlays(store, PageKind.HOME, orientation));
         }
-        assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.WIDGETS,
+        assertTrue(KeyboardOverlayPolicy.overlays(PageKind.HOME,
             layout(KeyboardMode.RESIZE)));
+    }
+
+    @Test
+    public void aStoredResizeKeepsTheDisplayResizingInPortraitToo() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.RESIZE);
+        assertFalse(overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertTrue(overlays(store, PageKind.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
@@ -98,15 +140,15 @@ public class KeyboardOverlayPolicyTest {
             KeyboardMode.OVERLAY);
         store.setKeyboardMode(PlaceOrientation.LANDSCAPE,
             KeyboardMode.RESIZE);
-        assertTrue(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.PORTRAIT));
-        assertFalse(overlays(store, PaneWallPage.DISPLAY, PlaceOrientation.LANDSCAPE));
+        assertTrue(overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT));
+        assertFalse(overlays(store, PageKind.DISPLAY, PlaceOrientation.LANDSCAPE));
     }
 
     @Test
     public void noOtherPlaceFloatsTheKeyboardEvenWithAnOverlayStored() {
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
-            if (place == PaneWallPage.DISPLAY || place == PaneWallPage.WIDGETS) continue;
+        for (PageKind place : PageKind.values()) {
+            if (place == PageKind.DISPLAY || place == PageKind.HOME) continue;
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 store.setKeyboardMode(orientation, KeyboardMode.OVERLAY);
                 assertFalse(place + " " + orientation, overlays(store, place, orientation));
@@ -120,14 +162,14 @@ public class KeyboardOverlayPolicyTest {
      */
     @Test
     public void aFloatingTypeFloatsOnEveryPlaceWhateverTheModeSays() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             assertTrue(place + " resize", KeyboardOverlayPolicy.overlays(place,
                 layout(KeyboardMode.RESIZE, KeyboardForm.FLOATING)));
             assertTrue(place + " overlay", KeyboardOverlayPolicy.overlays(place,
                 layout(KeyboardMode.OVERLAY, KeyboardForm.FLOATING)));
         }
         PlaceLayoutStore store = store();
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (PlaceOrientation orientation : PlaceOrientation.values()) {
                 store.setKeyboardForm(orientation, KeyboardForm.FLOATING);
                 assertTrue(place + " " + orientation, overlays(store, place, orientation));
@@ -138,7 +180,7 @@ public class KeyboardOverlayPolicyTest {
     /** Split is docked: it parts the rows, it does not lift off the bottom edge. */
     @Test
     public void aSplitTypeFloatsExactlyWhereADockedOneDoes() {
-        for (PaneWallPage place : PaneWallPage.values()) {
+        for (PageKind place : PageKind.values()) {
             for (KeyboardMode mode : KeyboardMode.values()) {
                 assertEquals(place + " " + mode,
                     KeyboardOverlayPolicy.overlays(place, layout(mode, KeyboardForm.DOCKED)),
@@ -149,12 +191,46 @@ public class KeyboardOverlayPolicyTest {
 
     @Test
     public void theDisplayResizesWhenItIsNotThePlaceOnScreen() {
-        assertFalse(KeyboardOverlayPolicy.overlays(PaneWallPage.TERMINAL,
+        assertFalse(KeyboardOverlayPolicy.overlays(PageKind.TERMINAL,
             layout(KeyboardMode.OVERLAY)));
-        assertTrue(KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY,
+        assertTrue(KeyboardOverlayPolicy.overlays(PageKind.DISPLAY,
             layout(KeyboardMode.OVERLAY)));
-        assertFalse(KeyboardOverlayPolicy.overlays(PaneWallPage.DISPLAY,
+        assertFalse(KeyboardOverlayPolicy.overlays(PageKind.DISPLAY,
             layout(KeyboardMode.RESIZE)));
+    }
+
+    /**
+     * The touchpad stands in the keyboard's frame, so with the pad up the frame is a shown keyboard
+     * of the pad's height: under Overlay the display keeps the size it has with nothing up, and
+     * once the pad's switch has saved Resize the display gives up exactly the pad's height. The
+     * switch decides it for the orientation it was pressed in and nowhere else.
+     */
+    @Test
+    public void theTouchpadFollowsTheKeyboardModeItsSwitchSaves() {
+        PlaceLayoutStore store = store();
+        store.setKeyboardMode(PlaceOrientation.PORTRAIT, KeyboardMode.OVERLAY);
+        store.setKeyboardMode(PlaceOrientation.LANDSCAPE, KeyboardMode.OVERLAY);
+        int available = 2000;
+        int dockPx = 180;
+        int marginPx = 24;
+        int padPx = 640;
+        int closed = contentHeight(false, false, 0, available, dockPx, marginPx);
+
+        boolean overlays = overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT);
+        assertTrue(overlays);
+        assertEquals("Overlay: the X screen keeps its size", closed,
+            contentHeight(overlays, true, padPx, available, dockPx, marginPx));
+
+        DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT);
+        overlays = overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT);
+        assertFalse(overlays);
+        assertEquals("Resize: the display shrinks above the pad", closed - padPx,
+            contentHeight(overlays, true, padPx, available, dockPx, marginPx));
+        assertTrue("landscape keeps its own mode",
+            overlays(store, PageKind.DISPLAY, PlaceOrientation.LANDSCAPE));
+
+        DisplayTouchpadPlacement.switchKeyboardMode(store, PlaceOrientation.PORTRAIT);
+        assertTrue(overlays(store, PageKind.DISPLAY, PlaceOrientation.PORTRAIT));
     }
 
     // ------------------------------------------------------------------ what it leaves the content
@@ -238,5 +314,55 @@ public class KeyboardOverlayPolicyTest {
         int stackPx = dockPx + (keyboardShown ? keyboardPx : 0);
         return KeyboardOverlayPolicy.contentHeightPx(availablePx,
             KeyboardOverlayPolicy.contentReservationPx(stackPx, marginPx, overlapPx));
+    }
+
+    /**
+     * Moved from the Home chrome policy's test: the dock and the keyboard take no room from the
+     * grid on Home (its dock overlays the page), up or down.
+     */
+    @Test
+    public void onAHomePageTheChromeTakesNoRoomWithTheKeyboardUpOrDown() {
+        int dock = 120;
+        int keyboard = 600;
+        int margin = 8;
+        assertEquals(0, KeyboardOverlayPolicy.restReservationPx(true, dock, 0, false, true,
+            keyboard, margin));
+        assertEquals(0, KeyboardOverlayPolicy.restReservationPx(true, dock, 0, true, true,
+            keyboard, margin));
+        // A window's dock takes its room; its keyboard takes room too unless it floats.
+        assertEquals(dock + margin, KeyboardOverlayPolicy.restReservationPx(false, dock, 0, false,
+            false, keyboard, margin));
+        assertEquals(dock + keyboard + margin, KeyboardOverlayPolicy.restReservationPx(false,
+            dock, 0, true, false, keyboard, margin));
+        assertEquals("the old signature is a window's", dock + margin,
+            KeyboardOverlayPolicy.restReservationPx(dock, 0, true, true, keyboard, margin));
+    }
+
+    /** The geometry pass's overlap: the whole stack on Home, the keyboard's share elsewhere. */
+    @Test
+    public void theContentReachesUnderTheWholeStackOnAHomePage() {
+        int stack = 720;
+        int margin = 8;
+        int overlap = KeyboardOverlayPolicy.overlapPx(true, stack, margin, 600);
+        assertEquals(stack + margin, overlap);
+        assertEquals("nothing is reserved", 0,
+            KeyboardOverlayPolicy.contentReservationPx(stack, margin, overlap));
+        assertEquals("with the keyboard down too", 0, KeyboardOverlayPolicy.contentReservationPx(
+            120, margin, KeyboardOverlayPolicy.overlapPx(true, 120, margin, 0)));
+        assertEquals(600, KeyboardOverlayPolicy.overlapPx(false, stack, margin, 600));
+        assertEquals(0, KeyboardOverlayPolicy.overlapPx(false, stack, margin, 0));
+    }
+
+    /** On Home the dock stays down, so floats meet the keyboard's own top (#309). */
+    @Test
+    public void homeFloatsMeetTheKeyboardsTrueTop() {
+        assertEquals("the in-app column's top", 1000 - 700,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(true, 0, 1000, 700, 123));
+        assertEquals("a system keyboard is its own top", 800,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(false, 300, 1000, 0, 800));
+        assertEquals("nothing up", -1,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(false, 0, 1000, 700, 800));
+        assertEquals("a column taller than the screen stops at the top", 0,
+            KeyboardOverlayPolicy.homeKeyboardTopPx(true, 0, 500, 700, 0));
     }
 }

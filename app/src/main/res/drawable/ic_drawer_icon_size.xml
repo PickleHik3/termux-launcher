@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp" android:height="24dp"
+    android:viewportWidth="960" android:viewportHeight="960">
+    <path android:fillColor="?attr/colorOnSurfaceVariant" android:pathData="M240 120H720Q840 120 840 240V720Q840 840 720 840H240Q120 840 120 720V240Q120 120 240 120ZM240 200Q200 200 200 240V720Q200 760 240 760H720Q760 760 760 720V240Q760 200 720 200H240ZM336 440H464Q520 440 520 496V624Q520 680 464 680H336Q280 680 280 624V496Q280 440 336 440Z"/>
+</vector>

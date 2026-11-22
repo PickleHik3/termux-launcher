@@ -1,0 +1,9 @@
+# Pong's Home page 1 with a Home float open over the widgets (1080x2412). Swipe to Home 2 and back
+# on the top border's air, clear of the float, five times: the float slides with its page. Live
+# blur's float gate (project-docs/active/live-glass-2026-11-03.md, wave 3).
+repeat 5
+swipe 750 91 250 91 300
+sleep 1
+swipe 250 91 750 91 300
+sleep 1
+end

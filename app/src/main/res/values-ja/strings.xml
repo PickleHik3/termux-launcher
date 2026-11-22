@@ -77,5 +77,4 @@
     <string name="termux_crash_report_notifications_enabled_title">クラッシュリポート通知</string>
     <string name="termux_crash_report_notifications_enabled_off">クラッシュリポートに関する通知を無効化しています。</string>
     <string name="termux_crash_report_notifications_enabled_on">クラッシュリポートに関する通知の表示を有効化しています。(デフォルト)</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; の外観</string>
 </resources>

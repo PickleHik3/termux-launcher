@@ -1,30 +1,118 @@
 # Look and themes
 
 This page covers the wallpaper, the glass look of the bars, colours, icons and the terminal's cursor
-and screen effects. Home, Terminal and Display share one look, so a change applies to all three.
+and screen effects. The status bar, the dock and the keyboard look the same on every page.
 
 ## Appearance
 
-Open **Appearance** from **Settings → Appearance → Wallpaper, look and layout**, from
-**Appearance** on a corner tab, or from the terminal's long-press menu. It has four tabs in a pill at the top: **Wallpaper | Look | Layout |
-Icon pack**. It opens on Wallpaper, or on the tab you last used if you were there in the last half
-hour.
+Open **Appearance** from Settings, from **Appearance** on a corner tab, from the terminal's
+long-press menu or from the command palette. You see your launcher, live, in a frame, and the
+editor bar at the bottom: the orientation chip, **Undo**, **Done** and the palette.
 
-**Done**, top right on every tab, applies everything you changed on any tab and closes. Back or
-Home with a wallpaper not yet applied asks whether to keep editing, discard or save. The Layout tab
-is described on [Layout and full screen](Layout_And_Full_Screen.md).
+The rule is one: **tap the thing**.
 
-**On a tablet in landscape** (smallest width 600dp or more), the controls sit in a side pane on the
-right instead of a sheet at the bottom, and the preview fits and centres to its left. The
-**Wallpaper | Look | Layout | Icon pack** pill stays on top, tall pages scroll inside the pane, and
-the clock face popup opens inside it. Turn the tablet to portrait for the bottom sheet. Phones keep
-the bottom sheet in both orientations.
+- **Tap a surface** in the frame (Home, the status bar, the terminal, the dock, the keyboard) and
+  its card rises with everything about it: how it looks, how big it is, where it sits, whether it
+  shows. The surface you are tuning wears a ring; the others a faint outline.
+- **Tap the palette** for what has no single surface: the look every surface shares, the
+  wallpaper, the theme and the icons.
+- **Swipe across the frame** to slide between Home and the Terminal.
+- **Hold a surface and drag it** to another edge.
+
+There are six cards: **Global**, **Home**, **Terminal**, **Status bar**, **Dock** and **Keyboard**.
+A card opens halfway, with the controls you use most; drag its handle up, or open **More**, for
+the rest. A tap on the frame or Back puts it down.
+
+Everything previews as you go. **Done** keeps it all, **Undo** puts everything back to how it was
+when you opened Appearance, and Back or Home with a change asks whether to keep editing, discard
+or save.
+
+A surface you hide (its **Visible** switch off) keeps a dashed outline in the frame, so you can tap
+it and show it again. The orientation chip shows the other orientation as a drawing you can arrange;
+those changes appear when you turn the phone.
+
+## Global
+
+Global is the look every surface wears. Change it once and the status bar, the dock, the keyboard,
+menus and widgets on glass all follow.
+
+- **Look**: **Presets** (**Clear**, **Mist**, **Tint**, **Solid** and **Custom**), **Opacity**,
+  **Blur** (clear to frosted, in eight steps, with a fine grain that grows with it) and **Tint**,
+  with the accent it takes.
+- **Fine-tune** (closed until you open it): **Grain**, **Rim**, **Edge** where the glass edge is
+  drawn (see [Glass](#glass)), **Depth** and **Vibrancy**.
+- **Shape**: **Style** (Docked or Floating), **Corner radius**, **Margin** and **Icon size**, one
+  size for Home's icons and the dock's.
+- **Colours**: **Theme** (**System**, **Light** or **Dark**), **Contrast**, **Accent**,
+  **Wallpaper colours** and **Tool colours** (see
+  [Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours)).
+- **Screen**: **Show wallpaper** and **Change**, which opens the wallpaper picker over the editor
+  (below), **Full screen**, **Text size** and **Page transition**.
+
+**Text size** makes the terminal text, the keyboard's letters and the labels on the status bar, the
+dock and Home larger or smaller together. Each keeps its own size on top of it: a pinch still zooms
+a terminal pane, and Home's label size still applies.
+
+Moving a slider, or picking a preset, changes Global only. A surface that has its own value keeps
+it.
+
+## Giving a surface its own look
+
+The status bar, the dock and the keyboard may each have their own **Opacity** and **Blur**, under
+**Appearance** on their cards. Nothing else about the glass is theirs to change; the rest is
+Global's.
+
+- Moving a surface's **Opacity** or **Blur** slider makes that value its own. A surface with its
+  own **Blur** wears that blur's grain with it.
+- A reset arrow (↺) at the end of the row marks a value that is the surface's own. Tap it to put
+  that value back on Global.
+- The same arrow in the card's header puts the whole surface back on Global. On the Global card it
+  appears while any surface has a value of its own, and asks once before putting every surface back.
+
+Menus and dialogs wear Global, never less opaque than keeps their text readable. Widgets wear
+Global too, if **Glass widgets** on the Home card is on; a widget can still choose its own look
+from its own settings.
+
+## The Terminal's Background
+
+The **Terminal** card holds the terminal's own background. It does not follow Global and has no
+reset arrow.
+
+- **Opacity**: how solid the panes are. A new install ships it higher than Global's glass, so the
+  terminal reads darker than the bars.
+- **Blur**: how much the panes blur what is behind them.
+- **Wallpaper dim**: how much the wallpaper is darkened on the Terminal's pages, the Display and
+  Assistant pages included. Home's pages are not dimmed.
+
+## The other cards
+
+- **Home**: **Columns**, **Rows**, **Label size**, **Icon pack**; under More, **Two-line labels**,
+  **Label shadow**, **Page dots**, **Folders** and **Wallpaper scrolling**; **Glass widgets** and
+  **Numerals**; the rows Home shows; and links to Home's gestures and pages.
+- **Terminal**: **Font size**, **Contrast** and a link to its font; the Background above; **Pane
+  borders**, **Split gap**, **Multiplexer**, **Automatic tiling** and **Focus grows**; **Cursor
+  trail** and **Screen effect**, with **Screen events** and **Composite signal** while an effect is
+  on; the rows the Terminal shows and **Minimal layout**.
+- **Status bar**: **Position** and its indicators (CPU, memory, battery, media and weather);
+  **Clock face**, **Clock position**, **Show seconds**, **12 h / 24 h** and **°C / °F** (see
+  [Status bar](Status_Bar.md#clock)); **Opacity** and **Blur**; links to the camera cutout and
+  pinned notifications.
+- **Dock**: **Type** and **Apps in the dock**; under More, **Dock icon pack**,
+  what the dock shows and **Monochrome icons**; its bars; **Opacity** and **Blur**.
+- **Keyboard**: **Type** (Docked, Floating or Split), **Height**, **Key spacing**, **Key corners**
+  and **Bottom padding**; while it is Floating or Split, **Width**, **Floating height** and **Split
+  gap**; **Opacity**, **Key opacity** and **Blur**; links to its theme and layouts (see
+  [Keyboard](Keyboard.md)).
+
+Heights, places and Type are one for Home and the Terminal, so nothing moves when you swipe.
 
 ## Wallpaper
 
-The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
+**Change**, beside **Show wallpaper** on the Global card, opens the picker over the editor. Back returns to the editor;
+**Done** keeps the wallpaper and everything else you changed and closes Appearance.
 
-- Tap a card, then **Choose photo** to pick an image. It is previewed before anything is applied.
+- The picker has a **Lock screen** card and a **Home screen** card. Tap a card, then **Choose photo**
+  to pick an image. It is previewed before anything is applied.
 - While your current wallpaper was set by another app, a small grey line under **Choose photo**
   reads "Set your wallpaper here to see fancier glass." It goes away once you apply a wallpaper from
   Appearance.
@@ -35,80 +123,77 @@ The Wallpaper tab has a **Lock screen** card and a **Home screen** card.
 **Done** puts Home's picture on Home and Lock's on Lock. Scripts can do the same with
 `launcherctl wallpaper set FILE --home|--lock|--both`; see [launcherctl](LauncherCtl.md).
 
-## Look
-
-The Look tab has a slider with five stops: **Clear**, **Mist**, **Tint**, **Solid** and
-**Custom**. Clear is the most see-through and Solid the least. Custom starts from the Look that is
-on screen, so you tune what you see; **Undo** puts back what you opened with.
-
-At **Custom**, vertical sliders appear:
-
-- With nothing tapped (**All surfaces**), the sliders apply to every surface: **Blur**, **Grain**,
-  **Opacity**, **Tint**, **Margin** and **Corner radius**, the glass and the shape, then
-  **Depth**, how thick the glass edge looks. Picking a Look puts Depth where that Look has it. The
-  rest of the edge comes with the Look: Clear shows the wallpaper sharply through its edge with a
-  touch of colour at the corners, Mist and Tint bend it through their frost, and every glass edge
-  carries the same faint line of light along its top. Depth shows only while the glass edge is
-  drawn: Android 13 or newer, **Fancier Glass** on, Lazy mode off, and a wallpaper set from the
-  Wallpaper tab (see [Glass](#glass)).
-- Tap an element in the frame to tune it on its own:
-  - **Status bar**: the four glass sliders, plus a **Clock** button for the face and alignment
-    (see [Status bar](Status_Bar.md#clock)).
-  - **Terminal**: the glass sliders and **Contrast**, plus **Cursor trail** and **Terminal effect**.
-  - **Dock**: the glass sliders, **Icon size** (the dock grows to fit it) and **Icons** (how many
-    app buttons show).
-  - **Keyboard**: the glass sliders, **Radius** and **Spacing**, plus a **Keyboard theme** button
-    for its theme, colours and font (see [Keyboard](Keyboard.md)).
-- Tap bare wallpaper to go back to the global sliders. **Undo** steps back.
-
 ### Glass
 
-Every glass surface bends the wallpaper at its edge, as deeply as the chosen Look says, where the
-phone can. That needs Android 13 and a wallpaper set through the Wallpaper tab or
+Every glass surface bends the wallpaper at its edge, as deeply as Global's Depth says, where the
+phone can. That needs Android 13 and a wallpaper set through Appearance or
 `launcherctl wallpaper set`; with any other wallpaper the glass stays flat. **Reduce idle activity**,
 battery saver and reduced motion switch the extra motion off. There is no switch for it.
 
 The bars blur the system wallpaper only after you allow **Wallpaper access** under **Settings →
-Permissions & services**; until then they render flat.
+General → Permissions & services**; until then they render flat.
 
 ## Cursor trail and terminal effect
 
-Both are on the Terminal element at Custom, and under **Settings → Terminal → Terminal display**:
+Both are on the Terminal card:
 
 - **Cursor trail**: **Off**, **Default**, **Motion blur**, **Railgun**, **Torpedo**, **Pixie dust**,
   **Comet**.
 - **Terminal effect**: **None**, **CRT**, **CRT (green)**, **CRT (amber)**, **TFT grid**. It covers
   the status bar, dock and keyboard too, with scanlines fixed to the screen.
+- **Composite signal** (CRT panes only, off by default): blends neighbouring pixels sideways so
+  dithering and pixel art read as shades; text gets a little softer.
+
+## Pane borders
+
+**Pane borders** on the Terminal card opens its own card; the back arrow in its header, or Back,
+returns to the Terminal card. Three small frames at the top show a pane as it rests, as the focused
+pane of a split, and asking for attention (which always wears the error colour). Below them:
+
+- **Border colour**: **Theme outline**, **Primary**, **Secondary**, **Tertiary** or **Custom**.
+  Custom opens a **Custom colour** field that takes `#RRGGBB`, or `#AARRGGBB` for a see-through
+  colour.
+- **When focused**: the colour of the focused pane in a split and of floating panes, the border's
+  own (**Same as border**) or any of the choices above. A single pane never takes it.
+- **Glow**: **Off** or **Steady**, a soft glow round every pane, and **Glow colour** for it.
+- **Reset pane borders** puts back the theme outline, Primary when focused and no glow.
 
 ## Icon pack
 
-The Icon pack tab previews each installed pack on your real dock. Tap a tile to apply it at once;
-the first tile, **System**, uses the apps' own icons. **Pinned app icons only** limits the pack to
-the pinned apps.
+**Icon pack** on the Home card opens the installed packs under it, previewed on your real
+dock. Tap a tile to apply it at once; the first tile, **System**, uses the apps' own icons.
+**Pinned app icons only** limits the pack to the pinned apps.
 
-## Appearance settings
+## Appearance in Settings
 
-**Settings → Appearance** is a settings page; the command palette's **Look and feel settings** opens
-it too, and Settings search finds every row on it. Its first row, **Wallpaper, look and layout**,
-opens the Appearance editor above. Below that it holds:
+How a thing looks and where it sits is set in the Appearance editor; what the launcher does is set
+in Settings. The **Appearance** row at the root of Settings, and the **Appearance** row at the top
+of Home, Terminal and Keyboard, open the editor on the right card: the root row opens **Global**.
+The command palette's **Look and feel settings** opens it too, and Settings search finds a row
+that moved into the editor and opens its card.
 
-- **Terminal fonts**: see [Terminal fonts](Terminal_Fonts.md).
-- **App theme**: **System**, **Light** or **Dark**.
-- **Wallpaper colors**: "Match the launcher and terminal to the wallpaper." On by default. It
-  overrides manual terminal colours; turn it off, or apply a Termux:Styling scheme, to use your own.
-- **Terminal contrast**: **Softer · pastel**, **Default · system** or **Harder · punchy**. It sets
-  how strongly the terminal's text stands out: Harder gives brighter text, a deeper background and
-  richer colours, Softer the gentlest. It changes the terminal's colours only, never the glass
-  behind them. On a see-through terminal it is judged against the wallpaper you can actually see;
-  over a wallpaper too bright for light text, the terminal switches to dark text and tells your
-  programs it is in light mode. It reads "Available when wallpaper colors are on" otherwise.
-- **Tools that follow the terminal colours** (below).
-- **Wallpaper**: show the system wallpaper behind launcher surfaces.
-- **Wallpaper parallax**: the wallpaper pans a little as the places slide. Needs a wallpaper set
-  through the launcher's picker; off in landscape and with animations off.
-- **Wallpaper alignment**: lines up the wallpaper behind the surfaces with the one on your screen.
-- **Monochrome icons**, **Icon pack** and **Pinned-app icon pack**.
-- **Keyboard look**: **Surface style** (opens Appearance) and **Keyboard theme**.
+These live in the editor, not in Settings:
+
+- On **Global**: theme, wallpaper colours, contrast, wallpaper, full screen and text size.
+- On **Home**: icon and label size, two-line labels, label shadow, folders, numerals, page dots
+  and wallpaper scrolling.
+- On **Status bar**: the 12 h / 24 h clock, °C / °F and the switches for the readings.
+- On **Terminal**: font size, cursor trail, screen effect, screen events, composite signal,
+  split gap, the multiplexer, automatic tiling and focus grows.
+- On **Keyboard**: the floating width and height and the split gap.
+
+Two pages stay pages, with a link from their card: **Terminal fonts**, see
+[Terminal fonts](Terminal_Fonts.md), and **Tool colours** under **Settings → Terminal**, see
+[Tools that follow the terminal colours](#tools-that-follow-the-terminal-colours).
+
+**Contrast** on Global and on the Terminal card is **Softer · pastel**, **Default · system** or
+**Harder · punchy**. It sets how strongly the terminal's text stands out: Harder gives brighter
+text, a deeper background and richer colours, Softer the gentlest. It changes the terminal's
+colours only, never the glass behind them. On a see-through terminal it is judged against the
+wallpaper you can actually see; over a wallpaper too bright for light text, the terminal switches
+to dark text and tells your programs it is in light mode. **Wallpaper colours** matches the
+launcher and terminal to the wallpaper, and overrides manual terminal colours; turn it off, or
+apply a Termux:Styling scheme, to use your own.
 
 ## Tools that follow the terminal colours
 
@@ -186,7 +271,7 @@ The tokens are `surface`, `surface_dim`, `surface_bright`, `surface_container_lo
 
 ## Reduce idle activity
 
-**Settings → App behavior → Reduce idle activity** ("Lazy mode. Pause idle animations and update
+**Settings → General → Reduce idle activity** ("Lazy mode. Pause idle animations and update
 status less often.") is off by default. With it on, the clock swaps its digits instead of folding
 them, a working window's rim holds lit instead of breathing, the readings sample less often, and
 the weather icon rests on its last frame. Nothing repaints until something changes, which saves

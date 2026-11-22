@@ -4,6 +4,8 @@ package com.termux.terminal;
  * Synchronized output, private mode 2026: while it is set the client is not told about screen
  * changes, so a program that repaints in several writes shows one finished frame. The hold is
  * bounded, because a program that dies between "begin" and "end" must not leave the pane frozen.
+ *
+ * <p>{@link GhosttySynchronizedUpdateTest} runs every case here on the Ghostty core too.
  */
 public class SynchronizedUpdateTest extends TerminalTestCase {
 
@@ -79,6 +81,30 @@ public class SynchronizedUpdateTest extends TerminalTestCase {
         enterString("\033]0;held\007");
         assertEquals(1, mOutput.bellsRung);
         assertEquals("held", mTerminal.getTitle());
+    }
+
+    /** Setting the mode again inside a hold keeps the one hold; one reset ends it and redraws once. */
+    public void testSettingTheModeAgainKeepsOneHold() {
+        withTerminalSized(5, 3);
+        enterString("\033[?2026h");
+        enterString("a\033[?2026hb");
+        assertTrue(mTerminal.isScreenUpdateHeld());
+        int before = mOutput.screenChanges;
+
+        enterString("\033[?2026l");
+        assertFalse(mTerminal.isScreenUpdateHeld());
+        assertEquals("Exactly one update on release", before + 1, mOutput.screenChanges);
+        assertLineIs(0, "ab   ");
+    }
+
+    /** A full reset from the program (RIS) ends the hold too. */
+    public void testRisEndsTheHold() {
+        withTerminalSized(5, 3);
+        enterString("\033[?2026habc");
+        assertTrue(mTerminal.isScreenUpdateHeld());
+        enterString("\033c");
+        assertFalse(mTerminal.isScreenUpdateHeld());
+        assertLineIs(0, "     ");
     }
 
     /** A terminal reset drops the hold along with the rest of the mode state. */

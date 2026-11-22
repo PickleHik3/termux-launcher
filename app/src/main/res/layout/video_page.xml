@@ -1,0 +1,116 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The Video half of the wallpaper picker (VideoPage): the recommended format, Choose video or
+     GIF, the hint about the file in use, the frame rate, and Back to photo. -->
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/video_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:overScrollMode="never">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingBottom="24dp">
+
+        <TextView
+            android:id="@+id/video_heading"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityHeading="true"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingTop="8dp"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:text="@string/video_heading"
+            android:textAppearance="?attr/textAppearanceTitleMedium"
+            android:textColor="?attr/colorOnSurface" />
+
+        <TextView
+            android:id="@+id/video_format"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingTop="4dp"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:text="@string/video_format_hint"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/video_choose"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/settings_gutter"
+            android:layout_marginTop="12dp"
+            android:layout_marginEnd="@dimen/settings_gutter"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:minHeight="48dp"
+            android:text="@string/video_choose" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/video_progress"
+            android:layout_width="match_parent"
+            android:layout_height="4dp"
+            android:layout_marginStart="@dimen/settings_gutter"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="@dimen/settings_gutter"
+            android:indeterminate="true"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/video_progress_label"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingTop="4dp"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/video_hint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:accessibilityLiveRegion="polite"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingTop="8dp"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurface"
+            android:visibility="gone" />
+
+        <include
+            android:id="@+id/video_knob_rate"
+            layout="@layout/preference_segmented_pill" />
+
+        <TextView
+            android:id="@+id/video_rate_note"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:paddingStart="@dimen/settings_gutter"
+            android:paddingEnd="@dimen/settings_gutter"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/video_back_to_photo"
+            style="@style/Widget.Material3.Button.TextButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="@dimen/settings_gutter"
+            android:layout_marginTop="8dp"
+            android:layout_marginEnd="@dimen/settings_gutter"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:minHeight="48dp"
+            android:text="@string/live_back_to_photo"
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>

@@ -3,12 +3,12 @@ package com.termux.app.help;
 import android.app.Application;
 import android.os.Bundle;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
+import com.termux.app.page.PageKind;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -32,7 +32,7 @@ public class HelpNavigationStateTest {
 
     @Test public void theWholeStackSurvivesTheRoundTrip() {
         HelpNavigation nav = new HelpNavigation();
-        nav.open(PaneWallPage.DISPLAY);
+        nav.open(PageKind.DISPLAY);
         nav.setScroll(120);
         nav.search();
         nav.setQuery("dock");
@@ -41,7 +41,7 @@ public class HelpNavigationStateTest {
         nav.openTerm("pane");
 
         HelpNavigation back = restored(nav.saveState());
-        assertEquals(PaneWallPage.DISPLAY, back.place());
+        assertEquals(PageKind.DISPLAY, back.place());
         assertEquals("dock", back.query());
         assertEquals(3, back.depth());
         assertEquals(HelpNavigation.Screen.TOPIC, back.screen());
@@ -63,7 +63,7 @@ public class HelpNavigationStateTest {
     /** The explorer is the launcher's view of help, not a page: a saved stack never holds one. */
     @Test public void anExploreFrameIsNotSaved() {
         HelpNavigation nav = new HelpNavigation();
-        nav.open(PaneWallPage.TERMINAL);
+        nav.open(PageKind.TERMINAL);
         nav.topic("dock");
         nav.explore("dock");
         assertEquals(HelpNavigation.Screen.EXPLORE, nav.screen());
@@ -77,7 +77,7 @@ public class HelpNavigationStateTest {
     /** Text entry belongs to the visit, not to the page. */
     @Test public void textEntryIsNotCarriedOver() {
         HelpNavigation nav = new HelpNavigation();
-        nav.open(PaneWallPage.TERMINAL);
+        nav.open(PageKind.TERMINAL);
         nav.search();
         nav.setTextEntryActive(true);
         assertFalse(restored(nav.saveState()).textEntryActive());
@@ -92,7 +92,7 @@ public class HelpNavigationStateTest {
         HelpNavigation empty = new HelpNavigation();
         assertFalse(empty.restoreState(new Bundle()));
         assertEquals(HelpNavigation.Screen.HOME, empty.screen());
-        assertEquals(PaneWallPage.TERMINAL, empty.place());
+        assertEquals(PageKind.TERMINAL, empty.place());
         assertEquals(1, empty.depth());
     }
 }

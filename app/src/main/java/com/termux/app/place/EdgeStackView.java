@@ -16,6 +16,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.place.PlaceLayout.Edge;
 
+import java.util.IdentityHashMap;
 import java.util.List;
 
 /**
@@ -54,6 +55,20 @@ public class EdgeStackView extends LinearLayout {
     @Nullable private Paint mSeparatorPaint;
     /** The draw pass's own buffer for {@link #separatorCenters}, so a frame allocates nothing. */
     @Nullable private int[] mSeparatorScratch;
+
+
+    /**
+     * The rows that stand in one side's lane ({@link StackLanes#HOME} or {@link StackLanes#TERMINAL});
+     * a row not here is the shared stack's. Set by the activity's edge walk, read by the layout.
+     */
+    @NonNull private final IdentityHashMap<View, Integer> mLanes = new IdentityHashMap<>(4);
+    /** The side standing in front: the shared rows stand as that side's rest has them. */
+    private int mFrontLane = StackLanes.TERMINAL;
+    /** Whether the last measure laid the rows out by lane (a visible row of a lane stands here). */
+    private boolean mLaned;
+    @NonNull private int[] mLaneHeight = new int[4];
+    @NonNull private int[] mLaneOf = new int[4];
+    @NonNull private int[] mLaneTop = new int[4];
 
     public EdgeStackView(@NonNull Context context) {
         this(context, null);
@@ -100,17 +115,135 @@ public class EdgeStackView extends LinearLayout {
         boolean reversed = mEdge == Edge.BOTTOM || mEdge == Edge.RIGHT;
         int count = outermostFirst.size();
         boolean moved = false;
+        boolean reordered = false;
         for (int position = 0; position < count; position++) {
             View bar = outermostFirst.get(reversed ? count - 1 - position : position);
             if (bar == null) continue;
             ViewGroup parent = bar.getParent() instanceof ViewGroup
                 ? (ViewGroup) bar.getParent() : null;
             if (parent == this && indexOfChild(bar) == position) continue;
-            if (parent != null) parent.removeView(bar);
-            addView(bar, Math.min(position, getChildCount()));
+            if (parent == this) {
+                // A bar this stack already holds changes place without leaving the window: a
+                // removeView/addView pair detaches it, and a bar re-attached mid-landing (the apps
+                // row) draws nothing until its layout settles again.
+                detachViewFromParent(bar);
+                attachViewToParent(bar, Math.min(position, getChildCount()), bar.getLayoutParams());
+                reordered = true;
+            } else {
+                if (parent != null) parent.removeView(bar);
+                addView(bar, Math.min(position, getChildCount()));
+            }
             moved = true;
         }
+        if (reordered) {
+            requestLayout();
+            invalidate();
+        }
         return moved;
+    }
+
+    /**
+     * Puts {@code bar} in {@code lane}'s side lane, or back in the shared stack
+     * ({@link StackLanes#STACK}). Lanes lay out along the bottom edge only.
+     *
+     * @return whether the lane changed
+     */
+    public boolean setLane(@NonNull View bar, int lane) {
+        int was = getLane(bar);
+        if (was == lane) return false;
+        if (lane == StackLanes.STACK) mLanes.remove(bar);
+        else mLanes.put(bar, lane);
+        requestLayout();
+        return true;
+    }
+
+    /** {@code bar}'s lane: {@link StackLanes#STACK} for a row that is not in a side's lane. */
+    public int getLane(@NonNull View bar) {
+        Integer lane = mLanes.get(bar);
+        return lane == null ? StackLanes.STACK : lane;
+    }
+
+    /**
+     * The side standing in front ({@link StackLanes#HOME} or {@link StackLanes#TERMINAL}): the
+     * shared rows stand on the rows that side shows. Changes only when the front page does.
+     */
+    public void setFrontLane(int lane) {
+        if (lane == mFrontLane) return;
+        mFrontLane = lane;
+        if (!mLanes.isEmpty()) requestLayout();
+    }
+
+    public int getFrontLane() {
+        return mFrontLane;
+    }
+
+    /** Whether a visible row of a side's lane stands in this stack, so it lays out by lane. */
+    private boolean lanesStand() {
+        if (mEdge != Edge.BOTTOM || mLanes.isEmpty()) return false;
+        for (int index = 0; index < getChildCount(); index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() != GONE && mLanes.containsKey(child)) return true;
+        }
+        return false;
+    }
+
+    /** Whether {@code child} is in the lane the front side stands: the shared rows and its own. */
+    private boolean inFront(@NonNull View child) {
+        if (!mLaned) return true;
+        int lane = getLane(child);
+        return lane == StackLanes.STACK || lane == mFrontLane;
+    }
+
+    @Override
+    protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        mLaned = lanesStand();
+        if (!mLaned) {
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            return;
+        }
+        int count = getChildCount();
+        if (mLaneHeight.length < count) {
+            mLaneHeight = new int[count];
+            mLaneOf = new int[count];
+            mLaneTop = new int[count];
+        }
+        int widest = 0;
+        for (int index = 0; index < count; index++) {
+            View child = getChildAt(index);
+            mLaneOf[index] = getLane(child);
+            if (child.getVisibility() == GONE) {
+                mLaneHeight[index] = 0;
+                continue;
+            }
+            measureChildWithMargins(child, widthMeasureSpec, 0,
+                MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED), 0);
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) child.getLayoutParams();
+            mLaneHeight[index] = child.getMeasuredHeight() + params.topMargin + params.bottomMargin;
+            widest = Math.max(widest, child.getMeasuredWidth() + params.leftMargin
+                + params.rightMargin);
+        }
+        int band = StackLanes.layoutBand(mLaneHeight, mLaneOf, count, mFrontLane, mLaneTop);
+        setMeasuredDimension(
+            resolveSizeAndState(Math.max(widest + getPaddingLeft() + getPaddingRight(),
+                getSuggestedMinimumWidth()), widthMeasureSpec, 0),
+            resolveSizeAndState(Math.max(band + getPaddingTop() + getPaddingBottom(),
+                getSuggestedMinimumHeight()), heightMeasureSpec, 0));
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        if (!mLaned) {
+            super.onLayout(changed, left, top, right, bottom);
+            return;
+        }
+        for (int index = 0; index < getChildCount(); index++) {
+            View child = getChildAt(index);
+            if (child.getVisibility() == GONE) continue;
+            LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) child.getLayoutParams();
+            int x = getPaddingLeft() + params.leftMargin;
+            int y = getPaddingTop() + mLaneTop[index] + params.topMargin;
+            child.layout(x, y, x + child.getMeasuredWidth(), y + child.getMeasuredHeight());
+        }
     }
 
     /**
@@ -128,6 +261,33 @@ public class EdgeStackView extends LinearLayout {
     /** The count last given, for the arrangement tests and for a caller re-asking. */
     public int getSeparatorCount() {
         return mSeparatorCount;
+    }
+
+    /**
+     * Lets {@code content}, the weighted sibling after this stack in a vertical
+     * {@link LinearLayout} column, reach up under the stack by {@code overlapPx}
+     * ({@link EdgeStackPolicy#topOverlapPx}), with the stack raised one Z step so it draws and takes
+     * touches over what it covers. 0 gives the content its own row back.
+     *
+     * <p>A negative top margin alone only slides the content up: {@code LinearLayout} clamps a
+     * negative margin out of the length it hands the weighted children, so the content kept losing
+     * the stack's height at its bottom. The content therefore asks for the overlap as its base
+     * height as well — base plus margin cost the column nothing, and the weight adds the rest — so
+     * it keeps exactly the bounds it has without the stack.
+     *
+     * @return whether the content's layout changed
+     */
+    public boolean overlayFollowing(@NonNull View content, int overlapPx) {
+        int overlap = Math.max(0, overlapPx);
+        float z = overlap > 0 ? 1f : 0f;
+        if (getTranslationZ() != z) setTranslationZ(z);
+        if (!(content.getLayoutParams() instanceof LinearLayout.LayoutParams)) return false;
+        LinearLayout.LayoutParams params = (LinearLayout.LayoutParams) content.getLayoutParams();
+        if (params.topMargin == -overlap && params.height == overlap) return false;
+        params.topMargin = -overlap;
+        params.height = overlap;
+        content.setLayoutParams(params);
+        return true;
     }
 
     /**
@@ -212,7 +372,7 @@ public class EdgeStackView extends LinearLayout {
         int drawn = 0;
         for (int index = 0; index < getChildCount() && drawn < wanted; index++) {
             View child = getChildAt(index);
-            if (child.getVisibility() == GONE) continue;
+            if (child.getVisibility() == GONE || !inFront(child)) continue;
             if ((column ? child.getWidth() : child.getHeight()) <= 0) continue;
             if (previous != null) {
                 int center = (contentEnd(previous, column) + contentStart(child, column)) / 2;

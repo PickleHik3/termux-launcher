@@ -1,0 +1,609 @@
+package com.termux.terminal;
+
+import java.util.Arrays;
+
+/**
+ * FROZEN COPY of TerminalRow at 166b12053, the reference for differential tests. Do not edit.
+ * Only the kitty placement bookkeeping (add, remove, carry on resize) is removed, since placements
+ * hold a reference to the real TerminalRow; everything that touches text is unchanged.
+ * <p>
+ * A row in a terminal, composed of a fixed number of cells.
+ * <p>
+ * The text in the row is stored in a char[] array, {@link #mText}, for quick access during rendering.
+ */
+public final class LegacyTerminalRow {
+
+    private static final float SPARE_CAPACITY_FACTOR = 1.5f;
+
+    /**
+     * Max combining characters that can exist in a column, that are separate from the base character
+     * itself. Any additional combining characters will be ignored and not added to the column.
+     *
+     * There does not seem to be limit in unicode standard for max number of combination characters
+     * that can be combined but such characters are primarily under 10.
+     *
+     * "Section 3.6 Combination" of unicode standard contains combining characters info.
+     * - https://www.unicode.org/versions/Unicode15.0.0/ch03.pdf
+     * - https://en.wikipedia.org/wiki/Combining_character#Unicode_ranges
+     * - https://stackoverflow.com/questions/71237212/what-is-the-maximum-number-of-unicode-combined-characters-that-may-be-needed-to
+     *
+     * UAX15-D3 Stream-Safe Text Format limits to max 30 combining characters.
+     * > The value of 30 is chosen to be significantly beyond what is required for any linguistic or technical usage.
+     * > While it would have been feasible to chose a smaller number, this value provides a very wide margin,
+     * > yet is well within the buffer size limits of practical implementations.
+     * - https://unicode.org/reports/tr15/#Stream_Safe_Text_Format
+     * - https://stackoverflow.com/a/11983435/14686958
+     *
+     * We choose the value 15 because it should be enough for terminal based applications and keep
+     * the memory usage low for a terminal row, won't affect performance or cause terminal to
+     * lag or hang, and will keep malicious applications from causing harm. The value can be
+     * increased if ever needed for legitimate applications.
+     */
+    private static final int MAX_COMBINING_CHARACTERS_PER_COLUMN = 15;
+
+    /** The number of columns in this terminal row. */
+    private final int mColumns;
+
+    /**
+     * The text filling this terminal row.
+     */
+    public char[] mText;
+    /** Display width at each code-point start; -1 marks a low surrogate. */
+    private byte[] mCharWidths;
+    /** The number of java chars used in {@link #mText}. */
+    private int mSpaceUsed;
+
+    /**
+     * If this row has been line wrapped due to text output at the end of line.
+     */
+    boolean mLineWrap;
+
+    /**
+     * The style bits of each cell in the row. See {@link TextStyle}.
+     */
+    final long[] mStyle;
+
+    /**
+     * If this row might contain chars with width != 1, used for deactivating fast path
+     */
+    boolean mHasNonOneWidthOrSurrogateChars;
+
+    /**
+     * If this row has a bitmap. Used for performace only
+     */
+    public boolean mHasBitmap;
+
+    /** This row carries no OSC 133 shell integration mark. */
+    public static final byte MARK_NONE = 0;
+
+    /** OSC 133;A - the shell's prompt starts on this row. */
+    public static final byte MARK_PROMPT_START = 1;
+
+    /** OSC 133;B - the prompt ends and what the user types starts on this row. */
+    public static final byte MARK_COMMAND_START = 2;
+
+    /** OSC 133;C - the command was submitted and its output starts on this row. */
+    public static final byte MARK_OUTPUT_START = 3;
+
+    /**
+     * The OSC 133 mark of this row, one of the {@code MARK_*} values. Marks live on the row rather than
+     * in a separate list so that they follow it through the circular buffer for free.
+     */
+    public byte mShellIntegrationMark;
+
+    /**
+     * The underline decoration color of each cell, or null while every cell in this row uses
+     * {@link TextStyle#DECORATION_COLOR_DEFAULT}. A 24 bit color does not fit in the packed style
+     * long, so it lives here and is allocated only for the rows that actually carry one.
+     */
+    private int[] mDecorationColors;
+
+    /**
+     * The OSC 8 hyperlink id of each cell, or null while no cell in this row is part of a hyperlink.
+     * Ids are indices into the emulator's link pool; 0 means "no link".
+     */
+    private int[] mHyperlinkIds;
+
+    /**
+     * The text sizing record of each cell, or null while every cell in this row is plain. A cell
+     * that belongs to an {@code OSC 66} block carries how big that block is and where in it the
+     * cell sits; see {@link KittyTextSizing} for the packing. Zero means a plain cell.
+     */
+    private int[] mTextSizes;
+
+    /**
+     * Construct a blank row (containing only whitespace, ' ') with a specified style.
+     */
+    public LegacyTerminalRow(int columns, long style) {
+        mColumns = columns;
+        mText = new char[(int) (SPARE_CAPACITY_FACTOR * columns)];
+        mCharWidths = new byte[mText.length];
+        mStyle = new long[columns];
+        clear(style);
+    }
+
+    /** If any cell in this row has a non-default underline decoration color. Performance only. */
+    public boolean hasDecorationColors() {
+        return mDecorationColors != null;
+    }
+
+    /** If any cell in this row is part of an OSC 8 hyperlink. Performance only. */
+    public boolean hasHyperlinks() {
+        return mHyperlinkIds != null;
+    }
+
+    public int getDecorationColor(int column) {
+        return (mDecorationColors == null) ? TextStyle.DECORATION_COLOR_DEFAULT : mDecorationColors[column];
+    }
+
+    public int getHyperlinkId(int column) {
+        return (mHyperlinkIds == null) ? 0 : mHyperlinkIds[column];
+    }
+
+    /** Mark every pool id referenced by this row without allocating a side table. */
+    void markUsedHyperlinkIds(boolean[] used) {
+        if (mHyperlinkIds == null) return;
+        for (int hyperlinkId : mHyperlinkIds) {
+            if (hyperlinkId > TerminalHyperlinks.NO_LINK && hyperlinkId < used.length)
+                used[hyperlinkId] = true;
+        }
+    }
+
+    private void setDecorationColor(int column, int color) {
+        if (mDecorationColors == null) {
+            if (color == TextStyle.DECORATION_COLOR_DEFAULT)
+                return;
+            mDecorationColors = new int[mColumns];
+            Arrays.fill(mDecorationColors, TextStyle.DECORATION_COLOR_DEFAULT);
+        }
+        mDecorationColors[column] = color;
+    }
+
+    private void setHyperlinkId(int column, int hyperlinkId) {
+        if (mHyperlinkIds == null) {
+            if (hyperlinkId == 0)
+                return;
+            mHyperlinkIds = new int[mColumns];
+        }
+        mHyperlinkIds[column] = hyperlinkId;
+    }
+
+    /** If any cell in this row belongs to a text sizing block. Performance only. */
+    public boolean hasTextSizes() {
+        return mTextSizes != null;
+    }
+
+    /**
+     * The packed text sizing record of a cell, or zero when the cell is a plain one. Public so a
+     * cache can compare one int instead of every accessor; the fields are read through the
+     * {@code getText*} accessors rather than by unpacking this.
+     */
+    public int getTextSizeRecord(int column) {
+        return (mTextSizes == null || column < 0 || column >= mColumns) ? 0 : mTextSizes[column];
+    }
+
+    /** Store a packed record, or zero to make the cell plain again. */
+    void setTextSizeRecord(int column, int record) {
+        if (mTextSizes == null) {
+            if (record == 0)
+                return;
+            mTextSizes = new int[mColumns];
+        }
+        mTextSizes[column] = record;
+    }
+
+    /** Whether this cell is part of a text sizing block at all. */
+    public boolean isTextSizeCell(int column) {
+        return KittyTextSizing.isPresent(getTextSizeRecord(column));
+    }
+
+    /** Whether this cell is a block's top left cell, the one that holds the text. */
+    public boolean isTextSizeAnchor(int column) {
+        return KittyTextSizing.isAnchor(getTextSizeRecord(column));
+    }
+
+    /** How many times normal size the block covering this cell is drawn, or 1 for a plain cell. */
+    public int getTextScale(int column) {
+        return KittyTextSizing.scaleOf(getTextSizeRecord(column));
+    }
+
+    /** How many cells wide the block's text is before scaling, or 1 for a plain cell. */
+    public int getTextCellWidth(int column) {
+        return KittyTextSizing.widthOf(getTextSizeRecord(column));
+    }
+
+    /** How far right of its block's anchor this cell sits. */
+    public int getTextSizeOffsetX(int column) {
+        return KittyTextSizing.offsetXOf(getTextSizeRecord(column));
+    }
+
+    /** How far below its block's anchor this cell sits. */
+    public int getTextSizeOffsetY(int column) {
+        return KittyTextSizing.offsetYOf(getTextSizeRecord(column));
+    }
+
+    /** The {@code n} of the block's {@code n/d} height fraction; 0 means the whole height. */
+    public int getTextFractionNumerator(int column) {
+        return KittyTextSizing.numeratorOf(getTextSizeRecord(column));
+    }
+
+    /** The {@code d} of the block's {@code n/d} height fraction; 0 means the whole height. */
+    public int getTextFractionDenominator(int column) {
+        return KittyTextSizing.denominatorOf(getTextSizeRecord(column));
+    }
+
+    /** Where in the block's height the text sits: 0 top, 1 bottom, 2 centre. */
+    public int getTextVerticalAlign(int column) {
+        return KittyTextSizing.verticalAlignOf(getTextSizeRecord(column));
+    }
+
+    /** Where in the block's width the text sits: 0 left, 1 right, 2 centre. */
+    public int getTextHorizontalAlign(int column) {
+        return KittyTextSizing.horizontalAlignOf(getTextSizeRecord(column));
+    }
+
+    /** Whether the block was too wide for the screen and sits on one row at normal size. */
+    public boolean isTextSizeDemoted(int column) {
+        return KittyTextSizing.isDemoted(getTextSizeRecord(column));
+    }
+
+    /** Forget every text sizing record on this row, leaving the text where it is. */
+    void clearTextSizes() {
+        mTextSizes = null;
+    }
+
+    /**
+     * NOTE: The sourceX2 is exclusive.
+     */
+    public void copyInterval(LegacyTerminalRow line, int sourceX1, int sourceX2, int destinationX) {
+        mHasNonOneWidthOrSurrogateChars |= line.mHasNonOneWidthOrSurrogateChars;
+        final int x1 = line.findStartOfColumn(sourceX1);
+        final int x2 = line.findStartOfColumn(sourceX2);
+        boolean startingFromSecondHalfOfWideChar = (sourceX1 > 0 && line.wideDisplayCharacterStartingAt(sourceX1 - 1));
+        final char[] sourceChars = (this == line) ? Arrays.copyOf(line.mText, line.mText.length) : line.mText;
+        final byte[] sourceWidths = (this == line)
+            ? Arrays.copyOf(line.mCharWidths, line.mCharWidths.length) : line.mCharWidths;
+        int latestNonCombiningWidth = 0;
+        for (int i = x1; i < x2; i++) {
+            int codePointStart = i;
+            char sourceChar = sourceChars[i];
+            int codePoint = Character.isHighSurrogate(sourceChar) ? Character.toCodePoint(sourceChar, sourceChars[++i]) : sourceChar;
+            int w = sourceWidths[codePointStart];
+            if (startingFromSecondHalfOfWideChar) {
+                // Just treat copying second half of wide char as copying whitespace.
+                codePoint = ' ';
+                w = 1;
+                startingFromSecondHalfOfWideChar = false;
+            }
+            if (w > 0) {
+                destinationX += latestNonCombiningWidth;
+                sourceX1 += latestNonCombiningWidth;
+                latestNonCombiningWidth = w;
+            }
+            setChar(destinationX, codePoint, line.getStyle(sourceX1), line.getDecorationColor(sourceX1),
+                line.getHyperlinkId(sourceX1), w, true);
+        }
+    }
+
+    public int getSpaceUsed() {
+        return mSpaceUsed;
+    }
+
+    /** Return the stored terminal-cell width of the code point starting at {@code charIndex}. */
+    public int getDisplayWidthAt(int charIndex) {
+        return mCharWidths[charIndex];
+    }
+
+    /**
+     * Note that the column may end of second half of wide character.
+     */
+    public int findStartOfColumn(int column) {
+        if (column == mColumns)
+            return getSpaceUsed();
+        int currentColumn = 0;
+        int currentCharIndex = 0;
+        while (true) {
+            // 0<2 1 < 2
+            int newCharIndex = currentCharIndex;
+            // cci=1, cci=2
+            char c = mText[newCharIndex++];
+            boolean isHigh = Character.isHighSurrogate(c);
+            int codePoint = isHigh ? Character.toCodePoint(c, mText[newCharIndex++]) : c;
+            // 1, 2
+            int wcwidth = mCharWidths[currentCharIndex];
+            if (wcwidth > 0) {
+                currentColumn += wcwidth;
+                if (currentColumn == column) {
+                    while (newCharIndex < mSpaceUsed) {
+                        // Skip combining chars.
+                        if (mCharWidths[newCharIndex] > 0) break;
+                        newCharIndex += Character.isHighSurrogate(mText[newCharIndex]) ? 2 : 1;
+                    }
+                    return newCharIndex;
+                } else if (currentColumn > column) {
+                    // Wide column going past end.
+                    return currentCharIndex;
+                }
+            }
+            currentCharIndex = newCharIndex;
+        }
+    }
+
+    private boolean wideDisplayCharacterStartingAt(int column) {
+        for (int currentCharIndex = 0, currentColumn = 0; currentCharIndex < mSpaceUsed; ) {
+            char c = mText[currentCharIndex++];
+            int codePoint = Character.isHighSurrogate(c) ? Character.toCodePoint(c, mText[currentCharIndex++]) : c;
+            int wcwidth = mCharWidths[currentCharIndex - Character.charCount(codePoint)];
+            if (wcwidth > 0) {
+                if (currentColumn == column && wcwidth == 2)
+                    return true;
+                currentColumn += wcwidth;
+                if (currentColumn > column)
+                    return false;
+            }
+        }
+        return false;
+    }
+
+    public void clear(long style) {
+        Arrays.fill(mText, ' ');
+        Arrays.fill(mCharWidths, (byte) 1);
+        Arrays.fill(mStyle, style);
+        mSpaceUsed = mColumns;
+        mHasNonOneWidthOrSurrogateChars = false;
+        mHasBitmap = false;
+        // Erasing a row drops its links and decoration colors, as they belong to the erased text.
+        mDecorationColors = null;
+        mHyperlinkIds = null;
+        mTextSizes = null;
+        mShellIntegrationMark = MARK_NONE;
+        dropKittyPlacements();
+    }
+
+    /**
+     * The kitty placements whose top-left cell is on this row, or null while there are none. They
+     * live on the row, like the shell integration mark, so they follow it through the circular
+     * buffer and into the scrollback for free, and go when the row is erased.
+     */
+    java.util.ArrayList<KittyPlacement> mKittyPlacements;
+
+    public boolean hasKittyPlacements() {
+        return mKittyPlacements != null && !mKittyPlacements.isEmpty();
+    }
+
+    /**
+     * This row's first {@code columns} cells as a row {@code columns} wide, cut or padded with
+     * blanks on the right, nothing wrapped: the alternate screen's resize (see
+     * {@link TerminalBuffer#resizeWithoutRewrap}). A wide character the cut would halve goes. The
+     * placements anchored here move to the new row, fitted to its columns.
+     */
+    LegacyTerminalRow resizedTo(int columns, long style) {
+        LegacyTerminalRow row = new LegacyTerminalRow(columns, style);
+        int end = Math.min(mColumns, columns);
+        if (end > 0 && end < mColumns && wideDisplayCharacterStartingAt(end - 1)) end--;
+        if (end > 0) row.copyInterval(this, 0, end, 0);
+        row.mLineWrap = mLineWrap && columns >= mColumns;
+        row.mShellIntegrationMark = mShellIntegrationMark;
+        row.mHasBitmap = mHasBitmap;
+        return row;
+    }
+
+    /** Detach every placement anchored here; returns whether there were any. */
+    boolean dropKittyPlacements() {
+        if (mKittyPlacements == null) return false;
+        for (KittyPlacement placement : mKittyPlacements) placement.anchor = null;
+        mKittyPlacements = null;
+        return true;
+    }
+
+    public void setChar(int columnToSet, int codePoint, long style) {
+        setChar(columnToSet, codePoint, style, TextStyle.DECORATION_COLOR_DEFAULT, 0);
+    }
+
+    // https://github.com/steven676/Android-Terminal-Emulator/commit/9a47042620bec87617f0b4f5d50568535668fe26
+    public void setChar(int columnToSet, int codePoint, long style, int decorationColor, int hyperlinkId) {
+        setChar(columnToSet, codePoint, style, decorationColor, hyperlinkId,
+            LegacyWcWidth.width(codePoint), true);
+    }
+
+    /**
+     * Write the first code point of a text sizing block's text into its anchor cell. The block's
+     * width comes from its record rather than from the character, so even a wide character is
+     * stored as one cell here and the cells beside it stay blank continuation cells.
+     */
+    public void setBlockAnchorChar(int column, int codePoint, long style, int decorationColor, int hyperlinkId) {
+        setChar(column, codePoint, style, decorationColor, hyperlinkId, 1, true);
+    }
+
+    /** Attach a code point to the existing grapheme without consuming another terminal cell. */
+    public void appendCodePointToCell(int column, int codePoint) {
+        setChar(column, codePoint, 0, TextStyle.DECORATION_COLOR_DEFAULT, 0, 0, false);
+    }
+
+    /** Promote a one-cell grapheme to two cells, overwriting the following cell safely. */
+    public boolean widenCell(int column) {
+        int start = findStartOfColumn(column);
+        if (mCharWidths[start] != 1 || column >= mColumns - 1) return false;
+        // A sized block already owns how many cells it covers; widening would eat its neighbour.
+        if (isTextSizeCell(column) || isTextSizeCell(column + 1)) return false;
+        if (wideDisplayCharacterStartingAt(column + 1))
+            setChar(column + 1, ' ', mStyle[column + 1]);
+        int nextStart = findStartOfColumn(column + 1);
+        int nextEnd = findStartOfColumn(column + 2);
+        int removed = nextEnd - nextStart;
+        System.arraycopy(mText, nextEnd, mText, nextStart, mSpaceUsed - nextEnd);
+        System.arraycopy(mCharWidths, nextEnd, mCharWidths, nextStart, mSpaceUsed - nextEnd);
+        mSpaceUsed -= removed;
+        mCharWidths[start] = 2;
+        mStyle[column + 1] = mStyle[column];
+        setDecorationColor(column + 1, getDecorationColor(column));
+        setHyperlinkId(column + 1, getHyperlinkId(column));
+        mHasNonOneWidthOrSurrogateChars = true;
+        return true;
+    }
+
+    private void setChar(int columnToSet, int codePoint, long style, int decorationColor,
+                         int hyperlinkId, int newCodePointDisplayWidth, boolean updateCellMetadata) {
+        if (columnToSet < 0 || columnToSet >= mStyle.length)
+            throw new IllegalArgumentException("LegacyTerminalRow.setChar(): columnToSet=" + columnToSet + ", codePoint=" + codePoint + ", style=" + style);
+        if (updateCellMetadata) {
+            mStyle[columnToSet] = style;
+            setDecorationColor(columnToSet, decorationColor);
+            setHyperlinkId(columnToSet, hyperlinkId);
+            // Writing ordinary text over a cell makes it a plain one again. Dropping the rest of
+            // the block it belonged to is TerminalBuffer's job, since only it can see other rows.
+            setTextSizeRecord(columnToSet, 0);
+            if (!mHasBitmap && TextStyle.isBitmap(style)) {
+                mHasBitmap = true;
+            }
+        }
+        // Fast path when we don't have any chars with width != 1
+        if (!mHasNonOneWidthOrSurrogateChars) {
+            if (codePoint >= Character.MIN_SUPPLEMENTARY_CODE_POINT || newCodePointDisplayWidth != 1) {
+                mHasNonOneWidthOrSurrogateChars = true;
+            } else {
+                mText[columnToSet] = (char) codePoint;
+                mCharWidths[columnToSet] = 1;
+                return;
+            }
+        }
+        final boolean newIsCombining = newCodePointDisplayWidth <= 0;
+        boolean wasExtraColForWideChar = (columnToSet > 0) && wideDisplayCharacterStartingAt(columnToSet - 1);
+        if (newIsCombining) {
+            // When standing at second half of wide character and inserting combining:
+            if (wasExtraColForWideChar)
+                columnToSet--;
+        } else {
+            // Check if we are overwriting the second half of a wide character starting at the previous column:
+            if (wasExtraColForWideChar)
+                setChar(columnToSet - 1, ' ', style);
+            // Check if we are overwriting the first half of a wide character starting at the next column:
+            boolean overwritingWideCharInNextColumn = newCodePointDisplayWidth == 2 && wideDisplayCharacterStartingAt(columnToSet + 1);
+            if (overwritingWideCharInNextColumn)
+                setChar(columnToSet + 1, ' ', style);
+        }
+        char[] text = mText;
+        final int oldStartOfColumnIndex = findStartOfColumn(columnToSet);
+        final int oldCodePointDisplayWidth = mCharWidths[oldStartOfColumnIndex];
+        // Get the number of elements in the mText array this column uses now
+        int oldCharactersUsedForColumn;
+        if (columnToSet + oldCodePointDisplayWidth < mColumns) {
+            int oldEndOfColumnIndex = findStartOfColumn(columnToSet + oldCodePointDisplayWidth);
+            oldCharactersUsedForColumn = oldEndOfColumnIndex - oldStartOfColumnIndex;
+        } else {
+            // Last character.
+            oldCharactersUsedForColumn = mSpaceUsed - oldStartOfColumnIndex;
+        }
+
+        // If MAX_COMBINING_CHARACTERS_PER_COLUMN already exist in column, then ignore adding additional combining characters.
+        if (newIsCombining) {
+            int combiningCharsCount = zeroWidthCodePointsCount(oldStartOfColumnIndex,
+                oldStartOfColumnIndex + oldCharactersUsedForColumn);
+            if (combiningCharsCount >= MAX_COMBINING_CHARACTERS_PER_COLUMN)
+                return;
+        }
+
+        // Find how many chars this column will need
+        int newCharactersUsedForColumn = Character.charCount(codePoint);
+        if (newIsCombining) {
+            // Combining characters are added to the contents of the column instead of overwriting them, so that they
+            // modify the existing contents.
+            // FIXME: Unassigned characters also get width=0.
+            newCharactersUsedForColumn += oldCharactersUsedForColumn;
+        }
+        int oldNextColumnIndex = oldStartOfColumnIndex + oldCharactersUsedForColumn;
+        int newNextColumnIndex = oldStartOfColumnIndex + newCharactersUsedForColumn;
+        final int javaCharDifference = newCharactersUsedForColumn - oldCharactersUsedForColumn;
+        if (javaCharDifference > 0) {
+            // Shift the rest of the line right.
+            int oldCharactersAfterColumn = mSpaceUsed - oldNextColumnIndex;
+            if (mSpaceUsed + javaCharDifference > text.length) {
+                // We need to grow the array
+                char[] newText = new char[text.length + mColumns];
+                byte[] newWidths = new byte[newText.length];
+                System.arraycopy(text, 0, newText, 0, oldNextColumnIndex);
+                System.arraycopy(text, oldNextColumnIndex, newText, newNextColumnIndex, oldCharactersAfterColumn);
+                System.arraycopy(mCharWidths, 0, newWidths, 0, oldNextColumnIndex);
+                System.arraycopy(mCharWidths, oldNextColumnIndex, newWidths, newNextColumnIndex,
+                    oldCharactersAfterColumn);
+                mText = text = newText;
+                mCharWidths = newWidths;
+            } else {
+                System.arraycopy(text, oldNextColumnIndex, text, newNextColumnIndex, oldCharactersAfterColumn);
+                System.arraycopy(mCharWidths, oldNextColumnIndex, mCharWidths, newNextColumnIndex,
+                    oldCharactersAfterColumn);
+            }
+        } else if (javaCharDifference < 0) {
+            // Shift the rest of the line left.
+            System.arraycopy(text, oldNextColumnIndex, text, newNextColumnIndex, mSpaceUsed - oldNextColumnIndex);
+            System.arraycopy(mCharWidths, oldNextColumnIndex, mCharWidths, newNextColumnIndex,
+                mSpaceUsed - oldNextColumnIndex);
+        }
+        mSpaceUsed += javaCharDifference;
+        // Store char. A combining character is stored at the end of the existing contents so that it modifies them:
+        //noinspection ResultOfMethodCallIgnored - since we already now how many java chars is used.
+        int storedAt = oldStartOfColumnIndex + (newIsCombining ? oldCharactersUsedForColumn : 0);
+        Character.toChars(codePoint, text, storedAt);
+        mCharWidths[storedAt] = (byte) newCodePointDisplayWidth;
+        if (Character.isSupplementaryCodePoint(codePoint)) mCharWidths[storedAt + 1] = -1;
+        if (oldCodePointDisplayWidth == 2 && newCodePointDisplayWidth == 1) {
+            // Replace second half of wide char with a space. Which mean that we actually add a ' ' java character.
+            if (mSpaceUsed + 1 > text.length) {
+                char[] newText = new char[text.length + mColumns];
+                byte[] newWidths = new byte[newText.length];
+                System.arraycopy(text, 0, newText, 0, newNextColumnIndex);
+                System.arraycopy(text, newNextColumnIndex, newText, newNextColumnIndex + 1, mSpaceUsed - newNextColumnIndex);
+                System.arraycopy(mCharWidths, 0, newWidths, 0, newNextColumnIndex);
+                System.arraycopy(mCharWidths, newNextColumnIndex, newWidths, newNextColumnIndex + 1,
+                    mSpaceUsed - newNextColumnIndex);
+                mText = text = newText;
+                mCharWidths = newWidths;
+            } else {
+                System.arraycopy(text, newNextColumnIndex, text, newNextColumnIndex + 1, mSpaceUsed - newNextColumnIndex);
+                System.arraycopy(mCharWidths, newNextColumnIndex, mCharWidths, newNextColumnIndex + 1,
+                    mSpaceUsed - newNextColumnIndex);
+            }
+            text[newNextColumnIndex] = ' ';
+            mCharWidths[newNextColumnIndex] = 1;
+            ++mSpaceUsed;
+        } else if (oldCodePointDisplayWidth == 1 && newCodePointDisplayWidth == 2) {
+            if (columnToSet == mColumns - 1) {
+                throw new IllegalArgumentException("Cannot put wide character in last column");
+            } else if (columnToSet == mColumns - 2) {
+                // Truncate the line to the second part of this wide char:
+                mSpaceUsed = newNextColumnIndex;
+            } else {
+                // Overwrite the contents of the next column, which mean we actually remove java characters. Due to the
+                // check at the beginning of this method we know that we are not overwriting a wide char.
+                int newNextNextColumnIndex = newNextColumnIndex + (Character.isHighSurrogate(mText[newNextColumnIndex]) ? 2 : 1);
+                int nextLen = newNextNextColumnIndex - newNextColumnIndex;
+                // Shift the array leftwards.
+                System.arraycopy(text, newNextNextColumnIndex, text, newNextColumnIndex, mSpaceUsed - newNextNextColumnIndex);
+                System.arraycopy(mCharWidths, newNextNextColumnIndex, mCharWidths, newNextColumnIndex,
+                    mSpaceUsed - newNextNextColumnIndex);
+                mSpaceUsed -= nextLen;
+            }
+        }
+    }
+
+    private int zeroWidthCodePointsCount(int start, int end) {
+        int count = 0;
+        for (int i = start; i < end; ) {
+            if (mCharWidths[i] == 0) count++;
+            i += Character.isHighSurrogate(mText[i]) ? 2 : 1;
+        }
+        return count;
+    }
+
+    boolean isBlank() {
+        // A picture anchored here is content even over blank cells: a resize must not drop the row.
+        if (mKittyPlacements != null && !mKittyPlacements.isEmpty()) return false;
+        for (int charIndex = 0, charLen = getSpaceUsed(); charIndex < charLen; charIndex++) if (mText[charIndex] != ' ')
+            return false;
+        return true;
+    }
+
+    public final long getStyle(int column) {
+        return mStyle[column];
+    }
+}

@@ -247,6 +247,87 @@ public class WidgetCrossPageDragTest {
             1, fixture.repository.pageCount());
     }
 
+    @Test public void aSecondFingerSwipeTurnsThePageUnderTheDraggedWidget() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(0, 0, 1, 1), 0);
+        fixture.put(2, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.put(3, new WidgetCellRect(3, 4, 4, 5), 1);
+        fixture.repository.trimEmptyPages();
+        fixture.renderAndLayout();
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+        assertEquals(2, fixture.repository.pageCount());
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        float x = home.centerX() + 2f, y = home.centerY();
+        fixture.finger(MotionEvent.ACTION_DOWN, 0, new int[] {0}, new float[][] {{x - 2f, y}});
+        fixture.finger(MotionEvent.ACTION_MOVE, 0, new int[] {0}, new float[][] {{x, y}});
+        // The second finger lands on the right and swipes left past the pager's distance.
+        float sx = PANE_WIDTH * 0.9f, sy = PANE_HEIGHT * 0.7f;
+        fixture.finger(MotionEvent.ACTION_POINTER_DOWN, 1, new int[] {0, 1},
+            new float[][] {{x, y}, {sx, sy}});
+        for (float travel = 40f; travel <= PANE_WIDTH * 0.5f; travel += 40f) {
+            fixture.finger(MotionEvent.ACTION_MOVE, 0, new int[] {0, 1},
+                new float[][] {{x, y}, {sx - travel, sy}});
+        }
+        assertEquals("the swipe turned the page once", 1, fixture.controller.currentPage());
+        assertTrue("the widget is in the air", fixture.pane.widgetDragLayer().isLifted());
+
+        // The second finger lifts first: that is not the drop.
+        fixture.finger(MotionEvent.ACTION_POINTER_UP, 1, new int[] {0, 1},
+            new float[][] {{x, y}, {sx - PANE_WIDTH * 0.5f, sy}});
+        assertTrue("still carried", fixture.pane.widgetDragLayer().isLifted());
+        assertEquals(1, fixture.controller.currentPage());
+
+        fixture.finger(MotionEvent.ACTION_UP, 0, new int[] {0}, new float[][] {{x, y}});
+        assertFalse(fixture.pane.widgetDragLayer().isLifted());
+        assertEquals("dropped on the page the swipe brought in", 1, fixture.repository.get(1).page);
+        assertEquals("under the carrying finger", new WidgetCellRect(0, 0, 1, 1),
+            fixture.repository.get(1).cell);
+    }
+
+    @Test public void theCarryingFingerLiftingFirstIsTheDrop() {
+        Fixture fixture = new Fixture();
+        fixture.put(1, new WidgetCellRect(3, 4, 4, 5), 0);
+        fixture.put(4, new WidgetCellRect(0, 0, 1, 1), 1);
+        fixture.repository.trimEmptyPages();
+        fixture.renderAndLayout();
+        fixture.controller.setCurrentPage(1);
+        fixture.controller.menuEditWidgets();
+        fixture.layout();
+
+        Rect home = fixture.paneBounds(new WidgetCellRect(0, 0, 1, 1));
+        float x = home.centerX(), y = home.centerY();
+        fixture.finger(MotionEvent.ACTION_DOWN, 0, new int[] {0}, new float[][] {{x, y}});
+        float sx = PANE_WIDTH * 0.1f, sy = PANE_HEIGHT * 0.7f;
+        fixture.finger(MotionEvent.ACTION_POINTER_DOWN, 1, new int[] {0, 1},
+            new float[][] {{x, y}, {sx, sy}});
+        for (float travel = 40f; travel <= PANE_WIDTH * 0.5f; travel += 40f) {
+            fixture.finger(MotionEvent.ACTION_MOVE, 0, new int[] {0, 1},
+                new float[][] {{x, y}, {sx + travel, sy}});
+        }
+        assertEquals("a right swipe brings the previous page", 0, fixture.controller.currentPage());
+
+        Rect target = fixture.paneBounds(new WidgetCellRect(1, 1, 2, 2));
+        float tx = target.centerX(), ty = target.centerY(), ex = sx + PANE_WIDTH * 0.5f;
+        fixture.finger(MotionEvent.ACTION_MOVE, 0, new int[] {0, 1},
+            new float[][] {{tx, ty}, {ex, sy}});
+        // The carrying finger lifts while the second is still down: that is the drop.
+        fixture.finger(MotionEvent.ACTION_POINTER_UP, 0, new int[] {0, 1},
+            new float[][] {{tx, ty}, {ex, sy}});
+        assertFalse("dropped", fixture.pane.widgetDragLayer().isLifted());
+        assertEquals(0, fixture.repository.get(4).page);
+        assertEquals("where the carrying finger lifted, not the swiping one",
+            new WidgetCellRect(1, 1, 2, 2), fixture.repository.get(4).cell);
+
+        // The second finger goes on, swipes and lifts; it moves nothing and turns nothing.
+        fixture.finger(MotionEvent.ACTION_MOVE, 0, new int[] {1}, new float[][] {{30f, sy}});
+        fixture.finger(MotionEvent.ACTION_UP, 0, new int[] {1}, new float[][] {{30f, sy}});
+        assertEquals(new WidgetCellRect(1, 1, 2, 2), fixture.repository.get(4).cell);
+        assertEquals(0, fixture.repository.get(4).page);
+        assertEquals(0, fixture.controller.currentPage());
+    }
+
     private static final class Fixture {
         final Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         final LauncherWidgetRepository repository;
@@ -325,6 +406,40 @@ public class WidgetCrossPageDragTest {
         private void dispatch(int action, float x, float y, long time) {
             MotionEvent event = MotionEvent.obtain(0L, time, action, x, y, 0);
             pane.widgetEditOverlay().dispatchTouchEvent(event);
+            event.recycle();
+        }
+
+        private long fingerTime;
+
+        /**
+         * One event of a several-finger gesture delivered at the pane, as the screen would:
+         * {@code ids} and {@code points} are every finger in the event, and for a pointer event
+         * {@code actionIndex} is the one that lands or lifts.
+         */
+        void finger(int action, int actionIndex, int[] ids, float[][] points) {
+            int count = ids.length;
+            MotionEvent.PointerProperties[] properties = new MotionEvent.PointerProperties[count];
+            MotionEvent.PointerCoords[] coords = new MotionEvent.PointerCoords[count];
+            for (int i = 0; i < count; i++) {
+                properties[i] = new MotionEvent.PointerProperties();
+                properties[i].id = ids[i];
+                properties[i].toolType = MotionEvent.TOOL_TYPE_FINGER;
+                coords[i] = new MotionEvent.PointerCoords();
+                coords[i].x = points[i][0];
+                coords[i].y = points[i][1];
+                coords[i].pressure = 1f;
+                coords[i].size = 1f;
+            }
+            int full = action;
+            if (action == MotionEvent.ACTION_POINTER_DOWN
+                || action == MotionEvent.ACTION_POINTER_UP) {
+                full = action | (actionIndex << MotionEvent.ACTION_POINTER_INDEX_SHIFT);
+            }
+            if (action == MotionEvent.ACTION_DOWN) fingerTime = 0L;
+            fingerTime += 16L;
+            MotionEvent event = MotionEvent.obtain(0L, fingerTime, full, count, properties,
+                coords, 0, 0, 1f, 1f, 0, 0, android.view.InputDevice.SOURCE_TOUCHSCREEN, 0);
+            pane.dispatchTouchEvent(event);
             event.recycle();
         }
 

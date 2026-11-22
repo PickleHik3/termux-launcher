@@ -39,6 +39,7 @@ import java.io.FileInputStream;
 import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Properties;
 
@@ -70,6 +71,15 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
 
     private static final String LOG_TAG = "TermuxTerminalSessionActivityClient";
     private final Handler mUiHandler = new Handler(Looper.getMainLooper());
+
+    /** Reads the name of a program asking for the clipboard from /proc, off the main thread. */
+    private static final java.util.concurrent.ExecutorService PROGRAM_NAME_READER =
+        java.util.concurrent.Executors.newSingleThreadExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "termux-clipboard-program");
+            thread.setDaemon(true);
+            return thread;
+        });
+
     private boolean mTerminalScreenUpdatePending;
     /** Sessions with a coalesced screen-update posted but not yet drawn (one entry per pane). */
     private final java.util.Set<TerminalSession> mPendingScreenUpdateSessions = new java.util.HashSet<>();
@@ -92,8 +102,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     private static final long GROUND_SETTLE_MS = 150L;
     private final Runnable mGroundSettledRunnable = this::onTerminalTextGroundSettled;
-    /** Cheap stamp (mtime, length) of colors.properties at the last non-dynamic apply. */
-    private long mLastColorsFileStamp = Long.MIN_VALUE;
+    /**
+     * {@link #schemeSignature} at the last non-dynamic apply: the contrast level, the
+     * colors.properties stamp and the ground. {@code Long.MIN_VALUE} while the wallpaper palette
+     * is on, so turning it off always reloads the scheme.
+     */
+    private long mLastSchemeSignature = Long.MIN_VALUE;
     @NonNull private String mLastFontErrorSummary = "";
     /** The resolved faces, so a new pane does not re-read and re-scan the font config. */
     private final TerminalFontMemo mFontMemo = new TerminalFontMemo();
@@ -121,8 +135,14 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @NonNull private final ShellSignals mSignals;
 
+    /** Which program-status records have already alerted, and when each session last did. */
+    @NonNull private final ProgramStatusAlerts mProgramStatusAlerts = new ProgramStatusAlerts();
+
     /** Pastes, and a program's picture reads and writes: see {@link TerminalClipboard}. */
     @NonNull private final TerminalClipboard mClipboard;
+
+    /** Asks before a program reads the clipboard; built at the first request. */
+    @Nullable private ClipboardReadConsent mClipboardConsent;
 
     public TermuxTerminalSessionActivityClient(@NonNull Context context, @NonNull TerminalHost host) {
         this.mContext = context;
@@ -194,6 +214,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // the first time bell key is pressed and play() is called, since sound may not be loaded
         // quickly enough before the call to play(). https://stackoverflow.com/questions/35435625
         loadBellSoundPool();
+        // A kill while Home was away is said once the return has settled: the phantom trim runs
+        // while the launcher is in the background, and a frozen process only hears of the exits
+        // as it comes back, before the notice pill can show anything.
+        mResumed = true;
+        onFrontPaneMaybeChanged();
+        if (!mHeldKilledShellNotices.isEmpty())
+            mMainHandler.postDelayed(this::sayHeldKilledShellNotices, KILLED_SHELL_NOTICE_DELAY_MS);
+    }
+
+    private void sayHeldKilledShellNotices() {
+        if (!mResumed) return;
+        List<String> held = mHeldKilledShellNotices;
+        mHeldKilledShellNotices = new ArrayList<>();
+        for (String text : held) mHost.showTerminalNotice(text, AppNoticeItem.Hold.REFUSAL);
+    }
+
+    /**
+     * Should be called when onPause() is called: a shell killed from here on, as the launcher
+     * leaves the screen, is said at the next resume.
+     */
+    public void onPause() {
+        mResumed = false;
     }
 
     /**
@@ -221,12 +263,12 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
         android.content.SharedPreferences store = preferences == null ? null : preferences.getSharedPreferences();
         if (store == null) return;
-        store.registerOnSharedPreferenceChangeListener(mLazyModeListener);
+        com.termux.shared.settings.preferences.PreferenceDraft.listen(store, mLazyModeListener);
         mLazyModeStore = store;
     }
 
     private void unwatchLazyMode() {
-        if (mLazyModeStore != null) mLazyModeStore.unregisterOnSharedPreferenceChangeListener(mLazyModeListener);
+        if (mLazyModeStore != null) com.termux.shared.settings.preferences.PreferenceDraft.unlisten(mLazyModeStore, mLazyModeListener);
         mLazyModeStore = null;
         mLazyModeEnabled = null;
     }
@@ -280,22 +322,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         if (!mPendingScreenUpdateSessions.add(changedSession))
             return;
         mTerminalScreenUpdatePending = true;
-        Runnable redraw = () -> {
-            mPendingScreenUpdateSessions.remove(changedSession);
-            mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
-            if (!mHost.isVisible())
-                return;
-            // The wall left for another place between the post and this frame: hand the pane to
-            // the deferred set rather than drawing it, so the one redraw happens on return.
-            com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
-            if (view == null)
-                return;
-            if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
-                mDeferredScreenUpdateSessions.add(changedSession);
-                return;
-            }
-            drawScreen(view);
-        };
+        Runnable redraw = () -> redrawChangedSession(changedSession);
         // Under a flood of output the main thread is mostly *parsing* bytes, and where this redraw is
         // posted decides how it interleaves with that parsing. Measured over four configurations:
         //
@@ -309,12 +336,35 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         //     (median 7ms, 3% janky): it competes with an already-ticking frame source.
         //
         // So: the frame clock exactly when nothing else is driving frames.
-        boolean pumpFrames = isLazyModeEnabled();
+        //
+        // Only a view on the window has a frame clock. Off it, postOnAnimation parks the redraw in
+        // the view's own queue until an attach that may never come, and the session stays in the
+        // coalescing set meanwhile, so every later burst is swallowed and the pane shows nothing new
+        // until a resize or a stop jogs it. A plain post always runs.
+        boolean pumpFrames = isLazyModeEnabled() && changedView.isAttachedToWindow();
         if (pumpFrames) {
-            changedView.postOnAnimation(redraw);
+            com.termux.app.window.FirstLayout.nextFrame(changedView, redraw);
         } else {
             mUiHandler.post(redraw);
         }
+    }
+
+    /** Draws the pane a pending screen update was for, if it is still there to be seen. */
+    private void redrawChangedSession(@NonNull TerminalSession changedSession) {
+        mPendingScreenUpdateSessions.remove(changedSession);
+        mTerminalScreenUpdatePending = !mPendingScreenUpdateSessions.isEmpty();
+        if (!mHost.isVisible())
+            return;
+        // The wall left for another place between the post and this frame: hand the pane to
+        // the deferred set rather than drawing it, so the one redraw happens on return.
+        com.termux.view.TerminalView view = mHost.viewForSession(changedSession);
+        if (view == null)
+            return;
+        if (!mHost.isTerminalPlaceOnScreen() && !paneCanBeSeen(view)) {
+            mDeferredScreenUpdateSessions.add(changedSession);
+            return;
+        }
+        drawScreen(view);
     }
 
     /**
@@ -406,6 +456,9 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // running in it (tlstore-ui's `keyboard.hide --hold`) must not leave it stuck down just
         // because the shell exited instead of asking nicely with `keyboard.show`.
         TerminalActionDispatcher.getInstance().onSessionFinished(finishedSession);
+        mProgramStatusAlerts.forget(finishedSession);
+        mSignals.sessionFinished(finishedSession);
+        if (mClipboardConsent != null) mClipboardConsent.onSessionFinished(finishedSession);
         // Before anything below drops its pane: the host reads its status and whether it is the
         // shell on screen.
         mHost.onShellFinished(finishedSession);
@@ -420,26 +473,58 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         }
         // Split panes / windows: route the finished shell through the pane controller first.
         com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
-        if (panes != null) {
-            com.termux.app.terminal.TerminalPaneController.Window window = panes.windowOf(finishedSession);
-            int result = panes.onSessionFinished(finishedSession);
-            if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
-                // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
-                service.killTermuxSession(finishedSession);
-                mHost.rebuildDrawerSessions();
-                termuxSessionListNotifyUpdated();
-                return;
-            }
-            if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_WINDOW) {
-                // The window's last pane closed; drop the window from its session (and the session
-                // if that was its last window), then switch to whatever remains.
-                service.killTermuxSession(finishedSession);
-                if (window != null) mHost.onWindowEmptied(window);
-                termuxSessionListNotifyUpdated();
-                return;
-            }
-            // FINISHED_UNKNOWN: shell not tracked by the controller; fall through to classic close.
+        boolean inWindow = panes != null && panes.windowOf(finishedSession) != null;
+        if (inWindow && KilledShellNotice.keepsPane(finishedSession.getExitStatus(),
+                finishedSession.isFinishRequested())) {
+            // A signal nobody here sent (Android's phantom-process limit, the low-memory killer, a
+            // `kill` from another shell): the pane stays with its "[Process completed (signal N)]"
+            // line until Enter, as in stock Termux, rather than its window vanishing unexplained.
+            // The snow plays on the pane as it is; nothing waits for it.
+            panes.screenEvent(finishedSession, PaneScreenEvent.Kind.DEATH_SNOW);
+            mHost.clearShellAttention(finishedSession.getPid());
+            showKilledShellNotice(finishedSession);
+            mHost.scheduleWindowBarRefresh();
+            mHost.rebuildDrawerSessions();
+            termuxSessionListNotifyUpdated();
+            return;
         }
+        // The pane plays its closing event before it goes: off for a close someone asked for while
+        // the shell ran, snow for a shell that ended on its own. The pane stays for the event's
+        // length, then goes as it would have at once; without an event it goes at once.
+        if (inWindow) {
+            PaneScreenEvent.Kind closing = finishedSession.isFinishRequested()
+                ? PaneScreenEvent.Kind.POWER_OFF : PaneScreenEvent.Kind.DEATH_SNOW;
+            if (panes.screenEvent(finishedSession, closing)
+                && panes.postOnHost(() -> finishedSessionAfterHold(finishedSession),
+                    closing.durationMs))
+                return;
+        }
+        removeFinishedPaneOrSession(service, finishedSession);
+    }
+
+    /**
+     * The rest of {@link #onSessionFinished} once a closing event has played: the host and the
+     * service are fetched again, and nothing happens when either is gone.
+     */
+    private void finishedSessionAfterHold(@NonNull TerminalSession finishedSession) {
+        if (!mHost.isHostAlive()) return;
+        TermuxService service = mHost.service();
+        if (service == null) return;
+        if (service.wantsToStop()) {
+            mHost.finishActivityIfNotFinishing();
+            return;
+        }
+        removeFinishedPaneOrSession(service, finishedSession);
+    }
+
+    /**
+     * What {@link #onSessionFinished} does with a finished shell that keeps no pane: its pane (and
+     * window) closes, or, for a shell no pane holds, the session is removed by the exit rules.
+     */
+    private void removeFinishedPaneOrSession(@NonNull TermuxService service,
+                                             @NonNull TerminalSession finishedSession) {
+        com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
+        if (panes != null && closeFinishedPane(panes, service, finishedSession)) return;
         int index = service.getIndexOfSession(finishedSession);
         // For plugin commands that expect the result back, we should immediately close the session
         // and send the result back instead of waiting fo the user to press enter.
@@ -548,13 +633,120 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return mSignals.clipboardRead();
     }
 
+    /**
+     * A clipboard read on the Fast engine: whether the program may have it is
+     * {@link ClipboardReadConsent}'s call, which may ask on a sheet.
+     */
+    @Override
+    public void onClipboardReadRequest(@NonNull TerminalSession session,
+                                       @NonNull com.termux.terminal.ClipboardReadRequest request) {
+        clipboardConsent().onRequest(session, new ClipboardReadConsent.Request() {
+            @Override public void allow(@Nullable String text) { request.allow(text); }
+            @Override public void deny() { request.deny(); }
+            @Override public boolean isPasted() { return request.isPasted(); }
+            @Override public boolean isListingOnly() { return request.isListingOnly(); }
+        });
+    }
+
+    /** The front pane or the launcher's visibility may have changed: queued clipboard reads may be due. */
+    public void onFrontPaneMaybeChanged() {
+        if (mClipboardConsent != null) mClipboardConsent.onFrontMaybeChanged();
+        mSignals.frontMaybeChanged();
+    }
+
+    @NonNull
+    private ClipboardReadConsent clipboardConsent() {
+        if (mClipboardConsent == null) {
+            mClipboardConsent = new ClipboardReadConsent(new ClipboardReadConsent.Ui() {
+                private boolean mSheetOpen;
+                /** The card this policy showed; closing closes it and no other. */
+                @Nullable private android.view.View mSheetCard;
+
+                @Override public boolean isReadSettingOn() {
+                    com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+                        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false);
+                    return preferences != null && preferences.isOsc52ClipboardReadEnabled();
+                }
+
+                @Override public boolean isTerminalShowing() {
+                    return mHost.isVisible() && mHost.isTerminalShowing();
+                }
+
+                @Nullable @Override public Object frontSession() {
+                    return mHost.currentSession();
+                }
+
+                @Override public void resolveProgramName(@NonNull Object session,
+                                                         @NonNull ClipboardReadConsent.NameCallback done) {
+                    // The process group is taken now, so the name belongs to the program that
+                    // asked; /proc is read off the main thread.
+                    final int pgid = ((TerminalSession) session).getForegroundProcessGroup();
+                    if (pgid <= 0) {
+                        done.onName(null);
+                        return;
+                    }
+                    PROGRAM_NAME_READER.execute(() -> {
+                        final String name = TerminalSession.programNameOf(pgid);
+                        mUiHandler.post(() -> done.onName(name));
+                    });
+                }
+
+                @Nullable @Override public String readClipboard() {
+                    return com.termux.shared.interact.ShareUtils.getTextStringFromClipboardIfSet(mContext, true);
+                }
+
+                @Override public boolean showSheet(@Nullable String programName,
+                                                   @NonNull ClipboardReadConsent.Callback callback) {
+                    TerminalSheetController sheet = mHost.sheetController();
+                    android.widget.LinearLayout body = TerminalSheetViews.body(mContext);
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_deny),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.DENY));
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_once),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.ONCE));
+                    TerminalSheetViews.addMenuRow(body, mContext.getString(R.string.clipboard_read_session),
+                        () -> callback.onChoice(ClipboardReadConsent.Choice.SESSION));
+                    if (programName != null)
+                        TerminalSheetViews.addMenuRow(body,
+                            mContext.getString(R.string.clipboard_read_always, programName),
+                            () -> callback.onChoice(ClipboardReadConsent.Choice.ALWAYS));
+                    String title = programName != null
+                        ? mContext.getString(R.string.clipboard_read_title, programName)
+                        : mContext.getString(R.string.clipboard_read_title_unnamed);
+                    mSheetOpen = true;
+                    boolean shown = sheet.show(title, body, false, null, () -> {
+                        mSheetOpen = false;
+                        mSheetCard = null;
+                        callback.onDismissed();
+                    });
+                    if (!shown) mSheetOpen = false;
+                    else if (mSheetOpen) mSheetCard = sheet.topCard();
+                    return shown;
+                }
+
+                @Override public void closeSheet() {
+                    if (!mSheetOpen) return;
+                    mSheetOpen = false;
+                    android.view.View card = mSheetCard;
+                    mSheetCard = null;
+                    mHost.sheetController().dismiss(card);
+                }
+            }, new ClipboardReadGrants(
+                com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mContext, false)));
+        }
+        return mClipboardConsent;
+    }
+
     @Override
     public void onBell(@NonNull TerminalSession session) {
         // Marked before the visibility and behaviour gates: the pill is not a sound, and a bell that
         // rang while the launcher was in the background is exactly the one the user needs to find.
         mHost.noteShellAttention(session);
+        mSignals.bell(session);
         if (!mHost.isVisible())
             return;
+        // Whatever the bell behaviour, ignore included: the tear is the pane's, not a sound.
+        TerminalPaneController bellPanes = mHost.paneController();
+        if (bellPanes != null) bellPanes.screenEvent(session, PaneScreenEvent.Kind.BELL_TEAR);
         raiseAttentionNotice(session);
         switch(mHost.properties().getBellBehaviour()) {
             case TermuxPropertyConstants.IVALUE_BELL_BEHAVIOUR_VIBRATE:
@@ -578,7 +770,46 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     @Override
     public void onNotification(@NonNull TerminalSession session, String title, String body) {
-        mSignals.notice(session, title, body);
+        mSignals.terminalMessage(session, title, body);
+    }
+
+    /**
+     * A program's own status moved. The window bar is asked to repaint (the host coalesces those
+     * into one pass per refresh interval), and a record that needs the user, finished or failed
+     * is shown as an in-app notice when its pane is not the one in front.
+     */
+    @Override
+    public void onProgramStatusChanged(@NonNull TerminalSession session,
+                                       @NonNull java.util.List<com.termux.terminal.ProgramStatus> raised) {
+        mHost.scheduleWindowBarRefresh();
+        TerminalEmulator current = session.getEmulator();
+        if (current != null) mProgramStatusAlerts.retainCurrent(session, current.getProgramStatus());
+        if (current != null) mSignals.programStatus(session, raised, current.getProgramStatus());
+        if (raised.isEmpty()) return;
+        boolean inFront = mHost.isVisible() && mHost.isTerminalShowing()
+            && session == mHost.currentSession();
+        if (inFront) return;
+        long now = android.os.SystemClock.uptimeMillis();
+        TerminalEmulator emulator = session.getEmulator();
+        for (com.termux.terminal.ProgramStatus record : raised) {
+            if (!mProgramStatusAlerts.shouldAlert(session, record, now)) continue;
+            String app = emulator == null ? "" : emulator.getProgramStatus().resolvedApp(record);
+            String tag = mSignals.sessionTag(session);
+            String name = !app.isEmpty() ? app : record.title;
+            boolean named = !name.isEmpty();
+            if (!named) name = tag == null ? "" : tag;
+            String headline;
+            switch (record.state) {
+                case BLOCKED: headline = mContext.getString(R.string.notice_program_needs_input, name); break;
+                case DONE: headline = mContext.getString(R.string.notice_program_done, name); break;
+                default: headline = mContext.getString(R.string.notice_program_error, name); break;
+            }
+            String detail = ProgramStatusLabel.oneLine(record.message, 200);
+            if (named && tag != null && !tag.isEmpty()) {
+                detail = detail.isEmpty() ? tag : detail + " · " + tag;
+            }
+            mSignals.statusNotice(session, headline, detail);
+        }
     }
 
     /** OSC 99: the phone's notification shade, through the same path the local API uses. */
@@ -620,7 +851,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             return;
         AppNotice.shell(mContext,
             mContext.getString(R.string.notice_shell_wants_attention, title),
-            null, "\uf0f3" /* nf-fa-bell */, true, () -> setCurrentSession(session));
+            null, R.drawable.ic_rl_bell, true, () -> setCurrentSession(session));
     }
 
     @Override
@@ -663,6 +894,13 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         // Ensure blinker starts again after reset if cursor blinking was disabled before reset like
         // with "tput civis" which would have called onTerminalCursorStateChange()
         mHost.focusedView().setTerminalCursorBlinkerState(true, true);
+    }
+
+    @Override
+    public boolean prefersGhosttyEngine() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences = mHost.preferences();
+        return preferences != null
+            && com.termux.terminal.TerminalEngine.isGhosttyPreference(preferences.getTerminalEngine());
     }
 
     @Override
@@ -899,15 +1137,28 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
         return service.getTerminalSessionForHandle(sessionHandle);
     }
 
+    /**
+     * Whether the service keeps running once it holds no shell: Home stays on screen after the
+     * Terminal's last shell, so the activity must outlive it, and the activity finishes when its
+     * service stops. See {@link TerminalHost#staysWhenTerminalEmpty()}.
+     */
+    public boolean keepsServiceWhenEmpty() {
+        return mHost.staysWhenTerminalEmpty();
+    }
+
     public void removeFinishedSession(TerminalSession finishedSession) {
         // Return pressed with finished session - remove it.
         TermuxService service = mHost.service();
         if (service == null)
             return;
+        // A pane kept after a kill (onSessionFinished) closes the way an exited pane does.
+        com.termux.app.terminal.TerminalPaneController panes = mHost.paneController();
+        if (panes != null && closeFinishedPane(panes, service, finishedSession)) return;
         int index = service.killTermuxSession(finishedSession);
         int size = service.getTermuxSessionsSize();
         if (size == 0) {
-            mHost.finishActivityIfNotFinishing();
+            // The home screen does not close with its last shell: the Terminal is simply empty.
+            mHost.rebuildDrawerSessions();
         } else {
             if (index >= size) {
                 index = size - 1;
@@ -916,6 +1167,65 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             if (termuxSession != null)
                 setCurrentSession(termuxSession.getTerminalSession());
         }
+    }
+
+    /**
+     * Drop a finished shell's pane through the pane controller, its window too when it was the
+     * last pane. False, changing nothing, when the controller does not hold the shell.
+     */
+    private boolean closeFinishedPane(@NonNull com.termux.app.terminal.TerminalPaneController panes,
+                                      @NonNull TermuxService service,
+                                      @NonNull TerminalSession finishedSession) {
+        com.termux.app.terminal.TerminalPaneController.Window window = panes.windowOf(finishedSession);
+        int result = panes.onSessionFinished(finishedSession);
+        if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_PANE) {
+            // A pane with siblings closed; its window lives on. Kill the shell, refresh drawer.
+            service.killTermuxSession(finishedSession);
+            mHost.rebuildDrawerSessions();
+            termuxSessionListNotifyUpdated();
+            return true;
+        }
+        if (result == com.termux.app.terminal.TerminalPaneController.FINISHED_WINDOW) {
+            // The window's last pane closed; drop the window from its session (and the session
+            // if that was its last window), then switch to whatever remains.
+            service.killTermuxSession(finishedSession);
+            if (window != null) mHost.onWindowEmptied(window);
+            termuxSessionListNotifyUpdated();
+            return true;
+        }
+        // FINISHED_UNKNOWN: shell not tracked by the controller.
+        return false;
+    }
+
+    /** When the last killed-shell notice was raised, so a burst of kills says it once. */
+    private long mLastKilledShellNoticeAt;
+    /** Killed-shell notices raised while Home was not on screen, said at the next resume. */
+    private List<String> mHeldKilledShellNotices = new ArrayList<>();
+    /** Between onResume and onPause: whether a notice raised now can be seen. */
+    private boolean mResumed;
+    private final Handler mMainHandler = new Handler(Looper.getMainLooper());
+    /** How long after a resume the held notices wait for the return to settle. */
+    private static final long KILLED_SHELL_NOTICE_DELAY_MS = 600L;
+
+    private void showKilledShellNotice(@NonNull TerminalSession session) {
+        // Ahead of the quiet window: the notice in Settings and the sheets is its own, and the
+        // pane stays only for a signal nobody here sent (KilledShellNotice.keepsPane).
+        com.termux.app.processlimit.ProcessLimitNotice.get(mContext).onChildKilled(
+            com.termux.app.processlimit.ProcessLimitPolicy.isKillSignal(-session.getExitStatus()), false);
+        long now = android.os.SystemClock.uptimeMillis();
+        if (now - mLastKilledShellNoticeAt < KilledShellNotice.QUIET_MS) return;
+        mLastKilledShellNoticeAt = now;
+        int signal = -session.getExitStatus();
+        String title = toToastTitle(session);
+        List<String> texts = new ArrayList<>();
+        texts.add(mContext.getString(R.string.msg_shell_killed_by_signal,
+            title == null ? mContext.getString(R.string.msg_shell_killed_shell) : title, signal));
+        // Its own notice after the first: the pill holds two lines, and the way out is the part
+        // that has to be read whole.
+        if (KilledShellNotice.mayBePhantomLimit(signal, android.os.Build.VERSION.SDK_INT))
+            texts.add(mContext.getString(R.string.msg_shell_killed_phantom_hint));
+        mHeldKilledShellNotices = texts;
+        if (mResumed) sayHeldKilledShellNotices();
     }
 
     public void termuxSessionListNotifyUpdated() {
@@ -971,13 +1281,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 // What the text stands on: the palette's own background while the terminal is
                 // opaque, the measured glass ground while it is translucent.
                 int ground = mHost.terminalTextGround();
-                props = MaterialTerminalColorScheme.create(mContext, level, ground,
-                    mTerminalInkPolarity);
+                // The pane band's own verdict, when it has one: the ground is its worst end for
+                // that ink, and judging the ink again there flips it (see decidedInk).
+                com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
+                com.termux.app.chrome.ChromeInk.Polarity leaning = decidedInk(band, ground);
+                // The glass floors are on while the panes are evened out, set before the build.
+                MaterialTerminalColorScheme.setGlassFloors(true);
+                props = MaterialTerminalColorScheme.create(mContext, level, ground, leaning,
+                    band != null);
                 mTerminalInkPolarity = MaterialTerminalColorScheme.polarityOf(props);
                 MaterialTerminalColorScheme.rememberGround(mContext, ground, mTerminalInkPolarity);
                 mLastMaterialTerminalPaletteSignature = MaterialTerminalColorScheme.signature(
-                    mContext, level, ground, mTerminalInkPolarity);
-                mLastColorsFileStamp = Long.MIN_VALUE;
+                    mContext, level, ground, leaning, band != null);
+                mLastSchemeSignature = Long.MIN_VALUE;
                 // The active roles are built here, on the main thread, from the activity's theme, so
                 // the files describe the same palette the terminal just took. The dark and light
                 // halves, which only the files and templates use, are derived on the writer thread
@@ -986,20 +1302,25 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
                 ThemeTemplates.exportPaletteAndRunPassAsync(mContext,
                     MaterialTerminalColorScheme.paletteSetSource(mContext, level, props));
             } else {
-                props = new Properties();
+                Properties loaded = new Properties();
                 mLastMaterialTerminalPaletteSignature = 0;
                 File colorsFile = TermuxConstants.TERMUX_COLOR_PROPERTIES_FILE;
-                mLastColorsFileStamp = colorsFileStamp();
                 if (colorsFile.isFile()) {
                     try (InputStream in = new FileInputStream(colorsFile)) {
-                        props.load(in);
+                        loaded.load(in);
                     }
-                    exportSchemeColorFiles(props);
-                } else {
-                    // No custom theme: rewrite the material-colors files from the scheme so shells
-                    // do not keep the old wallpaper palette.
-                    exportSchemeColorFiles(props);
                 }
+                // The Contrast row moves a fixed scheme too: its foreground and ANSI colours, on
+                // the same ground the wallpaper palette is measured against. Default is the scheme
+                // as loaded.
+                TerminalContrastLevel level =
+                    com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences());
+                int ground = mHost.terminalTextGround();
+                props = SchemeContrast.apply(loaded, ground, level);
+                mLastSchemeSignature = schemeSignature(level, ground);
+                // With or without a custom theme: rewrite the material-colors files from the scheme
+                // so shells do not keep the old wallpaper palette.
+                exportSchemeColorFiles(props);
             }
             TerminalColors.COLOR_SCHEME.updateWith(colorKeysOnly(props));
             resetAllSessionColors();
@@ -1010,6 +1331,7 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
             // output. The row cache sees the palette move and re-records each row.
             for (com.termux.view.TerminalView view : mHost.paneViews())
                 view.invalidate();
+            applyTextBackdropToPanes();
             updateBackgroundColor();
         } catch (Exception e) {
             Logger.logStackTraceWithMessage(LOG_TAG, "Error in applyTerminalColors()", e);
@@ -1169,6 +1491,19 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
     }
 
     /**
+     * What a fixed scheme's palette depends on: the colors.properties stamp, the contrast level
+     * and, away from Default, the ground's tone bucket (the same buckets the wallpaper palette's
+     * signature uses), so a ground that merely wobbles does not rebuild it.
+     */
+    @VisibleForTesting
+    static long schemeSignature(@NonNull TerminalContrastLevel level, int ground) {
+        long groundKey = level == TerminalContrastLevel.DEFAULT ? 0L
+            : android.graphics.Color.alpha(ground) == 0 ? -1L
+            : 1L + MaterialTerminalColorScheme.groundToneBucket(ground);
+        return ((colorsFileStamp() * 31L) + level.ordinal()) * 31L + groundKey;
+    }
+
+    /**
      * Rebuild the palette only if the Material roles, the contrast level or the ground the text
      * stands on actually moved. This is the path for resume, configuration changes, wallpaper-colour
      * callbacks and the pane band's measured ground settling: they fire whether or not
@@ -1177,20 +1512,89 @@ public class TermuxTerminalSessionActivityClient extends TermuxTerminalSessionCl
      */
     public void refreshMaterialTerminalColorsIfNeeded() {
         if (mHost.preferences() == null) return;
+        // Cheap and on every door here, the settled ground included: the panes' text floor
+        // follows the measured backdrop whether or not the palette is rebuilt.
+        applyTextBackdropToPanes();
         if (!mHost.preferences().isTerminalDynamicColorsEnabled()) {
-            // A custom colors.properties is followed: re-read it only when it changed.
-            if (colorsFileStamp() != mLastColorsFileStamp) applyTerminalColors();
+            // A fixed scheme is re-read and re-contrasted only when the file, the level or (away
+            // from Default) the ground moved.
+            long signature = schemeSignature(
+                com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
+                mHost.terminalTextGround());
+            if (signature != mLastSchemeSignature) applyTerminalColors();
             return;
         }
+        int ground = mHost.terminalTextGround();
+        com.termux.app.chrome.ChromeInk.Polarity band = mHost.terminalBandPolarity();
         int signature = MaterialTerminalColorScheme.signature(mContext,
             com.termux.app.chrome.LegibilityLevel.terminalContrast(mHost.preferences()),
-            mHost.terminalTextGround(), mTerminalInkPolarity);
+            ground, decidedInk(band, ground), band != null);
         if (signature == mLastMaterialTerminalPaletteSignature) return;
         applyTerminalColors();
     }
 
+    /**
+     * The ink the palette is built with on {@code ground}: the pane band's verdict ({@code band})
+     * when it has one, else the leaning the glass gives ({@link #inkLeaning}). The band weighs
+     * both inks against every pane's shortfall and hands the palette its worst end for the ink it
+     * chose; asked again on that end alone, the palette sent the ink to the other side, the band
+     * then re-measured for that ink and moved the worst end with it, and on a wallpaper neither
+     * ink reads at the level's target the two flipped each other on every pass (Harder, the
+     * screen recording of 2026-10-29). The signature asks here too, so a verdict that moves
+     * rebuilds the palette and one that stands leaves it alone.
+     */
+    @Nullable
+    private com.termux.app.chrome.ChromeInk.Polarity decidedInk(
+            @Nullable com.termux.app.chrome.ChromeInk.Polarity band, int ground) {
+        return band != null ? band : inkLeaning(ground);
+    }
+
+    /**
+     * The ink the palette is built leaning to on {@code ground}: the glass's, not the theme's
+     * ({@link TerminalSurfacePolicy#inkLeaning}). The build and the signature both ask here, so an
+     * opacity that crosses the line rebuilds the palette, and one that does not leaves it alone.
+     */
+    @Nullable
+    private com.termux.app.chrome.ChromeInk.Polarity inkLeaning(int ground) {
+        int opacity = mHost.preferences() != null
+            ? mHost.preferences().getTerminalBackgroundOpacity() : 100;
+        return TerminalSurfacePolicy.inkLeaning(android.graphics.Color.alpha(ground) != 0,
+            opacity, mTerminalInkPolarity);
+    }
+
+    /**
+     * Hand every pane what its default-background text really stands on, so the renderer holds it
+     * to its contrast floor there ({@code TerminalRenderer#setContrastBackdrop}). A pane re-records
+     * its rows only when the backdrop moved past {@code ContrastFloor.BACKDROP_TOLERANCE}.
+     */
+    private void applyTextBackdropToPanes() {
+        int backdrop = mHost.terminalTextSurface();
+        double floor = terminalContrastFloor(mHost.preferences());
+        for (com.termux.view.TerminalView view : mHost.paneViews()) {
+            if (view == null) continue;
+            view.setContrastBackdrop(backdrop);
+            view.setContrastFloor(floor);
+        }
+    }
+
+    /**
+     * The contrast the user's Terminal contrast level asks normal text to hold: Softer 3:1,
+     * Default 4.5:1, Harder 7:1, with wallpaper colours or a fixed scheme alike
+     * ({@link SchemeContrast} moves a fixed scheme to the same targets).
+     */
+    public static double terminalContrastFloor(
+            @Nullable com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences) {
+        if (preferences == null) return com.termux.view.ContrastFloor.TEXT;
+        return preferences.getTerminalContrastLevel().bodyTarget;
+    }
+
     private void onTerminalTextGroundSettled() {
-        if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
+        android.os.Trace.beginSection("Terminal.groundSettled");
+        try {
+            if (mHost.isHostAlive()) refreshMaterialTerminalColorsIfNeeded();
+        } finally {
+            android.os.Trace.endSection();
+        }
     }
 
     /**

@@ -20,7 +20,7 @@ import java.util.Locale;
 import java.util.Map;
 
 /**
- * The agenda and calendar widgets' date arithmetic and labels, kept free of Android so it is
+ * The Calendar widget's date arithmetic and labels, kept free of Android so it is
  * tested on its own: which events are today and which come next, the short labels beside them
  * ("now", "in 50 min", "14:30", "Wed"), the week strip and the month grid's shape.
  */
@@ -87,6 +87,16 @@ public final class CalendarWidgetFormats {
             if (!isOver(event, now) && overlaps(event, today, zone)) out.add(event);
         }
         return out;
+    }
+
+    /** The first event, in order, that starts on {@code day}; null for none. */
+    @Nullable public static CalendarEvent firstStarting(@NonNull List<CalendarEvent> events,
+                                                        @NonNull LocalDate day,
+                                                        @NonNull ZoneId zone) {
+        for (CalendarEvent event : events) {
+            if (day(event.startMs, zone).equals(day)) return event;
+        }
+        return null;
     }
 
     private static boolean isOver(@NonNull CalendarEvent event, long now) {

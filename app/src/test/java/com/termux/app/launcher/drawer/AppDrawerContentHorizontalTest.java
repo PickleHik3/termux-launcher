@@ -240,7 +240,8 @@ public class AppDrawerContentHorizontalTest {
         content.measure(View.MeasureSpec.makeMeasureSpec(WIDTH, View.MeasureSpec.EXACTLY),
             View.MeasureSpec.makeMeasureSpec(HEIGHT, View.MeasureSpec.EXACTLY));
         content.layout(0, 0, WIDTH, HEIGHT);
-        MotionEvent down = event(MotionEvent.ACTION_DOWN, 100f, content.getGrid().getTop() + 20f);
+        MotionEvent down = event(MotionEvent.ACTION_DOWN, 100f,
+            content.getGrid().getTop() + content.getGrid().getPaddingTop() + 20f);
         content.dispatchTouchEvent(down);
         down.recycle();
         int[] consumed = {0, 0};

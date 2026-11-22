@@ -77,7 +77,7 @@ public class PinnedAppsEditorRemoveTest {
         Context app = activity.getApplicationContext();
         seedLauncherApps(app);
         // A provider left by another test holds that test's context and catalogue.
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
         LauncherAppDataProvider provider = LauncherAppDataProvider.getInstance(app);
         awaitCatalogLoad(provider);
 

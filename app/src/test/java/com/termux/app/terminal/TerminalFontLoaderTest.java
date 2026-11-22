@@ -21,9 +21,11 @@ import org.robolectric.annotation.Implementation;
 import org.robolectric.annotation.Implements;
 
 import java.io.File;
+import android.app.Application;
 
 /** Typeface resolution, including the native font.ttf path that must survive every addition. */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class TerminalFontLoaderTest {
 
     @Rule public final TemporaryFolder temporary = new TemporaryFolder();

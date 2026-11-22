@@ -6,7 +6,6 @@ import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 
@@ -14,6 +13,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import com.termux.app.page.PageKind;
 
 /** Search over the real copy: the spec's examples, in the spec's order. */
 public class HelpSearchTest {
@@ -21,7 +21,7 @@ public class HelpSearchTest {
     private final HelpTopics.Text text = new HelpTestText();
 
     private List<HelpSearch.Result> search(String query) {
-        return HelpSearch.search(query, PaneWallPage.TERMINAL, text);
+        return HelpSearch.search(query, PageKind.TERMINAL, text);
     }
 
     private List<String> ids(String query) {
@@ -104,7 +104,7 @@ public class HelpSearchTest {
         assertTrue(ids("desktop").contains("gui_apps"));
         HelpSearch.Result fromTerminal = find("dock", "dock");
         List<HelpSearch.Result> fromWidgets =
-            HelpSearch.search("dock", PaneWallPage.WIDGETS, text);
+            HelpSearch.search("dock", PageKind.HOME, text);
         HelpSearch.Result elsewhere = null;
         for (HelpSearch.Result result : fromWidgets) if (result.id.equals("dock")) elsewhere = result;
         assertNotNull(fromTerminal);

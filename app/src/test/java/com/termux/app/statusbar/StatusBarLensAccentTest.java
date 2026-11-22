@@ -5,7 +5,6 @@ import static org.junit.Assert.assertEquals;
 import android.app.Application;
 import android.os.Build;
 
-import com.termux.app.wall.PaneWallPage;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -15,6 +14,7 @@ import org.robolectric.annotation.Config;
 
 import java.util.EnumMap;
 import java.util.Map;
+import com.termux.app.page.PageKind;
 
 /**
  * Where a place mark's colour comes from. The extra-keys row decides it — a place switch takes its
@@ -39,7 +39,7 @@ public class StatusBarLensAccentTest {
     @Test
     public void aLensToldNothingKeepsTheThemesOwnAccentForEveryPlace() {
         StatusBarLensView lens = lens();
-        for (PaneWallPage page : PaneWallPage.values()) {
+        for (PageKind page : PageKind.values()) {
             assertEquals(page.toString(),
                 StatusBarLensView.accentFor(lens.getContext(), page), lens.accent(page));
         }
@@ -48,32 +48,32 @@ public class StatusBarLensAccentTest {
     @Test
     public void aPlaceTheRowStandsAKeyForIsDrawnInTheKeysOwnColour() {
         StatusBarLensView lens = lens();
-        Map<PaneWallPage, Integer> row = new EnumMap<>(PaneWallPage.class);
-        row.put(PaneWallPage.TERMINAL, ROW_TERMINAL);
-        row.put(PaneWallPage.WIDGETS, ROW_WIDGETS);
+        Map<PageKind, Integer> row = new EnumMap<>(PageKind.class);
+        row.put(PageKind.TERMINAL, ROW_TERMINAL);
+        row.put(PageKind.HOME, ROW_WIDGETS);
         lens.setPlaceAccents(row);
 
-        assertEquals(ROW_TERMINAL, lens.accent(PaneWallPage.TERMINAL));
-        assertEquals(ROW_WIDGETS, lens.accent(PaneWallPage.WIDGETS));
+        assertEquals(ROW_TERMINAL, lens.accent(PageKind.TERMINAL));
+        assertEquals(ROW_WIDGETS, lens.accent(PageKind.HOME));
         // The row carries no Display switch here, so that place keeps what it always wore.
-        assertEquals(StatusBarLensView.accentFor(lens.getContext(), PaneWallPage.DISPLAY),
-            lens.accent(PaneWallPage.DISPLAY));
+        assertEquals(StatusBarLensView.accentFor(lens.getContext(), PageKind.DISPLAY),
+            lens.accent(PageKind.DISPLAY));
     }
 
     @Test
     public void aRowWithNoPlaceKeysAtAllHandsThePlacesBack() {
         StatusBarLensView lens = lens();
-        Map<PaneWallPage, Integer> row = new EnumMap<>(PaneWallPage.class);
-        row.put(PaneWallPage.TERMINAL, ROW_TERMINAL);
+        Map<PageKind, Integer> row = new EnumMap<>(PageKind.class);
+        row.put(PageKind.TERMINAL, ROW_TERMINAL);
         lens.setPlaceAccents(row);
-        assertEquals(ROW_TERMINAL, lens.accent(PaneWallPage.TERMINAL));
+        assertEquals(ROW_TERMINAL, lens.accent(PageKind.TERMINAL));
 
-        lens.setPlaceAccents(new EnumMap<>(PaneWallPage.class));
-        assertEquals(StatusBarLensView.accentFor(lens.getContext(), PaneWallPage.TERMINAL),
-            lens.accent(PaneWallPage.TERMINAL));
+        lens.setPlaceAccents(new EnumMap<>(PageKind.class));
+        assertEquals(StatusBarLensView.accentFor(lens.getContext(), PageKind.TERMINAL),
+            lens.accent(PageKind.TERMINAL));
         lens.setPlaceAccents(row);
         lens.setPlaceAccents(null);
-        assertEquals(StatusBarLensView.accentFor(lens.getContext(), PaneWallPage.TERMINAL),
-            lens.accent(PaneWallPage.TERMINAL));
+        assertEquals(StatusBarLensView.accentFor(lens.getContext(), PageKind.TERMINAL),
+            lens.accent(PageKind.TERMINAL));
     }
 }

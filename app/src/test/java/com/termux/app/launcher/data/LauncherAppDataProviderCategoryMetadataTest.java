@@ -41,7 +41,7 @@ public class LauncherAppDataProviderCategoryMetadataTest {
     @Before public void setUp() {
         context = RuntimeEnvironment.getApplication();
         packages = shadowOf(context.getPackageManager());
-        ReflectionHelpers.setStaticField(LauncherAppDataProvider.class, "instance", null);
+        LauncherAppDataProvider.resetForTest();
     }
 
     @Test public void primaryCarriesDeclaredCategoryAndSharedPackageFirstInstallTime() {

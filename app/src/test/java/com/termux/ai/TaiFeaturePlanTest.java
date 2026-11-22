@@ -119,6 +119,18 @@ public class TaiFeaturePlanTest {
     }
 
     @Test
+    public void anUnconfirmedGpuStartsOnTheCpuAndAMeasuredFasterGpuStillWins() {
+        installE2b();
+        TaiFeaturePlan plan = plan(TaiFunction.ASSISTANT, env(12, GpuPath.UNKNOWN));
+        assertEquals(CPU, plan.accelerator);
+        assertEquals(Reason.DEFAULT, plan.acceleratorReason);
+        evidence.chat(chat(GPU, false, 30.0)).chat(chat(CPU, false, 10.0));
+        plan = plan(TaiFunction.ASSISTANT, env(12, GpuPath.UNKNOWN));
+        assertEquals(GPU, plan.accelerator);
+        assertEquals(Reason.MEASURED, plan.acceleratorReason);
+    }
+
+    @Test
     public void eachFeatureHasItsWindowAndResidency() {
         installE2b();
         assertEquals(2048, pong(TaiFunction.TIDY_DICTATION).contextWindow);

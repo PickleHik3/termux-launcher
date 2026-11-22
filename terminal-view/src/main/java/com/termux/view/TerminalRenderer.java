@@ -13,8 +13,10 @@ import android.os.Trace;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import com.termux.terminal.KittyImagePlaceholder;
+import com.termux.terminal.KittyPlacement;
 import com.termux.terminal.KittyUnicodePlaceholder;
 import com.termux.terminal.TerminalBuffer;
+import com.termux.terminal.TerminalContent;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalRow;
 import com.termux.terminal.TextStyle;
@@ -364,6 +366,16 @@ public final class TerminalRenderer {
     /** Colour of the curly underline under a detected URL; 0 leaves URLs unmarked. */
     private int mUrlUnderlineColor;
 
+    /**
+     * What text on the default background really stands on, opaque, or 0 while that is the
+     * palette's own background ({@link #setContrastBackdrop}).
+     */
+    private int mContrastBackdrop;
+    /** Normal and faint ink held to {@link ContrastFloor} on the current backdrop, per colour. */
+    private final ContrastFloor.Memo mContrastMemo = new ContrastFloor.Memo();
+    /** The floor normal text is held to; the memo and faint text's share follow it. */
+    private double mContrastFloor = ContrastFloor.TEXT;
+
     /** The URL cells of the visible rows, refreshed each frame from the screen text. */
     private final UrlUnderlines mUrlUnderlines = new UrlUnderlines();
 
@@ -585,6 +597,11 @@ public final class TerminalRenderer {
     private final DashPathEffect mDottedEffect;
 
     private final DashPathEffect mDashedEffect;
+
+    /** The regular face this renderer draws with (the wallpaper scenes borrow it for their glyphs). */
+    public Typeface getTypeface() {
+        return mTypeface;
+    }
 
     public TerminalRenderer(int textSize, Typeface typeface, Typeface italicTypeface) {
         this(textSize, typeface, null,
@@ -883,6 +900,93 @@ public final class TerminalRenderer {
         return mUrlUnderlineColor;
     }
 
+    /**
+     * Tell the renderer what text on the default background really stands on — a translucent pane
+     * over the wallpaper shows the wallpaper through its tint — so that text is held to
+     * {@link ContrastFloor} against it. Zero (or any transparent colour) means the palette's own
+     * background, which is what an opaque pane stands on. Text on a cell background of its own is
+     * left alone: it stands on that colour, which the program chose.
+     *
+     * <p>Set when the backdrop is measured anew, never per frame: a change re-records every row,
+     * so one under {@link ContrastFloor#BACKDROP_TOLERANCE} of the applied backdrop is ignored and
+     * the applied one stays, letting a slow drift accumulate until it crosses and re-records
+     * once.</p>
+     */
+    public void setContrastBackdrop(int color) {
+        final int backdrop = (color >>> 24) == 0 ? 0 : color | 0xFF000000;
+        if (ContrastFloor.sameBackdrop(mContrastBackdrop, backdrop)) return;
+        mContrastBackdrop = backdrop;
+        Trace.beginSection("Terminal.contrastInvalidate");
+        mRowCache.invalidate();
+        Trace.endSection();
+    }
+
+    public int getContrastBackdrop() {
+        return mContrastBackdrop;
+    }
+
+    /**
+     * The contrast normal text is held to, from the user's Terminal contrast level; faint text is
+     * held proportionally lower. Zero or less means {@link ContrastFloor#TEXT}. Set on change
+     * only, never per frame: a change re-records every row.
+     */
+    public void setContrastFloor(double floor) {
+        final double text = floor > 0d ? floor : ContrastFloor.TEXT;
+        if (mContrastFloor == text) return;
+        mContrastFloor = text;
+        mContrastMemo.setTextFloor(text);
+        Trace.beginSection("Terminal.contrastInvalidate");
+        mRowCache.invalidate();
+        Trace.endSection();
+    }
+
+    public double getContrastFloor() {
+        return mContrastFloor;
+    }
+
+    /**
+     * The colour faint ink on a cell whose resolved background is {@code backColor} stands on: the
+     * cell's own where the program chose one, else the backdrop the floor is measured against.
+     */
+    private int dimGround(int backColor, int defaultBackColor) {
+        if (backColor != defaultBackColor) return backColor;
+        return mContrastBackdrop != 0 ? mContrastBackdrop : defaultBackColor;
+    }
+
+    /**
+     * The ink a glyph is drawn in: {@code foreColor} — made faint for {@code dim} — held to its
+     * contrast floor where it stands on the default background {@code defaultBackColor}. Text in
+     * the default background's own colour was hidden on purpose and stays so; text on a cell
+     * background of its own is the program's choice and is only made faint.
+     */
+    int legibleInk(int foreColor, int backColor, int defaultBackColor, boolean dim) {
+        if (backColor != defaultBackColor
+            || (foreColor | 0xFF000000) == (defaultBackColor | 0xFF000000)) {
+            return dim ? ContrastFloor.dim(foreColor, backColor) : foreColor;
+        }
+        mContrastMemo.setBackdrop(mContrastBackdrop != 0 ? mContrastBackdrop : defaultBackColor);
+        return dim ? mContrastMemo.dimText(foreColor) : mContrastMemo.text(foreColor);
+    }
+
+    /**
+     * Whether a run is only seam glyphs — box drawing, block elements, braille, sextants and the
+     * Powerline separators — whose colour has to match the cell beside them rather than read as
+     * text, so the contrast floor leaves them their own.
+     */
+    static boolean isSeamRun(char[] text, int start, int length) {
+        if (length <= 0) return false;
+        final int end = start + length;
+        for (int i = start; i < end; ) {
+            final int codePoint = Character.codePointAt(text, i, end);
+            if (!BoxGeometry.isSynthesizable(codePoint, true)
+                && !(codePoint >= 0xE0B0 && codePoint <= 0xE0D7) && codePoint != ' ') {
+                return false;
+            }
+            i += Character.charCount(codePoint);
+        }
+        return true;
+    }
+
     /** The ASCII advance table, for tests that check when a rebuild shares it. */
     float[][] asciiMeasures() {
         return mAsciiMeasures;
@@ -922,6 +1026,7 @@ public final class TerminalRenderer {
         } finally {
             Trace.endSection();
         }
+        com.termux.terminal.LatencyProbe.rendered();
     }
 
     /**
@@ -1017,7 +1122,7 @@ public final class TerminalRenderer {
         final int cursorCol = mEmulator.getCursorCol();
         final int cursorRow = mEmulator.getCursorRow();
         final boolean cursorVisible = mEmulator.shouldCursorBeVisible() && !mCursorSuppressed;
-        final TerminalBuffer screen = mEmulator.getScreen();
+        final TerminalContent screen = mEmulator.getContent();
         final int[] palette = mEmulator.mColors.mCurrentColors;
         final int cursorShape = mEmulator.getCursorStyle();
         mEmulator.setCellSize((int) mFontWidth, (int) mFontLineSpacing);
@@ -1034,7 +1139,7 @@ public final class TerminalRenderer {
             mCursorBlockAtColumn = Integer.MIN_VALUE;
             cursorBlock = null;
         } else {
-            final TerminalBuffer.TextBlock standingIn = screen.getTextBlockAt(cursorRow, cursorCol);
+            final TerminalBuffer.TextBlock standingIn = screen.textBlockAt(cursorCol, cursorRow);
             recordCursorBlock(cursorRow, cursorCol, standingIn);
             cursorBlock = cursorVisible ? standingIn : null;
         }
@@ -1056,10 +1161,11 @@ public final class TerminalRenderer {
         // neighbouring cell's fill instead of being clipped by it. Cell backgrounds are exactly
         // cell-aligned on screen (the per-run scale matrix cancels out for rectangles), so this
         // pass needs no font configuration or shaping.
+        paintKittyLayerBelowBackgrounds(canvas, topRow, horizontalOffset);
         for (int row = topRow; row < endRow; row++) {
             heightOffset += mFontLineSpacing;
             cursorSpanFor(span, cursorBlock, row, cursorRow, cursorCol, cursorVisible);
-            TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            TerminalRow lineObject = screen.row(row);
             drawRowBackgroundAndCursor(canvas, lineObject, palette, heightOffset, columns,
                 span.column, span.columns, span.lastRow,
                 cursorShape, selection, row, boldWithBright, reverseVideo, horizontalOffset,
@@ -1076,7 +1182,7 @@ public final class TerminalRenderer {
                     selx1 = selectionX1;
                 selx2 = (row == selectionY2) ? selectionX2 : mEmulator.mColumns;
             }
-            TerminalRow lineObject = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            TerminalRow lineObject = screen.row(row);
             drawRowGlyphs(mEmulator, canvas, lineObject, palette, heightOffset, columns,
                 span.column, span.columns,
                 cursorVisible, cursorShape, selx1, selx2, boldWithBright, reverseVideo,
@@ -1102,6 +1208,17 @@ public final class TerminalRenderer {
     }
 
     /**
+     * The kitty layer under the cell backgrounds (the Ghostty core names it; the Java core puts
+     * nothing there), over the pane's own background.
+     */
+    private void paintKittyLayerBelowBackgrounds(Canvas canvas, int topRow, float horizontalOffset) {
+        if (mKittyLayer.isEmpty()) return;
+        mKittyLayer.paintLayer(mKittyLayerTarget.into(canvas), KittyPlacement.LAYER_BELOW_BACKGROUND, topRow,
+            mFontWidth, mFontLineSpacing, mFontLineSpacingAndAscent, horizontalOffset);
+        mKittyLayerTarget.into(null);
+    }
+
+    /**
      * Replay the visible rows from their recordings, re-recording only the ones that moved.
      *
      * <p>Returns false — and draws nothing — whenever the caller must fall back to drawing the rows
@@ -1118,7 +1235,7 @@ public final class TerminalRenderer {
      * or how far its glyphs may reach depends on which path drew it.
      */
     private boolean drawRowsThroughNodes(TerminalEmulator mEmulator, Canvas canvas,
-                                         TerminalBuffer screen, int[] palette, int topRow,
+                                         TerminalContent screen, int[] palette, int topRow,
                                          int endRow, int columns, int cursorRow, int cursorCol,
                                          boolean cursorVisible,
                                          @Nullable TerminalBuffer.TextBlock cursorBlock,
@@ -1146,7 +1263,7 @@ public final class TerminalRenderer {
 
     @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.Q)
     private void recordAndReplayRows(android.graphics.RecordingCanvas canvas,
-                                     TerminalEmulator mEmulator, TerminalBuffer screen,
+                                     TerminalEmulator mEmulator, TerminalContent screen,
                                      int[] palette, int topRow, int endRow, int columns,
                                      int cursorRow, int cursorCol, boolean cursorVisible,
                                      @Nullable TerminalBuffer.TextBlock cursorBlock,
@@ -1198,8 +1315,7 @@ public final class TerminalRenderer {
                     selx1 = selectionX1;
                 selx2 = (row == selectionY2) ? selectionX2 : columns;
             }
-            final TerminalRow lineObject =
-                screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            final TerminalRow lineObject = screen.row(row);
             changedRows[index] = mRowCache.rowChanged(index, lineObject, columns, span.column,
                 span.columns, span.lastRow, cursorShape, cursorColor, selx1, selx2,
                 mUrlUnderlines.keyFor(index))
@@ -1216,8 +1332,7 @@ public final class TerminalRenderer {
                     selx1 = selectionX1;
                 selx2 = (row == selectionY2) ? selectionX2 : columns;
             }
-            final TerminalRow lineObject =
-                screen.allocateFullLineIfNecessary(screen.externalToInternalRow(row));
+            final TerminalRow lineObject = screen.row(row);
             final boolean changed = changedRows[index];
             final boolean carriesAnImage = mRowCache.rowCarriesAnImage(index);
             final android.graphics.RenderNode background = nodes.background(index);
@@ -1288,6 +1403,7 @@ public final class TerminalRenderer {
             }
             recorded++;
         }
+        paintKittyLayerBelowBackgrounds(canvas, topRow, horizontalOffset);
         for (int index = 0; index < visibleRows; index++)
             canvas.drawRenderNode(nodes.background(index));
         paintKittyLayer(canvas, true, topRow, horizontalOffset);
@@ -1703,7 +1819,7 @@ public final class TerminalRenderer {
      * scrolled above the top of the pane: the first visible row it covers draws it instead, from
      * the anchor's position, and the clip cuts off the part that is no longer on screen.
      */
-    private void drawRowTextBlocks(Canvas canvas, TerminalBuffer screen, TerminalRow lineObject,
+    private void drawRowTextBlocks(Canvas canvas, TerminalContent screen, TerminalRow lineObject,
                                    int[] palette, float y, int externalRow, int topRow,
                                    int columns, int cursorX, int cursorColumns, int cursorShape,
                                    Selection selection, boolean boldWithBright,
@@ -1712,7 +1828,7 @@ public final class TerminalRenderer {
         for (int column = 0; column < columns; column++) {
             if (!lineObject.isTextSizeCell(column)) continue;
             // Null is an orphan whose anchor has left the transcript: its cells stay blank.
-            final TerminalBuffer.TextBlock block = screen.getTextBlockAt(externalRow, column);
+            final TerminalBuffer.TextBlock block = screen.textBlockAt(column, externalRow);
             if (block == null || column != block.column) continue;
             if (block.row != externalRow
                 && !(externalRow == topRow && block.row < topRow)) continue;
@@ -1739,11 +1855,11 @@ public final class TerminalRenderer {
      * @param y          the bottom of {@code externalRow}, in the renderer's own coordinates.
      * @param foregroundOverride a colour the extra-cursor overlay imposes, or 0.
      */
-    private void drawTextBlock(Canvas canvas, TerminalBuffer screen,
+    private void drawTextBlock(Canvas canvas, TerminalContent screen,
                                TerminalBuffer.TextBlock block, TerminalRow lineObject,
                                int[] palette, float y, int externalRow, float horizontalOffset,
                                boolean boldWithBright, boolean invert, int foregroundOverride) {
-        final String text = screen.getTextBlockText(block);
+        final String text = screen.textBlockText(block);
         if (text.isEmpty()) return;
         final long style = lineObject.getStyle(block.column);
         final int effect = TextStyle.decodeEffect(style);
@@ -1754,8 +1870,10 @@ public final class TerminalRenderer {
             externalRow - block.row);
         final float blockHeight = TextBlockGeometry.height(mFontLineSpacing, block.rows);
         final float blockBottom = blockTop + blockHeight;
-        int foreColor = (int) (resolveRunColors(style, palette, boldWithBright, invert) >>> 32);
-        if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) foreColor = dimColor(foreColor);
+        final long blockColors = resolveRunColors(style, palette, boldWithBright, invert);
+        int foreColor = legibleInk((int) (blockColors >>> 32), (int) blockColors,
+            palette[TextStyle.COLOR_INDEX_BACKGROUND],
+            (effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0);
         if (foregroundOverride != 0) foreColor = foregroundOverride;
         final boolean bold = (effect & (TextStyle.CHARACTER_ATTRIBUTE_BOLD
             | TextStyle.CHARACTER_ATTRIBUTE_BLINK)) != 0;
@@ -2392,8 +2510,17 @@ public final class TerminalRenderer {
             }
         }
         if ((effect & TextStyle.CHARACTER_ATTRIBUTE_INVISIBLE) == 0) {
-            if (dim) {
-                foreColor = dimColor(foreColor);
+            final int asked = dim ? ContrastFloor.dim(foreColor,
+                dimGround(backColor, palette[TextStyle.COLOR_INDEX_BACKGROUND])) : foreColor;
+            if (foregroundOverride != 0) {
+                foreColor = asked;
+            } else {
+                final int legible = legibleInk(foreColor, backColor,
+                    palette[TextStyle.COLOR_INDEX_BACKGROUND], dim);
+                // A seam glyph keeps its colour so it still meets the cell beside it; the run is
+                // only scanned for that when the floor would have moved its colour.
+                foreColor = legible != asked && isSeamRun(text, startCharIndex, runWidthChars)
+                    ? asked : legible;
             }
             // Underlines are drawn as geometry below, since Paint only knows one straight variant.
             mTextPaint.setUnderlineText(false);
@@ -2494,26 +2621,17 @@ public final class TerminalRenderer {
     }
 
     /**
-     * Dim color handling used by libvte which in turn took it from xterm
-     * (https://bug735245.bugzilla-attachments.gnome.org/attachment.cgi?id=284267).
-     */
-    private static int dimColor(int color) {
-        final int red = (0xFF & (color >> 16)) * 2 / 3;
-        final int green = (0xFF & (color >> 8)) * 2 / 3;
-        final int blue = (0xFF & color) * 2 / 3;
-        return 0xFF000000 + (red << 16) + (green << 8) + blue;
-    }
-
-    /**
      * The final ink colour of one cell, so that a synthesized glyph inverts under a block cursor or
      * inside a selection exactly as the text around it does.
      */
-    private static int resolveInkColor(long textStyle, int[] palette, boolean boldWithBright,
-                                       boolean reverseVideo) {
-        final int foreColor = (int) (resolveRunColors(textStyle, palette, boldWithBright,
-            reverseVideo) >>> 32);
+    private int resolveInkColor(long textStyle, int[] palette, boolean boldWithBright,
+                                boolean reverseVideo) {
+        final long colors = resolveRunColors(textStyle, palette, boldWithBright, reverseVideo);
+        final int foreColor = (int) (colors >>> 32);
         return (TextStyle.decodeEffect(textStyle) & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0
-            ? dimColor(foreColor) : foreColor;
+            ? ContrastFloor.dim(foreColor,
+                dimGround((int) colors, palette[TextStyle.COLOR_INDEX_BACKGROUND]))
+            : foreColor;
     }
 
     /**
@@ -2837,7 +2955,7 @@ public final class TerminalRenderer {
     }
 
     /** Draw kitty-protocol cursors after the normal screen, so they do not perturb text run batching. */
-    private void drawExtraCursors(TerminalEmulator emulator, Canvas canvas, TerminalBuffer screen, int[] palette,
+    private void drawExtraCursors(TerminalEmulator emulator, Canvas canvas, TerminalContent screen, int[] palette,
                                   int topRow, int endRow, boolean boldWithBright, boolean reverseVideo,
                                   float horizontalOffset) {
         TerminalEmulator.ExtraCursor[] cursors = emulator.getExtraCursors();
@@ -2848,7 +2966,7 @@ public final class TerminalRenderer {
         for (TerminalEmulator.ExtraCursor cursor : cursors) {
             if (cursor.row < topRow || cursor.row >= endRow || cursor.col < 0 || cursor.col >= emulator.mColumns)
                 continue;
-            TerminalRow row = screen.allocateFullLineIfNecessary(screen.externalToInternalRow(cursor.row));
+            TerminalRow row = screen.row(cursor.row);
             int startColumn = cursor.col;
             int startIndex = row.findStartOfColumn(startColumn);
             if (startColumn > 0 && startIndex == row.findStartOfColumn(startColumn - 1))
@@ -2889,7 +3007,7 @@ public final class TerminalRenderer {
 
             float y = mFontLineSpacingAndAscent + (cursor.row - topRow + 1) * mFontLineSpacing;
             // D2 for the kitty extra cursors too: standing anywhere on a block covers all of it.
-            TerminalBuffer.TextBlock block = screen.getTextBlockAt(cursor.row, cursor.col);
+            TerminalBuffer.TextBlock block = screen.textBlockAt(cursor.col, cursor.row);
             if (block != null) {
                 drawExtraCursorOverBlock(canvas, screen, block, row, palette, topRow,
                     horizontalOffset, boldWithBright, reverseVideo, invertText, shape, cursorColor,
@@ -2924,7 +3042,9 @@ public final class TerminalRenderer {
                     int ink = (int) (resolveRunColors(style, palette, boldWithBright,
                         reverseVideo || invertText) >>> 32);
                     if (textOverride != 0) ink = textOverride;
-                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0) ink = dimColor(ink);
+                    if ((effect & TextStyle.CHARACTER_ATTRIBUTE_DIM) != 0)
+                        ink = ContrastFloor.dim(ink, dimGround(overlayBackground,
+                            palette[TextStyle.COLOR_INDEX_BACKGROUND]));
                     drawSynthesizedCell(canvas, codePoint, startColumn, width, y, horizontalOffset,
                         ink);
                 }
@@ -3158,7 +3278,7 @@ public final class TerminalRenderer {
      * block — filled, a bar down its left edge, or an underline along its bottom — and then the
      * block's own text again on top, in whatever colour the overlay imposes.
      */
-    private void drawExtraCursorOverBlock(Canvas canvas, TerminalBuffer screen,
+    private void drawExtraCursorOverBlock(Canvas canvas, TerminalContent screen,
                                           TerminalBuffer.TextBlock block, TerminalRow lineObject,
                                           int[] palette, int topRow, float horizontalOffset,
                                           boolean boldWithBright, boolean reverseVideo,
@@ -3357,10 +3477,10 @@ public final class TerminalRenderer {
      *
      * @return false when the cursor stands in no block.
      */
-    public boolean copyCursorBlock(@NonNull TerminalBuffer screen, int cursorRow, int cursorCol,
+    public boolean copyCursorBlock(@NonNull TerminalContent screen, int cursorRow, int cursorCol,
                                    @NonNull int[] out) {
         if (cursorRow != mCursorBlockAtRow || cursorCol != mCursorBlockAtColumn)
-            recordCursorBlock(cursorRow, cursorCol, screen.getTextBlockAt(cursorRow, cursorCol));
+            recordCursorBlock(cursorRow, cursorCol, screen.textBlockAt(cursorCol, cursorRow));
         if (mCursorBlockRows <= 0) return false;
         out[0] = mCursorBlockRow;
         out[1] = mCursorBlockColumn;

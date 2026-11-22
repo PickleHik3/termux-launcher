@@ -34,31 +34,10 @@ public class DockAppearancePreferencesTest {
     @Test
     public void blurRadiusUsesTheSameBoundsAsItsSlider() {
         preferences.setExtraKeysBlurRadius(-4);
-        assertEquals(0, preferences.getExtraKeysBlurRadius());
+        assertEquals(0, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
 
         preferences.setExtraKeysBlurRadius(49);
-        assertEquals(48, preferences.getExtraKeysBlurRadius());
-    }
-
-    @Test
-    public void wallpaperAlignmentRoundTripsAndClampsToItsSlider() {
-        // Nothing stored yet: the device's measured starting point, not a hard-coded 100.
-        assertEquals(TermuxAppSharedPreferences.defaultWallpaperRenderZoom(Build.MANUFACTURER),
-            preferences.getWallpaperRenderZoom());
-
-        preferences.setWallpaperRenderZoom(108);
-        assertEquals(108, preferences.getWallpaperRenderZoom());
-
-        preferences.setWallpaperRenderZoom(80);
-        assertEquals(90, preferences.getWallpaperRenderZoom());
-
-        preferences.setWallpaperRenderZoom(150);
-        assertEquals(120, preferences.getWallpaperRenderZoom());
-
-        // A value written past the bounds by hand is still read back inside them.
-        store.edit().putInt(TermuxPreferenceConstants.TERMUX_APP.KEY_WALLPAPER_RENDER_ZOOM, 300)
-            .commit();
-        assertEquals(120, preferences.getWallpaperRenderZoom());
+        assertEquals(36, preferences.getExtraKeysBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
     }
 
     @Test
@@ -83,7 +62,7 @@ public class DockAppearancePreferencesTest {
     public void cornerRadiusSupportsStyleDefaultAndSliderBounds() {
         // The shipped Docked look names a radius on the shared layer; the dock's own -1 stays the
         // "follow the selected style" sentinel the slider's lower bound clamps to.
-        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_BASE_CORNER_RADIUS,
+        assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS,
             preferences.getAppLauncherDockCornerRadius());
 
         preferences.setAppLauncherDockCornerRadius(-4);
@@ -103,9 +82,9 @@ public class DockAppearancePreferencesTest {
         preferences.setDockGlassGrain(21);
         preferences.setAppLauncherDockCornerRadius(19);
 
-        assertEquals(17, preferences.getStatusBarBlurRadius());
-        assertEquals(63, preferences.getStatusBarOpacity());
-        assertEquals(21, preferences.getStatusBarGrain());
+        assertEquals(17, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(63, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(21, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(19, preferences.getStatusBarCornerRadius());
     }
 
@@ -116,16 +95,16 @@ public class DockAppearancePreferencesTest {
         preferences.setStatusBarGrain(101);
         preferences.setStatusBarCornerRadius(44);
 
-        assertEquals(48, preferences.getStatusBarBlurRadius());
-        assertEquals(0, preferences.getStatusBarOpacity());
-        assertEquals(100, preferences.getStatusBarGrain());
+        assertEquals(36, preferences.getStatusBarBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(0, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(100, preferences.getStatusBarGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(40, preferences.getStatusBarCornerRadius());
     }
 
     @Test
     public void surfaceEdgeInsetsDefaultToTheSharedOuterMargin() {
-        // A fresh install starts fully linked, so all three read the Base gap. The keyboard used to
-        // ship 3dp wider than its neighbours; following Base lines it up with them instead, and an
+        // A fresh install starts fully linked, so all three read the Global gap. The keyboard used to
+        // ship 3dp wider than its neighbours; following Global lines it up with them instead, and an
         // existing install keeps its 13dp because migration sees the difference and detaches it.
         assertEquals(TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_HORIZONTAL_INSET,
             preferences.getDockHorizontalInset());
@@ -137,7 +116,7 @@ public class DockAppearancePreferencesTest {
 
     @Test
     public void surfaceEdgeInsetsCannotBeDetachedAndAreClampedToTheirSliderBounds() {
-        // Side gap is one Margin: a detach is ignored, so all three keep naming the Base gap.
+        // Side gap is one Margin: a detach is ignored, so all three keep naming the Global gap.
         preferences.detachSurfaceValue(TermuxAppSharedPreferences.SurfaceSlot.DOCK,
             TermuxAppSharedPreferences.SurfaceProperty.SIDE_GAP, 0);
         assertTrue(preferences.isSurfaceInheriting(TermuxAppSharedPreferences.SurfaceSlot.DOCK,

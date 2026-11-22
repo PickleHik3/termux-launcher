@@ -51,6 +51,7 @@ import com.termux.shared.markdown.MarkdownUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.view.KeyboardUtils;
 import com.termux.shared.view.ViewUtils;
+import com.termux.terminal.GhosttyKeys;
 import com.termux.terminal.KeyHandler;
 import com.termux.terminal.TerminalEmulator;
 import com.termux.terminal.TerminalLinks;
@@ -155,7 +156,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         // there may be no active pane yet at activity onCreate. Guard the initial font/keep-on setup.
         TerminalView view = mHost.focusedView();
         if (view != null)
-            view.setTextSize(mHost.preferences().getFontSize());
+            view.setTextSize(mHost.preferences().textScaledFontSize(
+                mHost.preferences().getFontSize()));
         mHost.requestFlushDockGeometryUpdate();
         if (view != null) {
             view.setKeepScreenOn(mHost.preferences().shouldKeepScreenOn());
@@ -184,13 +186,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     /**
      * Whether a pane paints the empty band around its text grid with the background colour of the
-     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). Pure preference, unlike
-     * the cursor trail: nothing about the device's power state should turn this back off.
+     * nearest edge cell (Ghostty's {@code window-padding-color = extend}). It follows the Wallpaper
+     * colors switch and nothing else, unlike the cursor trail: nothing about the device's power
+     * state should turn this back off.
      */
     public void applyPaddingFillPolicy(TerminalView view) {
         if (view == null)
             return;
-        view.setPaddingFillEnabled(mHost.preferences().isTerminalPaddingFillEnabled());
+        view.setPaddingFillEnabled(mHost.preferences().isTerminalDynamicColorsEnabled());
     }
 
     /**
@@ -316,7 +319,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onSingleTapUp(MotionEvent e) {
-        TerminalEmulator term = mHost.currentSession().getEmulator();
+        // The Terminal may be empty (no shell at all); a tap then has nothing to reach.
+        TerminalSession session = mHost.currentSession();
+        TerminalEmulator term = session == null ? null : session.getEmulator();
+        if (term == null) return;
         if (!term.isMouseTrackingActive() && !e.isFromSource(InputDevice.SOURCE_MOUSE)) {
             // Switched off, a tap is only a tap: the keyboard waits for its own key.
             if (isKeyboardTurnedOff()) return;
@@ -352,6 +358,13 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     private void showInAppKeyboardForTap() {
+        // A Home terminal widget tapped is the typing target: a stale external-field flag would
+        // keep the keyboard's container hidden on Home (#178).
+        if (com.termux.app.place.PlaceKeyboard.tapReclaimsFromExternalInput(
+                mInAppKeyboardController.isExternalTextInputActive(),
+                mHost.isHomeTerminalWidgetFocused())) {
+            mInAppKeyboardController.endExternalTextInput();
+        }
         mInAppKeyboardController.show(ShowReason.TERMINAL_TAP);
         suppressSystemImeForInAppKeyboard();
     }
@@ -461,7 +474,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     /**
      * The launcher's own chord space, for a surface that has taken the keyboard away from the
-     * terminal — the wall's Display page, where an X client owns every ordinary key.
+     * terminal — the display window, where an X client owns every ordinary key.
      *
      * <p>The rule is deliberately narrow: only a stroke holding <em>both</em> Ctrl and Alt is
      * the launcher's, and only when it resolves to a binding. Every default binding lives in
@@ -472,6 +485,15 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      */
     public boolean consumeLauncherChord(@NonNull KeyEvent e) {
         if (!e.isCtrlPressed() || !e.isAltPressed()) return false;
+        return handleRegistryKeybinds(e, false);
+    }
+
+    /**
+     * A chord from the in-app keyboard, offered to the user's bindings before whatever surface
+     * is typing gets it. Unlike a terminal stroke an unbound chord is never swallowed here: it
+     * goes on to the field or the shell exactly as it would have.
+     */
+    public boolean consumeInAppKeyboardChord(@NonNull KeyEvent e) {
         return handleRegistryKeybinds(e, false);
     }
 
@@ -593,6 +615,10 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * supported actions to extend.
      */
     public void runLauncherTool(@NonNull String toolId) {
+        if (com.termux.launcherctl.LauncherToolRegistry.isPaletteOnly(toolId)) {
+            Logger.logWarn(LOG_TAG, "Keyboard tool " + toolId + " is palette-only");
+            return;
+        }
         TerminalActionDispatcher dispatcher = TerminalActionDispatcher.getInstance();
         TerminalKeyInspector inspector = TerminalKeyInspector.active();
         if (inspector != null)
@@ -639,6 +665,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             if (action.type == TerminalBindingConfig.ActionType.SEND_KEY) {
                 TerminalSession session = mHost.currentSession();
+                // The Fast engine's library encoder writes the key itself; Standard goes on to the Java one.
+                if (session != null && TerminalBindingKeyEncoder.sendOnLibrary(action.value, session.getEmulator()) >= 0) {
+                    handled = true;
+                    continue;
+                }
                 String encoded = session == null ? null
                     : TerminalBindingKeyEncoder.encode(action.value, session.getEmulator());
                 if (encoded == null) {
@@ -651,6 +682,11 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 continue;
             }
 
+            if (com.termux.launcherctl.LauncherToolRegistry.isPaletteOnly(action.value)) {
+                Logger.logWarn(LOG_TAG, "Binding " + match.stroke + " -> " + action.value
+                    + " is palette-only");
+                continue;
+            }
             JSONObject arguments = mergeArguments(action.arguments, match.arguments);
             JSONObject result = dispatcher.execute(action.value, arguments);
             if (!result.optBoolean("ok", false)) {
@@ -797,14 +833,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     }
 
     public boolean readExtraKeysSpecialButton(SpecialButton specialButton) {
-        if (mHost.extraKeysView() == null)
-            return false;
-        Boolean state = mHost.extraKeysView().readSpecialButton(specialButton, true);
-        if (state == null) {
-            Logger.logError(LOG_TAG, "Failed to read an unregistered " + specialButton + " special button value from extra keys.");
-            return false;
-        }
-        return state;
+        return mHost.extraKeyModifiers().read(specialButton, true);
     }
 
     /**
@@ -829,7 +858,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
 
     @Override
     public void onShowNotice(CharSequence text) {
-        AppNotice.confirm(mContext, "⧉", text);
+        AppNotice.confirm(mContext, R.drawable.ic_rl_copy, text);
     }
 
     @Override
@@ -962,9 +991,14 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
             }
             if (resultingKeyCode != -1) {
                 TerminalEmulator term = session.getEmulator();
-                session.write(KeyHandler.getCode(resultingKeyCode, 0, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode()));
+                // The Fast engine's library encoder takes the key; Standard writes the Java sequence.
+                boolean sent = term.usesLibraryInputEncoders() && term.sendLibraryKey(
+                    GhosttyKeys.fromAndroidKeyCode(resultingKeyCode), GhosttyKeys.ACTION_PRESS, 0, 0, 0, "", false) >= 0;
+                if (!sent)
+                    session.write(KeyHandler.getCode(resultingKeyCode, 0, term.isCursorKeysApplicationMode(), term.isKeypadApplicationMode()));
             } else if (resultingCodePoint != -1) {
-                session.writeCodePoint(altDown, resultingCodePoint);
+                if (TerminalBindingKeyEncoder.sendCodePointOnLibrary(session.getEmulator(), resultingCodePoint, altDown) < 0)
+                    session.writeCodePoint(altDown, resultingCodePoint);
             }
             return true;
         } else if (ctrlDown) {
@@ -981,7 +1015,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                     if (codePointLowerCase == shortcut.codePoint) {
                         switch(shortcut.shortcutAction) {
                             case TermuxPropertyConstants.ACTION_SHORTCUT_CREATE_SESSION:
-                                mTermuxTerminalSessionActivityClient.addNewSession(false, null);
+                                if (!mHost.openNewTerminalOnHome(null))
+                                    mTermuxTerminalSessionActivityClient.addNewSession(false, null);
                                 return true;
                             case TermuxPropertyConstants.ACTION_SHORTCUT_NEXT_SESSION:
                                 mTermuxTerminalSessionActivityClient.switchToSession(true);
@@ -1035,7 +1070,7 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
      * pinned size, the scratchpad keeps its own, and the rest follow the new
      * default.
      */
-    void applyGlobalFontSize() {
+    public void applyGlobalFontSize() {
         if (!mHost.refreshPaneFontSizes()) {
             // No pane controller (compatibility mode): the single view follows the default.
             TerminalSession current = mHost.currentSession();
@@ -1043,7 +1078,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 return;
             TerminalView view = mHost.focusedView();
             if (view == null) return;
-            view.setTextSize(mHost.preferences().getFontSize());
+            view.setTextSize(mHost.preferences().textScaledFontSize(
+                mHost.preferences().getFontSize()));
         }
         mHost.requestFlushDockGeometryUpdate();
     }
@@ -1055,7 +1091,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         if (scratchpad) {
             mHost.preferences().changeScratchpadFontSize(increase);
             TerminalView view = mHost.focusedView();
-            if (view != null) view.setTextSize(mHost.preferences().getScratchpadFontSize());
+            if (view != null) view.setTextSize(mHost.preferences().textScaledFontSize(
+                mHost.preferences().getScratchpadFontSize()));
         } else {
             // Zoom pins a per-pane size on the focused pane instead of moving the app-wide
             // default, so no other pane — in this window or any other — changes with it. Panes
@@ -1067,10 +1104,22 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
                 // No pane controller (compatibility mode): the single view follows the default.
                 mHost.preferences().setFontSize(size);
                 TerminalView view = mHost.focusedView();
-                if (view != null) view.setTextSize(size);
+                if (view != null) view.setTextSize(mHost.preferences().textScaledFontSize(size));
             }
         }
         mHost.requestFlushDockGeometryUpdate();
+    }
+
+    /**
+     * The font toggle: the focused pane switches between its own size and the Compact size, and
+     * the next tap restores the size it had ({@link FontCompactPolicy}).
+     */
+    public void toggleCompactFontSize() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences prefs =
+            mHost.preferences();
+        int compact = FontCompactPolicy.compactSize(prefs.getStoredCompactFontSize(),
+            prefs.getFontSize(), prefs.getMinFontSize(), prefs.getMaxFontSize());
+        if (mHost.toggleActivePaneCompact(compact)) mHost.requestFlushDockGeometryUpdate();
     }
 
     /**
@@ -1254,8 +1303,8 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
     public boolean toggleKeyboardTurnedOff() {
         boolean off = !isKeyboardTurnedOff();
         setKeyboardTurnedOff(off);
-        AppNotice.show(mContext, off ? R.string.notice_keyboard_turned_off
-            : R.string.notice_keyboard_turned_on);
+        AppNotice.show(mContext, R.drawable.ic_rl_keyboard, mContext.getString(off
+            ? R.string.notice_keyboard_turned_off : R.string.notice_keyboard_turned_on), false);
         return !off;
     }
 
@@ -1412,9 +1461,9 @@ public class TermuxTerminalViewClient extends TermuxTerminalViewClientBase {
         TerminalEmulator emulator = session.getEmulator();
         if (emulator == null)
             return;
-        com.termux.terminal.TerminalBuffer screen = emulator.getScreen();
+        com.termux.terminal.TerminalContent screen = emulator.getContent();
         LinkedHashSet<CharSequence> urlSet = new LinkedHashSet<>();
-        for (UrlDetector.UrlSpan span : UrlDetector.find(screen, -screen.getActiveTranscriptRows(), emulator.mRows - 1))
+        for (UrlDetector.UrlSpan span : UrlDetector.find(screen, -screen.historyRows(), emulator.mRows - 1))
             urlSet.add(span.url);
         TerminalSheetController sheet = mHost.sheetController();
         String title = mContext.getString(R.string.action_select_url);

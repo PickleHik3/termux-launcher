@@ -46,7 +46,7 @@ map ctrl+alt+space>g pane.rotate
 ## When a binding applies
 
 `--when` takes `always` (the default), `splits-on` or `splits-off`, matching the
-**Split-pane controls** setting:
+**Multiplexer** setting:
 
 ```text
 map --when splits-off ctrl+alt+c session.new

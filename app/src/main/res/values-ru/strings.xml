@@ -44,7 +44,6 @@
     <string name="termux_terminal_view_key_logging_enabled_on">В журналах Logcat будут записи для ключей просмотра терминала. Они очень многословны и должны быть отключены при нормальных обстоятельствах, иначе это вызовет проблемы с производительностью.</string>
     <string name="termux_crash_report_notifications_enabled_title">Уведомления об отчетах о сбоях</string>
     <string name="termux_crash_report_notifications_enabled_off">Отключите уведомления для отчетов о сбоях.</string>
-    <string name="termux_style_preferences_title">&TERMUX_APP_NAME; Появление</string>
     <string name="donate_preference_title">Пожертвовать</string>
     <string name="bootstrap_error_body">&TERMUX_APP_NAME; не удалось установить загрузочные пакеты.</string>
     <string name="bootstrap_error_abort">Прервать</string>

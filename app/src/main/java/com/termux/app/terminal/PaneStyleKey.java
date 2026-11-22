@@ -35,6 +35,8 @@ public final class PaneStyleKey {
     private final int mWallBehindColor;
     @Nullable private final com.termux.app.chrome.GlassRefraction.Look mRefraction;
     @Nullable private final Bitmap mClearFrame;
+    /** The Look's glass the widgets wear ({@link PaneSurfaceStyle#lookGlass}), or null. */
+    @Nullable private final Object mLookGlass;
 
     private PaneStyleKey(@NonNull PaneSurfaceStyle style) {
         mGlass = style.isPaneGlassActive();
@@ -53,6 +55,8 @@ public final class PaneStyleKey {
         mWallBehindColor = style.wallBehindColor();
         mRefraction = style.paneGlassRefraction();
         mClearFrame = style.paneGlassClearFrame();
+        com.termux.app.chrome.LookGlassStyle look = style.lookGlass();
+        mLookGlass = look == null ? null : look.key();
     }
 
     @NonNull
@@ -60,27 +64,70 @@ public final class PaneStyleKey {
         return new PaneStyleKey(style);
     }
 
+    private static final String[] FIELDS = {
+        "glass", "border", "frame", "frameRect", "frostFilter", "tint", "rim", "openingLine",
+        "grainStrength", "cornerRadiusPx", "cornerRadiusDp", "gapDp", "wallBehind",
+        "wallBehindColor", "refraction", "clearFrame", "lookGlass"
+    };
+    private static final int WALL_GROUND = 13;
+
+    /** The one definition of each field's comparison; {@code index} is a position in FIELDS. */
+    private boolean fieldEquals(int index, @NonNull PaneStyleKey that) {
+        switch (index) {
+            case 0: return mGlass == that.mGlass;
+            case 1: return mBorder == that.mBorder;
+            case 2: return mFrame == that.mFrame;
+            case 3: return mFrameRect.equals(that.mFrameRect);
+            case 4: return mFrostFilter == that.mFrostFilter;
+            case 5: return mTint == that.mTint;
+            case 6: return mRim == that.mRim;
+            case 7: return mOpeningLine == that.mOpeningLine;
+            case 8: return mGrainStrength == that.mGrainStrength;
+            case 9: return Float.compare(mCornerRadiusPx, that.mCornerRadiusPx) == 0;
+            case 10: return mCornerRadiusDp == that.mCornerRadiusDp;
+            case 11: return mGapDp == that.mGapDp;
+            case 12: return mWallBehind == that.mWallBehind;
+            case 13: return mWallBehindColor == that.mWallBehindColor;
+            case 14: return Objects.equals(mRefraction, that.mRefraction);
+            case 15: return mClearFrame == that.mClearFrame;
+            default: return Objects.equals(mLookGlass, that.mLookGlass);
+        }
+    }
+
     @Override
     public boolean equals(@Nullable Object other) {
         if (this == other) return true;
         if (!(other instanceof PaneStyleKey)) return false;
         PaneStyleKey that = (PaneStyleKey) other;
-        return mGlass == that.mGlass
-            && mBorder == that.mBorder
-            && mFrame == that.mFrame
-            && mFrameRect.equals(that.mFrameRect)
-            && mFrostFilter == that.mFrostFilter
-            && mTint == that.mTint
-            && mRim == that.mRim
-            && mOpeningLine == that.mOpeningLine
-            && mGrainStrength == that.mGrainStrength
-            && Float.compare(mCornerRadiusPx, that.mCornerRadiusPx) == 0
-            && mCornerRadiusDp == that.mCornerRadiusDp
-            && mGapDp == that.mGapDp
-            && mWallBehind == that.mWallBehind
-            && mWallBehindColor == that.mWallBehindColor
-            && Objects.equals(mRefraction, that.mRefraction)
-            && mClearFrame == that.mClearFrame;
+        for (int i = 0; i < FIELDS.length; i++) if (!fieldEquals(i, that)) return false;
+        return true;
+    }
+
+    /**
+     * True when only the wall's ground colour differs. Nothing a terminal pane is dressed with
+     * reads it (only the Display page's corner mask does), so a pass that sees just this can skip
+     * re-dressing the panes.
+     */
+    public boolean sameButWallGround(@Nullable PaneStyleKey other) {
+        if (other == null) return false;
+        if (fieldEquals(WALL_GROUND, other)) return false;
+        for (int i = 0; i < FIELDS.length; i++) {
+            if (i != WALL_GROUND && !fieldEquals(i, other)) return false;
+        }
+        return true;
+    }
+
+    /** The names of the fields that differ from {@code other}, comma separated; "all" for null. */
+    @NonNull
+    public String movedFields(@Nullable PaneStyleKey other) {
+        if (other == null) return "all";
+        StringBuilder out = new StringBuilder();
+        for (int i = 0; i < FIELDS.length; i++) {
+            if (fieldEquals(i, other)) continue;
+            if (out.length() > 0) out.append(',');
+            out.append(FIELDS[i]);
+        }
+        return out.toString();
     }
 
     @Override
@@ -88,6 +135,6 @@ public final class PaneStyleKey {
         return Objects.hash(mGlass, mBorder, System.identityHashCode(mFrame), mFrameRect,
             System.identityHashCode(mFrostFilter), mTint, mRim, mOpeningLine, mGrainStrength, mCornerRadiusPx,
             mCornerRadiusDp, mGapDp, System.identityHashCode(mWallBehind), mWallBehindColor,
-            mRefraction, System.identityHashCode(mClearFrame));
+            mRefraction, System.identityHashCode(mClearFrame), mLookGlass);
     }
 }

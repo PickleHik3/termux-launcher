@@ -31,6 +31,8 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The hint surfaces' choreography, driven through fakes: which surface a prefix raises, what a
@@ -39,6 +41,7 @@ import java.util.Map;
  * {@link KeybindHintPresenter.Surface} and the fake scheduler.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class KeybindHintPresenterTest {
 
     /** A scheduler with a hand crank instead of a looper. */

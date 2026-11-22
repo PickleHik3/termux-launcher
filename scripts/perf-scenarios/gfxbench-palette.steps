@@ -1,0 +1,6 @@
+# Command palette: open with a space-bar swipe up, close with Back. Pong (1080x2412), Terminal
+# page, keyboard up. Live glass 2b's palette gate (project-docs/active/live-glass-2026-11-03.md).
+cmd input swipe 540 2230 540 1800 150
+sleep 1.5
+input keyevent BACK
+sleep 1.2

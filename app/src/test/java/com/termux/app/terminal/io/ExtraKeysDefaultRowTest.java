@@ -8,7 +8,7 @@ import static org.junit.Assert.assertTrue;
 import android.app.Application;
 import android.os.Build;
 
-import com.termux.app.wall.PaneWallPage;
+import com.termux.app.page.PageKind;
 import com.termux.app.wall.PaneWallPolicy;
 import com.termux.launcherctl.LauncherToolRegistry;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
@@ -42,45 +42,22 @@ public class ExtraKeysDefaultRowTest {
         return names;
     }
 
+    /**
+     * The three place switches left the shipped row for the navigation dot, so there is nothing
+     * for the wall to cut from it: whatever places the wall has, the shipped row comes back as it
+     * went in. (A row that still carries wall keys is a row the user wrote, and is never cut.)
+     */
     @Test
-    public void theShippedRowCarriesAllThreeSwitchesOnAWallOfThreePlaces() {
-        String row = ExtraKeysDefaultRow.forWall(SHIPPED, PaneWallPolicy.availablePages(false, true, true));
-        assertSame("nothing to cut, nothing rebuilt", SHIPPED, row);
-        assertTrue(tools(row).contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertTrue(tools(row).contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
-        assertTrue(tools(row).contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-    }
-
-    @Test
-    public void aHomeScreenWithoutTheDisplayLosesTheDisplaySwitchOnly() {
-        String row = ExtraKeysDefaultRow.forWall(SHIPPED, PaneWallPolicy.availablePages(false, true, false));
-        List<String> tools = tools(row);
-        assertTrue(tools.contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertTrue(tools.contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
-        assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-        // Every other key of the row is still there, in its order.
-        assertEquals(tools(SHIPPED).size() - 1, tools.size());
-        assertEquals(tools(SHIPPED).get(0), tools.get(0));
-    }
-
-    @Test
-    public void theDisplayWithoutTheWidgetsLosesTheWidgetsSwitchOnly() {
-        String row = ExtraKeysDefaultRow.forWall(SHIPPED, PaneWallPolicy.availablePages(false, false, true));
-        assertFalse(tools(row).contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertTrue(tools(row).contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-    }
-
-    @Test
-    public void aWallOfOnePlaceCarriesNoSwitchAtAll() {
-        String row = ExtraKeysDefaultRow.forWall(SHIPPED, PaneWallPolicy.availablePages(true, true, false));
-        List<String> tools = tools(row);
-        assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
-        assertFalse("a single place needs no switch for itself",
-            tools.contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
-        assertFalse(tools.contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
-        // The keyboard, mouse, split and session keys are what is left, and the row is one row.
-        assertEquals(tools(SHIPPED).size() - 3, tools.size());
-        assertEquals(1, ExtraKeysLayoutModel.parse(row).rowCount());
+    public void theShippedRowCarriesNoPlaceSwitchAndIsNeverCut() {
+        assertFalse(tools(SHIPPED).contains(LauncherToolRegistry.TOOL_WALL_WIDGETS));
+        assertFalse(tools(SHIPPED).contains(LauncherToolRegistry.TOOL_WALL_TERMINAL));
+        assertFalse(tools(SHIPPED).contains(LauncherToolRegistry.TOOL_WALL_DISPLAY));
+        boolean[][] walls = {{false, true, true}, {false, true, false}, {false, false, true},
+            {true, true, false}, {true, false, false}};
+        for (boolean[] w : walls) {
+            assertSame("nothing to cut, nothing rebuilt", SHIPPED,
+                ExtraKeysDefaultRow.forWall(SHIPPED, PaneWallPolicy.availablePages(w[0], w[1], w[2])));
+        }
     }
 
     @Test
@@ -106,6 +83,6 @@ public class ExtraKeysDefaultRowTest {
     public void theSecondShippedPageIsLeftAlone() {
         String empty = TermuxPropertyConstants.DEFAULT_IVALUE_EXTRA_KEYS2;
         assertSame(empty, ExtraKeysDefaultRow.forWall(empty,
-            java.util.Collections.singletonList(PaneWallPage.TERMINAL)));
+            java.util.Collections.singletonList(PageKind.TERMINAL)));
     }
 }

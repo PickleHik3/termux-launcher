@@ -22,6 +22,14 @@ public class TermuxTerminalSessionServiceClient extends TermuxTerminalSessionCli
     }
 
     @Override
+    public boolean prefersGhosttyEngine() {
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences preferences =
+            com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.build(mService, false);
+        return preferences != null
+            && com.termux.terminal.TerminalEngine.isGhosttyPreference(preferences.getTerminalEngine());
+    }
+
+    @Override
     public void setTerminalShellPid(@NonNull TerminalSession terminalSession, int pid) {
         TermuxSession termuxSession = mService.getTermuxSessionForTerminalSession(terminalSession);
         if (termuxSession != null)

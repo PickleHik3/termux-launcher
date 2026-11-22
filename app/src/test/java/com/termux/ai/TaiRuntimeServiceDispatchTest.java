@@ -84,4 +84,17 @@ public class TaiRuntimeServiceDispatchTest {
         assertTrue(TaiRuntimeService.isForegroundOperation(TaiRuntimeIpc.OP_IMAGE_GENERATE));
         assertFalse(TaiRuntimeService.isForegroundOperation(TaiRuntimeIpc.OP_IMAGE_CANCEL));
     }
+
+    /** The depth maker has its own lane and is a foreground job; its cancel rides the control lane. */
+    @Test
+    public void depthMake_usesItsOwnLaneAndCancelIsAControlOperation() {
+        assertTrue(TaiRuntimeService.isDepthOperation(TaiRuntimeIpc.OP_DEPTH_MAKE));
+        assertFalse(TaiRuntimeService.isDepthOperation(TaiRuntimeIpc.OP_DEPTH_CANCEL));
+        assertFalse(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_DEPTH_MAKE));
+        assertTrue(TaiRuntimeService.isConcurrentControlOperation(TaiRuntimeIpc.OP_DEPTH_CANCEL));
+        assertTrue(TaiRuntimeService.isForegroundOperation(TaiRuntimeIpc.OP_DEPTH_MAKE));
+        assertFalse(TaiRuntimeService.isForegroundOperation(TaiRuntimeIpc.OP_DEPTH_CANCEL));
+        assertFalse(TaiRuntimeService.isImageOperation(TaiRuntimeIpc.OP_DEPTH_MAKE));
+        assertFalse(TaiRuntimeService.isStatusOperation(TaiRuntimeIpc.OP_DEPTH_MAKE));
+    }
 }

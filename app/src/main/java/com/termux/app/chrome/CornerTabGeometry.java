@@ -7,7 +7,7 @@ import androidx.annotation.NonNull;
 
 /**
  * Where a corner tab goes, and what shape it is. Every frame on the wall answers a corner tap with
- * the same small tab of buttons — the Widgets page, the Display page and a terminal pane — and this
+ * the same small tab of buttons — the Widgets page, the display window and a terminal pane — and this
  * is the one place that decides where it lands, so all three agree to the pixel and none of them
  * can drift out of its own frame again.
  *
@@ -171,6 +171,20 @@ public final class CornerTabGeometry {
                               float gapPx, float padPx, float heightPx, float borderStrokePx,
                               float edgeMarginPx, float cornerHoldPx, float progress,
                               @NonNull RectF outTab, @NonNull RectF[] outButtons) {
+        layout(corner, bounds, widths, count, gapPx, padPx, heightPx, borderStrokePx, edgeMarginPx,
+            cornerHoldPx, progress, outTab, outButtons, null);
+    }
+
+    /**
+     * As above, and {@code outCellCenters}, when given, takes each button's own cell centre across
+     * the tab: where a glyph sits so that neighbours stand one cell and a gap apart, whichever
+     * ends the hit rectangles stretch to. It must hold at least {@code count}.
+     */
+    public static void layout(int corner, @NonNull RectF bounds, @NonNull float[] widths, int count,
+                              float gapPx, float padPx, float heightPx, float borderStrokePx,
+                              float edgeMarginPx, float cornerHoldPx, float progress,
+                              @NonNull RectF outTab, @NonNull RectF[] outButtons,
+                              @androidx.annotation.Nullable float[] outCellCenters) {
         for (int i = 0; i < outButtons.length; i++) outButtons[i].setEmpty();
         // The frame the tab actually lives in: inside the border, which is what it lines up on.
         float border = Math.max(0f, borderStrokePx);
@@ -219,6 +233,7 @@ public final class CornerTabGeometry {
         float edge = left + padPx;
         for (int i = 0; i < count; i++) {
             float start = i == 0 ? buttonLeft : edge - gapPx / 2f;
+            if (outCellCenters != null) outCellCenters[i] = edge + widths[i] * scale / 2f;
             edge += widths[i] * scale;
             float end = i == count - 1 ? buttonRight : edge + gapPx / 2f;
             outButtons[i].set(clamp(start, buttonLeft, buttonRight), top,

@@ -14,6 +14,8 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import android.app.Application;
+import org.robolectric.annotation.Config;
 
 /**
  * The bundled catalog is what decides which URLs the app contacts and which bytes it accepts,
@@ -21,6 +23,7 @@ import static org.junit.Assert.assertTrue;
  * crafted documents have to be rejected on every bound.
  */
 @RunWith(RobolectricTestRunner.class)
+@Config(application = Application.class)
 public class FontCatalogTest {
 
     @Before
