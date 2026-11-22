@@ -17,6 +17,32 @@ public final class BackdropRecording {
 
     private BackdropRecording() {}
 
+    private static final java.util.ArrayList<SurfaceView> sSurfaces = new java.util.ArrayList<>(2);
+
+    /** A SurfaceView joined the window: containers above it are descended, never drawn whole. */
+    public static void register(SurfaceView surface) {
+        if (!sSurfaces.contains(surface)) sSurfaces.add(surface);
+    }
+
+    public static void unregister(SurfaceView surface) {
+        sSurfaces.remove(surface);
+    }
+
+    /**
+     * Whether {@code view} is a SurfaceView's ancestor, so drawing it whole would record the
+     * SurfaceView by reference. Walks each registered surface's parents; no allocation.
+     */
+    public static boolean holdsSurface(View view) {
+        for (int i = 0; i < sSurfaces.size(); i++) {
+            android.view.ViewParent parent = sSurfaces.get(i).getParent();
+            while (parent != null) {
+                if (parent == view) return true;
+                parent = parent.getParent();
+            }
+        }
+        return false;
+    }
+
     /** Whether a recording may draw {@code view} by reference. */
     public static boolean mayRecord(View view) {
         return !(view instanceof SurfaceView);

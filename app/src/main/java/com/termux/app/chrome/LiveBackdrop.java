@@ -935,11 +935,48 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             }
             return;
         }
+        if (below instanceof Container && below instanceof ViewGroup
+                && BackdropRecording.holdsSurface(below)) {
+            descend(canvas, (ViewGroup) below);
+            return;
+        }
         BackdropRecording.begin();
         try {
             parent.drawChildForBackdrop(canvas, below);
         } finally {
             BackdropRecording.end();
+        }
+    }
+
+    /** Scratch child lists of {@link #descend}, one per depth, so nothing is allocated at rest. */
+    @NonNull private final ArrayList<ArrayList<View>> mDescent = new ArrayList<>();
+    private int mDescentDepth;
+
+    /**
+     * Draws a container that holds a SurfaceView child by child instead of whole, so the
+     * SurfaceView's RenderNode (whose position listener moves the real surface) is never in the
+     * recording: the container's place and background, then each child as {@link #drawBeneath}.
+     */
+    private void descend(@NonNull Canvas canvas, @NonNull ViewGroup group) {
+        if (group.getVisibility() != View.VISIBLE) return;
+        int save = canvas.save();
+        canvas.translate(group.getLeft(), group.getTop());
+        Matrix own = group.getMatrix();
+        if (!own.isIdentity()) canvas.concat(own);
+        Drawable background = group.getBackground();
+        if (background != null) background.draw(canvas);
+        canvas.translate(-group.getScrollX(), -group.getScrollY());
+        if (mDescent.size() <= mDescentDepth) mDescent.add(new ArrayList<>());
+        ArrayList<View> children = mDescent.get(mDescentDepth++);
+        try {
+            collectLevel(group, null, children);
+            for (int i = 0; i < children.size(); i++) {
+                drawBeneath((Container) group, canvas, children.get(i));
+            }
+        } finally {
+            children.clear();
+            mDescentDepth--;
+            canvas.restoreToCount(save);
         }
     }
 

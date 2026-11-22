@@ -37,4 +37,26 @@ public class BackdropRecordingTest {
         }
         assertFalse(BackdropRecording.skips(surface));
     }
+
+    @Test
+    public void containerHoldingASurfaceIsDescendedNotRecordedWhole() {
+        Context context = RuntimeEnvironment.getApplication();
+        android.widget.FrameLayout outer = new android.widget.FrameLayout(context);
+        android.widget.FrameLayout inner = new android.widget.FrameLayout(context);
+        android.widget.FrameLayout other = new android.widget.FrameLayout(context);
+        SurfaceView surface = new SurfaceView(context);
+        outer.addView(inner);
+        outer.addView(other);
+        inner.addView(surface);
+        assertFalse(BackdropRecording.holdsSurface(inner));
+        BackdropRecording.register(surface);
+        try {
+            assertTrue(BackdropRecording.holdsSurface(inner));
+            assertTrue(BackdropRecording.holdsSurface(outer));
+            assertFalse(BackdropRecording.holdsSurface(other));
+        } finally {
+            BackdropRecording.unregister(surface);
+        }
+        assertFalse(BackdropRecording.holdsSurface(inner));
+    }
 }

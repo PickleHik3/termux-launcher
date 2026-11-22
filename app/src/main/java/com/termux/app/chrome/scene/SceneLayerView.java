@@ -1003,6 +1003,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
+        com.termux.app.chrome.BackdropRecording.register(this);
         mDestroyed = false;
         kick();
     }
@@ -1010,6 +1011,7 @@ public final class SceneLayerView extends SurfaceView implements SurfaceHolder.C
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
+        com.termux.app.chrome.BackdropRecording.unregister(this);
         mRun = false;
         mMain.removeCallbacks(mPoll);
         mPolling = false;
