@@ -33,7 +33,6 @@ import com.termux.app.chrome.scene.ShaderErrors;
 import com.termux.app.chrome.scene.ShaderStore;
 import com.termux.app.chrome.scene.WallpaperMotion;
 import com.termux.app.surfaces.AppearanceEditorEntry;
-import com.termux.app.surfaces.EditorCard;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -154,7 +153,7 @@ public final class PhotoShaderNotification {
         if (previous != null && !previous.equals(id)) dropIfUnheld(app, previous);
         ensureChannel(app);
         String text = app.getString(R.string.photo_shader_notification_text);
-        NotificationCompat.Builder builder = base(app)
+        NotificationCompat.Builder builder = base(app, editorIntent(app, id, true))
             .setContentTitle(app.getString(R.string.photo_shader_notification_title))
             .setContentText(text)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(text))
@@ -178,17 +177,15 @@ public final class PhotoShaderNotification {
         ensureChannel(app);
         Bundle undo = new Bundle();
         undo.putString(EXTRA_PREVIOUS, previousMotion);
-        Intent edit = AppearanceEditorEntry.intent(app, EditorCard.APPEARANCE, false)
-            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        notify(app, base(app)
+        PendingIntent edit = editorIntent(app, id, false);
+        notify(app, base(app, edit)
             .setContentTitle(app.getString(R.string.photo_shader_notification_applied_title))
             .setContentText(app.getString(R.string.photo_shader_notification_applied_text))
             .setOngoing(false)
             .setAutoCancel(true)
             .addAction(action(app, R.string.photo_shader_notification_undo,
                 broadcast(app, ACTION_UNDO, id, 6, undo)))
-            .addAction(action(app, R.string.photo_shader_notification_edit,
-                PendingIntent.getActivity(app, 7, edit, PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag())))
+            .addAction(action(app, R.string.photo_shader_notification_edit, edit))
             .addAction(action(app, R.string.photo_shader_notification_done,
                 broadcast(app, ACTION_DONE, id, 8, null))));
     }
@@ -201,7 +198,7 @@ public final class PhotoShaderNotification {
         Bundle report = new Bundle();
         report.putString(EXTRA_ERRORS, PhotoShaderPrompt.errorReport(
             app.getString(R.string.photo_shader_error_report_intro), errors));
-        notify(app, base(app)
+        notify(app, base(app, editorIntent(app, id, true))
             .setContentTitle(app.getString(R.string.photo_shader_notification_failed_title))
             .setContentText(first)
             .setStyle(new NotificationCompat.BigTextStyle().bigText(first))
@@ -219,19 +216,25 @@ public final class PhotoShaderNotification {
         if (manager != null) manager.cancel(NOTIFICATION_ID);
     }
 
+    /** {@code body}: where a tap on the notification goes (the shader's editor). */
     @NonNull
-    private static NotificationCompat.Builder base(@NonNull Context app) {
-        NotificationCompat.Builder builder = new NotificationCompat.Builder(app, CHANNEL_ID)
+    private static NotificationCompat.Builder base(@NonNull Context app, @NonNull PendingIntent body) {
+        return new NotificationCompat.Builder(app, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_service_notification)
+            .setContentIntent(body)
             .setOnlyAlertOnce(true)
             .setPriority(NotificationCompat.PRIORITY_LOW);
-        // The body brings the launcher forward, named by the package's own launch intent.
-        Intent launch = app.getPackageManager().getLaunchIntentForPackage(app.getPackageName());
-        if (launch != null) {
-            builder.setContentIntent(PendingIntent.getActivity(app, 0, launch,
-                PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag()));
-        }
-        return builder;
+    }
+
+    /**
+     * The launcher with the wallpaper picker's editor open on shader {@code id}: the shader being
+     * made, in its photo flow ({@code photoFlow}), or the saved one as the Shader list opens it.
+     */
+    @NonNull
+    private static PendingIntent editorIntent(@NonNull Context app, @NonNull String id, boolean photoFlow) {
+        Intent intent = AppearanceEditorEntry.shaderIntent(app, id, photoFlow).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        return PendingIntent.getActivity(app, photoFlow ? 0 : 7, intent,
+            PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
     }
 
     @NonNull

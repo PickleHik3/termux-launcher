@@ -33,6 +33,7 @@
     <string name="photo_shader_notification_failed_title">The shader didn\'t compile</string>
     <string name="photo_shader_notification_copy_error">Copy error</string>
     <string name="photo_shader_notification_close">Close</string>
+    <string name="shader_open_kept_edits">Apply this shader or go back to the list, then open the other one again.</string>
     <string name="photo_shader_error_report_intro">This shader failed to compile on the launcher. Fix it and return the whole shader again.</string>
     <string name="photo_shader_step_bring_back">Bring the result back</string>
     <string name="shader_default_name">Shader</string>
