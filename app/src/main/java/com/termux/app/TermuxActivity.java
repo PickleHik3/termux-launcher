@@ -4753,8 +4753,23 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // live view that looks new each time: re-dress the panes and pages only when what it
         // answers has moved.
         com.termux.app.terminal.PaneStyleKey key = com.termux.app.terminal.PaneStyleKey.of(style);
-        if (key.equals(mAppliedPaneStyleKey)) return;
+        com.termux.app.terminal.PaneStyleKey previousKey = mAppliedPaneStyleKey;
+        if (key.equals(previousKey)) return;
         mAppliedPaneStyleKey = key;
+        if (key.sameButWallGround(previousKey)) {
+            // The ground colour changes on every Home <-> Terminal crossing and only the Display
+            // page's corner mask reads it.
+            Trace.beginSection("Frost.terminal.wallGround");
+            try {
+                if (mPaneWallController != null) mPaneWallController.applyWallGround(style);
+            } finally {
+                Trace.endSection();
+            }
+            return;
+        }
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log("pane-style-moved", "fields=" + key.movedFields(previousKey)); // DIAG(pane-style)
+        }
         Trace.beginSection("Frost.terminal.paneStyle");
         try {
             mPaneController.setSurfaceStyle(style);
