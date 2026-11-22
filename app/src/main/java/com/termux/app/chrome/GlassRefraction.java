@@ -1269,8 +1269,8 @@ public final class GlassRefraction {
         // the bend, so the split follows it round a corner and along a straight alike): red reads the
         // picture bent a little less, blue a little more, green as bent (three taps, Haze's
         // Simple). Where a clearer picture shows through, it is split the same way, so the fringe
-        // survives at the rim. A pixel with no split, every straight-edge middle and every face
-        // pixel among them, takes the one sample.
+        // survives at the rim. A pixel with no split, every face pixel (no pull) among them, takes
+        // the one sample.
         "    float split = uDisp > 0.0 ? pull * uDisp * kSplitWeight : 0.0;\n" +
         // Living glass parts the colours where it bends further than at rest, in step with that
         // extra bend and along it (the rim's inward), so the colour follows the glass. sn is the
