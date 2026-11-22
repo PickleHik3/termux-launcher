@@ -40,9 +40,10 @@ import java.util.Arrays;
  * pose, with a faint one facing away ({@link #glintWeight}); it fades back to the rest look as the
  * springs settle. The rim is fixed material, not a knob (a debug property tunes its numbers), and
  * every surface that runs the program wears it. Where a sharp picture of what is behind is handed in
- * ({@link Program#setClarityInput}, or the live route's edge pass, {@link LiveGlassEffect}), the
- * band shows it through the bend in place of the frost, wholly at the rim ({@link #sharpShare}),
- * at rest and in motion alike: a bevel is thin glass, so what is behind it reads sharp.
+ * ({@link Program#setClarityInput}), the band shows it through the bend in place of the frost,
+ * wholly at the rim ({@link #sharpShare}), at rest and in motion alike: a bevel is thin glass, so
+ * what is behind it reads sharp. The live route binds none (an effect takes one input), so its
+ * edge keeps the frost.
  * Dispersion splits the bent picture into red and blue evenly round the outline, in step with how
  * far it is bent there, the way a prism fans out white light (the Edge slider). A
  * pressed extra key adds a lens that magnifies toward the key's centre and eases to nothing at its
@@ -537,10 +538,6 @@ public final class GlassRefraction {
         // 1 while sharp is a clearer picture of its own, 0 while it is the frost bound in its
         // place (or nothing): the band then shows that picture wholly toward the rim.
         "uniform float uSharpEdge;\n" +
-        // 1 for the live route's edge pass (LiveGlassEffect's edge program): content is then the
-        // unblurred picture, and the program draws only the band, faded by its sharp share, to
-        // lie over the frosted pass. 0 for every other draw.
-        "uniform float uEdgeOnly;\n" +
         "uniform float uFaceClarity;\n" +
         "uniform float uDim;\n" +
         "uniform float uSizeLens;\n" +
@@ -860,10 +857,6 @@ public final class GlassRefraction {
         // outline. One sample; none of the convex rim's light, split or motion. concaveOffset in
         // Java.
         "    if (uConcave.x > 0.0) {\n" +
-        // The well has no sharp edge: the live edge pass leaves it to the frosted pass.
-        "        if (uEdgeOnly > 0.0) {\n" +
-        "            return half4(0.0);\n" +
-        "        }\n" +
         "        float cB = min(uConcave.y, kConcaveBandShare * 2.0 * hs);\n" +
         "        float cP = kConcavePullShare * cB;\n" +
         "        float cL = 1.5 * cP / kConcaveLipSlope;\n" +
@@ -1005,10 +998,6 @@ public final class GlassRefraction {
         "    float x = 1.0 - t;\n" +
         "    float edgeK = x > 0.0 ? (softB > 0.0 ? x * x * x * (x * (x * 6.0 - 15.0) + 10.0)\n" +
         "        : x * x * (3.0 - 2.0 * x)) : 0.0;\n" +
-        // The live edge pass draws the band alone: a face pixel there is left to the frosted pass.
-        "    if (uEdgeOnly > 0.0 && edgeK <= 0.0) {\n" +
-        "        return half4(0.0);\n" +
-        "    }\n" +
         "    float clarityK = edgeK * uSharpEdge;\n" +
         // Clear's face: the clearer picture shows through by uFaceClarity everywhere, the band
         // included, where one is handed in (uFaceClarity is 0 where none is). At 0 nothing runs.
@@ -1115,11 +1104,6 @@ public final class GlassRefraction {
         // A bead's outline is its own: a pixel wide, anti-aliased, nothing outside it.
         "    if (beads) {\n" +
         "        col = col * half(clamp(inside + 0.5, 0.0, 1.0));\n" +
-        "    }\n" +
-        // The live edge pass, faded by the edge's sharp share, so drawn over the frosted pass
-        // it is that pass's mix of the two pictures (whole at the rim, none on the face).
-        "    if (uEdgeOnly > 0.0) {\n" +
-        "        col = col * half(edgeK);\n" +
         "    }\n" +
         "    return col;\n" +
         "}\n";
@@ -2024,7 +2008,6 @@ public final class GlassRefraction {
         private final float[] mKeyNext = new float[2];
         /** Whether {@code sharp} is a clearer frame of its own, not the frost bound in its place. */
         private boolean mSharpDistinct;
-        private float mEdgeOnlyWritten = Float.NaN;
         /** The dock surface's glass as last written: {@code uSoftRim} in px and {@code uShelf}. */
         private float mSoftRimWritten = Float.NaN, mShelfWritten = Float.NaN;
         /**
@@ -2307,18 +2290,6 @@ public final class GlassRefraction {
                 mDimWritten = dim;
                 mShader.setFloatUniform("uDim", dim);
             }
-        }
-
-        /**
-         * The live route's edge pass ({@link LiveGlassEffect}): the content is the unblurred
-         * picture and the program draws only the band, faded by its sharp share
-         * ({@link #sharpShare}), to lie over the frosted pass. Off for every other draw.
-         */
-        public void setEdgeOnly(boolean edgeOnly) {
-            float v = edgeOnly ? 1f : 0f;
-            if (v == mEdgeOnlyWritten) return;
-            mEdgeOnlyWritten = v;
-            mShader.setFloatUniform("uEdgeOnly", v);
         }
 
         /**

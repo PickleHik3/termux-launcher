@@ -99,9 +99,6 @@ public class GlassRefractionTest {
         assertFalse(agsl.contains("uClarity"));
         assertFalse(agsl.contains("uLiveClarity"));
         assertFalse(agsl.contains("kLiveReach"));
-        // The live edge pass: the face reads nothing, and the band is faded by its share.
-        assertTrue(agsl.contains("if (uEdgeOnly > 0.0 && edgeK <= 0.0) {"));
-        assertTrue(agsl.contains("col = col * half(edgeK);"));
     }
 
     @Test
@@ -159,7 +156,7 @@ public class GlassRefractionTest {
             "uFrameScale", "uFrameOffset", "uLocalX", "uLocalY", "uLocalW", "uRectMin", "uRectMax",
             "uRadius", "uBand", "uStrength", "uDisp", "uDensity",
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
-            "uSharpEdge", "uEdgeOnly", "uFaceClarity", "uTouchActive", "uTouch", "uTouchRadius",
+            "uSharpEdge", "uFaceClarity", "uTouchActive", "uTouch", "uTouchRadius",
             "uTouchLens", "uKeyLight", "uSoftRim", "uShelf",
             "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap", "uConcave",
         };

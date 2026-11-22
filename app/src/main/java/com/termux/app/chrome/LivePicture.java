@@ -36,13 +36,6 @@ import java.util.ArrayList;
  *
  * <p>Nodes are made on the first recording and dropped by {@link #release}, so a picture that is
  * handed out but never drawn holds no pixels.</p>
- *
- * <p>The glass's edge shows what is behind it unblurred, so each holder also has a sharp drawable
- * ({@link #sharpDrawable}, {@link #aimedSharpDrawable}) that draws the record node itself at full
- * scale, with no blur and no layer of its own, for the holder's edge pass to bend. It draws only a
- * node the frost drawable already reaches ({@link #sharpReach}), so it can never bring the
- * holder's own node into an effect's input; while the wall moves (the layers are shown, or the
- * record holds the local layer only) it draws nothing and the edge keeps the frost.</p>
  */
 public final class LivePicture implements GlassPicture {
 
@@ -56,14 +49,6 @@ public final class LivePicture implements GlassPicture {
      * view's place. A float's titlebar shows the float's one picture through it.
      */
     @NonNull private final LiveDrawable mAimed = new LiveDrawable(true);
-    /** The unblurred record node for the holders' edge pass ({@link #sharpDrawable}). */
-    @NonNull private final LiveDrawable mSharp = new LiveDrawable(false, true);
-    @NonNull private final LiveDrawable mAimedSharp = new LiveDrawable(true, true);
-    /**
-     * The blur node's colours without the blur (the stored frame's parity, then the frost), for
-     * the edge pass to put on the sharp picture; rebuilt with the blur node's effect.
-     */
-    @Nullable private RenderEffect mSharpColour;
     /** Where the second holder's origin stands against the surface's, in px; see {@link #aimAt}. */
     private int mAimedX;
     private int mAimedY;
@@ -389,96 +374,11 @@ public final class LivePicture implements GlassPicture {
     @RequiresApi(Build.VERSION_CODES.S)
     private void applyEffect() {
         if (mBlur == null) return;
-        mSharpColour = colourEffect();
         RenderEffect effect = layerEffect();
         mBlur.setRenderEffect(effect);
         if (mSceneGround != null) mSceneGround.setRenderEffect(effect);
         // A change of radius, tint or frost reaches the frozen pages layer at once.
         if (mPage != null) mPage.setRenderEffect(effect);
-    }
-
-    /** {@link #layerEffect}'s colours alone: the stored frame's, then the frost; null for none. */
-    @RequiresApi(Build.VERSION_CODES.S)
-    @Nullable
-    private RenderEffect colourEffect() {
-        RenderEffect effect = mParityFilter != null
-            ? RenderEffect.createColorFilterEffect(mParityFilter) : null;
-        if (mFilter != null) {
-            RenderEffect tint = RenderEffect.createColorFilterEffect(mFilter);
-            effect = effect == null ? tint : RenderEffect.createChainEffect(tint, effect);
-        }
-        return effect;
-    }
-
-    /**
-     * The colours the edge pass puts on {@link #sharpDrawable}'s picture, so its edge matches the
-     * frost's colour: the same object until the frost's colours change, null for none.
-     */
-    @Nullable
-    public RenderEffect sharpColour() {
-        return mSharpColour;
-    }
-
-    /**
-     * The holder's sharp drawable: the record node at full scale, unblurred, aimed as
-     * {@link #drawable()} is. Its holder sets no callback on it.
-     */
-    @NonNull
-    public Drawable sharpDrawable() {
-        return mSharp;
-    }
-
-    /** {@link #sharpDrawable()} for the second holder, aimed as {@link #aimedDrawable()} is. */
-    @NonNull
-    public Drawable aimedSharpDrawable() {
-        return mAimedSharp;
-    }
-
-    /**
-     * Whether the sharp drawable draws a picture now: the picture is shown and the record node
-     * holds the one picture whole ({@link #sharpReach}).
-     */
-    public boolean sharpReady() {
-        if (!ready() || mRecord == null || !mRecord.hasDisplayList()) return false;
-        return sharpReach(layersShown(), mRecordHoldsLocal) != 0;
-    }
-
-    /** The holders draw the layers' composite now rather than the blur node. */
-    private boolean layersShown() {
-        return mLayered && mShown != null && mShown.hasDisplayList();
-    }
-
-    // ---- What each drawable reaches: a pure model of the nodes it draws ------------------------
-    /** The record node: what the window draws beneath the surface, never the surface itself. */
-    static final int NODE_RECORD = 1;
-    /** The quarter-scale blur node, which draws the record node. */
-    static final int NODE_BLUR = 1 << 1;
-    /** The layers' composite: the ground, the pages and the blur node. */
-    static final int NODE_SHOWN = 1 << 2;
-    static final int NODE_GROUND = 1 << 3;
-    static final int NODE_PAGES = 1 << 4;
-    /**
-     * The holder's own nodes (its live node and its edge node), which carry an effect over what
-     * the drawables draw: a drawable that reached one would feed that effect its own node.
-     */
-    static final int NODE_HOLDER = 1 << 5;
-
-    /**
-     * Every node the frost drawable reaches: the layers' composite and what it draws while
-     * {@code layersShown}, else the blur node and the record node under it. Pure.
-     */
-    static int frostReach(boolean layersShown, boolean pages) {
-        int blur = NODE_BLUR | NODE_RECORD;
-        return layersShown ? NODE_SHOWN | NODE_GROUND | (pages ? NODE_PAGES : 0) | blur : blur;
-    }
-
-    /**
-     * Every node the sharp drawable reaches: the record node alone, and only while it holds the
-     * one picture whole (not the local layer under the shown layers), else nothing, and the edge
-     * keeps the frost. Never a node outside {@link #frostReach}. Pure.
-     */
-    static int sharpReach(boolean layersShown, boolean recordHoldsLocal) {
-        return layersShown || recordHoldsLocal ? 0 : NODE_RECORD;
     }
 
     /** The blur node's effect: the blur, then the stored frame's colours, then the frost. */
@@ -1362,24 +1262,14 @@ public final class LivePicture implements GlassPicture {
         return mDrawable.getCallback() != null || mAimed.getCallback() != null;
     }
 
-    /**
-     * Draws the blur node at four times, the recording's origin on the surface's; or, a sharp
-     * one, the record node itself at full scale ({@link #sharpReach}).
-     */
+    /** Draws the blur node at four times, the recording's origin on the surface's. */
     private final class LiveDrawable extends Drawable {
         private int mAlpha = 255;
         /** The second holder's: aimed by {@link #aimAt}, and never sets the picture's colour filter. */
         private final boolean mSecond;
-        /** Draws the unblurred record node for the edge pass ({@link #sharpDrawable}). */
-        private final boolean mSharpOne;
 
         LiveDrawable(boolean second) {
-            this(second, false);
-        }
-
-        LiveDrawable(boolean second, boolean sharp) {
             mSecond = second;
-            mSharpOne = sharp;
         }
 
         @Override
@@ -1391,9 +1281,6 @@ public final class LivePicture implements GlassPicture {
             // While the wall moves: the backdrop layers, composited at the recording's scale.
             RenderNode shown = mLayered ? mShown : null;
             boolean layers = shown != null && shown.hasDisplayList();
-            RenderNode record = mRecord;
-            if (mSharpOne && (record == null || !record.hasDisplayList()
-                || sharpReach(layers, mRecordHoldsLocal) == 0)) return;
             int save = canvas.save();
             // The holder (an ImageView) has already moved the canvas to its content box.
             // The recording's origin is the surface's, less the margin and the reach above it.
@@ -1403,9 +1290,7 @@ public final class LivePicture implements GlassPicture {
                 canvas.translate(-mMarginPx - mSurface.getPaddingLeft(),
                     -mMarginPx - mReachTopPx - mSurface.getPaddingTop());
             }
-            if (mSharpOne) {
-                ((RecordingCanvas) canvas).drawRenderNode(record);
-            } else if (layers) {
+            if (layers) {
                 ((RecordingCanvas) canvas).drawRenderNode(shown);
             } else {
                 canvas.scale(SCALE, SCALE);
@@ -1426,7 +1311,7 @@ public final class LivePicture implements GlassPicture {
 
         @Override
         public void setColorFilter(@Nullable ColorFilter colorFilter) {
-            if (mSecond || mSharpOne || colorFilter == mFilter) return;
+            if (mSecond || colorFilter == mFilter) return;
             mFilter = colorFilter;
             if (mBlur != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) applyEffect();
         }

@@ -62,10 +62,7 @@ import com.termux.app.chrome.scene.LiveSceneFrame;
  * slab's own that carries the refraction as a {@code RenderEffect} ({@link LiveGlassEffect}), and
  * that node is drawn where the frame would have been. Only the picture is bent: the tint, the
  * veil, the grain and the rim are drawn over the node, on the slab's own canvas, as on the stored
- * frame. The edge shows what is behind it unblurred: a second node draws the picture's sharp
- * drawable ({@link LivePicture#sharpDrawable}, the unblurred record node) under the same program's
- * edge pass, over the first, so the band reads the sharp picture as the stored route's does. That
- * node is a layer the size of the slab (W x H x 4 bytes) while the slab is live.</p>
+ * frame.</p>
  */
 public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge, LiveSceneFrame.Surface {
 
@@ -218,17 +215,6 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     @Nullable private LiveGlassEffect mLiveEffect;
     /** The effect last set on {@link #mLiveNode}; typed loosely so this class loads below Android 12. */
     @Nullable private Object mLiveEffectSet;
-    /** The picture's sharp drawable this view shows at its edge: its own, or the aimed one. */
-    @Nullable private Drawable mLiveSharpDrawable;
-    /**
-     * The node the sharp picture is drawn into under the edge pass, over {@link #mLiveNode}; made
-     * on the first live draw that has a sharp picture.
-     */
-    @Nullable private android.graphics.RenderNode mLiveEdgeNode;
-    /** Builds the edge node's effect, made again only when its uniforms or colours move. */
-    @Nullable private LiveGlassEffect mLiveEdgeEffect;
-    /** The effect last set on {@link #mLiveEdgeNode}. */
-    @Nullable private Object mLiveEdgeEffectSet;
 
     public PaneGlassBackdropView(@NonNull Context context) {
         this(context, null);
@@ -256,8 +242,6 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (mLiveDrawable != null) mLiveDrawable.setCallback(null);
         mLivePicture = picture;
         mLiveDrawable = shown;
-        mLiveSharpDrawable = picture == null ? null
-            : aimed ? picture.aimedSharpDrawable() : picture.sharpDrawable();
         if (shown != null) {
             shown.setCallback(this);
             if (!aimed) shown.setColorFilter(mFramePaint.getColorFilter());
@@ -308,24 +292,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 || !(canvas instanceof android.graphics.RecordingCanvas)) {
             return;
         }
-        retireEdgeNode();
         if (mLiveEffectSet == null && !node.hasDisplayList()) return;
         mLiveEffectSet = null;
         node.setRenderEffect(null);
         node.discardDisplayList();
-    }
-
-    /**
-     * Empties the edge node and gives back its layer; called from a hardware draw that did not
-     * draw it, so nothing still recorded refers to it.
-     */
-    private void retireEdgeNode() {
-        android.graphics.RenderNode edge = mLiveEdgeNode;
-        if (edge == null || android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) return;
-        if (mLiveEdgeEffectSet == null && !edge.hasDisplayList()) return;
-        mLiveEdgeEffectSet = null;
-        edge.setRenderEffect(null);
-        edge.discardDisplayList();
     }
 
     /**
@@ -402,54 +372,6 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             node.endRecording();
         }
         ((android.graphics.RecordingCanvas) canvas).drawRenderNode(node);
-        if (!drawLiveEdge((android.graphics.RecordingCanvas) canvas, picture, look, density, width,
-                height, light)) {
-            retireEdgeNode();
-        }
-        return true;
-    }
-
-    /**
-     * The live route's sharp edge: the picture's unblurred record node into {@link #mLiveEdgeNode}
-     * under the program's edge pass, drawn over the frosted node. False, drawing nothing, while
-     * the picture has no sharp picture to show (the wall moving, {@link LivePicture#sharpReady}),
-     * for the concave well, or when the program is refused: the edge then keeps the frost. The
-     * same uniforms as the frosted pass, so the bend lands on the same spot in both.
-     */
-    @androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.TIRAMISU)
-    private boolean drawLiveEdge(@NonNull android.graphics.RecordingCanvas canvas,
-                                 @NonNull LivePicture picture, @NonNull GlassRefraction.Look look,
-                                 float density, int width, int height,
-                                 @Nullable GlassMotionLight light) {
-        Drawable sharp = mLiveSharpDrawable;
-        if (sharp == null || look.concave || !picture.sharpReady()) return false;
-        LiveGlassEffect builder = mLiveEdgeEffect;
-        if (builder == null || builder.density() != density) {
-            builder = new LiveGlassEffect(density, true);
-            mLiveEdgeEffect = builder;
-        }
-        android.graphics.RenderEffect effect = builder.effect(width, height, mRadiusPx, look,
-            light == null ? 0f : light.lagXPx(), light == null ? 0f : light.lagYPx(),
-            mTilt[0], mTilt[1], picture.sharpColour());
-        if (effect == null) return false;
-        android.graphics.RenderNode edge = mLiveEdgeNode;
-        if (edge == null) {
-            edge = new android.graphics.RenderNode("PaneGlass.liveEdge");
-            mLiveEdgeNode = edge;
-        }
-        edge.setPosition(0, 0, width, height);
-        if (effect != mLiveEdgeEffectSet) {
-            edge.setRenderEffect(effect);
-            mLiveEdgeEffectSet = effect;
-        }
-        android.graphics.RecordingCanvas recording = edge.beginRecording(width, height);
-        try {
-            sharp.setBounds(0, 0, width, height);
-            sharp.draw(recording);
-        } finally {
-            edge.endRecording();
-        }
-        canvas.drawRenderNode(edge);
         return true;
     }
 
