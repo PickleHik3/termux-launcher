@@ -25,8 +25,9 @@ final class LiveGround {
      * @param photoBackdrop  the view is the launcher-drawn photo wallpaper
      */
     static Draw choose(boolean sceneLive, boolean sceneLayer, boolean photoBackdrop) {
+        // The scene's layer is a SurfaceView: a recording never holds one, live frame or not.
+        if (sceneLayer) return sceneLive ? Draw.SCENE_FRAME : Draw.SKIP;
         if (!sceneLive) return Draw.CHILD;
-        if (sceneLayer) return Draw.SCENE_FRAME;
         if (photoBackdrop) return Draw.SKIP;
         return Draw.CHILD;
     }

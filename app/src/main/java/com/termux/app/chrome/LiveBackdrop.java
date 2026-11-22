@@ -927,7 +927,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         LiveSceneFrame.Frame frame = LiveSceneFrame.current();
         LiveGround.Draw how = LiveGround.choose(frame != null,
             below instanceof SceneLayerView, below instanceof WallpaperBackdropView);
-        if (how == LiveGround.Draw.SKIP) return;
+        if (how == LiveGround.Draw.SKIP || !BackdropRecording.mayRecord(below)) return;
         if (how == LiveGround.Draw.SCENE_FRAME && frame != null) {
             if (!frame.bitmap.isRecycled() && below.getVisibility() == View.VISIBLE) {
                 mSceneDest.set(below.getLeft(), below.getTop(), below.getRight(), below.getBottom());
@@ -935,7 +935,12 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
             }
             return;
         }
-        parent.drawChildForBackdrop(canvas, below);
+        BackdropRecording.begin();
+        try {
+            parent.drawChildForBackdrop(canvas, below);
+        } finally {
+            BackdropRecording.end();
+        }
     }
 
     /** Shadows and Z order among the views drawn, as a parent's own hardware draw has them. */
@@ -1589,6 +1594,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
                 RecordingCanvas canvas = node.beginRecording(
                     LivePicture.scaled(page.getWidth() + 2 * gutter, scale),
                     LivePicture.scaled(page.getHeight() + 2 * gutter, scale));
+                BackdropRecording.begin();
                 try {
                     // The page as it is, in its own coordinates; where it stands is its pose's
                     // matrix, drawn when the layer is ({@link LivePicture#redrawPages}).
@@ -1596,6 +1602,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
                     canvas.translate(gutter, gutter);
                     page.draw(canvas);
                 } finally {
+                    BackdropRecording.end();
                     node.endRecording();
                 }
             }
@@ -1639,18 +1646,23 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         canvas.scale(1f / scale, 1f / scale);
         canvas.translate(-rect.left, -rect.top);
         if (!frozen) canvas.enableZ();
-        for (int i = 0; i < mPages.size(); i++) {
-            View page = mPages.get(i);
-            if (frozen) {
-                int save = canvas.save();
-                canvas.translate(page.getLeft(), page.getTop());
-                Matrix own = page.getMatrix();
-                if (!own.isIdentity()) canvas.concat(own);
-                page.draw(canvas);
-                canvas.restoreToCount(save);
-            } else {
-                ((Container) wall).drawChildForBackdrop(canvas, page);
+        BackdropRecording.begin();
+        try {
+            for (int i = 0; i < mPages.size(); i++) {
+                View page = mPages.get(i);
+                if (frozen) {
+                    int save = canvas.save();
+                    canvas.translate(page.getLeft(), page.getTop());
+                    Matrix own = page.getMatrix();
+                    if (!own.isIdentity()) canvas.concat(own);
+                    page.draw(canvas);
+                    canvas.restoreToCount(save);
+                } else {
+                    ((Container) wall).drawChildForBackdrop(canvas, page);
+                }
             }
+        } finally {
+            BackdropRecording.end();
         }
         if (!frozen) canvas.disableZ();
         if (mWallPathIndex < 0) {
