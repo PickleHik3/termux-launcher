@@ -42,12 +42,6 @@
             app:summary="@string/font_toggle_compact_size_summary"
             app:persistent="false"
             app:iconSpaceReserved="false" />
-        <SwitchPreferenceCompat
-            app:key="font_toggle_shown"
-            app:title="@string/font_toggle_show_title"
-            app:summary="@string/font_toggle_show_summary"
-            app:persistent="false"
-            app:iconSpaceReserved="false" />
     </PreferenceCategory>
 
     <PreferenceCategory

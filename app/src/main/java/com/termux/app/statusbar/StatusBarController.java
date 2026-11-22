@@ -157,6 +157,8 @@ public final class StatusBarController {
         com.termux.app.statusbar.StatusBarStatSmoother barCpuSmoother();
         com.termux.app.statusbar.StatusBarStatSmoother barMemorySmoother();
         com.termux.app.statusbar.StatusBarStatSmoother barGpuSmoother();
+        /** Dresses the font toggle's pill for the page and the focused pane. */
+        void syncFontToggle();
         /** Opens or closes the stats card, or the weather card, from {@code anchor}. */
         void toggleStatsCard(@NonNull View anchor);
         void toggleWeatherCard(@NonNull View anchor);
@@ -1355,6 +1357,11 @@ public final class StatusBarController {
     /** {@link StatusBarWidgets#applySessionsBand}: the Terminal end's band, for a crossing. */
     public void applySessionsBand(@Nullable com.termux.app.chrome.OnGlass.Resolution band) {
         mWidgets.applySessionsBand(band);
+    }
+
+    /** {@link StatusBarWidgets#syncFontToggle}. */
+    public boolean syncFontToggle(boolean shown, boolean compact) {
+        return mWidgets.syncFontToggle(shown, compact);
     }
 
     /** {@link StatusBarWidgets#updateStatusWidgets}. */

@@ -1121,6 +1121,15 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_GPU, value, false);
     }
 
+    public boolean isStatusWidgetFontToggleEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_WIDGET_FONT_TOGGLE, TERMUX_APP.DEFAULT_STATUS_WIDGET_FONT_TOGGLE);
+    }
+
+    public void setStatusWidgetFontToggleEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_STATUS_WIDGET_FONT_TOGGLE, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
@@ -3112,15 +3121,6 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     public void setStoredCompactFontSize(int value) {
         SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences,
             TERMUX_APP.KEY_COMPACT_FONTSIZE + getDisplayIdAsString(), Math.max(0, value), false);
-    }
-
-    public boolean isFontToggleShown() {
-        return SharedPreferenceUtils.getBoolean(mSharedPreferences, TERMUX_APP.KEY_FONT_TOGGLE_SHOWN,
-            TERMUX_APP.DEFAULT_VALUE_FONT_TOGGLE_SHOWN);
-    }
-
-    public void setFontToggleShown(boolean value) {
-        SharedPreferenceUtils.setBoolean(mSharedPreferences, TERMUX_APP.KEY_FONT_TOGGLE_SHOWN, value, false);
     }
 
     /** {@code current} stepped one zoom increment, clamped to this display's font size limits. */

@@ -397,6 +397,7 @@ public class StatusBarControllerTest {
         @Override public StatusBarStatSmoother barMemorySmoother() { return null; }
         private final StatusBarStatSmoother gpuSmoother = StatusBarStatSmoother.forGpuPercent();
         @Override public StatusBarStatSmoother barGpuSmoother() { return gpuSmoother; }
+        @Override public void syncFontToggle() {}
         @Override public void toggleStatsCard(@NonNull View anchor) {}
         @Override public void toggleWeatherCard(@NonNull View anchor) {}
     }

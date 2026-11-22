@@ -132,7 +132,8 @@ public final class StatusBarCard {
     public static final int INDICATOR_NOTIFICATIONS = 5;
     public static final int INDICATOR_MEDIA = 6;
     public static final int INDICATOR_BATTERY = 7;
-    static final int INDICATOR_COUNT = 8;
+    public static final int INDICATOR_FONT_TOGGLE = 8;
+    static final int INDICATOR_COUNT = 9;
 
     /**
      * Whether {@code row} is one of the Clock &amp; Weather section's clock rows, which stand
@@ -404,7 +405,9 @@ public final class StatusBarCard {
             new TileGrid.Tile(R.drawable.ic_ms_music_note,
                 context.getString(R.string.editor_st_indicator_media)),
             new TileGrid.Tile(R.drawable.ic_ms_battery_full,
-                context.getString(R.string.editor_st_indicator_battery)));
+                context.getString(R.string.editor_st_indicator_battery)),
+            new TileGrid.Tile(R.drawable.ic_rl_text_size,
+                context.getString(R.string.editor_st_indicator_font_toggle)));
         // "Elements" is a plain label inside the Status bar section, not a section heading.
         boolean[] on = new boolean[INDICATOR_COUNT];
         for (int i = 0; i < on.length; i++)

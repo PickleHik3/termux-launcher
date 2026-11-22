@@ -6250,6 +6250,12 @@ public class TerminalPaneController {
         return true;
     }
 
+    /** Whether the font toggle has a pane to act on: a focused pane that is not the scratchpad. */
+    public boolean canToggleActivePaneCompact() {
+        return mActiveWindow != null && mActiveWindow.active != null
+            && !isScratchpadLeaf(mActiveWindow.active);
+    }
+
     /** Whether the focused pane is at the Compact size the font toggle gave it. */
     public boolean isActivePaneCompact() {
         return mActiveWindow != null && mActiveWindow.active != null

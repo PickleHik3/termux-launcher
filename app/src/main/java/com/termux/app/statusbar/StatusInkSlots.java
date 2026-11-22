@@ -11,13 +11,13 @@ public final class StatusInkSlots {
     private StatusInkSlots() {}
 
     /** The status widgets, each three slots: body ink, large (icon) ink, muted ink. */
-    public static final int WIDGETS = 8;
+    public static final int WIDGETS = 9;
     public static final int PER_WIDGET = 3;
     public static final int WIDGET_BODY = 0;
     public static final int WIDGET_LARGE = 1;
     public static final int WIDGET_MUTED = 2;
     /** The separator dots, one slot each. */
-    public static final int DOTS = 8;
+    public static final int DOTS = 9;
 
     public static final int WIDGET_FIRST = 0;
     public static final int DOT_FIRST = WIDGET_FIRST + WIDGETS * PER_WIDGET;

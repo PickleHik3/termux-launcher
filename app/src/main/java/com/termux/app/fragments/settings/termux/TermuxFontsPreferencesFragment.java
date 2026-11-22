@@ -65,7 +65,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
 
     /** The Compact size row, which the window bar's font toggle opens this screen on. */
     public static final String KEY_COMPACT_SIZE = "font_toggle_compact_size";
-    private static final String KEY_FONT_TOGGLE_SHOWN = "font_toggle_shown";
 
     /**
      * Installed families render their own row title as a live preview. Parsed faces are cached
@@ -177,7 +176,7 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
         }
     }
 
-    /** The font toggle's two settings live with the app's other terminal preferences. */
+    /** The Compact size row; the toggle itself is a Status bar card element. */
     private void configureFontToggleRows(@NonNull Context context) {
         TermuxAppSharedPreferences app = TermuxAppSharedPreferences.build(context);
         if (app == null) return;
@@ -186,14 +185,6 @@ public class TermuxFontsPreferencesFragment extends MaterialPreferenceFragment
             refreshCompactSizeRow(context, size, app);
             size.setOnPreferenceClickListener(preference -> {
                 showCompactSizeDialog(context, preference, app);
-                return true;
-            });
-        }
-        SwitchPreferenceCompat shown = findPreference(KEY_FONT_TOGGLE_SHOWN);
-        if (shown != null) {
-            shown.setChecked(app.isFontToggleShown());
-            shown.setOnPreferenceChangeListener((preference, value) -> {
-                app.setFontToggleShown(Boolean.TRUE.equals(value));
                 return true;
             });
         }
