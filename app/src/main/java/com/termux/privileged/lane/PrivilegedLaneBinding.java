@@ -13,6 +13,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.BuildConfig;
+import com.termux.privileged.PrivilegedBackendManager;
+import com.termux.privileged.PrivilegedAvailabilitySignal;
 import com.termux.privileged.PrivilegedPolicyStore;
 
 import rikka.shizuku.Shizuku;
@@ -29,7 +31,7 @@ public final class PrivilegedLaneBinding {
     private static final long REBIND_DELAY_MS = 2_000L;
 
     /** What the settings screen shows. */
-    public enum State { OFF, NO_SHIZUKU, NO_PERMISSION, BINDING, RUNNING }
+    public enum State { OFF, NO_SHIZUKU, NO_PERMISSION, BINDING, RUNNING, ROOT }
 
     /** The lane cannot serve right now; the message is for the client. */
     public static final class Unavailable extends Exception {
@@ -47,6 +49,12 @@ public final class PrivilegedLaneBinding {
     private boolean listening;
     private boolean binding;
     @Nullable private IPrivilegedLane lane;
+    /**
+     * The in-process lane used while root runs and Shizuku cannot. When Shizuku binds later, new
+     * spawns go to it and this one is only forgotten: its running children end on their own and
+     * the server still holds the stub for their waitFor and kill.
+     */
+    @Nullable private RootLane rootLane;
     /** What the service last reported through {@link IPrivilegedLane#uid()}, for the status row. */
     private int serviceUid = -1;
 
@@ -67,6 +75,7 @@ public final class PrivilegedLaneBinding {
             }
             synchronized (lock) {
                 lane = service;
+                rootLane = null;
                 serviceUid = uid;
                 binding = false;
                 lock.notifyAll();
@@ -77,8 +86,10 @@ public final class PrivilegedLaneBinding {
         @Override
         public void onServiceDisconnected(ComponentName name) {
             synchronized (lock) {
-                lane = null;
-                serviceUid = -1;
+                if (lane != rootLane) {
+                    lane = null;
+                    serviceUid = -1;
+                }
                 binding = false;
                 lock.notifyAll();
             }
@@ -90,11 +101,20 @@ public final class PrivilegedLaneBinding {
     private final Shizuku.OnBinderReceivedListener binderReceived = this::bindIfPossible;
     private final Shizuku.OnBinderDeadListener binderDead = () -> {
         synchronized (lock) {
-            lane = null;
-            serviceUid = -1;
+            if (lane != rootLane) {
+                lane = null;
+                serviceUid = -1;
+            }
             binding = false;
             lock.notifyAll();
         }
+        // Shizuku is gone: a rooted phone carries on through root.
+        mainHandler.post(this::bindIfPossible);
+    };
+    /** Root went away: the su clients it ran are useless, so the root lane ends with it. */
+    private final PrivilegedAvailabilitySignal.Listener availabilityListener = available -> {
+        if (!isRootActiveNow()) dropRootLane();
+        else bindIfPossible();
     };
     private final Shizuku.OnRequestPermissionResultListener permissionResult =
         (requestCode, grantResult) -> bindIfPossible();
@@ -122,6 +142,8 @@ public final class PrivilegedLaneBinding {
             if (listening) return;
             listening = true;
         }
+        // The availability signal is main-thread only.
+        mainHandler.post(() -> PrivilegedBackendManager.getInstance().addAvailabilityListener(availabilityListener));
         try {
             // Sticky: fires now if the binder is already here, later if Shizuku starts after us.
             Shizuku.addBinderReceivedListenerSticky(binderReceived);
@@ -154,10 +176,10 @@ public final class PrivilegedLaneBinding {
             ctx = appContext;
             current = lane;
         }
-        if (ctx == null || !PrivilegedPolicyStore.isLaneEnabled(ctx)) return State.OFF;
-        if (!shizukuAlive()) return State.NO_SHIZUKU;
-        if (!permissionGranted()) return State.NO_PERMISSION;
-        if (current != null && current.asBinder().isBinderAlive()) return State.RUNNING;
+        State chosen = LaneChoice.choose(ctx != null && PrivilegedPolicyStore.isLaneEnabled(ctx),
+            shizukuAlive(), permissionGranted(), isRootActiveNow());
+        if (chosen != State.BINDING) return chosen;
+        if (current != null && current != rootLaneNow() && current.asBinder().isBinderAlive()) return State.RUNNING;
         // Bound or not yet: the next request binds, so from the outside it is on its way.
         return State.BINDING;
     }
@@ -184,11 +206,13 @@ public final class PrivilegedLaneBinding {
         if (!PrivilegedPolicyStore.isLaneEnabled(ctx)) {
             throw new Unavailable("the privileged lane is turned off in Settings › Shizuku");
         }
-        if (!shizukuAlive()) throw new Unavailable("Shizuku is not running");
-        if (!permissionGranted()) {
+        if (!(shizukuAlive() && permissionGranted())) {
+            if (isRootActiveNow()) return ensureRootLane(ctx);
+            if (!shizukuAlive()) throw new Unavailable("Shizuku is not running");
             throw new Unavailable("grant Shizuku permission to " + appLabel(ctx));
         }
         IPrivilegedLane current = liveLane();
+        if (current != null && current == rootLaneNow()) current = null;
         if (current != null) return current;
 
         bindIfPossible();
@@ -206,6 +230,7 @@ public final class PrivilegedLaneBinding {
             }
         }
         current = liveLane();
+        if (current != null && current == rootLaneNow()) current = null;
         if (current == null) {
             throw new Unavailable("the Shizuku service did not start within " + (timeoutMs / 1000) + "s");
         }
@@ -218,7 +243,53 @@ public final class PrivilegedLaneBinding {
      */
     @Nullable
     public IPrivilegedLane boundLane() {
-        return liveLane();
+        IPrivilegedLane live = liveLane();
+        // The root lane cannot inject input, so the Home pull-down does not try it.
+        return live != null && live == rootLaneNow() ? null : live;
+    }
+
+    @Nullable
+    private RootLane rootLaneNow() {
+        synchronized (lock) {
+            return rootLane;
+        }
+    }
+
+    private static boolean isRootActiveNow() {
+        try {
+            return PrivilegedBackendManager.getInstance().isRootActive();
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** The root lane, created once and kept while root stays active. */
+    @NonNull
+    private IPrivilegedLane ensureRootLane(@NonNull Context ctx) {
+        synchronized (lock) {
+            if (rootLane == null) {
+                rootLane = new RootLane(ctx);
+                Log.i(TAG, "Lane runs through root as uid " + RootLaneCommands.SHELL_UID);
+            }
+            lane = rootLane;
+            serviceUid = rootLane.uid();
+            binding = false;
+            return rootLane;
+        }
+    }
+
+    private void dropRootLane() {
+        RootLane dropped;
+        synchronized (lock) {
+            dropped = rootLane;
+            rootLane = null;
+            if (dropped != null && lane == dropped) {
+                lane = null;
+                serviceUid = -1;
+            }
+            lock.notifyAll();
+        }
+        if (dropped != null) dropped.destroy();
     }
 
     @Nullable
@@ -237,15 +308,16 @@ public final class PrivilegedLaneBinding {
             ctx = appContext;
             serviceArgs = args;
             if (ctx == null || serviceArgs == null) return;
-            if (binding || (lane != null && lane.asBinder().isBinderAlive())) return;
+            if (binding || (lane != null && lane != rootLane && lane.asBinder().isBinderAlive())) return;
             if (!PrivilegedPolicyStore.isLaneEnabled(ctx)) return;
-            binding = true;
         }
         if (!shizukuAlive() || !permissionGranted()) {
-            synchronized (lock) {
-                binding = false;
-            }
+            if (isRootActiveNow()) ensureRootLane(ctx);
             return;
+        }
+        synchronized (lock) {
+            if (binding) return;
+            binding = true;
         }
         try {
             Shizuku.bindUserService(serviceArgs, connection);
@@ -268,6 +340,7 @@ public final class PrivilegedLaneBinding {
             binding = false;
             lock.notifyAll();
         }
+        dropRootLane();
         if (serviceArgs == null || !shizukuAlive()) return;
         try {
             // remove=true: Shizuku kills the service process rather than keeping it around.

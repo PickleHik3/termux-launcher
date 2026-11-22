@@ -156,6 +156,9 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
             case RUNNING:
                 label = getString(R.string.termux_privileged_lane_state_running, binding.serviceUid());
                 break;
+            case ROOT:
+                label = getString(R.string.termux_privileged_lane_state_root);
+                break;
             case BINDING:
                 label = getString(R.string.termux_privileged_lane_state_binding);
                 break;
@@ -170,7 +173,8 @@ public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragm
                 label = getString(R.string.termux_privileged_lane_state_off);
                 break;
         }
-        ((StatusCardPreference) lanePreference).setStatus(label, state == PrivilegedLaneBinding.State.RUNNING);
+        ((StatusCardPreference) lanePreference).setStatus(label, state == PrivilegedLaneBinding.State.RUNNING
+            || state == PrivilegedLaneBinding.State.ROOT);
     }
 
     private void refreshStatusSummary() {

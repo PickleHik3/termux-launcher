@@ -2208,7 +2208,8 @@
             <string name="termux_privileged_lane_state_no_shizuku">Shizuku isn\'t running</string>
             <string name="termux_privileged_lane_state_no_permission">Shizuku permission missing</string>
             <string name="termux_privileged_lane_state_off">Off</string>
-            <string name="termux_privileged_lane_enabled_title">Allow catalog tools to run as shell via Shizuku</string>
+            <string name="termux_privileged_lane_state_root">Running through root</string>
+            <string name="termux_privileged_lane_enabled_title">Allow catalog tools to run as shell via Shizuku or root</string>
             <string name="termux_privileged_lane_enabled_on">A tool the catalog marks priv=shizuku (btop, for one) may start as the shell user from a terminal session.</string>
             <string name="termux_privileged_lane_enabled_off">Every request from the terminal is refused.</string>
 
