@@ -90,7 +90,16 @@
                 android:id="@+id/shader_knob_rate"
                 layout="@layout/preference_segmented_pill" />
 
-            <!-- Photo flow only: step 1, copy the instructions for an AI tool. -->
+            <include
+                android:id="@+id/shader_photo_row"
+                layout="@layout/shader_image_row" />
+
+            <include
+                android:id="@+id/shader_depth_row"
+                layout="@layout/shader_image_row" />
+
+            <!-- Photo flow only, once a photo is chosen: Send to AI posts the notification that
+                 copies the photo and the prompt and takes the shader back. -->
             <LinearLayout
                 android:id="@+id/shader_photo_flow_copy"
                 android:layout_width="match_parent"
@@ -101,51 +110,25 @@
                 android:paddingEnd="@dimen/settings_gutter"
                 android:visibility="gone">
 
-                <LinearLayout
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/shader_photo_flow_copy_button"
+                    style="@style/Widget.Material3.Button.TonalButton"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:gravity="center_vertical"
-                    android:orientation="horizontal">
-
-                    <TextView
-                        android:layout_width="0dp"
-                        android:layout_height="wrap_content"
-                        android:layout_weight="1"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:minWidth="0dp"
-                        android:text="@string/photo_shader_step_copy"
-                        android:textAppearance="?attr/textAppearanceBodyMedium"
-                        android:textColor="?attr/colorOnSurface" />
-
-                    <com.google.android.material.button.MaterialButton
-                        android:id="@+id/shader_photo_flow_copy_button"
-                        style="@style/Widget.Material3.Button.TonalButton"
-                        android:layout_width="wrap_content"
-                        android:layout_height="wrap_content"
-                        android:layout_marginStart="12dp"
-                        android:ellipsize="end"
-                        android:maxLines="1"
-                        android:minWidth="0dp"
-                        android:minHeight="48dp"
-                        android:text="@string/photo_shader_copy" />
-                </LinearLayout>
+                    android:ellipsize="end"
+                    android:maxLines="1"
+                    android:minWidth="0dp"
+                    android:minHeight="48dp"
+                    android:text="@string/photo_shader_send" />
 
                 <TextView
+                    android:id="@+id/shader_photo_flow_note"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/photo_shader_step_paste_into_ai"
                     android:textAppearance="?attr/textAppearanceBodyMedium"
-                    android:textColor="?attr/colorOnSurfaceVariant" />
+                    android:textColor="?attr/colorOnSurfaceVariant"
+                    android:visibility="gone" />
             </LinearLayout>
-
-            <include
-                android:id="@+id/shader_photo_row"
-                layout="@layout/shader_image_row" />
-
-            <include
-                android:id="@+id/shader_depth_row"
-                layout="@layout/shader_image_row" />
 
             <!-- Terminal-app mode only: the same remembered setting as the Photo page's. -->
             <LinearLayout

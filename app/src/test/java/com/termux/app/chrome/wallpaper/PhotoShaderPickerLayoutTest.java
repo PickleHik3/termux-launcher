@@ -119,6 +119,7 @@ public class PhotoShaderPickerLayoutTest {
 
     private int pickTexture;
     private int pickDepth;
+    private int sent;
 
     private ShaderEditorPage editor() {
         return new ShaderEditorPage(mThemed, false, new ShaderEditorPage.Actions() {
@@ -130,6 +131,7 @@ public class PhotoShaderPickerLayoutTest {
             @Override public void onPickDepth(@NonNull String id) { pickDepth++; }
             @Override public void onDropFile(@NonNull String id, @NonNull String name) {}
             @Override public void onDelete(@NonNull String id) {}
+            @Override public void onSendToAi(@NonNull ShaderEditorPage.Draft draft) { sent++; }
         });
     }
 
@@ -157,41 +159,50 @@ public class PhotoShaderPickerLayoutTest {
         int paste = indexOf(content, root.findViewById(R.id.shader_paste));
         int errors = indexOf(content, root.findViewById(R.id.shader_errors));
         int heavy = indexOf(content, root.findViewById(R.id.shader_too_heavy));
-        assertTrue(name < quality && quality < rate && rate < copy && copy < photo && photo < depth);
-        assertTrue(depth < also && also < heading && heading < code && code < paste);
+        assertTrue(name < quality && quality < rate && rate < photo && photo < depth && depth < copy);
+        assertTrue(copy < also && also < heading && heading < code && code < paste);
         assertTrue(paste < errors && errors < heavy);
         assertEquals(content.getChildCount() - 1, heavy);
     }
 
     @Test
-    public void copyStepAndHeadingShowOnlyInThePhotoFlow() {
+    public void sendToAiShowsOnlyInThePhotoFlowOnceAPhotoIsChosen() {
         ShaderEditorPage page = editor();
-        View copy = page.root().findViewById(R.id.shader_photo_flow_copy);
+        View send = page.root().findViewById(R.id.shader_photo_flow_copy);
         View heading = page.root().findViewById(R.id.shader_code_heading);
         page.show(null, null, null, false, false, null, false);
-        assertEquals(View.GONE, copy.getVisibility());
+        assertEquals(View.GONE, send.getVisibility());
         assertEquals(View.GONE, heading.getVisibility());
         page.setPhotoFlow(true);
-        assertEquals(View.VISIBLE, copy.getVisibility());
+        assertEquals("no photo yet: nothing to send", View.GONE, send.getVisibility());
         assertEquals(View.VISIBLE, heading.getVisibility());
-        assertEquals(mThemed.getString(R.string.photo_shader_copy), ((TextView) page.root()
+        page.setTexture("photo.jpg");
+        assertEquals(View.VISIBLE, send.getVisibility());
+        assertEquals(mThemed.getString(R.string.photo_shader_send), ((TextView) page.root()
             .findViewById(R.id.shader_photo_flow_copy_button)).getText().toString());
+        page.setTexture(null);
+        assertEquals(View.GONE, send.getVisibility());
+        page.setTexture("photo.jpg");
         page.show(null, null, null, false, false, null, false);
-        assertEquals(View.GONE, copy.getVisibility());
+        assertEquals(View.GONE, send.getVisibility());
         assertEquals(View.GONE, heading.getVisibility());
     }
 
     @Test
-    public void copyReadsCopiedAfterATapAndCopyTextIsTheRawResource() {
+    public void sendToAiHandsTheDraftOverAndItsNoteGoesWithTheFlow() {
         ShaderEditorPage page = editor();
         page.show(null, null, null, false, false, null, false);
         page.setPhotoFlow(true);
-        TextView button = page.root().findViewById(R.id.shader_photo_flow_copy_button);
-        button.performClick();
-        assertEquals(mThemed.getString(R.string.photo_shader_copied), button.getText().toString());
-        assertTrue(ShaderEditorPage.readInstructions(mThemed).length() > 0);
+        page.setTexture("photo.jpg");
+        page.root().findViewById(R.id.shader_photo_flow_copy_button).performClick();
+        assertEquals(1, sent);
+        TextView note = page.root().findViewById(R.id.shader_photo_flow_note);
+        page.showSendNote(R.string.photo_shader_send_blocked);
+        assertEquals(View.VISIBLE, note.getVisibility());
+        assertEquals(mThemed.getString(R.string.photo_shader_send_blocked), note.getText().toString());
         page.setPhotoFlow(true);
-        assertEquals(mThemed.getString(R.string.photo_shader_copy), button.getText().toString());
+        assertEquals(View.GONE, note.getVisibility());
+        assertTrue(page.copyPrompt(false));
     }
 
     @Test
