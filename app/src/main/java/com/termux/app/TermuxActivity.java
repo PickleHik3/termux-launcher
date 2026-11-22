@@ -11259,25 +11259,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * visible-frame probe already lifts the whole root above the keyboard, so applying an inset
      * lift too would double it.
      */
+    @SuppressWarnings("deprecation")
     private int computeDockImeLiftPx(@NonNull WindowInsetsCompat insets) {
         // Insets can retain the previous app's mid-transition IME snapshot across a home resume.
         // Accept them only after an input flow in this activity explicitly requested the IME.
         if (!mImeRide.owns() || isSystemImeSuppressedByInAppKeyboard()) {
             return 0;
         }
-        View root = mTermuxActivityRootView;
-        return dockImeLiftPx(insets, root == null ? 0 : root.getPaddingBottom());
+        return dockImeLiftPx(insets, insets.getSystemWindowInsetBottom(),
+            insets.getInsets(Type.systemBars() | Type.displayCutout()).bottom);
     }
 
     /**
-     * The inset lift for {@code insets}, given the bottom padding the root already carries. The
-     * root fits system windows, and below Android 11 the legacy system-window insets fold the
-     * keyboard in, so with the window set to resize the root pads itself by the whole keyboard
-     * before this listener runs: the window has shrunk already. A lift on top of that is the
-     * second one (the Infinix Hot 10 Play on Android 10, fullscreen). Only the band of the
-     * keyboard the root still covers is lifted for, whatever reported it.
+     * The inset lift for {@code insets}, given the legacy fit {@code fitPx} the root pads itself by
+     * and the bars' own bottom inset {@code restPx} ({@link com.termux.app.place.BottomInsets}).
+     * Only the band of the keyboard the root's padding does not already clear is lifted for
+     * ({@link com.termux.app.place.BottomInsets#systemImeLiftPx}). The root's padding is worked
+     * out from these same insets, never read off the view: this listener runs before the root's
+     * own, so the view still carries the padding of the previous dispatch (none, with the
+     * keyboard down and the bars hidden), and a window that resized for the keyboard was lifted
+     * a whole keyboard again on top of it.
      */
-    static int dockImeLiftPx(@NonNull WindowInsetsCompat insets, int rootBottomPaddingPx) {
+    static int dockImeLiftPx(@NonNull WindowInsetsCompat insets, int fitPx, int restPx) {
         if (!insets.isVisible(Type.ime())) {
             return 0;
         }
@@ -11291,9 +11294,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (insets.isVisible(Type.statusBars())) {
             return 0;
         }
-        int alreadyGivenUp = Math.max(insets.getInsets(Type.navigationBars()).bottom,
-            rootBottomPaddingPx);
-        return Math.max(0, insets.getInsets(Type.ime()).bottom - alreadyGivenUp);
+        return com.termux.app.place.BottomInsets.systemImeLiftPx(
+            insets.getInsets(Type.ime()).bottom, insets.getInsets(Type.navigationBars()).bottom,
+            fitPx, restPx);
     }
 
     /** True while the dock is being lifted above the IME via insets instead of the root-view probe. */
