@@ -445,9 +445,9 @@ public class GlassRefractionTest {
     public void thePressedKeyGlowIsItsOwnConstant() {
         assertTrue(GlassRefraction.AGSL.contains("const float kKeyGlow = 0.15;"));
         assertEquals(0.15f, GlassRefraction.KEY_GLOW, 0f);
-        // Premultiplied and held under the alpha.
+        // Additive and unmultiplied, so it shows over a transparent key cell.
         assertTrue(GlassRefraction.AGSL.contains(
-            "col.rgb = min(col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG) * col.a, half3(col.a));"));
+            "col.rgb = col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG);"));
     }
 
     @Test

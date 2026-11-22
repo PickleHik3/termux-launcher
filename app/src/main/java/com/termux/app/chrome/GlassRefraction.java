@@ -1110,9 +1110,10 @@ public final class GlassRefraction {
         "        lin = min(lin, float3(1.0));\n" +
         "        col.rgb = half3(float3(fromLinearSrgb(half3(lin))) * ca);\n" +
         "    }\n" +
-        // The pressed key's glow and the faint scatter under a finger stay small additive light,
-        // premultiplied and held under the alpha.
-        "    col.rgb = min(col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG) * col.a, half3(col.a));\n" +
+        // The pressed key's glow and the faint scatter under a finger stay small additive light.
+        // Left unmultiplied on purpose: over a transparent key cell the alpha is near 0, and the
+        // glow must still show as added light there.
+        "    col.rgb = col.rgb + half3(lensGlow * kKeyGlow + 0.045 * touchG * touchG);\n" +
         // A bead's outline is its own: a pixel wide, anti-aliased, nothing outside it.
         "    if (beads) {\n" +
         "        col = col * half(clamp(inside + 0.5, 0.0, 1.0));\n" +
