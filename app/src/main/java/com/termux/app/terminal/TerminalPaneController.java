@@ -5913,7 +5913,25 @@ public class TerminalPaneController {
      */
     public boolean drawDepartureSlabs(@NonNull android.graphics.Canvas canvas, @NonNull View origin,
                                       @NonNull DepartureCard.Ground ground) {
-        return DepartureCard.draw(canvas, origin, mPaneFrames.values(), paneRadiusPx(), ground);
+        Window leaving = mActiveWindow;
+        if (leaving == null) return false;
+        List<Leaf> leaves = leavesOf(shownTreeOf(leaving));
+        List<TerminalSession> sessions = new ArrayList<>(leaves.size());
+        for (Leaf leaf : leaves) sessions.add(leaf.session);
+        return DepartureCard.draw(canvas, origin, framesOf(sessions, mPaneFrames), paneRadiusPx(), ground);
+    }
+
+    /**
+     * The frames of {@code keys} in their order, skipping keys with none: the departure card
+     * pictures only the window leaving, not the panes of other windows or detached ones.
+     */
+    static <K, V> List<V> framesOf(@NonNull List<K> keys, @NonNull Map<K, V> lookup) {
+        List<V> out = new ArrayList<>(keys.size());
+        for (K key : keys) {
+            V frame = lookup.get(key);
+            if (frame != null) out.add(frame);
+        }
+        return out;
     }
 
     /**

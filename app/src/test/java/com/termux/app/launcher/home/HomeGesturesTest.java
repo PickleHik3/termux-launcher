@@ -113,4 +113,12 @@ public class HomeGesturesTest {
         assertEquals("short", 0, HomeGestures.twoFingerDirection(0, 40, 64));
         assertEquals("sideways", 0, HomeGestures.twoFingerDirection(120, 90, 64));
     }
+
+    @Test
+    public void aKeptGestureAnswerIsReadAgainOnlyAfterItsOwnRowOrAClear() {
+        assertTrue(HomeGestures.movedBy(Gesture.SWIPE_UP.key, Gesture.SWIPE_UP));
+        assertTrue("the whole store cleared", HomeGestures.movedBy(null, Gesture.SWIPE_UP));
+        assertFalse(HomeGestures.movedBy(Gesture.SWIPE_DOWN.key, Gesture.SWIPE_UP));
+        assertFalse(HomeGestures.movedBy(HomeSettings.KEY_PAGE_TRANSITION, Gesture.SWIPE_UP));
+    }
 }

@@ -4753,8 +4753,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // live view that looks new each time: re-dress the panes and pages only when what it
         // answers has moved.
         com.termux.app.terminal.PaneStyleKey key = com.termux.app.terminal.PaneStyleKey.of(style);
-        if (key.equals(mAppliedPaneStyleKey)) return;
+        com.termux.app.terminal.PaneStyleKey previousKey = mAppliedPaneStyleKey;
+        if (key.equals(previousKey)) return;
         mAppliedPaneStyleKey = key;
+        if (key.sameButWallGround(previousKey)) {
+            // The ground colour changes on every Home <-> Terminal crossing and only the Display
+            // page's corner mask reads it.
+            Trace.beginSection("Frost.terminal.wallGround");
+            try {
+                if (mPaneWallController != null) mPaneWallController.applyWallGround(style);
+            } finally {
+                Trace.endSection();
+            }
+            return;
+        }
         Trace.beginSection("Frost.terminal.paneStyle");
         try {
             mPaneController.setSurfaceStyle(style);
@@ -9108,9 +9120,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** {@link #clearInAppKeyboardBackdrop} for a host whose held background holds no frame. */
     private void clearInAppKeyboardBackdropFrame() {
         mInAppKeyboardBackdropBitmap = null;
-        mInAppKeyboardBackdropDrawable = null;
-        mInAppKeyboardBackdropHost = null;
-        mInAppKeyboardBackdropParallax = null;
+        // The drawable is kept for the host's next glass (SharedFrameReuse): a new one compiles
+        // its own refraction program, 10-35 ms of the main thread on pong, and every keyboard
+        // hide came through here. The cache's in-use scan reads the bitmap above, not this.
         mInAppKeyboardBackdropFrameRect.setEmpty();
         mChrome.ledger().reset(SurfaceDirtyLedger.Backdrop.IN_APP_KEYBOARD);
     }
@@ -11579,6 +11591,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWallpaperBackdropView != null) mWallpaperBackdropView.hide();
         mChrome.onTrimMemory();
         clearInAppKeyboardBackdrop();
+        // Under this pressure the kept keyboard glass goes too, and the frame it still points at.
+        mInAppKeyboardBackdropDrawable = null;
+        mInAppKeyboardBackdropHost = null;
+        mInAppKeyboardBackdropParallax = null;
         clearAccessoryRenderEffectBackdrop();
         if (mLiveBackdrop != null) mLiveBackdrop.releaseAll();
         // A policy event: no surface is Live again until the window comes back.
@@ -31993,14 +32009,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatusCardHost.dismiss();
         captureTerminalDeparture();
         mCurrentWSession.current = index;
-        mPaneController.showWindow(mCurrentWSession.currentWindow());
-        // The arrival's nudge first, naming the window it left, so the wallpaper re-sync inside
-        // rebuildDrawerSessions already reads the departure: started after it, that sync wrote
-        // the arrival's offset (a whole jump) and the nudge's first tick wrote the departure back.
-        // The wallpaper's pan counts row places, the display window's among them.
-        animateTerminalWindowArrival(index >= previous ? 1 : -1,
-            previous);
-        rebuildDrawerSessions();
+        int direction = index >= previous ? 1 : -1;
+        // As a swipe's release: the window beyond the arriving one, the drawer's list and the
+        // wall's row wait for the slide to end. The arrival's nudge names the window it left, and
+        // during it the wallpaper follows PaneWallController.rowPosition() from that window, so
+        // the wallpaper re-sync inside rebuildDrawerSessions waits too: run before the nudge, it
+        // wrote the arrival's offset (a whole jump) and the nudge's first tick wrote the
+        // departure back. The wallpaper's pan counts row places, the display window's among them.
+        mPaneController.showWindowAfterStep(mCurrentWSession.currentWindow(), direction);
+        Runnable afterStep = new Runnable() {
+            private boolean mRan;
+            @Override public void run() {
+                if (mRan) return;
+                mRan = true;
+                android.os.Trace.beginSection("Term.afterWindowStep");
+                try {
+                    if (mPaneController != null) mPaneController.releaseHeldNeighbour();
+                    rebuildDrawerSessions();
+                } finally {
+                    android.os.Trace.endSection();
+                }
+            }
+        };
+        // Posted from the slide's end, so the frame that draws the window at rest goes out first
+        // and the rebuild (one neighbour's tree, the drawer and the bar: about 27 ms on pong)
+        // runs with nothing moving.
+        View root = mTermuxActivityRootView;
+        animateTerminalArrival(direction, true,
+            windowSwitchMs(com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS),
+            0f, previous, false, () -> {
+                if (root == null || !root.post(afterStep)) afterStep.run();
+            });
     }
 
     /**

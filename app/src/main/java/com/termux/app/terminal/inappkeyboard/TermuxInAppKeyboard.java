@@ -578,6 +578,10 @@ public final class TermuxInAppKeyboard {
         Trace.beginSection("Keyboard.show");
         try {
             boolean wasVisible = mVisible;
+            View container = mHost == null ? null : mHost.getKeyboardContainer();
+            boolean repeatsTravelShow = showRepeatsTravelShow(wasVisible, mShownForTravel,
+                container != null && container.getVisibility() == View.VISIBLE,
+                mExternalTextInputActive);
             mLastShowReason = Objects.requireNonNull(reason, "reason");
             mVisible = true;
             mShownForTravel = false;
@@ -587,11 +591,22 @@ public final class TermuxInAppKeyboard {
             if (!(mPlaceOwnsSystemIme && mPlaceKeepsSystemImeWhileVisible))
                 mPlaceHoldsSystemIme = false;
             suppressSystemIme();
-            showInternal();
+            // The travel show already put the keys up, laid out and watched; the landing only
+            // takes over typing, so it does not run the show's view and geometry work again.
+            if (!repeatsTravelShow) showInternal();
             if (!wasVisible && reason != ShowReason.FOCUS) notifyVisibilityChanged(true);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /**
+     * Whether a {@link #show} only repeats the {@link #showForTravel} that raised the keyboard:
+     * it is up for travel, its container is on screen and no outside field has taken the keys.
+     */
+    static boolean showRepeatsTravelShow(boolean wasVisible, boolean shownForTravel,
+                                         boolean containerVisible, boolean externalTextInput) {
+        return wasVisible && shownForTravel && containerVisible && !externalTextInput;
     }
 
     /**
