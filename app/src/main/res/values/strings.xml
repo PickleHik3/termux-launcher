@@ -2195,6 +2195,8 @@
             <string name="termux_privileged_allow_shell_fallback_off">Do not use shell fallback; remain unavailable if Shizuku is unusable.</string>
             <string name="termux_privileged_request_permission_title">Request Shizuku permission</string>
             <string name="termux_privileged_request_permission_summary">Request or re-check Shizuku permission now.</string>
+            <string name="termux_privileged_launcherctl_reboot_title">Let launcherctl restart the phone</string>
+            <string name="termux_privileged_launcherctl_reboot_summary">Allows restart, recovery and bootloader requests from scripts.</string>
             <string name="termux_privileged_request_permission_requested">Shizuku permission requested.</string>
             <string name="termux_privileged_request_permission_unavailable">Permission request unavailable for current backend state.</string>
 
@@ -2479,6 +2481,9 @@
     <!-- Terminal action titles, shown in the command palette -->
     <string name="tool_pane_split">New pane</string>
     <string name="tool_pane_root_shell">Root shell</string>
+    <string name="tool_device_restart">Restart phone</string>
+    <string name="tool_device_restart_recovery">Restart to recovery</string>
+    <string name="tool_device_restart_bootloader">Restart to bootloader</string>
     <string name="tool_pane_split_vertical">Split pane vertically</string>
     <string name="tool_pane_split_horizontal">Split pane horizontally</string>
     <string name="tool_pane_focus_direction">Move pane focus</string>
@@ -2583,6 +2588,9 @@
     <!-- Palette subtitles -->
     <string name="tool_desc_pane_split">Open a new pane where there is the most room.</string>
     <string name="tool_desc_pane_root_shell">Open a pane with a root shell that keeps your Termux tools.</string>
+    <string name="tool_desc_device_restart">Restart the phone now.</string>
+    <string name="tool_desc_device_restart_recovery">Restart the phone into recovery mode.</string>
+    <string name="tool_desc_device_restart_bootloader">Restart the phone into the bootloader.</string>
     <string name="tool_desc_pane_split_vertical">Split the focused pane into two panes side by side.</string>
     <string name="tool_desc_pane_split_horizontal">Split the focused pane into two stacked panes.</string>
     <string name="tool_desc_pane_kill_focused">Terminate the shell running in the focused pane.</string>

@@ -19,6 +19,8 @@ import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.privileged.ShizukuBackend;
 import com.termux.privileged.lane.PrivilegedLaneBinding;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 @Keep
 public class PrivilegedAccessPreferencesFragment extends MaterialPreferenceFragment {
@@ -236,6 +238,11 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
             case PrivilegedPolicyStore.KEY_LANE_ENABLED:
                 PrivilegedPolicyStore.setLaneEnabled(mContext, value);
                 break;
+            case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT: {
+                TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+                if (preferences != null) preferences.setLauncherCtlRootRebootEnabled(value);
+                break;
+            }
             default:
                 break;
         }
@@ -255,6 +262,10 @@ class PrivilegedAccessPreferencesDataStore extends PreferenceDataStore {
                 return PrivilegedPolicyStore.isShellFallbackEnabled(mContext);
             case PrivilegedPolicyStore.KEY_LANE_ENABLED:
                 return PrivilegedPolicyStore.isLaneSwitchOn(mContext);
+            case TermuxPreferenceConstants.TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT: {
+                TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(mContext, false);
+                return preferences != null && preferences.isLauncherCtlRootRebootEnabled();
+            }
             default:
                 return defValue;
         }

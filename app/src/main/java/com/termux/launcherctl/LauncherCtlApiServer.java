@@ -2136,6 +2136,13 @@ public class LauncherCtlApiServer {
         // A developer switch flipped by hand to compare two looks.
         rateLimiters.put("GET:/v1/pagebar-glass", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/pagebar-glass", new SimpleRateLimiter(30, 60_000));
+        // Root system actions: a script flips a toggle now and then; a restart is rarer still.
+        rateLimiters.put("POST:/v1/root/lock", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/root/reboot", new SimpleRateLimiter(3, 60_000));
+        rateLimiters.put("POST:/v1/root/wifi", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/root/data", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/root/airplane", new SimpleRateLimiter(30, 60_000));
+        rateLimiters.put("POST:/v1/root/dnd", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/ai/status", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("GET:/v1/ai/runtime", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/ai/tier", new SimpleRateLimiter(30, 60_000));

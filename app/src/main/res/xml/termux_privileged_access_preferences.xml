@@ -43,6 +43,12 @@
             app:title="@string/termux_privileged_request_permission_title"
             app:summary="@string/termux_privileged_request_permission_summary" />
 
+        <SwitchPreferenceCompat
+            app:key="launcherctl_root_reboot"
+            app:title="@string/termux_privileged_launcherctl_reboot_title"
+            app:summary="@string/termux_privileged_launcherctl_reboot_summary"
+            app:defaultValue="false" />
+
     </PreferenceCategory>
 
     <PreferenceCategory

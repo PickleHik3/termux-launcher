@@ -229,6 +229,12 @@ public final class ExtraKeyEligibility {
         tools.put(LauncherToolRegistry.TOOL_WINDOW_NEXT, Band.TERMINAL_TOOL);
         tools.put(LauncherToolRegistry.TOOL_WINDOW_PREVIOUS, Band.TERMINAL_TOOL);
 
+        // The root shell is a pane; the restarts belong to the phone, not to a page.
+        tools.put(LauncherToolRegistry.TOOL_PANE_ROOT_SHELL, Band.MULTIPLEX);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART_RECOVERY, Band.LAUNCHER);
+        tools.put(LauncherToolRegistry.TOOL_DEVICE_RESTART_BOOTLOADER, Band.LAUNCHER);
+
         TOOLS = Collections.unmodifiableMap(tools);
     }
 

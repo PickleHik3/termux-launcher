@@ -4646,4 +4646,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setBoolean(mSharedPreferences,
             TERMUX_APP.KEY_APPEARANCE_THEME_HINT_SEEN, seen, true);
     }
+
+    public boolean isLauncherCtlRootRebootEnabled() {
+        return SharedPreferenceUtils.getBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT, TERMUX_APP.DEFAULT_LAUNCHERCTL_ROOT_REBOOT);
+    }
+
+    public void setLauncherCtlRootRebootEnabled(boolean value) {
+        SharedPreferenceUtils.setBoolean(mSharedPreferences,
+            TERMUX_APP.KEY_LAUNCHERCTL_ROOT_REBOOT, value, false);
+    }
 }

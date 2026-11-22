@@ -248,6 +248,10 @@ public final class TermuxPreferenceConstants {
 
         public static final boolean DEFAULT_X11_FORCE_BGRA = false;
 
+        /** Whether launcherctl may restart the phone (restart, recovery, bootloader). */
+        public static final String KEY_LAUNCHERCTL_ROOT_REBOOT = "launcherctl_root_reboot";
+        public static final boolean DEFAULT_LAUNCHERCTL_ROOT_REBOOT = false;
+
         /** List the prefix's Linux apps in the app drawer, to be run on the display. */
         public static final String KEY_X11_DRAWER_APPS = "x11_drawer_apps";
 

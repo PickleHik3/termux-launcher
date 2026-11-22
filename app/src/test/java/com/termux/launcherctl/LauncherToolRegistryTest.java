@@ -71,8 +71,9 @@ public class LauncherToolRegistryTest {
         // voice.dictate, the Dictate key that starts a dictation on any place, and by window.move
         // with its palette pair window.move_left and window.move_right, which reorder the row, and
         // by pane.consume and pane.expel, Niri's column moves on the row, and by minimal.toggle,
-        // the palette's door to minimal mode, and by wall.assistant, the Assistant key.
-        assertEquals(92, registry.getUiTools().size());
+        // the palette's door to minimal mode, and by wall.assistant, the Assistant key, and by
+        // pane.root_shell and the three device.restart tools, which need root.
+        assertEquals(96, registry.getUiTools().size());
     }
 
     @Test
@@ -444,6 +445,19 @@ public class LauncherToolRegistryTest {
         LauncherToolRegistry.Availability noRoot = tool.availabilityIn(context(true, true));
         assertFalse("no root shell without root", noRoot.available);
         assertTrue(noRoot.reasonRes != 0);
+    }
+
+    @Test
+    public void restartTools_areConfirmedUnboundAndNeedRoot() {
+        for (String name : new String[]{"device.restart", "device.restart_recovery",
+                "device.restart_bootloader"}) {
+            LauncherToolRegistry.ToolMetadata tool = registry.getTool(name);
+            assertNotNull(name, tool);
+            assertTrue(name, tool.requiresConfirmation);
+            assertEquals(name, LauncherToolRegistry.ToolRisk.HIGH, tool.risk);
+            assertTrue(name + " has no default key", tool.defaultBindings.isEmpty());
+            assertFalse(name + " needs root", tool.availabilityIn(context(true, true)).available);
+        }
     }
 
     @Test
