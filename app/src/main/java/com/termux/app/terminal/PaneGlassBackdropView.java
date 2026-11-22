@@ -1067,8 +1067,9 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final Matrix mSoftMatrix = new Matrix();
 
     /** The frame through the frost and even-out filter, aimed as the plain draw aims it. */
-    private void drawFramePlain(@NonNull Canvas canvas, int width, int height) {
-        Bitmap frame = mFrame;
+    private void drawFramePlain(@NonNull Canvas canvas, int width, int height,
+                                @Nullable Bitmap frame, @Nullable Rect frameRect,
+                                float parallaxPx) {
         if (frame == null) return;
         // A HARDWARE frame is drawn from its small software copy, scaled back up to the frame.
         Bitmap readable = com.termux.app.chrome.HardwareFrame.readable(frame);
@@ -1078,8 +1079,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             mSoftShaderFrame = readable;
         }
         GlassAnchor.place(this, mPlacement);
-        mAim.set(mPlacement.toScreen, mFrameRect, frame.getWidth(), frame.getHeight(),
-            mParallax == null ? 0f : mParallax.offsetPx());
+        mAim.set(mPlacement.toScreen, frameRect, frame.getWidth(), frame.getHeight(), parallaxPx);
         mAim.shaderMatrix(mSoftMatrix);
         if (readable != frame) {
             mSoftMatrix.preScale(frame.getWidth() / (float) readable.getWidth(),
@@ -1134,6 +1134,16 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
      */
     static boolean skipsFrame(boolean liveFrame, boolean hardwareCanvas) {
         return liveFrame && !hardwareCanvas;
+    }
+
+    /**
+     * Whether the departure card's software canvas draws the scene's live frame plain through the
+     * slab's own filter (the even-out matrix is what makes the pane at rest darker than the raw
+     * wallpaper): a slab, not a corner mask, whose frame has a software-readable copy. Pure.
+     */
+    static boolean drawsSceneFramePlain(boolean liveFrame, boolean hardwareCanvas,
+                                        boolean cornerMask, boolean readable) {
+        return skipsFrame(liveFrame, hardwareCanvas) && !cornerMask && readable;
     }
 
     /** What goes over the frame: tint, veil, grain, rim; the corner mask's own colour instead. */
@@ -1193,7 +1203,13 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // The live frame is a hardware bitmap, which a software canvas refuses outright.
         if (skipsFrame(liveFrame != null, canvas.isHardwareAccelerated())) {
             // Only the frame sits out: the tint, veil, grain and rim still go over the ground the
-            // departure card painted, so the card is as dark as the pane it replaces.
+            // departure card painted, so the card is as dark as the pane it replaces. The frame
+            // goes under them plain, through the slab's own filter, aimed as the live frame is.
+            if (mFrame != null && !mFrame.isRecycled() && mFrameShader != null
+                    && drawsSceneFramePlain(true, false, mCornerMaskRadiusPx > 0f,
+                        com.termux.app.chrome.HardwareFrame.readable(liveFrame.bitmap) != null)) {
+                drawFramePlain(canvas, width, height, liveFrame.bitmap, LiveSceneFrame.rect(), 0f);
+            }
             drawDressing(canvas, width, height);
             canvas.restoreToCount(save);
             return;
@@ -1210,7 +1226,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsPlainOnSoftware(mProgram != null, canvas.isHardwareAccelerated(),
                     hardwareFrame)) {
-            drawFramePlain(canvas, width, height);
+            drawFramePlain(canvas, width, height, mFrame, mFrameRect,
+                mParallax == null ? 0f : mParallax.offsetPx());
         }
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsOnPaint(mProgram != null, canvas.isHardwareAccelerated(), hardwareFrame)) {

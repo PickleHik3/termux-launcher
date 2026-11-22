@@ -530,4 +530,13 @@ public class PaneGlassBackdropViewTest {
         assertFalse(PaneGlassBackdropView.skipsFrame(false, false));
         assertFalse(PaneGlassBackdropView.skipsFrame(false, true));
     }
+
+    @Test
+    public void theSceneFrameIsDrawnPlainOnlyOnASoftwareSlabWithAReadableCopy() {
+        assertTrue(PaneGlassBackdropView.drawsSceneFramePlain(true, false, false, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(true, true, false, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(false, false, false, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(true, false, true, true));
+        assertFalse(PaneGlassBackdropView.drawsSceneFramePlain(true, false, false, false));
+    }
 }
