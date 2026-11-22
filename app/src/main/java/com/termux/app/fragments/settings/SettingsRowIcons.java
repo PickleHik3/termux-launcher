@@ -116,8 +116,9 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_deployed_code, "gui_apps_distro");
         key(R.drawable.ic_ms_public, "gui_apps_starter_browser");
         key(R.drawable.ic_ms_folder, "gui_apps_starter_files");
-        key(R.drawable.ic_ms_developer_board, "x11_gpu", "status_widget_cpu",
-            "status_widget_gpu");
+        key(R.drawable.ic_ms_developer_board, "x11_gpu");
+        key(R.drawable.ic_rl_cpu, "status_widget_cpu");
+        key(R.drawable.ic_rl_gpu, "status_widget_gpu");
         key(R.drawable.ic_rl_text_size, "status_widget_font_toggle");
         key(R.drawable.ic_ms_apps, "display", "x11_drawer_apps");
         key(R.drawable.ic_ms_volume_up, "launcher_sound", "launcher_sound_status");
