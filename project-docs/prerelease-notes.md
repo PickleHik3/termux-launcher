@@ -13,118 +13,53 @@ Latest stable: v1.2.2.
 ## New in this drop
 <!-- Only what this drop adds over the one before it; replace the whole list at every drop. -->
 
-This update starts your look again from the default, once: glass, colours, the status bar, the dock, the keyboard's look, the terminal font and text size, and every page's layout. Your Home pages, widgets, apps, wallpaper, extra keys and sessions stay. Set it up again in the Appearance editor.
+### Home and glass
+- With a moving wallpaper, Home no longer flashes a small copy of the wallpaper in the top-left corner, and the wallpaper around the Linux display no longer flickers.
+- Switching terminal windows with the space bar over a moving wallpaper keeps the window that leaves as dark as it was.
+- The palette, the terminal sheet and the menus' panels wear the same glass as Home.
+- The drawer's card and its search capsule wear Live glass; the list runs under the floating search capsule, and the search bar folds once you scroll a full row.
 
-### Appearance
-- The status bar, dock, keyboard and menus look the same on every page; the Appearance editor has six cards, and the Workspace card is now part of Terminal.
-- A setting you change on one card shows a reset arrow; changing Global no longer overwrites it.
-- Each setting lives in one place: rows moved to the card where you see their effect, and Settings no longer repeats what the editor holds.
-- Menus and dialogs wear Global's glass, and sheets that stand over other glass are frosted more so they stay readable.
-- The Terminal card has its own Background: Opacity, Blur and Wallpaper dim (#287).
-- Adaptive legibility, next to Contrast on the Global and Terminal cards: off, text is tuned once for the whole wallpaper; on, each item adjusts to what is behind it (#297).
-- `launcherctl look` sets what the Appearance cards can; `--kind` and `--page` are gone.
-
-### Home
-- A glass page bar above the dock replaces the page dots: slide a finger along it to switch pages, with the page's name above your finger.
-- A page switcher key for the extra keys opens the page bar from any page, and a Setup card offers to add it.
-- Floating terminals on Home open above the keyboard and step down so no title bar is hidden; only the focused one makes room for the keyboard (#310).
-- On Home the keyboard comes up over the dock instead of pushing it up (#309).
-- Home comes back with its keyboard up or down as you left it.
-- Home's status bar shows a chip for each floating terminal on that page (#295).
-- Long-press Home › Appearance opens the Global card.
-- A vertical swipe that starts on a widget opens the drawer or shade as it would anywhere on Home.
-
-### Dock and drawer
-- New installs get the Default drawer: Apps and Categories side by side, switched by a swipe or the pill at the top, reopening on the one you left. Upgrading keeps your current drawer.
-- The drawer's search bar is a centred capsule, at the top or the bottom as you choose; while you scroll it folds into a round button in the corner, and a tap brings it back.
-- Long-press a Linux app in the drawer and choose Hide to take it out of the drawer; bring it back from the app's settings page.
-- Drawer layout settings have Icon size, Columns, and Rows for the Pages layout.
-- Hold a corner of the drawer for a shortcut to its settings, or tap Edit there to rearrange it: touch an app to lift it into a folder, drag the Categories tiles into your own order, and change the grid size in place. Reset category order in Drawer layout settings puts the tiles back.
-- Large icons stay sharp on dense screens and tablets.
-- A folder on the dock no longer appears inside the drawer, and its apps stay listed there.
-- The highlighted search result is a small glass tile around the app's icon and name.
-- Uninstall in an app's long-press menu works again, from the drawer, the dock and the widget pane.
-- Reorder pinned apps live: the row opens a gap where you carry an icon and the icon drops into it; hold at the row's end, or touch with a second finger, to turn the dock's page (#155).
-- Drag an app from the drawer onto the dock to pin it; the drawer closes as soon as you pick it up.
-- Lift a held icon by moving in any direction.
-- A folder opens out of its icon.
-- The drawer's app menu has Add to folder, with New folder.
-- On tablets and wide screens the drawer's Categories view adds columns instead of stretching the cards.
-- Touching the A–Z strip puts the drawer's keyboard away.
-- The drawer keeps its icons while the app list reloads instead of going blank.
-- New apps appear in the drawer and A–Z even when installed while another app was in front.
-
-### Extra keys and keyboard
-- The extra-keys bar is new: swipe between pages of keys, hold to repeat, swipe up for a key's second action, and set the key size in the editor.
-- Each page can have its own extra keys, or follow Global's.
-- Extra keys on Home: turn them on in the editor and they sit in a pill you can hold and move, and dock above the keyboard when it opens.
-- One set of outline icons across the extra keys, the keyboard, the status bar, notices, Home's widgets, weather, the page bar and the editor's buttons; keys you saved before pick them up on their own, and Esc, Ctrl and Alt stay as words.
-- Notices show an icon for what happened, and messages that used to pop up as Android toasts appear as notices too.
-- The extra keys' key picker shows each action's icon instead of its name.
-- Weather icons are still and two-toned, with their own icons for mainly clear, heavy rain, heavy snow and rime fog.
-- A press on the keyboard's outer frame types the key beside it.
-- Key bindings work from the in-app keyboard on every page.
-- In every text field in the launcher, the keyboard's settings, clipboard and layout keys work, and copy, cut, paste, select all, undo and Ctrl+A, C, X, V and Z act on the field.
-- Settings › Keyboard › Layouts previews the layout you are using.
-- Settings groups the keyboard and extra keys under Keyboard & extra keys.
-- With a hardware keyboard and the on-screen one hidden, renaming a window, the palette and find no longer bring up the on-screen keyboard.
-- After switching windows, by shortcut or by tapping a window chip, typing goes to the window now on screen.
-
-### Terminal
-- A program's status (needs input, done, failed) shows on its window's pill, with a notice when it happens in a pane you are not looking at.
-- When you are away from the Terminal page, bells, messages and program states arrive as Android notifications, one per window; tap one to open that pane.
-- On the Fast engine, a program that wants to read the clipboard asks first, per program; Settings can reset the programs you always allowed.
-- On the Fast engine, programs get the same keyboard, mouse and colour-scheme answers they get in Ghostty.
-- The split divider has its own touch strip, and Inner gap sets the gap between split panes.
-- In Terminal only mode, opening the app after Ctrl+D on the last shell starts a new shell instead of closing again (#276).
-
-### Linux apps
-- Settings › Linux apps has a page per app: touch mode, Scale, Graphics and the paste key's shortcut, applied when the app starts.
-- Paste a picture from Android's clipboard into Linux apps.
-- New shells connect to the running display without setup, and apps on the display get a proper cursor.
-- XFCE is offered on the Termux route of Set up Linux apps, with typing through your keyboard and the store's apps in its menu.
-- A desktop that ends is noticed, so it can start again.
-- In overlay mode the extra keys and keyboard sit below the display instead of over it.
-- GL apps start their graphics server on the display.
-- Text typed into Linux apps arrives as normal key presses, so it works in apps that ignored it before.
-- The desktop no longer disappears behind a Shader wallpaper.
-- Resize display shrinks the display window.
-- If Android stops the launcher's programs, a notice explains why, with a fix through Shizuku and a Restore in Diagnostics.
-
-### Wallpaper
-- Make a moving wallpaper from a photo: the Shader page's From a photo turns it into a depth scene, with the depth made on the phone.
+### Smoother
+- The drawer opens and closes without rebuilding its app list.
+- Swiping between Home pages no longer restarts your widgets.
+- Home does much less work while it sits still over a moving wallpaper.
+- Switching terminal windows, going between Home and the Terminal, and opening the keyboard do less work in the frames you see.
 
 ### Status bar
-- A battery chip can sit beside CPU and memory; switch it on in Settings or the Appearance editor.
-- When the readings are wider than the row, the status bar shows whole chips instead of cutting one off.
-- Window chips work from any page, and tapping the selected chip on Home goes to its window.
+- Choose the order of the status row's items in the Status bar card.
+- A GPU load stat, off by default. A CPU or GPU stat that needs Shizuku or root stays in place, greyed, and says what is missing.
+- Crisper CPU, RAM and GPU icons, and weather icons the same size as the rest of the set.
+- On the Terminal, a status bar pill switches between your text size and a saved Compact size.
 
-### Assistant
-- Answers show their thinking in a row you can open, and a line with their speed and time.
-- Messages are bubbles in your colours, and the composer says what the answer is doing, including Waiting in queue.
+### Shizuku and root
+- One Use choice picks Shizuku or root, in place of three switches.
+- With root: lock the screen from the A–Z strip; force stop, freeze or clear an app's cache from its menu; stop an app or end a process from the stats card; open a root shell in a new pane; and lock, restart or flip quick toggles with `launcherctl`.
+- With root, the stats card reads GPU load, clocks and temperatures where the system hides them.
 
-### Voice and on-device AI
-- A graphics chip that has not been checked starts on the processor; Check the GPU, among the Functions, tests it, and the result survives updates.
-- Re-sort apps offers the on-device route on lower-end phones and stays usable on low memory.
-- A voice's Voice settings opens the Read aloud page.
-
-### Setup
-- Setup cards come back only for cards you have never seen.
-- Skip keeps the choices made so far; the wizard waits until the first install has finished, and asks for wallpaper access only when your look needs it.
+### Wallpaper
+- Make a moving wallpaper from a photo with any AI chat: Send to AI gives you a notification with Copy image, Copy prompt and Paste shader. Edit opens that shader, Undo puts back the shader and wallpaper you had, and you can paste another answer to try again.
+- A moving wallpaper made from a shader moves on Home again.
 
 ### Fixes
-- Menus, key bubbles and the A–Z strip appear in the right place in split screen.
-- Two-option toggles stay on one line at large font sizes.
-- Weather keeps the last good forecast when a refresh fails.
-- Linux sound starts again after its server was killed.
-- Export logs saves its report to a file.
-- The Settings search field stays when you type the first letter.
+- A press that slides off the keyboard's back strips types nothing.
+- Sliding the cursor on the space bar no longer switches windows.
+- Rows lift above a system keyboard by the right amount.
+- Restart actions live in the palette, where they ask first.
+- The drawer's search keyboard goes away when the drawer settles on Categories.
+- A Global Look stays selected in the editor while surfaces keep their own glass.
 
 ## Experimental
 <!-- What is on pre and not yet in a stable, one line each; name the pull request or branch it came from,
 and end the line with its status in an HTML comment: ready, stays: P2, P6 (the checks still failing)
 or drop: reason (docs/agents/releasing.md, "Promoting from pre to a stable"). -->
 These may change or be dropped before they reach a stable release.
+
+- **New in v2.0.0-pre.7**:
+  - Send to AI: make a moving wallpaper from a photo with any AI chat, from a notification. <!-- stays: P1, P2 -->
+  - The status row's items in an order you choose, a GPU load stat, and greyed stats that say what they need. <!-- stays: P1, P2 -->
+  - One Use choice for Shizuku or root, and root actions from the A–Z strip, app menus, the stats card, a root shell pane and `launcherctl`. <!-- stays: P1, P2 -->
+  - The Compact text size pill on the Terminal's status bar. <!-- stays: P1, P2 -->
+  - The palette, sheets and menus in Home's glass, and the drawer's Live glass card and floating search capsule. <!-- stays: P1, P2 -->
 
 - **Terminal** (v2.0.0-pre.1):
   - dialog and whiptail screens, such as termux-change-repo, are readable: the red and blue text on their white panels now stands out in every Look and at every Contrast level. <!-- stays: P1, P2 -->
