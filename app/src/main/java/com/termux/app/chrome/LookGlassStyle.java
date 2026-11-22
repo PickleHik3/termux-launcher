@@ -200,13 +200,12 @@ public final class LookGlassStyle implements PaneSurfaceStyle, WidgetInkSource {
     @Override @Nullable public Bitmap paneGlassClearFrame() {
         LookGlassSpec spec = spec();
         View wallpaperFrame = mHost.wallpaperFrame();
-        if (!worn() || !spec.slabShown() || wallpaperFrame == null || !mHost.wallpaperBlurs()
-                || !WallpaperFrostPainter.wantsClearFrame(paneGlassRefraction(), spec.blurDp)) {
+        if (!worn() || !spec.slabShown() || wallpaperFrame == null || !mHost.wallpaperBlurs()) {
             mClearFrame = null;
             return null;
         }
-        Bitmap clear = mChrome.blurCache().obtain(GlassRefraction.CLARITY_RADIUS_DP,
-            wallpaperFrame);
+        Bitmap clear = WallpaperFrostPainter.sharpFrame(mChrome.blurCache(),
+            paneGlassRefraction(), spec.blurDp, wallpaperFrame);
         mClearFrame = clear != null && !clear.isRecycled() ? clear : null;
         return mClearFrame;
     }

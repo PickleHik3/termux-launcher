@@ -4700,13 +4700,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Nullable com.termux.app.chrome.GlassRefraction.Look look) {
         int radiusDp = mPreferences != null ? mPreferences.getTerminalGlassBlurRadius() : 0;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
-        if (wallpaperFrame == null || !isTerminalPaneGlassActive() || !wallpaperSampleable()
-                || !com.termux.app.chrome.WallpaperFrostPainter.wantsClearFrame(look, radiusDp)) {
+        if (wallpaperFrame == null || !isTerminalPaneGlassActive() || !wallpaperSampleable()) {
             mPaneGlassClearFrame = null;
             return null;
         }
-        Bitmap clear = mChrome.blurCache().obtain(
-            com.termux.app.chrome.GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame);
+        Bitmap clear = com.termux.app.chrome.WallpaperFrostPainter.sharpFrame(mChrome.blurCache(),
+            look, radiusDp, wallpaperFrame);
         mPaneGlassClearFrame = clear != null && !clear.isRecycled() ? clear : null;
         return mPaneGlassClearFrame;
     }
@@ -6658,12 +6657,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private Bitmap glassClearFrame(int blurRadiusDp) {
-        if (!com.termux.app.chrome.WallpaperFrostPainter.wantsClearFrame(mFancierGlassLook,
-                blurRadiusDp)) return null;
         View wallpaperFrame = findViewById(R.id.activity_termux_root_view);
         if (wallpaperFrame == null) return null;
-        Bitmap clear = mChrome.blurCache().obtain(
-            com.termux.app.chrome.GlassRefraction.CLARITY_RADIUS_DP, wallpaperFrame);
+        Bitmap clear = com.termux.app.chrome.WallpaperFrostPainter.sharpFrame(mChrome.blurCache(),
+            mFancierGlassLook, blurRadiusDp, wallpaperFrame);
         return clear != null && !clear.isRecycled() ? clear : null;
     }
 
