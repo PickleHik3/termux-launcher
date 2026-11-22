@@ -32012,14 +32012,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mStatusCardHost.dismiss();
         captureTerminalDeparture();
         mCurrentWSession.current = index;
-        mPaneController.showWindow(mCurrentWSession.currentWindow());
-        // The arrival's nudge first, naming the window it left, so the wallpaper re-sync inside
-        // rebuildDrawerSessions already reads the departure: started after it, that sync wrote
-        // the arrival's offset (a whole jump) and the nudge's first tick wrote the departure back.
-        // The wallpaper's pan counts row places, the display window's among them.
-        animateTerminalWindowArrival(index >= previous ? 1 : -1,
-            previous);
-        rebuildDrawerSessions();
+        int direction = index >= previous ? 1 : -1;
+        // As a swipe's release: the window beyond the arriving one, the drawer's list and the
+        // wall's row wait for the slide to end. The arrival's nudge names the window it left, and
+        // during it the wallpaper follows PaneWallController.rowPosition() from that window, so
+        // the wallpaper re-sync inside rebuildDrawerSessions waits too: run before the nudge, it
+        // wrote the arrival's offset (a whole jump) and the nudge's first tick wrote the
+        // departure back. The wallpaper's pan counts row places, the display window's among them.
+        mPaneController.showWindowAfterStep(mCurrentWSession.currentWindow(), direction);
+        Runnable afterStep = new Runnable() {
+            private boolean mRan;
+            @Override public void run() {
+                if (mRan) return;
+                mRan = true;
+                android.os.Trace.beginSection("Term.afterWindowStep");
+                try {
+                    if (mPaneController != null) mPaneController.releaseHeldNeighbour();
+                    rebuildDrawerSessions();
+                } finally {
+                    android.os.Trace.endSection();
+                }
+            }
+        };
+        animateTerminalArrival(direction, true,
+            windowSwitchMs(com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS),
+            0f, previous, false, afterStep);
     }
 
     /**
