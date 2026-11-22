@@ -323,7 +323,7 @@ public class GlassMotionLightTest {
         // The resting expressions are untouched, and every live term sits behind its gate.
         assertTrue(agsl.contains("float pull = edgeProfile(t) * min(sStrength, min(b.x, b.y)) * edge;"));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * pull;"));
-        assertTrue(agsl.contains("float split = uDisp > 0.0 ? pull * uDisp * cornerWeight(p, b) : 0.0;"));
+        assertTrue(agsl.contains("float split = uDisp > 0.0 ? pull * uDisp * kSplitWeight : 0.0;"));
         assertTrue(agsl.contains("float2 sn = nb;"));
         int liveGate = agsl.indexOf("if (live) {");
         assertTrue(liveGate > 0);
