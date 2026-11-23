@@ -11,9 +11,10 @@ import java.util.Locale;
  * The glass rim's numbers: one thin, crisp line along the outline that the program
  * ({@link GlassRefraction}) draws on every glass surface. The line both darkens what is behind it
  * (the dark line) and adds white (the light line), lit in linear light, so it adds no colour of
- * its own: white facing the room's key light (up and to the left), the dark deepest facing away,
- * and a baseline of white ({@link #base}) and of dark ({@link #darkAll}) that every side and
- * corner keeps alike, so no side vanishes under any page transition.
+ * its own: a baseline of white ({@link #base}) and of dark ({@link #darkAll}) that every side and
+ * corner keeps alike, so no side vanishes under any page transition, and the dark deepest facing
+ * away from up and to the left. The white a key light adds facing it ({@link #spec}) ships at 0:
+ * the glass has no fixed light, so the line is even all round; a finger still lights it.
  *
  * <p>The line's profile across the depth (BorderBeam's): whole from the outline to
  * {@link #lineDp} in, then off on a smoothstep over {@link #softDp}, plus a short halo of
@@ -47,8 +48,11 @@ public final class GlassRim {
     static final float HALO_DP = 0.75f;
     /** The white every side keeps, linear. {@code kRimBase}. */
     static final float BASE = 0.18f;
-    /** The white the key light adds where the outline faces it squarely, linear. {@code kRimSpec}. */
-    static final float SPEC = 0.25f;
+    /**
+     * The white a key light adds where the outline faces it squarely, linear: 0, no fixed light.
+     * It also lights the dock shelf's lip. A tuning key. {@code kRimSpec}.
+     */
+    static final float SPEC = 0f;
     /** The dark line's darkening facing straight away from the key light. {@code kRimDark}. */
     static final float DARK = 0.3f;
     /** The share of {@link #DARK} every side keeps. {@code kRimDarkAll}. */

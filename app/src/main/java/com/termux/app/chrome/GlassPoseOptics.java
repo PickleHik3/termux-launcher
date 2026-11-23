@@ -21,8 +21,10 @@ import java.util.Locale;
  * bevel facing away meets the eye more steeply and takes more Schlick Fresnel light from the
  * slab's own normal (the program turns the eye in the slab's frame); the face's reflectance rises
  * from {@link GlassSlab#f0} toward about 9% at 60 degrees ({@link #faceReflectanceRise}, the
- * dielectric Fresnel equations); one soft glint crosses the face as its normal passes the light's
- * reflection toward the eye ({@link #glint}).</li>
+ * dielectric Fresnel equations), and the bevel going away sees the wallpaper further out
+ * ({@link GlassRefraction}). A soft glint that crossed the face as its normal passed a fixed
+ * light's reflection ({@link #glint}) stays as a tuning key and ships at 0: the glass has no fixed
+ * light.</li>
  * <li><b>Scaled</b> (Depth's sink, Stack's rise): the picture is magnified a little with the
  * page's scale ({@link #magnify}). The bevel's width in px scales with the page by itself: the
  * slab draws in its own coordinates, under the page's transform.</li>
@@ -53,8 +55,8 @@ public final class GlassPoseOptics {
     static final float MAX_SHIFT_DP = 24f;
     /** The turn's Fresnel, on the bevel and the face, as a share of the physical change. */
     static final float FRESNEL = 1f;
-    /** The glint's white at its peak, linear. */
-    static final float GLINT = 0.10f;
+    /** The glint's white at its peak, linear: 0, no fixed light to glint. A tuning key. */
+    static final float GLINT = 0f;
     /** The glint's half width across its travel, dp; three times that along its length. */
     static final float GLINT_WIDTH_DP = 36f;
     /** The sine of turn over which the glint fades in: none flat, all of it from about 4 degrees. */

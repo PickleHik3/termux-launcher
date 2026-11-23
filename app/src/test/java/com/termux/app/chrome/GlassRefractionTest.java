@@ -923,7 +923,8 @@ public class GlassRefractionTest {
         assertEquals(agsl.indexOf(gate), agsl.lastIndexOf(gate));
         assertTrue(agsl.contains("lineW = min(1.0 - smoothstep(lineCore, lineCore + lineSoft, inside)\n"
             + "                + kRimHalo * exp(-max(inside - lineCore, 0.0) / lineHalo), 1.0);"));
-        assertTrue(agsl.contains("float white = (kRimBase + kRimSpec * lobe) * lineW + kRimSpec * shelfW;"));
+        assertTrue(agsl.contains(
+            "float white = (kRimBase + kRimSpec * lobe + kTouchRim * touchG) * lineW + kRimSpec * shelfW;"));
         assertTrue(agsl.contains(
             "float keep = 1.0 - kRimDark * (kRimDarkAll + (1.0 - kRimDarkAll) * away) * lineW;"));
         assertTrue(agsl.contains("float3 lin = float3(toLinearSrgb(half3(float3(col.rgb) / ca)));"));
@@ -932,10 +933,11 @@ public class GlassRefractionTest {
         // reflects (one tap, lens pixels only); one way back.
         assertEquals("two into linear light", 2, agsl.split("toLinearSrgb", -1).length - 1);
         assertEquals("one way back", agsl.indexOf("fromLinearSrgb"), agsl.lastIndexOf("fromLinearSrgb"));
-        // The rim's light is fixed in the room: only a finger moves its lobe (#318 removed the
-        // live glint, its key light and the tilt's lean).
-        assertTrue(agsl.contains("            lobe = lobe + kTouchRim * touchG;\n"
-            + "            float white = (kRimBase + kRimSpec * lobe) * lineW + kRimSpec * shelfW;"));
+        // No light moves on the rim but a finger's (#318 removed the live glint, its key light and
+        // the tilt's lean); the finger's white stands apart from the key light's, which ships at
+        // 0 (2026-11-23), at what one and a half lobes of the former 0.25 added.
+        assertEquals(1.5f * 0.25f, GlassRefraction.TOUCH_RIM, 1e-6f);
+        assertFalse(agsl.contains("lobe = lobe + kTouchRim"));
         for (String gone : new String[] {"uKeyLight", "glintW", "liveKeyLobe", "kTiltLight", "tiltLean"}) {
             assertFalse(gone, agsl.contains(gone));
         }

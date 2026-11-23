@@ -16,18 +16,21 @@ public class GlassSlabTest {
     private static final float DEPTH_DP = 9f;
 
     @Test
-    public void theDefaultsStartFromTheResearch() {
-        assertEquals(16f, SLAB.lensDp, 0f);
+    public void theDefaultsAreTheResearchAsTunedOnPong() {
+        // Tuned on pong by the developer, 2026-11-23: a wider zone eased in (p = 4), no fixed
+        // light (no specular), the sky tone cut to a floor, the wallpaper reflected instead.
+        assertEquals(24f, SLAB.lensDp, 0f);
         assertEquals(0.25f, SLAB.share, 0f);
         assertEquals(1.5f, SLAB.ior, 0f);
         assertEquals(0.04f, SLAB.f0, 0f);
         assertEquals("F0 is glass's own at its index", (float) Math.pow((1.5 - 1) / (1.5 + 1), 2),
             SLAB.f0, 1e-6f);
-        assertEquals(0.4f, SLAB.env, 0f);
-        assertEquals(0.2f, SLAB.spec, 0f);
+        assertEquals(0.1f, SLAB.env, 0f);
+        assertEquals(0f, SLAB.spec, 0f);
         assertEquals(24f, SLAB.power, 0f);
-        assertEquals(2f, SLAB.profile, 0f);
+        assertEquals(4f, SLAB.profile, 0f);
         assertEquals(1f, SLAB.disp, 0f);
+        assertEquals(2f, SLAB.reflect, 0f);
     }
 
     @Test
@@ -57,9 +60,11 @@ public class GlassSlabTest {
         String agsl = GlassRefraction.agsl(GlassRim.DEFAULT, GlassSlab.parse("lens=20,ior=1.6"));
         assertTrue(agsl.contains("const float kLensDp = 20.0;\n"));
         assertTrue(agsl.contains("const float kIor = 1.6;\n"));
-        assertTrue(GlassRefraction.AGSL.contains("const float kLensDp = 16.0;\n"));
+        assertTrue(GlassRefraction.AGSL.contains("const float kLensDp = 24.0;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float kLensShare = 0.25;\n"));
-        assertTrue(GlassRefraction.AGSL.contains("const float kSlabP = 2.0;\n"));
+        assertTrue(GlassRefraction.AGSL.contains("const float kSlabP = 4.0;\n"));
+        assertTrue(GlassRefraction.AGSL.contains("const float kEnv = 0.1;\n"));
+        assertTrue("no specular", GlassRefraction.AGSL.contains("const float kSpecK = 0.0;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float3 kHalf = float3("));
         assertTrue(GlassRefraction.agsl(GlassRim.DEFAULT, GlassSlab.parse("reflect=3"))
             .contains("const float kEnvK = 3.0;\n"));
@@ -70,8 +75,8 @@ public class GlassSlabTest {
     @Test
     public void aLargePaneAtPongTakesTheWholeLensAndTheDepth() {
         float shortSide = 360f * PONG;
-        assertEquals(16f * PONG, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
-        assertEquals("42 px on pong", 42f, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
+        assertEquals(24f * PONG, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
+        assertEquals("63 px on pong", 63f, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
         assertEquals(DEPTH_DP * PONG, SLAB.thicknessPx(DEPTH_DP * PONG, shortSide, PONG), 1e-3f);
     }
 
@@ -81,8 +86,9 @@ public class GlassSlabTest {
         float w = SLAB.lensWidthPx(shortSide, PONG);
         assertEquals("a quarter of its short side", 8f * PONG, w, 1e-3f);
         float t = SLAB.thicknessPx(DEPTH_DP * PONG, shortSide, PONG);
-        assertEquals("half the Depth, as its lens is half the large one", 4.5f * PONG, t, 1e-3f);
-        assertEquals("the same slope as a large pane's", DEPTH_DP / 16f, t / w, 1e-4f);
+        assertEquals("a third of the Depth, as its lens is a third of the large one",
+            DEPTH_DP / 3f * PONG, t, 1e-3f);
+        assertEquals("the same slope as a large pane's", DEPTH_DP / SLAB.lensDp, t / w, 1e-4f);
         // Its deepest bend stays well inside its half height: it stays readable.
         float deepest = SLAB.shiftPx(0f, w, t);
         assertTrue(deepest < 0.5f * shortSide / 2f);
@@ -92,14 +98,14 @@ public class GlassSlabTest {
     public void thePageBarTakesItsShareToo() {
         float shortSide = 30f * PONG;
         assertEquals(7.5f * PONG, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
-        assertEquals(DEPTH_DP * 30f / 64f * PONG,
+        assertEquals(DEPTH_DP * 7.5f / SLAB.lensDp * PONG,
             SLAB.thicknessPx(DEPTH_DP * PONG, shortSide, PONG), 1e-3f);
     }
 
     @Test
     public void theThicknessIsHeldSoTheBendNeverCrossesTheCentreLine() {
         float shortSide = 64f * PONG;
-        float deep = SLAB.thicknessPx(30f * PONG, shortSide, PONG);
+        float deep = SLAB.thicknessPx(50f * PONG, shortSide, PONG);
         float bound = deep * (float) Math.sqrt(SLAB.ior * SLAB.ior - 1f);
         assertTrue(bound <= shortSide / 2f + 1e-3f);
         assertEquals(shortSide / 2f, bound, 1e-2f);
@@ -174,7 +180,7 @@ public class GlassSlabTest {
         }
         // Strong at the border, as a thick slab's: at the outline about 10 dp on pong.
         assertEquals(bound, SLAB.shiftPx(0f, w, t), 0.1f * bound);
-        assertTrue("still a few px a quarter in", SLAB.shiftPx(w / 4f, w, t) > 4f);
+        assertTrue("still a px or more a quarter in", SLAB.shiftPx(w / 4f, w, t) > 1f);
         assertTrue("easing out toward the face", SLAB.shiftPx(0.9f * w, w, t) < 1.5f);
     }
 
@@ -221,15 +227,27 @@ public class GlassSlabTest {
 
     @Test
     public void theSpecularIsTheLensZonesFacingTheLight() {
-        assertEquals("none on the flat face", 0f, SLAB.specular(-0.55f, -0.83f, 0f), 1e-6f);
-        float lit = SLAB.specular(GlassRefraction.KEY_LIGHT_X, GlassRefraction.KEY_LIGHT_Y, 0.41f);
-        float away = SLAB.specular(-GlassRefraction.KEY_LIGHT_X, -GlassRefraction.KEY_LIGHT_Y, 0.41f);
+        // The tuning key's specular, at the strength it shipped with before 2026-11-23.
+        GlassSlab lit02 = GlassSlab.parse("spec=0.2");
+        assertEquals("none on the flat face", 0f, lit02.specular(-0.55f, -0.83f, 0f), 1e-6f);
+        float lit = lit02.specular(GlassRefraction.KEY_LIGHT_X, GlassRefraction.KEY_LIGHT_Y, 0.41f);
+        float away = lit02.specular(-GlassRefraction.KEY_LIGHT_X, -GlassRefraction.KEY_LIGHT_Y, 0.41f);
         assertTrue(lit > 0.15f);
-        assertTrue(lit <= SLAB.spec + 1e-3f);
+        assertTrue(lit <= lit02.spec + 1e-3f);
         assertTrue(away < 0.01f * lit);
         // Along the top and the left edges, not a spot in the corner alone.
-        assertTrue(SLAB.specular(0f, -1f, 0.41f) > 0.25f * lit);
-        assertTrue(SLAB.specular(-1f, 0f, 0.41f) > 0.05f * lit);
+        assertTrue(lit02.specular(0f, -1f, 0.41f) > 0.25f * lit);
+        assertTrue(lit02.specular(-1f, 0f, 0.41f) > 0.05f * lit);
+    }
+
+    @Test
+    public void theShippedSlabHasNoFixedLight() {
+        for (int deg = 0; deg < 360; deg += 15) {
+            float nx = (float) Math.cos(Math.toRadians(deg)), ny = (float) Math.sin(Math.toRadians(deg));
+            for (float slope : new float[] {0.1f, 0.41f, 2f, 40f}) {
+                assertEquals(0f, SLAB.specular(nx, ny, slope), 0f);
+            }
+        }
     }
 
     @Test

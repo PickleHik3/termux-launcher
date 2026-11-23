@@ -21,7 +21,8 @@ public class GlassRimTest {
         assertEquals(0.25f, rim.halo, 0f);
         assertEquals(0.75f, rim.haloDp, 0f);
         assertEquals(0.18f, rim.base, 0f);
-        assertEquals(0.25f, rim.spec, 0f);
+        // No key-light white: the glass has no fixed light (the developer, 2026-11-23).
+        assertEquals(0f, rim.spec, 0f);
         assertEquals(0.3f, rim.dark, 0f);
         assertEquals(0.35f, rim.darkAll, 0f);
     }
@@ -128,6 +129,7 @@ public class GlassRimTest {
         }
         assertEquals("bottom right keeps exactly the baseline", rim.base, least, 0f);
         assertEquals("facing the light squarely", rim.base + rim.spec, most, 1e-3f);
+        assertEquals("with no key light the white is even all round", least, most, 0f);
         // Top, bottom, left, right and the four corners: each at least the baseline, and the
         // line's width the same (it is one distance field, no side or corner branch).
         float[][] sides = {{0, -1}, {0, 1}, {-1, 0}, {1, 0}, {-0.7071f, -0.7071f},

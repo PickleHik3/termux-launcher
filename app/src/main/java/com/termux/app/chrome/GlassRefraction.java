@@ -39,8 +39,8 @@ import java.util.Arrays;
  * brings nothing, over a faint sky tone. There is no fixed light. Face pixels skip all of it.</p>
  * <p>The outline wears one thin, crisp rim ({@link GlassRim}): a line a few px wide that darkens
  * what is behind it and adds white, lit in linear light so it adds no colour of its own, with a
- * baseline of white and dark every side and corner keeps alike, more white facing one key light up
- * and to the left and more dark facing away. That is the glass at rest, on every surface, and it
+ * baseline of white and dark every side and corner keeps alike, and more dark facing away from up
+ * and to the left; a key light's extra white is a tuning key that ships at 0. That is the glass at rest, on every surface, and it
  * changes only with the slab's pose ({@link GlassPose}, below). The rim is fixed material, not a knob (a debug property tunes its numbers), and
  * every surface that runs the program wears it. Where a sharp picture of what is behind is handed in
  * ({@link Program#setClarityInput}), the lens zone shows it through the bend in place of the frost,
@@ -608,8 +608,9 @@ public final class GlassRefraction {
      * them. {@link #agsl} puts the rim's numbers ({@link #rimConstants}) between the two halves.
      */
     private static final String AGSL_BODY =
-        // The rim's key light: up and to the left, the wide lobe. KEY_LIGHT_X, KEY_LIGHT_Y,
-        // LUMA_R/G/B and Look.KEY_EXPONENT in Java; how much of the lobe a finger adds, TOUCH_RIM.
+        // The rim's key light: up and to the left, the wide lobe (its white ships at 0; its
+        // direction still sets where the dark line deepens). KEY_LIGHT_X, KEY_LIGHT_Y,
+        // LUMA_R/G/B and Look.KEY_EXPONENT in Java; the white a finger adds, TOUCH_RIM.
         "const float2 kKeyLight = float2(" + GlassRefraction.KEY_LIGHT_X + ", " + GlassRefraction.KEY_LIGHT_Y + ");\n" +
         "const float3 kLumaW = float3(0.2126, 0.7152, 0.0722);\n" +
         "const float kKeyExp = " + Look.KEY_EXPONENT + ";\n" +
@@ -1039,8 +1040,7 @@ public final class GlassRefraction {
         "            float rc = dot(n, kKeyLight);\n" +
         "            float lobe = rimLobe(rc);\n" +
         "            float away = rc < 0.0 ? rc * rc : 0.0;\n" +
-        "            lobe = lobe + kTouchRim * touchG;\n" +
-        "            float white = (kRimBase + kRimSpec * lobe) * lineW + kRimSpec * shelfW;\n" +
+        "            float white = (kRimBase + kRimSpec * lobe + kTouchRim * touchG) * lineW + kRimSpec * shelfW;\n" +
         "            white = white * uShine;\n" +
         "            float keep = 1.0 - kRimDark * (kRimDarkAll + (1.0 - kRimDarkAll) * away) * lineW;\n" +
         "            lin = lin * keep + float3(white);\n" +
@@ -1508,8 +1508,12 @@ public final class GlassRefraction {
         return SHELF_LIP_DP * (float) Math.max(0.0, Math.log(255.0 * SHELF_LIP * rim.spec));
     }
 
-    /** How much of the key light's lobe a finger's full reach adds to the rim near it ({@code kTouchRim}). */
-    static final float TOUCH_RIM = 1.5f;
+    /**
+     * The white, linear, a finger's full reach adds to the rim near it ({@code kTouchRim}): what
+     * it added as one and a half key-light lobes at the key light's former 0.25, kept apart from
+     * the key light (which ships at 0) so a touch still lights the rim.
+     */
+    static final float TOUCH_RIM = 0.375f;
 
     /**
      * A Lens bead's own soft rim band, dp ({@code uSoftRim} for a bead): the least its lens zone

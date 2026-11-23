@@ -36,9 +36,9 @@ import java.util.Locale;
  * a little past its outline, mirrored out across it along the field's gradient
  * ({@link #envTapPx}), weighted by {@link #envWeight} and {@link #reflect}, so a bright patch next
  * to a surface brings its own colour into that edge and a dark one brings nothing. It reflects,
- * it never multiplies the picture beneath. A white specular from a room light up and to the left
- * ({@link GlassRefraction#KEY_LIGHT_X}, Blinn-Phong on the slab's normal, {@link #specular})
- * stays as a tuning key. The thin rim ({@link GlassRim}) stays the visible outline; Fresnel
+ * it never multiplies the picture beneath. There is no fixed light: a white specular from a room
+ * light up and to the left ({@link GlassRefraction#KEY_LIGHT_X}, Blinn-Phong on the slab's
+ * normal, {@link #specular}) stays only as a tuning key and ships at 0. The thin rim ({@link GlassRim}) stays the visible outline; Fresnel
  * stands back where the rim line is drawn, so the outline is lit once.</li>
  * <li><b>Dispersion.</b> Only where the look's Edge asks: red and blue refract at their own
  * index ({@link #iorRed}, {@link #iorBlue}), so the split follows the bend, equal on straights
@@ -60,22 +60,31 @@ public final class GlassSlab {
     /** The debug system property that overrides the numbers; format in the class comment. */
     public static final String PROP = "debug.tl.glass_slab";
 
-    /** The lens zone's width on a large surface, dp. {@code kLensDp}. */
-    static final float LENS_DP = 16f;
+    /** The lens zone's width on a large surface, dp: wide, so the eased profile meets the face gently. {@code kLensDp}. */
+    static final float LENS_DP = 24f;
     /** The lens zone's width on a small piece, as a share of its short side. {@code kLensShare}. */
     static final float SHARE = 0.25f;
     /** Glass's index of refraction. {@code kIor}. */
     static final float IOR = 1.5f;
     /** Glass's reflectance head-on, Schlick's F0: {@code ((n - 1) / (n + 1))²} at 1.5. {@code kF0}. */
     static final float F0 = 0.04f;
-    /** The sky tone the slab reflects, linear white. {@code kEnv}. */
-    static final float ENV = 0.4f;
-    /** The room light's white at the specular's peak, linear. */
-    static final float SPEC = 0.2f;
+    /**
+     * The faint sky tone the slab reflects under the wallpaper it reflects, linear white: a floor,
+     * low so the zone does not read as a plain grey border. {@code kEnv}.
+     */
+    static final float ENV = 0.1f;
+    /**
+     * A room light's white at the specular's peak, linear: 0, the glass has no fixed light (it
+     * drew a milky line under every top border). A tuning key only; the program skips it at 0.
+     */
+    static final float SPEC = 0f;
     /** The specular's Blinn-Phong exponent: wide enough to run along the lit edges, not a corner spot. */
     static final float POWER = 24f;
-    /** The profile's superellipse exponent: 2 is a quarter ellipse. {@code kSlabP}. */
-    static final float PROFILE = 2f;
+    /**
+     * The profile's superellipse exponent: 2 is a quarter ellipse, which met the face too
+     * abruptly; 4 eases in across the zone and steepens only toward the outline. {@code kSlabP}.
+     */
+    static final float PROFILE = 4f;
     /** How far the indices of red and blue part from {@link #IOR} at Edge 100%, as a multiple of 1.49 / 1.52. */
     static final float DISP = 1f;
     /**

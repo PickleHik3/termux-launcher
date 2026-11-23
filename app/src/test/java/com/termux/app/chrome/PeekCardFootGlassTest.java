@@ -57,14 +57,15 @@ public class PeekCardFootGlassTest {
     @Test
     public void theNarrowRingUnderTheCardReadsTheFrostTheCardReadsPast() {
         // The defect: 12 px in from the side, the card sampled ~34 px in, past the bright frost by
-        // the side; the strip right under it, on the narrow ring, ~20 px in. Under the slab the
-        // two zones (the soft band's 24 dp, the slab's 16 dp) still part, by a px or two.
+        // the side; the strip right under it, on the narrow ring, ~20 px in. Under the 16 dp slab
+        // the two zones (the soft band's 24 dp, the slab's) still parted by a px or two; since
+        // the slab's zone is 24 dp too (2026-11-23), they sample alike even without the soft rim.
         GlassRefraction.Look look = GlassRefraction.Look.DEFAULT;
         float worst = 0f;
         for (float in = 0f; in <= 70f; in += 0.5f) {
             worst = Math.max(worst, Math.abs(cardDepth(look, in) - stripDepth(look, in, 0f)));
         }
-        assertTrue("the two sides part by " + worst + " px", worst > 1f);
+        assertEquals("the two sides part by " + worst + " px", 0f, worst, 1e-3f);
     }
 
     @Test
@@ -96,12 +97,11 @@ public class PeekCardFootGlassTest {
     @Test
     public void theStripsSeamsClearTheSoftBand() {
         // Its top runs on into the card and its bottom off the screen: neither may bend. Pushed
-        // by the narrow ring's reach alone, a look with a narrow Edge width leaves the 24 dp band
-        // reaching the strip's bottom edge.
+        // by the narrow ring's reach alone, a look with a narrow Edge width left the 24 dp band
+        // reaching the strip's bottom edge (the slab's own zone is 24 dp now, so it no longer
+        // does; the soft band still pushes the seam on its own).
         float softPx = DockSurfaceSpec.PEEK_GLASS.softRimDp * DENSITY;
         GlassRefraction.Look narrow = new GlassRefraction.Look(9, 8, 100);
-        float oldReach = GlassRefraction.seamReachPx(narrow, DENSITY, 0f);
-        assertTrue(softBends(narrow, oldReach, softPx));
         for (GlassRefraction.Look look : new GlassRefraction.Look[] {GlassRefraction.Look.DEFAULT,
             narrow, new GlassRefraction.Look(0, 1, 100), new GlassRefraction.Look(60, 40, 100)}) {
             float reach = GlassRefraction.seamReachPx(look, DENSITY, 0f, softPx);

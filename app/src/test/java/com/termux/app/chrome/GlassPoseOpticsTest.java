@@ -106,15 +106,26 @@ public class GlassPoseOpticsTest {
     }
 
     @Test
-    public void theGlintIsOffFlatAndTravelsAcrossTheFaceAsTheNormalSweeps() {
+    public void theGlintShipsOff() {
+        // No fixed light, so no glint (the developer, 2026-11-23): a turn sends none across.
+        assertEquals(0f, GlassPoseOptics.GLINT, 0f);
         float[] g = new float[4];
-        OPTICS.glint(0f, 0f, DENSITY, g);
+        OPTICS.glint(sine(15), 0f, DENSITY, g);
+        assertEquals(0f, g[3], 0f);
+    }
+
+    @Test
+    public void theGlintIsOffFlatAndTravelsAcrossTheFaceAsTheNormalSweeps() {
+        // The tuning key's glint, at the strength it shipped with before 2026-11-23.
+        GlassPoseOptics glinted = GlassPoseOptics.parse("glint=0.1");
+        float[] g = new float[4];
+        glinted.glint(0f, 0f, DENSITY, g);
         assertEquals(0f, g[3], 0f);
         float[] a = new float[4];
         float[] b = new float[4];
-        OPTICS.glint(sine(5), 0f, DENSITY, a);
-        OPTICS.glint(sine(15), 0f, DENSITY, b);
-        assertEquals(GlassPoseOptics.GLINT, a[3], 1e-6f);
+        glinted.glint(sine(5), 0f, DENSITY, a);
+        glinted.glint(sine(15), 0f, DENSITY, b);
+        assertEquals(0.1f, a[3], 1e-6f);
         // Turning so the right edge goes away swings the normal right: the glint moves left.
         assertTrue(b[0] < a[0]);
         assertTrue("mostly along the turn", Math.abs(a[1] - b[1]) < Math.abs(a[0] - b[0]) / 4f);
@@ -122,8 +133,8 @@ public class GlassPoseOpticsTest {
         float travelDp = (a[0] - b[0]) / DENSITY;
         assertTrue("travel " + travelDp, travelDp > 100f && travelDp < 400f);
         // A turn too small to see fades it in rather than popping it on.
-        OPTICS.glint(sine(1), 0f, DENSITY, g);
-        assertTrue(g[3] > 0f && g[3] < GlassPoseOptics.GLINT * 0.3f);
+        glinted.glint(sine(1), 0f, DENSITY, g);
+        assertTrue(g[3] > 0f && g[3] < 0.1f * 0.3f);
         assertEquals(GlassPoseOptics.GLINT_WIDTH_DP * DENSITY, g[2], 1e-4f);
     }
 
@@ -170,7 +181,9 @@ public class GlassPoseOpticsTest {
         assertTrue(u[5] > 0f);
         assertEquals(1f, u[6], 0f);
         assertEquals(GlassPoseOptics.MAX_SHIFT_DP * DENSITY, u[7], 1e-4f);
-        assertTrue(u[15] > 0f);
+        assertEquals("no glint: no fixed light", 0f, u[15], 0f);
+        GlassPoseOptics.parse("glint=0.1").uniforms(pose, GlassSlab.DEFAULT, DENSITY, u, scratch);
+        assertTrue("the tuning key's glint still reaches the program", u[15] > 0f);
     }
 
     @Test
