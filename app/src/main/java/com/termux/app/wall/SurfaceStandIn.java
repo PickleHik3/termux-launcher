@@ -18,7 +18,9 @@ import androidx.annotation.NonNull;
  *   flat otherwise. A page with no display running has no surface at all: it is plain views and
  *   takes every transform as it is ({@link Begin#FLAT}).</li>
  *   <li><b>The copy lands</b> ({@link #copied}). Still wanted, the stand-in goes up at once, at
- *   whatever the motion has reached, and the surface goes down beneath it. Too late, it is only
+ *   whatever the motion has reached, over the surface, which stays up until a frame with the
+ *   copy in it has reached the screen ({@link #covered}); then it goes down and the page takes
+ *   the motion's layer and tilt. Too late, it is only
  *   kept for the next arrival. Failed — no data, secure content, a surface gone — it is dropped
  *   and the motion carries on as it began.</li>
  *   <li><b>Rest</b> ({@link #rest}). The surface comes back first, beneath the stand-in, which
@@ -45,11 +47,25 @@ public final class SurfaceStandIn {
     /** The swap's fail-safe: the stand-in goes by now whether or not the surface said it drew. */
     public static final long SWAP_BACKSTOP_MS = 300L;
 
+    /**
+     * The cover's fail-safe: the surface goes down and the motion proceeds by now, whatever the
+     * frame callbacks did. The same figure as the keyboard reveal gate's backstop.
+     */
+    public static final long COVER_BACKSTOP_MS = 160L;
+
+    /** The frames the cover waits where frame-commit callbacks do not exist (before API 29). */
+    public static final int COVER_FALLBACK_FRAMES = 2;
+
     public enum State {
         /** No motion: the live surface is the picture, if there is one. */
         IDLE,
         /** A motion began and a copy of the surface is on its way; the page moves as it did. */
         COPYING,
+        /**
+         * The copy is up over the live surface, which stays up until a frame with the copy in it
+         * has reached the screen; the page still moves as it did (no layer, no tilt).
+         */
+        COVERING,
         /** The copy stands in, the surface is down: the page takes a layer, a scale and a tilt. */
         SHOWN,
         /** No display runs: the page is plain views, and a display starting holds off till rest. */
@@ -115,6 +131,7 @@ public final class SurfaceStandIn {
             case SHOWN:
             case FLAT:
             case COPYING:
+            case COVERING:
                 return Begin.KEEP;
             case RESTORING:
                 // Moved again before the swap finished: the stand-in is still up and a moment
@@ -174,8 +191,18 @@ public final class SurfaceStandIn {
         mCachedHeight = height;
         mCachedAtMs = nowMs;
         if (!current) return Copied.KEEP;
-        mState = State.SHOWN;
+        mState = State.COVERING;
         return Copied.SHOW;
+    }
+
+    /**
+     * A frame with the stand-in in it has been committed, or the cover's backstop ran out: the
+     * surface may go down now. False, and nothing changes, for a stale or late call.
+     */
+    public boolean covered() {
+        if (mState != State.COVERING) return false;
+        mState = State.SHOWN;
+        return true;
     }
 
     /**
@@ -193,6 +220,11 @@ public final class SurfaceStandIn {
                 mState = State.IDLE;
                 return Rest.NONE;
             case FLAT:
+                mState = State.IDLE;
+                return Rest.REMOVE;
+            case COVERING:
+                // The surface never went down: the stand-in goes, the copy stays cached.
+                mGeneration++;
                 mState = State.IDLE;
                 return Rest.REMOVE;
             case SHOWN:
@@ -285,7 +317,7 @@ public final class SurfaceStandIn {
 
     /** Whether the stand-in view is up, over the surface or in its place. */
     public boolean isStandInShown() {
-        return mState == State.SHOWN || mState == State.RESTORING;
+        return mState == State.COVERING || mState == State.SHOWN || mState == State.RESTORING;
     }
 
     @NonNull

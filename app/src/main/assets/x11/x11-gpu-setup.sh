@@ -328,7 +328,8 @@ done
 [ -n "$FOUND" ] || { say "No free display number was found near :$DISPLAY_NO."; exit 1; }
 DISPLAY_NO=$FOUND; TEST_DISPLAY=":$DISPLAY_NO"; SOCKET=$TMPDIR/.X11-unix/X$DISPLAY_NO
 # Headless: the server never announces itself, so the launcher cannot mistake it for your display.
-TERMUX_X11_HEADLESS=1 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
+# A display only for measuring: no fcitx5 beside it, however it is set up for the real one.
+TERMUX_X11_IM=0 TERMUX_X11_HEADLESS=1 termux-x11 "$TEST_DISPLAY" -ac >>"$LOG" 2>&1 &
 SERVER_PID=$!
 for _ in $(seq 1 20); do [ -S "$SOCKET" ] && break; sleep 0.5; done
 if [ ! -S "$SOCKET" ]; then

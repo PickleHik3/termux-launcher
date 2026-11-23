@@ -16,10 +16,14 @@ import androidx.annotation.Nullable;
  * face's diameter, so the 68dp face of a 2×1 card and the 160dp one of a 2×2 are the same
  * drawing. Tonal fills the face; Pane leaves it clear inside a hairline ring.
  *
- * <p>It wants its design size and settles for less when the card is smaller, always square.
- * Setting the time only invalidates; the face never relayouts once placed.</p>
+ * <p>It wants its design size and settles for less when the card is smaller, always square; a
+ * face made with {@link #FILL} takes all the room it is given instead, as the 1×1 does. Setting
+ * the time only invalidates; the face never relayouts once placed.</p>
  */
 final class AnalogClockFaceView extends View {
+    /** The size that asks for all the room the parent gives, square. */
+    static final int FILL = -1;
+
     private final BuiltinWidgetStyle style;
     private final int desiredPx;
     /** The centre dot's diameter as a share of the face: 12%, or 8% on the large faces. */
@@ -35,7 +39,7 @@ final class AnalogClockFaceView extends View {
                         float dotShare) {
         super(context);
         this.style = style;
-        this.desiredPx = style.dp(sizeDp);
+        this.desiredPx = sizeDp == FILL ? FILL : style.dp(sizeDp);
         this.dotShare = dotShare;
         ring.setStyle(Paint.Style.STROKE);
         ring.setColor(style.outlineVariant);
@@ -65,6 +69,16 @@ final class AnalogClockFaceView extends View {
     }
 
     @Override protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        if (desiredPx == FILL) {
+            int fallback = style.dp(BuiltinWidgetSpan.CELL_WIDTH_DP - 2 * OneByOneFit.INSET_DP);
+            int width = MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED
+                ? fallback : MeasureSpec.getSize(widthMeasureSpec);
+            int height = MeasureSpec.getMode(heightMeasureSpec) == MeasureSpec.UNSPECIFIED
+                ? fallback : MeasureSpec.getSize(heightMeasureSpec);
+            int side = OneByOneFit.artSide(width, height, 0);
+            setMeasuredDimension(side, side);
+            return;
+        }
         int side = Math.min(resolveSize(desiredPx, widthMeasureSpec),
             resolveSize(desiredPx, heightMeasureSpec));
         setMeasuredDimension(side, side);

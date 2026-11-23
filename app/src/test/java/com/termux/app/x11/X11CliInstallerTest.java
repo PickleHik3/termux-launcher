@@ -33,10 +33,12 @@ public class X11CliInstallerTest {
 
     private static final byte[] LOADER = "PK a loader".getBytes(StandardCharsets.UTF_8);
     private static final String GPU_SETUP = "#!/usr/bin/env bash\necho tried every profile\n";
+    private static final String IM_FOCUS = "#!/usr/bin/env bash\necho passed focus on\n";
 
     private static X11CliInstaller.AssetSource assets(byte[] loader) {
         return name -> new ByteArrayInputStream(name.endsWith("loader.apk") ? loader
-            : GPU_SETUP.getBytes(StandardCharsets.UTF_8));
+            : (name.endsWith("x11-im-focus.sh") ? IM_FOCUS : GPU_SETUP)
+                .getBytes(StandardCharsets.UTF_8));
     }
 
     @Rule public TemporaryFolder temp = new TemporaryFolder();
@@ -153,6 +155,7 @@ public class X11CliInstallerTest {
         assertFalse(installer.serverScript().exists());
         assertFalse(installer.preferenceScript().exists());
         assertFalse(installer.gpuSetupScript().exists());
+        assertFalse(installer.imFocusScript().exists());
         assertFalse(installer.loaderFile().exists());
         assertFalse(installer.openboxRc().exists());
         assertFalse(installer.markerFile().exists());
@@ -281,6 +284,48 @@ public class X11CliInstallerTest {
         assertFalse(server.contains("-fp"));
         assertFalse(server.contains("TERMUX_X11_FONT_PATH"));
         assertTrue(server.contains("--nice-name=\"termux-x11 com.termux.test $*\""));
+    }
+
+    // ---- The text-field focus helper beside the display (#129) --------------------------------
+
+    @Test public void theFocusHelperIsWrittenBesideTheOtherCommands() throws IOException {
+        assertEquals(X11CliInstaller.Result.INSTALLED, installer.install());
+
+        assertTrue(installer.imFocusScript().canExecute());
+        assertEquals("the shebang points at this prefix's bash",
+            "#!" + new File(bin, "bash").getPath() + "\necho passed focus on\n",
+            text(installer.imFocusScript()));
+    }
+
+    /**
+     * The server script is the one door every display goes through — the page's button, the
+     * start-up opt-in and a {@code termux-x11 :1} typed by hand — so it is where the helper
+     * starts, and only when fcitx5 is there for it to work with. It goes in the background and
+     * out of the server's way before the linker environment is taken off for the server, and it
+     * is handed the pid the server is about to become so it can leave when the display does.
+     */
+    @Test public void theServerStartsTheHelperOnlyWhenFcitx5IsInstalled() throws IOException {
+        installer.install();
+
+        String server = text(installer.serverScript());
+        String bin = com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
+        String start = "if [ \"${TERMUX_X11_IM:-1}\" != 0 ] && [ -x '" + bin + "/fcitx5' ]"
+            + " && [ -x '" + X11CliInstaller.IM_FOCUS_SCRIPT_PATH + "' ]; then\n"
+            + "  ('" + X11CliInstaller.IM_FOCUS_SCRIPT_PATH + "' \"$$\" '"
+            + X11CliInstaller.IM_BUS_PATH_PREFIX + "' \"$@\" < /dev/null > /dev/null 2>&1 &)\n"
+            + "fi\n";
+        assertTrue(server.contains(start));
+        assertTrue("with the shell's environment still whole",
+            server.indexOf(start) < server.indexOf("unset LD_LIBRARY_PATH LD_PRELOAD"));
+        assertEquals(X11CliInstaller.IM_FOCUS_SCRIPT_PATH, bin + "/termux-x11-im");
+    }
+
+    /** The nix edition gets docs for fcitx5, not a helper: its server script is as it was. */
+    @Test public void aNixServerStartsNoHelper() throws IOException {
+        nixProfile(new File(temp.getRoot(), "usr"));
+        installer.install();
+
+        assertFalse(text(installer.serverScript()).contains("termux-x11-im"));
     }
 
     /** Android's own shell has no {@code trap -p}, and must not be made to complain about it. */
@@ -484,5 +529,26 @@ public class X11CliInstallerTest {
             .startsWith("#!" + new File(bin, "bash").getPath() + "\n"));
         assertFalse(new File(temp.getRoot(), "usr/share/X11/xkb").exists());
         assertFalse(installer.wmScript().exists());
+    }
+
+    @Test
+    public void a32BitLauncherWithAnAppProcess32ExecsThatBinary() {
+        String path = X11CliInstaller.appProcessPath(false, "/system/bin/app_process32"::equals);
+        assertEquals("/system/bin/app_process32", path);
+        assertTrue(X11CliInstaller.serverScript("com.termux.test", "/system/bin/sh", false, path)
+            .contains("exec /system/bin/app_process32 -Xnoimage-dex2oat"));
+        assertTrue(X11CliInstaller.preferenceScript("com.termux.test", "/system/bin/sh", path)
+            .contains("exec /system/bin/app_process32 -Xnoimage-dex2oat"));
+    }
+
+    @Test
+    public void otherwiseTheScriptsExecAppProcess() {
+        // 32-bit launcher on a phone without app_process32, and every 64-bit launcher.
+        assertEquals("/system/bin/app_process", X11CliInstaller.appProcessPath(false, p -> false));
+        assertEquals("/system/bin/app_process", X11CliInstaller.appProcessPath(true, p -> true));
+        assertTrue(X11CliInstaller.serverScript("com.termux.test", "/system/bin/sh")
+            .contains("exec /system/bin/app_process -Xnoimage-dex2oat"));
+        assertTrue(X11CliInstaller.preferenceScript("com.termux.test", "/system/bin/sh")
+            .contains("exec /system/bin/app_process -Xnoimage-dex2oat"));
     }
 }

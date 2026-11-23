@@ -71,6 +71,22 @@ public class ResizeShiftPredictionTest extends TerminalTestCase {
         assertLinesAre("111", "222", "333", "444", "   ");
     }
 
+    public void testGrowingAnchoredMovesDownOnlyAsFarAsTheTranscriptGoes() {
+        withTerminalSized(COLS, 3).enterString("111\r\n222\r\n333\r\n$").assertCursorAt(2, 1);
+        // One transcript row for two new rows: the anchor pulls that one down, the other new row
+        // goes below the prompt rather than as blank padding above the output.
+        assertEquals(1, mTerminal.predictRowsOnlyResizeShift(5, true));
+        assertPredictionHolds(5, true);
+        assertLinesAre("111", "222", "333", "$  ", "   ");
+    }
+
+    public void testGrowingAnchoredWithNothingAboveKeepsTheRowsWhereTheyAre() {
+        withTerminalSized(COLS, 3).enterString("a\r\ndef$").assertCursorAt(2, 1);
+        assertEquals(0, mTerminal.predictRowsOnlyResizeShift(5, true));
+        assertPredictionHolds(5, true);
+        assertLinesAre("a  ", "def", "$  ", "   ", "   ");
+    }
+
     public void testGrowingWithNothingAboveKeepsTheRowsWhereTheyAre() {
         withTerminalSized(COLS, 3).enterString("a\r\ndef$").assertCursorAt(2, 1);
         assertEquals(0, mTerminal.predictRowsOnlyResizeShift(5, false));

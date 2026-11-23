@@ -113,14 +113,15 @@ public final class AppDrawerContentView extends FrameLayout
     /** Ceiling on the damped overpull, in dp. The raw pull is unbounded; the travel is not. */
     public static final float OVERPULL_MAX_DP = 96f;
 
-    private static final float PILL_MARGIN_H_DP = 16f;
+    /** The drawer's side padding, and the content inset every view type ends above the card's bottom. */
+    static final float PILL_MARGIN_H_DP = 16f;
     private static final float PILL_MARGIN_TOP_DP = 12f;
     private static final float PILL_TO_GRID_DP = 10f;
-    /** Bottom strip occupied by horizontal paging dots. */
-    private static final float PAGE_INDICATOR_BAND_DP = 64f;
     /** Band the categories search reserves above its rows for the "N RESULTS" label. */
     private static final float RESULTS_LABEL_BAND_DP = 24f;
 
+    /** Distance from the content's bottom edge to its last element; see {@link #setBottomInsetPx}. */
+    private int mBottomInsetPx;
     private final AppDrawerSearchPillView mPill;
     private final AppDrawerSearchInputView mInput;
     private final TextView mResultsLabel;
@@ -201,6 +202,14 @@ public final class AppDrawerContentView extends FrameLayout
     @Nullable private RecyclerView mGestureRecycler;
     @Nullable private View mOverpullSurface;
     private boolean mSearchRevealRequested;
+    /**
+     * The user scrolled the search keyboard away. It stays away, query or not, until the search is
+     * asked for again (a pill tap) or the search is reset.
+     */
+    private boolean mKeyboardDismissedByScroll;
+    /** True from the finger starting to drag the list until the list comes to rest. */
+    private boolean mGridUserScrolling;
+    @Nullable private KeyboardScrollListener mKeyboardScrollListener;
     /** True while the Android-keyboard search's text field, not the key stream, owns the query. */
     private boolean mTextFieldSearch;
     private float mDownRawY;
@@ -290,7 +299,12 @@ public final class AppDrawerContentView extends FrameLayout
             }
 
             @Override public void onSearchAction() {
-                launchFirstResult();
+                launchHighlightedResult();
+            }
+
+            @Override public boolean onArrowKey(int keyCode) {
+                AppDrawerSearchController search = mSearch;
+                return search != null && mTextFieldSearch && search.handleHighlightKey(keyCode);
             }
 
             @Override public void onDismissAction() {
@@ -321,7 +335,9 @@ public final class AppDrawerContentView extends FrameLayout
         // clipChildren=false for the rope lean and the full-plane drag overlay, so the recycler has
         // to establish its own hard draw boundary. With clipToPadding=false a partially visible
         // leading row can paint above this view during a fling and into the pill rectangle.
-        mGrid.setClipToPadding(true);
+        // Bottom padding (the card's content inset) is the one thing it lets rows paint into, and the
+        // outline below still holds the hard boundary at the top.
+        mGrid.setClipToPadding(false);
         mGrid.setOutlineProvider(ViewOutlineProvider.BOUNDS);
         mGrid.setClipToOutline(true);
         mGrid.addOnScrollListener(new RecyclerView.OnScrollListener() {
@@ -330,6 +346,21 @@ public final class AppDrawerContentView extends FrameLayout
                 // A context menu is anchored to a cell view. Scroll far enough and that view is
                 // recycled under a menu still floating where it used to be.
                 if (dx != 0 || dy != 0) dismissContextPopups();
+                // Only the finger's scroll (and the fling it throws) sends the keyboard away; a
+                // scrub or a query's jump to the top is the launcher moving the list, not the user.
+                KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                if (keyboard != null && mGridUserScrolling && dy > 0) keyboard.onListScrolledDown(dy);
+            }
+
+            @Override
+            public void onScrollStateChanged(@NonNull RecyclerView recyclerView, int newState) {
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    mGridUserScrolling = true;
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mGridUserScrolling) {
+                    mGridUserScrolling = false;
+                    KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                    if (keyboard != null) keyboard.onListScrollIdle();
+                }
             }
         });
         mColumnWidthPx = AppDrawerRopeMetrics.resolveColumnWidthPx(mDensity);
@@ -365,7 +396,7 @@ public final class AppDrawerContentView extends FrameLayout
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,
             LayoutParams.MATCH_PARENT);
         pagerParams.topMargin = gridParams.topMargin;
-        pagerParams.bottomMargin = dp(PAGE_INDICATOR_BAND_DP);
+        pagerParams.bottomMargin = Math.round(pagerBottomBandPx());
         mHorizontalPager.setVisibility(GONE);
         addView(mHorizontalPager, pagerParams);
 
@@ -415,7 +446,8 @@ public final class AppDrawerContentView extends FrameLayout
         addView(mNoResults, noResultsParams);
 
         LayoutParams indicatorParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            dp(PAGE_INDICATOR_BAND_DP), Gravity.BOTTOM);
+            AppDrawerPageIndicatorView.dotsHeightPx(mDensity), Gravity.BOTTOM);
+        indicatorParams.bottomMargin = mBottomInsetPx;
         addView(mPageIndicator, indicatorParams);
 
         mColumn = new AppDrawerRopeColumnView(context);
@@ -602,6 +634,8 @@ public final class AppDrawerContentView extends FrameLayout
         if (dock != null && mDragController == null) {
             mDragController = new AppDrawerDragController(dock, mDragOverlay, this);
             mAdapter.setDragController(mDragController, this::suppressCellClick);
+            mCategoryView.getDetailAdapter().setPickupDelegate(mDragController);
+            mCategoryView.getTileAdapter().setPickupDelegate(mDragController);
             mHorizontalAdapter.setClickGate(this::suppressCellClick);
             mHorizontalAdapter.setDragController(mDragController);
         }
@@ -621,6 +655,28 @@ public final class AppDrawerContentView extends FrameLayout
      */
     public void setSearchKeyboardRequestListener(@Nullable Runnable onKeyboardRequested) {
         mKeyboardRequestListener = onKeyboardRequested;
+    }
+
+    /** The list's scroll, as far as the search keyboard is concerned. */
+    public interface KeyboardScrollListener {
+        /** The finger scrolled the list {@code dy} pixels further down (its fling included). */
+        void onListScrolledDown(int dy);
+        /** That scroll has come to rest. */
+        void onListScrollIdle();
+    }
+
+    public void setKeyboardScrollListener(@Nullable KeyboardScrollListener listener) {
+        mKeyboardScrollListener = listener;
+    }
+
+    /**
+     * The list's scroll took the search keyboard away: the reveal target drops to 0 and stays
+     * there, whatever is typed, until the search is asked for again.
+     */
+    public void dismissSearchKeyboardByScroll() {
+        if (mKeyboardDismissedByScroll) return;
+        mKeyboardDismissedByScroll = true;
+        notifyRevealTarget();
     }
 
     /**
@@ -651,7 +707,9 @@ public final class AppDrawerContentView extends FrameLayout
         if (!interactive) {
             if (mDragController != null) mDragController.cancel();
             cancelCellLongPresses();
-            stopPresentationMotion();
+            // The drawer is closing, not torn down: what it shows stays until it is gone
+            // (resetDrawerFx), or Back blanks the card to "Nothing here yet" for the whole close.
+            stopPresentationMotion(true);
             stopOverpullSpring();
             mPolicy.disarm();
             // A scrub left in flight is a finger's worth of state on a surface that has stopped
@@ -722,7 +780,46 @@ public final class AppDrawerContentView extends FrameLayout
     /** Vertical space already reserved by the pill/top gap and the existing bottom band. */
     public float horizontalPagerUsableHeight(float contentHeightPx) {
         LayoutParams params = (LayoutParams) mHorizontalPager.getLayoutParams();
-        return Math.max(0f, contentHeightPx - params.topMargin - params.bottomMargin);
+        return AppDrawerContentInsetPolicy.pagerUsableHeightPx(contentHeightPx, params.topMargin,
+            params.bottomMargin);
+    }
+
+    /** The drawer's side padding in pixels: the one inset every view type keeps above the card. */
+    public int contentInsetPx() {
+        return dp(PILL_MARGIN_H_DP);
+    }
+
+    /**
+     * Ends every view type's content {@code bottomInsetPx} above the card's usable bottom (see
+     * {@link AppDrawerContentInsetPolicy}). Set once per keyboard decision or open, never per
+     * frame; each write compares first so an unchanged inset requests no layout.
+     */
+    public void setBottomInsetPx(int bottomInsetPx) {
+        int inset = Math.max(0, bottomInsetPx);
+        if (inset == mBottomInsetPx) return;
+        mBottomInsetPx = inset;
+        float rowTrailing = AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity;
+        int listPadding = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset, rowTrailing);
+        if (mGrid.getPaddingBottom() != listPadding) mGrid.setPadding(0, 0, 0, listPadding);
+        LayoutParams pager = (LayoutParams) mHorizontalPager.getLayoutParams();
+        int band = Math.round(pagerBottomBandPx());
+        if (pager.bottomMargin != band) {
+            pager.bottomMargin = band;
+            mHorizontalPager.setLayoutParams(pager);
+        }
+        LayoutParams indicator = (LayoutParams) mPageIndicator.getLayoutParams();
+        if (indicator.bottomMargin != inset) {
+            indicator.bottomMargin = inset;
+            mPageIndicator.setLayoutParams(indicator);
+        }
+        mCategoryView.setBottomInsetPx(inset);
+    }
+
+    /** Dots, the row gap above them and the inset below: what the pager gives up at the bottom. */
+    private float pagerBottomBandPx() {
+        return AppDrawerContentInsetPolicy.pagerBottomBandPx(mBottomInsetPx,
+            AppDrawerPageIndicatorView.dotsHeightPx(mDensity),
+            AppDrawerGridMetrics.ROW_BOTTOM_DP * mDensity);
     }
 
     public void setViewType(@NonNull AppDrawerViewType viewType) {
@@ -762,6 +859,11 @@ public final class AppDrawerContentView extends FrameLayout
      * gate. The vertical grid has no motion of its own here.
      */
     private void stopPresentationMotion() {
+        stopPresentationMotion(false);
+    }
+
+    /** @param keepContent a closing drawer: the categories keep their tiles until it is gone */
+    private void stopPresentationMotion(boolean keepContent) {
         switch (mViewType) {
             case HORIZONTAL:
                 cancelNestedClose();
@@ -769,7 +871,8 @@ public final class AppDrawerContentView extends FrameLayout
                 break;
             case CATEGORIES:
                 cancelNestedClose();
-                mCategoryView.reset();
+                if (keepContent) mCategoryView.stopForClose();
+                else mCategoryView.reset();
                 break;
             case VERTICAL:
                 break;
@@ -948,6 +1051,12 @@ public final class AppDrawerContentView extends FrameLayout
         // the wrong position for every letter that also has a profile app. Sorting here is what
         // makes each letter one contiguous run, which is the whole premise of both the section
         // index and the highlight.
+        // While the provider reloads (a finished category sort, an icon pack, a hidden app) it
+        // holds nothing; the drawer keeps what it shows until the warm-up's callback brings the
+        // fresh catalogue, rather than show an empty drawer for that second.
+        boolean loaded = provider.hasLoadedApps();
+        mCategoryView.setCatalogueLoaded(loaded);
+        if (!loaded) return;
         List<LauncherAppEntry> catalogue = AppDrawerSectionIndex.sortByLabel(provider.getAllApps());
         search.setCatalogue(catalogue);
         if (categoryTilesShown()) mCategoryView.submitBuckets(mCategoryBuckets);
@@ -955,8 +1064,28 @@ public final class AppDrawerContentView extends FrameLayout
 
     /** Empties the query and puts the grid back to the top. For a drawer that has closed. */
     public void resetSearch() {
+        clearSearchState();
+    }
+
+    /**
+     * A home press closed the drawer: no query in the model or the field, and the list back at the
+     * top whatever "remember position" says.
+     */
+    public void resetSearchToTop() {
+        clearSearchState();
+        mInput.mirror("", 0);
+        if (mViewType == AppDrawerViewType.VERTICAL) {
+            mGrid.stopScroll();
+            mGrid.scrollToPosition(0);
+        } else if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mHorizontalPager.setSelectedPage(0, false);
+        }
+    }
+
+    private void clearSearchState() {
         AppDrawerSearchController search = mSearch;
         mSearchRevealRequested = false;
+        mKeyboardDismissedByScroll = false;
         if (search != null) {
             search.reset();
         } else {
@@ -1003,30 +1132,35 @@ public final class AppDrawerContentView extends FrameLayout
      * otherwise. The controller owns the spring that chases it; this is only the target.
      */
     public float getRevealFraction() {
+        if (mKeyboardDismissedByScroll) return 0f;
         return mSearchRevealRequested || hasQuery() ? 1f : 0f;
     }
 
-    /** Launches the first ranked result, as Enter on any of the three intake channels does. */
-    public boolean launchFirstResult() {
+    /**
+     * Launches the highlighted result, or the first when nothing is highlighted: what Enter does on
+     * any of the three intake channels.
+     */
+    public boolean launchHighlightedResult() {
         AppDrawerSearchController search = mSearch;
         SuggestionBarView dock = mDock;
-        LauncherAppEntry first = search == null ? null : search.firstResult();
-        if (dock == null || first == null) return false;
-        return dock.launchEntryFromDrawer(firstCellView(), first);
+        LauncherAppEntry target = search == null ? null : search.commitTarget();
+        if (dock == null || target == null) return false;
+        int index = search.highlightedIndex();
+        return dock.launchEntryFromDrawer(cellViewAt(Math.max(0, index)), target);
     }
 
     @Nullable
-    private View firstCellView() {
+    private View cellViewAt(int position) {
         switch (mViewType) {
             case HORIZONTAL:
-                return mHorizontalAdapter.pageZeroIcon(mHorizontalPager);
+                return mHorizontalAdapter.iconAt(mHorizontalPager, position);
             case CATEGORIES:
                 if (!hasQuery()) return null;
                 break;
             case VERTICAL:
                 break;
         }
-        RecyclerView.ViewHolder holder = mGrid.findViewHolderForAdapterPosition(0);
+        RecyclerView.ViewHolder holder = mGrid.findViewHolderForAdapterPosition(position);
         if (holder instanceof AppDrawerAppsAdapter.Cell) {
             return ((AppDrawerAppsAdapter.Cell) holder).icon;
         }
@@ -1041,8 +1175,40 @@ public final class AppDrawerContentView extends FrameLayout
         applyResults(results, queryChanged);
     }
 
+    @Override
+    public void onSearchHighlightChanged(int oldIndex, int newIndex) {
+        if (mViewType == AppDrawerViewType.HORIZONTAL) {
+            mHorizontalAdapter.moveHighlight(newIndex);
+            int page = mHorizontalAdapter.pageOf(newIndex);
+            if (page >= 0 && page != mHorizontalPager.getSelectedPage()) {
+                mHorizontalPager.setSelectedPage(page, true);
+                updatePageIndicator();
+            }
+        } else {
+            mAdapter.moveHighlight(newIndex);
+            if (newIndex >= 0) mGrid.scrollToPosition(newIndex);
+        }
+    }
+
+    @Override
+    public int searchColumns() {
+        switch (mViewType) {
+            case HORIZONTAL:
+                AppDrawerHorizontalGridMetrics metrics = mHorizontalAdapter.getMetrics();
+                return metrics == null ? 1 : Math.max(1, metrics.columns);
+            case VERTICAL:
+                return mCategorySearchPresentation ? 1 : mVerticalColumns;
+            case CATEGORIES:
+            default:
+                return 1;
+        }
+    }
+
     private void applyResults(@NonNull List<LauncherAppEntry> results, boolean queryChanged) {
         AppDrawerSearchController search = mSearch;
+        int highlight = search == null ? AppDrawerSearchSelection.NONE : search.highlightedIndex();
+        mAdapter.presetHighlight(highlight);
+        mHorizontalAdapter.presetHighlight(highlight);
         mPill.setQuery(search == null ? "" : search.query(), search == null ? 0 : search.caret());
         if (mTextFieldSearch) {
             mInput.mirror(search == null ? "" : search.query(), search == null ? 0 : search.caret());
@@ -1425,6 +1591,7 @@ public final class AppDrawerContentView extends FrameLayout
      */
     public void requestSearchKeyboard() {
         mSearchRevealRequested = true;
+        mKeyboardDismissedByScroll = false;
         notifyRevealTarget();
         Runnable request = mKeyboardRequestListener;
         if (request != null) request.run();
@@ -1539,6 +1706,12 @@ public final class AppDrawerContentView extends FrameLayout
         // scroll from inside this dispatch, and that end has to know it is a cancellation rather
         // than a release, or a stream taken away by another window would report as a decision.
         if (action == MotionEvent.ACTION_CANCEL) mStreamCancelled = true;
+        // The highlight is a keyboard affordance: a touch on the results puts it away (the pill is
+        // the one place a finger lands while typing).
+        if (action == MotionEvent.ACTION_DOWN && mSearch != null
+            && mSearch.highlightedIndex() >= 0 && ev.getY() > mPill.getBottom()) {
+            mSearch.clearHighlight();
+        }
         boolean handled = super.dispatchTouchEvent(ev);
         if (action == MotionEvent.ACTION_CANCEL || action == MotionEvent.ACTION_UP) {
             mStreamCancelled = false;
@@ -1561,9 +1734,7 @@ public final class AppDrawerContentView extends FrameLayout
             mGestureDragStableId = downItem == null ? null : downItem.stableId;
             // Folders join apps here: a folder tile is picked up the same way, it just travels to a
             // free position instead of merging into what it lands on.
-            mGestureDragEligible = mInteractive && !hasQuery()
-                && mViewType != AppDrawerViewType.CATEGORIES
-                && downItem != null;
+            mGestureDragEligible = mInteractive && !hasQuery() && downItem != null;
             mDragPolicy = new AppDrawerDragPolicy(new AppDrawerDragPolicy.FrozenDown(
                 mGestureViewType, mInteractive, !hasQuery(), mGestureDragEligible,
                 mGestureDragStableId));
@@ -1621,6 +1792,11 @@ public final class AppDrawerContentView extends FrameLayout
             View child = mGrid.findChildViewUnder(x - mGrid.getLeft(), y - mGrid.getTop());
             if (child == null) return null;
             return mAdapter.itemAt(mGrid.getChildAdapterPosition(child));
+        }
+        if (mViewType == AppDrawerViewType.CATEGORIES) {
+            LauncherAppEntry entry = mCategoryView.appEntryAt(x - mCategoryView.getLeft(),
+                y - mCategoryView.getTop());
+            return entry == null ? null : AppDrawerItem.app(entry);
         }
         if (mViewType != AppDrawerViewType.HORIZONTAL) return null;
         View pageView = mHorizontalPager.findChildViewUnder(x - mHorizontalPager.getLeft(),
@@ -2143,6 +2319,15 @@ public final class AppDrawerContentView extends FrameLayout
     @NonNull
     public AppDrawerCategoryView getCategoryView() {
         return mCategoryView;
+    }
+
+    /**
+     * The plane's visible bottom in this view's coordinates while the keyboard's reveal moves the
+     * card's bottom; {@code +∞} when nothing cuts the content. The A–Z strip spaces its letters
+     * over what is above it, per frame, by redraw alone.
+     */
+    public void setRopeVisibleBottomPx(float bottomPx) {
+        mColumn.setVisibleBottomPx(bottomPx);
     }
 
     /** @return the A-Z column, whose touch stream and geometry the drawer's tests drive directly */

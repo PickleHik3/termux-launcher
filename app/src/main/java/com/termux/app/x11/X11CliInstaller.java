@@ -48,7 +48,7 @@ public final class X11CliInstaller {
      * compared for equality, so the 1.2.x stable line counts from 1016 (the pre-release line uses
      * 16 to 22 and up): a swap between stable and a drop always rewrites the scripts.
      */
-    @VisibleForTesting static final int VERSION = 1016;
+    @VisibleForTesting static final int VERSION = 1018;
 
     private static final String PREFIX = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
     private static final String BIN_DIR = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH;
@@ -65,6 +65,22 @@ public final class X11CliInstaller {
      * the server is handed one short path. Written only on nix — see {@link X11WindowManager}.
      */
     public static final String WM_SCRIPT_PATH = BIN_DIR + "/termux-x11-wm";
+    /**
+     * The helper that passes fcitx5's own text-field focus on to the launcher (#129): it owns
+     * fcitx5's virtual-keyboard name on a session bus of the display's, and answers fcitx5's
+     * show and hide with {@code launcherctl keyboard show|hide --source focus}. The server script
+     * starts it beside every display, and only when {@link #FCITX5_PATH} is installed.
+     */
+    static final String IM_FOCUS_SCRIPT_PATH = BIN_DIR + "/termux-x11-im";
+    /** fcitx5 itself, from Termux's x11 repository. Its presence is the whole opt-in. */
+    static final String FCITX5_PATH = BIN_DIR + "/fcitx5";
+    /**
+     * Where the helper puts the display's session bus, before the display's number is added: see
+     * {@link #imBusPath}. In the prefix's temporary directory, beside the X sockets themselves.
+     */
+    static final String IM_BUS_PATH_PREFIX =
+        TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-im-bus";
+    private static final String IM_FOCUS_ASSET = "x11/x11-im-focus.sh";
     static final String LOADER_PATH = LIBEXEC_DIR + "/loader.apk";
     /** openbox's configuration for the display: every window maximised, none decorated. */
     public static final String OPENBOX_RC_PATH = LIBEXEC_DIR + "/openbox-rc.xml";
@@ -357,6 +373,21 @@ public final class X11CliInstaller {
         return sleep.canExecute() ? sleep.getPath() : "/system/bin/sleep";
     }
 
+    /**
+     * The socket of the session bus the helper runs for {@code display} ({@code :1} and the like).
+     * One per display, because a second display — the GPU setup's test display above all — runs
+     * through the same server script, and two helpers sharing one socket would take each other's
+     * bus away. The helper works the same name out of the server's own arguments; an app's
+     * script is handed it by {@link X11LinuxAppRunner}, so the two meet on one bus.
+     */
+    @NonNull
+    static String imBusPath(@NonNull String display) {
+        String number = display.startsWith(":") ? display.substring(1) : display;
+        int screen = number.indexOf('.');
+        if (screen >= 0) number = number.substring(0, screen);
+        return IM_BUS_PATH_PREFIX + "-" + (number.isEmpty() ? "0" : number);
+    }
+
     /** True once this launcher's own commands are in place. */
     public static boolean isInstalled(@NonNull Context context) {
         X11CliInstaller installer = forPrefix(context);
@@ -369,6 +400,7 @@ public final class X11CliInstaller {
     @NonNull File preferenceScript() { return new File(binDir, "termux-x11-preference"); }
     @NonNull File gpuSetupScript() { return new File(binDir, "termux-x11-gpu-setup"); }
     @NonNull File wmScript() { return new File(binDir, "termux-x11-wm"); }
+    @NonNull File imFocusScript() { return new File(binDir, "termux-x11-im"); }
     @NonNull File loaderFile() { return new File(libexecDir, "loader.apk"); }
     @NonNull File markerFile() { return new File(libexecDir, ".installed"); }
     @NonNull File openboxRc() { return new File(libexecDir, "openbox-rc.xml"); }
@@ -397,11 +429,14 @@ public final class X11CliInstaller {
             // by the user from inside the environment. On nix those are two different shells.
             File prefixDir = binDir.getParentFile();
             boolean nix = prefixDir != null && NixProfile.isNix(prefixDir);
+            String appProcess = appProcessPath(android.os.Process.is64Bit(),
+                path -> new File(path).exists());
             writeAtomically(serverScript(),
-                bytes(serverScript(applicationId, hostShellPath(), nix)), true, true);
+                bytes(serverScript(applicationId, hostShellPath(), nix, appProcess)), true, true);
             writeAtomically(preferenceScript(),
-                bytes(preferenceScript(applicationId, prefixShellPath())), true, true);
+                bytes(preferenceScript(applicationId, prefixShellPath(), appProcess)), true, true);
             writeAtomically(gpuSetupScript(), bytes(withPrefixShebang(readText(GPU_SETUP_ASSET))), true, true);
+            writeAtomically(imFocusScript(), bytes(withPrefixShebang(readText(IM_FOCUS_ASSET))), true, true);
             writeAtomically(openboxRc(), bytes(openboxRcContent()), true, false);
             writeAtomically(markerFile(), bytes(marker), true, false);
             return Result.INSTALLED;
@@ -423,7 +458,7 @@ public final class X11CliInstaller {
             }
         }
         for (File file : new File[]{serverScript(), preferenceScript(), gpuSetupScript(),
-                wmScript(), loaderFile(), openboxRc(), markerFile()}) {
+                imFocusScript(), wmScript(), loaderFile(), openboxRc(), markerFile()}) {
             if (!file.exists() && !Files.isSymbolicLink(file.toPath())) continue;
             file.setWritable(true, true);
             if (!file.delete()) {
@@ -494,6 +529,26 @@ public final class X11CliInstaller {
     @NonNull
     static String serverScript(@NonNull String applicationId, @NonNull String shell,
                                boolean nixFontPath) {
+        return serverScript(applicationId, shell, nixFontPath, APP_PROCESS);
+    }
+
+    static final String APP_PROCESS = "/system/bin/app_process";
+    static final String APP_PROCESS_32 = "/system/bin/app_process32";
+
+    /**
+     * The zygote binary the loader runs under. It must be the launcher's own bitness: a 32-bit
+     * install on a 64-bit phone only carries 32-bit libraries, and {@code app_process} there is
+     * the 64-bit binary, which cannot load them.
+     */
+    @NonNull
+    static String appProcessPath(boolean launcherIs64Bit,
+                                 @NonNull java.util.function.Predicate<String> exists) {
+        return !launcherIs64Bit && exists.test(APP_PROCESS_32) ? APP_PROCESS_32 : APP_PROCESS;
+    }
+
+    @NonNull
+    static String serverScript(@NonNull String applicationId, @NonNull String shell,
+                               boolean nixFontPath, @NonNull String appProcess) {
         return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/getprop ] || [ ! -e /system/bin/app_process ]; then\n"
@@ -509,6 +564,7 @@ public final class X11CliInstaller {
             + "    if [ -d \"$dir\" ]; then export XKB_CONFIG_ROOT=\"$dir\"; break; fi\n"
             + "  done\n"
             + "fi\n"
+            + (nixFontPath ? "" : imFocusStartBlock())
             + "[ -z \"${LD_LIBRARY_PATH+x}\" ] || export XSTARTUP_LD_LIBRARY_PATH=\"$LD_LIBRARY_PATH\"\n"
             + "[ -z \"${LD_PRELOAD+x}\" ] || export XSTARTUP_LD_PRELOAD=\"$LD_PRELOAD\"\n"
             + "[ -z \"${CLASSPATH+x}\" ] || export XSTARTUP_CLASSPATH=\"$CLASSPATH\"\n"
@@ -518,10 +574,39 @@ public final class X11CliInstaller {
             // either way (no handler, no notification), so only the complaint is silenced.
             + "[ -n \"$(trap -p USR1 2>/dev/null)\" ] && export TERMUX_X11_NOTIFY_PARENT=1\n"
             + (nixFontPath ? nixFontPathBlock(applicationId) : "")
-            + "exec /system/bin/app_process -Xnoimage-dex2oat / "
+            + "exec " + appProcess + " -Xnoimage-dex2oat / "
             + "--nice-name=\"" + (nixFontPath ? "$TERMUX_X11_NICE_NAME"
                 : "termux-x11 " + applicationId + " $*")
             + "\" com.termux.x11.Loader \"$@\"\n";
+    }
+
+    /**
+     * The lines that start the focus helper ({@link #IM_FOCUS_SCRIPT_PATH}) beside the server.
+     * The server script is the one door every display goes through — the page's button, the
+     * start-up opt-in, a {@code termux-x11 :1} typed by hand — so the helper starts here, and only
+     * when fcitx5 is installed: without it there is nothing to start and nothing changes.
+     *
+     * <ul>
+     *   <li>It is handed {@code $$}, which a subshell still expands to this shell's pid: the pid
+     *       the server is about to {@code exec} into, so the helper can leave when the display
+     *       does.</li>
+     *   <li>It runs in a subshell of its own, so it is nobody's child once that subshell has
+     *       gone — not the server's, which would never reap it.</li>
+     *   <li>It starts before the linker environment is taken off for the server: it is a prefix
+     *       shell script, and runs the prefix's own programs.</li>
+     *   <li>{@code TERMUX_X11_IM=0} leaves it out, for a display that only exists to be measured
+     *       (the GPU setup's).</li>
+     * </ul>
+     * Termux only: the nix edition gets fcitx5 as docs, not as a helper.
+     */
+    @NonNull
+    private static String imFocusStartBlock() {
+        String helper = ProotDistro.singleQuote(IM_FOCUS_SCRIPT_PATH);
+        return "if [ \"${TERMUX_X11_IM:-1}\" != 0 ] && [ -x " + ProotDistro.singleQuote(FCITX5_PATH)
+            + " ] && [ -x " + helper + " ]; then\n"
+            + "  (" + helper + " \"$$\" " + ProotDistro.singleQuote(IM_BUS_PATH_PREFIX)
+            + " \"$@\" < /dev/null > /dev/null 2>&1 &)\n"
+            + "fi\n";
     }
 
     /**
@@ -567,6 +652,12 @@ public final class X11CliInstaller {
     /** {@link #preferenceScript(String)} with the shell spelled out; see the server script's. */
     @NonNull
     static String preferenceScript(@NonNull String applicationId, @NonNull String shell) {
+        return preferenceScript(applicationId, shell, APP_PROCESS);
+    }
+
+    @NonNull
+    static String preferenceScript(@NonNull String applicationId, @NonNull String shell,
+                                   @NonNull String appProcess) {
         return "#!" + shell + "\n"
             + MARKER_PREAMBLE + " — do not edit; the launcher rewrites it\n"
             + "if [ ! -e /system/bin/app_process ]; then\n"
@@ -581,7 +672,7 @@ public final class X11CliInstaller {
             + "export CLASSPATH=" + LOADER_PATH + "\n"
             + "export TERMUX_X11_LOADER_OVERRIDE_CMDENTRYPOINT_CLASS="
             + "com.termux.x11.LoriePreferences\\$Receiver\n"
-            + "exec /system/bin/app_process -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
+            + "exec " + appProcess + " -Xnoimage-dex2oat / com.termux.x11.Loader \"$@\"\n";
     }
 
     /**

@@ -417,14 +417,16 @@ public final class MaterialTerminalColorScheme {
      * that treats them as glyph colours lifts both to the same mid tone as everything else — which is
      * how ANSI black stopped being dark and started matching bright black. So slots 0, 7 and 15 are
      * exempt — bright white is a fill exactly as much as white is, and holding it to a text ratio is
-     * what used to drag it down into the dark end of the neutral ladder; slot 8 keeps a fixed 3.0:1
-     * because it really is text — dim text, the one thing the level must not be allowed to brighten
-     * into ordinary text; the rest take the level's ratio.
+     * what used to drag it down into the dark end of the neutral ladder; slot 8 is dim text and
+     * takes the level's own dim ratio ({@link TerminalContrastLevel#dimRatio}): a fixed 3.0:1 at
+     * every level held Softer's and Harder's grey to Default's contrast, so Contrast barely moved
+     * it. Its tone ({@link TerminalContrastLevel#dimToneDark}) keeps it from brightening into
+     * ordinary text. The rest take the level's ratio.
      */
     @VisibleForTesting
     static double ansiFloor(int slot, @NonNull TerminalContrastLevel level) {
         if (slot == 0 || slot == 7 || slot == 15) return 0d;
-        if (slot == 8) return 3.0d;
+        if (slot == 8) return level.dimRatio;
         return level.ansiRatio;
     }
 
@@ -490,7 +492,10 @@ public final class MaterialTerminalColorScheme {
         double warm = warmNeutralHue(neutralHue);
         double neutral = warmNeutralChroma(neutralChroma);
         slots.setProperty("color0", hex(Hct.from(warm, neutral, 25d).toInt()));
-        slots.setProperty("color8", hex(Hct.from(warm, neutral, dark ? 45d : 50d).toInt()));
+        // The dim text follows the level: toward the ground for Softer, toward the text for
+        // Harder. Default keeps the 45 and 50 the ladder always had.
+        slots.setProperty("color8", hex(Hct.from(warm, neutral,
+            dark ? level.dimToneDark : level.dimToneLight).toInt()));
         slots.setProperty("color7", hex(Hct.from(warm, neutral, dark ? 80d : 75d).toInt()));
         slots.setProperty("color15", hex(Hct.from(warm, neutral, dark ? 96d : 92d).toInt()));
         return slots;
