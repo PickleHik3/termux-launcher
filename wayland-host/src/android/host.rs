@@ -390,6 +390,8 @@ pub struct State {
     last_keepalive: Instant,
     events: Box<dyn HostEvents>,
     pub xwayland: Option<super::xwayland::XwaylandState>,
+    /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
+    teardown: crate::teardown::Teardown,
 }
 
 pub fn spawn(
@@ -505,7 +507,7 @@ fn setup(
     // host keeps its lock and the bind fails instead of stealing its socket.
     let listener = ListeningSocket::bind_absolute(config.socket_path.clone())?;
     linfo!("listening on {} (scale {}, frame {:?})", config.socket_path.display(), config.scale, config.frame_period);
-    loop_handle.insert_source(Generic::new(listener, Interest::READ, Mode::Level), |_, listener, state| {
+    let listener_token = loop_handle.insert_source(Generic::new(listener, Interest::READ, Mode::Level), |_, listener, state| {
         loop {
             match listener.accept() {
                 Ok(Some(stream)) => state.insert_client(stream),
@@ -519,7 +521,7 @@ fn setup(
         Ok(PostAction::Continue)
     })?;
 
-    loop_handle.insert_source(Generic::new(display, Interest::READ, Mode::Level), |_, display, state| {
+    let display_token = loop_handle.insert_source(Generic::new(display, Interest::READ, Mode::Level), |_, display, state| {
         // SAFETY: the display is not dropped while the source is registered.
         let display = unsafe { display.get_mut() };
         if let Err(e) = display.dispatch_clients(state) {
@@ -569,7 +571,13 @@ fn setup(
         last_keepalive: now,
         events,
         xwayland: None,
+        teardown: Default::default(),
     };
+    // Last in, first out: the listening socket goes (and its files with it), then the display.
+    let h = state.loop_handle.clone();
+    state.teardown.add(move || h.remove(display_token));
+    let h = state.loop_handle.clone();
+    state.teardown.add(move || h.remove(listener_token));
     if let Some(xw) = config.xwayland {
         super::xwayland::start(&mut state, xw);
     }
@@ -610,6 +618,7 @@ impl State {
             }
         }
         self.maps.clear();
+        self.teardown.run();
     }
 
     /// Debug: writes what toplevel `id` shows (its held buffer, cropped and cut like a copy,
