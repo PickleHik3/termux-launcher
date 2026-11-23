@@ -11,7 +11,9 @@ import com.termux.R;
 import com.termux.app.page.PageKind;
 import com.termux.app.place.SeamDress;
 import com.termux.shared.termux.settings.preferences.FrostStops;
+import com.termux.shared.termux.settings.preferences.GlassMaterial;
 import com.termux.shared.termux.settings.preferences.LookGrid;
+import com.termux.shared.termux.settings.preferences.LookGridMigration;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
@@ -70,9 +72,12 @@ public final class SurfacePresets {
      * the Material blend is 35 ({@code GlassLook.TINT_LOOK_PERCENT}); a look older than 6 has
      * every Tint value scaled on read ({@link #rescaleTintAmounts}). Shade, which 5 brought, was
      * retired (2026-10-17): a look that still names it has the key dropped on read
-     * ({@link #RETIRED_SHADE_KEY}), so it applies, and draws, as Shade 0.
+     * ({@link #RETIRED_SHADE_KEY}), so it applies, and draws, as Shade 0. 7 is Frost, Depth and
+     * Shine: Shine ({@link TERMUX_APP#KEY_SURFACE_GLASS_SHINE}) replaces the rim string, the
+     * dispersion and the four edge keys, a look older than 7 has its rim and dispersion folded
+     * into one on read ({@link GlassMaterial#shineForRimAndEdge}), and the retired keys are dropped.
      */
-    public static final int FORMAT_VERSION = 6;
+    public static final int FORMAT_VERSION = 7;
 
     /**
      * The retired Shade's key, kept only so a stored look and the store itself shed it
@@ -100,67 +105,57 @@ public final class SurfacePresets {
         }
     }
 
-    /**
-     * Clear's face terms (generation 6): face clarity, dim and size lens. A stored look without
-     * them reads as 0, the glass as it was.
-     */
-    private static final String[] FACE_TERM_KEYS = {
-        TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, TERMUX_APP.KEY_FANCIER_GLASS_DIM,
-        TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS,
+    /** The keys a look saved before format 7 carries and the app now drops. */
+    private static final String[] RETIRED_GLASS_KEYS = {
+        TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT,
+        TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION,
+        TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY,
+        TERMUX_APP.KEY_FANCIER_GLASS_DIM, TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS,
+        TERMUX_APP.KEY_SURFACE_GLASS_RIM,
     };
 
     private static final List<Preset> PRESETS = Collections.unmodifiableList(Arrays.asList(
-        // Clear (id minimal): the most transparent glass, wallpaper forward, tuned toward Apple's
-        // Clear Liquid Glass (generation 6): the face shows the clearer picture where one is
-        // handed in (face clarity 100), the lensing grows with the surface (size lens 100), and there is no
-        // grain. Its dim term ships at 0: the dim shifts the terminal pane's even-out ink vote (ChromeInk
-        // bandPolarity) and turned its text dark.
-        // Glass 20 (blur 7, grain 0), opacity 10 on every surface (the terminal follows Global, no detached
-        // override), its own colour (Tint 0). Its face is
-        // nearly the wallpaper itself, so the edge has to carry the glass: the deepest bend of the
-        // Looks (27 over an edge of 18, one and a half bands, Depth 90), Haze Clear's sharp edge
-        // (clarity 76) and its corner glint (dispersion 40, a fiftieth of the pull). The rim's
-        // hairline is fixed in the program; light 10 and no specular are stored only so an older
-        // build reading this store draws a faint rim. Scheme tint, hairline rim, classic motion.
+        // Clear (id minimal): the most transparent glass, wallpaper forward. Glass 20 (blur 7,
+        // grain 0), opacity 10, its own colour (Tint 0), the realistic slab (Depth 60, 27 dp) and
+        // the room light as it is (Shine 50). Its face is nearly the wallpaper itself, so the lens
+        // edge carries the glass.
         preset("minimal", R.string.termux_surface_preset_minimal,
             TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, GlassControls.blurForGlass(GlassControls.CLEAR),
-            10, 0, 0, 27, 18, 10, 0, 40, 76,
-            look -> {
-                look.put(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, 100);
-                look.put(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS, 100);
-            }),
-        // Mist: Obsidian-Music's glass and motion (Apache-2.0; see
-        // project-docs/reference/launcher/mist-preset-obsidian-values.md). Glass 75 (blur 25, grain
-        // 7): blur 25 and opacity 60 are Obsidian's own numbers. Grain is not its 0.08 noise
-        // carried over: Haze lays a soft noise tile at 0.08 alpha, ours is full-contrast random
-        // alpha at up to 60/255 of the percentage, so a literal match (about 68) would read as
-        // sand; 7 is the same faint tooth. Obsidian's ink, untinted (Tint 0). The edge is a little
-        // shallower than Clear's (bend 24 over an edge of
-        // 16, Depth 80), bent through the frost itself (clarity 0, as Haze's Regular) and with no
-        // fringe; light 10 as Clear's. On light glass (the white Obsidian ink) its opacity is 35,
-        // not 60, which reads as milk there (MIST_LIGHT_OPACITY, presets(boolean)).
+            10, 0, 0, GlassMaterial.REALISTIC_BEND_DP, GlassMaterial.SHINE_DEFAULT,
+            look -> { }),
+        // Frosted (id frost; Mist before): a blurred face on Clear's edge. Obsidian-Music's glass
+        // and motion (Apache-2.0; see
+        // project-docs/reference/launcher/mist-preset-obsidian-values.md): Glass 75 (blur 25,
+        // grain 7), opacity 60 and Obsidian's ink, untinted (Tint 0). On light glass (the white
+        // Obsidian ink) its opacity is 35, not 60, which reads as milk there
+        // (MIST_LIGHT_OPACITY, presets(boolean)).
         preset("frost", R.string.termux_surface_preset_frost,
             TERMUX_APP.SURFACE_MATERIAL_FROST, 50, GlassControls.blurForGlass(GlassControls.MIST),
-            60, GlassControls.grainForGlass(GlassControls.MIST), 0, 24, 16, 10, 0, 0, 0,
+            60, GlassControls.grainForGlass(GlassControls.MIST), 0,
+            GlassMaterial.REALISTIC_BEND_DP, GlassMaterial.SHINE_DEFAULT,
             look -> {
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_OBSIDIAN);
-                look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.GLASS_RIM_GRADIENT);
                 look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.GLASS_MOTION_MIST);
             }),
-        // Tint (id stock): glass in Material colours, the scheme's ink at the Material blend
-        // (Tint 35: 0.35 toward the primary container, a 0.14 wash toward the primary), Glass 40
-        // (blur 12, grain 4), with the shallowest edge of the Looks (bend 21 over an edge of 14,
-        // Depth 70), bent through the frost (clarity 0) and with no fringe; light 10 as Clear's.
-        // At opacity 46 the face carries the accent alone, so the frame takes no tint.
+        // Tinted (id stock; Tint before): glass in Material colours, the scheme's ink at the
+        // Material blend (Tint 35: 0.35 toward the primary container, a 0.14 wash toward the
+        // primary), Glass 40 (blur 12, grain 4), with the thinnest pane of the Looks (21 dp). At
+        // opacity 46 the face carries the accent alone, so the frame takes no tint.
         preset("stock", R.string.termux_surface_preset_stock,
             TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, GlassControls.blurForGlass(GlassControls.TINT),
             46, GlassControls.grainForGlass(GlassControls.TINT),
-            com.termux.app.chrome.GlassLook.TINT_LOOK_PERCENT, 21, 14, 10, 0, 0, 0,
+            com.termux.app.chrome.GlassLook.TINT_LOOK_PERCENT, 21, GlassMaterial.SHINE_DEFAULT,
             look -> { }),
-        // Solid: opaque, no blur cost, and no edge to clear. Blur 0 and grain 0 sit off the Glass
-        // curve: no frost at all.
+        // Solid: opaque, no blur cost, and no lens to show: a flat slab with a quiet rim. Blur 0 and
+        // grain 0 sit off the Glass curve: no frost at all.
         preset("solid", R.string.termux_surface_preset_solid,
-            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 0, 1, 0, 0, 0, 0,
+            TERMUX_APP.SURFACE_MATERIAL_SOLID, 78, 0, 92, 0, 0, 0, 30,
+            look -> { }),
+        // Liquid: the dramatic one. Clear's face under a thick lens (Depth 90, a 41 dp slab of a
+        // higher index), strong light (Shine 85) and a touch of colour split.
+        preset("liquid", R.string.termux_surface_preset_liquid,
+            TERMUX_APP.SURFACE_MATERIAL_GLASS, 50, GlassControls.blurForGlass(GlassControls.CLEAR),
+            8, 0, 0, GlassMaterial.bendForDepth(90), 85,
             look -> { })
     ));
 
@@ -168,185 +163,18 @@ public final class SurfacePresets {
         void addTo(Map<String, Object> look);
     }
 
-    // --------------------------------------------------------------- a Look that moved
-
-    /**
-     * Bumped whenever a shipped Look's edge values move, with the values it had until then added to
-     * {@link #EARLIER_EDGES}, so that {@link #readoptMovedLooks} carries an install sitting on the
-     * old values to the new ones once.
-     */
-    static final int LOOKS_GENERATION = 6;
-
-    /** The generation an install's Looks were last brought up to; absent is 0. */
+    /** The generation an install's Looks were last brought up to; absent is 0. Only the reset names it. */
     static final String KEY_LOOKS_GENERATION = "surface_looks_generation";
 
-    /** The six edge keys, in the order {@link #EARLIER_EDGES} lists their values. */
-    private static final String[] EDGE_KEYS = {
-        TERMUX_APP.KEY_FANCIER_GLASS_BEND, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH,
-        TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR,
-        TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, TERMUX_APP.KEY_FANCIER_GLASS_CLARITY,
-    };
-
     /**
-     * Each Look's earlier edges (bend, edge width, light, specular, dispersion, clarity), newest
-     * first: every generation whose other values were already the Look's current ones, so an
-     * install that took the Look then still matches it whole. A key a generation did not have yet
-     * reads as its default, 0. Clear and Tint once shared 4/10/18 and Mist's oldest edge is the
-     * untouched defaults, which is why a match takes the whole Look and not the edge alone.
-     */
-    private static final Map<String, int[][]> EARLIER_EDGES = earlierEdges();
-
-    private static Map<String, int[][]> earlierEdges() {
-        HashMap<String, int[][]> earlier = new HashMap<>();
-        earlier.put("minimal", new int[][] {
-            {27, 18, 10, 0, 40, 76}, // generation 5: Clear before its face terms and with grain 3
-            {26, 26, 50, 0, 35, 100}, // 84c12ad58, generation 4
-            {26, 26, 30, 0, 35, 100}, // 2d3c642d7, generations 2 and 3
-            {11, 28, 70, 0, 25, 100}, // b81888cf5, generation 1
-            {6, 14, 40, 0, 0, 70}, // bfcd74678
-            {6, 14, 24, 0, 0, 70}, // 6475ebebe
-            {4, 10, 18, 0, 0, 0},  // f32aa35a6, and every fresh install until this generation
-        });
-        earlier.put("frost", new int[][] {
-            {24, 24, 45, 0, 30, 90}, // 84c12ad58, generation 4
-            {24, 24, 28, 0, 30, 90}, // b4ba1b7e5, generation 3
-            {24, 30, 28, 0, 30, 90}, // 2d3c642d7, generation 2
-            {13, 32, 60, 0, 20, 90}, // b81888cf5, generation 1
-            {9, 20, 30, 0, 0, 60}, // bfcd74678
-            {9, 20, 18, 0, 0, 45}, // 6475ebebe
-            {9, 20, 18, 20, 0, 0}, // 69ab9c6e9
-            {9, 20, 18, 0, 0, 0},  // 04219dea8, again from 2adbaf512
-        });
-        earlier.put("stock", new int[][] {
-            {20, 22, 40, 0, 0, 85}, // 84c12ad58, generation 4
-            {20, 22, 25, 0, 0, 85}, // b4ba1b7e5, generation 3
-            {20, 26, 25, 0, 0, 85}, // 2d3c642d7, generation 2
-            {10, 26, 60, 0, 0, 85}, // b81888cf5, generation 1
-            {6, 14, 36, 0, 0, 55}, // bfcd74678
-            {6, 14, 22, 0, 0, 55}, // 6475ebebe
-            {4, 10, 18, 0, 0, 0},  // f32aa35a6
-        });
-        return Collections.unmodifiableMap(earlier);
-    }
-
-    /**
-     * Once per {@link #LOOKS_GENERATION}: an install whose live look is a shipped Look at one of
-     * its earlier edges takes the Look as it ships now, so its stop in the editor stays that Look
-     * rather than turning Custom. Any other look, Custom included, is left exactly as it is. Runs
-     * at start-up, after the preferences' own migrations.
-     */
-    public static void readoptMovedLooks(@NonNull TermuxAppSharedPreferences prefs) {
-        SharedPreferences store = prefs.getSharedPreferences();
-        if (store == null || store.getInt(KEY_LOOKS_GENERATION, 0) >= LOOKS_GENERATION)
-            return;
-        Preset moved = lookOnEarlierEdges(prefs);
-        if (moved != null)
-            apply(prefs, moved);
-        store.edit().putInt(KEY_LOOKS_GENERATION, LOOKS_GENERATION).apply();
-    }
-
-    /** The shipped Look the live look is at one of its earlier edges, or null. */
-    @Nullable
-    static Preset lookOnEarlierEdges(@NonNull TermuxAppSharedPreferences prefs) {
-        for (Preset preset : presets(prefs)) {
-            int[][] earlier = EARLIER_EDGES.get(preset.id);
-            if (earlier == null)
-                continue;
-            for (int[] edges : earlier) {
-                if (matches(prefs, withEdges(preset, edges)))
-                    return preset;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * Each Look's Global blur and grain before format 5 moved them onto the Glass curve; Solid's did
-     * not move.
-     */
-    private static final Map<String, int[]> BLUR_GRAIN_BEFORE_FORMAT_5 = blurGrainBeforeFormat5();
-
-    private static Map<String, int[]> blurGrainBeforeFormat5() {
-        HashMap<String, int[]> before = new HashMap<>();
-        before.put("minimal", new int[] {4, 4});
-        before.put("frost", new int[] {25, 8});
-        before.put("stock", new int[] {10, 10});
-        return Collections.unmodifiableMap(before);
-    }
-
-    /**
-     * The shipped Look the live look is, as it stood before format 5 (at its edges then or at any
-     * earlier ones), or null: the stored values are still format 4's, so a Look is recognised by
-     * its old blur and grain, the full tint strength and, for Tint, the {@code material} family.
-     * The glass controls' migration re-adopts it whole, so its stop stays that Look.
-     */
-    @Nullable
-    static Preset lookAsShippedBeforeFormat5(@NonNull TermuxAppSharedPreferences prefs) {
-        for (Preset preset : presets(prefs)) {
-            LinkedHashMap<String, Object> values = new LinkedHashMap<>(preset.values);
-            int[] blurGrain = BLUR_GRAIN_BEFORE_FORMAT_5.get(preset.id);
-            if (blurGrain != null) {
-                values.put(cellKey(null, SurfaceProperty.BLUR),
-                    FrostStops.nearestStopByBlur(blurGrain[0]));
-                values.put(cellKey(null, SurfaceProperty.GRAIN), blurGrain[1]);
-            }
-            values.put(cellKey(null, SurfaceProperty.TINT), LEGACY_TINT_STRENGTH);
-            if ("stock".equals(preset.id))
-                values.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.GLASS_TINT_MATERIAL);
-            values.remove(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE);
-            values.remove(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY);
-            for (String key : FACE_TERM_KEYS)
-                values.put(key, 0);
-            Preset before = new Preset(preset.id, preset.nameRes, values);
-            if (matches(prefs, before))
-                return preset;
-            int[][] earlier = EARLIER_EDGES.get(preset.id);
-            if (earlier == null)
-                continue;
-            for (int[] edges : earlier) {
-                if (matches(prefs, withEdgesKeepingGrain(before, edges)))
-                    return preset;
-            }
-        }
-        return null;
-    }
-
-    /**
-     * {@code preset} with its six edge values replaced by {@code edges}, and as it stood before
-     * generation 6: no face terms and, for Clear, the grain it had then.
-     */
-    @NonNull
-    static Preset withEdges(@NonNull Preset preset, @NonNull int[] edges) {
-        Preset before = withEdgesKeepingGrain(preset, edges);
-        if (!"minimal".equals(preset.id))
-            return before;
-        LinkedHashMap<String, Object> values = new LinkedHashMap<>(before.values);
-        values.put(cellKey(null, SurfaceProperty.GRAIN),
-            GlassControls.grainForGlass(GlassControls.CLEAR));
-        return new Preset(preset.id, preset.nameRes, values);
-    }
-
-    /** As {@link #withEdges} but with the preset's own grain (the format-5 path sets its own). */
-    @NonNull
-    private static Preset withEdgesKeepingGrain(@NonNull Preset preset, @NonNull int[] edges) {
-        LinkedHashMap<String, Object> values = new LinkedHashMap<>(preset.values);
-        for (int i = 0; i < EDGE_KEYS.length; i++)
-            values.put(EDGE_KEYS[i], edges[i]);
-        for (String key : FACE_TERM_KEYS)
-            values.put(key, 0);
-        return new Preset(preset.id, preset.nameRes, values);
-    }
-
-    /**
-     * Material point, the Global triple and the six Fancier Glass keys; the default glass
-     * tint, rim and motion; then the extras, whose puts replace any of those in place. The dock
+     * Material point, the Global triple, Depth's thickness and Shine; the default glass
+     * tint and motion; then the extras, whose puts replace any of those in place. The dock
      * style is deliberately absent — a Look never changes Style — and so are corners and margins,
      * which are Layout's ({@link #isLayoutOwned}).
      */
     private static Preset preset(String id, @StringRes int nameRes, String material,
                                  int intensity, int blur, int opacity, int grain, int tint,
-                                 int bend, int edgeWidth, int edgeLight,
-                                 int specular, int dispersion, int clarity, Extras extras) {
+                                 int bend, int shine, Extras extras) {
         LinkedHashMap<String, Object> look = new LinkedHashMap<>();
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL, material);
         look.put(TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY, intensity);
@@ -357,14 +185,7 @@ public final class SurfacePresets {
         // accent's container.
         look.put(cellKey(null, SurfaceProperty.TINT), tint);
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, bend);
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, edgeWidth);
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, edgeLight);
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, specular);
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, dispersion);
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, clarity);
-        // Clear's face terms (generation 6); every other Look ships them at 0, as before.
-        for (String key : FACE_TERM_KEYS)
-            look.put(key, 0);
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_SHINE, shine);
         putGlassDefaults(look);
         extras.addTo(look);
         return new Preset(id, nameRes, look);
@@ -372,7 +193,6 @@ public final class SurfacePresets {
 
     private static void putGlassDefaults(Map<String, Object> look) {
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT);
-        look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM);
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, TERMUX_APP.DEFAULT_SURFACE_GLASS_MOTION);
         putGlassControlDefaults(look);
     }
@@ -610,20 +430,12 @@ public final class SurfacePresets {
                 look.put(cellKey(null, property), cellValue(prefs, null, property, pageOf(half)));
         }
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT, prefs.getSurfaceGlassTint());
-        look.put(TERMUX_APP.KEY_SURFACE_GLASS_RIM, prefs.getSurfaceGlassRim());
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_MOTION, prefs.getSurfaceGlassMotion());
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE, prefs.getSurfaceGlassTintHue());
         look.put(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY, prefs.getSurfaceGlassVibrancy());
         look.put(TERMUX_APP.KEY_TERMINAL_BORDER_ENABLED, prefs.isTerminalBorderEnabled());
         look.put(TERMUX_APP.KEY_FANCIER_GLASS_BEND, prefs.getFancierGlassBendDp());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, prefs.getFancierGlassEdgeWidthDp());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, prefs.getFancierGlassEdgeLightPercent());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, prefs.getFancierGlassSpecularPercent());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, prefs.getFancierGlassDispersionPercent());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, prefs.getFancierGlassClarityPercent());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, prefs.getFancierGlassFaceClarityPercent());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_DIM, prefs.getFancierGlassDimPercent());
-        look.put(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS, prefs.getFancierGlassSizeLensPercent());
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_SHINE, prefs.getGlassShine());
         putCustomOnly(prefs, look);
         for (SurfaceEditorRows.Row row : SurfaceEditorRows.rows()) {
             if (isLayoutOwned(row.property)
@@ -982,17 +794,6 @@ public final class SurfacePresets {
         if (!look.isEmpty()) {
             for (Map.Entry<String, Object> glass : glassDefaults().entrySet())
                 if (!look.containsKey(glass.getKey())) look.put(glass.getKey(), glass.getValue());
-            // Format 3 added the edge's specular and dispersion; before it there were none.
-            if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR))
-                look.put(TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, 0);
-            if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION))
-                look.put(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION, 0);
-            // Format 4 added the edge's clarity; before it the edge showed the frost alone.
-            if (!look.containsKey(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY))
-                look.put(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, 0);
-            // Generation 6 added the face terms; a look saved before them has none.
-            for (String key : FACE_TERM_KEYS)
-                if (!look.containsKey(key)) look.put(key, 0);
             if (format < 5) {
                 // The tint strength came later still; before it every look wore the full tint.
                 if (!look.containsKey(TERMUX_APP.KEY_SURFACE_GLOBAL_TINT))
@@ -1002,12 +803,29 @@ public final class SurfacePresets {
             // Format 6 stretched the Tint scale; a look older than it has its amounts scaled.
             if (format < 6)
                 rescaleTintAmounts(look);
+            // Format 7: Shine takes the rim and the dispersion; the retired keys go.
+            if (format < 7)
+                foldIntoShine(look);
+            for (String key : RETIRED_GLASS_KEYS)
+                look.remove(key);
             // A look saved before the grid names its cells by the old keys; they read as grid cells.
             toGridKeys(look);
             if (!look.containsKey(cellKey(null, SurfaceProperty.TINT)))
                 look.put(cellKey(null, SurfaceProperty.TINT), TERMUX_APP.DEFAULT_SURFACE_GLOBAL_TINT);
         }
         return look;
+    }
+
+    /** Format 7: {@code look}'s rim string and dispersion as its Shine, in place. */
+    static void foldIntoShine(@NonNull Map<String, Object> look) {
+        if (look.containsKey(TERMUX_APP.KEY_SURFACE_GLASS_SHINE))
+            return;
+        Object rim = look.get(TERMUX_APP.KEY_SURFACE_GLASS_RIM);
+        Object edge = look.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION);
+        int rimStop = rim instanceof String
+            ? LookGridMigration.rimOf((String) rim) : LookGrid.RIM_HAIRLINE;
+        look.put(TERMUX_APP.KEY_SURFACE_GLASS_SHINE, GlassMaterial.shineForRimAndEdge(rimStop,
+            edge instanceof Number ? ((Number) edge).intValue() : 0));
     }
 
     /**
@@ -1357,29 +1175,19 @@ public final class SurfacePresets {
             case TERMUX_APP.KEY_FANCIER_GLASS_BEND:
                 prefs.setFancierGlassBendDp(intOf(value));
                 return;
+            case TERMUX_APP.KEY_SURFACE_GLASS_SHINE:
+                prefs.setGlassShine(intOf(value));
+                return;
+            // Keys a look saved before format 7 carried: Shine took their place.
             case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH:
-                prefs.setFancierGlassEdgeWidthDp(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT:
-                prefs.setFancierGlassEdgeLightPercent(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR:
-                prefs.setFancierGlassSpecularPercent(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION:
-                prefs.setFancierGlassDispersionPercent(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_CLARITY:
-                prefs.setFancierGlassClarityPercent(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY:
-                prefs.setFancierGlassFaceClarityPercent(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_DIM:
-                prefs.setFancierGlassDimPercent(intOf(value));
-                return;
             case TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS:
-                prefs.setFancierGlassSizeLensPercent(intOf(value));
+            case TERMUX_APP.KEY_SURFACE_GLASS_RIM:
                 return;
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
                 prefs.setSurfaceMaterial(pageOf(half), (String) value);
@@ -1389,9 +1197,6 @@ public final class SurfacePresets {
                 return;
             case TERMUX_APP.KEY_SURFACE_GLASS_TINT:
                 prefs.setSurfaceGlassTint((String) value);
-                return;
-            case TERMUX_APP.KEY_SURFACE_GLASS_RIM:
-                prefs.setSurfaceGlassRim((String) value);
                 return;
             case TERMUX_APP.KEY_SURFACE_GLASS_MOTION:
                 prefs.setSurfaceGlassMotion((String) value);
@@ -1560,30 +1365,14 @@ public final class SurfacePresets {
                 return null;
             case TERMUX_APP.KEY_FANCIER_GLASS_BEND:
                 return prefs.getFancierGlassBendDp();
-            case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH:
-                return prefs.getFancierGlassEdgeWidthDp();
-            case TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT:
-                return prefs.getFancierGlassEdgeLightPercent();
-            case TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR:
-                return prefs.getFancierGlassSpecularPercent();
-            case TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION:
-                return prefs.getFancierGlassDispersionPercent();
-            case TERMUX_APP.KEY_FANCIER_GLASS_CLARITY:
-                return prefs.getFancierGlassClarityPercent();
-            case TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY:
-                return prefs.getFancierGlassFaceClarityPercent();
-            case TERMUX_APP.KEY_FANCIER_GLASS_DIM:
-                return prefs.getFancierGlassDimPercent();
-            case TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS:
-                return prefs.getFancierGlassSizeLensPercent();
+            case TERMUX_APP.KEY_SURFACE_GLASS_SHINE:
+                return prefs.getGlassShine();
             case TERMUX_APP.KEY_SURFACE_MATERIAL:
                 return prefs.getSurfaceMaterial(pageOf(half));
             case TERMUX_APP.KEY_SURFACE_MATERIAL_INTENSITY:
                 return prefs.getSurfaceMaterialIntensity(pageOf(half));
             case TERMUX_APP.KEY_SURFACE_GLASS_TINT:
                 return prefs.getSurfaceGlassTint();
-            case TERMUX_APP.KEY_SURFACE_GLASS_RIM:
-                return prefs.getSurfaceGlassRim();
             case TERMUX_APP.KEY_SURFACE_GLASS_MOTION:
                 return prefs.getSurfaceGlassMotion();
             case TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE:

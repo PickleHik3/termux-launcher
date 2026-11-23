@@ -3036,7 +3036,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
                 case MARGIN: return AppearanceLooks.marginDp(prefs.getGlobalMarginDp());
-                case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
+                case DEPTH: return GlassEdgeControls.read(prefs.getFancierGlassBendDp(), mDepthSet);
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
                 case TEXT_SIZE:
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
@@ -3096,7 +3096,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case VIBRANCY:
                     return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
                         ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
-                case GLASS_EDGE: return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
+                case SHINE: return Control.SHINE.clamp(prefs.getGlassShine());
                 default: return cardRowValue(row);
             }
         }
@@ -3117,7 +3117,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case GRAIN: return com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.min;
                 case RIM: return com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM.min;
                 case VIBRANCY: return Control.VIBRANCY.min;
-                case GLASS_EDGE: return Control.EDGE.min;
+                case SHINE: return Control.SHINE.min;
                 default: return cardRowFrom(row);
             }
         }
@@ -3148,7 +3148,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case GRAIN: return com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.max;
                 case RIM: return com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM.max;
                 case VIBRANCY: return Control.VIBRANCY.max;
-                case GLASS_EDGE: return Control.EDGE.max;
+                case SHINE: return Control.SHINE.max;
                 default: return cardRowTo(row);
             }
         }
@@ -3171,7 +3171,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case DEPTH:
                 case TEXT_SIZE:
                 case KEY_OPACITY:
-                case GLASS_EDGE:
+                case SHINE:
                 case REFLECTION:
                 case GRAIN:
                 case WALLPAPER_DIM:
@@ -3871,7 +3871,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 syncDirty();
                 break;
             case VIBRANCY: writeVibrancy(value); break;
-            case GLASS_EDGE: writeGlassEdge(value); break;
+            case SHINE: writeGlassShine(value); break;
             default:
                 writeCardRow(row, value, dragging);
                 break;
@@ -4423,9 +4423,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         int written = Control.DEPTH.clamp(value);
-        GlassEdgeControls.Edge next = glassEdgeOf(prefs).withDepth(written);
-        prefs.setFancierGlassBendDp(next.bend);
-        prefs.setFancierGlassEdgeWidthDp(next.width);
+        prefs.setFancierGlassBendDp(GlassEdgeControls.bendForDepth(written));
         mDepthSet = written;
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
     }
@@ -4481,21 +4479,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /** The glass edge's colour split, global like Depth. */
-    private void writeGlassEdge(int value) {
+    /** Shine, the light on the rim and lens: global like Depth. */
+    private void writeGlassShine(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        prefs.setFancierGlassDispersionPercent(Control.EDGE.clamp(value));
+        prefs.setGlassShine(Control.SHINE.clamp(value));
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
-    }
-
-    @NonNull
-    private static GlassEdgeControls.Edge glassEdgeOf(@NonNull TermuxAppSharedPreferences prefs) {
-        return new GlassEdgeControls.Edge(prefs.getFancierGlassBendDp(),
-            prefs.getFancierGlassEdgeWidthDp(), prefs.getFancierGlassEdgeLightPercent(),
-            prefs.getFancierGlassSpecularPercent(), prefs.getFancierGlassDispersionPercent(),
-            prefs.getFancierGlassClarityPercent());
     }
 
     /** Key spacing, previewed live on the keyboard. */
@@ -6809,7 +6799,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
             case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
             case TINT_HUE: return R.drawable.ic_ms_format_color_fill;
-            case VIBRANCY: return R.drawable.ic_ms_auto_awesome;
+            case VIBRANCY:
+            case SHINE: return R.drawable.ic_ms_auto_awesome;
             case DEPTH: return R.drawable.ic_ms_layers;
             case FULL_SCREEN: return R.drawable.ic_ms_fullscreen;
             case MINIMAL: return R.drawable.ic_ms_crop_free;

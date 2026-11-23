@@ -173,7 +173,7 @@ public final class EditorRows {
         MINIMAL(Kind.SWITCH, R.string.appearance_row_minimal, R.drawable.ic_corner_minimal_enter),
         VIBRANCY(Kind.SLIDER, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
-        GLASS_EDGE(Kind.SLIDER, R.string.appearance_row_glass_edge, R.drawable.ic_editor_depth),
+        SHINE(Kind.SLIDER, R.string.appearance_row_shine, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_rl_terminal),
         LINK_GESTURES(Kind.LINK, R.string.appearance_row_gestures, R.drawable.ic_symbol_tune),
         /** Settings › Performance, offered under Depth and Edge while a setting puts them out. */

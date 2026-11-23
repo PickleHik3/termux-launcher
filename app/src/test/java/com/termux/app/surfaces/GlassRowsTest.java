@@ -23,7 +23,7 @@ public class GlassRowsTest {
 
     /** The shared Appearance block, after its heading (appearance-cards overhaul §2). */
     private static final java.util.List<Row> BLOCK = Arrays.asList(Row.SECTION_APPEARANCE,
-        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
+        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.SHINE,
         Row.DEPTH, Row.RIM, Row.TINT_HUE);
 
     /** The terminal's glass card wears the whole Appearance block until #287 turns it into Background. */
@@ -52,7 +52,7 @@ public class GlassRowsTest {
             assertTrue(card + " Opacity", rows.contains(Row.OPACITY));
             assertTrue(card + " Blur", rows.contains(Row.FROST));
             for (Row gone : new Row[] {Row.LOOK, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
-                    Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.VIBRANCY, Row.LINK_GLASS_REFRACTION})
+                    Row.RIM, Row.SHINE, Row.DEPTH, Row.VIBRANCY, Row.LINK_GLASS_REFRACTION})
                 assertFalse(card + " " + gone, rows.contains(gone));
         }
     }
@@ -61,7 +61,7 @@ public class GlassRowsTest {
     public void depthAndEdgeStayWhereTheDeviceCannotDrawThem() {
         assertEquals(rowsOf(EditorCard.DOCK, ALL), rowsOf(EditorCard.DOCK, NO_EDGE));
         assertTrue(rowsOf(EditorCard.APPEARANCE, NO_EDGE).contains(Row.DEPTH));
-        assertTrue(GlassRows.needsGlassEdge(Row.GLASS_EDGE));
+        assertTrue(GlassRows.needsGlassEdge(Row.SHINE));
         assertTrue(GlassRows.needsGlassEdge(Row.DEPTH));
         assertFalse(GlassRows.needsGlassEdge(Row.FROST));
     }
@@ -77,7 +77,7 @@ public class GlassRowsTest {
     public void theCellRowsAreTheGridsProperties() {
         assertEquals(LookGrid.Property.GRAIN, GlassRows.cellProperty(Row.GRAIN));
         assertEquals(LookGrid.Property.RIM, GlassRows.cellProperty(Row.RIM));
-        assertEquals(LookGrid.Property.EDGE, GlassRows.cellProperty(Row.GLASS_EDGE));
+        assertEquals(LookGrid.Property.EDGE, GlassRows.cellProperty(Row.SHINE));
         assertEquals(LookGrid.Property.DEPTH, GlassRows.cellProperty(Row.DEPTH));
         assertEquals("Colour has an element column", LookGrid.Property.TINT_HUE,
             GlassRows.cellProperty(Row.TINT_HUE));

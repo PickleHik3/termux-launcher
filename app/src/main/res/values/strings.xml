@@ -2254,9 +2254,10 @@
                      "Glass", "Frost" and "Solid" are what the Material control is called, and a
                      preset named after one of them read as a shortcut to that control rather than
                      as a complete look. -->
-                <string name="termux_surface_preset_stock">Tint</string>
-                <string name="termux_surface_preset_frost">Mist</string>
+                <string name="termux_surface_preset_stock">Tinted</string>
+                <string name="termux_surface_preset_frost">Frosted</string>
                 <string name="termux_surface_preset_solid">Solid</string>
+                <string name="termux_surface_preset_liquid">Liquid</string>
                 <string name="termux_surface_preset_minimal">Clear</string>
                 <string name="termux_surface_preset_custom">Custom</string>
                 <string name="termux_surface_preset_applied">%1$s applied</string>

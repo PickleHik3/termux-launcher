@@ -54,7 +54,6 @@ final class AppearanceSnapshot {
     private final int mPaneGlowCustom;
     private final int mWallpaperTerminalOpacity;
     private final String mTint;
-    private final String mRim;
     private final String mMotion;
     private final String mTintHue;
     private final int mVibrancy;
@@ -63,14 +62,7 @@ final class AppearanceSnapshot {
     /** Where Global's Glass slider and each surface's were left; -1 for none stored. */
     private final int[] mGlassPositions;
     private final int mBend;
-    private final int mEdgeWidth;
-    private final int mEdgeLight;
-    private final int mSpecular;
-    private final int mDispersion;
-    private final int mClarity;
-    private final int mFaceClarity;
-    private final int mDimTerm;
-    private final int mSizeLens;
+    private final int mShine;
     private final int mKeyboardBlurRaw;
     private final int mKeyOpacity;
     /** Whether the keyboard's key and background opacity move together. */
@@ -153,7 +145,6 @@ final class AppearanceSnapshot {
         mPaneGlowCustom = prefs.getTerminalPaneGlowCustom();
         mWallpaperTerminalOpacity = prefs.getWallpaperEnabledTerminalBackgroundOpacity();
         mTint = prefs.getSurfaceGlassTint();
-        mRim = prefs.getSurfaceGlassRim();
         mMotion = prefs.getSurfaceGlassMotion();
         mTintHue = prefs.getSurfaceGlassTintHue();
         mVibrancy = prefs.getSurfaceGlassVibrancy();
@@ -164,14 +155,7 @@ final class AppearanceSnapshot {
         for (SurfaceSlot slot : slots)
             mGlassPositions[slot.ordinal() + 1] = prefs.getSurfaceGlassPosition(slot);
         mBend = prefs.getFancierGlassBendDp();
-        mEdgeWidth = prefs.getFancierGlassEdgeWidthDp();
-        mEdgeLight = prefs.getFancierGlassEdgeLightPercent();
-        mSpecular = prefs.getFancierGlassSpecularPercent();
-        mDispersion = prefs.getFancierGlassDispersionPercent();
-        mClarity = prefs.getFancierGlassClarityPercent();
-        mFaceClarity = prefs.getFancierGlassFaceClarityPercent();
-        mDimTerm = prefs.getFancierGlassDimPercent();
-        mSizeLens = prefs.getFancierGlassSizeLensPercent();
+        mShine = prefs.getGlassShine();
         mKeyboardBlurRaw = prefs.getInAppKeyboardBlurRadiusRaw();
         mKeyOpacity = prefs.getInAppKeyboardKeyOpacity();
         mOpacityLinked = prefs.isInAppKeyboardOpacityLinked();
@@ -272,7 +256,6 @@ final class AppearanceSnapshot {
         prefs.setTerminalPaneGlowCustom(mPaneGlowCustom);
         prefs.setWallpaperEnabledTerminalBackgroundOpacity(mWallpaperTerminalOpacity);
         prefs.setSurfaceGlassTint(mTint);
-        prefs.setSurfaceGlassRim(mRim);
         prefs.setSurfaceGlassMotion(mMotion);
         prefs.setSurfaceGlassTintHue(mTintHue);
         prefs.setSurfaceGlassVibrancy(mVibrancy);
@@ -281,14 +264,7 @@ final class AppearanceSnapshot {
         for (SurfaceSlot slot : SurfaceSlot.values())
             prefs.setSurfaceGlassPosition(slot, mGlassPositions[slot.ordinal() + 1]);
         prefs.setFancierGlassBendDp(mBend);
-        prefs.setFancierGlassEdgeWidthDp(mEdgeWidth);
-        prefs.setFancierGlassEdgeLightPercent(mEdgeLight);
-        prefs.setFancierGlassSpecularPercent(mSpecular);
-        prefs.setFancierGlassDispersionPercent(mDispersion);
-        prefs.setFancierGlassClarityPercent(mClarity);
-        prefs.setFancierGlassFaceClarityPercent(mFaceClarity);
-        prefs.setFancierGlassDimPercent(mDimTerm);
-        prefs.setFancierGlassSizeLensPercent(mSizeLens);
+        prefs.setGlassShine(mShine);
         prefs.setInAppKeyboardBlurRadiusRaw(mKeyboardBlurRaw);
         prefs.setInAppKeyboardKeyOpacity(mKeyOpacity);
         prefs.setInAppKeyboardOpacityLinked(mOpacityLinked);
@@ -336,14 +312,11 @@ final class AppearanceSnapshot {
             .append(',').append(mPaneGlow).append(',').append(mPaneGlowColour)
             .append(',').append(mPaneGlowCustom)
             .append('|').append(mWallpaperTerminalOpacity)
-            .append('|').append(mTint).append('|').append(mRim).append('|').append(mMotion)
+            .append('|').append(mTint).append('|').append(mMotion)
             .append('|').append(mTintHue).append('|').append(mVibrancy)
             .append('|').append(mTextSize)
             .append('|').append(java.util.Arrays.toString(mGlassPositions))
-            .append('|').append(mBend).append('|').append(mEdgeWidth).append('|').append(mEdgeLight)
-            .append('|').append(mSpecular).append('|').append(mDispersion)
-            .append('|').append(mClarity)
-            .append('|').append(mFaceClarity).append('|').append(mDimTerm).append('|').append(mSizeLens)
+            .append('|').append(mBend).append('|').append(mShine)
             .append('|').append(mKeyboardBlurRaw).append('|').append(mKeyOpacity)
             .append('|').append(mOpacityLinked)
             .append('|').append(mKeyRadiusRaw).append('|').append(mKeySpacingRaw)

@@ -34,6 +34,7 @@ import java.util.Map;
  *       {@link SurfacePresets#rescaleTintAmounts}).</li>
  *   <li>Format 2: every Tint amount moves onto the stretched scale ({@link #FORMAT}).</li>
  *   <li>Format 3: the retired Shade's stored value is dropped.</li>
+ *   <li>Format 4: Frost, Depth and Shine ({@link GlassLookUpgrade}); never on a fresh install.</li>
  * </ul>
  *
  * <p>A store that never wrote a tint key read the old default, the full strength; it is pinned
@@ -55,14 +56,15 @@ public final class GlassControlsMigration {
      * value is removed (every earlier format takes that in the same edit) and the saved Custom
      * look sheds it on the rewrite ({@link SurfacePresets#RETIRED_SHADE_KEY}).
      */
-    static final int FORMAT = 3;
+    static final int FORMAT = 4;
+    /** The format that brought Frost, Depth and Shine. */
+    private static final int FORMAT_SHINE = 4;
     /** The format that stretched the Tint scale. */
     private static final int FORMAT_TINT_SCALE = 2;
 
     /**
-     * The Looks' start-up work, in its order: this migration first, so a Look it recognises at its
-     * old values is applied as it ships now, then {@link SurfacePresets#readoptMovedLooks} for a
-     * Look whose edge moved. The application calls this, not the two apart.
+     * The Looks' start-up work: this migration, then the saved Custom look in the grid's keys.
+     * The application calls this, not the two apart.
      */
     public static void runAtStartUp(@NonNull TermuxAppSharedPreferences prefs) {
         runAtStartUp(prefs, false);
@@ -79,7 +81,6 @@ public final class GlassControlsMigration {
                                     boolean freshInstall) {
         run(prefs, freshInstall);
         SurfacePresets.rewriteStoredCustom(prefs);
-        SurfacePresets.readoptMovedLooks(prefs);
     }
 
     public static void run(@NonNull TermuxAppSharedPreferences prefs) {
@@ -101,14 +102,8 @@ public final class GlassControlsMigration {
         if (from < 1) {
             if (!freshInstall) {
                 pinLegacyTintStrengths(into, batch);
-                SurfacePresets.Preset shipped = SurfacePresets.lookAsShippedBeforeFormat5(into);
-                if (shipped != null) {
-                    // A shipped Look as it ships now: its Tint is already on the stretched scale.
-                    SurfacePresets.apply(into, shipped);
-                } else {
-                    migrateLive(into);
-                    rescaleTintAmounts(into, batch);
-                }
+                migrateLive(into);
+                rescaleTintAmounts(into, batch);
             }
             snapRememberedBlur(into, batch);
             writeGlassPositions(into);
@@ -117,6 +112,13 @@ public final class GlassControlsMigration {
         }
         // Format 3: Shade is retired; its stored value is dropped, and the look draws as Shade 0.
         batch.edit().remove(SurfacePresets.RETIRED_SHADE_KEY).apply();
+        // Format 4: Frost, Depth and Shine. Each stored value takes the nearest of the new model,
+        // the retired edge keys go; a fresh install was written whole in the new model.
+        if (from < FORMAT_SHINE && !freshInstall) {
+            GlassLookUpgrade.run(into.lookGrid());
+            for (String key : RETIRED_EDGE_KEYS)
+                batch.edit().remove(key).apply();
+        }
         String custom = into.getSurfaceCustomPreset();
         if (!custom.isEmpty()) {
             Map<String, Object> look = SurfacePresets.deserialize(custom);
@@ -127,6 +129,14 @@ public final class GlassControlsMigration {
         batch.applyToStore();
         restore(store, pageValues);
     }
+
+    /** The stored keys Shine and the derived face took over: dropped by the format 4 upgrade. */
+    private static final String[] RETIRED_EDGE_KEYS = {
+        TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT,
+        TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION,
+        TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY,
+        TERMUX_APP.KEY_FANCIER_GLASS_DIM, TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS,
+    };
 
     /** Every page's own look value in {@code store} ({@code <detachable key>@<id>}). */
     @NonNull

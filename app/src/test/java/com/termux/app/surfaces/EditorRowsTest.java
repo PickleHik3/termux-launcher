@@ -178,7 +178,7 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
+        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.SHINE, Row.DEPTH,
             Row.VIBRANCY, Row.RIM, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
             Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
             Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
@@ -219,7 +219,7 @@ public class EditorRowsTest {
         }
         assertTrue(rowsOf(EditorCard.TERMINAL, ALL).contains(Row.EFFECT));
         assertTrue(GlassRows.needsGlassEdge(Row.DEPTH));
-        assertTrue(GlassRows.needsGlassEdge(Row.GLASS_EDGE));
+        assertTrue(GlassRows.needsGlassEdge(Row.SHINE));
     }
 
     @Test
@@ -227,7 +227,7 @@ public class EditorRowsTest {
         for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
             Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP,
             Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
-            Row.VIBRANCY, Row.GLASS_EDGE})
+            Row.VIBRANCY, Row.SHINE})
             assertEquals(row + " is vertical", Kind.SLIDER, row.kind);
         for (Row row : Row.values()) {
             if (row != Row.LOOK)
@@ -270,7 +270,7 @@ public class EditorRowsTest {
 
     @Test
     public void allSurfacesIsTheGlassAndTheTextSize() {
-        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.GLASS_EDGE, Row.VIBRANCY,
+        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.SHINE, Row.VIBRANCY,
             Row.DEPTH, Row.TEXT_SIZE})
             assertTrue(row.name(), EditorRows.isAllSurfaces(row));
         assertFalse(EditorRows.isAllSurfaces(Row.LOOK));

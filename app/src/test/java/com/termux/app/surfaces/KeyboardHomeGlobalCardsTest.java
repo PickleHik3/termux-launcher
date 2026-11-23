@@ -132,7 +132,7 @@ public class KeyboardHomeGlobalCardsTest {
         assertFalse("the Terminal is on a Look, not Custom",
             AppearanceLooks.isCustomStop(model.value(Row.LOOK)));
         assertTrue(model.shown(Row.VIBRANCY));
-        assertTrue(model.shown(Row.GLASS_EDGE));
+        assertTrue(model.shown(Row.SHINE));
         assertTrue(model.shown(Row.DEPTH));
         assertEquals(3, looks(editor).swatches(Row.TINT_HUE).length);
         assertEquals(3, model.choices(Row.TINT_HUE).length);
