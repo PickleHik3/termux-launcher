@@ -76,6 +76,12 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
         this.sinks = sinks;
     }
 
+    /** X owns every ordinary chord; the Workspace's own Ctrl+Alt route stays as it is. */
+    @Override
+    public boolean yieldsToBindings() {
+        return false;
+    }
+
     @Override
     public boolean interceptKeyValue(@NonNull KeyValue value, boolean ctrl, boolean alt,
                                      boolean shift) {
@@ -223,7 +229,28 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
 
     private void sendText(@NonNull Sink view, @Nullable String text) {
         if (text == null || text.isEmpty()) return;
-        view.text(text);
+        // Printable ASCII goes as key presses, as a physical keyboard types it; typing it as text
+        // remaps a scratch keycode per character, and a slow client reads the stale map. Runs of
+        // characters with no US key still go as text, in order.
+        int runStart = -1;
+        for (int i = 0; i < text.length(); i++) {
+            char c = text.charAt(i);
+            int code = X11AsciiKeys.keyCode(c);
+            if (code == KeyEvent.KEYCODE_UNKNOWN) {
+                if (runStart < 0) runStart = i;
+                continue;
+            }
+            if (runStart >= 0) {
+                sendTextRun(view, text.substring(runStart, i));
+                runStart = -1;
+            }
+            sendModified(view, code, false, false, X11AsciiKeys.needsShift(c));
+        }
+        if (runStart >= 0) sendTextRun(view, runStart == 0 ? text : text.substring(runStart));
+    }
+
+    private void sendTextRun(@NonNull Sink view, @NonNull String run) {
+        view.text(run);
     }
 
     /**
@@ -278,26 +305,6 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
 
     /** The keycode a character sits on, for the chords that need one. */
     private static int keyCodeForChar(char c) {
-        if (c >= 'a' && c <= 'z') return KeyEvent.KEYCODE_A + (c - 'a');
-        if (c >= 'A' && c <= 'Z') return KeyEvent.KEYCODE_A + (c - 'A');
-        if (c >= '0' && c <= '9') return KeyEvent.KEYCODE_0 + (c - '0');
-        switch (c) {
-            case ' ': return KeyEvent.KEYCODE_SPACE;
-            case '\t': return KeyEvent.KEYCODE_TAB;
-            case '\n':
-            case '\r': return KeyEvent.KEYCODE_ENTER;
-            case '.': return KeyEvent.KEYCODE_PERIOD;
-            case ',': return KeyEvent.KEYCODE_COMMA;
-            case '-': return KeyEvent.KEYCODE_MINUS;
-            case '=': return KeyEvent.KEYCODE_EQUALS;
-            case '[': return KeyEvent.KEYCODE_LEFT_BRACKET;
-            case ']': return KeyEvent.KEYCODE_RIGHT_BRACKET;
-            case '\\': return KeyEvent.KEYCODE_BACKSLASH;
-            case ';': return KeyEvent.KEYCODE_SEMICOLON;
-            case '\'': return KeyEvent.KEYCODE_APOSTROPHE;
-            case '/': return KeyEvent.KEYCODE_SLASH;
-            case '`': return KeyEvent.KEYCODE_GRAVE;
-            default: return KeyEvent.KEYCODE_UNKNOWN;
-        }
+        return X11AsciiKeys.keyCode(c);
     }
 }

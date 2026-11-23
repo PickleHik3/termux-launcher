@@ -464,6 +464,8 @@ public class SettingsActivity extends AppCompatActivity implements PreferenceFra
                         preferenceFragment.setDivider(null);
                         preferenceFragment.setDividerHeight(0);
                     }
+                    // Each section's rows share one rounded tonal card.
+                    SettingsLayoutUtils.applyGroups(preferenceFragment);
                 }
             }, true);
     }

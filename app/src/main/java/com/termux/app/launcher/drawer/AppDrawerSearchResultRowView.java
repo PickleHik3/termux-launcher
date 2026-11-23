@@ -54,7 +54,7 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
         int padH = Math.round(PAD_H_DP * density);
         int padV = Math.round(PAD_V_DP * density);
         setPadding(padH, padV, padH, padV);
-        setBackground(rowBackground(density));
+        refreshBackground();
 
         // Re-home the shared label into a two-line text column beside the icon.
         removeView(label);
@@ -91,7 +91,13 @@ public final class AppDrawerSearchResultRowView extends AppDrawerAppCellView {
     @Override
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
-        setBackground(rowBackground(getResources().getDisplayMetrics().density));
+        refreshBackground();
+    }
+
+    @Override
+    protected void refreshBackground() {
+        float density = getResources().getDisplayMetrics().density;
+        setBackground(isKeyboardHighlighted() ? highlightDrawable(density) : rowBackground(density));
     }
 
     @NonNull

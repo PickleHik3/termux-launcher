@@ -11,11 +11,11 @@ import androidx.annotation.NonNull;
  * chroma. Changes the terminal palette only, never the chrome bands or the pane's glass.
  */
 public enum TerminalContrastLevel {
-    //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach
-    //                                              min   max    dark  light  dark  light  dark light  dark light
-    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d),
-    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d),
-    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d);
+    //        value      body  ansi  cursor ×chroma chroma band  normal tone  bright tone  fg tone     bg tone     reach  dim tone    dim
+    //                                              min   max    dark  light  dark  light  dark light  dark light         dark light  ratio
+    SOFTER("softer",     3.0d, 3.5d, 3.0d, 0.5d,   10d,  24d,   84d,  46d,   92d,  34d,   80d, 30d,  16d,  90d,   4d,   36d,  60d,  2.0d),
+    DEFAULT("default",   4.5d, 4.5d, 3.0d, 1.0d,   16d, 200d,   80d,  40d,   90d,  30d,   90d, 10d,   8d,  97d,  10d,   45d,  50d,  3.0d),
+    HARDER("harder",     7.0d, 6.0d, 4.5d, 1.7d,   56d, 110d,   78d,  38d,   90d,  28d,   96d,  6d,   2d, 100d,  20d,   62d,  36d,  4.5d);
 
     @NonNull public final String value;
     /**
@@ -48,13 +48,25 @@ public enum TerminalContrastLevel {
      * reach 4.5:1, and chasing it all the way ends every colour at black or white.
      */
     public final double toneReach;
+    /**
+     * The dim text's HCT tone (ANSI bright black, slot 8: comments, autosuggestions, a prompt's
+     * grey) on a dark palette and on a light one. It stays between ANSI black (25) and white (80
+     * dark, 75 light) at every level, so it never passes for the ground or for ordinary text;
+     * Harder moves it toward the text and Softer toward the ground. It used to be 45 and 50 at
+     * every level, held to one fixed 3.0:1, so the three levels drew nearly the same grey.
+     */
+    public final double dimToneDark;
+    public final double dimToneLight;
+    /** The contrast the dim text is held to against what it stands on. */
+    public final double dimRatio;
 
     TerminalContrastLevel(@NonNull String value, double bodyTarget, double ansiRatio,
                           double cursorRatio, double chromaScale, double chromaMin,
                           double chromaMax, double normalToneDark, double normalToneLight,
                           double brightToneDark, double brightToneLight,
                           double fgToneDark, double fgToneLight,
-                          double bgToneDark, double bgToneLight, double toneReach) {
+                          double bgToneDark, double bgToneLight, double toneReach,
+                          double dimToneDark, double dimToneLight, double dimRatio) {
         this.value = value;
         this.bodyTarget = bodyTarget;
         this.ansiRatio = ansiRatio;
@@ -71,6 +83,9 @@ public enum TerminalContrastLevel {
         this.bgToneDark = bgToneDark;
         this.bgToneLight = bgToneLight;
         this.toneReach = toneReach;
+        this.dimToneDark = dimToneDark;
+        this.dimToneLight = dimToneLight;
+        this.dimRatio = dimRatio;
     }
 
     /** {@code sourceChroma} as this level spends it: scaled, then held inside the level's band. */

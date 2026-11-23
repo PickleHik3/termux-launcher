@@ -96,10 +96,16 @@ public class X11KeyboardBridgeTest {
     @Test
     public void pasteAsPlainTextTypesTheClipboard() {
         RecordingSink sink = new RecordingSink();
-        sink.clipboard = "ls -la";
+        sink.clipboard = "a\u00e9B";
         assertTrue(bridge(sink).interceptKeyValue(KeyValue.getKeyByName("pasteAsPlainText"),
             false, false, false));
-        assertEquals(Collections.singletonList("text ls -la"), sink.events);
+        // Printable ASCII goes as key presses (Shift around a capital), the rest as text, in order.
+        assertEquals(Arrays.asList(
+            "down " + KeyEvent.KEYCODE_A, "up " + KeyEvent.KEYCODE_A,
+            "text \u00e9",
+            "down " + KeyEvent.KEYCODE_SHIFT_LEFT,
+            "down " + KeyEvent.KEYCODE_B, "up " + KeyEvent.KEYCODE_B,
+            "up " + KeyEvent.KEYCODE_SHIFT_LEFT), sink.events);
     }
 
     @Test

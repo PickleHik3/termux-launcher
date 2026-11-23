@@ -282,7 +282,39 @@ public class ChromeShadeTest {
         // A surface where black can never reach the rim target: black itself.
         ChromeShade.note(ChromeInk.Polarity.DARK_INK, Color.BLACK);
         assertEquals(ChromeShade.MAX_STRUCTURAL_ALPHA, Color.alpha(ChromeShade.rim(RIM_SEED)));
-        assertEquals(ChromeShade.MAX_STRUCTURAL_ALPHA, Color.alpha(ChromeShade.fill(0x0EFFFFFF)));
+        assertEquals(ChromeShade.MAX_FILL_ALPHA, Color.alpha(ChromeShade.fill(0x0EFFFFFF)));
+    }
+
+    /**
+     * A dark theme over a bright wallpaper votes DARK_INK on a dark nominal glass, where black can
+     * never reach the fill target. The wash must stay a glass wash, not the 70% slab it was.
+     */
+    @Test
+    public void aDarkGlassUnderDarkInkKeepsTheWashAGlassWash() {
+        ChromeShade.note(ChromeInk.Polarity.DARK_INK, NIGHT_GLASS);
+        int rest = ChromeShade.fill(TILE_FILL_SEED);
+        int pressed = ChromeShade.stateFill(TILE_FILL_PRESSED_SEED, TILE_FILL_SEED);
+        int folder = ChromeShade.fill(FOLDER_FILL_SEED);
+        assertTrue("tile wash alpha " + Color.alpha(rest),
+            Color.alpha(rest) <= ChromeShade.MAX_FILL_ALPHA);
+        assertTrue("folder wash alpha " + Color.alpha(folder),
+            Color.alpha(folder) <= ChromeShade.MAX_FILL_ALPHA);
+        assertTrue("pressed alpha " + Color.alpha(pressed),
+            Color.alpha(pressed) <= ChromeShade.MAX_STATE_ALPHA);
+        // What is left of a mid-dark frost under the wash is still mostly the frost.
+        int under = 0xFF3A3F4A;
+        int composite = OnGlass.composite(rest, under);
+        assertTrue("backdrop weight " + Integer.toHexString(composite),
+            Color.red(composite) >= Color.red(under) * 0.65d);
+    }
+
+    /** The light glass still gets its full contrast target inside the fill cap. */
+    @Test
+    public void theFillCapLeavesRoomForTheLightGlass() {
+        ChromeShade.note(ChromeInk.Polarity.DARK_INK, LIGHT_GLASS);
+        int fill = ChromeShade.fill(TILE_FILL_SEED);
+        assertTrue(Color.alpha(fill) <= ChromeShade.MAX_FILL_ALPHA);
+        assertTrue(ChromeShade.separation(fill, LIGHT_GLASS) >= ChromeShade.TARGET_FILL);
     }
 
     /**

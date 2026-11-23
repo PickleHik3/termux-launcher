@@ -49,7 +49,6 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
 
     // The views the current span shows; null where it has none.
     @Nullable private BatteryRingView ring;
-    @Nullable private TextView ringGlyph;
     @Nullable private TextView level;
     @Nullable private TextView levelUnit;
     @Nullable private BuiltinWidgetUi.BarView bar;
@@ -94,31 +93,32 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
     }
 
     private void clearRefs() {
-        ring = null; ringGlyph = null; level = null; levelUnit = null; bar = null;
+        ring = null; level = null; levelUnit = null; bar = null;
         statusGlyph = null; status = null; detail = null; temperature = null; power = null;
         temperatureBar = null; powerBar = null; readings = null; chart = null;
         axis.clear();
         statusForm = STATUS_PLAIN;
     }
 
+    /**
+     * The ring fills the card to the 1×1 inset and draws the number inside its inner disc, sized
+     * to that disc: a tall cell grows the ring, never the number past it, at any font scale.
+     */
     @NonNull private View buildOneByOne(@NonNull BuiltinWidgetUi ui) {
         FrameLayout root = new FrameLayout(getContext());
-        ring = new BatteryRingView(getContext(), ui.style, 68);
+        inset(root, OneByOneFit.INSET_DP, OneByOneFit.INSET_DP, OneByOneFit.INSET_DP,
+            OneByOneFit.INSET_DP, ui);
+        ring = new BatteryRingView(getContext(), ui.style);
         FrameLayout.LayoutParams ringParams = new FrameLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         ringParams.gravity = Gravity.CENTER;
         root.addView(ring, ringParams);
-
-        ringGlyph = ui.glyph(StatGlyphs.POWER, 13f, ui.style.done);
-        level = ui.numeral("", 17f);
-        level.setGravity(Gravity.CENTER);
-        LinearLayout middle = ui.column(1, ringGlyph, level);
-        middle.setGravity(Gravity.CENTER_HORIZONTAL);
-        FrameLayout.LayoutParams middleParams = new FrameLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        middleParams.gravity = Gravity.CENTER;
-        root.addView(middle, middleParams);
         return root;
+    }
+
+    /** The 1×1 ring takes the card's room itself; zooming it would only narrow that room. */
+    @Override protected boolean zoomsToFill(@NonNull BuiltinWidgetSpan span) {
+        return span != BuiltinWidgetSpan.ONE_BY_ONE;
     }
 
     @NonNull private View buildTwoByOne(@NonNull BuiltinWidgetUi ui) {
@@ -304,11 +304,7 @@ public class BatteryWidgetView extends BuiltinWidgetView implements BatterySourc
         String temp = DeviceWidgetFormats.celsius(state.temperatureTenths);
         String watts = DeviceWidgetFormats.watts(state.powerWatts);
 
-        if (ring != null) ring.set(fraction, accent);
-        if (ringGlyph != null) {
-            ringGlyph.setVisibility(powered ? VISIBLE : GONE);
-            ringGlyph.setTextColor(accent);
-        }
+        if (ring != null) ring.set(fraction, accent, levelText, powered);
         if (level != null) {
             boolean withPercent = levelUnit == null && ring == null && known;
             level.setText(withPercent ? state.level + "%" : levelText);

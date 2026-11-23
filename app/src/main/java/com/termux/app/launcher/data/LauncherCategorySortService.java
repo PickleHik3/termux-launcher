@@ -7,7 +7,9 @@ import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Build;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
@@ -125,6 +127,7 @@ public final class LauncherCategorySortService extends Service {
     @NonNull private static volatile Snapshot state = Snapshot.IDLE;
 
     private final ExecutorService executor = Executors.newSingleThreadExecutor();
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private long lastNotificationUpdateMs;
 
     /** The current run's state in one read. */
@@ -158,9 +161,17 @@ public final class LauncherCategorySortService extends Service {
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
         ensureChannel();
+        // Only the main thread starts or ends a run, so this read is the run's real state.
+        if (state.running) {
+            // A second start while a run is going (the row tapped again). The run keeps the
+            // foreground and ends the service itself; stopping here, with the newest start id,
+            // would destroy the service under the run.
+            startForeground(NOTIFICATION_ID, progressNotification(state));
+            return START_NOT_STICKY;
+        }
         startForeground(NOTIFICATION_ID, buildNotification(
             getString(R.string.settings_app_drawer_category_sort_hint_preparing), 0, true, true));
-        if (intent == null || !ACTION_SORT.equals(intent.getAction()) || state.running) {
+        if (intent == null || !ACTION_SORT.equals(intent.getAction())) {
             stopForeground(true);
             stopSelf(startId);
             return START_NOT_STICKY;
@@ -176,16 +187,24 @@ public final class LauncherCategorySortService extends Service {
                 update(s -> s.withErrorMessage(error).withOutcome(
                     getString(R.string.settings_app_drawer_category_sort_failed, error)));
             } finally {
-                update(s -> s.withRunning(false).withCancelRequested(false));
-                // Order matters: drop the ongoing progress notification first, then post the
-                // result as its own dismissible one — a user who left Settings mid-run learns how
-                // it ended without going back in.
-                stopForeground(true);
-                postResultNotification();
-                stopSelf(startId);
+                mainHandler.post(this::finishRun);
             }
         });
         return START_NOT_STICKY;
+    }
+
+    /**
+     * Ends the run on the main thread, beside {@link #onStartCommand}: no start can land between
+     * the run ending and the service stopping, so stopping for every start so far is right.
+     */
+    private void finishRun() {
+        update(s -> s.withRunning(false).withCancelRequested(false));
+        // Order matters: drop the ongoing progress notification first, then post the result as
+        // its own dismissible one — a user who left Settings mid-run learns how it ended without
+        // going back in.
+        stopForeground(true);
+        postResultNotification();
+        stopSelf();
     }
 
     @Override
@@ -574,10 +593,14 @@ public final class LauncherCategorySortService extends Service {
         lastNotificationUpdateMs = elapsed;
         NotificationManager manager = getSystemService(NotificationManager.class);
         if (manager == null) return;
-        Snapshot now = state;
-        manager.notify(NOTIFICATION_ID, buildNotification(progressText(now),
+        manager.notify(NOTIFICATION_ID, progressNotification(state));
+    }
+
+    @NonNull
+    private Notification progressNotification(@NonNull Snapshot now) {
+        return buildNotification(progressText(now),
             LauncherCategorySortProgress.percent(now.phase, now.processed, now.total),
-            LauncherCategorySortProgress.isIndeterminate(now.phase), true));
+            LauncherCategorySortProgress.isIndeterminate(now.phase), true);
     }
 
     /**
