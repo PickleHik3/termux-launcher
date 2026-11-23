@@ -76,6 +76,12 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
         self.dirty = false;
     }
 
+    /// A buffer another surface of this window let go (a subsurface or popup replaced or
+    /// removed it): released after the next copy, like the window's own.
+    pub fn release_later(&mut self, buffer: B) {
+        self.releases.push(buffer);
+    }
+
     /// The commit's frame callbacks wait for the tick (moved out of `frames`).
     pub fn add_frames(&mut self, frames: &mut Vec<F>) {
         self.frames.append(frames);
@@ -218,6 +224,21 @@ mod tests {
         p.forget(&1);
         p.forget(&2);
         assert_eq!(tick(&mut p, true, false), (None, vec![], vec![]));
+    }
+
+    #[test]
+    fn a_subsurface_buffer_waits_for_the_copy_like_the_root() {
+        let mut p: Paced<u32, u32> = Paced::new();
+        p.commit_buffer(1);
+        tick(&mut p, true, false);
+        // A subsurface replaced buffer 7 and the window is marked for a new copy.
+        p.release_later(7);
+        assert!(p.repaint());
+        assert_eq!(tick(&mut p, true, false), (Some(1), vec![7], vec![]));
+        // Hidden: it waits for the keep-alive.
+        p.release_later(8);
+        assert_eq!(tick(&mut p, false, false), (None, vec![], vec![]));
+        assert_eq!(tick(&mut p, false, true), (None, vec![8], vec![]));
     }
 
     #[test]
