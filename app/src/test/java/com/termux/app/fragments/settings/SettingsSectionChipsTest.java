@@ -118,7 +118,7 @@ public class SettingsSectionChipsTest {
 
     @Test
     public void theChipRowEndsOneGutterPastItsLastChip() {
-        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
+        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
         ChipGroup group = chipGroup(fragment);
         View row = fragment.getSectionChipsRow();
         // Narrow enough that the chips run past the edge and the row scrolls.

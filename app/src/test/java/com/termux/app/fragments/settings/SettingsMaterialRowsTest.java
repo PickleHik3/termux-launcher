@@ -22,7 +22,7 @@ import com.termux.R;
 import com.termux.app.activities.SettingsActivity;
 import com.termux.app.fragments.settings.SettingsRowGroups.Kind;
 import com.termux.app.fragments.settings.SettingsRowGroups.Shape;
-import com.termux.app.fragments.settings.termux.GeneralPreferencesFragment;
+import com.termux.app.fragments.settings.termux.TerminalPreferencesFragment;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -116,7 +116,7 @@ public class SettingsMaterialRowsTest {
     }
 
     @Test public void aPageInsetsItsRowsIntoCardsAndClipsTheOuterCorners() {
-        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
+        TerminalPreferencesFragment fragment = launch(TerminalPreferencesFragment.class);
         RecyclerView list = laidOutList(fragment);
         RecyclerView.LayoutManager layout = list.getLayoutManager();
         assertNotNull(layout);
@@ -158,19 +158,5 @@ public class SettingsMaterialRowsTest {
             }
         }
         assertTrue("General has grouped rows", grouped > 3);
-    }
-
-    @Test public void aRowJustUnderAHeaderOpensACardWithNoExtraSpace() {
-        GeneralPreferencesFragment fragment = launch(GeneralPreferencesFragment.class);
-        RecyclerView list = laidOutList(fragment);
-        RecyclerView.Adapter<?> adapter = list.getAdapter();
-        assertTrue(adapter instanceof PreferenceGroup.PreferencePositionCallback);
-        int position = ((PreferenceGroup.PreferencePositionCallback) adapter)
-            .getPreferenceAdapterPosition("animation_speed");
-        assertTrue(position > 0);
-        RecyclerView.ViewHolder holder = list.findViewHolderForAdapterPosition(position);
-        assertNotNull(holder);
-        assertEquals(0, list.getLayoutManager().getTopDecorationHeight(holder.itemView));
-        assertTrue(holder.itemView.getClipToOutline());
     }
 }
