@@ -1687,6 +1687,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             TERMUX_APP.KEY_X11_START_WITH, value == null ? "" : value.trim(), false);
     }
 
+    /** Which display Linux apps open under; see {@code TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND}. Trimmed. */
+    @NonNull
+    public String getLinuxDisplayBackend() {
+        String value = SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND, TERMUX_APP.DEFAULT_LINUX_DISPLAY_BACKEND, false);
+        return value == null ? TERMUX_APP.DEFAULT_LINUX_DISPLAY_BACKEND : value.trim();
+    }
+
+    public void setLinuxDisplayBackend(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND,
+            value == null ? TERMUX_APP.DEFAULT_LINUX_DISPLAY_BACKEND : value.trim(), false);
+    }
+
     /** The command the display starts with when the choice is {@code command}. Trimmed. */
     @NonNull
     public String getX11StartWithCommand() {

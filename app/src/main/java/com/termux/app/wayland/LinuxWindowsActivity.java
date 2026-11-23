@@ -1,4 +1,3 @@
-// Developer harness for the Wayland host; it is removed when the Wayland Display page lands.
 package com.termux.app.wayland;
 
 import android.app.Activity;
@@ -6,7 +5,6 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Color;
-import android.graphics.Point;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
 import android.os.Bundle;
@@ -20,7 +18,6 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.LongSparseArray;
 import android.util.TypedValue;
-import android.view.Display;
 import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -28,55 +25,62 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
 import com.termux.BuildConfig;
-import com.termux.shared.termux.TermuxConstants;
+import com.termux.R;
 
 import java.io.File;
 
 /**
- * Shows each Linux toplevel of the Wayland host in its own {@link TextureView}, stacked
- * in equal shares of the height over the system wallpaper.
+ * The Linux windows screen: where Linux apps opened under Wayland Display show, until they have
+ * a window page of their own on the wall. One window fills the screen below a row of tabs, one
+ * tab per window (its title, and a ✕ that asks the app to close); tapping a tab shows that window.
+ * The wallpaper shows through a window's transparent pixels.
  *
- * The compositor runs in {@link LinuxWindowsService} in the {@code :linuxwindows} process, so it
- * outlives this activity: reopening re-attaches to the live toplevels, and a crash there leaves
- * this activity standing with a Restart button. Not exported; start it with
- * {@code am start -n <package>/com.termux.app.wayland.WaylandTestActivity} from the app's uid
- * (add {@code --ez xwayland true} to also start rootless Xwayland from the prefix).
+ * <p>The compositor runs in {@link LinuxWindowsService} in the {@code :linuxwindows} process, so
+ * it outlives this screen: Back leaves the screen and every app keeps running, and opening it
+ * again re-attaches to the live windows. When the last window closes the screen finishes.
+ * {@link WaylandAppRunner} opens it after starting an app. A long press on the tab row shows the
+ * developer controls (Start, Stop, Crash compositor, Probe, the copy log). Not exported.
  */
-public final class WaylandTestActivity extends Activity {
+public final class LinuxWindowsActivity extends Activity {
 
     private static final String LOG_TAG = "TLWayland";
-    /** The clients' XDG_RUNTIME_DIR, under the prefix's tmp. */
-    public static final String SOCKET_DIR = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/tl-wayland";
-    public static final String EXTRA_XWAYLAND = "xwayland";
+
     /** {@code --es dump all}: write every window to files/wayland-dumps/<id>.png once connected. */
     public static final String EXTRA_DUMP = "dump";
     private static final long DUMP_DELAY_MS = 1000;
     private static final int DUMP_TRIES = 5;
 
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
+    /** The widest a tab's title grows before it is ellipsized. */
+    private static final int TAB_TITLE_MAX_DP = 200;
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private final LongSparseArray<Pane> mPanes = new LongSparseArray<>();
+    private final LinuxWindowTabs mTabs = new LinuxWindowTabs();
 
-    private LinearLayout mPaneHost;
-    private TextView mStatus;
+    private LinearLayout mTabRow;
+    private FrameLayout mWindowHost;
     private TextView mEmpty;
-    private Button mStartButton;
-    private Button mStopButton;
-    private Button mCrashButton;
-    private Button mProbeButton;
+    /** The developer controls, shown by a long press on the tab row. */
+    private View mDevBar;
+    private TextView mStatus;
     private Button mCopyLogButton;
     private boolean mCopyLog;
     private Button mDumpButton;
     /** The intent asked for a dump; done once the host runs and the windows are replayed. */
     private boolean mDumpPending;
+    /** The host reported running and has not since stopped. */
+    private boolean mHostRunning;
 
     private ILinuxWindows mService;
     private IBinder mServiceBinder;
@@ -84,10 +88,10 @@ public final class WaylandTestActivity extends Activity {
     /** The debug interface, bound beside the host for Crash, Probe and the copy log. */
     private ILinuxWindowsDebug mDebug;
     private boolean mDebugBound;
-    /** Start the compositor when the service reports it is not running. */
-    private boolean mAutoStart = true;
-    /** The activity is visible: panes hand their Surfaces to the host. */
+    /** The activity is visible: the shown window is drawn and has focus. */
     private boolean mVisible;
+    /** A window has been here since the screen opened: the last one closing finishes it. */
+    private boolean mHadWindow;
     private long mFocusedId;
     private int mHostPid;
 
@@ -150,7 +154,7 @@ public final class WaylandTestActivity extends Activity {
                 pane.appId = appId;
                 pane.width = width;
                 pane.height = height;
-                pane.updateLabel();
+                pane.updateTab();
             });
         }
 
@@ -163,10 +167,10 @@ public final class WaylandTestActivity extends Activity {
         public void onXDisplay(String display) {}
     };
 
-    /** One toplevel: a title line with a close button over its TextureView. */
+    /** One toplevel: its tab in the row and its TextureView in the window area. */
     private final class Pane implements TextureView.SurfaceTextureListener {
         final long id;
-        final LinearLayout row;
+        final LinearLayout tab;
         final TextView label;
         final TextureView view;
         Surface surface;
@@ -184,19 +188,20 @@ public final class WaylandTestActivity extends Activity {
 
         Pane(long id) {
             this.id = id;
-            row = new LinearLayout(WaylandTestActivity.this);
-            row.setOrientation(LinearLayout.VERTICAL);
-
-            LinearLayout titleLine = new LinearLayout(WaylandTestActivity.this);
-            titleLine.setOrientation(LinearLayout.HORIZONTAL);
-            titleLine.setGravity(Gravity.CENTER_VERTICAL);
+            tab = new LinearLayout(LinuxWindowsActivity.this);
+            tab.setOrientation(LinearLayout.HORIZONTAL);
+            tab.setGravity(Gravity.CENTER_VERTICAL);
+            tab.setOnClickListener(v -> showWindow(id));
+            tab.setOnLongClickListener(v -> toggleDevBar());
             label = shadowedText();
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
-            label.setPadding(dp(8), dp(2), dp(8), dp(2));
+            label.setMaxWidth(dp(TAB_TITLE_MAX_DP));
+            label.setPadding(dp(12), dp(8), dp(4), dp(8));
             TextView close = shadowedText();
             close.setText("✕");
-            close.setPadding(dp(12), dp(2), dp(12), dp(2));
+            close.setContentDescription(getString(R.string.linux_windows_close));
+            close.setPadding(dp(8), dp(8), dp(12), dp(8));
             close.setOnClickListener(v -> {
                 if (mService != null) {
                     try {
@@ -205,29 +210,28 @@ public final class WaylandTestActivity extends Activity {
                     }
                 }
             });
-            titleLine.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-            titleLine.addView(close, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+            tab.addView(label, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+            tab.addView(close, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
 
-            view = new TextureView(WaylandTestActivity.this);
+            view = new TextureView(LinuxWindowsActivity.this);
             view.setOpaque(false);
             view.setSurfaceTextureListener(this);
             view.setOnTouchListener((v, e) -> onTouch(e));
             view.setOnGenericMotionListener((v, e) -> onGenericMotion(e));
-            row.addView(titleLine, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-            row.addView(view, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         }
 
-        void updateLabel() {
-            StringBuilder sb = new StringBuilder();
-            sb.append(TextUtils.isEmpty(title) ? "(untitled)" : title);
-            if (!TextUtils.isEmpty(appId)) sb.append(" · ").append(appId);
-            if ((flags & ILinuxWindows.WINDOW_X11) != 0) sb.append(" · X11");
-            if (clientPid > 0) sb.append(" · pid ").append(clientPid);
-            if (width > 0) sb.append(" · ").append(width).append('×').append(height);
-            label.setText(sb);
-            label.setTypeface(null, id == mFocusedId ? Typeface.BOLD : Typeface.NORMAL);
+        boolean shown() {
+            return mTabs.shown() == id;
+        }
+
+        void updateTab() {
+            String name = !TextUtils.isEmpty(title) ? title
+                : !TextUtils.isEmpty(appId) ? appId : getString(R.string.linux_windows_untitled);
+            if (!TextUtils.equals(label.getText(), name)) label.setText(name);
+            label.setTypeface(null, shown() ? Typeface.BOLD : Typeface.NORMAL);
+            tab.setAlpha(shown() ? 1f : 0.7f);
         }
 
         /** Hands the Surface to the host. */
@@ -236,7 +240,7 @@ public final class WaylandTestActivity extends Activity {
             try {
                 mService.configure(id, view.getWidth(), view.getHeight(), density());
                 mService.setSurface(id, surface);
-                mService.setVisible(id, mVisible);
+                mService.setVisible(id, mVisible && shown());
             } catch (RemoteException ignored) {
             }
         }
@@ -402,48 +406,84 @@ public final class WaylandTestActivity extends Activity {
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // A build without -Pwayland=true has no host to test.
+        // A build without -Pwayland=true has no host.
         if (!BuildConfig.WAYLAND_DISPLAY) {
             finish();
             return;
         }
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
+        // Below the status bar and above the navigation bar; the keyboard is not handled yet.
         root.setFitsSystemWindows(true);
 
+        HorizontalScrollView tabScroll = new HorizontalScrollView(this);
+        tabScroll.setHorizontalScrollBarEnabled(false);
+        tabScroll.setFillViewport(true);
+        mTabRow = new LinearLayout(this);
+        mTabRow.setOrientation(LinearLayout.HORIZONTAL);
+        mTabRow.setGravity(Gravity.CENTER_VERTICAL);
+        mTabRow.setMinimumHeight(dp(40));
+        mTabRow.setOnLongClickListener(v -> toggleDevBar());
+        tabScroll.addView(mTabRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT));
+        root.addView(tabScroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        mDevBar = devBar();
+        mDevBar.setVisibility(View.GONE);
+        root.addView(mDevBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        mWindowHost = new FrameLayout(this);
+        mEmpty = shadowedText();
+        mEmpty.setGravity(Gravity.CENTER);
+        mEmpty.setPadding(dp(24), dp(24), dp(24), dp(24));
+        mEmpty.setText(R.string.linux_windows_opening);
+        mWindowHost.addView(mEmpty, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        root.addView(mWindowHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        setContentView(root);
+
+        handleDumpIntent(getIntent());
+        connect();
+    }
+
+    /** Developer controls; their words are not product copy. */
+    private View devBar() {
+        HorizontalScrollView scroll = new HorizontalScrollView(this);
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setGravity(Gravity.CENTER_VERTICAL);
         bar.setPadding(dp(8), 0, dp(8), 0);
         mStatus = shadowedText();
         mStatus.setSingleLine(true);
-        mStatus.setEllipsize(TextUtils.TruncateAt.END);
-        mStartButton = button("Start", v -> {
-            mAutoStart = true;
+        mStatus.setPadding(0, 0, dp(8), 0);
+        bar.addView(mStatus);
+        bar.addView(button("Start", v -> {
             if (mService == null) connect();
             else startHost();
-        });
-        mStopButton = button("Stop", v -> {
+        }));
+        bar.addView(button("Stop", v -> {
             if (mService == null) return;
             try {
                 mService.stop();
             } catch (RemoteException ignored) {
             }
-        });
-        mCrashButton = button("Crash compositor", v -> {
+        }));
+        bar.addView(button("Crash compositor", v -> {
             if (mDebug == null) return;
             try {
                 mDebug.crash();
             } catch (RemoteException ignored) {
             }
-        });
-        mProbeButton = button("Probe", v -> {
+        }));
+        bar.addView(button("Probe", v -> {
             if (mDebug == null) return;
             try {
                 mDebug.probe();
             } catch (RemoteException ignored) {
             }
-        });
+        }));
         mCopyLogButton = button("Log copies", v -> {
             if (mDebug == null) return;
             mCopyLog = !mCopyLog;
@@ -453,42 +493,21 @@ public final class WaylandTestActivity extends Activity {
             } catch (RemoteException ignored) {
             }
         });
+        bar.addView(mCopyLogButton);
         mDumpButton = button("Dump", v -> dumpAll(1));
-        bar.addView(mStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
-        bar.addView(mStartButton);
-        bar.addView(mStopButton);
-        root.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT));
-        LinearLayout debugBar = new LinearLayout(this);
-        debugBar.setOrientation(LinearLayout.HORIZONTAL);
-        debugBar.setPadding(dp(8), 0, dp(8), 0);
-        debugBar.addView(mCrashButton);
-        debugBar.addView(mProbeButton);
-        debugBar.addView(mCopyLogButton);
-        debugBar.addView(mDumpButton);
-        root.addView(debugBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT));
+        bar.addView(mDumpButton);
+        scroll.addView(bar);
+        return scroll;
+    }
 
-        mPaneHost = new LinearLayout(this);
-        mPaneHost.setOrientation(LinearLayout.VERTICAL);
-        mEmpty = shadowedText();
-        mEmpty.setGravity(Gravity.CENTER);
-        mEmpty.setPadding(dp(24), dp(24), dp(24), dp(24));
-        mPaneHost.addView(mEmpty, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
-            LinearLayout.LayoutParams.MATCH_PARENT));
-        root.addView(mPaneHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
-        setContentView(root);
-
-        mDumpPending = "all".equals(getIntent().getStringExtra(EXTRA_DUMP));
-        showStopped("Connecting…", false);
-        connect();
+    private boolean toggleDevBar() {
+        mDevBar.setVisibility(mDevBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        return true;
     }
 
     private void connect() {
         Intent intent = new Intent(this, LinuxWindowsService.class);
         try {
-            // Started as well as bound, so the host outlives this activity.
-            startService(intent);
             mBound = bindService(intent, mConnection, BIND_AUTO_CREATE);
             if (mBound && !mDebugBound) {
                 Intent debug = new Intent(this, LinuxWindowsService.class).setAction(LinuxWindowsService.ACTION_DEBUG);
@@ -498,37 +517,30 @@ public final class WaylandTestActivity extends Activity {
             Log.w(LOG_TAG, "cannot reach the host service: " + e);
             mBound = false;
         }
-        if (!mBound) showStopped("The Linux windows host cannot be reached.", true);
+        if (!mBound) showStopped("not reachable");
     }
 
+    /** The developer Start: the same start a launch makes ({@link WaylandAppRunner}). */
     private void startHost() {
         if (mService == null) return;
-        File dir = new File(SOCKET_DIR);
+        File dir = new File(WaylandAppRunner.SOCKET_DIR);
         if (!dir.isDirectory() && !dir.mkdirs()) {
-            showStopped("Cannot create " + SOCKET_DIR, true);
+            showStopped("cannot create " + WaylandAppRunner.SOCKET_DIR);
             return;
         }
         try {
-            Os.chmod(SOCKET_DIR, 0700);
+            Os.chmod(WaylandAppRunner.SOCKET_DIR, 0700);
         } catch (ErrnoException e) {
-            Log.w(LOG_TAG, "chmod " + SOCKET_DIR + ": " + e.getMessage());
+            Log.w(LOG_TAG, "chmod " + WaylandAppRunner.SOCKET_DIR + ": " + e.getMessage());
         }
-        File xkb = new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/X11/xkb");
-        String xkbRoot = xkb.isDirectory() ? xkb.getAbsolutePath() : null;
-        String xwayland = null;
-        if (getIntent().getBooleanExtra(EXTRA_XWAYLAND, false)) {
-            File bin = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/Xwayland");
-            if (bin.canExecute()) xwayland = bin.getAbsolutePath();
-            else Log.w(LOG_TAG, "no executable " + bin);
-        }
-        Display display = getWindowManager().getDefaultDisplay();
-        Point size = new Point();
-        display.getRealSize(size);
-        float refresh = display.getRefreshRate();
-        long framePeriodNanos = refresh > 1f ? (long) (1_000_000_000L / refresh) : 0L;
+        WaylandAppRunner.HostStart start = WaylandAppRunner.hostStart(this);
         try {
-            mService.start(SOCKET_DIR, xkbRoot, xwayland, size.x, size.y, density(), framePeriodNanos);
-        } catch (RemoteException ignored) {
+            // The service is started as well as bound, so the host outlives this screen.
+            startService(new Intent(this, LinuxWindowsService.class));
+            mService.start(WaylandAppRunner.SOCKET_DIR, start.xkbConfigRoot, start.xwaylandBinary,
+                start.width, start.height, start.scale, start.framePeriodNanos);
+        } catch (RemoteException | RuntimeException e) {
+            Log.w(LOG_TAG, "start: " + e);
         }
     }
 
@@ -537,7 +549,6 @@ public final class WaylandTestActivity extends Activity {
         if (interfaceVersion != ILinuxWindows.VERSION) {
             Log.w(LOG_TAG, "host speaks version " + interfaceVersion + ", this screen " + ILinuxWindows.VERSION);
             onHostDied();
-            showStopped("The Linux windows host is a different version.", false);
             return;
         }
         mHostPid = hostPid;
@@ -545,14 +556,10 @@ public final class WaylandTestActivity extends Activity {
 
     private void hostState(int state, String message) {
         if (isDestroyed()) return;
+        mHostRunning = state == ILinuxWindows.STATE_RUNNING;
         switch (state) {
             case ILinuxWindows.STATE_RUNNING:
-                mAutoStart = false;
-                mStatus.setText("Host pid " + mHostPid);
-                mStartButton.setVisibility(View.GONE);
-                mStopButton.setVisibility(View.VISIBLE);
-                mCrashButton.setVisibility(View.VISIBLE);
-                mEmpty.setText("Waiting for Linux windows.\n" + message);
+                mStatus.setText("Host pid " + mHostPid + ". " + message);
                 if (mDumpPending) {
                     mDumpPending = false;
                     // The replayed windows arrive after the state; give them a moment.
@@ -562,37 +569,26 @@ public final class WaylandTestActivity extends Activity {
             case ILinuxWindows.STATE_STARTING:
                 mStatus.setText("Starting…");
                 break;
-            case ILinuxWindows.STATE_STOPPED:
-                if (mAutoStart) {
-                    mAutoStart = false;
-                    mStatus.setText("Starting…");
-                    startHost();
-                    break;
-                }
-                showStopped(TextUtils.isEmpty(message) ? "Stopped." : message, true);
-                mStartButton.setText("Start");
-                break;
             case ILinuxWindows.STATE_DIED:
                 clearPanes();
-                showStopped(message, true);
-                mStartButton.setText("Restart");
+                showStopped(message);
                 break;
             default:
-                showStopped(message, false);
+                // Stopped or unavailable: the developer bar says so; the windows go by their own callbacks.
+                mStatus.setText(TextUtils.isEmpty(message) ? "Stopped." : message);
                 break;
         }
     }
 
-    private void showStopped(String line, boolean offerStart) {
-        mStatus.setText(line);
-        mEmpty.setText(line);
-        mEmpty.setVisibility(mPanes.size() == 0 ? View.VISIBLE : View.GONE);
-        mStartButton.setVisibility(offerStart ? View.VISIBLE : View.GONE);
-        mStopButton.setVisibility(View.GONE);
-        mCrashButton.setVisibility(View.GONE);
+    /** The host is gone: the empty area says so; the developer bar says why. */
+    private void showStopped(String why) {
+        if (mStatus != null) mStatus.setText(why);
+        if (mEmpty == null) return;
+        mEmpty.setText(R.string.linux_windows_stopped);
+        mEmpty.setVisibility(mTabs.size() == 0 ? View.VISIBLE : View.GONE);
     }
 
-    /** The host process died: drop its views, say so once, offer Restart. */
+    /** The host process died: drop its views and say so once. */
     private void onHostDied() {
         if (mService == null && !mBound) return;
         if (mServiceBinder != null) {
@@ -612,7 +608,7 @@ public final class WaylandTestActivity extends Activity {
             mDebugBound = false;
         }
         if (mBound) {
-            // Unbind so Android does not bring the service back on its own; Restart does.
+            // Unbind so Android does not bring the service back on its own; a launch does.
             try {
                 unbindService(mConnection);
             } catch (IllegalArgumentException ignored) {
@@ -621,8 +617,7 @@ public final class WaylandTestActivity extends Activity {
         }
         clearPanes();
         if (isDestroyed()) return;
-        showStopped("The Linux windows host stopped unexpectedly.", true);
-        mStartButton.setText("Restart");
+        showStopped("The host process died.");
     }
 
     private void windowCreated(long id, String title, String appId, int clientPid, int flags) {
@@ -632,26 +627,90 @@ public final class WaylandTestActivity extends Activity {
         pane.appId = appId;
         pane.clientPid = clientPid;
         pane.flags = flags;
-        pane.updateLabel();
         mPanes.put(id, pane);
+        mHadWindow = true;
         mEmpty.setVisibility(View.GONE);
-        mPaneHost.addView(pane.row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        mTabRow.addView(pane.tab, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+        mWindowHost.addView(pane.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+            FrameLayout.LayoutParams.MATCH_PARENT));
+        long before = mTabs.shown();
+        mTabs.add(id);
+        applyShown(before);
     }
 
     private void removePane(long id) {
         Pane pane = mPanes.get(id);
         if (pane == null) return;
         mPanes.remove(id);
-        mPaneHost.removeView(pane.row);
+        mTabRow.removeView(pane.tab);
+        mWindowHost.removeView(pane.view);
         if (mFocusedId == id) mFocusedId = 0;
-        if (mPanes.size() == 0) mEmpty.setVisibility(View.VISIBLE);
+        mTabs.remove(id);
+        if (mTabs.size() == 0) {
+            // The last window closed: nothing is left to show here.
+            if (mHadWindow && !isFinishing()) finish();
+            return;
+        }
+        // The closed window's view is gone with it; only the newly shown one needs telling.
+        applyShown(LinuxWindowTabs.NONE);
     }
 
     private void clearPanes() {
-        for (int i = mPanes.size() - 1; i >= 0; i--) mPaneHost.removeView(mPanes.valueAt(i).row);
+        for (int i = mPanes.size() - 1; i >= 0; i--) {
+            Pane pane = mPanes.valueAt(i);
+            mTabRow.removeView(pane.tab);
+            mWindowHost.removeView(pane.view);
+        }
         mPanes.clear();
+        mTabs.clear();
         mFocusedId = 0;
-        mEmpty.setVisibility(View.VISIBLE);
+        if (mEmpty != null) mEmpty.setVisibility(View.VISIBLE);
+    }
+
+    /** A tab was tapped. */
+    private void showWindow(long id) {
+        long before = mTabs.shown();
+        if (mTabs.show(id)) applyShown(before);
+    }
+
+    /**
+     * Makes the views follow {@link #mTabs}: only the shown window's view is visible, the host is
+     * told the window shown before ({@code before}) is hidden, and the shown one takes focus while
+     * the screen is visible.
+     */
+    private void applyShown(long before) {
+        long shown = mTabs.shown();
+        for (int i = 0; i < mPanes.size(); i++) {
+            Pane pane = mPanes.valueAt(i);
+            int visibility = pane.id == shown ? View.VISIBLE : View.INVISIBLE;
+            if (pane.view.getVisibility() != visibility) pane.view.setVisibility(visibility);
+            pane.updateTab();
+        }
+        if (before != shown) {
+            Pane old = mPanes.get(before);
+            if (old != null) old.setVisible(false);
+        }
+        Pane now = mPanes.get(shown);
+        if (now != null) {
+            now.setVisible(mVisible);
+            if (mVisible) focus(shown);
+        }
+    }
+
+    /** {@code --es dump all}: at once when the host already runs (a launch of the live screen
+     *  arrives in onNewIntent), else when it does. */
+    private void handleDumpIntent(Intent intent) {
+        if (intent == null || !"all".equals(intent.getStringExtra(EXTRA_DUMP))) return;
+        if (mHostRunning) mMain.postDelayed(() -> dumpAll(DUMP_TRIES), DUMP_DELAY_MS);
+        else mDumpPending = true;
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        setIntent(intent);
+        handleDumpIntent(intent);
     }
 
     /** Asks the host to write every window to files/wayland-dumps/<id>.png (see logcat TLWayland). */
@@ -675,7 +734,6 @@ public final class WaylandTestActivity extends Activity {
 
     private void focus(long id) {
         if (mFocusedId == id) return;
-        long old = mFocusedId;
         mFocusedId = id;
         if (mService != null) {
             try {
@@ -683,10 +741,6 @@ public final class WaylandTestActivity extends Activity {
             } catch (RemoteException ignored) {
             }
         }
-        Pane before = mPanes.get(old);
-        if (before != null) before.updateLabel();
-        Pane now = mPanes.get(id);
-        if (now != null) now.updateLabel();
     }
 
     @Override
@@ -711,7 +765,11 @@ public final class WaylandTestActivity extends Activity {
     protected void onStart() {
         super.onStart();
         mVisible = true;
-        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).setVisible(true);
+        Pane shown = mPanes.get(mTabs.shown());
+        if (shown != null) {
+            shown.setVisible(true);
+            focus(shown.id);
+        }
     }
 
     @Override
@@ -727,7 +785,7 @@ public final class WaylandTestActivity extends Activity {
 
     @Override
     protected void onDestroy() {
-        // The host keeps running; only this activity's views and listener go.
+        // The host keeps running; only this screen's views and listener go.
         if (mService != null) {
             for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).detach();
             try {

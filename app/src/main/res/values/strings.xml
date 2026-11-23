@@ -483,6 +483,17 @@
     <string name="settings_x11_window_manager_title">Window manager</string>
     <string name="settings_x11_window_manager_summary">Started with the display so windows open full size. Leave empty for none.</string>
     <string name="settings_x11_window_manager_hint">Openbox arranges the windows, and a whole desktop brings its own instead</string>
+    <!-- Linux apps › Display: which display Linux apps open under (builds with the Wayland host). -->
+    <string name="settings_linux_display_title">Display</string>
+    <string name="settings_linux_display_x11">X11 Display</string>
+    <string name="settings_linux_display_wayland">Wayland Display</string>
+    <string name="settings_linux_display_hint">Wayland Display opens each Linux app in its own window. It is new and some apps may not work yet.</string>
+    <!-- Wayland Display: the tap's notice when it could not start, and the Linux windows screen. -->
+    <string name="linux_wayland_start_failed">Wayland Display did not start, so the app could not open.</string>
+    <string name="linux_windows_opening">Opening…</string>
+    <string name="linux_windows_stopped">Wayland Display stopped, and its apps closed.</string>
+    <string name="linux_windows_untitled">Untitled window</string>
+    <string name="linux_windows_close">Close</string>
     <!-- Linux apps › Start with (#166): what opens on the display each time it starts. -->
     <string name="settings_x11_start_with_title">Start with</string>
     <string name="settings_x11_start_with_summary">Open a desktop or a command each time the display starts.</string>

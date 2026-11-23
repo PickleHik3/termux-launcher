@@ -29495,6 +29495,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 refreshLinuxApps(true);
                 return false;
             }
+            // Wayland Display, when Settings chooses it: the app opens in its own window on the
+            // Linux windows screen, so no Display page is routed or added.
+            if (mLinuxApps.runUnderWayland(app)) {
+                closeAppDrawerForLinuxLaunch();
+                return true;
+            }
             // A3c: the app opens on its Display page: the one bound to it, else the first unbound
             // one, else a new temporary page after the current one, which goes with its display.
             // The runner's show-display step shows that page; the landing there leaves the app to
