@@ -1,5 +1,5 @@
 # Copyright 2026 The Google AI Edge Authors. All Rights Reserved.
-# Licensed under the Apache License, Version 2.0. See LICENSE-TERMINAL-EMULATOR.
+# Licensed under the Apache License, Version 2.0. See LICENSES/Apache-2.0.txt.
 # https://www.apache.org/licenses/LICENSE-2.0
 # Distributed on an AS IS basis, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND.
 # Modified for Termux Launcher: Python adaptation of Google AI Edge LiteRT samples

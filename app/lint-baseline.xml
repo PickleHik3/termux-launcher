@@ -4326,13 +4326,6 @@
 
     <issue
         id="UnusedResources"
-        message="The resource `R.raw.license_gpl_3_unexpected_keyboard` appears to be unused">
-        <location
-            file="build/generated/license-resources/raw/license_gpl_3_unexpected_keyboard.txt"/>
-    </issue>
-
-    <issue
-        id="UnusedResources"
         message="The resource `R.layout.preference_widget_switch_compat` appears to be unused"
         errorLine1="&lt;com.google.android.material.materialswitch.MaterialSwitch"
         errorLine2="^">

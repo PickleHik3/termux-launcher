@@ -5,8 +5,19 @@ Termux Launcher is a modified distribution of
 [Termux:Monet](https://github.com/Termux-Monet/termux-monet). The launcher-specific source is
 available at [PickleHik3/termux-launcher](https://github.com/PickleHik3/termux-launcher).
 
-The project as a whole is distributed under GPLv3-only. Full license texts are included with the
-source distribution and in the app's **Settings > Open-source licenses** screen.
+The project as a whole is distributed under GPLv3-only ([`LICENSE`](LICENSE)). The other license
+texts are in [`LICENSES/`](LICENSES), one file per license; each copyright holder is named below
+and in the source files' own headers. The same texts are in the app's
+**Settings > Open-source licenses** screen.
+
+| File | License | Covers |
+|---|---|---|
+| `LICENSE` | GPLv3-only | the project as a whole, including the Termux, Termux:Monet, Unexpected-Keyboard, kitty and termux-x11 code |
+| `LICENSES/Apache-2.0.txt` | Apache-2.0 | `terminal-emulator/`, `terminal-view/`, `termux-am-library/`, and the Apache-2.0 entries below |
+| `LICENSES/MIT-Termux.txt` | MIT | the MIT parts of `termux-shared/` (see [`termux-shared/LICENSE.md`](termux-shared/LICENSE.md)) |
+| `LICENSES/GPL-2.0-with-Classpath-exception.txt` | GPLv2-only with the Classpath exception | `termux-shared/.../file/filesystem/` (libcore/ojluni) |
+| `LICENSES/BSD-2-Clause-commonmark.txt` | BSD-2-Clause | commonmark-java, used through Markwon |
+| `THIRD_PARTY_LICENSES.txt` | various | the notices of bundled native libraries, fonts and data |
 
 ## Vendored and adapted code
 
@@ -50,13 +61,20 @@ source distribution and in the app's **Settings > Open-source licenses** screen.
   278-305), with Schlick's Fresnel as at lines 778-782. The adaptation measures the lens zone on
   one rounded-box distance field, scales it with the surface's size and lights it in linear
   light; the measured iOS fold maps are not used.
-- **Terminal Emulator for Android** — Apache-2.0 — Copyright Jack Palevich and contributors.
+- **[Terminal Emulator for Android](https://github.com/jackpal/Android-Terminal-Emulator)** —
+  Apache-2.0 — Copyright Jack Palevich and contributors. The base of `terminal-emulator/` and
+  `terminal-view/`.
+- **termux-am-library** — Apache-2.0 — Copyright Termux contributors; adapted from the Android
+  Open Source Project's `am` command.
 - **Android Open Source Project / Launcher3** — Apache-2.0 — portions of terminal compatibility,
   `termux-am-library`, and launcher gesture navigation.
-- **Lawnchair** — Apache-2.0 — launcher gesture-navigation compatibility adapted from Lawnchair.
+- **Lawnchair** — Apache-2.0 — Copyright (c) 2020 The Android Open Source Project; Copyright (c)
+  2024 Lawnchair. Launcher gesture-navigation compatibility adapted from Lawnchair; see
+  [`docs/launcher-animation-attribution.md`](docs/launcher-animation-attribution.md).
 - **RealtimeBlurView** — Apache-2.0 — Copyright 2016 Tu Yimin. The vendored implementation is
   modified by Termux Launcher.
 - **libsuperuser** — Apache-2.0 — Copyright 2012–2019 Jorrit "Chainfire" Jongma.
+  `termux-shared/.../shell/StreamGobbler.java`.
 - **libcore/ojluni** — GPLv2-only with the Classpath exception — filesystem compatibility classes.
 - **[DrJava](https://drjava.org/) `ArgumentTokenizer`** — BSD-3-Clause — Copyright (c) 2001-2010,
   JavaPLT group at Rice University. Inherited from Termux as
@@ -143,7 +161,7 @@ The Android application also uses these independently maintained libraries:
 - Markwon — Apache-2.0
 - Process Phoenix — Apache-2.0
 - Shizuku API — Apache-2.0
-- CommonMark Java — BSD-2-Clause
+- CommonMark Java — BSD-2-Clause — Copyright (c) 2015-2021 Atlassian Pty Ltd — through Markwon
 - Android core library desugaring (`desugar_jdk_libs` 2.1.2) — GPLv2 with the Classpath exception
   — OpenJDK-derived `java.*` classes compiled into the APK for older Android versions
 
