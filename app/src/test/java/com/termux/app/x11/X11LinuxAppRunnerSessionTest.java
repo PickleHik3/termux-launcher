@@ -161,12 +161,12 @@ public class X11LinuxAppRunnerSessionTest {
         LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
         runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV, RESTART_WM);
         idle();
-        assertTrue(X11LinuxAppRunner.isDesktopRunning());
+        assertTrue(runner.hasRunningDesktop());
 
         // A daemon the desktop left behind holds the script's pipes: no exit is ever reported.
         host.displayRunning = false;
         runner.onDisplayRunningChanged(false);
-        assertFalse(X11LinuxAppRunner.isDesktopRunning());
+        assertFalse(runner.hasRunningDesktop());
 
         // Tapping the desktop again starts it, not "just shows" a dead one.
         runner.run(xfce);
@@ -183,7 +183,7 @@ public class X11LinuxAppRunnerSessionTest {
         host.listeners.get(0).onExit(143);
         assertEquals("no window manager restart for a display that is gone", 1, host.scripts.size());
         assertTrue(host.notices.isEmpty());
-        assertFalse(X11LinuxAppRunner.isDesktopRunning());
+        assertFalse(runner.hasRunningDesktop());
     }
 
     @Test public void aDisplayStoppedWithNoDesktopChangesNothing() {

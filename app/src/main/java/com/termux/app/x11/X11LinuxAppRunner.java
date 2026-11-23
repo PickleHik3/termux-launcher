@@ -336,6 +336,11 @@ public final class X11LinuxAppRunner {
         launch(app, true);
     }
 
+    /** Whether a desktop session is the one running on the display. */
+    boolean hasRunningDesktop() {
+        return runningSession != null;
+    }
+
     /**
      * A desktop dies with the display it ran on, and its script's exit may never be reported (a
      * daemon it left behind can hold the script's output open). The bookkeeping ends here: the
@@ -346,7 +351,7 @@ public final class X11LinuxAppRunner {
     private void endDesktopWithDisplay() {
         if (runningSession == null) return;
         Logger.logInfo(LOG_TAG, "Display stopped; " + runningSession.id + " ended with it");
-        setRunningSession(null);
+        runningSession = null;
         takeOver = null;
         EXECUTOR.execute(() -> new java.io.File(SESSION_PID_PATH).delete());
     }

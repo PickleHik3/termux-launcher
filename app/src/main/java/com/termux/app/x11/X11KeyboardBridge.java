@@ -238,14 +238,12 @@ public final class X11KeyboardBridge implements TerminalKeyEventHandler.KeyValue
                 sendTextRun(view, text.substring(runStart, i));
                 runStart = -1;
             }
-            if (com.termux.x11.X11KeysDiag.on()) com.termux.x11.X11KeysDiag.log("bridge.char", "path=key code=" + code + " shift=" + X11AsciiKeys.needsShift(c) + " c=" + (int) c); // DIAG(x11-keys)
             sendModified(view, code, false, false, X11AsciiKeys.needsShift(c));
         }
         if (runStart >= 0) sendTextRun(view, runStart == 0 ? text : text.substring(runStart));
     }
 
     private void sendTextRun(@NonNull Sink view, @NonNull String run) {
-        if (com.termux.x11.X11KeysDiag.on()) com.termux.x11.X11KeysDiag.log("bridge.char", "path=text len=" + run.length()); // DIAG(x11-keys)
         view.text(run);
     }
 
