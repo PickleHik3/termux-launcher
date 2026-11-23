@@ -53,10 +53,8 @@ public class DeviceTierTest {
         assertEquals("slower", low.animationSpeed);
         assertTrue(low.autotiling);
         DeviceTier.Defaults mid = DeviceTier.defaults(DeviceTier.Tier.MID);
-        assertFalse(mid.motionLight);
         assertTrue(mid.fancierGlass);
         DeviceTier.Defaults high = DeviceTier.defaults(DeviceTier.Tier.HIGH);
-        assertTrue(high.motionLight);
         assertFalse(high.lowMemory);
     }
 }

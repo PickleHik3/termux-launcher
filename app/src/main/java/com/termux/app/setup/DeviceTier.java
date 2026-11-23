@@ -70,19 +70,17 @@ final class DeviceTier {
     static final class Defaults {
         final boolean ai;
         final boolean fancierGlass;
-        final boolean motionLight;
         final boolean parallax;
         final boolean lazy;
         final boolean lowMemory;
         @NonNull final String animationSpeed;
         final boolean autotiling;
 
-        Defaults(boolean ai, boolean fancierGlass, boolean motionLight, boolean parallax,
+        Defaults(boolean ai, boolean fancierGlass, boolean parallax,
                  boolean lazy, boolean lowMemory, @NonNull String animationSpeed,
                  boolean autotiling) {
             this.ai = ai;
             this.fancierGlass = fancierGlass;
-            this.motionLight = motionLight;
             this.parallax = parallax;
             this.lazy = lazy;
             this.lowMemory = lowMemory;
@@ -95,14 +93,14 @@ final class DeviceTier {
     static Defaults defaults(@NonNull Tier tier) {
         switch (tier) {
             case LOW:
-                return new Defaults(false, false, false, false, true, true,
+                return new Defaults(false, false, false, true, true,
                     AnimationSpeed.SLOWER, true);
             case MID:
-                return new Defaults(true, true, false, true, false, false,
+                return new Defaults(true, true, true, false, false,
                     AnimationSpeed.NORMAL, true);
             case HIGH:
             default:
-                return new Defaults(true, true, true, true, false, false,
+                return new Defaults(true, true, true, false, false,
                     AnimationSpeed.NORMAL, true);
         }
     }

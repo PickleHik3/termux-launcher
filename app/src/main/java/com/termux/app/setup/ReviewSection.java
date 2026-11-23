@@ -59,8 +59,7 @@ final class ReviewSection implements SetupSection {
         addAppearanceGroup(context, page, state);
 
         addGroup(context, page, R.string.setup_group_power);
-        addRow(context, page, R.string.setup_row_glass_motion,
-            pair(onOff(context, v.fancierGlass), onOff(context, v.motionLight)));
+        addRow(context, page, R.string.setup_power_glass, onOff(context, v.fancierGlass));
         addRow(context, page, R.string.setup_row_parallax_lazy,
             pair(onOff(context, v.parallax), onOff(context, v.lazy)));
         addRow(context, page, R.string.setup_row_memory_animation,

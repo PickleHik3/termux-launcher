@@ -65,15 +65,6 @@ final class PerformanceRowPolicy {
         return glassUnavailable(facts);
     }
 
-    @NonNull
-    static Reason livingGlass(@NonNull Facts facts) {
-        if (facts.idleReduced) return Reason.OFF_WHILE_IDLE_REDUCED;
-        Reason glass = glassUnavailable(facts);
-        if (glass != Reason.NONE) return glass;
-        // Only a surface that refracts has glass to move.
-        return facts.glassRefractionOn ? Reason.NONE : Reason.NEEDS_GLASS_REFRACTION;
-    }
-
     /**
      * Live blur feeds the Glass refraction program, so it is greyed for Glass refraction's own
      * reasons and while Glass refraction is off; the Low-memory preset keeps it off at runtime.

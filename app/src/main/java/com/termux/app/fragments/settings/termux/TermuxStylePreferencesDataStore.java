@@ -24,11 +24,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
     private static final long STYLE_SYNC_DEBOUNCE_MS = 140L;
     private static final Handler MAIN_HANDLER = new Handler(Looper.getMainLooper());
 
-    /** Battery &amp; performance › Living glass, which writes through this store. */
-    static final String KEY_MOTION_LIGHT =
-        com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP
-            .KEY_FANCIER_GLASS_MOTION_LIGHT;
-
     private final Context mContext;
 
     private final TermuxAppSharedPreferences mPreferences;
@@ -116,10 +111,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 mPreferences.setWidgetsOnGlassEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
-            case KEY_MOTION_LIGHT:
-                // Read by each pane as a motion starts: nothing to restyle.
-                mPreferences.setFancierGlassMotionLightEnabled(value);
-                break;
             case "app_launcher_bw_icons":
                 mPreferences.setAppLauncherBwIconsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
@@ -188,8 +179,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "widgets_on_glass":
                 return mPreferences.isWidgetsOnGlassEnabled();
-            case KEY_MOTION_LIGHT:
-                return mPreferences.isFancierGlassMotionLightEnabled();
             case "app_launcher_bw_icons":
                 return mPreferences.isAppLauncherBwIconsEnabled();
             case "show_in_recents_when_not_default":

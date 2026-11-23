@@ -48,12 +48,6 @@
             app:summary="@string/settings_performance_live_windows_summary"
             android:defaultValue="true" />
         <SwitchPreferenceCompat
-            app:key="fancier_glass_motion_light"
-            app:icon="@drawable/ic_ms_living_glass"
-            app:title="@string/settings_motion_light_title"
-            app:summary="@string/settings_performance_living_glass_summary"
-            android:defaultValue="true" />
-        <SwitchPreferenceCompat
             app:key="wallpaper_parallax"
             app:icon="@drawable/ic_ms_swipe"
             app:title="@string/settings_wallpaper_parallax_title"

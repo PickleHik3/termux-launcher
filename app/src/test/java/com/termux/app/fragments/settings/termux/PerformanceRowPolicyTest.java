@@ -23,7 +23,6 @@ public class PerformanceRowPolicyTest {
     public void everyRowIsFreeWhenNothingStandsInTheWay() {
         Facts facts = free();
         assertEquals(Reason.NONE, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals(Reason.NONE, PerformanceRowPolicy.livingGlass(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.wallpaperParallax(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.cursorTrail(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.terminalEffect(facts));
@@ -39,7 +38,6 @@ public class PerformanceRowPolicyTest {
         assertEquals(Reason.SET_BY_LOW_MEMORY_PRESET, PerformanceRowPolicy.cursorTrail(facts));
         assertEquals(Reason.SET_BY_LOW_MEMORY_PRESET, PerformanceRowPolicy.terminalEffect(facts));
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.livingGlass(facts));
         assertFalse(Reason.SET_BY_LOW_MEMORY_PRESET.enabled());
         assertFalse("the preset's value is the stored one", Reason.SET_BY_LOW_MEMORY_PRESET.shownOff());
     }
@@ -54,7 +52,6 @@ public class PerformanceRowPolicyTest {
     public void idleReductionAloneGreysOnlyTheGlass() {
         Facts facts = new Facts(T, true, false, true, true, true);
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.livingGlass(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.wallpaperParallax(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.cursorTrail(facts));
         assertEquals(Reason.NONE, PerformanceRowPolicy.terminalEffect(facts));
@@ -66,14 +63,12 @@ public class PerformanceRowPolicyTest {
     public void idleReductionComesBeforeAnOldAndroid() {
         Facts facts = new Facts(S, true, false, false, true, true);
         assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals(Reason.OFF_WHILE_IDLE_REDUCED, PerformanceRowPolicy.livingGlass(facts));
     }
 
     @Test
     public void belowAndroid13TheGlassNeedsAndroid13BeforeAWallpaper() {
         Facts facts = new Facts(S, false, false, false, false, true);
         assertEquals(Reason.NEEDS_ANDROID_13, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals(Reason.NEEDS_ANDROID_13, PerformanceRowPolicy.livingGlass(facts));
         assertFalse(Reason.NEEDS_ANDROID_13.shownOff());
     }
 
@@ -81,15 +76,6 @@ public class PerformanceRowPolicyTest {
     public void withoutAPickedWallpaperTheGlassAsksForOne() {
         Facts facts = new Facts(T, false, false, false, false, true);
         assertEquals(Reason.NEEDS_PICKED_WALLPAPER, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals("the wallpaper is named before refraction",
-            Reason.NEEDS_PICKED_WALLPAPER, PerformanceRowPolicy.livingGlass(facts));
-    }
-
-    @Test
-    public void livingGlassNeedsRefractionOn() {
-        Facts facts = new Facts(T, false, false, true, false, true);
-        assertEquals(Reason.NONE, PerformanceRowPolicy.glassRefraction(facts));
-        assertEquals(Reason.NEEDS_GLASS_REFRACTION, PerformanceRowPolicy.livingGlass(facts));
     }
 
     @Test

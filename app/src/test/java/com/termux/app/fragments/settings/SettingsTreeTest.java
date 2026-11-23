@@ -134,7 +134,6 @@ public class SettingsTreeTest {
         {"AppBehaviorPreferencesFragment", "low_memory_preset"},
         {"GeneralPreferencesFragment", "lazy_mode"},
         {"GeneralPreferencesFragment", "low_memory_preset"},
-        {"TermuxStylePreferencesFragment", "fancier_glass_motion_light"},
         {"X11DisplayPreferencesFragment", "x11_drawer_apps"},
         {"X11DisplayLinuxAppsPreferencesFragment", "x11_window_manager"},
         {"X11DisplayPreferencesFragment", "displayScale"},

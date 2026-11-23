@@ -42,7 +42,6 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     private static final String KEY_LOW_MEMORY_PRESET = "low_memory_preset";
     private static final String KEY_GLASS_REFRACTION = "fancier_glass";
     private static final String KEY_LIVE_BLUR = "live_blur";
-    private static final String KEY_LIVING_GLASS = TermuxStylePreferencesDataStore.KEY_MOTION_LIGHT;
     private static final String KEY_WALLPAPER_PARALLAX = "wallpaper_parallax";
     /** The trail's on/off, which the preset and the Appearance editor write; not Terminal's style list. */
     private static final String KEY_CURSOR_TRAIL = "terminal_cursor_trail";
@@ -139,8 +138,6 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
             R.string.settings_performance_glass_refraction_summary);
         showSwitch(KEY_LIVE_BLUR, prefs.isLiveBlurEnabled(), PerformanceRowPolicy.liveBlur(facts),
             R.string.settings_performance_live_blur_summary);
-        showSwitch(KEY_LIVING_GLASS, prefs.isFancierGlassMotionLightEnabled(),
-            PerformanceRowPolicy.livingGlass(facts), R.string.settings_performance_living_glass_summary);
         showSwitch(KEY_WALLPAPER_PARALLAX, prefs.isWallpaperParallaxEnabled(),
             PerformanceRowPolicy.wallpaperParallax(facts), R.string.settings_performance_parallax_summary);
         showSwitch(KEY_CURSOR_TRAIL, prefs.isTerminalCursorTrailEnabled(),
