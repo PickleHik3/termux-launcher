@@ -5,6 +5,7 @@
 //! these calls carry are `crate::protocol`'s, mirrored from `ILinuxWindows.aidl`.
 
 pub mod log;
+mod direct;
 mod focus;
 mod host;
 mod java;
@@ -31,6 +32,15 @@ use window::NativeWindow;
 static HOST: Mutex<Option<HostHandle>> = Mutex::new(None);
 /// "compositor thread is gone" is logged once per host, not once per call.
 static GONE_LOGGED: AtomicBool = AtomicBool::new(false);
+/// Experiment: the last direct request (nativeSetDirect), applied at every start.
+static DIRECT_REQUEST: Mutex<Option<direct::DirectRequest>> = Mutex::new(None);
+
+fn direct_request() -> Option<direct::DirectRequest> {
+    match DIRECT_REQUEST.lock() {
+        Ok(g) => g.clone(),
+        Err(p) => p.into_inner().clone(),
+    }
+}
 
 fn guarded<T>(name: &str, fallback: T, f: impl FnOnce() -> T) -> T {
     match catch_unwind(AssertUnwindSafe(f)) {
@@ -142,6 +152,7 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
             scale: sane_scale(scale),
             frame_period: frame_period(frame_period_nanos),
             xwayland,
+            direct: direct_request(),
         };
         let events = move || {
             callbacks.attach().map(|(events, ended)| {
@@ -343,5 +354,41 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeDumpWindow<
         if let Some(path) = java_string(&mut env, &path) {
             send(Command::Dump { id, path });
         }
+    })
+}
+
+/// Experiment (exp/wayland-turnip): asks for the direct presenter (`on`) or the copy path for
+/// windows created from now on. `hookDir` is the app's nativeLibraryDir, `driverDir` the
+/// app-private directory holding `driverName` (ending in '/'); both null when `on` is false.
+/// Kept for later starts; a running host loads the driver on its own thread at once.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetDirect<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    on: jboolean,
+    hook_dir: JString<'l>,
+    driver_dir: JString<'l>,
+    driver_name: JString<'l>,
+) {
+    guarded("nativeSetDirect", (), || {
+        let request = if on == JNI_FALSE {
+            None
+        } else {
+            match (java_string(&mut env, &hook_dir), java_string(&mut env, &driver_dir), java_string(&mut env, &driver_name)) {
+                (Some(hook_dir), Some(driver_dir), Some(driver_name)) => {
+                    Some(direct::DirectRequest { hook_dir, driver_dir, driver_name })
+                }
+                _ => {
+                    lwarn!("nativeSetDirect: on without a hook dir, driver dir and driver name; ignored");
+                    return;
+                }
+            }
+        };
+        linfo!("direct requested: {}", if request.is_some() { "on" } else { "off" });
+        match DIRECT_REQUEST.lock() {
+            Ok(mut g) => *g = request.clone(),
+            Err(p) => *p.into_inner() = request.clone(),
+        }
+        send(Command::SetDirect { request });
     })
 }

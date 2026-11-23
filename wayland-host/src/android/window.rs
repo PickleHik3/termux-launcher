@@ -70,6 +70,17 @@ impl NativeWindow {
         }
     }
 
+    /// The ANativeWindow, for a Vulkan surface on it (experiment, direct mode).
+    #[cfg_attr(not(all(feature = "turnip", target_arch = "aarch64")), allow(dead_code))]
+    pub fn as_ptr(&self) -> *mut ANativeWindow {
+        self.ptr
+    }
+
+    /// A Vulkan swapchain had the window: the next post sets the buffer geometry again.
+    pub fn forget_geometry(&mut self) {
+        self.geometry = (0, 0);
+    }
+
     /// Copies a `width` x `height` client image (`stride` bytes per row) into the window and
     /// posts it. The window's buffers take the client's size; TextureView scales to the view.
     pub fn post(&mut self, src: &[u8], stride: usize, width: i32, height: i32, format: pixels::PixelFormat) -> Result<PostTiming, i32> {

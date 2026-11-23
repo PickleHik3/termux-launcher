@@ -76,6 +76,9 @@ use crate::pixels;
 use crate::png;
 use crate::protocol::*;
 
+use crate::direct::{HostTime, Mode as PresentMode};
+
+use super::direct::{Direct, DirectRequest, DirectWindow, PresentError};
 use super::focus::KeyboardFocus;
 use super::java::HostEvents;
 use super::log::{lerror, linfo, lwarn};
@@ -120,6 +123,8 @@ pub enum Command {
     Close { id: i64 },
     /// Debug: write the window's shown pixels as a PNG to `path` (checked by the service).
     Dump { id: i64, path: String },
+    /// Experiment: new windows use the direct presenter (Some) or copy (None).
+    SetDirect { request: Option<DirectRequest> },
 }
 
 pub struct StartConfig {
@@ -129,6 +134,8 @@ pub struct StartConfig {
     pub scale: f64,
     pub frame_period: Duration,
     pub xwayland: Option<super::xwayland::XwaylandConfig>,
+    /// Experiment: load the bundled driver at start and make new windows direct.
+    pub direct: Option<DirectRequest>,
 }
 
 /// The running compositor as Java's thread sees it.
@@ -310,6 +317,8 @@ pub struct Toplevel {
     pub id: i64,
     pub shell: Shell,
     announced: bool,
+    /// Experiment: copy or direct, and the direct swapchain. Before `window`: it is dropped first.
+    direct: DirectWindow,
     window: Option<NativeWindow>,
     /// The launcher's setVisible; drawn only while visible and with a window.
     visible: bool,
@@ -333,6 +342,9 @@ pub struct Toplevel {
     clamp_logged: bool,
     /// The kind of the last buffer copied, so a change is logged once.
     last_kind: Option<Kind>,
+    /// A copy window got a dmabuf with a modifier it cannot read (only while direct is or was
+    /// on); logged once.
+    copy_refused_logged: bool,
     paced: Paced<WlBuffer, WlCallback>,
     stats: CopyStats,
     last_log: Instant,
@@ -358,8 +370,12 @@ pub struct State {
     #[allow(dead_code)]
     pub viewporter_state: ViewporterState,
     pub dmabuf_state: DmabufState,
-    #[allow(dead_code)]
     dmabuf_global: DmabufGlobal,
+    /// Globals replaced when direct changed what is advertised: disabled, kept for clients that
+    /// bound them.
+    old_dmabuf_globals: Vec<DmabufGlobal>,
+    /// Experiment: the direct presenter's driver and imports.
+    direct: Direct,
     /// Read-only mappings of the dmabufs clients committed, per wl_buffer.
     maps: DmabufMaps,
     pub seat_state: SeatState<State>,
@@ -468,8 +484,12 @@ fn setup(
     let viewporter_state = ViewporterState::new::<State>(&dh);
     // zwp_linux_dmabuf_v1 version 3: format + modifier events, which Mesa's Vulkan WSI needs.
     // Linear only, single plane, shown by copying the mapped pixels.
+    // Experiment: with direct asked for at start, the driver loads here and the global also
+    // advertises the modifiers it can import (else linear only, as without the experiment).
+    let mut direct = Direct::default();
+    direct.set(config.direct.clone());
     let mut dmabuf_state = DmabufState::new();
-    let dmabuf_global = dmabuf_state.create_global::<State>(&dh, source::advertised_formats());
+    let dmabuf_global = dmabuf_state.create_global::<State>(&dh, direct.dmabuf_formats());
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<State>(&dh);
     let decoration_state = XdgDecorationState::new::<State>(&dh);
@@ -546,6 +566,8 @@ fn setup(
         viewporter_state,
         dmabuf_state,
         dmabuf_global,
+        old_dmabuf_globals: Vec::new(),
+        direct,
         maps: DmabufMaps::default(),
         seat_state,
         data_device_state,
@@ -670,11 +692,28 @@ impl State {
             Command::Key { id, android_keycode, down, time } => self.key(id, android_keycode, down, time),
             Command::Close { id } => self.close(id),
             Command::Dump { id, path } => self.dump(id, &path),
+            Command::SetDirect { request } => self.set_direct(request),
         }
+    }
+
+    /// Experiment: takes a direct request; when what direct offers changed, the dmabuf global is
+    /// replaced so clients that connect from now on see the matching modifiers.
+    fn set_direct(&mut self, request: Option<DirectRequest>) {
+        if !self.direct.set(request) {
+            return;
+        }
+        let formats = self.direct.dmabuf_formats();
+        let pairs = formats.len();
+        self.dmabuf_state.disable_global::<State>(&self.display_handle, &self.dmabuf_global);
+        let global = self.dmabuf_state.create_global::<State>(&self.display_handle, formats);
+        self.old_dmabuf_globals.push(std::mem::replace(&mut self.dmabuf_global, global));
+        linfo!("dmabuf global replaced: {pairs} format/modifier pairs for clients that connect from now on");
     }
 
     fn set_window(&mut self, id: i64, window: Option<NativeWindow>) {
         let Some(i) = self.toplevel_index(id) else { return };
+        // A swapchain on the old Surface goes before the Surface does.
+        self.toplevels[i].direct.detach();
         let has_window = window.is_some();
         self.toplevels[i].window = window;
         if has_window {
@@ -981,6 +1020,13 @@ impl State {
         if !buffer.is_alive() {
             return;
         }
+        let started = Instant::now();
+        if self.toplevels[i].direct.mode == PresentMode::Direct && self.post_direct(i, buffer, started) {
+            return;
+        }
+        if !self.copy_can_read(i, buffer) {
+            return;
+        }
         let output = self.output_size;
         let maps = &mut self.maps;
         let t = &mut self.toplevels[i];
@@ -991,6 +1037,7 @@ impl State {
                 t.window = None;
             }
         }
+        t.direct.host_time.add(started.elapsed().as_micros() as u64);
         let size = (t.shown.2, t.shown.3);
         if size != t.reported_size && t.announced {
             t.reported_size = size;
@@ -998,6 +1045,97 @@ impl State {
             let id = t.id;
             self.events.window_changed(id, &title, &app_id, size.0, size.1);
         }
+    }
+
+    /// A dmabuf with a tiled or compressed modifier reaches a copy window only while direct is
+    /// or was on (the copy path alone advertises linear only); a mapping would read it as
+    /// garbage, so the window keeps its last frame.
+    fn copy_can_read(&mut self, i: usize, buffer: &WlBuffer) -> bool {
+        use smithay::backend::allocator::Buffer;
+        let Ok(dmabuf) = smithay::wayland::dmabuf::get_dmabuf(buffer) else { return true };
+        let modifier = dmabuf.format().modifier;
+        if modifier == smithay::backend::allocator::Modifier::Linear {
+            return true;
+        }
+        let t = &mut self.toplevels[i];
+        if !t.copy_refused_logged {
+            t.copy_refused_logged = true;
+            lwarn!(
+                "toplevel {}: mode=copy cannot read modifier 0x{:x}; the window keeps its last frame (restart the client with direct off)",
+                t.id,
+                u64::from(modifier)
+            );
+        }
+        false
+    }
+
+    /// Experiment: shows `buffer` through the direct presenter. True when the tick is done with
+    /// the window (shown, skipped, or its Surface dropped); false when the window just fell back
+    /// to copy and the copy path should show this buffer.
+    fn post_direct(&mut self, i: usize, buffer: &WlBuffer, started: Instant) -> bool {
+        let output = self.output_size;
+        let layout = Layout::of(&self.toplevels[i], output);
+        let direct = &mut self.direct;
+        let t = &mut self.toplevels[i];
+        let id = t.id;
+        let Some(desc) = dmabuf_desc(buffer) else {
+            lwarn!("toplevel {id}: mode=direct -> copy: an shm buffer (or a format direct does not take)");
+            t.direct.fall_back();
+            return false;
+        };
+        let Some((shown, full, logical)) = shown_rect(layout, &desc) else { return true };
+        let Some(window) = t.window.as_ref() else { return true };
+        match direct.present(&mut t.direct, window, buffer, shown, id) {
+            Ok(()) => {}
+            Err(PresentError::Lost(why)) => {
+                lwarn!("toplevel {id}: direct present failed ({why}); the Surface is dropped until a new one comes");
+                t.direct.detach();
+                t.window = None;
+                return true;
+            }
+            Err(PresentError::FallBack(why)) => {
+                lwarn!("toplevel {id}: mode=direct -> copy: {why}");
+                t.direct.fall_back();
+                if let Some(w) = t.window.as_mut() {
+                    w.forget_geometry();
+                }
+                return false;
+            }
+        }
+        t.direct.host_time.add(started.elapsed().as_micros() as u64);
+        if shown != full && !t.clamp_logged {
+            t.clamp_logged = true;
+            let limit = post_limit(t.view_size, output);
+            lwarn!("toplevel {id}: frame {}x{} is over the limit {}x{}; showing its top-left part", full.2, full.3, limit.0, limit.1);
+        }
+        t.buffer_size = (desc.width, desc.height);
+        t.shown = shown;
+        t.content = logical;
+        if COPY_LOG.load(Ordering::Relaxed) && t.last_log.elapsed() >= LOG_INTERVAL && t.direct.host_time.frames > 0 {
+            let h = t.direct.host_time;
+            linfo!(
+                "frames toplevel={id} mode=direct kind=dmabuf modifier=0x{:x} buffer={}x{} shown={}x{}+{}+{} frames={} host_us_avg={} host_us_max={}",
+                t.direct.shown_modifier().unwrap_or(desc.modifier),
+                desc.width,
+                desc.height,
+                shown.2,
+                shown.3,
+                shown.0,
+                shown.1,
+                h.frames,
+                h.avg(),
+                h.max_us
+            );
+            t.direct.host_time = HostTime::default();
+            t.last_log = Instant::now();
+        }
+        let size = (t.shown.2, t.shown.3);
+        if size != t.reported_size && t.announced {
+            t.reported_size = size;
+            let (title, app_id) = t.shell.names();
+            self.events.window_changed(id, &title, &app_id, size.0, size.1);
+        }
+        true
     }
 
     pub fn announce(&mut self, i: usize) {
@@ -1009,6 +1147,9 @@ impl State {
         t.id = id;
         t.announced = true;
         t.reported_size = (0, 0);
+        if t.direct.mode == PresentMode::Direct {
+            linfo!("toplevel {id}: mode=direct (new window while direct is on)");
+        }
         if let Some(surface) = t.shell.wl_surface() {
             self.output.enter(&surface);
         }
@@ -1021,6 +1162,7 @@ impl State {
             id: 0,
             shell,
             announced: false,
+            direct: DirectWindow::new(self.direct.new_window_mode()),
             window: None,
             visible: true,
             view_size: None,
@@ -1035,6 +1177,7 @@ impl State {
             reported_size: (0, 0),
             clamp_logged: false,
             last_kind: None,
+            copy_refused_logged: false,
             paced: Paced::new(),
             stats: CopyStats::default(),
             last_log: Instant::now(),
@@ -1049,6 +1192,7 @@ impl State {
         let was_announced = t.announced;
         t.announced = false;
         t.id = 0;
+        t.direct.detach();
         t.window = None;
         t.visible = true;
         t.view_size = None;
@@ -1129,6 +1273,25 @@ fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
     Some((shown, full, map.to_logical(shown)))
 }
 
+/// Experiment: a dmabuf's description for `shown_rect`, without mapping it. None for shm or a
+/// format the host does not take.
+fn dmabuf_desc(buffer: &WlBuffer) -> Option<Desc> {
+    use smithay::backend::allocator::Buffer;
+    let d = smithay::wayland::dmabuf::get_dmabuf(buffer).ok()?;
+    let fourcc = d.format().code as u32;
+    let size = d.size();
+    Some(Desc {
+        kind: Kind::Dmabuf,
+        width: size.w,
+        height: size.h,
+        stride: i32::try_from(d.strides().next()?).ok()?,
+        offset: d.offsets().next()? as i64,
+        fourcc,
+        modifier: u64::from(d.format().modifier),
+        format: pixels::drm_format(fourcc)?,
+    })
+}
+
 /// Copies the shown part of `buffer` (shm or dmabuf) into the toplevel's window. Err with the
 /// platform's code when the post failed; Ok also when the buffer could not be read (logged,
 /// nothing posted, the window keeps its previous frame).
@@ -1183,7 +1346,7 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &m
     if COPY_LOG.load(Ordering::Relaxed) && t.last_log.elapsed() >= LOG_INTERVAL && t.stats.frames > 0 {
         let s = &t.stats;
         linfo!(
-            "copy toplevel={} kind={} buffer={}x{} shown={}x{}+{}+{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
+            "copy toplevel={} mode=copy kind={} buffer={}x{} shown={}x{}+{}+{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={} host_us_avg={} host_us_max={}",
             id,
             desc.kind.name(),
             t.buffer_size.0,
@@ -1197,9 +1360,12 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &m
             s.last_copy_us,
             s.copy_us_sum / s.frames as u64,
             s.copy_us_max,
-            s.total_us_sum / s.frames as u64
+            s.total_us_sum / s.frames as u64,
+            t.direct.host_time.avg(),
+            t.direct.host_time.max_us
         );
         t.stats = CopyStats::default();
+        t.direct.host_time = HostTime::default();
         t.last_log = Instant::now();
     }
     posted
@@ -1332,6 +1498,7 @@ impl BufferHandler for State {
         }
         self.loose_releases.retain(|b| b != buffer);
         self.maps.forget(buffer);
+        self.direct.forget(buffer);
     }
 }
 
@@ -1344,7 +1511,13 @@ impl DmabufHandler for State {
     /// covering the width. Anything else fails with the protocol's own error (`failed` for
     /// create, a protocol error for create_immed).
     fn dmabuf_imported(&mut self, _global: &DmabufGlobal, dmabuf: Dmabuf, notifier: ImportNotifier) {
-        match source::check_import(&dmabuf) {
+        // Experiment: a modifier the copy cannot read is taken when the direct presenter can
+        // import it (advertised only while direct is on).
+        let checked = match source::check_import(&dmabuf) {
+            Err("modifier") if self.direct.can_import(&dmabuf) => Ok(()),
+            other => other,
+        };
+        match checked {
             Ok(()) => {
                 if notifier.successful::<State>().is_err() {
                     lwarn!("dmabuf import: the client went away");
