@@ -61,6 +61,10 @@ public final class LinuxWindowsActivity extends Activity {
     private static final int DUMP_TRIES = 5;
 
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
+    /** {@code putExtra(EXTRA_OPENING, true)}: the runner opened the screen with an app just started. */
+    static final String EXTRA_OPENING = "opening";
+    /** How long "no Linux apps" shows before the screen closes itself. */
+    private static final long NO_APPS_CLOSE_MS = 2500;
     private static final float UNSHOWN_TAB_ALPHA = 0.7f;
     /** The shown tab's wash over the wallpaper. */
     private static final int SHOWN_TAB_BACKGROUND = 0x33FFFFFF;
@@ -84,6 +88,27 @@ public final class LinuxWindowsActivity extends Activity {
     private boolean mDumpPending;
     /** The host reported running and has not since stopped. */
     private boolean mHostRunning;
+    private boolean mHostStarting;
+    /** The host has said its state, or could not be reached. */
+    private boolean mStateKnown;
+    /** The host died or could not be reached. */
+    private boolean mStopped;
+    /** The runner's launch gave up waiting for the host. */
+    private boolean mLaunchFailed;
+    /** The runner opened this screen for an app it just started: "Opening" until it has a window. */
+    private boolean mOpeningExtra;
+    private boolean mOpeningExpired;
+    private final Runnable mCloseWhenEmpty = () -> {
+        if (mTabs.size() == 0 && !isFinishing()) finish();
+    };
+    private final Runnable mOpeningExpiry = () -> {
+        mOpeningExpired = true;
+        settle();
+    };
+    private final WaylandAppRunner.PendingListener mPendingListener = started -> {
+        if (!started) mLaunchFailed = true;
+        settle();
+    };
 
     private ILinuxWindows mService;
     private IBinder mServiceBinder;
@@ -455,14 +480,50 @@ public final class LinuxWindowsActivity extends Activity {
         mEmpty = shadowedText();
         mEmpty.setGravity(Gravity.CENTER);
         mEmpty.setPadding(dp(24), dp(24), dp(24), dp(24));
-        mEmpty.setText(R.string.linux_windows_opening);
         mWindowHost.addView(mEmpty, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(mWindowHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
 
+        mOpeningExtra = getIntent() != null && getIntent().getBooleanExtra(EXTRA_OPENING, false);
+        WaylandAppRunner.shared(this).setPendingListener(mPendingListener);
+        settle();
         handleDumpIntent(getIntent());
         connect();
+    }
+
+    /**
+     * What the empty area says, and whether the screen closes itself. "Opening" only while a launch
+     * is in flight; with no host and nothing launching it says so plainly and closes after a moment
+     * (never starting the host: its Start is the developer row's).
+     */
+    private void settle() {
+        if (isDestroyed() || mEmpty == null) return;
+        mMain.removeCallbacks(mCloseWhenEmpty);
+        if (mTabs.size() > 0) return;
+        boolean opening = WaylandAppRunner.shared(this).launchPending() || mHostStarting
+            || (mOpeningExtra && !mOpeningExpired && (mHostRunning || !mStateKnown));
+        boolean close = false;
+        int text;
+        if (mStopped && mHadWindow) {
+            text = R.string.linux_windows_stopped;
+        } else if (opening) {
+            text = R.string.linux_windows_opening;
+        } else if (mLaunchFailed) {
+            text = R.string.linux_wayland_start_failed;
+            close = true;
+        } else if (!mStateKnown) {
+            text = 0;
+        } else {
+            text = R.string.linux_windows_no_apps;
+            close = true;
+        }
+        CharSequence current = mEmpty.getText();
+        CharSequence wanted = text == 0 ? "" : getString(text);
+        if (!TextUtils.equals(current, wanted)) mEmpty.setText(wanted);
+        mEmpty.setVisibility(View.VISIBLE);
+        // The developer row open means the developer is driving the host by hand.
+        if (close && mDevBar.getVisibility() != View.VISIBLE) mMain.postDelayed(mCloseWhenEmpty, NO_APPS_CLOSE_MS);
     }
 
     /** Developer controls; their words are not product copy. */
@@ -576,6 +637,7 @@ public final class LinuxWindowsActivity extends Activity {
 
     private boolean toggleDevBar() {
         mDevBar.setVisibility(mDevBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        settle();
         return true;
     }
 
@@ -631,9 +693,16 @@ public final class LinuxWindowsActivity extends Activity {
     private void hostState(int state, String message) {
         if (isDestroyed()) return;
         mHostRunning = state == ILinuxWindows.STATE_RUNNING;
+        mHostStarting = state == ILinuxWindows.STATE_STARTING;
+        mStateKnown = true;
+        if (mHostRunning || mHostStarting) mStopped = false;
         switch (state) {
             case ILinuxWindows.STATE_RUNNING:
                 mStatus.setText("Host pid " + mHostPid + ". " + message);
+                if (mOpeningExtra && !mOpeningExpired) {
+                    mMain.removeCallbacks(mOpeningExpiry);
+                    mMain.postDelayed(mOpeningExpiry, WaylandAppRunner.START_TIMEOUT_MS);
+                }
                 if (mDumpPending) {
                     mDumpPending = false;
                     // The replayed windows arrive after the state; give them a moment.
@@ -652,14 +721,17 @@ public final class LinuxWindowsActivity extends Activity {
                 mStatus.setText(TextUtils.isEmpty(message) ? "Stopped." : message);
                 break;
         }
+        settle();
     }
 
     /** The host is gone: the empty area says so; the developer bar says why. */
     private void showStopped(String why) {
         if (mStatus != null) mStatus.setText(why);
-        if (mEmpty == null) return;
-        mEmpty.setText(R.string.linux_windows_stopped);
-        mEmpty.setVisibility(mTabs.size() == 0 ? View.VISIBLE : View.GONE);
+        mStopped = true;
+        mStateKnown = true;
+        mHostRunning = false;
+        mHostStarting = false;
+        settle();
     }
 
     /** The host process died: drop its views and say so once. */
@@ -813,6 +885,12 @@ public final class LinuxWindowsActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (intent != null && intent.getBooleanExtra(EXTRA_OPENING, false)) {
+            mOpeningExtra = true;
+            mOpeningExpired = false;
+            mLaunchFailed = false;
+            settle();
+        }
         handleDumpIntent(intent);
     }
 
@@ -889,6 +967,9 @@ public final class LinuxWindowsActivity extends Activity {
     @Override
     protected void onDestroy() {
         // The host keeps running; only this screen's views and listener go.
+        WaylandAppRunner.shared(this).setPendingListener(null);
+        mMain.removeCallbacks(mCloseWhenEmpty);
+        mMain.removeCallbacks(mOpeningExpiry);
         if (mService != null) {
             for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).detach();
             try {
