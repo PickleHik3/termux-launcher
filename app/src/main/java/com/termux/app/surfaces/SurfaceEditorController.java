@@ -3491,14 +3491,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull
     private String lookStopName(int stop) {
-        switch (AppearanceLooks.presetIdForStop(stop) == null ? "custom"
-            : AppearanceLooks.presetIdForStop(stop)) {
-            case "minimal": return getString(R.string.termux_surface_preset_minimal);
-            case "frost": return getString(R.string.termux_surface_preset_frost);
-            case "stock": return getString(R.string.termux_surface_preset_stock);
-            case "solid": return getString(R.string.termux_surface_preset_solid);
-            default: return getString(R.string.termux_surface_preset_custom);
-        }
+        // Each Look names itself; a stop with no Look is Custom.
+        SurfacePresets.Preset preset =
+            AppearanceLooks.presetForStop(SurfacePresets.presets(), stop);
+        return getString(preset != null ? preset.nameRes : R.string.termux_surface_preset_custom);
     }
 
     @NonNull

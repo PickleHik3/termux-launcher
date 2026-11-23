@@ -47,6 +47,16 @@ public class AppearanceLooksTest {
         assertNull(AppearanceLooks.presetForStop(presets, AppearanceLooks.CUSTOM_STOP));
     }
 
+    /** The editor labels a stop by its Look's own name, so no shipped Look reads as Custom. */
+    @Test
+    public void everyLookStopHasItsOwnNameNotCustoms() {
+        java.util.Set<Integer> names = new java.util.HashSet<>();
+        for (SurfacePresets.Preset preset : SurfacePresets.presets()) {
+            assertTrue(preset.id, preset.nameRes != com.termux.R.string.termux_surface_preset_custom);
+            assertTrue(preset.id, names.add(preset.nameRes));
+        }
+    }
+
     @Test
     public void presetIdsAndStopsRoundTrip() {
         for (int stop = 0; stop < AppearanceLooks.CUSTOM_STOP; stop++)
