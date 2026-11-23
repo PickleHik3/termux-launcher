@@ -61,7 +61,7 @@ public class EditorRowOrderTest {
             .contains(Row.STATUS_POSITION));
         assertEquals("the Keyboard opens on its Form", Row.FORM,
             EditorRows.rows(EditorCard.KEYBOARD, OFFERS[0]).get(0).row);
-        for (Row row : new Row[] {Row.RIM, Row.CONTRAST, Row.HOME_ICON_SIZE, Row.LABEL_SIZE,
+        for (Row row : new Row[] {Row.CONTRAST, Row.HOME_ICON_SIZE, Row.LABEL_SIZE,
                 Row.PAGE_TRANSITION})
             assertEquals(row + " is a small choice", Group.TOGGLES, EditorRows.groupOf(row));
     }
@@ -72,7 +72,6 @@ public class EditorRowOrderTest {
         assertEquals(Group.SLIDERS, EditorRows.groupOf(Row.MARGIN));
         assertEquals("the opacity link stands with the sliders it links", Group.SLIDERS,
             EditorRows.groupOf(Row.OPACITY_LINK));
-        assertEquals(Group.TOGGLES, EditorRows.groupOf(Row.RIM));
         assertEquals(Group.TOGGLES, EditorRows.groupOf(Row.CONTRAST));
         assertEquals(Group.TOGGLES, EditorRows.groupOf(Row.MULTIPLEXER));
         assertEquals(Group.COLOURS, EditorRows.groupOf(Row.TINT_HUE));
@@ -83,14 +82,14 @@ public class EditorRowOrderTest {
     public void headingsTiersAndAGroupsOwnOrderStay() {
         List<Spec> listed = new EditorRows.CardRows()
             .tier(1, Row.MULTIPLEXER, Row.MARGIN, Row.TINT_HUE, Row.CORNERS, Row.LOOK)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_GESTURES, Row.RIM)
+            .tier(3, Row.SECTION_LINKS, Row.LINK_GESTURES, Row.CONTRAST)
             .tier(1, Row.HEIGHT)
             .build();
         List<Row> got = new ArrayList<>();
         for (Spec spec : EditorRows.ordered(listed))
             got.add(spec.row);
         assertEquals(Arrays.asList(Row.LOOK, Row.MARGIN, Row.CORNERS, Row.MULTIPLEXER, Row.TINT_HUE,
-            Row.SECTION_LINKS, Row.RIM, Row.LINK_GESTURES, Row.HEIGHT), got);
+            Row.SECTION_LINKS, Row.CONTRAST, Row.LINK_GESTURES, Row.HEIGHT), got);
     }
 
     @Test

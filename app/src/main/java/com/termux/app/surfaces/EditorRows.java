@@ -85,10 +85,6 @@ public final class EditorRows {
          */
         FROST(Kind.SLIDER, R.string.appearance_row_frost, R.drawable.ic_editor_blur),
         CORNERS(Kind.SLIDER, R.string.appearance_row_corners, R.drawable.ic_editor_corners),
-        /** The glass's grain at the chips' cell, 0 to 100%. */
-        GRAIN(Kind.SLIDER, R.string.appearance_row_grain, R.drawable.ic_editor_grain),
-        /** The glass's rim at the chips' cell: None, Hairline or Bright. */
-        RIM(Kind.SEGMENTS, R.string.appearance_row_rim, R.drawable.ic_editor_corners),
         MARGIN(Kind.SLIDER, R.string.appearance_row_margin, R.drawable.ic_editor_margin),
         DEPTH(Kind.SLIDER, R.string.appearance_row_depth, R.drawable.ic_editor_depth),
         /**
@@ -171,7 +167,6 @@ public final class EditorRows {
             R.drawable.ic_ed_wallpaper_colours),
         FULL_SCREEN(Kind.SWITCH, R.string.appearance_row_full_screen, R.drawable.ic_editor_full_screen),
         MINIMAL(Kind.SWITCH, R.string.appearance_row_minimal, R.drawable.ic_corner_minimal_enter),
-        VIBRANCY(Kind.SLIDER, R.string.appearance_row_vibrancy, R.drawable.ic_editor_tint),
         TINT_HUE(Kind.MENU, R.string.appearance_row_tint_hue, R.drawable.ic_editor_tint),
         SHINE(Kind.SLIDER, R.string.appearance_row_shine, R.drawable.ic_editor_depth),
         TOOL_COLOURS(Kind.LINK, R.string.appearance_row_tool_colours, R.drawable.ic_rl_terminal),
@@ -293,7 +288,7 @@ public final class EditorRows {
         PINNED_NOTIFICATIONS(Kind.LINK, R.string.settings_essential_notifications_title,
             R.drawable.ic_ms_push_pin),
         // The Pane borders card's rows (cards/PaneBordersCard), drawn by that card through
-        // EditorCardSheet.Model#rowView; the Kind is the stand-in. Rim is RIM itself.
+        // EditorCardSheet.Model#rowView; the Kind is the stand-in.
         /** The three frames, Normal, Focused and Attention, in the panes' own drawables. */
         PANE_PREVIEW(Kind.MENU, R.string.appearance_row_pane_borders, 0),
         PANE_BORDER_COLOUR(Kind.SEGMENTS, R.string.appearance_row_border_colour,
@@ -449,7 +444,7 @@ public final class EditorRows {
      * The groups a container's rows stand in, in order (developer, 2026-11-04): the Look and the
      * structural choices beside it (what kind of thing the card is: the dock's Type, the bar's
      * Position, the keyboard's Form), the sliders (the opacity link with them, between the two
-     * it links), the toggles and small choices (switches, tiles, segments such as Rim and
+     * it links), the toggles and small choices (switches, tiles, segments such as
      * Contrast, menus), the colours (pickers and swatches), then the links. Spacing, not a
      * heading, separates them.
      */

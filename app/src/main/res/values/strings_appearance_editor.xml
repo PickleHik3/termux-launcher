@@ -132,14 +132,7 @@
     <string name="appearance_row_wallpaper_colours">Dynamic colour</string>
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
-    <string name="appearance_row_vibrancy">Vibrancy</string>
     <string name="appearance_row_tint_hue">Accent</string>
-    <string name="appearance_row_grain">Grain</string>
-    <!-- The light line around the glass: none, a hairline, or a bright one. -->
-    <string name="appearance_row_rim">Rim strength</string>
-    <string name="appearance_rim_none">None</string>
-    <string name="appearance_rim_hairline">Thin</string>
-    <string name="appearance_rim_bright">Bright</string>
     <!-- The Pane borders card under the Terminal card (#206). -->
     <string name="appearance_row_pane_borders">Pane borders</string>
     <string name="appearance_row_border_colour">Border colour</string>
@@ -183,7 +176,6 @@
     <!-- Row values. -->
     <string name="appearance_readout_percent">%1$d%%</string>
     <string name="appearance_readout_dp">%1$d dp</string>
-    <string name="appearance_readout_times">%1$s×</string>
 
     <!-- Segment choices: short, so three fit a phone at a large font size. -->
     <string name="appearance_contrast_softer">Softer</string>

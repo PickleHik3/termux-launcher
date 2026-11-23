@@ -23,8 +23,8 @@ public class GlassRowsTest {
 
     /** The shared Appearance block, after its heading (appearance-cards overhaul §2). */
     private static final java.util.List<Row> BLOCK = Arrays.asList(Row.SECTION_APPEARANCE,
-        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.SHINE,
-        Row.DEPTH, Row.RIM, Row.TINT_HUE);
+        Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT, Row.CORNERS, Row.SHINE,
+        Row.DEPTH, Row.TINT_HUE);
 
     /** The terminal's glass card wears the whole Appearance block until #287 turns it into Background. */
     @Test
@@ -42,7 +42,7 @@ public class GlassRowsTest {
 
     /**
      * The status bar, the dock and the keyboard own Opacity and Blur only (ADR 0031 §2): their
-     * Appearance holds those two and the surface's own extras, never Grain, Tint or the rest.
+     * Appearance holds those two and the surface's own extras, never Tint or the rest.
      */
     @Test
     public void theChromeCardsHoldOpacityAndBlurOnly() {
@@ -51,8 +51,8 @@ public class GlassRowsTest {
             java.util.List<Row> rows = rowsOf(card, ALL);
             assertTrue(card + " Opacity", rows.contains(Row.OPACITY));
             assertTrue(card + " Blur", rows.contains(Row.FROST));
-            for (Row gone : new Row[] {Row.LOOK, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
-                    Row.RIM, Row.SHINE, Row.DEPTH, Row.VIBRANCY, Row.LINK_GLASS_REFRACTION})
+            for (Row gone : new Row[] {Row.LOOK, Row.TINT, Row.TINT_HUE, Row.CORNERS,
+                    Row.SHINE, Row.DEPTH, Row.LINK_GLASS_REFRACTION})
                 assertFalse(card + " " + gone, rows.contains(gone));
         }
     }

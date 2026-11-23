@@ -131,7 +131,6 @@ public class KeyboardHomeGlobalCardsTest {
         EditorCardSheet.Model model = model(editor);
         assertFalse("the Terminal is on a Look, not Custom",
             AppearanceLooks.isCustomStop(model.value(Row.LOOK)));
-        assertTrue(model.shown(Row.VIBRANCY));
         assertTrue(model.shown(Row.SHINE));
         assertTrue(model.shown(Row.DEPTH));
         assertEquals(3, looks(editor).swatches(Row.TINT_HUE).length);

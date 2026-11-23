@@ -73,8 +73,6 @@ public class AppearanceLooksTest {
     public void controlRangesAreTheStoredRanges() {
         assertEquals(0, Control.GLASS.min);
         assertEquals(100, Control.GLASS.max);
-        assertEquals("0.7x", 70, Control.VIBRANCY.min);
-        assertEquals("1.5x", 150, Control.VIBRANCY.max);
         assertEquals("Edge: no fringe", 0, Control.SHINE.min);
         assertEquals("Edge: the bold edge", 100, Control.SHINE.max);
         assertEquals(AppearanceLooks.KEY_CORNERS_MAX_DP, Control.KEY_RADIUS.max);

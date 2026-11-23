@@ -226,7 +226,7 @@ public class EditorRowsTest {
         for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
             Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP,
             Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
-            Row.VIBRANCY, Row.SHINE})
+            Row.SHINE})
             assertEquals(row + " is vertical", Kind.SLIDER, row.kind);
         for (Row row : Row.values()) {
             if (row != Row.LOOK)
@@ -269,7 +269,7 @@ public class EditorRowsTest {
 
     @Test
     public void allSurfacesIsTheGlassAndTheTextSize() {
-        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.SHINE, Row.VIBRANCY,
+        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.SHINE,
             Row.DEPTH, Row.TEXT_SIZE})
             assertTrue(row.name(), EditorRows.isAllSurfaces(row));
         assertFalse(EditorRows.isAllSurfaces(Row.LOOK));

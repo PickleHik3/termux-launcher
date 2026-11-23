@@ -79,7 +79,7 @@ public final class AppearanceLooks {
      * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
      * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; Key opacity
      * the caps' opacity in percent (stored -1 leaves it to the theme); the others are their own units (dp, percent, a count, a stop). Glass is 0 to 100 over blur and grain
-     * ({@link GlassControls}); Vibrancy the frame's saturation in percent, 70 to 150. Shine and
+     * ({@link GlassControls}); Shine and
      * Depth are the glass's, app-wide, both 0 to 100 ({@link GlassMaterial},
      * {@link GlassEdgeControls}). Text size is the shared size of the type the launcher draws, in
      * percent of each surface's own, 80 to 150 in steps of 5. Split gap is the terminal's own: the
@@ -90,7 +90,6 @@ public final class AppearanceLooks {
         OPACITY(0, OPACITY_MAX, 1),
         TINT(0, TINT_MAX, 1),
         SHINE(GlassMaterial.MIN, GlassMaterial.MAX, 1),
-        VIBRANCY(TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY, TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY, 1),
         KEY_OPACITY(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_OPACITY,
             TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, 1),
         KEY_RADIUS(0, KEY_CORNERS_MAX_DP, 1),

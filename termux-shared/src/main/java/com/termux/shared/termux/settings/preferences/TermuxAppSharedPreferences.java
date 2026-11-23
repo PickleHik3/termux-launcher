@@ -3967,18 +3967,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             tint == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT : tint, false);
     }
 
-    /** The glass rim a preset chose; {@code hairline} unless it named another that we know. */
+    /** The Global rim cell, which only {@code launcherctl look} writes now; {@code hairline} by default. */
     @NonNull
     public String getSurfaceGlassRim() {
         switch (lookGrid().value(LookGrid.Property.RIM, null)) {
             case LookGrid.RIM_GRADIENT: return TERMUX_APP.GLASS_RIM_GRADIENT;
             default: return TERMUX_APP.GLASS_RIM_HAIRLINE;
         }
-    }
-
-    public void setSurfaceGlassRim(@Nullable String rim) {
-        lookGrid().write(LookGrid.Property.RIM, null,
-            LookGridMigration.rimOf(rim == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM : rim));
     }
 
     /** The glass motion profile a preset chose; {@code classic} unless it named another we know. */
