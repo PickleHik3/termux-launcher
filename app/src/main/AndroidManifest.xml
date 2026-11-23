@@ -185,6 +185,15 @@
             </intent-filter>
         </activity-alias>
 
+        <!-- Spike: Linux Wayland apps, one view per window, over the wallpaper. Started by hand
+             with am start; not part of the product. -->
+        <activity
+            android:name=".app.wayland.WaylandSpikeActivity"
+            android:exported="false"
+            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
+            android:taskAffinity="${TERMUX_PACKAGE_NAME}.wayland"
+            android:theme="@style/Theme.TermuxActivity.Wallpaper" />
+
         <!-- The help centre: the whole guide, read on a screen of its own. -->
         <activity
             android:name=".app.help.HelpActivity"
