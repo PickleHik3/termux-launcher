@@ -14,9 +14,16 @@ pub const WARN: c_int = 5;
 pub const ERROR: c_int = 6;
 
 pub fn write(prio: c_int, msg: &str) {
+    write_tagged(TAG, prio, msg);
+}
+
+/// Logs under another tag; `tag` must end in a NUL byte.
+pub fn write_tagged(tag: &[u8], prio: c_int, msg: &str) {
+    debug_assert_eq!(tag.last(), Some(&0));
     let text = CString::new(msg.replace('\0', " ")).unwrap_or_default();
+    // SAFETY: both pointers are NUL-terminated strings that live across the call.
     unsafe {
-        __android_log_write(prio, TAG.as_ptr() as *const c_char, text.as_ptr());
+        __android_log_write(prio, tag.as_ptr() as *const c_char, text.as_ptr());
     }
 }
 

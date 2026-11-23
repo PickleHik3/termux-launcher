@@ -6,7 +6,9 @@
 #     /tmp, which Android does not have), in wayland-host/target/patched/,
 #   - libtlwayland.so, copied into <outdir>/<abi>/ (first argument; Gradle passes
 #     app/build/wayland/jniLibs; default wayland-host/target/jniLibs),
-#   - the test client, left in wayland-host/target/<triple>/release/tlwayland-testclient.
+#   - the test client, left in wayland-host/target/<triple>/release/tlwayland-testclient,
+#   - the AHB probe client (arm64 only), left in
+#     wayland-host/target/aarch64-linux-android/release/tlwayland-ahbclient.
 # Run by Gradle with -Pwayland=true; by hand: scripts/build-wayland-host.sh [outdir].
 # Needs: rustup with the Android targets (aarch64-linux-android, x86_64-linux-android,
 # armv7-linux-androideabi, i686-linux-android for x86), cargo-ndk, the NDK, ninja, bison, and meson
@@ -185,6 +187,12 @@ done
 
 cargo ndk "${NDK_ARGS[@]}" -P "$API" -o "$OUT_DIR" build --release -p tlwayland
 cargo ndk "${NDK_ARGS[@]}" -P "$API" build --release -p tlwayland-testclient
+# The AHB probe (E3) only means anything on an Adreno phone.
+if [[ " ${ABIS[*]} " == *" arm64-v8a "* ]]; then
+    cargo ndk -t arm64-v8a -P "$API" build --release -p tlwayland-ahbclient
+    ahbclient="$TARGET_DIR/aarch64-linux-android/release/tlwayland-ahbclient"
+    echo "arm64-v8a: $(stat -c %s "$ahbclient") bytes $ahbclient"
+fi
 
 for abi in "${ABIS[@]}"; do
     so="$OUT_DIR/$abi/libtlwayland.so"

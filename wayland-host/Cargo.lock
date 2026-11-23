@@ -700,6 +700,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "tlwayland-ahbclient"
+version = "0.1.0"
+dependencies = [
+ "ash",
+ "libc",
+]
+
+[[package]]
 name = "tlwayland-testclient"
 version = "0.1.0"
 dependencies = [

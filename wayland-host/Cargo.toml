@@ -2,7 +2,7 @@
 # toplevel.
 # Built by scripts/build-wayland-host.sh; nothing here is committed as a binary.
 [workspace]
-members = [".", "testclient"]
+members = [".", "testclient", "ahbclient"]
 resolver = "2"
 
 [package]

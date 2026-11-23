@@ -1,0 +1,15 @@
+[package]
+name = "tlwayland-ahbclient"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Feasibility probe E3: imports a buffer the launcher allocated as Vulkan memory and clears it.
+# Run from the Termux prefix; loads the prefix's libvulkan.so at run time.
+[[bin]]
+name = "tlwayland-ahbclient"
+path = "src/main.rs"
+
+[dependencies]
+ash = "0.38"
+libc = "0.2"

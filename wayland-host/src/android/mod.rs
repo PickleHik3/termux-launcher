@@ -5,6 +5,7 @@
 //! these calls carry are `crate::protocol`'s, mirrored from `ILinuxWindows.aidl`.
 
 pub mod log;
+mod ahb;
 mod focus;
 mod host;
 mod java;
@@ -343,5 +344,50 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeDumpWindow<
         if let Some(path) = java_string(&mut env, &path) {
             send(Command::Dump { id, path });
         }
+    })
+}
+
+/// Debug (AHB probe E1): writes the test pattern for `frame` into `buffer` (a HardwareBuffer the
+/// service allocated with CPU write usage). False when the buffer cannot be locked.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeAhbFill<'l>(
+    env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    buffer: JObject<'l>,
+    frame: jint,
+) -> jboolean {
+    guarded("nativeAhbFill", JNI_FALSE, || {
+        if buffer.is_null() {
+            return JNI_FALSE;
+        }
+        if ahb::fill(env.get_raw(), buffer.as_raw(), frame) {
+            JNI_TRUE
+        } else {
+            JNI_FALSE
+        }
+    })
+}
+
+/// Debug (AHB probe E2): logs the layout of AHardwareBuffers of several usages, on a thread of
+/// its own.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeAhbLayoutProbe<'l>(_env: JNIEnv<'l>, _class: JClass<'l>) {
+    guarded("nativeAhbLayoutProbe", (), ahb::spawn_layout_probe)
+}
+
+/// Debug (AHB probe E3): hands an AHardwareBuffer's fd to the first client on `socketPath`,
+/// waits for it, reads the colour back and returns the buffer as a HardwareBuffer (or null).
+/// Blocks for up to about three minutes: call it off the main thread.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeAhbServeClient<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    variant: jint,
+    modifier: jint,
+    socket_path: JString<'l>,
+) -> jni::sys::jobject {
+    guarded("nativeAhbServeClient", std::ptr::null_mut(), || {
+        let Some(path) = java_string(&mut env, &socket_path) else { return std::ptr::null_mut() };
+        ahb::serve_client(env.get_raw(), variant, modifier, &path)
     })
 }
