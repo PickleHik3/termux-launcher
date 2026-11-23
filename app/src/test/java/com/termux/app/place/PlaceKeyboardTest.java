@@ -18,6 +18,16 @@ public class PlaceKeyboardTest {
     private static final PageKind WINDOW = PageKind.TERMINAL;
 
     @Test
+    public void backClosesTheKeyboardOnHomeOnlyWhenItIsUpAndNotAlwaysOn() {
+        assertTrue(PlaceKeyboard.backClosesKeyboard(HOME, true, false));
+        assertFalse("nothing up, nothing to close", PlaceKeyboard.backClosesKeyboard(HOME, false, false));
+        assertFalse("always on keeps it", PlaceKeyboard.backClosesKeyboard(HOME, true, true));
+        assertFalse("the Terminal's Back keeps its meaning", PlaceKeyboard.backClosesKeyboard(WINDOW, true, false));
+        assertFalse("the Display's Back keeps its meaning",
+            PlaceKeyboard.backClosesKeyboard(PageKind.DISPLAY, true, false));
+    }
+
+    @Test
     public void homeComesBackAsItWasLeftAndIsAlwaysUpWhileAlwaysOn() {
         assertTrue("Home remembers its keyboard per visit",
             PlaceKeyboard.keyboardOnEnter(HOME, true, false, false));

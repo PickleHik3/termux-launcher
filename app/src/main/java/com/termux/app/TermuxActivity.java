@@ -21207,6 +21207,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new String(Character.toChars(codePoint)), floatFocused);
             }
         });
+        // Home's keyboard: with nothing raised over the page left to take Back, it puts the
+        // keyboard down (and Home's memory with it) before the page's own Back runs.
+        registry.register(() -> {
+            if (!com.termux.app.place.PlaceKeyboard.backClosesKeyboard(
+                    mLastWallPage, committedKeyboardVisible(), isHomeKeyboardAlwaysOn())
+                || !mPages.isCommitted(com.termux.app.page.PageKind.HOME)) return false;
+            applyBorderKeyboardSwipe(false, true);
+            rememberPlaceKeyboard(com.termux.app.page.PageKind.HOME, false);
+            return true;
+        });
         // The page tail of the Back chain (ADR 0030 section 3): everything above is raised over
         // the page; then the front page's Back, then Home page 1. Reads mPages when asked, never
         // when registered, because this runs at field initialisation.
