@@ -1,11 +1,13 @@
 #!/usr/bin/env bash
-# Builds the Wayland host spike (wayland-host/) for arm64-v8a and x86_64:
+# Builds the Wayland host spike (wayland-host/) for arm64-v8a, x86_64 and armeabi-v7a (x86 on
+# request, see WAYLAND_ABIS below):
 #   - libxkbcommon as a static library (smithay links it unconditionally),
 #   - smithay 0.7.0 with wayland-host/patches/*.patch applied (its Xwayland support hardcodes
 #     /tmp, which Android does not have), in wayland-host/target/patched/,
 #   - libtlwayland.so, copied into app/src/main/jniLibs/<abi>/ (gitignored),
 #   - the test client, left in wayland-host/target/<triple>/release/tlwayland-testclient.
-# Needs: rustup with the two Android targets, cargo-ndk, the NDK, ninja, bison, and meson
+# Needs: rustup with the Android targets (aarch64-linux-android, x86_64-linux-android,
+# armv7-linux-androideabi, i686-linux-android for x86), cargo-ndk, the NDK, ninja, bison, and meson
 # (taken from PATH, else run through `uvx`).
 set -euo pipefail
 
@@ -15,7 +17,9 @@ TARGET_DIR="$CRATE/target"
 export PATH="$HOME/.cargo/bin:$PATH"
 export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/29.0.14206865}"
 API=26
-ABIS=(arm64-v8a x86_64)
+# The ABIs the app ships (app/build.gradle abiFilters). x86 also builds, but no APK carries it:
+# WAYLAND_ABIS="arm64-v8a x86_64 armeabi-v7a x86".
+read -r -a ABIS <<< "${WAYLAND_ABIS:-arm64-v8a x86_64 armeabi-v7a}"
 
 SMITHAY_VERSION=0.7.0
 SMITHAY_SHA256=740cea6927892bc182d5bf70c8f79806c8bc9f68f2fb96e55a30be171b63af98
@@ -30,10 +34,30 @@ else
     MESON=(uvx --from meson==1.6.1 meson)
 fi
 
+# Rust's target triple.
 triple_for() {
     case "$1" in
         arm64-v8a) echo aarch64-linux-android ;;
         x86_64) echo x86_64-linux-android ;;
+        armeabi-v7a) echo armv7-linux-androideabi ;;
+        x86) echo i686-linux-android ;;
+    esac
+}
+
+# The NDK's clang prefix, which differs from Rust's triple for armv7.
+clang_for() {
+    case "$1" in
+        armeabi-v7a) echo armv7a-linux-androideabi ;;
+        *) triple_for "$1" ;;
+    esac
+}
+
+cpu_family_for() {
+    case "$1" in
+        arm64-v8a) echo aarch64 ;;
+        x86_64) echo x86_64 ;;
+        armeabi-v7a) echo arm ;;
+        x86) echo x86 ;;
     esac
 }
 
@@ -41,13 +65,16 @@ cpu_for() {
     case "$1" in
         arm64-v8a) echo aarch64 ;;
         x86_64) echo x86_64 ;;
+        armeabi-v7a) echo armv7 ;;
+        x86) echo i686 ;;
     esac
 }
 
 build_xkbcommon() {
-    local abi="$1" triple cpu src prefix build cross llvm
-    triple="$(triple_for "$abi")"
+    local abi="$1" clang cpu family src prefix build cross llvm
+    clang="$(clang_for "$abi")"
     cpu="$(cpu_for "$abi")"
+    family="$(cpu_family_for "$abi")"
     src="$TARGET_DIR/xkbcommon/src/libxkbcommon-xkbcommon-$XKB_VERSION"
     prefix="$TARGET_DIR/xkbcommon/$abi"
     build="$TARGET_DIR/xkbcommon/build-$abi"
@@ -65,13 +92,13 @@ build_xkbcommon() {
     cross="$TARGET_DIR/xkbcommon/cross-$abi.txt"
     cat > "$cross" <<EOF
 [binaries]
-c = '$llvm/$triple$API-clang'
+c = '$llvm/$clang$API-clang'
 ar = '$llvm/llvm-ar'
 strip = '$llvm/llvm-strip'
 
 [host_machine]
 system = 'android'
-cpu_family = '$cpu'
+cpu_family = '$family'
 cpu = '$cpu'
 endian = 'little'
 EOF
@@ -129,6 +156,8 @@ done
 # The static libxkbcommon.a satisfies the xkbcommon crate's `-lxkbcommon`.
 export CARGO_TARGET_AARCH64_LINUX_ANDROID_RUSTFLAGS="-L native=$TARGET_DIR/xkbcommon/arm64-v8a/lib"
 export CARGO_TARGET_X86_64_LINUX_ANDROID_RUSTFLAGS="-L native=$TARGET_DIR/xkbcommon/x86_64/lib"
+export CARGO_TARGET_ARMV7_LINUX_ANDROIDEABI_RUSTFLAGS="-L native=$TARGET_DIR/xkbcommon/armeabi-v7a/lib"
+export CARGO_TARGET_I686_LINUX_ANDROID_RUSTFLAGS="-L native=$TARGET_DIR/xkbcommon/x86/lib"
 
 cd "$CRATE"
 NDK_ARGS=()
