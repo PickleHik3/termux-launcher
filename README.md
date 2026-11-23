@@ -175,7 +175,7 @@ Questions, setups and ideas all go to the [Discord server](https://discord.gg/sW
 
 Termux Launcher is a modified Termux/Termux:Monet distribution, developed from 2026 onward and
 released under GPLv3-only. It is an independent fork with no affiliation to the official Termux
-project. See [LICENSE](LICENSE), [license exceptions](LICENSE-EXCEPTIONS.md), and
+project. See [LICENSE](LICENSE), the other license texts in [LICENSES](LICENSES), and
 [open-source notices](THIRD_PARTY_NOTICES.md). The Android app exposes the same notices under
 **Settings > Open-source licenses**.
 

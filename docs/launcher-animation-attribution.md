@@ -13,4 +13,4 @@ Upstream references:
 
 License:
 
-- Apache License 2.0 (`LICENSE-LAWNCHAIR-APACHE-2.0`)
+- Apache License 2.0 (`LICENSES/Apache-2.0.txt`)

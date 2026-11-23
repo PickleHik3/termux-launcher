@@ -595,20 +595,17 @@ tasks.register("generateLicenseResources", Copy) {
     from(rootProject.file("LICENSE")) {
         rename { "license_gpl_3.txt" }
     }
-    from(rootProject.file("LICENSE-TERMINAL-EMULATOR")) {
+    from(rootProject.file("LICENSES/Apache-2.0.txt")) {
         rename { "license_apache_2.txt" }
     }
-    from(rootProject.file("LICENSE-TERMUX-SHARED")) {
+    from(rootProject.file("LICENSES/MIT-Termux.txt")) {
         rename { "license_mit.txt" }
     }
-    from(rootProject.file("LICENSE-LIBCORE-OJLUNI")) {
+    from(rootProject.file("LICENSES/GPL-2.0-with-Classpath-exception.txt")) {
         rename { "license_gpl_2_classpath.txt" }
     }
-    from(rootProject.file("LICENSE-BSD-2-CLAUSE")) {
+    from(rootProject.file("LICENSES/BSD-2-Clause-commonmark.txt")) {
         rename { "license_bsd_2_clause.txt" }
-    }
-    from(rootProject.file("LICENSE-UNEXPECTED-KEYBOARD")) {
-        rename { "license_gpl_3_unexpected_keyboard.txt" }
     }
 }
 
