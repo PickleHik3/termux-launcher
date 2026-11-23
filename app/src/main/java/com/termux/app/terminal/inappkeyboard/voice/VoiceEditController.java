@@ -8,7 +8,6 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.CommandPaletteSoftKeyDecision;
 import com.termux.app.terminal.FocuslessKeyIntake;
-import com.termux.app.terminal.inappkeyboard.FieldEditor;
 
 import java.util.Collections;
 import java.util.List;
@@ -65,24 +64,8 @@ public final class VoiceEditController extends FocuslessKeyIntake {
         this.host = host;
         this.model = new VoiceEditModel(text, caretUtf16, marks);
         active = true;
-        resetFieldEdits();
         host.onDraftChanged(model);
     }
-
-    /** The draft, as the in-app keyboard's editing keys see it. */
-    private final FieldEditor.Field field = new FieldEditor.Field() {
-        @Nullable @Override public String fieldText() { return model == null ? null : model.text(); }
-
-        @Override public void replaceFieldText(@NonNull String text) {
-            if (model == null) return;
-            model.replaceAll(text);
-            changed();
-        }
-
-        @Override public void insertFieldText(@NonNull String text) { insert(text); }
-    };
-
-    @Nullable @Override protected FieldEditor.Field editableField() { return field; }
 
     @Override public boolean isActive() { return active; }
 

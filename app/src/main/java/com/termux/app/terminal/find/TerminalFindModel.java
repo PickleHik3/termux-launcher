@@ -111,15 +111,6 @@ public final class TerminalFindModel {
         return Result.HANDLED;
     }
 
-    /** The whole query at once (a cut, an undo); only while it is being typed. */
-    public Result replaceQuery(@NonNull String text) {
-        if (mode != Mode.TYPING) return Result.IGNORED;
-        query.setLength(0);
-        query.append(text);
-        research();
-        return Result.HANDLED;
-    }
-
     public Result backspace() {
         if (mode != Mode.TYPING) return Result.IGNORED;
         if (query.length() == 0) return Result.CLOSED;

@@ -7,7 +7,6 @@ import androidx.annotation.Nullable;
 
 import com.termux.app.terminal.ClipboardText;
 import com.termux.app.terminal.FocuslessKeyIntake;
-import com.termux.app.terminal.inappkeyboard.FieldEditor;
 
 import java.util.List;
 
@@ -44,43 +43,8 @@ public final class TerminalFindController extends FocuslessKeyIntake {
         this.host = host;
         this.model = new TerminalFindModel(snapshot);
         active = true;
-        resetFieldEdits();
         host.onFindChanged(model);
         return true;
-    }
-
-    /** The query while it is typed; once committed there is no text to edit, only the copy mode. */
-    private final FieldEditor.Field queryField = new FieldEditor.Field() {
-        @Nullable @Override public String fieldText() { return model == null ? null : model.query(); }
-
-        @Override public void replaceFieldText(@NonNull String text) {
-            TerminalFindModel current = model;
-            if (current != null) settle(current.replaceQuery(text));
-        }
-
-        @Override public void insertFieldText(@NonNull String text) {
-            TerminalFindModel current = model;
-            if (current != null) settle(current.typeText(text));
-        }
-    };
-
-    @Nullable
-    @Override
-    protected FieldEditor.Field editableField() {
-        TerminalFindModel current = model;
-        return current != null && current.mode() == TerminalFindModel.Mode.TYPING ? queryField : null;
-    }
-
-    /**
-     * Find's own chords: every chord once the query is committed (the copy mode's commands), and
-     * Ctrl+V while typing, which starts a block selection on what is matched.
-     */
-    @Override
-    protected boolean ownsChord(@NonNull String text, boolean ctrl, boolean alt) {
-        TerminalFindModel current = model;
-        if (current == null) return false;
-        if (current.mode() != TerminalFindModel.Mode.TYPING) return true;
-        return ctrl && !alt && (text.equals("v") || text.equals("V"));
     }
 
     @Override public boolean isActive() { return active; }

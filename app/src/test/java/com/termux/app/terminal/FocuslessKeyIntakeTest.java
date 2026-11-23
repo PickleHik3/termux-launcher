@@ -50,8 +50,7 @@ public class FocuslessKeyIntakeTest {
         // A value the editor has no use for is still swallowed rather than typed into the shell.
         assertTrue(intake.interceptKeyValue(
             KeyValue.makeInternalModifier(KeyValue.Modifier.FN), false, false, false));
-        // Ctrl+"bc" is a chord no editing shortcut maps: swallowed, not handed on as text.
-        assertEquals(List.of("text a", "text  ", "backspace", "commit",
+        assertEquals(List.of("text a", "text bc ctrl", "text  ", "backspace", "commit",
             "cursor -3", "cursor 1", "key " + KeyEvent.KEYCODE_MOVE_HOME), intake.edits);
     }
 
