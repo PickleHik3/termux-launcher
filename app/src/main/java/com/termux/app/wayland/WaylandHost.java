@@ -84,6 +84,8 @@ public final class WaylandHost {
     public static native void nativeProbe();
     /** Debug: the once-a-second copy-time line per window. */
     public static native void nativeSetCopyLog(boolean on);
+    /** Debug: write window id's shown pixels as a PNG to path (already checked). */
+    public static native void nativeDumpWindow(long id, String path);
 
     // Called from native code on the compositor thread.
 

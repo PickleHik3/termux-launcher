@@ -9,6 +9,7 @@ pub mod held;
 pub mod keymap;
 pub mod paced;
 pub mod pixels;
+pub mod png;
 pub mod protocol;
 pub mod xlock;
 

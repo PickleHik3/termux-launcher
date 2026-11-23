@@ -9,6 +9,7 @@ mod focus;
 mod host;
 mod java;
 mod probe;
+mod source;
 mod window;
 mod xwayland;
 
@@ -327,4 +328,20 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeProbe<'l>(_
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetCopyLog<'l>(_env: JNIEnv<'l>, _class: JClass<'l>, on: jboolean) {
     host::COPY_LOG.store(on != JNI_FALSE, Ordering::Relaxed);
+}
+
+/// Debug: writes what window `id` shows as a PNG to `path`. The service has checked that the
+/// path is inside the app's data directory.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeDumpWindow<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    id: jlong,
+    path: JString<'l>,
+) {
+    guarded("nativeDumpWindow", (), || {
+        if let Some(path) = java_string(&mut env, &path) {
+            send(Command::Dump { id, path });
+        }
+    })
 }

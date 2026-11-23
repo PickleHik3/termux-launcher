@@ -55,6 +55,10 @@ public final class WaylandTestActivity extends Activity {
     /** The clients' XDG_RUNTIME_DIR, under the prefix's tmp. */
     public static final String SOCKET_DIR = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/tl-wayland";
     public static final String EXTRA_XWAYLAND = "xwayland";
+    /** {@code --es dump all}: write every window to files/wayland-dumps/<id>.png once connected. */
+    public static final String EXTRA_DUMP = "dump";
+    private static final long DUMP_DELAY_MS = 1000;
+    private static final int DUMP_TRIES = 5;
 
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
 
@@ -70,6 +74,9 @@ public final class WaylandTestActivity extends Activity {
     private Button mProbeButton;
     private Button mCopyLogButton;
     private boolean mCopyLog;
+    private Button mDumpButton;
+    /** The intent asked for a dump; done once the host runs and the windows are replayed. */
+    private boolean mDumpPending;
 
     private ILinuxWindows mService;
     private IBinder mServiceBinder;
@@ -443,6 +450,7 @@ public final class WaylandTestActivity extends Activity {
             } catch (RemoteException ignored) {
             }
         });
+        mDumpButton = button("Dump", v -> dumpAll(1));
         bar.addView(mStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         bar.addView(mStartButton);
         bar.addView(mStopButton);
@@ -454,6 +462,7 @@ public final class WaylandTestActivity extends Activity {
         debugBar.addView(mCrashButton);
         debugBar.addView(mProbeButton);
         debugBar.addView(mCopyLogButton);
+        debugBar.addView(mDumpButton);
         root.addView(debugBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -467,6 +476,7 @@ public final class WaylandTestActivity extends Activity {
         root.addView(mPaneHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
 
+        mDumpPending = "all".equals(getIntent().getStringExtra(EXTRA_DUMP));
         showStopped("Connecting…", false);
         connect();
     }
@@ -540,6 +550,11 @@ public final class WaylandTestActivity extends Activity {
                 mStopButton.setVisibility(View.VISIBLE);
                 mCrashButton.setVisibility(View.VISIBLE);
                 mEmpty.setText("Waiting for Linux windows.\n" + message);
+                if (mDumpPending) {
+                    mDumpPending = false;
+                    // The replayed windows arrive after the state; give them a moment.
+                    mMain.postDelayed(() -> dumpAll(DUMP_TRIES), DUMP_DELAY_MS);
+                }
                 break;
             case ILinuxWindows.STATE_STARTING:
                 mStatus.setText("Starting…");
@@ -634,6 +649,25 @@ public final class WaylandTestActivity extends Activity {
         mPanes.clear();
         mFocusedId = 0;
         mEmpty.setVisibility(View.VISIBLE);
+    }
+
+    /** Asks the host to write every window to files/wayland-dumps/<id>.png (see logcat TLWayland). */
+    private void dumpAll(int triesLeft) {
+        if (isDestroyed()) return;
+        if (mDebug == null) {
+            if (triesLeft > 1) mMain.postDelayed(() -> dumpAll(triesLeft - 1), DUMP_DELAY_MS);
+            else Log.w(LOG_TAG, "dump: the debug interface is not connected");
+            return;
+        }
+        File dir = new File(getFilesDir(), "wayland-dumps");
+        Log.i(LOG_TAG, "dump: " + mPanes.size() + " window(s) to " + dir);
+        for (int i = 0; i < mPanes.size(); i++) {
+            long id = mPanes.keyAt(i);
+            try {
+                mDebug.dumpWindow(id, new File(dir, id + ".png").getPath());
+            } catch (RemoteException ignored) {
+            }
+        }
     }
 
     private void focus(long id) {

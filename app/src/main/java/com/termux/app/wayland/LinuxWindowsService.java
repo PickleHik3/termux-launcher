@@ -14,6 +14,9 @@ import android.view.Surface;
 
 import androidx.annotation.Nullable;
 
+import java.io.File;
+import java.io.IOException;
+
 /**
  * Hosts the Wayland compositor in its own process ({@code :linuxwindows}), so a crash in it
  * (or, later, in a GPU driver it loads) cannot take the launcher down, and Linux apps outlive
@@ -152,7 +155,39 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         public void setCopyLog(boolean on) {
             if (mLoaded) WaylandHost.nativeSetCopyLog(on);
         }
+
+        @Override
+        public void dumpWindow(long id, String path) {
+            File dataDir = getFilesDir().getParentFile();
+            String checked = dataDir == null ? null : dumpPathInside(dataDir.getPath(), path);
+            if (checked == null) {
+                Log.w(LOG_TAG, "dump: refused path outside the app's data directory: " + path);
+                return;
+            }
+            File parent = new File(checked).getParentFile();
+            if (parent != null && !parent.isDirectory() && !parent.mkdirs()) {
+                Log.w(LOG_TAG, "dump: cannot create " + parent);
+                return;
+            }
+            if (mLoaded && mRunning) WaylandHost.nativeDumpWindow(id, checked);
+        }
     };
+
+    /**
+     * The canonical form of path when it lies inside dataDir (symlinks and ".." resolved), else
+     * null. The debug dump writes only there.
+     */
+    @Nullable
+    static String dumpPathInside(String dataDir, @Nullable String path) {
+        if (path == null || path.isEmpty()) return null;
+        try {
+            String root = new File(dataDir).getCanonicalPath();
+            String file = new File(path).getCanonicalPath();
+            return file.startsWith(root + File.separator) ? file : null;
+        } catch (IOException e) {
+            return null;
+        }
+    }
 
     @Override
     public void onCreate() {

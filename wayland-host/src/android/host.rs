@@ -15,6 +15,7 @@ use std::time::{Duration, Instant};
 
 use smithay::delegate_compositor;
 use smithay::delegate_data_device;
+use smithay::delegate_dmabuf;
 use smithay::delegate_fractional_scale;
 use smithay::delegate_output;
 use smithay::delegate_seat;
@@ -37,11 +38,12 @@ use smithay::reexports::wayland_server::backend::{ClientData, ClientId, Disconne
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
-use smithay::reexports::wayland_server::protocol::wl_shm;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, ListeningSocket, Resource};
 use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::wayland::buffer::BufferHandler;
+use smithay::wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier};
 use smithay::wayland::compositor::{
     get_parent, send_surface_state, with_states, with_surface_tree_downward, BufferAssignment, CompositorClientState,
     CompositorHandler, CompositorState, SurfaceAttributes, TraversalAction,
@@ -57,7 +59,7 @@ use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgShellHandler, XdgShellState,
     XdgToplevelSurfaceData,
 };
-use smithay::wayland::shm::{with_buffer_contents, ShmHandler, ShmState};
+use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::xwayland_shell::XWaylandShellState;
 use smithay::xwayland::{X11Surface, XWaylandClientData};
@@ -70,11 +72,14 @@ use crate::geometry::{
 };
 use crate::keymap::android_to_evdev;
 use crate::paced::Paced;
+use crate::pixels;
+use crate::png;
 use crate::protocol::*;
 
 use super::focus::KeyboardFocus;
 use super::java::HostEvents;
 use super::log::{lerror, linfo, lwarn};
+use super::source::{self, fourcc_name, Desc, DmabufMaps, Kind};
 use super::window::NativeWindow;
 
 /// A hidden toplevel's waiting frame callbacks and buffers are let go this often.
@@ -87,6 +92,8 @@ const MAX_NAME_CHARS: usize = 256;
 /// Window ids are unique for the life of the process, across stop and start, so a late call
 /// for a gone window can never reach a new one.
 static NEXT_ID: AtomicI64 = AtomicI64::new(1);
+/// One line for the first refused dmabuf import; a client can retry in a loop.
+static DMABUF_REJECT_LOGGED: AtomicBool = AtomicBool::new(false);
 /// The per-toplevel copy-time log line (debug interface).
 pub static COPY_LOG: AtomicBool = AtomicBool::new(false);
 
@@ -111,6 +118,8 @@ pub enum Command {
     /// An Android key code; the host maps it to evdev.
     Key { id: i64, android_keycode: i32, down: bool, time: u32 },
     Close { id: i64 },
+    /// Debug: write the window's shown pixels as a PNG to `path` (checked by the service).
+    Dump { id: i64, path: String },
 }
 
 pub struct StartConfig {
@@ -322,6 +331,8 @@ pub struct Toplevel {
     reported_size: (i32, i32),
     /// The size limit was hit; logged once per toplevel.
     clamp_logged: bool,
+    /// The kind of the last buffer copied, so a change is logged once.
+    last_kind: Option<Kind>,
     paced: Paced<WlBuffer, WlCallback>,
     stats: CopyStats,
     last_log: Instant,
@@ -346,6 +357,11 @@ pub struct State {
     pub fractional_scale_state: FractionalScaleManagerState,
     #[allow(dead_code)]
     pub viewporter_state: ViewporterState,
+    pub dmabuf_state: DmabufState,
+    #[allow(dead_code)]
+    dmabuf_global: DmabufGlobal,
+    /// Read-only mappings of the dmabufs clients committed, per wl_buffer.
+    maps: DmabufMaps,
     pub seat_state: SeatState<State>,
     pub data_device_state: DataDeviceState,
     #[allow(dead_code)]
@@ -450,6 +466,10 @@ fn setup(
     let output_manager_state = OutputManagerState::new_with_xdg_output::<State>(&dh);
     let fractional_scale_state = FractionalScaleManagerState::new::<State>(&dh);
     let viewporter_state = ViewporterState::new::<State>(&dh);
+    // zwp_linux_dmabuf_v1 version 3: format + modifier events, which Mesa's Vulkan WSI needs.
+    // Linear only, single plane, shown by copying the mapped pixels.
+    let mut dmabuf_state = DmabufState::new();
+    let dmabuf_global = dmabuf_state.create_global::<State>(&dh, source::advertised_formats());
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<State>(&dh);
     let decoration_state = XdgDecorationState::new::<State>(&dh);
@@ -524,6 +544,9 @@ fn setup(
         output_manager_state,
         fractional_scale_state,
         viewporter_state,
+        dmabuf_state,
+        dmabuf_global,
+        maps: DmabufMaps::default(),
         seat_state,
         data_device_state,
         decoration_state,
@@ -586,6 +609,39 @@ impl State {
                 b.release();
             }
         }
+        self.maps.clear();
+    }
+
+    /// Debug: writes what toplevel `id` shows (its held buffer, cropped and cut like a copy,
+    /// before the Surface) to `path` as a PNG, and logs the path and size.
+    fn dump(&mut self, id: i64, path: &str) {
+        let Some(i) = self.toplevel_index(id) else {
+            lwarn!("dump: no window {id}");
+            return;
+        };
+        let Some(buffer) = self.toplevels[i].paced.current().cloned() else {
+            lwarn!("dump: window {id} has no frame");
+            return;
+        };
+        let layout = Layout::of(&self.toplevels[i], self.output_size);
+        let result = source::with_pixels(&buffer, &mut self.maps, |ptr, len, desc| {
+            let (shown, _, _) = shown_rect(layout, desc)?;
+            let (start, bytes) = content_span(usize::try_from(desc.offset).ok()?, desc.stride as usize, shown, len)?;
+            // SAFETY: the mapping lives for this closure and content_span checked the range.
+            let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
+            let (w, h) = (shown.2 as usize, shown.3 as usize);
+            let mut rgba = vec![0u8; w * h * 4];
+            pixels::convert(src, desc.stride as usize, &mut rgba, w * 4, w, h, desc.format);
+            Some((png::encode_rgba(w as u32, h as u32, &rgba)?, shown, desc.kind))
+        });
+        match result {
+            Ok(Some((png, shown, kind))) => match std::fs::write(path, &png) {
+                Ok(()) => linfo!("dump window={id} kind={} size={}x{} bytes={} path={path}", kind.name(), shown.2, shown.3, png.len()),
+                Err(e) => lwarn!("dump window={id}: cannot write {path}: {e}"),
+            },
+            Ok(None) => lwarn!("dump window={id}: its buffer cannot be read"),
+            Err(e) => lwarn!("dump window={id}: {e}"),
+        }
     }
 
     pub fn toplevel_index(&self, id: i64) -> Option<usize> {
@@ -613,6 +669,7 @@ impl State {
             Command::Pointer { id, action, button, x, y, time } => self.pointer(id, action, button, x, y, time),
             Command::Key { id, android_keycode, down, time } => self.key(id, android_keycode, down, time),
             Command::Close { id } => self.close(id),
+            Command::Dump { id, path } => self.dump(id, &path),
         }
     }
 
@@ -925,8 +982,9 @@ impl State {
             return;
         }
         let output = self.output_size;
+        let maps = &mut self.maps;
         let t = &mut self.toplevels[i];
-        match post_buffer(t, buffer, output) {
+        match post_buffer(t, buffer, output, maps) {
             Ok(()) => {}
             Err(rc) => {
                 lwarn!("toplevel {}: post failed ({rc}); the Surface is dropped until a new one comes", t.id);
@@ -976,6 +1034,7 @@ impl State {
             shown: (0, 0, 0, 0),
             reported_size: (0, 0),
             clamp_logged: false,
+            last_kind: None,
             paced: Paced::new(),
             stats: CopyStats::default(),
             last_log: Instant::now(),
@@ -1031,63 +1090,102 @@ fn toplevel_names(surface: &ToplevelSurface) -> (String, String) {
     })
 }
 
-/// Copies the shown part of `buffer` into the toplevel's window: the window geometry, mapped
-/// from logical to buffer pixels, clipped to the buffer and cut to the size limit, so a client
-/// never decides how much the launcher allocates. Err with the platform's code when the post
-/// failed; Ok also when the buffer could not be read (logged, nothing posted).
-fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32)) -> Result<(), i32> {
+/// What decides the shown rectangle, copied out of a toplevel so the copy can borrow its window.
+#[derive(Clone, Copy)]
+struct Layout {
+    buffer_scale: i32,
+    viewport_src: Option<RectF>,
+    viewport_dst: Option<(i32, i32)>,
+    geometry: Option<Rect>,
+    view_size: Option<(i32, i32)>,
+    output: (i32, i32),
+}
+
+impl Layout {
+    fn of(t: &Toplevel, output: (i32, i32)) -> Layout {
+        Layout {
+            buffer_scale: t.buffer_scale,
+            viewport_src: t.viewport_src,
+            viewport_dst: t.viewport_dst,
+            geometry: t.geometry,
+            view_size: t.view_size,
+            output,
+        }
+    }
+}
+
+/// The rectangle a copy of `desc` shows, in buffer pixels: the window geometry mapped from
+/// logical to buffer pixels, clipped to the buffer and cut to the size limit, so a client never
+/// decides how much the launcher allocates. Also the uncut rectangle and the shown part in
+/// logical coordinates. None for a buffer with an impossible layout.
+fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
+    let (w, h) = (desc.width, desc.height);
+    if w <= 0 || h <= 0 || desc.stride < w.checked_mul(4)? || desc.offset < 0 {
+        return None;
+    }
+    let map = surface_map(w, h, l.buffer_scale, l.viewport_src, l.viewport_dst);
+    let full = map.to_buffer(map.logical_content(l.geometry), w, h);
+    let shown = clamp_to_limit(full, post_limit(l.view_size, l.output));
+    Some((shown, full, map.to_logical(shown)))
+}
+
+/// Copies the shown part of `buffer` (shm or dmabuf) into the toplevel's window. Err with the
+/// platform's code when the post failed; Ok also when the buffer could not be read (logged,
+/// nothing posted, the window keeps its previous frame).
+fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &mut DmabufMaps) -> Result<(), i32> {
     let id = t.id;
-    let (geometry, bs, src, dst) = (t.geometry, t.buffer_scale, t.viewport_src, t.viewport_dst);
-    let limit = post_limit(t.view_size, output);
+    let layout = Layout::of(t, output);
     let Some(window) = t.window.as_mut() else { return Ok(()) };
     let stats = &mut t.stats;
-    let result = with_buffer_contents(buffer, |ptr, len, data| {
-        let (w, h, stride, offset) = (data.width, data.height, data.stride, data.offset);
-        if w <= 0 || h <= 0 || stride < w * 4 || offset < 0 {
-            return None;
-        }
-        let map = surface_map(w, h, bs, src, dst);
-        let logical = map.logical_content(geometry);
-        let full = map.to_buffer(logical, w, h);
-        let shown = clamp_to_limit(full, limit);
-        let (start, bytes) = content_span(offset as usize, stride as usize, shown, len)?;
-        let opaque = match data.format {
-            wl_shm::Format::Argb8888 => false,
-            wl_shm::Format::Xrgb8888 => true,
-            _ => return None,
-        };
-        // SAFETY: smithay holds the pool mapping for the duration of this closure and
-        // content_span checked the range against its length.
+    let result = source::with_pixels(buffer, maps, |ptr, len, desc| {
+        let (shown, full, logical) = shown_rect(layout, desc)?;
+        let (start, bytes) = content_span(usize::try_from(desc.offset).ok()?, desc.stride as usize, shown, len)?;
+        // SAFETY: the pool or dmabuf mapping lives for this closure and content_span checked the
+        // range against its length.
         let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
-        let posted = window.post(src, stride as usize, shown.2, shown.3, opaque).map(|timing| {
+        let posted = window.post(src, desc.stride as usize, shown.2, shown.3, desc.format).map(|timing| {
             stats.frames += 1;
             stats.copy_us_sum += timing.copy_us;
             stats.copy_us_max = stats.copy_us_max.max(timing.copy_us);
             stats.total_us_sum += timing.total_us;
             stats.last_copy_us = timing.copy_us;
         });
-        Some((posted, (w, h), shown, full, map.to_logical(shown)))
+        Some((posted, *desc, shown, full, logical))
     });
-    let (posted, size, shown, full, logical) = match result {
+    let (posted, desc, shown, full, logical) = match result {
         Ok(Some(v)) => v,
         Ok(None) => return Ok(()),
         Err(e) => {
-            lwarn!("toplevel {id}: unreadable buffer: {e:?}");
+            lwarn!("toplevel {id}: unreadable buffer: {e}");
             return Ok(());
         }
     };
+    if t.last_kind != Some(desc.kind) {
+        t.last_kind = Some(desc.kind);
+        linfo!(
+            "toplevel {id}: kind={} format={} modifier=0x{:x} stride={} size={}x{}",
+            desc.kind.name(),
+            fourcc_name(desc.fourcc),
+            desc.modifier,
+            desc.stride,
+            desc.width,
+            desc.height
+        );
+    }
     if shown != full && !t.clamp_logged {
         t.clamp_logged = true;
+        let limit = post_limit(t.view_size, output);
         lwarn!("toplevel {id}: frame {}x{} is over the limit {}x{}; showing its top-left part", full.2, full.3, limit.0, limit.1);
     }
-    t.buffer_size = size;
+    t.buffer_size = (desc.width, desc.height);
     t.shown = shown;
     t.content = logical;
     if COPY_LOG.load(Ordering::Relaxed) && t.last_log.elapsed() >= LOG_INTERVAL && t.stats.frames > 0 {
         let s = &t.stats;
         linfo!(
-            "copy toplevel={} buffer={}x{} shown={}x{}+{}+{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
+            "copy toplevel={} kind={} buffer={}x{} shown={}x{}+{}+{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
             id,
+            desc.kind.name(),
             t.buffer_size.0,
             t.buffer_size.1,
             shown.2,
@@ -1233,6 +1331,32 @@ impl BufferHandler for State {
             t.paced.forget(buffer);
         }
         self.loose_releases.retain(|b| b != buffer);
+        self.maps.forget(buffer);
+    }
+}
+
+impl DmabufHandler for State {
+    fn dmabuf_state(&mut self) -> &mut DmabufState {
+        &mut self.dmabuf_state
+    }
+
+    /// Only what the copy can read is taken: one linear plane of an advertised format, a stride
+    /// covering the width. Anything else fails with the protocol's own error (`failed` for
+    /// create, a protocol error for create_immed).
+    fn dmabuf_imported(&mut self, _global: &DmabufGlobal, dmabuf: Dmabuf, notifier: ImportNotifier) {
+        match source::check_import(&dmabuf) {
+            Ok(()) => {
+                if notifier.successful::<State>().is_err() {
+                    lwarn!("dmabuf import: the client went away");
+                }
+            }
+            Err(why) => {
+                if !DMABUF_REJECT_LOGGED.swap(true, Ordering::Relaxed) {
+                    lwarn!("dmabuf import refused ({why}); further refusals are not logged");
+                }
+                notifier.failed();
+            }
+        }
     }
 }
 
@@ -1348,3 +1472,4 @@ delegate_seat!(State);
 delegate_data_device!(State);
 delegate_fractional_scale!(State);
 delegate_viewporter!(State);
+delegate_dmabuf!(State);
