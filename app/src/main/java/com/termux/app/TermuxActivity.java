@@ -21905,7 +21905,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null) return;
         com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
-            ? null : mPaneWallController.displayWindow();
+            ? null : mPaneWallController.displayPage();
         if (frame != null) frame.holdHostSizeOverNextLayout();
         PlaceLayout.KeyboardMode mode = com.termux.app.x11.DisplayTouchpadPlacement
             .switchKeyboardMode(store, currentPlaceOrientation());
