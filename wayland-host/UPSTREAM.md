@@ -30,6 +30,18 @@ upstream is committed here.
   (`diff -u` of the two files, paths `a/` and `b/`), rename it to the new version, run the script
   and `cargo test`. The `.patched` stamp re-applies the patch when its text changes.
 
+## TODO (host review 2026-11-24, left open)
+
+- **13, title and size callbacks are not merged.** Each title, app id or shown-size change is one
+  JNI call, one `Handler.post` and one oneway transaction to the launcher. Titles are now cut at
+  256 characters (`MAX_NAME_CHARS` in `host.rs`); still to do: keep only the latest pending
+  change per window and send it on the frame tick, so a client retitling in a loop cannot flood
+  the launcher's async binder space.
+- **15, no per-client resource limits.** Each `wl_shm_pool` keeps an fd and a mapping of up to
+  2 GB. Cap pools per client and total mapped bytes (an `ShmHandler`-side count, or a smithay
+  patch in `wayland/shm/handlers.rs`), and kill the client over the cap: a client can otherwise
+  use up the process's fds, or the address space of a 32-bit process.
+
 ## libxkbcommon 1.9.2
 
 - smithay links it unconditionally (keyboard keymaps), and Android has none.
