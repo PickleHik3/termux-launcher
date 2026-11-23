@@ -395,8 +395,9 @@ public final class LinuxWindowsActivity extends Activity {
         return b;
     }
 
+    /** The output scale: the Display scale setting, as X11 Display reads it. */
     private float density() {
-        return getResources().getDisplayMetrics().density;
+        return LinuxDisplayScale.current(this);
     }
 
     private int dp(int value) {

@@ -430,7 +430,7 @@ public final class WaylandAppRunner {
 
     /**
      * The prefix's keymap data and {@code Xwayland} (each null when missing), and the default
-     * display's real size, density and refresh period.
+     * display's real size and refresh period with the Display scale setting ({@link LinuxDisplayScale}).
      */
     @NonNull
     static HostStart hostStart(@NonNull Context context) {
@@ -439,7 +439,7 @@ public final class WaylandAppRunner {
         File bin = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/Xwayland");
         String xwayland = bin.canExecute() ? bin.getAbsolutePath() : null;
         if (xwayland == null) Log.w(LOG_TAG, "no executable " + bin + "; X11 apps have no display");
-        float density = context.getResources().getDisplayMetrics().density;
+        float scale = LinuxDisplayScale.current(context);
         Point size = new Point();
         long framePeriodNanos = 0L;
         DisplayManager displays = (DisplayManager) context.getSystemService(Context.DISPLAY_SERVICE);
@@ -449,7 +449,7 @@ public final class WaylandAppRunner {
             float refresh = display.getRefreshRate();
             framePeriodNanos = framePeriodNanos(refresh);
         }
-        return new HostStart(xkbRoot, xwayland, size.x, size.y, density, framePeriodNanos);
+        return new HostStart(xkbRoot, xwayland, size.x, size.y, scale, framePeriodNanos);
     }
 
     /** The host's frame tick for a display refreshing {@code refreshHz} times a second; 0 means 60 Hz. */
