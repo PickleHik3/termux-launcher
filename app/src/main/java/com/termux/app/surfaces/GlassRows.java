@@ -84,11 +84,9 @@ public final class GlassRows {
         return row == Row.DEPTH ? GlassEdgeControls.bendForDepth(value) : value;
     }
 
-    /** The Depth position that writes {@code bend}: the lowest, as a Depth move would land. */
+    /** The Depth position that writes {@code bend}, as the editor's own Depth reads it. */
     static int depthForBend(int bend) {
-        for (int t = GlassEdgeControls.MIN; t <= GlassEdgeControls.MAX; t++)
-            if (GlassEdgeControls.bendForDepth(t) >= bend) return t;
-        return GlassEdgeControls.MAX;
+        return GlassEdgeControls.depthFor(bend);
     }
 
     // ------------------------------------------------------------------ a Look at one cell

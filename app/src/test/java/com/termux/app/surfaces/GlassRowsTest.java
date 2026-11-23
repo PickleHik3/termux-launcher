@@ -83,6 +83,13 @@ public class GlassRowsTest {
             GlassRows.cellProperty(Row.OPACITY));
     }
 
+    /** The realistic slab reads as Depth's default position on the card, as in the editor. */
+    @Test
+    public void theRealisticSlabReadsAsTheDefaultDepth() {
+        int realistic = GlassEdgeControls.bendForDepth(com.termux.shared.termux.settings.preferences.GlassMaterial.DEPTH_DEFAULT);
+        assertEquals(com.termux.shared.termux.settings.preferences.GlassMaterial.DEPTH_DEFAULT, GlassRows.toRow(Row.DEPTH, realistic));
+    }
+
     @Test
     public void depthRoundTripsThroughItsBend() {
         for (int depth = GlassEdgeControls.MIN; depth <= GlassEdgeControls.MAX; depth++) {
