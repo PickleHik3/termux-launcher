@@ -185,13 +185,15 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- Developer harness for the Wayland host (-Pwayland=true): one view per Linux window,
-             over the wallpaper. Started by hand with am start; it finishes at once in a build
-             without the host. Recreating it (rotation) re-attaches to the live windows: the
-             compositor runs in LinuxWindowsService's own process. -->
+        <!-- The Linux windows screen (-Pwayland=true): apps opened under Wayland Display, one
+             window shown at a time below a row of tabs, over the wallpaper. Opened by
+             WaylandAppRunner; it finishes at once in a build without the host. Recreating it
+             (rotation) re-attaches to the live windows: the compositor runs in
+             LinuxWindowsService's own process. One instance, so a second launch reuses it. -->
         <activity
-            android:name=".app.wayland.WaylandTestActivity"
+            android:name=".app.wayland.LinuxWindowsActivity"
             android:exported="false"
+            android:launchMode="singleTask"
             android:taskAffinity="${TERMUX_PACKAGE_NAME}.wayland"
             android:theme="@style/Theme.TermuxActivity.Wallpaper" />
 
