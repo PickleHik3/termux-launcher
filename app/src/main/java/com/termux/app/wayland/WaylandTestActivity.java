@@ -57,6 +57,11 @@ public final class WaylandTestActivity extends Activity {
     public static final String EXTRA_XWAYLAND = "xwayland";
     /** {@code --es dump all}: write every window to files/wayland-dumps/<id>.png once connected. */
     public static final String EXTRA_DUMP = "dump";
+    /**
+     * Experiment: {@code --ez direct true} makes windows show their GPU buffers through the
+     * bundled Turnip driver (needs -PwaylandTurnip=true); the host starts once that is asked.
+     */
+    public static final String EXTRA_DIRECT = "direct";
     private static final long DUMP_DELAY_MS = 1000;
     private static final int DUMP_TRIES = 5;
 
@@ -75,6 +80,11 @@ public final class WaylandTestActivity extends Activity {
     private Button mCopyLogButton;
     private boolean mCopyLog;
     private Button mDumpButton;
+    /** Experiment: new windows use the direct presenter. */
+    private Button mDirectButton;
+    private boolean mDirect;
+    /** Direct was asked for by the intent: the host starts once the debug interface has it. */
+    private boolean mStartWhenDebug;
     /** The intent asked for a dump; done once the host runs and the windows are replayed. */
     private boolean mDumpPending;
 
@@ -116,6 +126,11 @@ public final class WaylandTestActivity extends Activity {
         @Override
         public void onServiceConnected(ComponentName name, IBinder binder) {
             mDebug = ILinuxWindowsDebug.Stub.asInterface(binder);
+            if (mDirect) sendDirect();
+            if (mStartWhenDebug) {
+                mStartWhenDebug = false;
+                startHost();
+            }
         }
 
         @Override
@@ -451,6 +466,12 @@ public final class WaylandTestActivity extends Activity {
             }
         });
         mDumpButton = button("Dump", v -> dumpAll(1));
+        mDirect = getIntent().getBooleanExtra(EXTRA_DIRECT, false);
+        mDirectButton = button(directLabel(), v -> {
+            mDirect = !mDirect;
+            mDirectButton.setText(directLabel());
+            sendDirect();
+        });
         bar.addView(mStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         bar.addView(mStartButton);
         bar.addView(mStopButton);
@@ -463,6 +484,7 @@ public final class WaylandTestActivity extends Activity {
         debugBar.addView(mProbeButton);
         debugBar.addView(mCopyLogButton);
         debugBar.addView(mDumpButton);
+        debugBar.addView(mDirectButton);
         root.addView(debugBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -563,7 +585,9 @@ public final class WaylandTestActivity extends Activity {
                 if (mAutoStart) {
                     mAutoStart = false;
                     mStatus.setText("Starting…");
-                    startHost();
+                    // Direct from the intent reaches the host first, so it loads at start.
+                    if (mDirect && mDebug == null && mDebugBound) mStartWhenDebug = true;
+                    else startHost();
                     break;
                 }
                 showStopped(TextUtils.isEmpty(message) ? "Stopped." : message, true);
@@ -649,6 +673,19 @@ public final class WaylandTestActivity extends Activity {
         mPanes.clear();
         mFocusedId = 0;
         mEmpty.setVisibility(View.VISIBLE);
+    }
+
+    private String directLabel() {
+        return mDirect ? "Direct: on" : "Direct: off";
+    }
+
+    /** Experiment: windows created from now on use the direct presenter, or copy. */
+    private void sendDirect() {
+        if (mDebug == null) return;
+        try {
+            mDebug.setDirect(mDirect);
+        } catch (RemoteException ignored) {
+        }
     }
 
     /** Asks the host to write every window to files/wayland-dumps/<id>.png (see logcat TLWayland). */

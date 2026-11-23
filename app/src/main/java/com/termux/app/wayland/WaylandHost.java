@@ -84,6 +84,12 @@ public final class WaylandHost {
     public static native void nativeProbe();
     /** Debug: the once-a-second copy-time line per window. */
     public static native void nativeSetCopyLog(boolean on);
+    /**
+     * Experiment: new windows use the bundled Turnip driver without a CPU copy (on), or copy.
+     * hookDir is nativeLibraryDir, driverDir the driver's directory ending in '/'; null when off.
+     */
+    public static native void nativeSetDirect(boolean on, @Nullable String hookDir, @Nullable String driverDir,
+                                              @Nullable String driverName);
     /** Debug: write window id's shown pixels as a PNG to path (already checked). */
     public static native void nativeDumpWindow(long id, String path);
 

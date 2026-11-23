@@ -16,4 +16,10 @@ oneway interface ILinuxWindowsDebug {
      * which must lie inside the app's data directory; the host logs the path and size.
      */
     void dumpWindow(long id, String path);
+    /**
+     * Experiment (exp/wayland-turnip): windows created from now on show their GPU buffers through
+     * the bundled Turnip driver without a CPU copy (on), or copy (off). Kept for later starts;
+     * TLWayland "direct" lines say what happened. Without -PwaylandTurnip=true it only logs.
+     */
+    void setDirect(boolean on);
 }

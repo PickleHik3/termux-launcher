@@ -61,6 +61,9 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     /** Written on the main thread, read by binder threads to drop calls for a stopped host. */
     private volatile boolean mRunning;
     private int mState = ILinuxWindows.STATE_STOPPED;
+    /** Experiment: orders setDirect calls, whose driver copy runs on a thread of its own. */
+    private final Object mDirectLock = new Object();
+    private int mDirectRequest;
     private String mMessage = "";
 
     private final ILinuxWindows.Stub mBinder = new ILinuxWindows.Stub() {
@@ -170,6 +173,30 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
                 return;
             }
             if (mLoaded && mRunning) WaylandHost.nativeDumpWindow(id, checked);
+        }
+
+        @Override
+        public void setDirect(boolean on) {
+            if (!mLoaded) return;
+            final int request;
+            synchronized (mDirectLock) {
+                request = ++mDirectRequest;
+                if (!on) {
+                    WaylandHost.nativeSetDirect(false, null, null, null);
+                    return;
+                }
+            }
+            // The first copy of the driver is about 14 MB: off the main thread. The request then
+            // waits for the next start, or reaches a running host, which loads the driver itself.
+            new Thread(() -> {
+                String driverDir = TurnipDriver.prepare(LinuxWindowsService.this);
+                if (driverDir == null) return;
+                synchronized (mDirectLock) {
+                    // A later setDirect (off) wins over this one.
+                    if (request != mDirectRequest) return;
+                    WaylandHost.nativeSetDirect(true, getApplicationInfo().nativeLibraryDir, driverDir, TurnipDriver.NAME);
+                }
+            }, "tl-turnip-prepare").start();
         }
     };
 
