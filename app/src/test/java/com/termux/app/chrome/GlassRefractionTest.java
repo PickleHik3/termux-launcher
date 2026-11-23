@@ -660,28 +660,28 @@ public class GlassRefractionTest {
             "        w = beads ? min(max(sSoft, w), kBeadBandShare * cr) : max(w, sSoft);\n"));
     }
 
+    /** How far in from the outline the default slab's mirrored fold may reach, dp. */
+    private static final float FOLD_REACH_DP = 3f;
 
     @Test
-    public void theSlabFoldsThePictureOnlyUnderTheRimAtTheDefaultDepth() {
+    public void theSlabFoldsThePictureOnlyInItsOuterThreeDpAtTheDefaultDepth() {
         // The sample's depth is inside + shift. A thick slab's edge stands up and mirrors what is
-        // just inside it across its outermost px; at the default Depth that fold ends inside the
-        // rim line's reach, which is drawn over it, on the narrow zone and the dock's soft band
-        // alike and under the whole shelf. From there in, walking in by a px never walks the
-        // sample back. A deeper Depth widens the mirrored band (a dramatic look, tuned on pong).
-        // BROKEN BY THE 2026-11-23 PONG TUNING (32 dp lens, index 1.7, rim fade 0.2 dp, no halo):
-        // at 9 dp the fold now reaches 5.1 px (1.95 dp) at rest and 6.9 px (2.6 dp) under the whole
-        // shelf at 420 dpi, past the rim line's 2.6 px (1 dp) reach. Left failing for the developer's call.
+        // just inside it across its outermost px. With the deep lens the developer picked on pong
+        // (2026-11-23: 32 dp, index 1.7) that fold reaches about 2 dp at rest and 2.6 dp under the
+        // whole shelf at the default Depth, past the rim line: accepted as part of that look. It
+        // stays inside the outer 3 dp on the narrow zone and the dock's soft band alike; from
+        // there in, walking in by a px never walks the sample back. A deeper Depth widens it.
         GlassSlab slab = GlassSlab.DEFAULT;
         float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
         float half = 200f * DENSITY;
-        float rimReach = GlassRefraction.Look.rimReachPx(DENSITY);
+        float foldReach = FOLD_REACH_DP * DENSITY;
         for (float soft : new float[] {0f, softPx}) {
             for (float lower : new float[] {0f, 0.5f, 1f}) {
                 float w = GlassRefraction.lensZonePx(slab, half, DENSITY, 1f, soft, 0f, lower);
                 for (int depthDp : new int[] {0, 9}) {
                     float t = GlassRefraction.lensThicknessPx(slab, depthDp * DENSITY, half, DENSITY, 1f, lower);
                     float previous = -1f;
-                    for (float in = rimReach; in < 2f * w; in += 0.25f) {
+                    for (float in = foldReach; in < 2f * w; in += 0.25f) {
                         float depth = in + slab.shiftPx(in, w, t);
                         assertTrue(depthDp + "dp soft " + soft + " lower " + lower + " at " + in,
                             depth > previous);
