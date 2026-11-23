@@ -2,6 +2,7 @@ package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
 
+import com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch;
 import com.termux.app.x11.DisplayKeyboardRoute.Target;
 
 import org.junit.Test;
