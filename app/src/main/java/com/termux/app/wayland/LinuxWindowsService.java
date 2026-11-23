@@ -62,6 +62,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     private volatile boolean mRunning;
     private int mState = ILinuxWindows.STATE_STOPPED;
     private String mMessage = "";
+    /** Xwayland's display for replay; empty when there is none. Main thread. */
+    private String mXDisplay = "";
 
     private final ILinuxWindows.Stub mBinder = new ILinuxWindows.Stub() {
         @Override
@@ -252,12 +254,19 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
             mRunning = false;
         }
         dropWindows();
+        setXDisplay("");
         setState(ILinuxWindows.STATE_STOPPED, "Stopped.");
         // Ends the started state; the service goes once nothing is bound.
         stopSelf();
     }
 
     /** Every window of a host that is gone is destroyed for every listener. */
+    private void setXDisplay(String display) {
+        if (display.equals(mXDisplay)) return;
+        mXDisplay = display;
+        broadcast(cb -> cb.onXDisplay(display));
+    }
+
     private void dropWindows() {
         for (int i = 0; i < mWindows.size(); i++) {
             long id = mWindows.keyAt(i);
@@ -282,6 +291,7 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         try {
             callback.onAttached(ILinuxWindows.VERSION, Process.myPid());
             callback.onHostState(mState, mMessage);
+            callback.onXDisplay(mXDisplay);
             for (int i = 0; i < mWindows.size(); i++) {
                 long id = mWindows.keyAt(i);
                 Window w = mWindows.valueAt(i);
@@ -340,6 +350,12 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     }
 
     @Override
+    public void onXDisplay(String display) {
+        if (!mRunning) return;
+        setXDisplay(display == null ? "" : display);
+    }
+
+    @Override
     public void onHostEnded(boolean crashed) {
         if (!mRunning) return;
         Log.e(LOG_TAG, "the compositor ended without being asked" + (crashed ? " (panic)" : ""));
@@ -347,6 +363,7 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         WaylandHost.stop();
         mRunning = false;
         dropWindows();
+        setXDisplay("");
         setState(ILinuxWindows.STATE_DIED, "The Linux windows host stopped unexpectedly.");
     }
 }

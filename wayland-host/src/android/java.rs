@@ -20,6 +20,7 @@ struct Methods {
     changed: JStaticMethodID,
     destroyed: JStaticMethodID,
     ended: JStaticMethodID,
+    x_display: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -33,6 +34,8 @@ pub trait HostEvents {
     fn window_created(&mut self, id: i64, title: &str, app_id: &str, pid: i32, flags: i32);
     fn window_changed(&mut self, id: i64, title: &str, app_id: &str, width: i32, height: i32);
     fn window_destroyed(&mut self, id: i64);
+    /// The X display Xwayland got (":0"), or "" when it is gone.
+    fn x_display(&mut self, display: &str);
 }
 
 impl JavaCallbacks {
@@ -44,6 +47,7 @@ impl JavaCallbacks {
             changed: env.get_static_method_id(&local, "onWindowChanged", strings)?,
             destroyed: env.get_static_method_id(&local, "onWindowDestroyed", "(J)V")?,
             ended: env.get_static_method_id(&local, "onHostEnded", "(Z)V")?,
+            x_display: env.get_static_method_id(&local, "onXDisplay", "(Ljava/lang/String;)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -118,6 +122,11 @@ impl HostEvents for AttachedCallbacks {
     fn window_destroyed(&mut self, id: i64) {
         let m = self.methods.destroyed;
         call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
+    }
+
+    fn x_display(&mut self, display: &str) {
+        let m = self.methods.x_display;
+        call(&mut self.env, &self.class, m, |env| Ok(vec![jvalue { l: env.new_string(display)?.into_raw() }]));
     }
 }
 

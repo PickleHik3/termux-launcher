@@ -17,4 +17,10 @@ oneway interface ILinuxWindowsCallback {
     /** Title, app id or the drawn size (pixels, 0 before the first frame) changed. */
     void onWindowChanged(long id, String title, String appId, int width, int height);
     void onWindowDestroyed(long id);
+    /**
+     * The X display Xwayland got, such as ":0" (the value for DISPLAY), once it is ready; empty
+     * when there is none: Xwayland was not asked for, is gone, or the host stopped. Replayed on
+     * addCallback after onHostState.
+     */
+    void onXDisplay(String display);
 }

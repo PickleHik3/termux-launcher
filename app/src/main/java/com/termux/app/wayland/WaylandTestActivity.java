@@ -158,6 +158,9 @@ public final class WaylandTestActivity extends Activity {
         public void onWindowDestroyed(long id) {
             mMain.post(() -> removePane(id));
         }
+
+        @Override
+        public void onXDisplay(String display) {}
     };
 
     /** One toplevel: a title line with a close button over its TextureView. */

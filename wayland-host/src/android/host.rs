@@ -388,7 +388,7 @@ pub struct State {
     timer: Option<(RegistrationToken, Instant)>,
     last_tick: Instant,
     last_keepalive: Instant,
-    events: Box<dyn HostEvents>,
+    pub events: Box<dyn HostEvents>,
     pub xwayland: Option<super::xwayland::XwaylandState>,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
     teardown: crate::teardown::Teardown,

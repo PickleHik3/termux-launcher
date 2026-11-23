@@ -91,11 +91,15 @@ pub fn start(state: &mut State, config: XwaylandConfig) {
                         x.wm = Some(wm);
                     }
                     linfo!("Xwayland ready: DISPLAY=:{display_number}");
+                    state.events.x_display(&format!(":{display_number}"));
                 }
                 Err(e) => lerror!("cannot start the X11 window manager: {e}"),
             }
         }
-        XWaylandEvent::Error => lerror!("Xwayland exited while starting; see {}", log_path.display()),
+        XWaylandEvent::Error => {
+            lerror!("Xwayland exited while starting; see {}", log_path.display());
+            state.events.x_display("");
+        }
     });
     match token {
         Ok(token) => state.xwayland = Some(XwaylandState { wm: None, token: Some(token), client }),
@@ -242,6 +246,7 @@ impl XwmHandler for State {
     /// starts again.
     fn disconnected(&mut self, _xwm: XwmId) {
         lerror!("Xwayland is gone; its windows are closed");
+        self.events.x_display("");
         for i in (0..self.toplevels.len()).rev() {
             if matches!(self.toplevels[i].shell, Shell::X11(_)) {
                 self.remove_toplevel_at(i);

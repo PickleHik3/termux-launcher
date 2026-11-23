@@ -26,6 +26,8 @@ public final class WaylandHost {
         void onWindowCreated(long id, String title, String appId, int clientPid, int flags);
         void onWindowChanged(long id, String title, String appId, int width, int height);
         void onWindowDestroyed(long id);
+        /** Xwayland's display (":0"), or empty when it is gone. */
+        void onXDisplay(String display);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -113,6 +115,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onWindowDestroyed(id);
+        });
+    }
+
+    @Keep
+    static void onXDisplay(String display) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onXDisplay(display);
         });
     }
 
