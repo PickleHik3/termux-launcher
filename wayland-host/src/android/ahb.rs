@@ -391,7 +391,9 @@ fn fd_facts(label: &str, fds: &[OwnedFd], expected: usize) -> Option<(usize, Map
             dma_buf_sync(raw, DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ),
             dma_buf_sync(raw, DMA_BUF_SYNC_END | DMA_BUF_SYNC_READ)
         );
-        if first.is_none() {
+        // Reading a mapping past the end of a smaller file is SIGBUS: keep only one the fd's
+        // own size covers (dma-buf mmap refuses oversize maps anyway).
+        if first.is_none() && seek_size.max(st_size) >= expected {
             if let Ok(m) = expected_map {
                 first = Some((k, m));
             }
@@ -747,7 +749,13 @@ fn serve(variant: usize, modifier_choice: i32, path: &str) -> Option<Ahb> {
     } else {
         alog!("{label} readback lock skipped: no CPU read usage");
     }
-    match map_read(fd.as_raw_fd(), stride_bytes as usize * d.height as usize) {
+    let linear_len = stride_bytes as usize * d.height as usize;
+    let mapped = if (size as usize) < linear_len {
+        Err(format!("the fd holds {size} bytes, fewer than {linear_len}"))
+    } else {
+        map_read(fd.as_raw_fd(), linear_len)
+    };
+    match mapped {
         Ok(map) => {
             dma_buf_sync(fd.as_raw_fd(), DMA_BUF_SYNC_START | DMA_BUF_SYNC_READ);
             let words = map.words();

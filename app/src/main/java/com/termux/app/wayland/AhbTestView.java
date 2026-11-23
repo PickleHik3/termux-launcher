@@ -30,6 +30,8 @@ final class AhbTestView extends View {
     private final Paint mBitmapPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     private final Paint mText = new Paint(Paint.ANTI_ALIAS_FLAG);
     private final RectF mDst = new RectF();
+    /** The status line, rebuilt in place each draw. */
+    private final StringBuilder mLine = new StringBuilder(64);
     @Nullable private Bitmap mBitmap;
     @Nullable private HardwareBuffer mBuffer;
     private String mExperiment = "";
@@ -116,8 +118,10 @@ final class AhbTestView extends View {
             if (mLastDrawnHostFrame >= 0) mChangesSeen++;
             mLastDrawnHostFrame = mHostFrame;
         }
-        canvas.drawText(mExperiment + " host frame " + mHostFrame + ", drawn " + mDrawn + " (tap to close)", 16,
-            mText.getTextSize() * 1.5f, mText);
+        mLine.setLength(0);
+        mLine.append(mExperiment).append(" host frame ").append(mHostFrame).append(", drawn ").append(mDrawn)
+            .append(" (tap to close)");
+        canvas.drawText(mLine, 0, mLine.length(), 16, mText.getTextSize() * 1.5f, mText);
         if (mDrawn % 60 == 0) {
             Log.i(LOG_TAG, mExperiment.toUpperCase() + " view: drawn " + mDrawn + ", host frame " + mHostFrame);
         }
