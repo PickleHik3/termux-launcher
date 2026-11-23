@@ -33,6 +33,10 @@ android {
     // -Pwayland=true builds the Wayland compositor library (wayland-host/, Rust) into the APK and
     // sets BuildConfig.WAYLAND_DISPLAY; without it no Rust runs and the APK has no library.
     def waylandEnabled = (project.findProperty('wayland') ?: 'false').toString() == 'true'
+    // Experiment (exp/wayland-turnip): -PwaylandTurnip=true (needs -Pwayland=true) bundles the
+    // Turnip Vulkan driver and the adrenotools hooks for arm64-v8a so the host can try showing GPU
+    // buffers without a copy; see the wayland-host task below.
+    def waylandTurnipEnabled = (project.findProperty('waylandTurnip') ?: 'false').toString() == 'true'
     // The embedded X server. Off with -Px11Server=false: the loader and libXlorie.so stay out of
     // the APK and BuildConfig.X11_SERVER tells the app there is no display to offer.
     // `project.` matters: inside the android block a bare hasProperty asks the extension.
@@ -184,7 +188,10 @@ android {
 
     packagingOptions {
         jniLibs {
-            useLegacyPackaging false
+            // The adrenotools hooks are loaded by path from nativeLibraryDir, so they must be
+            // extracted at install: -PwaylandTurnip=true packs every native library compressed
+            // and has the installer extract them (legacy packaging). Off: unchanged.
+            useLegacyPackaging waylandTurnipEnabled
             // A build without the display carries no X server: the committed prebuilts stay in
             // the tree and out of the APK.
             if (!x11ServerEnabled) excludes.add('**/libXlorie.so')
@@ -221,6 +228,8 @@ if ((project.findProperty('wayland') ?: 'false').toString() == 'true') {
     def buildWaylandHost = tasks.register('buildWaylandHost', Exec) {
         inputs.files(waylandScript)
         inputs.files(fileTree(waylandCrate) { exclude 'target/**' })
+        // Switching -PwaylandTurnip rebuilds the arm64 library with or without the driver loader.
+        inputs.property('waylandTurnip', (project.findProperty('waylandTurnip') ?: 'false').toString())
         outputs.dir(waylandJniLibs)
         doFirst {
             environment 'ANDROID_NDK_HOME', new File(android.sdkDirectory, "ndk/${waylandNdkVersion}").absolutePath
@@ -229,6 +238,30 @@ if ((project.findProperty('wayland') ?: 'false').toString() == 'true') {
     }
     android.sourceSets.main.jniLibs.srcDirs += waylandJniLibs
     tasks.named('preBuild') { dependsOn buildWaylandHost }
+
+    // Experiment: -PwaylandTurnip=true copies the prebuilt driver, hooks and libadrenotools from
+    // outside the tree (scripts/fetch-turnip-prebuilt.sh) into build/turnip, packs the hooks and
+    // the driver asset, and links libadrenotools into the arm64 libtlwayland.so.
+    if ((project.findProperty('waylandTurnip') ?: 'false').toString() == 'true') {
+        def turnipScript = rootProject.file('scripts/fetch-turnip-prebuilt.sh')
+        def turnipDir = layout.buildDirectory.dir('turnip').get().asFile
+        def fetchTurnip = tasks.register('fetchTurnipPrebuilt', Exec) {
+            inputs.files(turnipScript)
+            outputs.dir(turnipDir)
+            // The source lives outside the tree; copy every time (about 14 MB, under a second).
+            outputs.upToDateWhen { false }
+            commandLine 'bash', turnipScript.absolutePath, turnipDir.absolutePath
+        }
+        buildWaylandHost.configure {
+            dependsOn fetchTurnip
+            environment 'TL_ADRENOTOOLS_DIR', new File(turnipDir, 'adrenotools').absolutePath
+        }
+        android.sourceSets.main.jniLibs.srcDirs += new File(turnipDir, 'jniLibs')
+        android.sourceSets.main.assets.srcDirs += new File(turnipDir, 'assets')
+        tasks.named('preBuild') { dependsOn fetchTurnip }
+    }
+} else if ((project.findProperty('waylandTurnip') ?: 'false').toString() == 'true') {
+    throw new GradleException("-PwaylandTurnip=true needs -Pwayland=true")
 }
 
 dependencies {

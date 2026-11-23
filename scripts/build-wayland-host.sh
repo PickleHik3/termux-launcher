@@ -183,7 +183,25 @@ for abi in "${ABIS[@]}"; do
     NDK_ARGS+=(-t "$abi")
 done
 
-cargo ndk "${NDK_ARGS[@]}" -P "$API" -o "$OUT_DIR" build --release -p tlwayland
+# Experiment (exp/wayland-turnip): with TL_ADRENOTOOLS_DIR set (Gradle's -PwaylandTurnip=true, from
+# scripts/fetch-turnip-prebuilt.sh), arm64-v8a is built with the `turnip` feature, which links
+# libadrenotools from that directory (wayland-host/build.rs); the other ABIs never are.
+if [[ -n "${TL_ADRENOTOOLS_DIR:-}" ]]; then
+    [[ -f "$TL_ADRENOTOOLS_DIR/libadrenotools.a" ]] || fail "TL_ADRENOTOOLS_DIR has no libadrenotools.a: run scripts/fetch-turnip-prebuilt.sh"
+    OTHER_ARGS=()
+    TURNIP_ABI=0
+    for abi in "${ABIS[@]}"; do
+        if [[ "$abi" == arm64-v8a ]]; then TURNIP_ABI=1; else OTHER_ARGS+=(-t "$abi"); fi
+    done
+    if [[ $TURNIP_ABI -eq 1 ]]; then
+        cargo ndk -t arm64-v8a -P "$API" -o "$OUT_DIR" build --release -p tlwayland --features turnip
+    fi
+    if [[ ${#OTHER_ARGS[@]} -gt 0 ]]; then
+        cargo ndk "${OTHER_ARGS[@]}" -P "$API" -o "$OUT_DIR" build --release -p tlwayland
+    fi
+else
+    cargo ndk "${NDK_ARGS[@]}" -P "$API" -o "$OUT_DIR" build --release -p tlwayland
+fi
 cargo ndk "${NDK_ARGS[@]}" -P "$API" build --release -p tlwayland-testclient
 
 for abi in "${ABIS[@]}"; do

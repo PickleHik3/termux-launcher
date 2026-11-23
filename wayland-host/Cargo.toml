@@ -14,6 +14,12 @@ publish = false
 [lib]
 crate-type = ["cdylib"]
 
+[features]
+# Experiment (exp/wayland-turnip): load the bundled Turnip driver through libadrenotools and show
+# client dmabufs without a CPU copy. arm64 Android only; build.rs links libadrenotools from
+# TL_ADRENOTOOLS_DIR (scripts/fetch-turnip-prebuilt.sh).
+turnip = []
+
 # The compositor only builds for Android; on the host only the pure pixel code compiles, so
 # `cargo test` runs without smithay or libxkbcommon.
 [target.'cfg(target_os = "android")'.dependencies]
