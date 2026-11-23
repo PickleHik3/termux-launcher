@@ -1,11 +1,13 @@
-//! JNI surface of libtlwayland. Every entry point catches panics: in the real launcher this
-//! process is the home screen.
+//! JNI surface of libtlwayland, loaded only in the `:linuxwindows` process. Every entry point
+//! catches panics all the same.
 //!
-//! Java side: `com.termux.app.wayland.WaylandHost`.
+//! Java side: `com.termux.app.wayland.WaylandHost`, driven by `LinuxWindowsService`.
 
 pub mod log;
+mod focus;
 mod host;
 mod java;
+mod probe;
 mod window;
 mod xwayland;
 
@@ -13,7 +15,7 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::path::PathBuf;
 use std::sync::Mutex;
 
-use jni::objects::{JClass, JObject, JString};
+use jni::objects::{JClass, JFloatArray, JIntArray, JObject, JString};
 use jni::sys::{jboolean, jfloat, jint, jlong, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
@@ -43,6 +45,14 @@ fn send(cmd: Command) {
             lwarn!("compositor thread is gone");
         }
     }
+}
+
+/// This process's name, from /proc/self/cmdline (e.g. `com.termux:linuxwindows`).
+fn process_name() -> String {
+    std::fs::read("/proc/self/cmdline")
+        .ok()
+        .map(|b| String::from_utf8_lossy(b.split(|c| *c == 0).next().unwrap_or_default()).into_owned())
+        .unwrap_or_default()
 }
 
 fn java_string(env: &mut JNIEnv, s: &JString) -> Option<String> {
@@ -76,6 +86,8 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
             return JNI_FALSE;
         }
         let Some(dir) = java_string(&mut env, &socket_dir) else { return JNI_FALSE };
+        linfo!("host starting in pid {} ({})", std::process::id(), process_name());
+        probe::spawn();
         if let Some(root) = java_string(&mut env, &xkb_config_root) {
             // Read by libxkbcommon when the seat's keyboard builds its keymap, on the compositor
             // thread, which does not exist yet.
@@ -166,19 +178,65 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeConfigure<'
     guarded("nativeConfigure", (), || send(Command::Configure { id, width, height }))
 }
 
-/// One touch point of the toplevel `id`, in view pixels. `action`: 0 down, 1 up, 2 motion,
-/// 3 cancel. `slot` is the Android pointer id.
+/// One MotionEvent's touch points for the toplevel `id`, in view pixels; they share `action`
+/// (0 down, 1 up, 2 motion, 3 cancel) and are followed by one wl_touch.frame. `slots` are
+/// Android pointer ids; only the first `count` entries (at most 10) are read.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeTouch<'l>(
-    _env: JNIEnv<'l>,
+    env: JNIEnv<'l>,
     _class: JClass<'l>,
     id: jlong,
     action: jint,
-    slot: jint,
-    x: jfloat,
-    y: jfloat,
+    count: jint,
+    slots: JIntArray<'l>,
+    xs: JFloatArray<'l>,
+    ys: JFloatArray<'l>,
 ) {
-    guarded("nativeTouch", (), || send(Command::Touch { id, action, slot, x, y }))
+    guarded("nativeTouch", (), || {
+        let n = (count.max(0) as usize).min(host::MAX_TOUCH_POINTS);
+        let mut s = [0i32; host::MAX_TOUCH_POINTS];
+        let mut x = [0f32; host::MAX_TOUCH_POINTS];
+        let mut y = [0f32; host::MAX_TOUCH_POINTS];
+        if n > 0
+            && (env.get_int_array_region(&slots, 0, &mut s[..n]).is_err()
+                || env.get_float_array_region(&xs, 0, &mut x[..n]).is_err()
+                || env.get_float_array_region(&ys, 0, &mut y[..n]).is_err())
+        {
+            let _ = env.exception_clear();
+            return;
+        }
+        let mut points = host::TouchPoints { count: n, points: [(0, 0.0, 0.0); host::MAX_TOUCH_POINTS] };
+        for k in 0..n {
+            points.points[k] = (s[k], x[k], y[k]);
+        }
+        send(Command::Touch { id, action, points });
+    })
+}
+
+/// A hardware key for the toplevel `id`: an Android key code, mapped to evdev here. The
+/// toplevel takes keyboard focus first.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeKey<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    id: jlong,
+    android_keycode: jint,
+    down: jboolean,
+) {
+    guarded("nativeKey", (), || send(Command::Key { id, android_keycode, down: down != JNI_FALSE }))
+}
+
+/// Asks the toplevel `id` to close (xdg_toplevel.close, or WM_DELETE_WINDOW for X11).
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeClose<'l>(_env: JNIEnv<'l>, _class: JClass<'l>, id: jlong) {
+    guarded("nativeClose", (), || send(Command::Close { id }))
+}
+
+/// Debug: kills this process with abort(), to check that the launcher survives it.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeAbort<'l>(_env: JNIEnv<'l>, _class: JClass<'l>) {
+    lerror!("aborting on request (Crash compositor)");
+    std::process::abort();
 }
 
 /// A pointer event for the toplevel `id`. `action`: 0 motion (x, y in view pixels),

@@ -99,16 +99,23 @@ EOF
 prepare_smithay() {
     local dir="$TARGET_DIR/patched/smithay-$SMITHAY_VERSION"
     local crate="$TARGET_DIR/patched/smithay-$SMITHAY_VERSION.crate"
-    if [[ -f "$dir/.patched" ]]; then
+    local patches=("$CRATE"/patches/smithay-"$SMITHAY_VERSION"-*.patch)
+    local stamp
+    stamp="$(cat "${patches[@]}" | sha256sum | cut -d' ' -f1)"
+    if [[ -f "$dir/.patched" && "$(cat "$dir/.patched")" == "$stamp" ]]; then
         return
     fi
     rm -rf "$dir"
     mkdir -p "$TARGET_DIR/patched"
-    curl -sSL -o "$crate" "https://static.crates.io/crates/smithay/smithay-$SMITHAY_VERSION.crate"
+    if [[ ! -f "$crate" ]]; then
+        curl -sSL -o "$crate" "https://static.crates.io/crates/smithay/smithay-$SMITHAY_VERSION.crate"
+    fi
     echo "$SMITHAY_SHA256  $crate" | sha256sum -c -
     tar -xzf "$crate" -C "$TARGET_DIR/patched"
-    patch -d "$dir" -p1 < "$CRATE/patches/smithay-$SMITHAY_VERSION-x11-tmpdir.patch"
-    touch "$dir/.patched"
+    for p in "${patches[@]}"; do
+        patch -d "$dir" -p1 < "$p"
+    done
+    echo "$stamp" > "$dir/.patched"
 }
 
 # Cargo resolves the [patch] path before anything builds, so this comes first (also before a

@@ -53,3 +53,27 @@
      let _ = ::std::fs::remove_file(&path);
      // We know this path is not too long, these unwrap cannot fail
      let fs_addr = SocketAddrUnix::new(path.as_bytes()).unwrap();
+--- a/src/xwayland/xserver.rs
++++ b/src/xwayland/xserver.rs
+@@ -165,12 +165,21 @@
+         command.envs(envs);
+ 
+         unsafe {
++            let parent_pid = libc::getpid();
+             let wayland_socket_fd = wl_x11.as_raw_fd();
+             let wm_socket_fd = x_wm_x11.as_raw_fd();
+             let pipe_fd = displayfd_send.as_raw_fd();
+             let socket_fds: Vec<_> = listen_sockets.iter().map(|socket| socket.as_raw_fd()).collect();
+ 
+             command.pre_exec(move || {
++                // Die with the spawning thread: a compositor that stops or crashes must not
++                // leave Xwayland holding its display.
++                if libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL) != 0 {
++                    return Err(std::io::Error::last_os_error());
++                }
++                if libc::getppid() != parent_pid {
++                    libc::_exit(1);
++                }
+                 // unset the CLOEXEC flag from the sockets we need to pass
+                 // to xwayland.
+                 unset_cloexec(wayland_socket_fd)?;

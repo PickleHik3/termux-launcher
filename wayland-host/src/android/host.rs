@@ -53,6 +53,14 @@ use smithay::wayland::shell::xdg::{
 };
 use smithay::wayland::shm::{with_buffer_contents, ShmHandler, ShmState};
 
+use smithay::backend::input::KeyState;
+use smithay::input::keyboard::{FilterResult, Keycode};
+use smithay::wayland::shell::xdg::SurfaceCachedState;
+
+use crate::geometry::{content_rect, content_span, view_to_surface, Rect};
+use crate::keymap::android_to_evdev;
+
+use super::focus::KeyboardFocus;
 use super::java::HostEvents;
 use super::log::{lerror, linfo, lwarn};
 use super::window::NativeWindow;
@@ -73,12 +81,26 @@ pub const POINTER_BUTTON_UP: i32 = 2;
 pub const POINTER_AXIS: i32 = 3;
 pub const POINTER_LEAVE: i32 = 4;
 
+/// Touch points one MotionEvent can carry here; more are dropped.
+pub const MAX_TOUCH_POINTS: usize = 10;
+
+/// One MotionEvent's worth of touch points: (slot, x, y) in view pixels.
+#[derive(Clone, Copy)]
+pub struct TouchPoints {
+    pub count: usize,
+    pub points: [(i32, f32, f32); MAX_TOUCH_POINTS],
+}
+
 /// What Java asks of the compositor thread.
 pub enum Command {
     SetWindow { id: i64, window: Option<NativeWindow> },
     Configure { id: i64, width: i32, height: i32 },
-    Touch { id: i64, action: i32, slot: i32, x: f32, y: f32 },
+    /// Every point gets `action`, then one wl_touch.frame.
+    Touch { id: i64, action: i32, points: TouchPoints },
     Pointer { id: i64, action: i32, button: i32, x: f32, y: f32 },
+    /// An Android key code; the host maps it to evdev.
+    Key { id: i64, android_keycode: i32, down: bool },
+    Close { id: i64 },
 }
 
 pub struct StartConfig {
@@ -126,6 +148,28 @@ impl Shell {
         match self {
             Shell::Xdg(t) => Some(t.wl_surface().clone()),
             Shell::X11(w) => w.wl_surface(),
+        }
+    }
+
+    fn keyboard_focus(&self) -> Option<KeyboardFocus> {
+        match self {
+            Shell::Xdg(t) => Some(KeyboardFocus::Wl(t.wl_surface().clone())),
+            Shell::X11(w) => Some(KeyboardFocus::X11(w.clone())),
+        }
+    }
+
+    /// The committed xdg window geometry; X11 windows have none.
+    fn geometry(&self) -> Option<Rect> {
+        match self {
+            Shell::Xdg(t) => with_states(t.wl_surface(), |states| {
+                states
+                    .cached_state
+                    .get::<SurfaceCachedState>()
+                    .current()
+                    .geometry
+                    .map(|g| (g.loc.x, g.loc.y, g.size.w, g.size.h))
+            }),
+            Shell::X11(_) => None,
         }
     }
 
@@ -190,7 +234,12 @@ pub struct Toplevel {
     announced: bool,
     window: Option<NativeWindow>,
     view_size: Option<(i32, i32)>,
+    /// The whole wl_buffer, for the log.
     buffer_size: (i32, i32),
+    /// xdg_surface.set_window_geometry as last committed (None for X11 windows).
+    geometry: Option<Rect>,
+    /// The part of the buffer shown: the window geometry clipped to the buffer.
+    content: Rect,
     /// The newest buffer, kept only while there is no window to post it to.
     waiting_buffer: Option<WlBuffer>,
     /// Frame callbacks held while the toplevel has no window.
@@ -417,8 +466,10 @@ impl State {
         match cmd {
             Command::SetWindow { id, window } => self.set_window(id, window),
             Command::Configure { id, width, height } => self.configure(id, width, height),
-            Command::Touch { id, action, slot, x, y } => self.touch(id, action, slot, x, y),
+            Command::Touch { id, action, points } => self.touch(id, action, &points),
             Command::Pointer { id, action, button, x, y } => self.pointer(id, action, button, x, y),
+            Command::Key { id, android_keycode, down } => self.key(id, android_keycode, down),
+            Command::Close { id } => self.close(id),
         }
     }
 
@@ -451,39 +502,72 @@ impl State {
         t.shell.configure(width, height);
     }
 
-    /// View pixels to surface coordinates: the buffer is scaled to fill the view.
+    /// View pixels to surface coordinates: the shown content (window geometry) fills the view.
     fn surface_point(t: &Toplevel, x: f32, y: f32) -> (f64, f64) {
-        match t.view_size {
-            Some((vw, vh)) if t.buffer_size.0 > 0 && t.buffer_size.1 > 0 => (
-                x as f64 * t.buffer_size.0 as f64 / vw as f64,
-                y as f64 * t.buffer_size.1 as f64 / vh as f64,
-            ),
-            _ => (x as f64, y as f64),
+        view_to_surface(x, y, t.view_size, t.content)
+    }
+
+    /// Gives the toplevel keyboard focus unless it already has it.
+    fn focus_keyboard(&mut self, i: usize) {
+        let Some(keyboard) = self.seat.get_keyboard() else { return };
+        let Some(target) = self.toplevels[i].shell.keyboard_focus() else { return };
+        if keyboard.current_focus().as_ref() != Some(&target) {
+            keyboard.set_focus(self, Some(target), SERIAL_COUNTER.next_serial());
         }
     }
 
-    fn touch(&mut self, id: i64, action: i32, slot: i32, x: f32, y: f32) {
+    fn touch(&mut self, id: i64, action: i32, points: &TouchPoints) {
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(touch) = self.seat.get_touch() else { return };
         let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
-        let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
         let time = self.now_ms();
-        let slot = Some(slot.max(0) as u32).into();
-        let focus = Some((surface.clone(), (0.0, 0.0).into()));
-        match action {
-            TOUCH_DOWN => {
-                let serial = SERIAL_COUNTER.next_serial();
-                if let Some(keyboard) = self.seat.get_keyboard() {
-                    keyboard.set_focus(self, Some(surface), serial);
+        if action == TOUCH_CANCEL {
+            touch.cancel(self);
+            return;
+        }
+        if action == TOUCH_DOWN {
+            self.focus_keyboard(i);
+        }
+        for &(slot, x, y) in &points.points[..points.count.min(MAX_TOUCH_POINTS)] {
+            let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
+            let slot = Some(slot.max(0) as u32).into();
+            let focus = Some((surface.clone(), (0.0, 0.0).into()));
+            match action {
+                TOUCH_DOWN => {
+                    let serial = SERIAL_COUNTER.next_serial();
+                    touch.down(self, focus, &DownEvent { slot, location: (sx, sy).into(), serial, time });
                 }
-                touch.down(self, focus, &DownEvent { slot, location: (sx, sy).into(), serial, time });
+                TOUCH_UP => touch.up(self, &UpEvent { slot, serial: SERIAL_COUNTER.next_serial(), time }),
+                TOUCH_MOTION => touch.motion(self, focus, &TouchMotion { slot, location: (sx, sy).into(), time }),
+                _ => return,
             }
-            TOUCH_UP => touch.up(self, &UpEvent { slot, serial: SERIAL_COUNTER.next_serial(), time }),
-            TOUCH_MOTION => touch.motion(self, focus, &TouchMotion { slot, location: (sx, sy).into(), time }),
-            TOUCH_CANCEL => touch.cancel(self),
-            _ => return,
         }
         touch.frame(self);
+    }
+
+    fn key(&mut self, id: i64, android_keycode: i32, down: bool) {
+        let Some(evdev) = android_to_evdev(android_keycode) else { return };
+        let Some(i) = self.toplevel_index(id) else { return };
+        let Some(keyboard) = self.seat.get_keyboard() else { return };
+        self.focus_keyboard(i);
+        let state = if down { KeyState::Pressed } else { KeyState::Released };
+        let time = self.now_ms();
+        // xkb key codes are evdev codes + 8.
+        keyboard.input::<(), _>(self, Keycode::new(evdev + 8), state, SERIAL_COUNTER.next_serial(), time, |_, _, _| {
+            FilterResult::Forward
+        });
+    }
+
+    fn close(&mut self, id: i64) {
+        let Some(i) = self.toplevel_index(id) else { return };
+        match &self.toplevels[i].shell {
+            Shell::Xdg(t) => t.send_close(),
+            Shell::X11(w) => {
+                if let Err(e) = w.close() {
+                    lwarn!("X11 close: {e}");
+                }
+            }
+        }
     }
 
     fn pointer(&mut self, id: i64, action: i32, button: i32, x: f32, y: f32) {
@@ -499,9 +583,7 @@ impl State {
             }
             POINTER_BUTTON_DOWN | POINTER_BUTTON_UP => {
                 if action == POINTER_BUTTON_DOWN {
-                    if let Some(keyboard) = self.seat.get_keyboard() {
-                        keyboard.set_focus(self, Some(surface), serial);
-                    }
+                    self.focus_keyboard(i);
                 }
                 let state = if action == POINTER_BUTTON_DOWN {
                     smithay::backend::input::ButtonState::Pressed
@@ -571,6 +653,8 @@ impl State {
             window: None,
             view_size: None,
             buffer_size: (0, 0),
+            geometry: None,
+            content: (0, 0, 0, 0),
             waiting_buffer: None,
             held_frames: Vec::new(),
             stats: CopyStats::default(),
@@ -615,10 +699,13 @@ fn toplevel_names(surface: &ToplevelSurface) -> (String, String) {
     })
 }
 
-/// Copies `buffer` into the toplevel's window, if it has one, and logs the copy time at most
-/// once a second. Returns the buffer's size when it could be read.
-fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer) -> Option<(i32, i32)> {
+/// Copies the shown part of `buffer` (the window geometry clipped to the buffer) into the
+/// toplevel's window, if it has one, and logs the copy time at most once a second. Returns the
+/// whole buffer's size and the shown rectangle when the buffer could be read; without a window
+/// it only measures.
+fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer) -> Option<((i32, i32), Rect)> {
     let id = t.id;
+    let geometry = t.geometry;
     let window = &mut t.window;
     let stats = &mut t.stats;
     let result = with_buffer_contents(buffer, |ptr, len, data| {
@@ -626,20 +713,18 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer) -> Option<(i32, i32)> {
         if w <= 0 || h <= 0 || stride < w * 4 || offset < 0 {
             return None;
         }
-        let needed = offset as usize + stride as usize * (h as usize - 1) + w as usize * 4;
-        if needed > len {
-            return None;
-        }
+        let content = content_rect(w, h, geometry);
+        let (start, bytes) = content_span(offset as usize, stride as usize, content, len)?;
         let opaque = match data.format {
             wl_shm::Format::Argb8888 => false,
             wl_shm::Format::Xrgb8888 => true,
-            _ => return Some((w, h)),
+            _ => return Some(((w, h), content)),
         };
         if let Some(win) = window.as_mut() {
-            // SAFETY: smithay holds the pool mapping for the duration of this closure and the
-            // range was checked against its length above.
-            let src = unsafe { std::slice::from_raw_parts(ptr.add(offset as usize), needed - offset as usize) };
-            match win.post(src, stride as usize, w, h, opaque) {
+            // SAFETY: smithay holds the pool mapping for the duration of this closure and
+            // content_span checked the range against its length.
+            let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
+            match win.post(src, stride as usize, content.2, content.3, opaque) {
                 Ok(timing) => {
                     stats.frames += 1;
                     stats.copy_us_sum += timing.copy_us;
@@ -650,16 +735,20 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer) -> Option<(i32, i32)> {
                 Err(rc) => lwarn!("toplevel {id}: post failed ({rc})"),
             }
         }
-        Some((w, h))
+        Some(((w, h), content))
     });
     if t.last_log.elapsed() >= LOG_INTERVAL && t.stats.frames > 0 {
         let s = &t.stats;
         linfo!(
-            "copy toplevel={} buffer={}x{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
+            "copy toplevel={} buffer={}x{} shown={}x{}+{}+{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
             id,
             t.buffer_size.0,
             t.buffer_size.1,
-            t.buffer_size.0 as i64 * t.buffer_size.1 as i64 * 4,
+            t.content.2,
+            t.content.3,
+            t.content.0,
+            t.content.1,
+            t.content.2 as i64 * t.content.3 as i64 * 4,
             s.frames,
             s.last_copy_us,
             s.copy_us_sum / s.frames as u64,
@@ -745,27 +834,27 @@ impl CompositorHandler for State {
             return;
         };
 
+        // Window geometry is double-buffered with the buffer, so read it on every commit.
+        self.toplevels[i].geometry = self.toplevels[i].shell.geometry();
+
         if let Some(BufferAssignment::NewBuffer(buffer)) = root_buffer {
-            let size = if self.toplevels[i].window.is_some() {
-                let size = post_buffer(&mut self.toplevels[i], &buffer);
+            // Without a window this only measures; the buffer waits for the window.
+            let measured = post_buffer(&mut self.toplevels[i], &buffer);
+            if self.toplevels[i].window.is_some() {
                 buffer.release();
-                size
-            } else {
-                let size = with_buffer_contents(&buffer, |_, _, d| (d.width, d.height)).ok();
-                if let Some(old) = self.toplevels[i].waiting_buffer.replace(buffer) {
-                    old.release();
-                }
-                size
-            };
+            } else if let Some(old) = self.toplevels[i].waiting_buffer.replace(buffer) {
+                old.release();
+            }
             if !self.toplevels[i].announced {
                 self.announce(i);
             }
-            if let Some(size) = size {
-                if size != self.toplevels[i].buffer_size {
-                    self.toplevels[i].buffer_size = size;
+            if let Some((size, content)) = measured {
+                self.toplevels[i].buffer_size = size;
+                if (content.2, content.3) != (self.toplevels[i].content.2, self.toplevels[i].content.3) {
                     let id = self.toplevels[i].id;
-                    self.events.toplevel_buffer_size(id, size.0, size.1);
+                    self.events.toplevel_buffer_size(id, content.2, content.3);
                 }
+                self.toplevels[i].content = content;
             }
         } else if !self.toplevels[i].announced && self.toplevels[i].shell.is_initial_configure_sent() {
             // The initial (bufferless) commit: title and app id are set by now.
@@ -861,7 +950,7 @@ impl XdgDecorationHandler for State {
 impl OutputHandler for State {}
 
 impl SeatHandler for State {
-    type KeyboardFocus = WlSurface;
+    type KeyboardFocus = KeyboardFocus;
     type PointerFocus = WlSurface;
     type TouchFocus = WlSurface;
 
