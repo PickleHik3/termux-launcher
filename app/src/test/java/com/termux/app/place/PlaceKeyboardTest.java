@@ -18,6 +18,14 @@ public class PlaceKeyboardTest {
     private static final PageKind WINDOW = PageKind.TERMINAL;
 
     @Test
+    public void aKeyboardTheDrawerRaisedIsNeverRememberedAsThePlaces() {
+        assertFalse("drawer's keyboard, place had none", PlaceKeyboard.keyboardToRemember(true, true, false));
+        assertTrue("the place's own memory is kept", PlaceKeyboard.keyboardToRemember(true, true, true));
+        assertTrue("a person's keyboard is recorded", PlaceKeyboard.keyboardToRemember(true, false, false));
+        assertFalse(PlaceKeyboard.keyboardToRemember(false, false, true));
+    }
+
+    @Test
     public void backClosesTheKeyboardOnHomeOnlyWhenItIsUpAndNotAlwaysOn() {
         assertTrue(PlaceKeyboard.backClosesKeyboard(HOME, true, false));
         assertFalse("nothing up, nothing to close", PlaceKeyboard.backClosesKeyboard(HOME, false, false));

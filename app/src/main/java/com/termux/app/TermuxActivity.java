@@ -26488,7 +26488,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // place had before, which is what leaving minimal mode is meant to bring back. So did the
         // page overview, whose cards show every place with its keyboard down.
         if (store.isMinimal() || mOverviewPreviewing) return;
-        store.setKeyboardOpen(place, keyboardUp);
+        // Up on the drawer search's behalf (raised by it, not claimed since) it is not the place's.
+        store.setKeyboardOpen(place, com.termux.app.place.PlaceKeyboard.keyboardToRemember(keyboardUp,
+            mSheets.drawerRaisedKeyboard() && !mSheets.drawerRaisedKeyboardClaimed(),
+            store.wasKeyboardOpen(place)));
     }
 
     /**
