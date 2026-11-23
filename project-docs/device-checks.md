@@ -13,6 +13,12 @@ over; an item two releases old is re-judged and dropped if nothing rides on it. 
 under twenty items; past that, the oldest are re-judged first.
 
 ## Agent
+- 2026-11-23 · rel/1.3.0 candidate 069b34e81 · Seen on emulator tl16: upgrade over 1.2.2 keeps the
+  look, fresh install bootstraps, Settings cards in light, dark and largest font, drawer search,
+  1.3.0 -> 2.0.0-pre.7 -> 1.3.0 swap launches. Still owed: the Display window says why a Start
+  failed (Start succeeded there; make it fail, e.g. a broken xstartup); a desktop ends when its
+  display stops (needs a distro); Linux apps' keyboard follows text fields (needs a distro and
+  fcitx5); 32-bit display starts (needs a 32-bit device or APK) · emulator, or surface.
 - 2026-11-01 · rel/1.2.2 backport · Seen on emulator tl16 2026-11-01: fresh 1.2.1 to 1.2.2 upgrade,
   Nix fresh bootstrap, segmented pills, dock hold and unpin, drawer folder pull, hardware keys in
   search, punctuation-free selection. Still owed: two extra-key pages turn one page per swipe;
