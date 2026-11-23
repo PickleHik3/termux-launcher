@@ -8,7 +8,7 @@ upstream is committed here.
 ## smithay 0.7.0
 
 - Source: the crates.io tarball, pinned by `SMITHAY_VERSION` and `SMITHAY_SHA256` in the script.
-- Patch: `patches/smithay-0.7.0-android-xwayland.patch`, applied into `target/patched/` and wired
+- Patch: `patches/smithay-0.7.0-android-xwayland.patch` (each `patches/smithay-<version>-*.patch` is applied in turn), into `target/patched/` and wired
   in by the `[patch]` entry in `Cargo.toml`.
   - `xwayland/x11_sockets.rs`: the X lock file and `.X11-unix/` socket paths came from a
     hard-coded `/tmp`, which Android does not have. They now live under `$SMITHAY_X11_TMPDIR`
@@ -16,6 +16,11 @@ upstream is committed here.
   - `xwayland/xserver.rs`: the Xwayland child sets `PR_SET_PDEATHSIG` to SIGKILL before exec, so
     it ends with its parent. A compositor that stops or crashes must not leave Xwayland holding
     its display.
+- Patch: `patches/smithay-0.7.0-shm-resize.patch`.
+  - `wayland/shm/handlers.rs`: `wl_shm_pool.resize` with a size of 0 or less posted a protocol
+    error and then fell through to `NonZeroUsize::try_from(0).unwrap()`, which panicked the
+    compositor thread: one client could end every Linux window. It now returns after the error.
+    On a version bump, check upstream's `Request::Resize` before dropping it.
 - Refresh: bump the version and sha256 in the script, re-cut the patch against the new tree
   (`diff -u` of the two files, paths `a/` and `b/`), rename it to the new version, run the script
   and `cargo test`. The `.patched` stamp re-applies the patch when its text changes.
