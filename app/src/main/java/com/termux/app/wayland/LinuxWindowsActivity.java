@@ -467,15 +467,19 @@ public final class LinuxWindowsActivity extends Activity {
 
     /** Developer controls; their words are not product copy. */
     private View devBar() {
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(8), 0, dp(8), 0);
+        // The status on its own line, the buttons wrapping below it within the screen's width.
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        int pad = res(R.dimen.linux_windows_dev_padding);
+        box.setPadding(pad, 0, pad, 0);
         mStatus = shadowedText();
         mStatus.setSingleLine(true);
-        mStatus.setPadding(0, 0, dp(8), 0);
-        bar.addView(mStatus);
+        mStatus.setEllipsize(TextUtils.TruncateAt.END);
+        box.addView(mStatus, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+        WrapRow bar = new WrapRow(this);
+        box.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
         bar.addView(button("Start", v -> {
             if (mService == null) connect();
             else startHost();
@@ -513,8 +517,61 @@ public final class LinuxWindowsActivity extends Activity {
         bar.addView(mCopyLogButton);
         mDumpButton = button("Dump", v -> dumpAll(1));
         bar.addView(mDumpButton);
-        scroll.addView(bar);
-        return scroll;
+        return box;
+    }
+
+    /** Children left to right, starting a new line when the next does not fit the width. */
+    private static final class WrapRow extends ViewGroup {
+        WrapRow(android.content.Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            int available = MeasureSpec.getSize(widthSpec);
+            int x = 0;
+            int lineHeight = 0;
+            int height = 0;
+            int widest = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE) continue;
+                child.measure(MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                int w = child.getMeasuredWidth();
+                if (x > 0 && x + w > available) {
+                    height += lineHeight;
+                    x = 0;
+                    lineHeight = 0;
+                }
+                x += w;
+                widest = Math.max(widest, x);
+                lineHeight = Math.max(lineHeight, child.getMeasuredHeight());
+            }
+            height += lineHeight;
+            setMeasuredDimension(resolveSize(widest, widthSpec), resolveSize(height, heightSpec));
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            int available = r - l;
+            int x = 0;
+            int y = 0;
+            int lineHeight = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE) continue;
+                int w = child.getMeasuredWidth();
+                if (x > 0 && x + w > available) {
+                    y += lineHeight;
+                    x = 0;
+                    lineHeight = 0;
+                }
+                child.layout(x, y, x + w, y + child.getMeasuredHeight());
+                x += w;
+                lineHeight = Math.max(lineHeight, child.getMeasuredHeight());
+            }
+        }
     }
 
     private boolean toggleDevBar() {
