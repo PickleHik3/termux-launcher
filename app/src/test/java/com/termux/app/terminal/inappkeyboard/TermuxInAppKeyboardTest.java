@@ -278,6 +278,22 @@ public class TermuxInAppKeyboardTest {
     }
 
     /** Phase 5 has to be able to tell a focus signal's doing from a person's. */
+    /** The drawer's search holds its own reasons, so nothing reads its keyboard as the Display frame's. */
+    @Test
+    public void theDrawerSearchRaisesAndLowersUnderItsOwnReason() {
+        mPreferences.setInAppKeyboardEnabled(true);
+        mController.onCreate(null);
+        mController.hide(TermuxInAppKeyboard.HideReason.TOOL);
+
+        mController.show(TermuxInAppKeyboard.ShowReason.DRAWER_SEARCH);
+        assertTrue(mController.isVisible());
+        assertEquals(TermuxInAppKeyboard.ShowReason.DRAWER_SEARCH, mController.getLastShowReason());
+
+        mController.hide(TermuxInAppKeyboard.HideReason.DRAWER_SEARCH);
+        assertFalse(mController.isVisible());
+        assertEquals(TermuxInAppKeyboard.HideReason.DRAWER_SEARCH, mController.getLastHideReason());
+    }
+
     @Test
     public void theToolAndFocusReasonsAreCarriedThroughShowAndHide() {
         mPreferences.setInAppKeyboardEnabled(true);

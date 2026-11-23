@@ -15136,6 +15136,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The keyboard mouse mode's touchpad stands in is the pad's frame, raised by the pad
             // itself: nobody asked for a keyboard there, so it must not pin the policy off.
             if (mTouchpad.isRaisingDisplayFrameKeyboard()) return;
+            // The drawer's search raising or lowering its own keyboard is nobody's intent either.
+            if (mSheets.isChangingDrawerKeyboard()) return;
             // A keyboard the wall's slide raised or put away on its own is nobody's intent either.
             if (mQuietKeyboardChange) return;
             mSheets.claimDrawerRaisedKeyboard();
@@ -25456,9 +25458,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isDisplayTouchpadFrame() { return mTouchpad.isDisplayTouchpadFrame(); }
         @Override public @NonNull com.termux.app.x11.DisplayFrameContentPolicy frameContent() { return mFrameContent; }
         @Override public void applyDisplayFrameDecision(@NonNull com.termux.app.x11.DisplayFrameContentPolicy.Decision decision) { mTouchpad.applyDisplayFrameDecision(decision); }
-        @Override public void raiseDisplayFrameKeyboard() { mTouchpad.raiseDisplayFrameKeyboard(); }
-        @Override public void lowerDisplayFrameKeyboard() { mTouchpad.lowerDisplayFrameKeyboard(); }
-        @Override public void setRaisingDisplayFrameKeyboard(boolean raising) { mTouchpad.setRaisingDisplayFrameKeyboard(raising); }
         // -------------------------------------------------------------- the sheets still built in the activity
         // -------------------------------------------------------------- the sheets' own Hosts (still the activity's)
         @Override public @NonNull com.termux.app.terminal.TerminalCommandPaletteController.Host newCommandPaletteHost() { return new CommandPaletteActivityHost(); }

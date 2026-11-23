@@ -70,7 +70,13 @@ public final class TermuxInAppKeyboard {
          * float): the person asked for the field, not for this keyboard, so a hardware keyboard
          * serves it just as well and the setting keeps this one down.
          */
-        TEXT_ENTRY
+        TEXT_ENTRY,
+        /**
+         * The app drawer's search raised it. Nobody pinned it and it is not the Display frame's:
+         * the drawer takes it down again on close. A person's ask, so the hardware setting does not
+         * hold it back (the drawer's own route already stands aside for a physical keyboard).
+         */
+        DRAWER_SEARCH
     }
 
     public enum HideReason {
@@ -85,7 +91,9 @@ public final class TermuxInAppKeyboard {
         /** Text focus went away, so what a focus signal opened is closed again. */
         FOCUS,
         /** A hardware keyboard was attached and the setting asks the on-screen one to step aside. */
-        HARDWARE_KEYBOARD
+        HARDWARE_KEYBOARD,
+        /** The app drawer closed and puts down the keyboard its search raised. */
+        DRAWER_SEARCH
     }
 
     public enum ToggleReason {

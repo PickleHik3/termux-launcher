@@ -82,11 +82,6 @@ public final class SheetsController {
         @NonNull com.termux.app.x11.DisplayFrameContentPolicy frameContent();
         /** Applies a display frame decision. */
         void applyDisplayFrameDecision(@NonNull com.termux.app.x11.DisplayFrameContentPolicy.Decision decision);
-        /** Raises and lowers the display frame's keyboard. */
-        void raiseDisplayFrameKeyboard();
-        void lowerDisplayFrameKeyboard();
-        /** Holds the keyboard's visibility listener off while a raise is nobody's pin. */
-        void setRaisingDisplayFrameKeyboard(boolean raising);
 
         // -------------------------------------------------------------- the sheets' own Hosts (still the activity's)
 
@@ -423,6 +418,23 @@ public final class SheetsController {
         mDrawerRaisedKeyboardClaimed = true;
     }
 
+    /** Set while the drawer's own raise or lower runs: the keyboard's listener reads it as nobody's pin. */
+    private boolean mDrawerKeyboardChanging;
+
+    /** Whether the drawer is raising or lowering its search keyboard right now. */
+    public boolean isChangingDrawerKeyboard() {
+        return mDrawerKeyboardChanging;
+    }
+
+    private void showDrawerKeyboard(@NonNull TermuxInAppKeyboard keyboard) {
+        mDrawerKeyboardChanging = true;
+        try {
+            keyboard.show(TermuxInAppKeyboard.ShowReason.DRAWER_SEARCH);
+        } finally {
+            mDrawerKeyboardChanging = false;
+        }
+    }
+
     /** The drawer closed: put back down what its search raised over the display, quietly. */
     public void lowerDrawerSearchKeyboard() {
         boolean raised = mDrawerRaisedKeyboard;
@@ -434,8 +446,13 @@ public final class SheetsController {
         com.termux.app.x11.DisplayFrameContentPolicy frameContent = mHost.frameContent();
         if (mHost.isDisplayTouchpadFrame() && frameContent.isKeyboardContent()) {
             mHost.applyDisplayFrameDecision(frameContent.onTextFocus(false));
-        } else {
-            mHost.lowerDisplayFrameKeyboard();
+        } else if (keyboard != null) {
+            mDrawerKeyboardChanging = true;
+            try {
+                keyboard.hide(TermuxInAppKeyboard.HideReason.DRAWER_SEARCH);
+            } finally {
+                mDrawerKeyboardChanging = false;
+            }
         }
     }
 
@@ -466,11 +483,11 @@ public final class SheetsController {
             if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.TURN_ON_AND_RAISE) {
                 // Switched off with the keyboard key, and tapping the search asks for it back.
                 // Nobody's pin either: held off from the visibility listener like the raise below.
-                mHost.setRaisingDisplayFrameKeyboard(true);
+                mDrawerKeyboardChanging = true;
                 try {
                     keyboard.setTurnedOff(false);
                 } finally {
-                    mHost.setRaisingDisplayFrameKeyboard(false);
+                    mDrawerKeyboardChanging = false;
                 }
             }
             // The drawer's raise is nobody's pin: it goes down again with the drawer
@@ -482,7 +499,7 @@ public final class SheetsController {
                 mDrawerRaisedKeyboard = true;
                 mDrawerRaisedKeyboardClaimed = false;
             } else if (!wasUp) {
-                mHost.raiseDisplayFrameKeyboard();
+                showDrawerKeyboard(keyboard);
                 // Up before the drawer was pulled, it stays the Terminal's: the close leaves it.
                 if (com.termux.app.x11.DisplayKeyboardRoute.drawerOwnsRaise(wasUp,
                         mAppDrawerController != null

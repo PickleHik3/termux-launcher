@@ -466,6 +466,16 @@ public class WindowSourceRulesTest {
     }
 
     @Test
+    public void theDrawerSearchKeyboardNeverGoesThroughTheDisplayTouchpad() throws IOException {
+        String sheets = sources().get("app/chrome/sheets/SheetsController.java");
+        for (String banned : new String[]{"raiseDisplayFrameKeyboard", "lowerDisplayFrameKeyboard",
+                "setRaisingDisplayFrameKeyboard", "ShowReason.KEYBOARD_ACTION",
+                "HideReason.KEYBOARD_ACTION"}) {
+            assertFalse("SheetsController uses " + banned, sheets.contains(banned));
+        }
+    }
+
+    @Test
     public void homeDoesItsPageEventsInTheHomePageNotTheHost() throws IOException {
         List<String> problems = new ArrayList<>();
         String host = sources().get("app/launcher/home/HomePageHost.java");
