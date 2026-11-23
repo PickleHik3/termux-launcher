@@ -380,6 +380,31 @@ public final class TerminalRow {
         if (placement.anchor == this) placement.anchor = null;
     }
 
+    /**
+     * This row's first {@code columns} cells as a row {@code columns} wide, cut or padded with
+     * blanks on the right, nothing wrapped: the alternate screen's resize (see
+     * {@link TerminalBuffer#resizeWithoutRewrap}). A wide character the cut would halve goes. The
+     * placements anchored here move to the new row, fitted to its columns.
+     */
+    TerminalRow resizedTo(int columns, long style) {
+        TerminalRow row = new TerminalRow(columns, style);
+        int end = Math.min(mColumns, columns);
+        if (end > 0 && end < mColumns && wideDisplayCharacterStartingAt(end - 1)) end--;
+        if (end > 0) row.copyInterval(this, 0, end, 0);
+        row.mLineWrap = mLineWrap && columns >= mColumns;
+        row.mShellIntegrationMark = mShellIntegrationMark;
+        row.mHasBitmap = mHasBitmap;
+        if (mKittyPlacements != null) {
+            java.util.ArrayList<KittyPlacement> carried = mKittyPlacements;
+            mKittyPlacements = null;
+            for (KittyPlacement placement : carried) {
+                placement.fitToColumns(columns);
+                row.addKittyPlacement(placement);
+            }
+        }
+        return row;
+    }
+
     /** Detach every placement anchored here; returns whether there were any. */
     boolean dropKittyPlacements() {
         if (mKittyPlacements == null) return false;
