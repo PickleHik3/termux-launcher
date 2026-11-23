@@ -492,7 +492,7 @@
     <string name="linux_wayland_start_failed">Wayland Display did not start, so the app could not open.</string>
     <string name="linux_windows_opening">Opening…</string>
     <string name="linux_windows_stopped">Wayland Display stopped, and its apps closed.</string>
-    <string name="linux_windows_untitled">Untitled window</string>
+    <string name="linux_windows_untitled">Window</string>
     <string name="linux_windows_close">Close</string>
     <!-- Linux apps › Start with (#166): what opens on the display each time it starts. -->
     <string name="settings_x11_start_with_title">Start with</string>

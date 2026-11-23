@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Linux windows screen's tab row. The text is in sp, so it follows the font scale. -->
+    <dimen name="linux_windows_tab_text">14sp</dimen>
+    <dimen name="linux_windows_tab_height">48dp</dimen>
+    <!-- A few characters of the label plus the close target. -->
+    <dimen name="linux_windows_tab_min_width">112dp</dimen>
+    <dimen name="linux_windows_close_target">48dp</dimen>
+    <dimen name="linux_windows_tab_label_padding">12dp</dimen>
+    <dimen name="linux_windows_dev_padding">8dp</dimen>
+</resources>

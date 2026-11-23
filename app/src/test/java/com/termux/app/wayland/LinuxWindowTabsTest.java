@@ -61,4 +61,23 @@ public class LinuxWindowTabsTest {
         assertEquals(LinuxWindowTabs.NONE, tabs.shown());
         assertFalse(tabs.contains(1));
     }
+
+    @Test
+    public void tabsShareTheRowButNeverGoUnderTheMinimum() {
+        assertEquals(400, LinuxWindowTabs.tabWidth(400, 1, 100));
+        assertEquals(200, LinuxWindowTabs.tabWidth(400, 2, 100));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 4, 100));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 9, 100));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 0, 100));
+    }
+
+    @Test
+    public void labelIsTheTitleElseTheAppIdElseTheFallback() {
+        assertEquals("~/src", LinuxWindowTabs.label("~/src", "kitty", "Window"));
+        assertEquals("kitty", LinuxWindowTabs.label("~", "kitty", "Window"));
+        assertEquals("kitty", LinuxWindowTabs.label("", "kitty", "Window"));
+        assertEquals("kitty", LinuxWindowTabs.label(null, " kitty ", "Window"));
+        assertEquals("~", LinuxWindowTabs.label("~", "", "Window"));
+        assertEquals("Window", LinuxWindowTabs.label("  ", null, "Window"));
+    }
 }

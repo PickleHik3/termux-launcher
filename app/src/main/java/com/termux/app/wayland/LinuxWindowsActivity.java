@@ -61,14 +61,17 @@ public final class LinuxWindowsActivity extends Activity {
     private static final int DUMP_TRIES = 5;
 
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
-    /** The widest a tab's title grows before it is ellipsized. */
-    private static final int TAB_TITLE_MAX_DP = 200;
+    private static final float UNSHOWN_TAB_ALPHA = 0.7f;
+    /** The shown tab's wash over the wallpaper. */
+    private static final int SHOWN_TAB_BACKGROUND = 0x33FFFFFF;
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private final LongSparseArray<Pane> mPanes = new LongSparseArray<>();
     private final LinuxWindowTabs mTabs = new LinuxWindowTabs();
 
+    private HorizontalScrollView mTabScroll;
     private LinearLayout mTabRow;
+    private int mTabViewportWidth;
     private FrameLayout mWindowHost;
     private TextView mEmpty;
     /** The developer controls, shown by a long press on the tab row. */
@@ -193,15 +196,17 @@ public final class LinuxWindowsActivity extends Activity {
             tab.setGravity(Gravity.CENTER_VERTICAL);
             tab.setOnClickListener(v -> showWindow(id));
             tab.setOnLongClickListener(v -> toggleDevBar());
+            tab.setMinimumWidth(res(R.dimen.linux_windows_tab_min_width));
             label = shadowedText();
+            label.setTextSize(TypedValue.COMPLEX_UNIT_PX, getResources().getDimension(R.dimen.linux_windows_tab_text));
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
-            label.setMaxWidth(dp(TAB_TITLE_MAX_DP));
-            label.setPadding(dp(12), dp(8), dp(4), dp(8));
+            label.setGravity(Gravity.CENTER_VERTICAL);
+            label.setPadding(res(R.dimen.linux_windows_tab_label_padding), 0, 0, 0);
             TextView close = shadowedText();
             close.setText("✕");
+            close.setGravity(Gravity.CENTER);
             close.setContentDescription(getString(R.string.linux_windows_close));
-            close.setPadding(dp(8), dp(8), dp(12), dp(8));
             close.setOnClickListener(v -> {
                 if (mService != null) {
                     try {
@@ -210,10 +215,9 @@ public final class LinuxWindowsActivity extends Activity {
                     }
                 }
             });
-            tab.addView(label, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-            tab.addView(close, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+            tab.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+            int target = res(R.dimen.linux_windows_close_target);
+            tab.addView(close, new LinearLayout.LayoutParams(target, target));
 
             view = new TextureView(LinuxWindowsActivity.this);
             view.setOpaque(false);
@@ -227,11 +231,11 @@ public final class LinuxWindowsActivity extends Activity {
         }
 
         void updateTab() {
-            String name = !TextUtils.isEmpty(title) ? title
-                : !TextUtils.isEmpty(appId) ? appId : getString(R.string.linux_windows_untitled);
+            String name = LinuxWindowTabs.label(title, appId, getString(R.string.linux_windows_untitled));
             if (!TextUtils.equals(label.getText(), name)) label.setText(name);
             label.setTypeface(null, shown() ? Typeface.BOLD : Typeface.NORMAL);
-            tab.setAlpha(shown() ? 1f : 0.7f);
+            tab.setAlpha(shown() ? 1f : UNSHOWN_TAB_ALPHA);
+            tab.setBackgroundColor(shown() ? SHOWN_TAB_BACKGROUND : Color.TRANSPARENT);
         }
 
         /** Hands the Surface to the host. */
@@ -400,6 +404,10 @@ public final class LinuxWindowsActivity extends Activity {
         return LinuxDisplayScale.current(this);
     }
 
+    private int res(int dimenId) {
+        return getResources().getDimensionPixelSize(dimenId);
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -418,15 +426,23 @@ public final class LinuxWindowsActivity extends Activity {
         root.setFitsSystemWindows(true);
 
         HorizontalScrollView tabScroll = new HorizontalScrollView(this);
+        mTabScroll = tabScroll;
         tabScroll.setHorizontalScrollBarEnabled(false);
         tabScroll.setFillViewport(true);
         mTabRow = new LinearLayout(this);
         mTabRow.setOrientation(LinearLayout.HORIZONTAL);
         mTabRow.setGravity(Gravity.CENTER_VERTICAL);
-        mTabRow.setMinimumHeight(dp(40));
+        mTabRow.setMinimumHeight(res(R.dimen.linux_windows_tab_height));
         mTabRow.setOnLongClickListener(v -> toggleDevBar());
         tabScroll.addView(mTabRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        // The tabs share the row's width; a changed width sets theirs after this layout pass.
+        tabScroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int width = r - l;
+            if (width == mTabViewportWidth) return;
+            mTabViewportWidth = width;
+            mTabRow.post(this::sizeTabs);
+        });
         root.addView(tabScroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -631,8 +647,9 @@ public final class LinuxWindowsActivity extends Activity {
         mPanes.put(id, pane);
         mHadWindow = true;
         mEmpty.setVisibility(View.GONE);
-        mTabRow.addView(pane.tab, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT));
+        mTabRow.addView(pane.tab, new LinearLayout.LayoutParams(res(R.dimen.linux_windows_tab_min_width),
+            LinearLayout.LayoutParams.MATCH_PARENT));
+        sizeTabs();
         mWindowHost.addView(pane.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT));
         long before = mTabs.shown();
@@ -648,6 +665,7 @@ public final class LinuxWindowsActivity extends Activity {
         mWindowHost.removeView(pane.view);
         if (mFocusedId == id) mFocusedId = 0;
         mTabs.remove(id);
+        sizeTabs();
         if (mTabs.size() == 0) {
             // The last window closed: nothing is left to show here.
             if (mHadWindow && !isFinishing()) finish();
@@ -667,6 +685,32 @@ public final class LinuxWindowsActivity extends Activity {
         mTabs.clear();
         mFocusedId = 0;
         if (mEmpty != null) mEmpty.setVisibility(View.VISIBLE);
+    }
+
+    /** Gives every tab its share of the row ({@link LinuxWindowTabs#tabWidth}); only a changed width is set. */
+    private void sizeTabs() {
+        int count = mTabRow.getChildCount();
+        int width = LinuxWindowTabs.tabWidth(mTabViewportWidth, count, res(R.dimen.linux_windows_tab_min_width));
+        for (int i = 0; i < count; i++) {
+            View tab = mTabRow.getChildAt(i);
+            ViewGroup.LayoutParams lp = tab.getLayoutParams();
+            if (lp.width != width) {
+                lp.width = width;
+                tab.setLayoutParams(lp);
+            }
+        }
+    }
+
+    /** Scrolls the row so {@code tab} is in view, once the row has laid it out. */
+    private void scrollToTab(View tab) {
+        mTabScroll.post(() -> {
+            int viewport = mTabScroll.getWidth();
+            int left = tab.getLeft();
+            int right = left + tab.getWidth();
+            int scroll = mTabScroll.getScrollX();
+            if (left < scroll) mTabScroll.smoothScrollTo(left, 0);
+            else if (right > scroll + viewport) mTabScroll.smoothScrollTo(right - viewport, 0);
+        });
     }
 
     /** A tab was tapped. */
@@ -693,6 +737,7 @@ public final class LinuxWindowsActivity extends Activity {
             if (old != null) old.setVisible(false);
         }
         Pane now = mPanes.get(shown);
+        if (now != null) scrollToTab(now.tab);
         if (now != null) {
             now.setVisible(mVisible);
             if (mVisible) focus(shown);
