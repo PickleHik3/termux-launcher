@@ -874,12 +874,19 @@ public class ExtraKeysEditorFragment extends Fragment {
 
     private View saveBar(@NonNull Context context) {
         LinearLayout bar = row(context);
-        bar.setPadding(dp(16), dp(10), dp(16), dp(12));
+        boolean landscape = getResources().getConfiguration().orientation
+            == android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+        int buttonHeight = dp(landscape ? 40 : 48);
+        if (landscape) bar.setPadding(dp(16), dp(2), dp(16), dp(2));
+        else bar.setPadding(dp(16), dp(10), dp(16), dp(12));
         bar.setBackgroundColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurface, Color.BLACK));
         discardButton = new MaterialButton(context, null,
             com.google.android.material.R.attr.materialButtonOutlinedStyle);
         discardButton.setText(R.string.settings_extra_keys_discard);
+        discardButton.setMinHeight(buttonHeight);
+        if (landscape) discardButton.setInsetTop(0);
+        if (landscape) discardButton.setInsetBottom(0);
         discardButton.setOnClickListener(v -> confirmDiscard(() -> {
             loadDraft(context);
             dirty = false;
@@ -892,6 +899,11 @@ public class ExtraKeysEditorFragment extends Fragment {
         saveButton = new MaterialButton(context);
         saveButton.setText(R.string.settings_extra_keys_save);
         saveButton.setIconResource(R.drawable.ic_symbol_check);
+        saveButton.setMinHeight(buttonHeight);
+        if (landscape) saveButton.setInsetTop(0);
+        if (landscape) saveButton.setInsetBottom(0);
+        saveButton.setSingleLine(true);
+        saveButton.setEllipsize(TextUtils.TruncateAt.END);
         saveButton.setOnClickListener(v -> save());
         bar.addView(saveButton);
         return bar;

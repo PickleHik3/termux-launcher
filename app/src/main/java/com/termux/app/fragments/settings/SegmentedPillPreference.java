@@ -4,6 +4,7 @@ import android.content.Context;
 import android.content.res.TypedArray;
 import android.text.StaticLayout;
 import android.util.AttributeSet;
+import android.util.TypedValue;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.LinearLayout;
@@ -14,6 +15,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 import androidx.appcompat.content.res.AppCompatResources;
 import androidx.preference.Preference;
+import androidx.core.widget.TextViewCompat;
 import androidx.preference.PreferenceViewHolder;
 
 import com.google.android.material.button.MaterialButton;
@@ -55,6 +57,16 @@ public final class SegmentedPillPreference extends Preference {
     /** True once a label did not fit side by side ({@link #labelsDoNotFit}): the segments then
      *  stack full-width so no label is cut or shrunk. Reset when the segment set changes. */
     private boolean mStacked;
+    /** True once a label fitted only with the segments' side padding trimmed to
+     *  {@link #COMPACT_PADDING_DP}: a large text size keeps the row on one line that way before
+     *  it stacks. Reset when the segment set changes. */
+    private boolean mCompact;
+    /** The side padding a segment keeps around its label when the style's 12dp would push the
+     *  row into a stack. */
+    private static final int COMPACT_PADDING_DP = 4;
+    /** A two-segment label shrinks from the style's 14sp to this before it ellipsizes. */
+    private static final int AUTOSIZE_MAX_SP = 14;
+    private static final int AUTOSIZE_MIN_SP = 10;
 
     public SegmentedPillPreference(@NonNull Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -108,6 +120,7 @@ public final class SegmentedPillPreference extends Preference {
         mLabelResIds = labelResIds;
         mLabelText = new CharSequence[values.length];
         mStacked = false;
+        mCompact = false;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
     }
@@ -126,6 +139,7 @@ public final class SegmentedPillPreference extends Preference {
         mLabelResIds = new int[values.length];
         mLabelText = labels;
         mStacked = false;
+        mCompact = false;
         mValue = normalize(getPersistedString(mValues[0]));
         notifyChanged();
     }
@@ -184,8 +198,11 @@ public final class SegmentedPillPreference extends Preference {
             if (mLabelText[i] != null) button.setText(mLabelText[i]);
             else if (mLabelResIds[i] != 0) button.setText(mLabelResIds[i]);
             button.setEnabled(isEnabled());
+            applyLabelSizing(button, mValues.length == 2);
         }
         group.setContentDescription(getTitle());
+        // Every bind: the row's view may have been another pill's, trimmed or not.
+        applyPadding(buttons, mCompact);
         applyStacking(group, buttons, mStacked);
         int selected = selectedIndex();
         if (selected < 0) group.clearChecked();
@@ -213,6 +230,51 @@ public final class SegmentedPillPreference extends Preference {
         };
         group.addOnButtonCheckedListener(listener);
         group.setTag(R.id.segmented_pill_track, listener);
+    }
+
+    /**
+     * Two segments are wide enough for a label to shrink to one line instead of ellipsizing at a
+     * large font scale (at 14sp, the size it already has, nothing changes). Three or four
+     * segments keep the trim-then-stack fit. Compares before setting.
+     */
+    private static void applyLabelSizing(@NonNull MaterialButton button, boolean autosize) {
+        boolean on = TextViewCompat.getAutoSizeTextType(button)
+            == TextViewCompat.AUTO_SIZE_TEXT_TYPE_UNIFORM;
+        if (on == autosize) return;
+        if (autosize) {
+            button.setMaxLines(1);
+            TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(button, AUTOSIZE_MIN_SP,
+                AUTOSIZE_MAX_SP, 1, TypedValue.COMPLEX_UNIT_SP);
+        } else {
+            TextViewCompat.setAutoSizeTextTypeWithDefaults(button,
+                TextViewCompat.AUTO_SIZE_TEXT_TYPE_NONE);
+            button.setTextSize(TypedValue.COMPLEX_UNIT_SP, AUTOSIZE_MAX_SP);
+            button.setMaxLines(2);
+        }
+    }
+
+    /**
+     * The segments' side padding: the style's, kept on each button the first time it is seen, or
+     * {@link #COMPACT_PADDING_DP}. Compares before setting.
+     */
+    private static void applyPadding(@NonNull MaterialButton[] buttons, boolean compact) {
+        for (MaterialButton button : buttons) {
+            Object kept = button.getTag(R.id.segmented_pill_track);
+            int[] style;
+            if (kept instanceof int[]) {
+                style = (int[]) kept;
+            } else {
+                style = new int[] {button.getPaddingStart(), button.getPaddingEnd()};
+                button.setTag(R.id.segmented_pill_track, style);
+            }
+            int side = Math.round(COMPACT_PADDING_DP
+                * button.getResources().getDisplayMetrics().density);
+            int start = compact ? Math.min(side, style[0]) : style[0];
+            int end = compact ? Math.min(side, style[1]) : style[1];
+            if (button.getPaddingStart() == start && button.getPaddingEnd() == end) continue;
+            button.setPaddingRelative(start, button.getPaddingTop(), end,
+                button.getPaddingBottom());
+        }
     }
 
     /** Full-width stacked segments (vertical) or the weighted single row. */
@@ -278,6 +340,16 @@ public final class SegmentedPillPreference extends Preference {
     private void fitAfterLayout(@NonNull MaterialButtonToggleGroup group,
                                 @NonNull MaterialButton[] buttons) {
         if (group.getWidth() == 0) return;
+        if (!mStacked && labelsDoNotFit(buttons, mValues.length) && !mCompact) {
+            // The segments' widths do not move with their padding: trimmed, the labels are judged
+            // again at once, and stack only when even that is not enough.
+            mCompact = true;
+            applyPadding(buttons, true);
+            if (labelsDoNotFit(buttons, mValues.length)) {
+                mCompact = false;
+                applyPadding(buttons, false);
+            }
+        }
         if (!mStacked && labelsDoNotFit(buttons, mValues.length)) {
             mStacked = true;
             applyStacking(group, buttons, true);

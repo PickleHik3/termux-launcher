@@ -18,7 +18,8 @@ import static org.junit.Assert.assertTrue;
  */
 @RunWith(RobolectricTestRunner.class)
 public class TaiImageAdmissionTest {
-    private static final long PONG_TOTAL = 11_530_736L * 1024L;
+    /** A phone small enough that the fixed floors apply (the RAM-share rule gives less), so the plan arithmetic below holds. */
+    private static final long SMALL_TOTAL = 4L * 1024L * 1024L * 1024L;
     private static final long SD15 = 1_150_000_000L;
     private static final long GB = 1024L * 1024L * 1024L;
     private static final TaiImageAdmission.Measured UNKNOWN = mode -> 0L;
@@ -31,7 +32,7 @@ public class TaiImageAdmissionTest {
     private static TaiImageAdmission.Decision decide(long peak, int requested, long available,
                                                       List<TaiResidency.Entry> evictable, TaiImageAdmission.Measured measured,
                                                       TaiLoadBudget.Conditions conditions) {
-        return TaiImageAdmission.decide(peak, requested, "opencl", PONG_TOTAL, available, evictable, measured, conditions);
+        return TaiImageAdmission.decide(peak, requested, "opencl", SMALL_TOTAL, available, evictable, measured, conditions);
     }
 
     @Test

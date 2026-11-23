@@ -253,8 +253,7 @@ public final class TermuxInAppKeyboard {
     }
 
     private static LayoutModifier.LayoutOptions buildLayoutOptions(String extraKeysStoredValue) {
-        return new LayoutModifier.LayoutOptions(true, false, true,
-            InAppKeyboardExtraKeys.resolve(extraKeysStoredValue));
+        return InAppKeyboardLayoutSource.textLayoutOptions(extraKeysStoredValue);
     }
 
     public boolean isEnabled() {
@@ -1759,7 +1758,7 @@ public final class TermuxInAppKeyboard {
         mLayoutRing = LauncherKeyboardLayouts.parseSelection(resources,
             mPreferences.getInAppKeyboardLayouts());
         String stored = mPreferences.getInAppKeyboardActiveLayout();
-        String active = mLayoutRing.contains(stored) ? stored : mLayoutRing.get(0);
+        String active = InAppKeyboardLayoutSource.activeId(mLayoutRing, stored);
         if (active.equals(mActiveTextLayoutId))
             return;
         mActiveTextLayoutId = active;
@@ -2133,13 +2132,11 @@ public final class TermuxInAppKeyboard {
     }
 
     private KeyboardData loadBundledLayout(int resourceId) {
-        KeyboardData keyboard = KeyboardData.load(requireContainer().getResources(), resourceId);
-        if (keyboard == null) {
+        KeyboardData keyboard = InAppKeyboardLayoutSource.loadBundled(
+            requireContainer().getResources(), resourceId, mLayoutOptions);
+        if (keyboard == null)
             mHost.debugLog("Failed to load bundled in-app keyboard layout " + resourceId);
-            return null;
-        }
-        return LayoutModifier.modify(keyboard, mLayoutOptions,
-            requireContainer().getResources());
+        return keyboard;
     }
 
     /** Any modal pad, any catalogued text layout, or — for anything else — where the ring is. */

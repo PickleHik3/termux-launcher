@@ -38,6 +38,13 @@ public final class X11LinuxAppRunner {
      */
     static final List<String> TOUCH_ENV = java.util.Collections.singletonList("MOZ_USE_XINPUT2=1");
 
+    /**
+     * What tells GTK, Qt and the XIM clients to use fcitx5, for {@link #inputMethodBlock}. The
+     * names are fcitx5's own; Termux packages the GTK modules and the Qt 6 one.
+     */
+    static final List<String> INPUT_METHOD_ENV = java.util.Collections.unmodifiableList(
+        Arrays.asList("GTK_IM_MODULE=fcitx", "QT_IM_MODULE=fcitx", "XMODIFIERS=@im=fcitx"));
+
     /** How long a display gets to come up before the tap is given up on. */
     private static final long START_TIMEOUT_MS = 15_000L;
     /**
@@ -67,6 +74,22 @@ public final class X11LinuxAppRunner {
     @VisibleForTesting
     static final String SESSION_PID_PATH =
         TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-session.pid";
+
+    /**
+     * Where a desktop's output goes, truncated at every start. A file rather than the launcher's
+     * pipes: a daemon the desktop leaves behind inherits it, and a pipe held that way would keep
+     * the host from ever reporting that the desktop ended. Also the log to read when one misbehaves.
+     */
+    @VisibleForTesting
+    static final String SESSION_LOG_PATH =
+        TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/termux-x11-session.log";
+
+    /**
+     * Exported by the session's shell as its own pid, and so found in {@code /proc/<pid>/environ}
+     * of the desktop it becomes: what tells our session from a stranger that reused the pid.
+     */
+    @VisibleForTesting
+    static final String SESSION_MARKER_VAR = "TERMUX_X11_SESSION_PID";
 
     /** The directory a session is given as {@code XDG_RUNTIME_DIR}, under its own world's tmp. */
     private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
@@ -300,13 +323,37 @@ public final class X11LinuxAppRunner {
 
     /** The controller's running state changed. */
     public void onDisplayRunningChanged(boolean running) {
-        if (!running || pending == null) return;
+        if (!running) {
+            endDesktopWithDisplay();
+            return;
+        }
+        if (pending == null) return;
         LinuxAppCatalog.LinuxApp app = pending;
         pending = null;
         handler.removeCallbacks(giveUp);
         // The display is up because this runner just asked for it: the manager it starts may not
         // be there yet, and a desktop must wait for it rather than race it.
         launch(app, true);
+    }
+
+    /** Whether a desktop session is the one running on the display. */
+    boolean hasRunningDesktop() {
+        return runningSession != null;
+    }
+
+    /**
+     * A desktop dies with the display it ran on, and its script's exit may never be reported (a
+     * daemon it left behind can hold the script's output open). The bookkeeping ends here: the
+     * desktop is no longer the running one, and the pid file it left names nothing. The user
+     * stopped the display, so this is not a kill to tell them about. The script's own exit, if it
+     * comes later, is stale and {@link #onSessionExited} ignores it.
+     */
+    private void endDesktopWithDisplay() {
+        if (runningSession == null) return;
+        Logger.logInfo(LOG_TAG, "Display stopped; " + runningSession.id + " ended with it");
+        runningSession = null;
+        takeOver = null;
+        EXECUTOR.execute(() -> new java.io.File(SESSION_PID_PATH).delete());
     }
 
     /**
@@ -612,7 +659,9 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * The shell line that runs the app: the display, the GPU environment, the home directory,
+     * The shell line that runs the app: the display, the GPU environment, fcitx5's when it is
+     * there ({@link #inputMethodBlock}), the cursor theme lines of a prefix app
+     * ({@link #cursorBlock}), the home directory,
      * then the app's command — its own, or a {@code proot-distro login} around it when the app is
      * installed in a container. The touch environment goes in first so a GPU profile still has the
      * last word over anything it sets. Pure, so the composition is tested.
@@ -650,6 +699,9 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
+        // apps keep the cursor guess until that follow-up is verified on a phone.
+        if (app.container.isPrefix()) script.append(cursorBlock()).append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (awaitWindowManager != null) script.append(awaitWindowManager);
         // An Electron app under a virgl profile also draws in software (#162): its own GPU path
@@ -659,6 +711,57 @@ public final class X11LinuxAppRunner {
         script.append("exec ").append(noSandbox ? app.commandWith(extraArgs) : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * The lines that give a prefix app a cursor theme: where an Xcursor lookup searches, and a
+     * theme when the user has none. Toolkits that do their own lookup (Rust and gpui apps) search
+     * {@code /usr/share/icons}, which the prefix does not have. Used in {@link #script} for
+     * prefix apps only: a desktop chooses its own theme and a container's {@code /usr/share/icons}
+     * is already the default path. The prefix path has no quotes or spaces, so it sits as plain
+     * text inside the double-quoted word. {@code core} leaves the cursor to the X server's own
+     * font, the same as finding no theme. Shell builtins and {@code [} only, no variable left
+     * set beyond the two exports. Pure, so the text is tested.
+     */
+    @NonNull
+    static String cursorBlock() {
+        String prefix = TermuxConstants.TERMUX_PREFIX_DIR_PATH;
+        String icons = prefix + "/share/icons";
+        return "export XCURSOR_PATH=\"${XCURSOR_PATH:-$HOME/.local/share/icons:$HOME/.icons:"
+            + icons + ":" + prefix + "/share/pixmaps}\"\n"
+            + "if [ -z \"${XCURSOR_THEME:-}\" ] && [ ! -d \"$HOME/.local/share/icons/default\" ]"
+            + " && [ ! -d \"$HOME/.icons/default\" ]"
+            + " && [ ! -d " + ProotDistro.singleQuote(icons + "/default") + " ]; then\n"
+            + "if [ -d " + ProotDistro.singleQuote(icons + "/Adwaita/cursors") + " ]; then\n"
+            + "export XCURSOR_THEME=Adwaita\n"
+            + "else\n"
+            + "export XCURSOR_THEME=core\n"
+            + "fi\n"
+            + "fi\n";
+    }
+
+    /**
+     * The lines that hand an app fcitx5 (#129): the toolkits' input-method modules, and the
+     * display's session bus, which is where the helper started fcitx5 — a GTK or Qt module talks
+     * to fcitx5 over D-Bus alone, so an app on any other bus never reaches it, and its text
+     * fields never report focus.
+     *
+     * <p>Only when fcitx5 is installed and the helper's bus for this display is actually up: the
+     * socket only exists while the helper runs, and an app given a bus nobody answers on is worse
+     * off than one given none. Without fcitx5 the app is run exactly as it always was. Pure, so
+     * the composition is tested.
+     */
+    @NonNull
+    static String inputMethodBlock(@NonNull String display) {
+        String bus = X11CliInstaller.imBusPath(display);
+        StringBuilder block = new StringBuilder();
+        block.append("if [ -x ").append(ProotDistro.singleQuote(X11CliInstaller.FCITX5_PATH))
+            .append(" ] && [ -S ").append(ProotDistro.singleQuote(bus)).append(" ]; then\n");
+        for (String line : INPUT_METHOD_ENV) block.append("export ").append(line).append('\n');
+        block.append("export DBUS_SESSION_BUS_ADDRESS=")
+            .append(ProotDistro.singleQuote("unix:path=" + bus)).append('\n');
+        block.append("fi\n");
+        return block.toString();
     }
 
     /**
@@ -687,11 +790,17 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
+        // focused text field opens the Android keyboard. A container has neither it nor its modules.
+        if (app.container.isPrefix()) script.append(inputMethodBlock(display));
         script.append("cd \"$HOME\"\n");
         if (stopWindowManager != null) script.append(stopWindowManager).append('\n');
         script.append("mkdir -p ")
             .append(ProotDistro.singleQuote(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH))
             .append('\n');
+        // From here the desktop talks to a file, not to the host's pipes (see SESSION_LOG_PATH).
+        script.append("exec > ").append(ProotDistro.singleQuote(SESSION_LOG_PATH)).append(" 2>&1\n");
+        script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
         String body = sessionBody(app);
         if (app.container.isPrefix()) script.append(body);
@@ -703,8 +812,9 @@ public final class X11LinuxAppRunner {
      * What a desktop is started with, in its own world — the prefix's or a container's. Three
      * things, none of which anything else in Termux sets:
      * <ul>
-     *   <li>{@code XDG_RUNTIME_DIR}, made before it is used. Nothing in a Termux prefix or in a
-     *       container sets one, and a desktop's own pieces expect it to be there.</li>
+     *   <li>{@code XDG_RUNTIME_DIR} for a container's desktop, made before it is used: nothing in
+     *       a container sets one, and a desktop's own pieces expect it. A prefix desktop is left
+     *       with its shells' value, so their sockets (herdr-core's) are found from both.</li>
      *   <li>{@code XDG_SESSION_TYPE}, and {@code XDG_CURRENT_DESKTOP} from the session file's own
      *       {@code DesktopNames} when it named any — which is what the key is for.</li>
      *   <li>a session bus, but only for a desktop that starts none itself
@@ -716,9 +826,14 @@ public final class X11LinuxAppRunner {
     @NonNull
     static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app) {
         StringBuilder body = new StringBuilder();
-        body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
-            .append("\"\n");
-        body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
+        // A prefix desktop keeps the runtime directory its shells have (none, in Termux): tools
+        // that keep a socket there, such as herdr-core, then find the same one inside the
+        // desktop as outside it. A container has no shells of ours to agree with.
+        if (!app.container.isPrefix()) {
+            body.append("export XDG_RUNTIME_DIR=\"${TMPDIR:-/tmp}/").append(RUNTIME_DIR_NAME)
+                .append("\"\n");
+            body.append("mkdir -p \"$XDG_RUNTIME_DIR\" && chmod 700 \"$XDG_RUNTIME_DIR\"\n");
+        }
         body.append("export XDG_SESSION_TYPE=x11\n");
         if (!app.desktopNames.isEmpty()) {
             body.append("export XDG_CURRENT_DESKTOP=")
@@ -758,6 +873,10 @@ public final class X11LinuxAppRunner {
         return "pid=$(cat " + pidFile + " 2>/dev/null)\n"
             + "rm -f " + pidFile + "\n"
             + "[ -n \"$pid\" ] || exit 0\n"
+            // A pid file outlives its desktop; the pid may now be anyone's. Only a process that
+            // carries this session's marker (its own pid, exported before it exec'd) is ours.
+            + "tr '\\0' '\\n' < \"/proc/$pid/environ\" 2>/dev/null"
+            + " | grep -qx \"" + SESSION_MARKER_VAR + "=$pid\" || exit 0\n"
             + "kill \"$pid\" 2>/dev/null\n"
             + "n=0\n"
             + "while [ \"$n\" -lt 40 ] && kill -0 \"$pid\" 2>/dev/null; do\n"

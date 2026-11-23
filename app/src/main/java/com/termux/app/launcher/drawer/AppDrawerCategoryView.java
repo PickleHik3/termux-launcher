@@ -34,6 +34,7 @@ import androidx.recyclerview.widget.RecyclerView;
 import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
+import com.termux.app.launcher.model.LauncherAppEntry;
 import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.drawer.AppDrawerCategoryTouchRegions.Part;
 import com.termux.app.launcher.drawer.AppDrawerTransitionGeometry.Frame;
@@ -87,10 +88,14 @@ public final class AppDrawerCategoryView extends ViewGroup
     @Nullable private Runnable frameRequestListener;
     @Nullable private Runnable popupDismissCallback;
     @NonNull private List<AppDrawerCategoryBucket> buckets = Collections.emptyList();
+    /** {@link #setCatalogueLoaded}: false while the catalogue (re)loads. */
+    private boolean catalogueLoaded = true;
     @Nullable private AppDrawerCategoryBucket selectedBucket;
     @NonNull private Part streamPart = Part.OUTSIDE;
     private boolean streamFinalized;
     private float downRawY;
+    /** See {@link #setBottomInsetPx}; zero until the controller sets it. */
+    private int bottomInset;
     private float collapseStartProgress = 1f;
     private float headerDownX;
     private float headerDownY;
@@ -246,6 +251,21 @@ public final class AppDrawerCategoryView extends ViewGroup
         addView(morph);
     }
 
+    /**
+     * Whether the catalogue behind the buckets has finished loading. While it (re)loads the
+     * buckets may be empty for no reason the user should see, so "Nothing here yet" waits for it.
+     */
+    public void setCatalogueLoaded(boolean loaded) {
+        if (catalogueLoaded == loaded) return;
+        catalogueLoaded = loaded;
+        applyEmptyState();
+    }
+
+    /** "Nothing here yet" only once the catalogue has loaded and holds nothing to show. */
+    private void applyEmptyState() {
+        emptyState.setVisibility(buckets.isEmpty() && catalogueLoaded ? VISIBLE : GONE);
+    }
+
     public void setDock(@Nullable SuggestionBarView dock) {
         tileAdapter.setDock(dock);
         detailAdapter.setDock(dock);
@@ -306,14 +326,41 @@ public final class AppDrawerCategoryView extends ViewGroup
         // edge, so in landscape — where a second row only half fits — the tiles read as clipped by
         // the plane rather than as a list that scrolls. One row gap of overscroll says the
         // difference, and the tiles still paint into it while dragging.
-        int bottom = Math.max(0, Math.round(metrics.itemGapPx + metrics.itemBottomGapPx));
-        overview.setPadding(horizontal, 0, horizontal, bottom);
+        overview.setPadding(horizontal, 0, horizontal, overviewBottomPaddingPx());
         overview.setClipToPadding(false);
         tileSpacing.setMetrics(metrics);
         overview.invalidateItemDecorations();
         tileAdapter.setMetrics(metrics);
         detailAdapter.setMetrics(metrics);
         requestLayout();
+    }
+
+    /**
+     * Ends the last overview card and the opened category's last row {@code bottomInsetPx} above
+     * the card's usable bottom. Each tile and row already carries its own trailing gap, which the
+     * padding gives back. Not per frame.
+     */
+    public void setBottomInsetPx(int bottomInsetPx) {
+        int inset = Math.max(0, bottomInsetPx);
+        if (inset == bottomInset) return;
+        bottomInset = inset;
+        int detail = AppDrawerContentInsetPolicy.listBottomPaddingPx(inset,
+            AppDrawerGridMetrics.ROW_BOTTOM_DP * getResources().getDisplayMetrics().density);
+        if (detailList.getPaddingBottom() != detail) {
+            detailList.setPadding(0, 0, 0, detail);
+            detailList.setClipToPadding(false);
+        }
+        int overviewBottom = overviewBottomPaddingPx();
+        if (overview.getPaddingBottom() != overviewBottom) {
+            overview.setPadding(overview.getPaddingLeft(), 0, overview.getPaddingRight(),
+                overviewBottom);
+        }
+    }
+
+    private int overviewBottomPaddingPx() {
+        AppDrawerCategoryGridMetrics current = metrics;
+        return AppDrawerContentInsetPolicy.listBottomPaddingPx(bottomInset,
+            current == null ? 0f : current.itemBottomGapPx);
     }
 
     public void submitBuckets(@NonNull List<AppDrawerCategoryBucket> newBuckets) {
@@ -351,7 +398,7 @@ public final class AppDrawerCategoryView extends ViewGroup
             int position = positionOfCategory(firstCategoryId);
             if (position >= 0) overviewLayout.scrollToPositionWithOffset(position, firstOffset);
         }
-        emptyState.setVisibility(buckets.isEmpty() ? VISIBLE : GONE);
+        applyEmptyState();
         overview.setVisibility(buckets.isEmpty() ? GONE : VISIBLE);
         requestLayout();
     }
@@ -551,13 +598,27 @@ public final class AppDrawerCategoryView extends ViewGroup
         morph.setClickable(false);
         overview.setAlpha(1f);
         overview.setVisibility(buckets.isEmpty() ? GONE : VISIBLE);
-        emptyState.setVisibility(buckets.isEmpty() ? VISIBLE : GONE);
+        applyEmptyState();
     }
 
     private void abortToOverview() {
         expansion.teardown();
         expansionSpring.reset(0f);
         tileAdapter.rebindAttachedPreviews();
+        finishAtOverview();
+        cancelGesture();
+    }
+
+    /**
+     * Stops the category transition for a drawer on its way out and keeps the tiles: the card keeps
+     * what it shows until it is gone, then {@link #reset} empties it.
+     */
+    public void stopForClose() {
+        clickGate.suppress();
+        expansion.teardown();
+        expansionSpring.reset(0f);
+        detailAdapter.releaseAttached(detailList);
+        selectedBucket = null;
         finishAtOverview();
         cancelGesture();
     }
@@ -783,6 +844,26 @@ public final class AppDrawerCategoryView extends ViewGroup
         if (expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW && !buckets.isEmpty())
             return overview;
         return null;
+    }
+    /**
+     * The app a finger at this view's local ({@code x}, {@code y}) is on: a row of the open
+     * category, or one of a tile's launch icons. Null anywhere else.
+     */
+    @Nullable public LauncherAppEntry appEntryAt(float x, float y) {
+        RecyclerView active = activeRecyclerView();
+        if (active == null || getVisibility() != VISIBLE) return null;
+        float localX = x - active.getLeft();
+        float localY = y - active.getTop();
+        View child = active.findChildViewUnder(localX, localY);
+        if (child == null) return null;
+        if (active == detailList) {
+            int position = active.getChildAdapterPosition(child);
+            List<LauncherAppEntry> entries = detailAdapter.entries();
+            return position >= 0 && position < entries.size() ? entries.get(position) : null;
+        }
+        if (!(child instanceof AppDrawerCategoryTileView)) return null;
+        return ((AppDrawerCategoryTileView) child).launchEntryAt(
+            localX - child.getLeft(), localY - child.getTop());
     }
     public boolean isOverview() {
         return expansion.state() == AppDrawerCategoryExpansionModel.State.OVERVIEW;

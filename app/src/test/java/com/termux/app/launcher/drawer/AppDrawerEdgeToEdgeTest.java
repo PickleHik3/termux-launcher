@@ -190,6 +190,7 @@ public class AppDrawerEdgeToEdgeTest {
             mHost.decorNavStripAlpha, 0.001f);
 
         ReflectionHelpers.callInstanceMethod(mController, "onClosed",
+            ClassParameter.from(boolean.class, false),
             ClassParameter.from(boolean.class, false));
         assertEquals("a closed drawer hands the strip back", 1f, mHost.decorNavStripAlpha, 0.001f);
     }

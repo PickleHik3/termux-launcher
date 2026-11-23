@@ -78,6 +78,18 @@ public final class AnchoredMenu {
     }
 
     /**
+     * Shows {@code popup} at a position given in screen coordinates. showAtLocation takes the
+     * parent window's coordinates, which differ from the screen's in split screen and freeform.
+     */
+    private void showAtScreen(@NonNull PopupWindow popup, int screenX, int screenY) {
+        int[] origin = new int[2];
+        host.getRootView().getLocationOnScreen(origin);
+        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT,
+            AnchoredMenuGeometry.toWindowX(screenX, origin[0]),
+            AnchoredMenuGeometry.toWindowY(screenY, origin[1]));
+    }
+
+    /**
      * Builds the panel and places it beside {@code mainMenu}, vertically centred on the row that
      * opened it. Falls back to plain anchoring when the main menu has no content view to align to.
      */
@@ -103,7 +115,7 @@ public final class AnchoredMenu {
         AnchoredMenuGeometry.sideAlignedPosition(mainLoc[0], main.getWidth(),
             rowLoc[1] + (rowAnchor.getHeight() / 2), popup.getWidth(), popup.getHeight(),
             screenW, screenH, dp(AnchoredMenuGeometry.GAP_DP), xy);
-        popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
+        showAtScreen(popup, xy[0], xy[1]);
         return popup;
     }
 
@@ -139,7 +151,7 @@ public final class AnchoredMenu {
             int[] xy = new int[2];
             AnchoredMenuGeometry.anchoredPosition(anchorRect, popup.getWidth(), popup.getHeight(),
                 screenW, visibleFrame, gap, xy);
-            popup.showAtLocation(host, Gravity.TOP | Gravity.LEFT, xy[0], xy[1]);
+            showAtScreen(popup, xy[0], xy[1]);
         } else {
             popup.showAtLocation(host, Gravity.CENTER_HORIZONTAL | Gravity.BOTTOM, 0,
                 host.getHeight() + gap);

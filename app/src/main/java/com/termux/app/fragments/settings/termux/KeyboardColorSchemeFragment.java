@@ -37,7 +37,10 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.R;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardColorScheme;
+import com.termux.app.terminal.inappkeyboard.InAppKeyboardLayoutSource;
 import com.termux.app.terminal.inappkeyboard.InAppKeyboardPaletteFactory;
+import com.termux.app.terminal.inappkeyboard.KeyboardLayoutFiles;
+import com.termux.app.terminal.inappkeyboard.LauncherKeyboardLayouts;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import java.io.File;
@@ -107,6 +110,10 @@ public class KeyboardColorSchemeFragment extends Fragment {
     private ActivityResultLauncher<String[]> mFontPickerLauncher;
     private FrameLayout mPreviewHolder;
     private TextView mFontSummary;
+    /** The ring the keyboard cycles through, and the layout the preview draws from it. */
+    private List<String> mLayoutRing = java.util.Collections.emptyList();
+    private String mShownLayoutId = LauncherKeyboardLayouts.LAYOUT_MAIN;
+    private static final int LAYOUT_CHIP_MAX_WIDTH_DP = 160;
 
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
@@ -136,7 +143,12 @@ public class KeyboardColorSchemeFragment extends Fragment {
         mPreviewHolder = new FrameLayout(context);
         root.addView(mPreviewHolder, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mLayoutRing = LauncherKeyboardLayouts.parseSelection(getResources(),
+            mPreferences.getInAppKeyboardLayouts());
+        mShownLayoutId = InAppKeyboardLayoutSource.activeId(mLayoutRing,
+            mPreferences.getInAppKeyboardActiveLayout());
         rebuildPreview();
+        addLayoutChips(context, root);
 
         // 2. One supporting line; the pencil and reset glyphs sit in the sentences, the same marks
         // as the card's buttons.
@@ -267,15 +279,12 @@ public class KeyboardColorSchemeFragment extends Fragment {
         config.labelFont = previewLabelFont(context, mPreferences.getInAppKeyboardFontPath());
         config.symbolFont = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
         mKeyboard = new Keyboard2View(context, config.build(), buildPreviewPalette(context));
-        KeyboardData previewLayout = KeyboardData.load(getResources(),
-            juloo.keyboard2.R.xml.termux_launcher_qwerty);
-        if (previewLayout != null) {
-            LayoutModifier.LayoutOptions options = new LayoutModifier.LayoutOptions(
-                true, false, true,
-                com.termux.app.terminal.inappkeyboard.InAppKeyboardExtraKeys.resolve(
-                    mPreferences.getInAppKeyboardExtraKeys()));
-            mKeyboard.setKeyboard(LayoutModifier.modify(previewLayout, options, getResources()));
-        }
+        // The layout the user types on (or the one picked in the ring row), so every key can be painted.
+        KeyboardData previewLayout = InAppKeyboardLayoutSource.load(getResources(),
+            KeyboardLayoutFiles.defaultHome(), mShownLayoutId,
+            InAppKeyboardLayoutSource.textLayoutOptions(mPreferences.getInAppKeyboardExtraKeys()));
+        if (previewLayout != null)
+            mKeyboard.setKeyboard(previewLayout);
         // The height is the layout's, in the orientation the phone is being held in.
         mKeyboard.setHeightScale(new PlaceLayoutStore(mPreferences).keyboardHeightScale(
             PlaceOrientation.of(getResources().getConfiguration())));
@@ -692,6 +701,46 @@ public class KeyboardColorSchemeFragment extends Fragment {
         R.drawable.ic_keyboard_color_role_secondary_bottom,
         R.drawable.ic_keyboard_color_role_background
     };
+
+    /**
+     * One scrollable line of chips under the preview, one per ring layout; tapping one swaps the
+     * preview only, never the layout the user types on. Absent when the ring holds one layout.
+     */
+    private void addLayoutChips(@NonNull android.content.Context context,
+                                @NonNull LinearLayout root) {
+        if (mLayoutRing.size() < 2) return;
+        android.widget.HorizontalScrollView scroller =
+            new android.widget.HorizontalScrollView(context);
+        scroller.setHorizontalScrollBarEnabled(false);
+        ChipGroup chips = new ChipGroup(context);
+        chips.setSingleLine(true);
+        chips.setSingleSelection(true);
+        chips.setSelectionRequired(true);
+        chips.setChipSpacingHorizontal(dp(GAP_DP));
+        for (String id : mLayoutRing) {
+            Chip chip = new Chip(context);
+            chip.setChipDrawable(ChipDrawable.createFromAttributes(context, null, 0,
+                com.google.android.material.R.style.Widget_Material3_Chip_Filter));
+            chip.setText(LauncherKeyboardLayouts.labelFor(getResources(), id));
+            chip.setSingleLine(true);
+            chip.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            chip.setMaxWidth(dp(LAYOUT_CHIP_MAX_WIDTH_DP));
+            chip.setCheckedIconVisible(false);
+            chip.setCheckable(true);
+            chip.setChecked(id.equals(mShownLayoutId));
+            chip.setOnClickListener(view -> {
+                if (id.equals(mShownLayoutId)) return;
+                mShownLayoutId = id;
+                rebuildPreview();
+            });
+            chips.addView(chip);
+        }
+        scroller.addView(chips);
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        params.topMargin = dp(GAP_DP);
+        root.addView(scroller, params);
+    }
 
     /** All six role chips in one group, wrapping to as many lines as the width needs. */
     private void addRoleChips(@NonNull android.content.Context context,

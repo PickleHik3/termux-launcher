@@ -306,6 +306,9 @@
     <string name="settings_widget_grid_rows_title">Grid rows</string>
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
+    <string name="termux_x11_start_failed">The display could not start.</string>
+    <string name="termux_x11_start_failed_generic">The display stopped as it started.</string>
+    <string name="termux_x11_start_failed_help">Startup and support</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
     <string name="termux_x11_needs_keyboard_data_nix">Add xkeyboard-config to home.nix and switch, then come back.</string>
     <string name="termux_x11_read_guide">Read the guide</string>
@@ -340,16 +343,19 @@
     <string name="settings_gui_apps_gpu_copy_summary">Paste it into the terminal to let your apps draw with this phone\'s graphics.</string>
     <string name="settings_gui_apps_gpu_clipboard_label">Graphics setup</string>
     <string name="settings_gui_apps_gpu_copied">Graphics command copied. Paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_gpu_benchmark_title">Benchmark graphics</string>
+    <string name="settings_gui_apps_gpu_benchmark_summary">Tries every option and keeps the fastest. Takes a few minutes.</string>
+    <string name="settings_gui_apps_gpu_benchmark_clipboard_label">Graphics benchmark</string>
+    <string name="settings_gui_apps_gpu_benchmark_copied">Benchmark command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
-    <string name="settings_x11_touch_mode_title">Touch</string>
+    <string name="settings_x11_touch_mode_title">Touch mode</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
     <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
     <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
-    <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
     <string name="settings_x11_filtering_title">Scaling</string>
@@ -544,7 +550,10 @@
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
     <string name="settings_app_drawer_category_sort_on_device">On this device</string>
     <string name="settings_app_drawer_category_sort_on_device_summary">%1$s · nothing leaves your phone</string>
-    <string name="settings_app_drawer_category_sort_on_device_warning">Takes about %1$d minutes. Keep the phone plugged in.</string>
+    <plurals name="settings_app_drawer_category_sort_on_device_warning">
+        <item quantity="one">Takes about %1$d minute. Keep the phone plugged in.</item>
+        <item quantity="other">Takes about %1$d minutes. Keep the phone plugged in.</item>
+    </plurals>
     <string name="settings_app_drawer_category_sort_paste">Copy a prompt for an AI chat</string>
     <string name="settings_app_drawer_category_sort_paste_summary">Paste it into any AI chat, then paste the answer back</string>
     <string name="settings_app_drawer_category_sort_paste_warning">Sends your installed-app list to that service</string>
@@ -735,6 +744,9 @@
         <item quantity="other">%d panes</item>
     </plurals>
     <string name="msg_terminal_reset">Terminal reset</string>
+    <string name="msg_shell_killed_by_signal">%1$s was killed (signal %2$d). Enter closes it.</string>
+    <string name="msg_shell_killed_shell">A shell</string>
+    <string name="msg_shell_killed_phantom_hint">Android\'s process limit? Developer options → Disable child process restrictions</string>
 
     <string name="action_kill_process">Kill process (%d)</string>
     <string name="title_confirm_kill_process">Really kill this session?</string>
@@ -1987,7 +1999,7 @@
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
-                <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
+                <string name="termux_app_launcher_accessibility_lock_prompt_message">Lets the launcher lock the screen and open notifications or quick settings from your gestures.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
                 <string name="termux_app_launcher_dock_style_default">Docked</string>
                 <string name="termux_app_launcher_dock_style_rounded">Floating</string>
@@ -2120,6 +2132,12 @@
     <string name="tool_mouse_toggle">Mouse mode</string>
     <string name="extra_key_readout_mouse_mode_on">Mouse mode on</string>
     <string name="extra_key_readout_mouse_mode_off">Mouse mode off</string>
+    <!-- The display touchpad's two buttons, read by a screen reader. The mode button's state is
+         the keyboard mode (GLOSSARY: Keyboard mode), the same value the Layout editor shows. -->
+    <string name="display_touchpad_exit_description">Leave mouse mode</string>
+    <string name="display_touchpad_keyboard_mode_description">Keyboard mode</string>
+    <string name="display_touchpad_keyboard_mode_overlay">Overlay</string>
+    <string name="display_touchpad_keyboard_mode_resize">Resize</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>
