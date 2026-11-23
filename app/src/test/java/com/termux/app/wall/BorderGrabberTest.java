@@ -151,4 +151,30 @@ public class BorderGrabberTest {
         assertEquals(88f + BorderGrabber.PRESSED_EXTRA_WIDTH_DP * DENSITY, pill.width(), EPS);
         assertEquals("drawn along the swipe", 2113f, pill.top, EPS);
     }
+
+    @Test
+    public void thePillIsHiddenWhileItsPageIsOffRestEvenUnderAFingerOrReducedMotion() {
+        assertEquals(0f, BorderGrabber.landedVisibility(false, 10_000L, false, false), 0f);
+        assertEquals(0f, BorderGrabber.landedVisibility(false, 10_000L, true, true), 0f);
+    }
+
+    @Test
+    public void thePillFadesInOnceByTimeAfterLanding() {
+        long fade = BorderGrabber.LANDING_FADE_MS;
+        assertEquals(0f, BorderGrabber.landedVisibility(true, 0L, false, false), 0f);
+        assertEquals(0.5f, BorderGrabber.landedVisibility(true, fade / 2, false, false), EPS);
+        assertEquals(1f, BorderGrabber.landedVisibility(true, fade, false, false), 0f);
+        assertEquals(1f, BorderGrabber.landedVisibility(true, fade * 50, false, false), 0f);
+        assertEquals(0f, BorderGrabber.landedVisibility(true, -5L, false, false), 0f);
+    }
+
+    @Test
+    public void aFingerInTheZoneShowsItFullBeforeTheFadeEnds() {
+        assertEquals(1f, BorderGrabber.landedVisibility(true, 10L, false, true), 0f);
+    }
+
+    @Test
+    public void underReducedMotionItAppearsAtOnceOnLanding() {
+        assertEquals(1f, BorderGrabber.landedVisibility(true, 0L, true, false), 0f);
+    }
 }

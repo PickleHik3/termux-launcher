@@ -30,9 +30,10 @@ import com.termux.app.launcher.widget.HomeLabelInk;
  * swipe's zone (the air between the page's edge and the wall's, or the box around the pill a row
  * into the page, {@link BorderDrag}), and
  * drawn a short way after it, with resistance, while the swipe is held; both ease back on the
- * lift. It moves and fades with its page — scaled with a sunk page, gone over the first stretch of
- * a slide as the page's outline goes ({@link PaneWallPolicy#pageOutlineAlpha}) — and is not drawn
- * where its swipe is off. Under reduced motion it is the resting pill and nothing else.
+ * lift. It moves with its page — scaled with a sunk page — and is hidden the moment a page swipe
+ * or transition moves the page off its rest, then fades in once, by time, after the page has
+ * landed ({@link #landedVisibility}); it is not drawn where its swipe is off. Under reduced
+ * motion it is the resting pill and nothing else, and appears at once on landing.
  *
  * <p>Drawn by the wall ({@link PaneWallLayout#dispatchDraw}) over its pages, so it costs a rounded
  * rect in the wall's own display list and nothing in any page's. The geometry is pure and static
@@ -70,6 +71,25 @@ public final class BorderGrabber {
     static final float TRACK_FRACTION = 0.25f;
     static final float TRACK_MAX_DP = 10f;
     static final long EMPHASIS_MS = 140L;
+    /** How long the pill takes to fade in once its page has landed: as long as its press eases. */
+    static final long LANDING_FADE_MS = EMPHASIS_MS;
+
+    /**
+     * The share of its alpha the pill shows: none while the page is off its rest, then a fade over
+     * {@link #LANDING_FADE_MS} from the moment it landed ({@code sinceLandMs}). Full at once under
+     * a finger or under reduced motion.
+     */
+    static float landedVisibility(boolean atRest, long sinceLandMs, boolean reducedMotion,
+                                  boolean pressed) {
+        if (!atRest) return 0f;
+        if (pressed || reducedMotion) return 1f;
+        return clamp01((float) sinceLandMs / LANDING_FADE_MS);
+    }
+
+    /** Whether a finger is on the pill's zone. */
+    boolean isPressed() {
+        return mPressed;
+    }
 
     @NonNull private final View mHost;
     /** Whether it marks the top border rather than the bottom one. */
