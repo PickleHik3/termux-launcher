@@ -1232,10 +1232,12 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                     // and the rim runs along this slab's own rounded rect, so the bend and the
                     // light move with the page while the wallpaper they bend stays put.
                     program.setAim(aim[0], aim[1], aim[2], aim[3]);
+                    program.setFrameSize(aimFrame.getWidth(), aimFrame.getHeight());
                     program.setLocal(mAim.local);
                     program.setRect(0f, 0f, width, height, mRadiusPx);
                     if (mPreviousProgram != null) {
                         mPreviousProgram.setAim(aim[0], aim[1], aim[2], aim[3]);
+                        mPreviousProgram.setFrameSize(aimFrame.getWidth(), aimFrame.getHeight());
                         mPreviousProgram.setLocal(mAim.local);
                         mPreviousProgram.setRect(0f, 0f, width, height, mRadiusPx);
                     } else if (mPreviousFrameShader != null) {

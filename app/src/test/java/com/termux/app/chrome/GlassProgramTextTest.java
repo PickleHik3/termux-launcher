@@ -56,4 +56,17 @@ public class GlassProgramTextTest {
         }
         assertTrue(seen > 20);
     }
+
+    @Test
+    public void theBandsSharpMixIsGatedByTheInFrameTest() {
+        String agsl = GlassRefraction.AGSL;
+        assertTrue(agsl.contains("clarityK *= frameClarity(fgRaw);"));
+        assertTrue(agsl.contains("clarityK *= frameClarity(fRaw);"));
+        assertTrue("the fade runs before the sharp mix",
+            agsl.indexOf("clarityK *= frameClarity(fRaw);") < agsl.indexOf("mix(col, sharp.eval(f), half(clarityK))"));
+        assertTrue("the fade runs before the dispersed sharp mix",
+            agsl.indexOf("clarityK *= frameClarity(fgRaw);") < agsl.indexOf("mix(col, clear, half(clarityK))"));
+        assertFalse("no band tap reads the frame uncovered",
+            agsl.contains("float2 fg = framePx(sampleCoord);") || agsl.contains("float2 f = framePx(sampleCoord);"));
+    }
 }

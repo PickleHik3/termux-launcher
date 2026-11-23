@@ -420,6 +420,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         if (program != null) {
             // The same aim, as uniforms: the program samples the frame by its own pixels.
             program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+            program.setFrameSize(frame.getWidth(), frame.getHeight());
             program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
             syncPose(program, mPreviousProgram);
         } else {
@@ -438,6 +439,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
             GlassRefraction.Program previousProgram = program == null ? null : mPreviousProgram;
             if (previousProgram != null) {
                 previousProgram.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+                previousProgram.setFrameSize(previous.getWidth(), previous.getHeight());
                 previousProgram.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
             } else {
                 matrixOf(mMatrix, mAim);
@@ -480,6 +482,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
             mOrigin[0], mOrigin[1], 0f);
         if (program != null) {
             program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
+            program.setFrameSize(live.bitmap.getWidth(), live.bitmap.getHeight());
             program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
             syncPose(program, null);
         } else {

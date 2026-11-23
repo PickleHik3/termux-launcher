@@ -506,6 +506,10 @@ public final class GlassRefraction {
         "uniform shader sharp;\n" +
         "uniform float2 uFrameScale;\n" +
         "uniform float2 uFrameOffset;\n" +
+        // The frame's valid box in its own pixels, (minX, minY, maxX, maxY): the frame the sampler
+        // can read before it clamps. Wide open (a RenderEffect's content, or no frame size told)
+        // reaches nothing. GlassRefraction.frameInset and frameClarity in Java.
+        "uniform float4 uFrameBox;\n" +
         "uniform float3 uLocalX;\n" +
         "uniform float3 uLocalY;\n" +
         "uniform float3 uLocalW;\n" +
@@ -601,7 +605,10 @@ public final class GlassRefraction {
         // uDisp at Edge 100%: Look.MAX_DISPERSION_SHARE in Java.
         "const float kDispFull = " + Look.MAX_DISPERSION_SHARE + ";\n" +
         // The pressed key's added glow at its centre; KEY_GLOW in Java.
-        "const float kKeyGlow = 0.15;\n";
+        "const float kKeyGlow = 0.15;\n" +
+        // FRAME_MARGIN_PX and FRAME_FADE_PX in Java.
+        "const float kFrameMarginPx = " + GlassRefraction.FRAME_MARGIN_PX + ";\n" +
+        "const float kFrameFadePx = " + GlassRefraction.FRAME_FADE_PX + ";\n";
 
     /**
      * The program from the rim's constants on: the key light, the glint, and everything below
@@ -657,6 +664,18 @@ public final class GlassRefraction {
         "    float3 p = float3(c, 1.0);\n" +
         "    float3 h = float3(dot(uLocalX, p), dot(uLocalY, p), dot(uLocalW, p));\n" +
         "    return (h.xy / h.z - uFrameOffset) / uFrameScale;\n" +
+        "}\n" +
+        // A frame pixel kept kFrameMarginPx inside the frame, so a sample the lens or the turn
+        // carries past the edge reads the frost's last real column, not the clamp's repeat.
+        "float2 frameInset(float2 f) {\n" +
+        "    return clamp(f, uFrameBox.xy + kFrameMarginPx, uFrameBox.zw - kFrameMarginPx);\n" +
+        "}\n" +
+        // The share of the sharp picture a frame pixel may show: whole inside, easing to 0 over
+        // kFrameFadePx as the pixel nears the margin, so the clear frame's clamped edge column
+        // never shows as an unblurred streak. frameClarity in Java.
+        "float frameClarity(float2 f) {\n" +
+        "    float2 d = min(f - uFrameBox.xy, uFrameBox.zw - f);\n" +
+        "    return smoothstep(kFrameMarginPx, kFrameMarginPx + kFrameFadePx, min(d.x, d.y));\n" +
         "}\n" +
         // The slab's profile slope across the lens zone, d(h/T)/de, e 0 at the outline to 1 where
         // the zone meets the flat face: the superellipse (1 - (1 - e)^p)^(1/p)'s, 0 at the face
@@ -923,9 +942,13 @@ public final class GlassRefraction {
         "    float2 oB = nb * (shiftG - shiftB);\n" +
         "    half4 col = half4(0.0);\n" +
         "    if (max(dot(oR, oR), dot(oB, oB)) > 0.25) {\n" +
-        "        float2 fr = framePx(sampleCoord + oR);\n" +
-        "        float2 fg = framePx(sampleCoord);\n" +
-        "        float2 fb = framePx(sampleCoord + oB);\n" +
+        "        float2 fr = frameInset(framePx(sampleCoord + oR));\n" +
+        "        float2 fgRaw = framePx(sampleCoord);\n" +
+        "        float2 fg = frameInset(fgRaw);\n" +
+        "        float2 fb = frameInset(framePx(sampleCoord + oB));\n" +
+        "        if (clarityK > 0.0) {\n" +
+        "            clarityK *= frameClarity(fgRaw);\n" +
+        "        }\n" +
         "        half4 g = content.eval(fg);\n" +
         "        col = half4(content.eval(fr).r, g.g, content.eval(fb).b, g.a);\n" +
         "        if (clarityK > 0.0) {\n" +
@@ -934,8 +957,12 @@ public final class GlassRefraction {
         "            col = mix(col, clear, half(clarityK));\n" +
         "        }\n" +
         "    } else {\n" +
-        "        float2 f = framePx(sampleCoord);\n" +
+        "        float2 fRaw = framePx(sampleCoord);\n" +
+        "        float2 f = frameInset(fRaw);\n" +
         "        col = content.eval(f);\n" +
+        "        if (clarityK > 0.0) {\n" +
+        "            clarityK *= frameClarity(fRaw);\n" +
+        "        }\n" +
         "        if (clarityK > 0.0) {\n" +
         "            col = mix(col, sharp.eval(f), half(clarityK));\n" +
         "        }\n" +
@@ -1452,6 +1479,27 @@ public final class GlassRefraction {
         return slab.steepness(slope);
     }
 
+    /** {@code kFrameMarginPx}: how far inside the frame a lens sample is kept, frame px. */
+    static final float FRAME_MARGIN_PX = 2f;
+    /** {@code kFrameFadePx}: the distance the sharp mix eases out over, past the margin, frame px. */
+    static final float FRAME_FADE_PX = 8f;
+
+    /** The program's {@code frameInset}: {@code v} kept {@link #FRAME_MARGIN_PX} inside {@code [lo, hi]}. Pure. */
+    static float frameInset(float v, float lo, float hi) {
+        return Math.max(lo + FRAME_MARGIN_PX, Math.min(hi - FRAME_MARGIN_PX, v));
+    }
+
+    /**
+     * The program's {@code frameClarity}: the share of the sharp picture a frame pixel at
+     * {@code (x, y)} may show, for a frame spanning {@code (minX, minY)} to {@code (maxX, maxY)}.
+     * 1 well inside, 0 at the margin and beyond, smoothstep between. Pure.
+     */
+    static float frameClarity(float x, float y, float minX, float minY, float maxX, float maxY) {
+        float d = Math.min(Math.min(x - minX, maxX - x), Math.min(y - minY, maxY - y));
+        float t = Math.max(0f, Math.min(1f, (d - FRAME_MARGIN_PX) / FRAME_FADE_PX));
+        return t * t * (3f - 2f * t);
+    }
+
     /** {@code uSharpEdge} for a program whose sharp input is bound and a picture of its own. Pure. */
     static float sharpEdge(boolean sharpBound, boolean sharpDistinct) {
         return sharpBound && sharpDistinct ? 1f : 0f;
@@ -1580,6 +1628,7 @@ public final class GlassRefraction {
         @NonNull private final RuntimeShader mShader;
         private final float mDensity;
         private float mScaleX = Float.NaN, mScaleY, mOffsetX, mOffsetY;
+        private float mFrameW = Float.NaN, mFrameH = Float.NaN;
         /** The local matrix last written, and scratch to read the next one into. */
         private final float[] mLocal = new float[9];
         private final float[] mLocalNext = new float[9];
@@ -1634,6 +1683,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uLensFeather", density * LENS_FEATHER_DP);
             mShader.setFloatUniform("uTouchLens", TOUCH_LENS);
             setAim(1f, 1f, 0f, 0f);
+            mShader.setFloatUniform("uFrameBox", -1e6f, -1e6f, 1e6f, 1e6f);
             setLocal(null);
             setLook(Look.DEFAULT);
             mLensOn = true; // so the clear below is a write, not a skip
@@ -1912,6 +1962,18 @@ public final class GlassRefraction {
             mOffsetY = offsetY;
             mShader.setFloatUniform("uFrameScale", Math.max(1e-4f, scaleX), Math.max(1e-4f, scaleY));
             mShader.setFloatUniform("uFrameOffset", offsetX, offsetY);
+        }
+
+        /**
+         * The bound frame's size in its own pixels, so the lens band keeps its frost where it
+         * reads past the frame's edge. Written only on a change. Never told (a RenderEffect's
+         * content is the view), the box stays wide open and the program reads as before.
+         */
+        public void setFrameSize(float width, float height) {
+            if (mFrameW == width && mFrameH == height) return;
+            mFrameW = width;
+            mFrameH = height;
+            mShader.setFloatUniform("uFrameBox", 0f, 0f, width, height);
         }
 
         /**

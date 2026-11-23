@@ -977,4 +977,28 @@ public class GlassRefractionTest {
         assertTrue(GlassRefraction.rimLobe(-d, -d) > GlassRefraction.rimLobe(0f, -1f));
         assertTrue(GlassRefraction.rimLobe(0f, -1f) > GlassRefraction.rimLobe(-1f, 0f));
     }
+
+    @Test
+    public void theFrameFadeLeavesTheInsideAloneAndZeroesPastTheEdge() {
+        float m = GlassRefraction.FRAME_MARGIN_PX, f = GlassRefraction.FRAME_FADE_PX;
+        assertEquals(1f, GlassRefraction.frameClarity(500f, 300f, 0f, 0f, 1000f, 600f), 0f);
+        assertEquals(1f, GlassRefraction.frameClarity(m + f, 300f, 0f, 0f, 1000f, 600f), 1e-6f);
+        assertEquals(0f, GlassRefraction.frameClarity(m, 300f, 0f, 0f, 1000f, 600f), 0f);
+        assertEquals(0f, GlassRefraction.frameClarity(-40f, 300f, 0f, 0f, 1000f, 600f), 0f);
+        assertEquals(0f, GlassRefraction.frameClarity(1040f, 300f, 0f, 0f, 1000f, 600f), 0f);
+        assertEquals(0f, GlassRefraction.frameClarity(500f, 700f, 0f, 0f, 1000f, 600f), 0f);
+        float prev = 0f;
+        for (float x = m; x <= m + f; x += 0.5f) {
+            float k = GlassRefraction.frameClarity(x, 300f, 0f, 0f, 1000f, 600f);
+            assertTrue("rises without a step at " + x, k >= prev && k - prev < 0.2f);
+            prev = k;
+        }
+    }
+
+    @Test
+    public void theFrameInsetKeepsASampleInsideTheFrame() {
+        assertEquals(500f, GlassRefraction.frameInset(500f, 0f, 1000f), 0f);
+        assertEquals(GlassRefraction.FRAME_MARGIN_PX, GlassRefraction.frameInset(-30f, 0f, 1000f), 0f);
+        assertEquals(1000f - GlassRefraction.FRAME_MARGIN_PX, GlassRefraction.frameInset(1300f, 0f, 1000f), 0f);
+    }
 }

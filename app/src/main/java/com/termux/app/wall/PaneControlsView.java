@@ -937,6 +937,7 @@ public final class PaneControlsView extends View {
                 // one corner, and past the two edges that are the frame's.
                 float[] aim = mAim.scaleOffset;
                 program.setAim(aim[0], aim[1], aim[2], aim[3]);
+                program.setFrameSize(mFrostFrame.getWidth(), mFrostFrame.getHeight());
                 program.setLocal(mAim.local);
                 GlassRefraction.Look look = mLook;
                 float reach = look == null ? 0f
