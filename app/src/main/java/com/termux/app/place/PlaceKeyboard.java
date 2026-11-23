@@ -53,6 +53,26 @@ public final class PlaceKeyboard {
     }
 
     /**
+     * What a place is recorded as leaving with. A keyboard the drawer's search raised is the
+     * drawer's, not the place's: it is never written as the place's open memory, so the place
+     * keeps what it had before the drawer and does not bring that keyboard up on every return.
+     */
+    public static boolean keyboardToRemember(boolean keyboardUp, boolean drawerHoldsKeyboard,
+                                             boolean priorOpen) {
+        return drawerHoldsKeyboard ? priorOpen : keyboardUp;
+    }
+
+    /**
+     * Whether Back puts the keyboard down: on Home, with the keyboard up and not held by always
+     * on, once nothing raised over the page has taken the press. The Terminal's and the Display's
+     * Back keep their own meaning.
+     */
+    public static boolean backClosesKeyboard(@NonNull PageKind page, boolean keyboardUp,
+                                             boolean alwaysOn) {
+        return page == PageKind.HOME && keyboardUp && !alwaysOn;
+    }
+
+    /**
      * How many of the grid's rows always on gives the keyboard: as many whole rows as the keyboard
      * covers, from a grid {@code gridHeightPx} tall cut into {@code gridRows} rows. Zero when the
      * grid or the keyboard is not measured yet, or when nothing would be left of the grid.

@@ -15136,6 +15136,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The keyboard mouse mode's touchpad stands in is the pad's frame, raised by the pad
             // itself: nobody asked for a keyboard there, so it must not pin the policy off.
             if (mTouchpad.isRaisingDisplayFrameKeyboard()) return;
+            // The drawer's search raising or lowering its own keyboard is nobody's intent either.
+            if (mSheets.isChangingDrawerKeyboard()) return;
             // A keyboard the wall's slide raised or put away on its own is nobody's intent either.
             if (mQuietKeyboardChange) return;
             mSheets.claimDrawerRaisedKeyboard();
@@ -21207,6 +21209,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     new String(Character.toChars(codePoint)), floatFocused);
             }
         });
+        // Home's keyboard: with nothing raised over the page left to take Back, it puts the
+        // keyboard down (and Home's memory with it) before the page's own Back runs.
+        registry.register(() -> {
+            if (!com.termux.app.place.PlaceKeyboard.backClosesKeyboard(
+                    mLastWallPage, committedKeyboardVisible(), isHomeKeyboardAlwaysOn())
+                || !mPages.isCommitted(com.termux.app.page.PageKind.HOME)) return false;
+            applyBorderKeyboardSwipe(false, true);
+            rememberPlaceKeyboard(com.termux.app.page.PageKind.HOME, false);
+            return true;
+        });
         // The page tail of the Back chain (ADR 0030 section 3): everything above is raised over
         // the page; then the front page's Back, then Home page 1. Reads mPages when asked, never
         // when registered, because this runs at field initialisation.
@@ -25446,9 +25458,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isDisplayTouchpadFrame() { return mTouchpad.isDisplayTouchpadFrame(); }
         @Override public @NonNull com.termux.app.x11.DisplayFrameContentPolicy frameContent() { return mFrameContent; }
         @Override public void applyDisplayFrameDecision(@NonNull com.termux.app.x11.DisplayFrameContentPolicy.Decision decision) { mTouchpad.applyDisplayFrameDecision(decision); }
-        @Override public void raiseDisplayFrameKeyboard() { mTouchpad.raiseDisplayFrameKeyboard(); }
-        @Override public void lowerDisplayFrameKeyboard() { mTouchpad.lowerDisplayFrameKeyboard(); }
-        @Override public void setRaisingDisplayFrameKeyboard(boolean raising) { mTouchpad.setRaisingDisplayFrameKeyboard(raising); }
         // -------------------------------------------------------------- the sheets still built in the activity
         // -------------------------------------------------------------- the sheets' own Hosts (still the activity's)
         @Override public @NonNull com.termux.app.terminal.TerminalCommandPaletteController.Host newCommandPaletteHost() { return new CommandPaletteActivityHost(); }
@@ -26479,7 +26488,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // place had before, which is what leaving minimal mode is meant to bring back. So did the
         // page overview, whose cards show every place with its keyboard down.
         if (store.isMinimal() || mOverviewPreviewing) return;
-        store.setKeyboardOpen(place, keyboardUp);
+        // Up on the drawer search's behalf (raised by it, not claimed since) it is not the place's.
+        store.setKeyboardOpen(place, com.termux.app.place.PlaceKeyboard.keyboardToRemember(keyboardUp,
+            mSheets.drawerRaisedKeyboard() && !mSheets.drawerRaisedKeyboardClaimed(),
+            store.wasKeyboardOpen(place)));
     }
 
     /**

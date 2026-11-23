@@ -106,7 +106,6 @@ public class SheetsControllerTest {
         assertFalse("the system ask is nobody's raise", mSheets.drawerRaisedKeyboard());
 
         mSheets.lowerDrawerSearchKeyboard();
-        assertEquals("the drawer raised nothing, so nothing is lowered", 0, mHost.frameLowers);
     }
 
     @Test
@@ -114,7 +113,6 @@ public class SheetsControllerTest {
         ReflectionHelpers.setField(mSheets, "mDrawerRaisedKeyboard", true);
         mSheets.lowerDrawerSearchKeyboard();
         assertFalse(mSheets.drawerRaisedKeyboard());
-        assertEquals("no keyboard is up to lower", 0, mHost.frameLowers);
     }
 
     @Test
@@ -286,7 +284,6 @@ public class SheetsControllerTest {
     private static final class FakeHost implements SheetsController.Host {
         final Activity activity;
         int systemImeRequests;
-        int frameLowers;
         int typingKeyboardAsks;
         int typingClaimRestores;
         int hostsMade;
@@ -343,9 +340,6 @@ public class SheetsControllerTest {
             return new com.termux.app.x11.DisplayFrameContentPolicy();
         }
         @Override public void applyDisplayFrameDecision(@NonNull com.termux.app.x11.DisplayFrameContentPolicy.Decision decision) { }
-        @Override public void raiseDisplayFrameKeyboard() { }
-        @Override public void lowerDisplayFrameKeyboard() { frameLowers++; }
-        @Override public void setRaisingDisplayFrameKeyboard(boolean raising) { }
         @NonNull @Override public com.termux.app.terminal.TerminalCommandPaletteController.Host newCommandPaletteHost() {
             return proxy(com.termux.app.terminal.TerminalCommandPaletteController.Host.class);
         }
