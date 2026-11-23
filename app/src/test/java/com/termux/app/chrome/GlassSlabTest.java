@@ -16,15 +16,14 @@ public class GlassSlabTest {
     private static final float DEPTH_DP = 9f;
 
     @Test
-    public void theDefaultsAreTheResearchAsTunedOnPong() {
-        // Tuned on pong by the developer, 2026-11-23: a wider zone eased in (p = 4), no fixed
-        // light (no specular), the sky tone cut to a floor, the wallpaper reflected instead.
-        assertEquals(24f, SLAB.lensDp, 0f);
+    public void theDefaultsAreAsTunedOnPong20261123() {
+        // Tuned on pong by the developer, 2026-11-23: a deep zone (32 dp) eased in (p = 4) at index
+        // 1.7, no fixed light (no specular), the sky tone cut to a floor, the wallpaper reflected.
+        assertEquals(32f, SLAB.lensDp, 0f);
         assertEquals(0.25f, SLAB.share, 0f);
-        assertEquals(1.5f, SLAB.ior, 0f);
+        assertEquals(1.7f, SLAB.ior, 0f);
         assertEquals(0.04f, SLAB.f0, 0f);
-        assertEquals("F0 is glass's own at its index", (float) Math.pow((1.5 - 1) / (1.5 + 1), 2),
-            SLAB.f0, 1e-6f);
+        // F0 stays the 4% it was tuned at; it is no longer glass's own at 1.7 (6.7%).
         assertEquals(0.1f, SLAB.env, 0f);
         assertEquals(0f, SLAB.spec, 0f);
         assertEquals(24f, SLAB.power, 0f);
@@ -60,7 +59,7 @@ public class GlassSlabTest {
         String agsl = GlassRefraction.agsl(GlassRim.DEFAULT, GlassSlab.parse("lens=20,ior=1.6"));
         assertTrue(agsl.contains("const float kLensDp = 20.0;\n"));
         assertTrue(agsl.contains("const float kIor = 1.6;\n"));
-        assertTrue(GlassRefraction.AGSL.contains("const float kLensDp = 24.0;\n"));
+        assertTrue(GlassRefraction.AGSL.contains("const float kLensDp = 32.0;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float kLensShare = 0.25;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float kSlabP = 4.0;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float kEnv = 0.1;\n"));
@@ -75,8 +74,8 @@ public class GlassSlabTest {
     @Test
     public void aLargePaneAtPongTakesTheWholeLensAndTheDepth() {
         float shortSide = 360f * PONG;
-        assertEquals(24f * PONG, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
-        assertEquals("63 px on pong", 63f, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
+        assertEquals(32f * PONG, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
+        assertEquals("84 px on pong", 84f, SLAB.lensWidthPx(shortSide, PONG), 1e-3f);
         assertEquals(DEPTH_DP * PONG, SLAB.thicknessPx(DEPTH_DP * PONG, shortSide, PONG), 1e-3f);
     }
 
@@ -86,8 +85,8 @@ public class GlassSlabTest {
         float w = SLAB.lensWidthPx(shortSide, PONG);
         assertEquals("a quarter of its short side", 8f * PONG, w, 1e-3f);
         float t = SLAB.thicknessPx(DEPTH_DP * PONG, shortSide, PONG);
-        assertEquals("a third of the Depth, as its lens is a third of the large one",
-            DEPTH_DP / 3f * PONG, t, 1e-3f);
+        assertEquals("a quarter of the Depth, as its lens is a quarter of the large one",
+            DEPTH_DP / 4f * PONG, t, 1e-3f);
         assertEquals("the same slope as a large pane's", DEPTH_DP / SLAB.lensDp, t / w, 1e-4f);
         // Its deepest bend stays well inside its half height: it stays readable.
         float deepest = SLAB.shiftPx(0f, w, t);
@@ -188,8 +187,8 @@ public class GlassSlabTest {
     public void dispersionPartsTheIndicesOnlyWhenAsked() {
         assertEquals(SLAB.ior, SLAB.iorRed(0f), 0f);
         assertEquals(SLAB.ior, SLAB.iorBlue(0f), 0f);
-        assertEquals(1.49f, SLAB.iorRed(1f), 1e-6f);
-        assertEquals(1.52f, SLAB.iorBlue(1f), 1e-6f);
+        assertEquals(1.69f, SLAB.iorRed(1f), 1e-6f);
+        assertEquals(1.72f, SLAB.iorBlue(1f), 1e-6f);
         float w = 42f, t = 23.6f;
         for (float inside = 0f; inside < w; inside += 1f) {
             float r = SLAB.shiftPx(inside, w, t, SLAB.iorRed(1f));

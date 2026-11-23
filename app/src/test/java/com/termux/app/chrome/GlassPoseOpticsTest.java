@@ -31,22 +31,22 @@ public class GlassPoseOpticsTest {
             assertTrue("grows at " + deg, shift > last);
             last = shift;
         }
-        // 30 degrees at 1.5: tan 30 - tan 19.47 = 0.2239.
-        assertEquals(0.2239f, OPTICS.shiftTan(sine(30), IOR), 1e-3f);
-        // Carousel's 60: tan 60 - tan 35.26 = 1.025, so about the slab's thickness.
-        assertEquals(1.025f, OPTICS.shiftTan(sine(60), IOR), 2e-3f);
+        // 30 degrees at 1.7: tan 30 - tan 17.10 = 0.2696.
+        assertEquals(0.2696f, OPTICS.shiftTan(sine(30), IOR), 1e-3f);
+        // Carousel's 60: tan 60 - tan 30.60 = 1.140, so a little over the slab's thickness.
+        assertEquals(1.140f, OPTICS.shiftTan(sine(60), IOR), 2e-3f);
         assertTrue(Float.isFinite(OPTICS.shiftTan(1f, IOR)));
         // Symmetric in the turn's direction: the direction is the uniform's vector.
         assertEquals(OPTICS.shiftTan(sine(20), IOR), OPTICS.shiftTan(-sine(20), IOR), 0f);
     }
 
     @Test
-    public void theFacesReflectanceRisesFromFourToAboutNinePercentAtSixty() {
-        assertEquals(0.04f, GlassPoseOptics.fresnelExact(1f, IOR), 1e-4f);
-        assertEquals(0.0895f, GlassPoseOptics.fresnelExact((float) Math.cos(Math.toRadians(60)), IOR), 2e-3f);
+    public void theFacesReflectanceRisesFromSevenToAboutTwelvePercentAtSixty() {
+        assertEquals(0.0672f, GlassPoseOptics.fresnelExact(1f, IOR), 1e-4f);
+        assertEquals(0.1203f, GlassPoseOptics.fresnelExact((float) Math.cos(Math.toRadians(60)), IOR), 2e-3f);
         assertEquals(1f, GlassPoseOptics.fresnelExact(0f, IOR), 1e-6f);
         assertEquals(0f, OPTICS.faceReflectanceRise(0f, IOR), 0f);
-        assertEquals(0.0495f, OPTICS.faceReflectanceRise(sine(60), IOR), 2e-3f);
+        assertEquals(0.0531f, OPTICS.faceReflectanceRise(sine(60), IOR), 2e-3f);
         float last = 0f;
         for (int deg = 5; deg <= 60; deg += 5) {
             float rise = OPTICS.faceReflectanceRise(sine(deg), IOR);

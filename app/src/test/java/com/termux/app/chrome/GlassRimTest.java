@@ -14,11 +14,11 @@ public class GlassRimTest {
     private static final float MDPI = 1f;
 
     @Test
-    public void theDefaultsAreTheThinEdgeExperimentsAndBorderBeamsProfile() {
+    public void theDefaultsAreAHardLineAsTunedOnPong20261123() {
         GlassRim rim = GlassRim.DEFAULT;
         assertEquals(0.5f, rim.lineDp, 0f);
-        assertEquals(1f, rim.softDp, 0f);
-        assertEquals(0.25f, rim.halo, 0f);
+        assertEquals(0.2f, rim.softDp, 0f);
+        assertEquals(0f, rim.halo, 0f);
         assertEquals(0.75f, rim.haloDp, 0f);
         assertEquals(0.18f, rim.base, 0f);
         // No key-light white: the glass has no fixed light (the developer, 2026-11-23).
@@ -78,11 +78,12 @@ public class GlassRimTest {
         GlassRim rim = GlassRim.DEFAULT;
         assertEquals(1f, rim.weight(0f, PONG), 0f);
         assertEquals(1f, rim.weight(rim.corePx(PONG), PONG), 0f);
-        // Whole for about a px and a third, gone but the halo by about 4 px.
+        // Whole for about a px and a third, gone by about 2.3 px: the 0.2 dp fade is under the
+        // fade's one-px floor.
         assertEquals(0.5f * PONG, rim.corePx(PONG), 1e-6f);
         float end = rim.corePx(PONG) + rim.softPx(PONG);
-        assertEquals(3.94f, end, 0.01f);
-        // Past the line only the halo is left, already under a tenth.
+        assertEquals(2.3125f, end, 0.01f);
+        // No halo: past the fade nothing is left.
         assertEquals(rim.halo * (float) Math.exp(-rim.softPx(PONG) / rim.haloPx(PONG)),
             rim.weight(end, PONG), 1e-6f);
         assertTrue(rim.weight(end, PONG) < 0.1f);

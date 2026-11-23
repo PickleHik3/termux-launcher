@@ -668,6 +668,9 @@ public class GlassRefractionTest {
         // rim line's reach, which is drawn over it, on the narrow zone and the dock's soft band
         // alike and under the whole shelf. From there in, walking in by a px never walks the
         // sample back. A deeper Depth widens the mirrored band (a dramatic look, tuned on pong).
+        // BROKEN BY THE 2026-11-23 PONG TUNING (32 dp lens, index 1.7, rim fade 0.2 dp, no halo):
+        // at 9 dp the fold now reaches 5.1 px (1.95 dp) at rest and 6.9 px (2.6 dp) under the whole
+        // shelf at 420 dpi, past the rim line's 2.6 px (1 dp) reach. Left failing for the developer's call.
         GlassSlab slab = GlassSlab.DEFAULT;
         float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
         float half = 200f * DENSITY;
@@ -690,20 +693,22 @@ public class GlassRefractionTest {
     }
 
     @Test
-    public void theSoftBandReachesItsWidthAndTheShelfThickensTheLowerEdge() {
+    public void theSoftBandNeverNarrowsTheZoneAndTheShelfThickensTheLowerEdge() {
         GlassSlab slab = GlassSlab.DEFAULT;
         float softPx = GlassRefraction.SOFT_RIM_DP * DENSITY;
         float half = 200f * DENSITY;
         float depth = 9f * DENSITY;
         float w = GlassRefraction.lensZonePx(slab, half, DENSITY, 1f, softPx, 0f, 0f);
         float t = GlassRefraction.lensThicknessPx(slab, depth, half, DENSITY, 1f, 0f);
-        assertEquals(softPx, w, 1e-3f);
+        // The lens (32 dp) is now wider than the soft band (24 dp): the zone is the lens's.
+        assertEquals(slab.lensPx(DENSITY), w, 1e-3f);
+        assertTrue(w >= softPx);
         assertTrue(slab.shiftPx(softPx * 0.5f, w, t) > 0f);
-        assertEquals(0f, slab.shiftPx(softPx, w, t), 0f);
+        assertEquals(0f, slab.shiftPx(w, w, t), 0f);
         // The lower edge is the thicker one under the shelf.
         float wl = GlassRefraction.lensZonePx(slab, half, DENSITY, 1f, softPx, 0f, 1f);
         float tl = GlassRefraction.lensThicknessPx(slab, depth, half, DENSITY, 1f, 1f);
-        assertTrue(slab.shiftPx(softPx * 0.6f, wl, tl) > slab.shiftPx(softPx * 0.6f, w, t));
+        assertTrue(slab.shiftPx(w * 0.6f, wl, tl) > slab.shiftPx(w * 0.6f, w, t));
     }
 
     @Test
