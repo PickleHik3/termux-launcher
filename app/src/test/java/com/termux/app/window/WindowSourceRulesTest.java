@@ -99,7 +99,10 @@ public class WindowSourceRulesTest {
         // page and element edge: cut as the page steps (5 to 7) land
         "terminal <-> theme",
         // page and element edge: cut as the page steps (5 to 7) land
-        "terminal <-> wall"
+        "terminal <-> wall",
+        // element edge: the X11 runner opens apps through the Wayland runner, which reads the
+        // X11 GPU profile and the Display scale stops; cut when either side takes a Host
+        "wayland <-> x11"
     );
 
     /** Longer cycles that no pair explains. */

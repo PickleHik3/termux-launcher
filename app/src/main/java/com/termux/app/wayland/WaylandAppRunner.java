@@ -13,6 +13,7 @@ import android.os.Looper;
 import android.os.RemoteException;
 import android.system.ErrnoException;
 import android.system.Os;
+import android.text.TextUtils;
 import android.util.Log;
 import android.view.Display;
 
@@ -99,6 +100,10 @@ public final class WaylandAppRunner {
      * to that start and not a state from before it.
      */
     private boolean startingSeen;
+    /** Xwayland's display the host last reported (":0"); null when none. */
+    @Nullable private String xDisplay;
+    /** Gave up waiting for Xwayland's display for the launches in hand: they run without DISPLAY. */
+    private boolean xWaitExpired;
     /** Live windows, counted from the host's callbacks; reset on every (re)attach. */
     private int windows;
 
@@ -107,6 +112,12 @@ public final class WaylandAppRunner {
             Log.w(LOG_TAG, "the host did not run within " + START_TIMEOUT_MS + " ms");
             failPending();
         }
+    };
+
+    private final Runnable xWaitTimeout = () -> {
+        Log.w(LOG_TAG, "Xwayland reported no display within " + START_TIMEOUT_MS + " ms; launching without DISPLAY");
+        xWaitExpired = true;
+        dispatchPending();
     };
 
     private final Runnable idleStop = this::stopIfIdle;
@@ -150,7 +161,9 @@ public final class WaylandAppRunner {
         }
 
         @Override
-        public void onXDisplay(String display) {}
+        public void onXDisplay(String display) {
+            main.post(() -> xDisplayReported(display));
+        }
 
         @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags) {
@@ -256,7 +269,19 @@ public final class WaylandAppRunner {
         startAsked = false;
         stateKnown = false;
         windows = 0;
+        xDisplay = null;
+        xWaitExpired = false;
         main.removeCallbacks(idleStop);
+        main.removeCallbacks(xWaitTimeout);
+    }
+
+    private void xDisplayReported(@Nullable String display) {
+        if (service == null) return;
+        xDisplay = TextUtils.isEmpty(display) ? null : display;
+        if (xDisplay != null) {
+            main.removeCallbacks(xWaitTimeout);
+            if (running) dispatchPending();
+        }
     }
 
     private void attached(int interfaceVersion) {
@@ -282,7 +307,10 @@ public final class WaylandAppRunner {
             case ILinuxWindows.STATE_DIED:
                 running = false;
                 windows = 0;
+                xDisplay = null;
+                xWaitExpired = false;
                 main.removeCallbacks(idleStop);
+                main.removeCallbacks(xWaitTimeout);
                 if (startAsked && !startingSeen) {
                     // A state from before this runner's start; the start's own answer follows.
                     break;
@@ -340,6 +368,13 @@ public final class WaylandAppRunner {
     private void dispatchPending() {
         if (pending.isEmpty()) return;
         main.removeCallbacks(startTimeout);
+        if (xDisplay == null && !xWaitExpired && xwaylandBinary() != null) {
+            // Xwayland was asked for and has not reported its display yet; the report runs this again.
+            main.removeCallbacks(xWaitTimeout);
+            main.postDelayed(xWaitTimeout, START_TIMEOUT_MS);
+            return;
+        }
+        main.removeCallbacks(xWaitTimeout);
         List<Launch> launches = new ArrayList<>(pending);
         pending.clear();
         String wayland = socketPath();
@@ -350,6 +385,7 @@ public final class WaylandAppRunner {
 
     private void failPending() {
         main.removeCallbacks(startTimeout);
+        main.removeCallbacks(xWaitTimeout);
         startAsked = false;
         if (pending.isEmpty()) return;
         List<Launch> launches = new ArrayList<>(pending);
@@ -377,13 +413,13 @@ public final class WaylandAppRunner {
     }
 
     /**
-     * The X display the host's Xwayland serves, for {@code DISPLAY}. Null for now: the host picks
-     * the first free display number and does not report it through {@link ILinuxWindows} yet, so
-     * an X11-only app has no display under Wayland Display until the interface carries it.
+     * The X display the host's Xwayland serves, for {@code DISPLAY}, as the host reported it
+     * ({@link ILinuxWindowsCallback#onXDisplay}); null when none came, and an X11-only app then
+     * has no display.
      */
     @Nullable
     private String xwaylandDisplay() {
-        return null;
+        return xDisplay;
     }
 
     private void openWindowsScreen() {
@@ -436,9 +472,8 @@ public final class WaylandAppRunner {
     static HostStart hostStart(@NonNull Context context) {
         File xkb = new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/X11/xkb");
         String xkbRoot = xkb.isDirectory() ? xkb.getAbsolutePath() : null;
-        File bin = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/Xwayland");
-        String xwayland = bin.canExecute() ? bin.getAbsolutePath() : null;
-        if (xwayland == null) Log.w(LOG_TAG, "no executable " + bin + "; X11 apps have no display");
+        String xwayland = xwaylandBinary();
+        if (xwayland == null) Log.w(LOG_TAG, "no executable Xwayland; X11 apps have no display");
         float scale = LinuxDisplayScale.current(context);
         Point size = new Point();
         long framePeriodNanos = 0L;
@@ -450,6 +485,13 @@ public final class WaylandAppRunner {
             framePeriodNanos = framePeriodNanos(refresh);
         }
         return new HostStart(xkbRoot, xwayland, size.x, size.y, scale, framePeriodNanos);
+    }
+
+    /** The prefix's Xwayland when it is executable; null otherwise. */
+    @Nullable
+    private static String xwaylandBinary() {
+        File bin = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/Xwayland");
+        return bin.canExecute() ? bin.getAbsolutePath() : null;
     }
 
     /** The host's frame tick for a display refreshing {@code refreshHz} times a second; 0 means 60 Hz. */

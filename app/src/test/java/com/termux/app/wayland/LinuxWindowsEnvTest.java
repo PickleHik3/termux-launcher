@@ -71,4 +71,29 @@ public class LinuxWindowsEnvTest {
         assertNull(LinuxWindowsService.dumpPathInside(data.getPath(), data.getPath()));
         assertNull(LinuxWindowsService.dumpPathInside(data.getPath(), null));
     }
+
+    @Test
+    public void turnipZinkGainsTheKopperLinesAndNothingElseDoes() {
+        List<String> base = Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "VK_ICD_FILENAMES=/x");
+        List<String> turnip = LinuxWindowsEnv.gpuEnv(base, "turnip-zink");
+        assertEquals(Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "VK_ICD_FILENAMES=/x",
+            "LIBGL_KOPPER_DRI2=1", "VK_DRIVER_FILES=" + com.termux.app.x11.X11GpuProbe.FREEDRENO_ICD), turnip);
+        assertEquals(2, base.size());
+        for (X11GpuProbe.Profile profile : X11GpuProbe.Profile.values()) {
+            if (profile == X11GpuProbe.Profile.TURNIP_ZINK) continue;
+            assertEquals(profile.id, base, LinuxWindowsEnv.gpuEnv(base, profile.id));
+        }
+        assertEquals(base, LinuxWindowsEnv.gpuEnv(base, null));
+        assertEquals(base, LinuxWindowsEnv.gpuEnv(base, "no-such-profile"));
+    }
+
+    @Test
+    public void aDisplayNumberComesOutOfADisplayString() {
+        assertEquals(0, LinuxWindowsEnv.displayNumber(":0"));
+        assertEquals(12, LinuxWindowsEnv.displayNumber(":12"));
+        assertEquals(LinuxWindowsEnv.NO_X_DISPLAY, LinuxWindowsEnv.displayNumber(null));
+        assertEquals(LinuxWindowsEnv.NO_X_DISPLAY, LinuxWindowsEnv.displayNumber(""));
+        assertEquals(LinuxWindowsEnv.NO_X_DISPLAY, LinuxWindowsEnv.displayNumber(":x"));
+        assertEquals(LinuxWindowsEnv.NO_X_DISPLAY, LinuxWindowsEnv.displayNumber("0"));
+    }
 }

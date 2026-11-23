@@ -12,7 +12,8 @@ import java.util.List;
 /**
  * The environment a Linux app gets so it finds the Wayland host: one list of {@code NAME=value}
  * lines, added after the GPU profile's own lines ({@code X11GpuProbe.Recommendation.env}), which
- * the caller takes unchanged. No callers yet; the launching slice uses it.
+ * the caller takes unchanged. {@link #gpuEnv} adds the lines the Wayland compositor wants on top
+ * of a profile's. {@code X11LinuxAppRunner} builds an app's environment through this class.
  *
  * Rules:
  * - {@code WAYLAND_DISPLAY} is the socket's absolute path (libwayland takes one), so nothing
@@ -35,6 +36,34 @@ public final class LinuxWindowsEnv {
     public static final int NO_X_DISPLAY = -1;
 
     private LinuxWindowsEnv() {}
+
+    /**
+     * The GPU lines an app gets under Wayland Display: {@code profileEnv} (what the GPU profile
+     * already yields, unchanged), and for {@code turnip-zink} also {@code LIBGL_KOPPER_DRI2=1} and
+     * {@code VK_DRIVER_FILES} naming the freedreno ICD. Measured on a phone: with these two and a
+     * Mesa that carries the Wayland kopper patch, GL apps render on Turnip under this compositor;
+     * on a stock Mesa they change nothing on Wayland. Other profiles pass through unchanged.
+     */
+    @NonNull
+    public static List<String> gpuEnv(@NonNull List<String> profileEnv, @Nullable String gpuProfile) {
+        List<String> env = new ArrayList<>(profileEnv);
+        if (X11GpuProbe.Profile.of(gpuProfile) == X11GpuProbe.Profile.TURNIP_ZINK) {
+            env.add("LIBGL_KOPPER_DRI2=1");
+            env.add("VK_DRIVER_FILES=" + X11GpuProbe.FREEDRENO_ICD);
+        }
+        return env;
+    }
+
+    /** The number in a display such as {@code ":1"}, or {@link #NO_X_DISPLAY} for null, empty or anything else. */
+    public static int displayNumber(@Nullable String display) {
+        if (display == null || display.length() < 2 || display.charAt(0) != ':') return NO_X_DISPLAY;
+        try {
+            int n = Integer.parseInt(display.substring(1));
+            return n < 0 ? NO_X_DISPLAY : n;
+        } catch (NumberFormatException e) {
+            return NO_X_DISPLAY;
+        }
+    }
 
     /**
      * @param socketPath the Wayland socket, absolute ({@code <prefix>/tmp/tl-wayland/wayland-0}).

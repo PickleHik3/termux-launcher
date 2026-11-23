@@ -9,6 +9,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.app.wayland.LinuxDisplayBackend;
+import com.termux.app.wayland.LinuxWindowsEnv;
 import com.termux.app.wayland.WaylandAppRunner;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
@@ -683,7 +684,8 @@ public final class X11LinuxAppRunner {
             boolean noSandbox = shouldStartWithNoSandbox(app);
             GpuChoice gpu = appGraphics(app);
             String display = xDisplay == null ? "" : xDisplay;
-            List<String> env = waylandEnv(waylandDisplay, appEnv(app, gpu));
+            List<String> env = waylandEnv(waylandDisplay, xDisplay,
+                gpu.profile == null ? null : gpu.profile.id, appEnv(app, gpu));
             String script = gpuServerBlock(gpu.server) + script(app, display, env, noSandbox, null);
             handler.post(() -> {
                 Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display"
@@ -698,14 +700,16 @@ public final class X11LinuxAppRunner {
     }
 
     /**
-     * An app's exports under Wayland Display: {@code WAYLAND_DISPLAY} (the socket's absolute path,
-     * so {@code XDG_RUNTIME_DIR} is left alone), then {@code appEnv} unchanged. Pure.
+     * An app's exports under Wayland Display: {@link LinuxWindowsEnv#forClient} (the socket's
+     * absolute path, so {@code XDG_RUNTIME_DIR} is left alone, the X display and the toolkit
+     * hints), then {@code appEnv} with the Wayland GPU lines ({@link LinuxWindowsEnv#gpuEnv}). Pure.
      */
     @NonNull
-    static List<String> waylandEnv(@NonNull String waylandDisplay, @NonNull List<String> appEnv) {
-        List<String> env = new java.util.ArrayList<>(appEnv.size() + 1);
-        env.add("WAYLAND_DISPLAY=" + waylandDisplay);
-        env.addAll(appEnv);
+    static List<String> waylandEnv(@NonNull String waylandDisplay, @Nullable String xDisplay,
+                                   @Nullable String gpuProfile, @NonNull List<String> appEnv) {
+        List<String> env = new java.util.ArrayList<>(LinuxWindowsEnv.forClient(waylandDisplay,
+            LinuxWindowsEnv.displayNumber(xDisplay), gpuProfile));
+        env.addAll(LinuxWindowsEnv.gpuEnv(appEnv, gpuProfile));
         return env;
     }
 
