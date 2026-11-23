@@ -146,6 +146,9 @@ fn open_libvulkan(req: &DirectRequest) -> Result<usize, String> {
 /// Loads the driver (once per process) and makes an instance and device on it. Logs a line per
 /// fact; Err is why direct is not available.
 pub fn load(req: &DirectRequest) -> Result<Ctx, String> {
+    if LIBVULKAN.get().is_some() {
+        linfo!("direct load: the driver loaded earlier in this process is reused (or its failure repeated)");
+    }
     let lib = LIBVULKAN.get_or_init(|| open_libvulkan(req)).clone()?;
     // SAFETY: a handle dlopen gave us; the name is NUL-terminated.
     let gipa = unsafe { libc::dlsym(lib as *mut c_void, c"vkGetInstanceProcAddr".as_ptr()) };
@@ -786,8 +789,10 @@ impl WindowPresenter {
             .present_mode(vk::PresentModeKHR::FIFO)
             .clipped(true)
             .old_swapchain(old);
+        // Nothing of the old swapchain may be in use when its parts go (rare: size changes only).
+        let _ = ctx.device.queue_wait_idle(ctx.queue);
         let swapchain = ctx.swapchain_fn.create_swapchain(&info, None);
-        // The old one is retired either way; nothing of it is in flight.
+        // The old one is retired either way.
         self.drop_swapchain_parts();
         if old != vk::SwapchainKHR::null() {
             ctx.swapchain_fn.destroy_swapchain(old, None);
@@ -914,9 +919,10 @@ impl WindowPresenter {
             );
             match (&self.opaque, src.opaque) {
                 (Some(pass), true) => {
+                    let framebuffer = *pass.framebuffers.get(i).ok_or(vk::Result::ERROR_UNKNOWN)?;
                     let begin = vk::RenderPassBeginInfo::default()
                         .render_pass(pass.render_pass)
-                        .framebuffer(pass.framebuffers[i])
+                        .framebuffer(framebuffer)
                         .render_area(vk::Rect2D { offset: vk::Offset2D::default(), extent: self.extent });
                     device.cmd_begin_render_pass(self.cmd, &begin, vk::SubpassContents::INLINE);
                     device.cmd_bind_pipeline(self.cmd, vk::PipelineBindPoint::GRAPHICS, pass.pipeline);

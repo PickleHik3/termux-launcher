@@ -139,6 +139,8 @@ impl Direct {
                     lwarn!("direct load: failed: {e}; every window keeps the copy path");
                 }
             }
+        } else if self.load_failed {
+            lwarn!("direct load: failed earlier in this host; every window keeps the copy path (restart the host to retry)");
         }
         #[cfg(not(all(feature = "turnip", target_arch = "aarch64")))]
         lwarn!("direct load: not in this build (needs -PwaylandTurnip=true, arm64-v8a); every window keeps the copy path");
