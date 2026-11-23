@@ -954,6 +954,20 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         }
         BackdropRecording.begin();
         try {
+            if (below instanceof ViewGroup && BackdropRecording.holdsSurface(below)) {
+                // A container that is not a Container (a Workspace window's frame, the Terminal
+                // page) holding a SurfaceView: its display list would hold the surface's node, so
+                // it is drawn by the same descent the pages layer uses.
+                if (below.getVisibility() == View.VISIBLE) {
+                    int save = canvas.save();
+                    canvas.translate(below.getLeft(), below.getTop());
+                    Matrix own = below.getMatrix();
+                    if (!own.isIdentity()) canvas.concat(own);
+                    BackdropRecording.drawWhole(canvas, below);
+                    canvas.restoreToCount(save);
+                }
+                return;
+            }
             parent.drawChildForBackdrop(canvas, below);
         } finally {
             BackdropRecording.end();
@@ -1649,7 +1663,9 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
                     // matrix, drawn when the layer is ({@link LivePicture#redrawPages}).
                     canvas.scale(1f / scale, 1f / scale);
                     canvas.translate(gutter, gutter);
-                    page.draw(canvas);
+                    // Never a SurfaceView inside the page, however deep (a Workspace window's
+                    // Display): its node would be drawn by the capture's own renderer.
+                    BackdropRecording.drawWhole(canvas, page);
                 } finally {
                     BackdropRecording.end();
                     node.endRecording();
@@ -1699,12 +1715,14 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         try {
             for (int i = 0; i < mPages.size(); i++) {
                 View page = mPages.get(i);
-                if (frozen) {
+                // A page holding a SurfaceView, however deep, is descended rather than drawn by
+                // its display list (BackdropRecording.drawWhole), frozen or not.
+                if (frozen || BackdropRecording.holdsSurface(page)) {
                     int save = canvas.save();
                     canvas.translate(page.getLeft(), page.getTop());
                     Matrix own = page.getMatrix();
                     if (!own.isIdentity()) canvas.concat(own);
-                    page.draw(canvas);
+                    BackdropRecording.drawWhole(canvas, page);
                     canvas.restoreToCount(save);
                 } else {
                     ((Container) wall).drawChildForBackdrop(canvas, page);
