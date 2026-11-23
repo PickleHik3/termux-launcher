@@ -24,6 +24,7 @@ import androidx.annotation.RequiresApi;
 import androidx.annotation.VisibleForTesting;
 
 import java.util.ArrayList;
+import java.util.List;
 
 /**
  * Live blur's recorder: for each glass surface it is given, everything the window draws
@@ -503,6 +504,80 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
     public boolean commitLive() {
         preDraw();
         return !mPictures.isEmpty();
+    }
+
+    /**
+     * {@code cells} left {@code from} for another parent by detach and attach, between frames:
+     * every picture whose recordings now draw a loop ({@link ReparentCycles}) drops them at once,
+     * before the next frame syncs, and draws its stored frame until the next pre-draw records it
+     * again against the new parents. A cell's old parent counts as still holding it until that
+     * parent draws again, since its display list still draws the cell. Pictures off any loop keep
+     * their recordings. Once per reparent; allocates a little then, never per frame.
+     */
+    @Override
+    public int reparented(@NonNull List<View> cells, @NonNull View from) {
+        int n = mPictures.size();
+        if (n == 0 || cells.isEmpty()) return 0;
+        View[][] holders = new View[n][3];
+        for (int i = 0; i < n; i++) {
+            LivePicture p = mPictures.get(i);
+            holders[i][0] = p.mSurface;
+            holders[i][1] = hostOf(p.drawable());
+            holders[i][2] = hostOf(p.aimedDrawable());
+        }
+        boolean[][] edge = new boolean[n][n];
+        for (int i = 0; i < n; i++) {
+            LivePicture p = mPictures.get(i);
+            for (int j = 0; j < n; j++) {
+                edge[i][j] = draws(p.mRecordedLocal, holders[j], cells, from)
+                    || draws(p.mRecordedBeneath, holders[j], cells, from)
+                    || draws(p.mRecordedPages, holders[j], cells, from);
+            }
+        }
+        boolean[] loop = new boolean[n];
+        ReparentCycles.onCycle(edge, n, loop);
+        int dropped = 0;
+        for (int i = 0; i < n; i++) {
+            if (!loop[i]) continue;
+            LivePicture p = mPictures.get(i);
+            p.trim();
+            p.mMotionPlan.forget();
+            p.mSurface.invalidate();
+            View aimed = holders[i][2];
+            if (aimed != null) aimed.invalidate();
+            dropped++;
+        }
+        // Whatever moved: the next pre-draw plans every picture whole.
+        mPlanStamp++;
+        return dropped;
+    }
+
+    /**
+     * Whether a recording of {@code recorded} draws one of {@code holders}: a recorded view holds
+     * it now, or holds a moved cell's old parent while that cell holds it (the old parent's
+     * display list still draws the cell until it draws again).
+     */
+    private static boolean draws(@NonNull List<View> recorded, @NonNull View[] holders,
+                                 @NonNull List<View> cells, @NonNull View from) {
+        for (int k = 0; k < recorded.size(); k++) {
+            View v = recorded.get(k);
+            if (v == null) continue;
+            for (View holder : holders) {
+                if (holder == null) continue;
+                if (ReparentCycles.holds(v, holder)) return true;
+                if (!ReparentCycles.holds(v, from)) continue;
+                for (int c = 0; c < cells.size(); c++) {
+                    if (ReparentCycles.holds(cells.get(c), holder)) return true;
+                }
+            }
+        }
+        return false;
+    }
+
+    @Nullable
+    private static View hostOf(@Nullable Drawable drawable) {
+        Drawable.Callback callback = drawable == null ? null : drawable.getCallback();
+        return callback instanceof View ? (View) callback : null;
     }
 
     private void preDraw() {

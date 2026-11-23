@@ -327,6 +327,7 @@ public final class WidgetGridView extends ViewGroup {
      */
     void adoptCellsFrom(@NonNull WidgetGridView other, @NonNull List<LauncherWidgetRecord> wanted) {
         if (other == this || !isAttachedToWindow() || !other.isAttachedToWindow()) return;
+        List<View> moved = null;
         for (LauncherWidgetRecord record : wanted) {
             int id = record.appWidgetId;
             WidgetCellView cell = other.cells.get(id);
@@ -338,7 +339,19 @@ public final class WidgetGridView extends ViewGroup {
             if (!Float.isNaN(cellCornerRadius)) cell.setLookCornerRadius(cellCornerRadius);
             cells.put(id, cell);
             attachViewToParent(cell, getChildCount(), cell.getLayoutParams());
+            if (moved == null) moved = new java.util.ArrayList<>(wanted.size());
+            moved.add(cell);
         }
+        if (moved == null) return;
+        // Neither grid drew the move: both draw again in the next frame, so neither display list
+        // still draws a cell it no longer holds.
+        other.invalidate();
+        invalidate();
+        // A glass recording made against the old parents could now draw a loop through the cells
+        // (a card's own picture drawing the grid that now holds the card): those drop before the
+        // next frame syncs and record again against the new parents.
+        com.termux.app.glass.GlassService glass = com.termux.app.glass.GlassService.of(this);
+        if (glass != null) glass.reparented(moved, other);
     }
 
     @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
