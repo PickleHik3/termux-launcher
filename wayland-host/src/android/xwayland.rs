@@ -29,7 +29,7 @@ use smithay::xwayland::{X11Surface, X11Wm, XWayland, XWaylandClientData, XWaylan
 
 use crate::xlock::{self, Owner};
 
-use super::host::{Shell, State};
+use super::host::{OrWindow, Shell, State};
 use super::log::{lerror, linfo, lwarn};
 
 pub struct XwaylandConfig {
@@ -157,6 +157,14 @@ fn x11_index(state: &State, window: &X11Surface) -> Option<usize> {
     state.toplevels.iter().position(|t| matches!(&t.shell, Shell::X11(w) if w == window))
 }
 
+/// An override-redirect window stops being shown; its owner's view is composed again.
+fn drop_or_window(state: &mut State, window: &X11Surface) {
+    if let Some(k) = state.or_windows.iter().position(|o| o.window == *window) {
+        let o = state.or_windows.remove(k);
+        state.repaint_id(o.owner);
+    }
+}
+
 impl XwmHandler for State {
     fn xwm_state(&mut self, _xwm: XwmId) -> &mut X11Wm {
         // smithay asks only from its window-manager source, which exists only once start_wm
@@ -185,9 +193,23 @@ impl XwmHandler for State {
         self.announce(i);
     }
 
-    fn mapped_override_redirect_window(&mut self, _xwm: XwmId, _window: X11Surface) {}
+    /// Menus and tooltips of X apps: shown over the X window they belong to (`or_owner`), at
+    /// their X position, in that window's view.
+    fn mapped_override_redirect_window(&mut self, _xwm: XwmId, window: X11Surface) {
+        if self.or_windows.iter().any(|o| o.window == window) {
+            return;
+        }
+        match self.or_owner(&window) {
+            Some(owner) => {
+                self.or_windows.push(OrWindow { window, owner });
+                self.repaint_id(owner);
+            }
+            None => linfo!("override-redirect X window 0x{:x} has no X window to be shown with", window.window_id()),
+        }
+    }
 
     fn unmapped_window(&mut self, _xwm: XwmId, window: X11Surface) {
+        drop_or_window(self, &window);
         if let Some(i) = x11_index(self, &window) {
             self.remove_toplevel_at(i);
         }
@@ -197,6 +219,7 @@ impl XwmHandler for State {
     }
 
     fn destroyed_window(&mut self, _xwm: XwmId, window: X11Surface) {
+        drop_or_window(self, &window);
         if let Some(i) = x11_index(self, &window) {
             self.remove_toplevel_at(i);
         }
@@ -227,7 +250,12 @@ impl XwmHandler for State {
         let _ = window.configure(geo);
     }
 
-    fn configure_notify(&mut self, _xwm: XwmId, _window: X11Surface, _geometry: Rectangle<i32, Logical>, _above: Option<X11Window>) {}
+    /// An override-redirect window moved or was resized.
+    fn configure_notify(&mut self, _xwm: XwmId, window: X11Surface, _geometry: Rectangle<i32, Logical>, _above: Option<X11Window>) {
+        if let Some(owner) = self.or_windows.iter().find(|o| o.window == window).map(|o| o.owner) {
+            self.repaint_id(owner);
+        }
+    }
 
     fn property_notify(&mut self, _xwm: XwmId, window: X11Surface, property: WmWindowProperty) {
         if matches!(property, WmWindowProperty::Title | WmWindowProperty::Class) {
@@ -247,6 +275,7 @@ impl XwmHandler for State {
     fn disconnected(&mut self, _xwm: XwmId) {
         lerror!("Xwayland is gone; its windows are closed");
         self.events.x_display("");
+        self.or_windows.clear();
         for i in (0..self.toplevels.len()).rev() {
             if matches!(self.toplevels[i].shell, Shell::X11(_)) {
                 self.remove_toplevel_at(i);
@@ -263,8 +292,11 @@ impl XWaylandShellHandler for State {
         &mut self.xwayland_shell_state
     }
 
-    fn surface_associated(&mut self, _xwm: XwmId, wl_surface: WlSurface, _surface: X11Surface) {
+    fn surface_associated(&mut self, _xwm: XwmId, wl_surface: WlSurface, surface: X11Surface) {
         self.output.enter(&wl_surface);
+        if let Some(owner) = self.or_windows.iter().find(|o| o.window == surface).map(|o| o.owner) {
+            self.repaint_id(owner);
+        }
     }
 }
 
