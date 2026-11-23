@@ -59,19 +59,18 @@ public class GlassRefractionTest {
 
     @Test
     public void theEdgeReadsTheSharpPictureWhollyWhereOneIsBoundAndTheFaceKeepsItsShare() {
-        // A clearer picture of its own bound: the rim shows it whole, whatever the stored clarity.
+        // A clearer picture of its own bound: the steep outer part shows it whole, whatever the
+        // stored clarity, and the flat face none.
+        GlassSlab slab = GlassSlab.DEFAULT;
         float edge = GlassRefraction.sharpEdge(true, true);
         assertEquals(1f, edge, 0f);
-        for (boolean soft : new boolean[] {false, true}) {
-            assertEquals(1f, GlassRefraction.sharpMix(0f, soft, edge, 0f), 0f);
-            // Half way at the band's middle, and none at its inner edge or on the face.
-            assertEquals(0.5f, GlassRefraction.sharpMix(0.5f, soft, edge, 0f), 1e-6f);
-            assertEquals(0f, GlassRefraction.sharpMix(1f, soft, edge, 0f), 0f);
-        }
+        float steep = 1.0e4f;
+        assertEquals(1f, GlassRefraction.sharpMix(slab, steep, edge, 0f), 0f);
+        assertEquals(0f, GlassRefraction.sharpMix(slab, 0f, edge, 0f), 0f);
         // The frost bound in its place, or nothing bound: no sharp share, no second sample.
         assertEquals(0f, GlassRefraction.sharpEdge(true, false), 0f);
         assertEquals(0f, GlassRefraction.sharpEdge(false, false), 0f);
-        assertEquals(0f, GlassRefraction.sharpMix(0f, false, GlassRefraction.sharpEdge(true, false), 0f), 0f);
+        assertEquals(0f, GlassRefraction.sharpMix(slab, steep, GlassRefraction.sharpEdge(true, false), 0f), 0f);
         // The face's share is Clear's face clarity, unchanged: 0 for a look without it, its own
         // share for Clear, and only where a picture of its own is bound.
         GlassRefraction.Look frosted = new GlassRefraction.Look(24, 16, 10, 0, 0, 0);
@@ -81,21 +80,48 @@ public class GlassRefractionTest {
         assertEquals(1f, GlassRefraction.faceClarity(clear, true, true), 0f);
         assertEquals(0f, GlassRefraction.faceClarity(clear, true, false), 0f);
         assertEquals(0f, GlassRefraction.faceClarity(null, true, true), 0f);
-        assertEquals(0.3f, GlassRefraction.sharpMix(1f, false, edge, 0.3f), 1e-6f);
-        assertEquals(1f, GlassRefraction.sharpMix(0f, false, edge, 0.3f), 1e-6f);
+        assertEquals(0.3f, GlassRefraction.sharpMix(slab, 0f, edge, 0.3f), 1e-6f);
+        assertEquals(1f, GlassRefraction.sharpMix(slab, steep, edge, 0.3f), 1e-6f);
         // The stored clarity no longer reaches the program: two looks apart only in it draw alike.
         assertEquals(GlassRefraction.faceClarity(new GlassRefraction.Look(9, 20, 18, 0, 0, 0), true, true),
             GlassRefraction.faceClarity(new GlassRefraction.Look(9, 20, 18, 0, 0, 100), true, true), 0f);
     }
 
     @Test
+    public void theNearlyFlatInnerZoneKeepsTheFrostAndOnlyTheSteepPartIsSharp() {
+        // The tuned slab (24 dp, profile 4) at the default Depth on a large pane at pong: the
+        // inner part of the zone barely bends, so it keeps the face's frost rather than reading
+        // as an unblurred strip (a turned Carousel card showed one down its near edge).
+        GlassSlab slab = GlassSlab.parse("lens=24,profile=4");
+        float density = 2.625f;
+        float w = slab.lensWidthPx(360f * density, density);
+        float t = slab.thicknessPx(9f * density, 360f * density, density);
+        float edge = GlassRefraction.sharpEdge(true, true);
+        for (float inside = 0.5f * w; inside < w; inside += 0.5f) {
+            assertTrue("frost at " + inside / w,
+                GlassRefraction.sharpMix(slab, slab.slopeAt(inside, w, t), edge, 0f) < 0.05f);
+        }
+        assertEquals("sharp at the steep outer edge", 1f,
+            GlassRefraction.sharpMix(slab, slab.slopeAt(0.02f * w, w, t), edge, 0f), 1e-3f);
+        // Smooth: the share only grows toward the outline, a px at a time by a small step, so
+        // there is no ring where the mix starts.
+        float last = 0f;
+        for (float inside = w; inside >= 0f; inside -= 1f) {
+            float k = GlassRefraction.sharpMix(slab, slab.slopeAt(inside, w, t), edge, 0f);
+            assertTrue("grows at " + inside, k >= last - 1e-6f);
+            assertTrue("no step at " + inside, k - last < 0.2f);
+            last = k;
+        }
+    }
+
+    @Test
     public void theProgramMixesTheSharpPictureByTheEdgeShareAndTheFaceShareAlone() {
         String agsl = GlassRefraction.AGSL;
-        assertTrue(agsl.contains("float edgeK = x > 0.0 ? (uSoftRim > 0.0 ? x * x * x * (x * (x * 6.0 - 15.0) + 10.0)"));
-        // e runs 0 at the outline to 1 on the face, and stays 1 on every face pixel.
-        assertTrue(agsl.contains("    float x = 1.0 - e;\n"));
-        assertTrue(agsl.contains(": x * x * (3.0 - 2.0 * x)) : 0.0;"));
-        assertTrue(agsl.contains("float clarityK = edgeK * uSharpEdge;"));
+        // The sharp share is the zone's steepness, which the bend computes; 0 on the face.
+        assertTrue(agsl.contains("    float steepK = 0.0;\n"));
+        assertTrue(agsl.contains("steepK = smoothstep(0.0, kBendFull, bendT * kSlabHold);"));
+        assertTrue(agsl.contains("float clarityK = steepK * uSharpEdge;"));
+        assertFalse(agsl.contains("edgeK"));
         assertTrue(agsl.contains("clarityK = mix(clarityK, 1.0, faceMix);"));
         // No knob scales the edge, and nothing raises it while the slab moves.
         assertFalse(agsl.contains("uClarity"));

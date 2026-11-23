@@ -44,8 +44,8 @@ import java.util.Arrays;
  * changes only with the slab's pose ({@link GlassPose}, below). The rim is fixed material, not a knob (a debug property tunes its numbers), and
  * every surface that runs the program wears it. Where a sharp picture of what is behind is handed in
  * ({@link Program#setClarityInput}), the lens zone shows it through the bend in place of the frost,
- * wholly at the rim ({@link #sharpShare}), at rest and in motion alike: a bevel is thin glass, so
- * what is behind it reads sharp. The live route binds none (an effect takes one input), so its
+ * across the steep outer part and easing into the frost as the zone flattens ({@link #sharpShare}),
+ * at rest and in motion alike: a steep bevel shows what is behind it bent and sharp. The live route binds none (an effect takes one input), so its
  * edge keeps the frost.
  * Dispersion refracts red and blue at their own index, so the bent picture splits evenly round
  * the outline in step with how far it is bent there, the way a prism fans out white light (the
@@ -207,7 +207,7 @@ public final class GlassRefraction {
         /**
          * The stored edge clarity, a percentage. Kept so a saved look loads and compares as it
          * was; the program ignores it, as {@link #specularPercent}: the edge shows the sharp
-         * picture wholly wherever one is bound ({@link GlassRefraction#sharpShare}).
+         * picture by the zone's steepness wherever one is bound ({@link GlassRefraction#sharpShare}).
          */
         public final int clarityPercent;
         /**
@@ -905,15 +905,12 @@ public final class GlassRefraction {
         "            lensGlow = fade * (1.0 - rr);\n" +
         "        }\n" +
         "    }\n" +
-        // The lens zone's share of the sharp picture: a bevel is thin glass, so it shows what is
-        // behind it unblurred (de Rousiers et al. 2011), easing in from the frost where the zone
-        // meets the face, half way at its middle, whole at the outline. The soft zone eases on a
-        // smootherstep, so the sharp picture has no inner edge there either. Zero on the face,
-        // which keeps its frost. sharpShare in Java.
-        "    float x = 1.0 - e;\n" +
-        "    float edgeK = x > 0.0 ? (uSoftRim > 0.0 ? x * x * x * (x * (x * 6.0 - 15.0) + 10.0)\n" +
-        "        : x * x * (3.0 - 2.0 * x)) : 0.0;\n" +
-        "    float clarityK = edgeK * uSharpEdge;\n" +
+        // The lens zone's share of the sharp picture: a steep bevel shows what is behind it bent
+        // and unblurred (de Rousiers et al. 2011), so the share follows how much the slab bends
+        // here (steepK): whole across the steep outer part, easing to nothing as the zone
+        // flattens, with no step, so the nearly flat inner part keeps the face's frost instead of
+        // reading as an unblurred strip. Zero on the face. sharpShare in Java.
+        "    float clarityK = steepK * uSharpEdge;\n" +
         // Clear's face: the clearer picture shows through by uFaceClarity everywhere, the zone
         // included, where one is handed in (uFaceClarity is 0 where none is). At 0 nothing runs.
         "    if (faceMix > 0.0) {\n" +
@@ -1445,16 +1442,14 @@ public final class GlassRefraction {
     static final float TOUCH_LENS = 0.10f;
 
     /**
-     * The program's {@code edgeK}: how much of the sharp picture a pixel at {@code t} across the
-     * band (0 at the rim, 1 at its inner edge and on the face) shows where one is bound, on the
-     * band's smoothstep, or the soft band's smootherstep when {@code soft}. Whole at the rim, 0
-     * on the face, at rest and in motion alike: the face's own share is Clear's face clarity,
-     * which this does not touch. Pure.
+     * How much of the sharp picture a lens pixel where the slab {@code slab} slopes by
+     * {@code slope} shows where one is bound: the zone's steepness ({@link GlassSlab#steepness},
+     * the program's {@code steepK}), whole across the steep outer part, easing to nothing where
+     * the zone flattens into the face, at rest and in motion alike. The face's own share is
+     * Clear's face clarity, which this does not touch. Pure.
      */
-    static float sharpShare(float t, boolean soft) {
-        float x = 1f - Math.max(0f, Math.min(1f, t));
-        if (x <= 0f) return 0f;
-        return soft ? x * x * x * (x * (x * 6f - 15f) + 10f) : x * x * (3f - 2f * x);
+    static float sharpShare(@NonNull GlassSlab slab, float slope) {
+        return slab.steepness(slope);
     }
 
     /** {@code uSharpEdge} for a program whose sharp input is bound and a picture of its own. Pure. */
@@ -1468,13 +1463,13 @@ public final class GlassRefraction {
     }
 
     /**
-     * The program's {@code clarityK}: how much of the sharp picture a pixel at {@code t} shows,
-     * for {@code uSharpEdge} and the face's share {@code faceMix} ({@code uFaceClarity} after the
-     * size fade). The edge's share is {@link #sharpShare} whole; the face mixes toward the sharp
-     * picture by its own share and nothing else. Pure.
+     * The program's {@code clarityK}: how much of the sharp picture a pixel at slope
+     * {@code slope} shows, for {@code uSharpEdge} and the face's share {@code faceMix}
+     * ({@code uFaceClarity} after the size fade). The edge's share is {@link #sharpShare} whole;
+     * the face mixes toward the sharp picture by its own share and nothing else. Pure.
      */
-    static float sharpMix(float t, boolean soft, float sharpEdge, float faceMix) {
-        float k = sharpShare(t, soft) * sharpEdge;
+    static float sharpMix(@NonNull GlassSlab slab, float slope, float sharpEdge, float faceMix) {
+        float k = sharpShare(slab, slope) * sharpEdge;
         return faceMix > 0f ? k + (1f - k) * faceMix : k;
     }
 
@@ -1873,7 +1868,7 @@ public final class GlassRefraction {
 
         /**
          * {@code uSharpEdge}: 1 while the sharp shader is a clearer picture of its own, so the
-         * band shows it wholly toward the rim ({@link #sharpShare}); 0 while it is the frost bound
+         * band shows it across its steep part ({@link #sharpShare}); 0 while it is the frost bound
          * in its place, where mixing toward it would read a second sample of the same picture.
          * {@code uFaceClarity}: Clear's face share, where such a picture is bound.
          */
