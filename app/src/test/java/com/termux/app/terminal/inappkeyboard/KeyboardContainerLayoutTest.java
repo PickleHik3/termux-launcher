@@ -93,4 +93,31 @@ public class KeyboardContainerLayoutTest {
         assertTrue(parent.dispatchTouchEvent(down(50, 50)));
         assertEquals(2, hits[0]);
     }
+
+    @Test public void anUpKeyboardOwnsItsBoxOnEveryPageAndADownOneDoesNot() {
+        assertTrue(KeyboardContainerLayout.ownsItsBox(0));
+        assertFalse(KeyboardContainerLayout.ownsItsBox(12));
+    }
+
+    @Test public void aTouchNoKeyTakesInsideAnUpKeyboardNeverReachesTheWallUnderIt() {
+        Context context = RuntimeEnvironment.getApplication();
+        FrameLayout parent = new FrameLayout(context);
+        View wall = new View(context);
+        final int[] wallHits = {0};
+        wall.setOnTouchListener((v, e) -> { wallHits[0]++; return true; });
+        KeyboardContainerLayout keyboard = new KeyboardContainerLayout(context);
+        parent.addView(wall, new FrameLayout.LayoutParams(100, 100));
+        parent.addView(keyboard, new FrameLayout.LayoutParams(100, 100));
+        parent.measure(View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(100, View.MeasureSpec.EXACTLY));
+        parent.layout(0, 0, 100, 100);
+
+        keyboard.setCoversBelow(KeyboardContainerLayout.ownsItsBox(0));
+        assertTrue(parent.dispatchTouchEvent(down(50, 95)));
+        assertEquals("the band under the bottom row is the keyboard's", 0, wallHits[0]);
+
+        keyboard.setCoversBelow(KeyboardContainerLayout.ownsItsBox(12));
+        assertTrue(parent.dispatchTouchEvent(down(50, 95)));
+        assertEquals(1, wallHits[0]);
+    }
 }
