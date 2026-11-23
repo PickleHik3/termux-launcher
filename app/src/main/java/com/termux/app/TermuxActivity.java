@@ -20486,17 +20486,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Stop the server the way {@code pkill termux-x11} does. It is a separate process on
-     * purpose — that is what keeps an X server crash off the home screen — so its own name is
-     * the only handle the launcher has on it.
+     * Stop the server the way {@code pkill termux-x11} does, whoever started it. It is a separate
+     * process on purpose — that is what keeps an X server crash off the home screen — so its own
+     * name is the only handle the launcher has on it. Signalled from here, not through the
+     * prefix's {@code pkill}, which a prefix without procps lacks; that is only the fallback when
+     * no server could be found here. The window leaves when the server's Binder dies.
      */
     private void killEmbeddedDisplayServer() {
-        if (mTermuxService != null) {
-            mTermuxService.createTermuxTask(
-                TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
-                new String[]{"-f", "termux-x11 " + getPackageName()}, null,
-                TermuxConstants.TERMUX_HOME_DIR_PATH);
-        }
+        final String packageName = getPackageName();
+        new Thread(() -> {
+            if (com.termux.app.x11.X11ServerProcesses.stopAll(packageName) > 0) return;
+            runOnUiThread(() -> {
+                if (mTermuxService == null) return;
+                mTermuxService.createTermuxTask(
+                    TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/pkill",
+                    new String[]{"-f", "termux-x11 " + packageName}, null,
+                    TermuxConstants.TERMUX_HOME_DIR_PATH);
+            });
+        }, "x11-stop").start();
         syncPlaceBar();
     }
 
@@ -20727,6 +20734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Whoever owns typing now — an open palette or sheet keeps its claim — not nobody.
         restoreInAppKeyboardTypingClaim();
         hideDisplaySystemKeyboard();
+        releaseDisplayFocus(mPaneWallController.displayPage());
         mPaneWallController.detachDisplayPage();
         syncDisplayEnvironment();
         syncDisplayKeyboardRoute();
@@ -20845,12 +20853,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncDisplayPageAttachment(@NonNull com.termux.app.wall.PaneWallPage page) {
         com.termux.app.x11.X11PaneFrame display = mPaneWallController == null
             ? null : mPaneWallController.displayPage();
+        // Off its window the display's view must neither keep the keys nor take them back.
+        if (page != com.termux.app.wall.PaneWallPage.DISPLAY) releaseDisplayFocus(display);
         if (mX11Display == null || display == null) return;
         if (page == com.termux.app.wall.PaneWallPage.DISPLAY) {
             // The arrival itself: nothing about starting or stopping a display happened, but the
             // message may be stale if a package landed in the prefix while the wall rested
             // elsewhere.
             refreshDisplayEmptyStateReadiness();
+            com.termux.app.x11.DisplayViewFocus.admit(display.display());
             mX11Display.attachView(display.display());
             display.display().requestFocus();
             // A place that asked for the keyboard as it arrived asked for it itself, so the
@@ -20873,12 +20884,34 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The display window left the screen or is going: the keys go back to the active terminal
+     * pane — quietly, so no system keyboard comes up for it — and the display's view stops being
+     * able to take them (DisplayViewFocus). Without it the palette and the terminal stay deaf
+     * after a display session until the app restarts.
+     */
+    private void releaseDisplayFocus(@Nullable com.termux.app.x11.X11PaneFrame frame) {
+        if (frame == null) return;
+        com.termux.x11.LorieView view;
+        try {
+            view = frame.display();
+        } catch (IllegalStateException notInflated) {
+            return;
+        }
+        com.termux.app.x11.DisplayViewFocus.release(view,
+            focused -> focused instanceof TerminalView,
+            () -> {
+                if (mInAppKeyboard == null || !mInAppKeyboard.isExternalTextInputActive())
+                    returnFocusToTerminalQuietly();
+            });
+    }
+
+    /**
      * {@code DISPLAY} for shells started from now on: set while a display server runs and the
-     * user asked for it, cleared otherwise. Nothing already running is touched, and nothing is
-     * written to disk — Termux:X11 never set it, so it stays an opt-in. Whether a server runs is
+     * setting is on (the default), cleared otherwise. Nothing already running is touched, and
+     * nothing is written to disk. Whether a server runs is
      * the process's ({@link com.termux.app.x11.X11DisplayServerState}), not this activity's
      * controller's: a relaunched activity, before or without its controller on the server, must
-     * not read as the display having stopped. Only the opt-in is this activity's to say.
+     * not read as the display having stopped. Only the setting is this activity's to say.
      */
     private void syncDisplayEnvironment() {
         com.termux.app.x11.X11DisplayServerState.setDisplayEnvWanted(
@@ -21162,6 +21195,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         mX11Display.host().setLorieView(page.display());
         mX11Display.setListener(running -> {
+            if (running) {
+                mDisplayConnectedSinceStart = true;
+                setDisplayStartFailure(null);
+            }
             // The display was switched off with a server running, and the user chose to stop
             // it: the server has gone now, so the page follows it.
             if (!running && mDisplayTearDownAfterStop != null) {
@@ -21275,8 +21312,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPreferences.isX11ForceBgraEnabled(),
             com.termux.app.x11.X11WindowManager.xstartup(mPreferences.getX11WindowManager()));
         if (argv.length == 0) return;
-        mTermuxService.createTermuxTask(argv[0], java.util.Arrays.copyOfRange(argv, 1, argv.length),
-            null, TermuxConstants.TERMUX_HOME_DIR_PATH);
+        // A new Start clears what the last one said, and counts from here whether a display
+        // connects.
+        final int startId = ++mDisplayStartId;
+        mDisplayConnectedSinceStart = false;
+        setDisplayStartFailure(null);
+        final com.termux.shared.shell.command.runner.app.AppShell task =
+            mTermuxService.createTermuxTask(argv[0],
+                java.util.Arrays.copyOfRange(argv, 1, argv.length), null,
+                TermuxConstants.TERMUX_HOME_DIR_PATH);
+        if (task == null) return;
+        // The exit callback runs on the main thread after the task's output is complete, so
+        // stderr is safe to read here.
+        mTermuxService.notifyOnAppShellExit(task, exitCode -> {
+            if (isFinishing() || isDestroyed()) return;
+            // Superseded by a later Start, or a display did connect: the server ended normally.
+            if (startId != mDisplayStartId || mDisplayConnectedSinceStart) return;
+            setDisplayStartFailure(com.termux.app.x11.X11StartFailure.reason(
+                task.getExecutionCommand().resultData.stderr,
+                getString(R.string.termux_x11_start_failed_generic)));
+        });
+    }
+
+    /** Which Start the exit callback belongs to; bumped by every Start. */
+    private int mDisplayStartId;
+    /** Whether a display came up since the last Start. */
+    private boolean mDisplayConnectedSinceStart;
+
+    /** Hand the Display window the reason the last Start died, or clear it with null. */
+    private void setDisplayStartFailure(@Nullable String reason) {
+        if (mPaneWallController == null) return;
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController.displayPage();
+        if (frame != null) frame.setStartFailure(reason);
     }
 
     /** The Display place's menu while it is up. */
@@ -21595,9 +21662,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // The frame stops being mouse mode's when the wall leaves the place or the display goes:
         // mouse mode itself stays on, and comes back to the pad rather than to a parked keyboard.
         if (!ours) mFrameContent.onFrameLost();
-        // A tap on the pad is a click where the pointer stands, so while the pad holds the frame
-        // the text-focus policy reads its taps whatever the touch mode is under it.
-        if (mX11Display != null) mX11Display.setPadUp(ours);
         boolean wanted = ours
             && mFrameContent.content() == com.termux.app.x11.DisplayFrameContentPolicy.Content.PAD;
         float density = getResources().getDisplayMetrics().density;
@@ -21670,6 +21734,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             pad.setTapListener(() -> {
                 if (mX11Display != null) mX11Display.onDisplayTap();
             });
+            pad.setModeSwitchListener(this::switchDisplayKeyboardMode);
             mDisplayTouchpad = pad;
         }
         // The keyboard's frame is the pad's: the host wraps its content, so a match-parent pad
@@ -21852,8 +21917,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Keyboard2View keys = inGap ? (Keyboard2View) keyboardView : null;
         pad.setInSplitGap(inGap, keys == null ? 0f : keys.getKeyCapRadiusPx(),
             keys == null ? 0 : keys.getKeyCapColor());
+        syncDisplayTouchpadModeSwitch(pad);
         return com.termux.app.x11.DisplayTouchpadPlacement.padParams(gap, seat,
             keyboardView == null ? 0 : keyboardView.getHeight(), density);
+    }
+
+    /**
+     * The pad's keyboard mode button shows this orientation's keyboard mode, and is there only
+     * where the mode decides anything: over a floating keyboard it is not.
+     */
+    private void syncDisplayTouchpadModeSwitch(
+            @NonNull com.termux.app.x11.DisplayTouchpadView pad) {
+        PlaceLayout layout = currentPlaceLayout();
+        pad.setKeyboardModeSwitch(
+            com.termux.app.x11.DisplayTouchpadPlacement.offersModeSwitch(inAppKeyboardForm()),
+            layout.keyboardMode == PlaceLayout.KeyboardMode.OVERLAY);
+    }
+
+    /**
+     * The pad's keyboard mode button: this orientation's keyboard mode flips between Overlay and
+     * Resize, saved where the Layout editor reads it. The pad stands in the keyboard's frame, so
+     * the one geometry pass that follows floats it over the display or gives it the display's
+     * room, as it would the keyboard. The display holds its size over that pass and takes the new
+     * one after it, so the X screen is resized once; an overlaying keyboard also paints opaque
+     * rather than glass, so the stack is re-rendered with it.
+     */
+    private void switchDisplayKeyboardMode() {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null) return;
+        com.termux.app.x11.X11PaneFrame frame = mPaneWallController == null
+            ? null : mPaneWallController.displayPage();
+        if (frame != null) frame.holdHostSizeOverNextLayout();
+        PlaceLayout.KeyboardMode mode = com.termux.app.x11.DisplayTouchpadPlacement
+            .switchKeyboardMode(store, currentPlaceOrientation());
+        Logger.logInfo(LOG_TAG, "Touchpad switched the keyboard mode to " + mode);
+        if (mDisplayTouchpad != null) syncDisplayTouchpadModeSwitch(mDisplayTouchpad);
+        mGeometry.requestNow(GeometryScheduler.Reason.KEYBOARD,
+            GeometryScheduler.ResizePolicy.NOW);
+        mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
+            | ChromeRenderer.SCOPE_ACCESSORY_RENDER | ChromeRenderer.SCOPE_KEYBOARD_BACKDROP);
     }
 
     private void createWidgetPaneController() {

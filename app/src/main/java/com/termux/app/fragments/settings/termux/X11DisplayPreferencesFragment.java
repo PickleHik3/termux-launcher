@@ -33,7 +33,6 @@ import com.termux.x11.Prefs;
  */
 public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
 
-    private static final String KEY_TOUCH_MODE = "touchMode";
     private static final String KEY_KEYBOARD_FOLLOWS_TEXT = "x11_keyboard_follows_text";
     private static final String KEY_RESOLUTION_MODE = "displayResolutionMode";
     private static final String KEY_SCALE = "displayScale";
@@ -72,14 +71,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         Preference dpiRow = findPreference("x11_display_dpi");
         if (dpiRow instanceof com.termux.app.fragments.settings.SliderPreference)
             ((com.termux.app.fragments.settings.SliderPreference) dpiRow).setValueSuffix(" dpi");
-        com.termux.app.fragments.settings.SegmentedPillPreference touch = findPreference(KEY_TOUCH_MODE);
-        if (touch != null) {
-            applyKeyboardFollowsTextRow(touch.getValue());
-            touch.setOnPreferenceChangeListener((preference, value) -> {
-                applyKeyboardFollowsTextRow(String.valueOf(value));
-                return true;
-            });
-        }
         ListPreference mode = findPreference(KEY_RESOLUTION_MODE);
         if (mode != null) {
             applyResolutionRows(mode.getValue());
@@ -98,21 +89,6 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         if (scale != null) scale.setVisible("scaled".equals(mode));
         if (exact != null) exact.setVisible("exact".equals(mode));
         if (custom != null) custom.setVisible("custom".equals(mode));
-    }
-
-    /**
-     * A tap only means "here" while touch is read as a touchscreen, so the keyboard row says as
-     * much in the other two modes rather than offering a switch that would do nothing.
-     */
-    private void applyKeyboardFollowsTextRow(@Nullable String touchMode) {
-        Preference row = findPreference(KEY_KEYBOARD_FOLLOWS_TEXT);
-        if (row == null) return;
-        boolean touchscreen = String.valueOf(
-            com.termux.app.x11.DisplayTextFocusPolicy.TOUCH_MODE_TOUCHSCREEN).equals(touchMode);
-        row.setEnabled(touchscreen);
-        row.setSummary(touchscreen
-            ? R.string.settings_x11_keyboard_follows_text_summary
-            : R.string.settings_x11_keyboard_follows_text_unavailable);
     }
 
     /**

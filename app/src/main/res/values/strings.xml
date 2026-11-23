@@ -306,6 +306,9 @@
     <string name="settings_widget_grid_rows_title">Grid rows</string>
     <string name="widget_picker_no_space">No room for a %1$d × %2$d widget on this %3$d × %4$d page. You can make the grid bigger in Settings.</string>
     <string name="termux_x11_no_display">No display is running.</string>
+    <string name="termux_x11_start_failed">The display could not start.</string>
+    <string name="termux_x11_start_failed_generic">The display stopped as it started.</string>
+    <string name="termux_x11_start_failed_help">Startup and support</string>
     <string name="termux_x11_needs_keyboard_data">The display needs the xkeyboard-config package installed before it can start.</string>
     <string name="termux_x11_needs_keyboard_data_nix">Add xkeyboard-config to home.nix and switch, then come back.</string>
     <string name="termux_x11_read_guide">Read the guide</string>
@@ -340,6 +343,10 @@
     <string name="settings_gui_apps_gpu_copy_summary">Paste it into the terminal to let your apps draw with this phone\'s graphics.</string>
     <string name="settings_gui_apps_gpu_clipboard_label">Graphics setup</string>
     <string name="settings_gui_apps_gpu_copied">Graphics command copied. Paste it into the terminal and press Enter.</string>
+    <string name="settings_gui_apps_gpu_benchmark_title">Benchmark graphics</string>
+    <string name="settings_gui_apps_gpu_benchmark_summary">Tries every option and keeps the fastest. Takes a few minutes.</string>
+    <string name="settings_gui_apps_gpu_benchmark_clipboard_label">Graphics benchmark</string>
+    <string name="settings_gui_apps_gpu_benchmark_copied">Benchmark command copied. Paste it into the terminal and press Enter.</string>
     <string name="settings_x11_display_title">Display</string>
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
@@ -349,7 +356,6 @@
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
     <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
     <string name="settings_x11_keyboard_follows_text_summary">Open the keyboard when you tap a text field and close it when you tap elsewhere.</string>
-    <string name="settings_x11_keyboard_follows_text_unavailable">Available in Touchscreen touch mode.</string>
     <string name="settings_x11_resolution_mode_title">Resolution</string>
     <string name="settings_x11_scale_title">Scale</string>
     <string name="settings_x11_filtering_title">Scaling</string>
@@ -2126,6 +2132,12 @@
     <string name="tool_mouse_toggle">Mouse mode</string>
     <string name="extra_key_readout_mouse_mode_on">Mouse mode on</string>
     <string name="extra_key_readout_mouse_mode_off">Mouse mode off</string>
+    <!-- The display touchpad's two buttons, read by a screen reader. The mode button's state is
+         the keyboard mode (GLOSSARY: Keyboard mode), the same value the Layout editor shows. -->
+    <string name="display_touchpad_exit_description">Leave mouse mode</string>
+    <string name="display_touchpad_keyboard_mode_description">Keyboard mode</string>
+    <string name="display_touchpad_keyboard_mode_overlay">Overlay</string>
+    <string name="display_touchpad_keyboard_mode_resize">Resize</string>
     <string name="tool_pane_next_layout">Next pane layout</string>
     <string name="tool_pane_toggle_float">Float / dock pane</string>
     <string name="tool_terminal_toggle_scratchpad">Toggle scratchpad</string>

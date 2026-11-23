@@ -25,10 +25,12 @@ import com.termux.app.notice.AppNotice;
 import com.termux.app.tour.TourEdition;
 import com.termux.app.x11.DistroSetupStore;
 import com.termux.app.x11.GuiAppsSetup;
+import com.termux.app.x11.X11CliInstaller;
 import com.termux.app.x11.X11GpuProbe;
 import com.termux.shared.interact.ShareUtils;
 import com.termux.shared.termux.TermuxConstants;
 
+import java.io.File;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -59,6 +61,7 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
     static final String KEY_GRAPHICS_CATEGORY = "gui_apps_graphics_category";
     static final String KEY_GPU = "x11_gpu";
     static final String KEY_GPU_COPY = "gui_apps_gpu_copy";
+    static final String KEY_GPU_BENCHMARK = "gui_apps_gpu_benchmark";
 
     /** How long the launcher is given to come forward before the notice is raised on it. */
     private static final long NOTICE_DELAY_MS = 350L;
@@ -161,6 +164,11 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
             copyGraphicsCommand(preference.getContext());
             return true;
         });
+        Preference gpuBenchmark = findPreference(KEY_GPU_BENCHMARK);
+        if (gpuBenchmark != null) gpuBenchmark.setOnPreferenceClickListener(preference -> {
+            copyBenchmarkCommand(preference.getContext());
+            return true;
+        });
         probeGpu(context);
     }
 
@@ -245,6 +253,22 @@ public final class GuiAppsSetupPreferencesFragment extends MaterialPreferenceFra
         if (activity != null) activity.finish();
         new Handler(Looper.getMainLooper()).postDelayed(
             () -> AppNotice.show(appContext, R.string.settings_gui_apps_gpu_copied),
+            NOTICE_DELAY_MS);
+    }
+
+    /**
+     * The installed benchmark script, by name: it is on PATH, so the bare command is what the user
+     * pastes, with no newline, and their Enter runs it.
+     */
+    private void copyBenchmarkCommand(@NonNull Context context) {
+        Context appContext = context.getApplicationContext();
+        ShareUtils.copyTextToClipboard(appContext,
+            getString(R.string.settings_gui_apps_gpu_benchmark_clipboard_label),
+            new File(X11CliInstaller.GPU_SETUP_SCRIPT_PATH).getName(), null);
+        Activity activity = getActivity();
+        if (activity != null) activity.finish();
+        new Handler(Looper.getMainLooper()).postDelayed(
+            () -> AppNotice.show(appContext, R.string.settings_gui_apps_gpu_benchmark_copied),
             NOTICE_DELAY_MS);
     }
 
