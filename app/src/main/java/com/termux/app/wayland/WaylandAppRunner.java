@@ -92,6 +92,13 @@ public final class WaylandAppRunner {
     /** The host should be stopped as soon as the binding connects (Settings went back to X11). */
     private boolean stopOnConnect;
     private boolean running;
+    /** The host has told this binding its state at least once (the replay after addCallback). */
+    private boolean stateKnown;
+    /**
+     * The host said STARTING since this runner asked it to start, so a STOPPED now is the answer
+     * to that start and not a state from before it.
+     */
+    private boolean startingSeen;
     /** Live windows, counted from the host's callbacks; reset on every (re)attach. */
     private int windows;
 
@@ -179,11 +186,12 @@ public final class WaylandAppRunner {
             dispatchPending();
             return;
         }
-        if (service != null && !startAsked) {
+        if (service != null && stateKnown && !startAsked) {
             // Connected to a stopped host: the state replay has come and gone.
             startHost();
             return;
         }
+        // Otherwise the replay, or the start already asked for, brings the host up.
         if (!bound) connect();
     }
 
@@ -243,6 +251,7 @@ public final class WaylandAppRunner {
         service = null;
         running = false;
         startAsked = false;
+        stateKnown = false;
         windows = 0;
         main.removeCallbacks(idleStop);
     }
@@ -256,6 +265,7 @@ public final class WaylandAppRunner {
 
     private void hostState(int state, @Nullable String message) {
         if (service == null) return;
+        stateKnown = true;
         switch (state) {
             case ILinuxWindows.STATE_RUNNING:
                 running = true;
@@ -263,12 +273,17 @@ public final class WaylandAppRunner {
                 dispatchPending();
                 break;
             case ILinuxWindows.STATE_STARTING:
+                startingSeen = true;
                 break;
             case ILinuxWindows.STATE_STOPPED:
             case ILinuxWindows.STATE_DIED:
                 running = false;
                 windows = 0;
                 main.removeCallbacks(idleStop);
+                if (startAsked && !startingSeen) {
+                    // A state from before this runner's start; the start's own answer follows.
+                    break;
+                }
                 if (pending.isEmpty()) {
                     // Nothing to open: let go, so the host's process can end.
                     disconnect();
@@ -309,6 +324,7 @@ public final class WaylandAppRunner {
             Log.w(LOG_TAG, "chmod " + SOCKET_DIR + ": " + e.getMessage());
         }
         startAsked = true;
+        startingSeen = false;
         HostStart start = hostStart(context);
         try {
             service.start(SOCKET_DIR, start.xkbConfigRoot, start.xwaylandBinary, start.width,
