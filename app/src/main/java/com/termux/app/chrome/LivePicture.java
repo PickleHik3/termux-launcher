@@ -321,7 +321,8 @@ public final class LivePicture implements GlassPicture {
         return mSurface;
     }
 
-    int marginPx() {
+    /** How far the recording reaches past the surface on each side, px: what the picture holds there. */
+    public int marginPx() {
         return mMarginPx;
     }
 
