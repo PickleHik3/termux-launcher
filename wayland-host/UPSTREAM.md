@@ -21,6 +21,11 @@ upstream is committed here.
     error and then fell through to `NonZeroUsize::try_from(0).unwrap()`, which panicked the
     compositor thread: one client could end every Linux window. It now returns after the error.
     On a version bump, check upstream's `Request::Resize` before dropping it.
+- Patch: `patches/smithay-0.7.0-xwayland-reap.patch` (applies after the Xwayland one).
+  - `xwayland/xserver.rs`: `XWaylandClientData::reap_child()` kills and waits for Xwayland
+    unless `disconnected` already took it, and `disconnected` no longer unwraps a child that is
+    gone. A stopping compositor drops its display without dispatching Xwayland's disconnect, so
+    the un-waited child would stay a zombie for the life of the process; `xwayland::stop` reaps it.
 - Refresh: bump the version and sha256 in the script, re-cut the patch against the new tree
   (`diff -u` of the two files, paths `a/` and `b/`), rename it to the new version, run the script
   and `cargo test`. The `.patched` stamp re-applies the patch when its text changes.

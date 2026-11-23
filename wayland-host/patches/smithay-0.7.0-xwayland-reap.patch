@@ -1,0 +1,30 @@
+--- a/src/xwayland/xserver.rs
++++ b/src/xwayland/xserver.rs
+@@ -384,7 +384,8 @@
+             error!("Xwayland disconnected: {}", err);
+         }
+ 
+-        let mut child = self.child.lock().unwrap().take().unwrap();
++        // Taken already when the compositor reaped it on stop (reap_child).
++        let Some(mut child) = self.child.lock().unwrap().take() else { return };
+         thread::spawn(move || {
+             if let Ok(status) = child.wait() {
+                 if !status.success() {
+@@ -400,6 +401,17 @@
+     pub fn user_data(&self) -> &UserDataMap {
+         &self.data_map
+     }
++
++    /// Kills Xwayland and waits for it, unless `disconnected` already took it. A compositor that
++    /// stops drops its display without dispatching this client's disconnect, which would leave
++    /// the child a zombie for the life of the process.
++    pub fn reap_child(&self) {
++        let child = self.child.lock().ok().and_then(|mut c| c.take());
++        if let Some(mut child) = child {
++            let _ = child.kill();
++            let _ = child.wait();
++        }
++    }
+ }
+ 
+ /// Removes the `O_CLOEXEC` flag from a `RawFd`, causing it to leak when we
