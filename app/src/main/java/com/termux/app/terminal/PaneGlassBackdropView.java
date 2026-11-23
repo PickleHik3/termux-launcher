@@ -333,29 +333,39 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             PANEGLASS_POSE.tick();
             postInvalidateOnAnimation();
         }
-        android.graphics.RenderEffect effect = builder.effect(width, height, mRadiusPx, look,
-            mPose);
+        // The node reaches the picture's margin past the slab on every side, so the effect's
+        // content holds the picture a turned slab shifts in from past its outline; a node cut at
+        // the slab's own bounds held none, and the turn read a band of nothing there.
+        int margin = picture.marginPx();
+        android.graphics.RenderEffect effect = builder.effect(width, height, margin, mRadiusPx,
+            look, mPose);
         if (effect == null) return false;
         android.graphics.RenderNode node = mLiveNode;
         if (node == null) {
             node = new android.graphics.RenderNode("PaneGlass.live");
             mLiveNode = node;
         }
-        node.setPosition(0, 0, width, height);
+        node.setPosition(-margin, -margin, width + margin, height + margin);
         if (effect != mLiveEffectSet) {
             node.setRenderEffect(effect);
             mLiveEffectSet = effect;
         }
         Drawable drawable = mLiveDrawable;
         if (drawable == null) return false;
-        android.graphics.RecordingCanvas recording = node.beginRecording(width, height);
+        android.graphics.RecordingCanvas recording =
+            node.beginRecording(width + 2 * margin, height + 2 * margin);
         try {
+            recording.translate(margin, margin);
             drawable.setBounds(0, 0, width, height);
             drawable.draw(recording);
         } finally {
             node.endRecording();
         }
+        // Only the slab's own bounds show: the margin is what the effect reads, not what it draws.
+        int save = canvas.save();
+        canvas.clipRect(0, 0, width, height);
         ((android.graphics.RecordingCanvas) canvas).drawRenderNode(node);
+        canvas.restoreToCount(save);
         return true;
     }
 

@@ -1490,6 +1490,14 @@ public final class GlassRefraction {
     }
 
     /**
+     * The most a turn shifts the picture ({@code uPoseLight.w}): the optics' most,
+     * {@code maxShiftPx}, held to what the content holds past the outline, {@code reachPx}. Pure.
+     */
+    static float poseShiftCap(float maxShiftPx, float reachPx) {
+        return Math.min(maxShiftPx, reachPx);
+    }
+
+    /**
      * The program's {@code frameClarity}: the share of the sharp picture a frame pixel at
      * {@code (x, y)} may show, for a frame spanning {@code (minX, minY)} to {@code (maxX, maxY)}.
      * 1 well inside, 0 at the margin and beyond, smoothstep between. Pure.
@@ -1656,6 +1664,8 @@ public final class GlassRefraction {
         private final float[] mPoseNext = new float[GlassPoseOptics.UNIFORMS];
         private final float[] mPoseScratch = new float[4];
         private boolean mPoseWrittenValid;
+        /** {@link #setShiftReach}: what the content holds past the outline, px; unbounded unset. */
+        private float mShiftReachPx = Float.POSITIVE_INFINITY;
         /** Whether {@code sharp} is a clearer frame of its own, not the frost bound in its place. */
         private boolean mSharpDistinct;
         /** The dock surface's glass as last written: {@code uSoftRim} in px and {@code uShelf}. */
@@ -2078,6 +2088,7 @@ public final class GlassRefraction {
             mPose.scale = scale;
             float[] u = mPoseNext;
             GlassPoseOptics.active().uniforms(mPose, GlassSlab.active(), mDensity, u, mPoseScratch);
+            u[7] = poseShiftCap(u[7], mShiftReachPx);
             float[] w = mPoseWritten;
             boolean first = !mPoseWrittenValid;
             if (first || u[0] != w[0] || u[1] != w[1] || u[2] != w[2] || u[3] != w[3]) {
@@ -2094,6 +2105,20 @@ public final class GlassRefraction {
             }
             System.arraycopy(u, 0, w, 0, GlassPoseOptics.UNIFORMS);
             mPoseWrittenValid = true;
+        }
+
+        /**
+         * How far past the outline the content holds the picture, px: a turn's shift is held to
+         * it ({@link #poseShiftCap}), so no sample of a turned slab leaves what is drawn. Under a
+         * {@code RenderEffect} the content is the slab's node, which holds only the live
+         * picture's margin; unset, the shift is the optics' own. Written on the next
+         * {@link #setPose}.
+         */
+        public void setShiftReach(float reachPx) {
+            float reach = Float.isNaN(reachPx) ? Float.POSITIVE_INFINITY : Math.max(0f, reachPx);
+            if (reach == mShiftReachPx) return;
+            mShiftReachPx = reach;
+            mPoseWrittenValid = false;
         }
 
         /** The rest pose: the rest look, which is every surface at rest. */
