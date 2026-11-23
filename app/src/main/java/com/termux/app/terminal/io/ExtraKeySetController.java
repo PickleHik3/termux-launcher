@@ -32,10 +32,10 @@ public final class ExtraKeySetController {
         /** The stored value of a property line as written, or null when absent. */
         @Nullable String rawLine(@NonNull String key);
 
-        /** One page of keys from its value; {@code fallback} is the value a bad row falls back to. */
         /** The keys in the longest row of a page value, 0 when it does not parse; raises no notice. */
         int longestRow(@NonNull String value);
 
+        /** One page of keys from its value; {@code fallback} is the value a bad row falls back to. */
         @Nullable ExtraKeysInfo parsePage(@NonNull String value, @NonNull String fallback, int page);
 
         @Nullable ExtraKeysBarView bar();
