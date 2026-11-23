@@ -43,6 +43,24 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
+      - name: Setup Rust for the Wayland compositor host (-Pwayland=true)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android,armv7-linux-androideabi
+      - name: Install the Wayland host's build tools
+        run: sudo apt-get install -y --no-install-recommends meson ninja-build bison
+      - name: Cache the Wayland host build (cargo, cargo-ndk, libxkbcommon)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-ndk
+            wayland-host/target
+          key: wayland-host-${{ runner.os }}-${{ hashFiles('wayland-host/Cargo.lock', 'wayland-host/patches/*', 'scripts/build-wayland-host.sh') }}
+          restore-keys: wayland-host-${{ runner.os }}-
+      - name: Install cargo-ndk
+        run: command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
       - name: Setup Gradle cache
         uses: gradle/actions/setup-gradle@v4
 
@@ -129,7 +147,7 @@ jobs:
           export TERMUX_APP_VERSION_NAME="$NIGHTLY_VERSION_NAME" # Used by app/build.gradle
           export TERMUX_APK_VERSION_TAG="$APK_VERSION_TAG" # Used by app/build.gradle
           export TERMUX_PACKAGE_VARIANT="${{ env.PACKAGE_VARIANT }}" # Used by app/build.gradle
-          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon -Pghostty=true "$BUILD_TASK" || \
+          ./.github/scripts/gradle_retry.sh ./gradlew --no-daemon -Pghostty=true -Pwayland=true "$BUILD_TASK" || \
             exit_on_error "Build failed for '$APK_VERSION_TAG' build."
 
           echo "Validating APKs"

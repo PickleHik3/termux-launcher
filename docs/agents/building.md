@@ -18,6 +18,12 @@ and a JDK compatible with AGP 8.13.2; the code targets Java 11.
   arm64-v8a and x86_64 only) and its tests' host library; it needs Zig 0.17 and the NDK. Without it
   the APK has no library and Settings hides **Terminal engine**. CI's nightly `assembleStaging` and
   the release workflow's `assembleRelease` pass it (`mlugg/setup-zig`), so drops carry the engine.
+- `-Pwayland=true` builds the Wayland compositor host (`wayland-host/`, Rust, smithay) as
+  `libtlwayland.so` for arm64-v8a, x86_64 and armeabi-v7a, and sets `BuildConfig.WAYLAND_DISPLAY`.
+  Without it no Rust runs and the APK carries no library. It needs rustup with the three Android
+  targets (`rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi`),
+  `cargo-ndk`, `meson`, `ninja` and `bison`; the first build takes about ten minutes for
+  libxkbcommon. CI's nightly passes it; the release workflow does not yet.
 
 ## Installing
 
