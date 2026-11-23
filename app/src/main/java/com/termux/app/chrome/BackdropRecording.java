@@ -80,4 +80,48 @@ public final class BackdropRecording {
     public static boolean skips(View child) {
         return sDepth > 0 && !mayRecord(child);
     }
+
+    /**
+     * Draws {@code view}'s content into {@code canvas} (in the view's own coordinates), as
+     * {@code view.draw(canvas)} would, but never a SurfaceView or a view left out, however deep.
+     * {@code draw} draws each child by its existing display list, so a SurfaceView below a child
+     * that did not draw again would be recorded by reference whatever {@link #skips} says: a
+     * container that holds one ({@link #holdsSurface}) is descended instead, its background and
+     * then each child at its place, the same rule {@code LiveBackdrop} applies to the views
+     * beneath a surface. A wall page holding a Workspace window with the Display in it is one.
+     * Main thread; allocates nothing.
+     */
+    public static void drawWhole(android.graphics.Canvas canvas, View view) {
+        if (!(view instanceof android.view.ViewGroup) || !holdsSurface(view)) {
+            view.draw(canvas);
+            return;
+        }
+        android.view.ViewGroup group = (android.view.ViewGroup) view;
+        android.graphics.drawable.Drawable background = group.getBackground();
+        if (background != null) background.draw(canvas);
+        int save = canvas.save();
+        canvas.translate(-group.getScrollX(), -group.getScrollY());
+        try {
+            int count = group.getChildCount();
+            boolean ordered = android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q;
+            for (int i = 0; i < count; i++) {
+                View child = group.getChildAt(ordered ? group.getChildDrawingOrder(i) : i);
+                if (child == null || child.getVisibility() != View.VISIBLE || !mayRecord(child)) {
+                    continue;
+                }
+                int childSave = canvas.save();
+                canvas.translate(child.getLeft(), child.getTop());
+                android.graphics.Matrix own = child.getMatrix();
+                if (!own.isIdentity()) canvas.concat(own);
+                if (child.getAlpha() < 1f) {
+                    canvas.saveLayerAlpha(0f, 0f, child.getWidth(), child.getHeight(),
+                        Math.round(255f * Math.max(0f, child.getAlpha())));
+                }
+                drawWhole(canvas, child);
+                canvas.restoreToCount(childSave);
+            }
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
 }
