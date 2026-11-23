@@ -2,19 +2,27 @@ package com.termux.app.chrome;
 
 import org.junit.Test;
 
+import java.io.File;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assume.assumeTrue;
 
 /**
  * The rest look is the thin rim's (#314, {@link GlassRim}) under the fixed key light, and the
- * glint is the slab's motion only. On pong the narrow glint at rest read as a bright smear in the
- * top-left corner of every glass surface ("it does not look good when the glass slabs are static,
- * should it not appear only when in motion?", the user, 2026-10-20). The program cannot run on
- * the JVM, so its rest path is held to its text and its Java twins to the rim's arithmetic.
+ * glass changes only with its page's pose (#318, {@link GlassPose}): at rest every pose term is
+ * skipped, so the rest look is the program's own. On pong a narrow glint at rest read as a bright
+ * smear in the top-left corner of every glass surface (the user, 2026-10-20). The program cannot
+ * run on the JVM, so its rest path is held to its text and its Java twins to the rim's arithmetic.
  *
- * <p>Until #314 this pinned the gathered light of commit 673ff85d4 bit for bit; that light (the
- * backdrop's colour multiplied at the outline) is gone, so the pin is now the rim's rest lobe:
- * the thin-edge experiment's {@code c²} toward the key light over an even baseline.</p>
+ * <p>Until #318 this pinned the speed spring's glint weight (Living glass) at zero at rest; the
+ * spring is gone, so the pin is now that every read of a pose uniform sits behind the pose's own
+ * gate, and that the rest pose writes the rest values.</p>
  */
 public class GlassRestLookTest {
 
@@ -51,77 +59,21 @@ public class GlassRestLookTest {
         }
     }
 
-    @Test
-    public void atGlintWeightZeroTheLobeIsTheRestLookWhateverTheLight() {
-        // A slab whose springs have settled draws the rest look exactly, wherever its last pose
-        // left uKeyLight: the program then never reads it.
-        float[][] lights = {{GlassRefraction.KEY_LIGHT_X, GlassRefraction.KEY_LIGHT_Y},
-            {1f, 0f}, {0f, 1f}, {-0.8f, 0.6f}};
-        for (float[] l : lights) {
-            for (int deg = 0; deg < 360; deg += 3) {
-                float nx = (float) Math.cos(Math.toRadians(deg)), ny = (float) Math.sin(Math.toRadians(deg));
-                assertEquals(GlassRefraction.rimLobe(nx, ny),
-                    GlassRefraction.rimLobe(nx, ny, l[0], l[1], 0f), 0f);
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------------------- the weight
+    // ---------------------------------------------------------------------------- the pose
 
     @Test
-    public void theGlintWeightIsZeroAtRestWholeWhenWhollyLiveAndNeverSteps() {
-        assertEquals(0f, GlassRefraction.glintWeight(0f), 0f);
-        assertEquals(1f, GlassRefraction.glintWeight(1f), 0f);
-        // A slab with no lag and no tilt is not live at all.
-        assertEquals(0f, GlassRefraction.glintWeight(GlassRefraction.liveness(0f, 0f, 0f, 0f, DENSITY)), 0f);
-        // A tilt under the rest threshold is flat, so its weight is 0 exactly.
-        float[] tilt = new float[2];
-        GlassRefraction.tiltVector(GlassRefraction.TILT_REST_DEG * 0.9f, 0f, tilt);
-        assertEquals(0f, GlassRefraction.glintWeight(
-            GlassRefraction.liveness(0f, 0f, tilt[0], tilt[1], DENSITY)), 0f);
-        // The springs' last snap to rest moves it by a few thousandths at most: the lag's last
-        // dp on both axes, and the tilt's last twentieth of a degree.
-        float lastLag = GlassMotionLight.LAG_REST_DP * DENSITY;
-        assertTrue(GlassRefraction.glintWeight(
-            GlassRefraction.liveness(lastLag, lastLag, 0f, 0f, DENSITY)) < 0.005f);
-        GlassRefraction.tiltVector(GlassRefraction.TILT_REST_DEG, 0f, tilt);
-        assertTrue(GlassRefraction.glintWeight(
-            GlassRefraction.liveness(0f, 0f, tilt[0], tilt[1], DENSITY)) < 0.001f);
-        // It rises with the pose, without a step anywhere.
-        float last = 0f;
-        for (int i = 0; i <= 200; i++) {
-            float w = GlassRefraction.glintWeight(i / 200f);
-            assertTrue(w >= last);
-            assertTrue("eases at " + i, w - last < 0.01f);
-            last = w;
-        }
-        // Its scale: about an eighth at the press rig's 1.1 degrees, whole by 5 degrees.
-        float rig = GlassRefraction.liveness(0f, 0f, (float) Math.sin(Math.toRadians(1.1)), 0f, DENSITY);
-        assertEquals(0.13f, GlassRefraction.glintWeight(rig), 0.01f);
-        float held = GlassRefraction.liveness(0f, 0f, (float) Math.sin(Math.toRadians(5.0)), 0f, DENSITY);
-        assertEquals(1f, GlassRefraction.glintWeight(held), 0f);
-    }
-
-    @Test
-    public void theLobeMovesFromTheRestLookToTheLiveGlintWithTheWeight() {
-        float kx = GlassRefraction.KEY_LIGHT_X, ky = GlassRefraction.KEY_LIGHT_Y;
-        for (float[] n : new float[][] {{-D, -D}, {0f, -1f}, {-1f, 0f}, {D, D}}) {
-            float rest = GlassRefraction.rimLobe(n[0], n[1]);
-            float live = GlassRefraction.liveRimLobe(n[0], n[1], kx, ky);
-            assertEquals(live, GlassRefraction.rimLobe(n[0], n[1], kx, ky, 1f), 1e-6f);
-            float last = rest;
-            for (int i = 1; i <= 100; i++) {
-                float lobe = GlassRefraction.rimLobe(n[0], n[1], kx, ky, i / 100f);
-                assertTrue("between the two", lobe >= Math.min(rest, live) - 1e-6f
-                    && lobe <= Math.max(rest, live) + 1e-6f);
-                assertTrue("no step", Math.abs(lobe - last) <= Math.abs(live - rest) / 100f + 1e-5f);
-                last = lobe;
-            }
-        }
-        // The top-left corner at rest against a whole glint: the smear the user saw is the live
-        // light only.
-        assertEquals(0.97f, GlassRefraction.rimLobe(-D, -D, kx, ky, 0f), 0.01f);
-        assertTrue(GlassRefraction.rimLobe(-D, -D, kx, ky, 1f) > 1.5f);
+    public void theRestPoseWritesTheValuesThatSkipEveryPoseTerm() {
+        float[] u = new float[GlassPoseOptics.UNIFORMS];
+        GlassPoseOptics.active().uniforms(new GlassPose(), GlassSlab.DEFAULT, DENSITY, u, new float[4]);
+        // turned is uPose.xy != 0, scaled is uPoseLight.x != 1, the glint is uGlint.w > 0.
+        assertEquals(0f, u[0], 0f);
+        assertEquals(0f, u[1], 0f);
+        assertEquals(1f, u[4], 0f);
+        assertEquals(0f, u[15], 0f);
+        // A press rig's last twentieth of a degree is rest, so its last frame is the rest look.
+        GlassPose pose = new GlassPose();
+        GlassPose.fromViewProperties(GlassPose.TILT_REST_DEG * 0.9f, 0f, 1f, pose);
+        assertTrue(pose.isRest());
     }
 
     // ---------------------------------------------------------------------------- the program
@@ -138,42 +90,71 @@ public class GlassRestLookTest {
             "            float rc = dot(n, kKeyLight);\n"
                 + "            float lobe = rimLobe(rc);\n"
                 + "            float away = rc < 0.0 ? rc * rc : 0.0;\n",
+            "    bool turned = uPose.x != 0.0 || uPose.y != 0.0;\n",
+            "    bool scaled = uPoseLight.x != 1.0;\n",
+            "            float3 hv = kHalf;\n",
         };
         for (String line : rest) assertTrue(line, agsl.contains(line));
-        // The glint's weight is 0 unless the slab is live, and is set only inside the live gate.
-        assertTrue(agsl.contains("    float glintW = 0.0;\n"));
-        int liveGate = agsl.indexOf("    if (live) {\n");
-        String setLine = "        glintW = smoothstep(0.0, 1.0, liveK);\n";
-        int set = agsl.indexOf(setLine);
-        assertTrue(liveGate > 0 && set > liveGate);
-        assertEquals("set once", set, agsl.lastIndexOf(setLine));
-        assertEquals("declared at 0 and assigned nowhere else", 2,
-            agsl.split("glintW = ", -1).length - 1);
-        assertTrue(agsl.contains("    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n"));
-        // Every live light term is behind glintW > 0.
-        String liveLobe = "            if (glintW > 0.0) {\n"
-            + "                float lc = dot(n, uKeyLight);\n"
-            + "                lobe = mix(lobe, kKeyPeak * (liveKeyLobe(lc) + kCounter * liveKeyLobe(-lc)), glintW);\n"
-            + "                away = mix(away, lc < 0.0 ? lc * lc : 0.0, glintW);\n"
-            + "            }\n";
-        assertTrue(agsl.contains(liveLobe));
-        // uKeyLight is read in main once, inside that gate.
-        int main = agsl.indexOf("half4 main(");
-        int read = agsl.indexOf("uKeyLight", main);
-        assertTrue(read > agsl.indexOf(liveLobe));
-        assertEquals(read, agsl.lastIndexOf("uKeyLight"));
+        // The speed spring and everything it drove are gone.
+        for (String gone : new String[] {"uLag", "uTilt", "uKeyLight", "glintW", "liveK", "kLag",
+                "kTilt", "kLive", "kKeyPeak", "kCounter", "tiltOffset", "bendV"}) {
+            assertFalse(gone, agsl.contains(gone));
+        }
     }
 
     @Test
-    public void theRestLookHoldsWhereverTheProgramIsBuiltOnceAndNeverMoved() {
-        // The dock and the strip run the program as a RenderEffect built once: never a lag, never
-        // a tilt. Their weight is 0 for good, so they wear the rest look.
-        float w = GlassRefraction.glintWeight(GlassRefraction.liveness(0f, 0f, 0f, 0f, DENSITY));
-        assertEquals(0f, w, 0f);
-        for (int deg = 0; deg < 360; deg += 5) {
-            float nx = (float) Math.cos(Math.toRadians(deg)), ny = (float) Math.sin(Math.toRadians(deg));
-            assertEquals(restLobe(nx, ny), GlassRefraction.rimLobe(nx, ny,
-                GlassRefraction.KEY_LIGHT_X, GlassRefraction.KEY_LIGHT_Y, w), 1e-6f);
+    public void everyPoseUniformInMainIsReadBehindThePosesGate() {
+        String agsl = GlassRefraction.AGSL;
+        int main = agsl.indexOf("half4 main(");
+        assertTrue(main > 0);
+        Matcher m = Pattern.compile("uPose\\w*|uGlint").matcher(agsl);
+        m.region(main, agsl.length());
+        int reads = 0;
+        while (m.find()) {
+            int at = m.start();
+            reads++;
+            String line = lineAt(agsl, at);
+            if (line.contains("bool turned = ") || line.contains("bool scaled = ")) continue;
+            assertTrue("read at '" + line.trim() + "' sits under if (turned...) or if (scaled)",
+                underPoseGate(agsl, main, at));
         }
+        assertTrue(reads > 6);
+    }
+
+    /** The line of {@code text} holding index {@code at}. */
+    private static String lineAt(String text, int at) {
+        int start = text.lastIndexOf('\n', at) + 1;
+        int end = text.indexOf('\n', at);
+        return text.substring(start, end < 0 ? text.length() : end);
+    }
+
+    /** Whether some block enclosing {@code at} (inside main) opens on a line naming the pose's gate. */
+    private static boolean underPoseGate(String text, int main, int at) {
+        int depth = 0;
+        for (int i = at; i > main; i--) {
+            char c = text.charAt(i);
+            if (c == '}') depth++;
+            else if (c == '{') {
+                if (depth == 0) {
+                    String opener = lineAt(text, i);
+                    if (opener.contains("turned") || opener.contains("scaled")) return true;
+                } else {
+                    depth--;
+                }
+            }
+        }
+        return false;
+    }
+
+    @Test
+    public void everyProgramStartsAtRest() throws Exception {
+        File source = new File("src/main/java/com/termux/app/chrome/GlassRefraction.java");
+        if (!source.isFile()) source = new File("app/" + source.getPath());
+        assumeTrue("the source is reachable from the test's directory", source.isFile());
+        String java = new String(Files.readAllBytes(source.toPath()), StandardCharsets.UTF_8);
+        int ctor = java.indexOf("        private Program(float density) {");
+        int end = java.indexOf("\n        }\n", ctor);
+        assertTrue(ctor > 0 && end > ctor);
+        assertTrue("the constructor writes the rest pose", java.substring(ctor, end).contains("clearPose();"));
     }
 }

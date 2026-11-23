@@ -16,12 +16,12 @@ import androidx.annotation.VisibleForTesting;
  * no clearer frame is bound, so the edge's clarity term stays at zero.
  *
  * <p>An effect copies the program's uniforms when it is made, so it is made again only when one
- * of them moved (size, corner, look, the motion light's lag, the tilt), and handed back as is
- * otherwise: a surface at rest draws the same effect on every frame and allocates nothing.</p>
+ * of them moved (size, corner, look, the page's pose), and handed back as is otherwise: a surface
+ * at rest draws the same effect on every frame and allocates nothing.</p>
  */
 public final class LiveGlassEffect {
 
-    private static final int KEY_SIZE = 7;
+    private static final int KEY_SIZE = 6;
 
     private final float mDensity;
     @Nullable private GlassRefraction.Program mProgram;
@@ -41,18 +41,16 @@ public final class LiveGlassEffect {
 
     /**
      * The effect for a {@code width} x {@code height} surface cut at {@code radiusPx}, wearing
-     * {@code look}, its light lagging by {@code lagX, lagY} px and tipped by {@code tiltX, tiltY}
-     * ({@link GlassRefraction#tiltVector}). The same object while none of those moved. Null when
-     * the phone runs no program: the caller keeps the stored frame.
+     * {@code look}, posed as {@code pose} ({@link GlassPose}). The same object while none of those
+     * moved. Null when the phone runs no program: the caller keeps the stored frame.
      */
     @RequiresApi(Build.VERSION_CODES.TIRAMISU)
     @Nullable
     public RenderEffect effect(int width, int height, float radiusPx,
-                               @NonNull GlassRefraction.Look look, float lagX, float lagY,
-                               float tiltX, float tiltY) {
+                               @NonNull GlassRefraction.Look look, @NonNull GlassPose pose) {
         if (mFailed) return null;
         if (mEffect != null && look.equals(mKeyLook)
-            && sameKey(mKey, width, height, radiusPx, lagX, lagY, tiltX, tiltY)) {
+            && sameKey(mKey, width, height, radiusPx, pose.tiltX, pose.tiltY, pose.scale)) {
             return mEffect;
         }
         GlassRefraction.Program program = mProgram;
@@ -70,11 +68,10 @@ public final class LiveGlassEffect {
         program.setLocal(null);
         program.setRect(0f, 0f, width, height, radiusPx);
         program.setLook(look);
-        program.setLag(lagX, lagY);
-        program.setTilt(tiltX, tiltY);
+        program.setPose(pose);
         mEffect = RenderEffect.createRuntimeShaderEffect(program.shader(), "content");
         mKeyLook = look;
-        writeKey(mKey, width, height, radiusPx, lagX, lagY, tiltX, tiltY);
+        writeKey(mKey, width, height, radiusPx, pose.tiltX, pose.tiltY, pose.scale);
         return mEffect;
     }
 
@@ -86,22 +83,21 @@ public final class LiveGlassEffect {
 
     @VisibleForTesting
     static void writeKey(@NonNull float[] key, int width, int height, float radiusPx,
-                         float lagX, float lagY, float tiltX, float tiltY) {
+                         float tiltX, float tiltY, float scale) {
         key[0] = width;
         key[1] = height;
         key[2] = radiusPx;
-        key[3] = lagX;
-        key[4] = lagY;
-        key[5] = tiltX;
-        key[6] = tiltY;
+        key[3] = tiltX;
+        key[4] = tiltY;
+        key[5] = scale;
     }
 
     /** Whether {@code key} already holds these uniforms. Pure. */
     @VisibleForTesting
     static boolean sameKey(@NonNull float[] key, int width, int height, float radiusPx,
-                           float lagX, float lagY, float tiltX, float tiltY) {
-        return key[0] == width && key[1] == height && key[2] == radiusPx && key[3] == lagX
-            && key[4] == lagY && key[5] == tiltX && key[6] == tiltY;
+                           float tiltX, float tiltY, float scale) {
+        return key[0] == width && key[1] == height && key[2] == radiusPx && key[3] == tiltX
+            && key[4] == tiltY && key[5] == scale;
     }
 
     @VisibleForTesting

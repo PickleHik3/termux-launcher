@@ -43,9 +43,6 @@ public class GlassLoneBandTest {
         float w = GlassRefraction.lensZonePx(SLAB, shortHalf, D, 1f, 0f, 0f, 0f);
         float t = GlassRefraction.lensThicknessPx(SLAB, DEPTH, shortHalf, D, 1f, 0f);
         assertEquals(0f, SLAB.shiftPx(shortHalf, w, t), 0f);
-        // A lean deepens the zone; it is still held at the half side.
-        assertEquals(0f, SLAB.shiftPx(shortHalf, Math.min(w * (1f + GlassRefraction.LAG_BAND),
-            shortHalf), t * (1f + GlassRefraction.LAG_BEND)), 0f);
     }
 
     @Test
@@ -62,15 +59,12 @@ public class GlassLoneBandTest {
     public void theBendsDirectionTurnsRoundACornerAtLeastAsDeepAsTheZone() {
         // The dock's lone band: the soft rim with the whole shelf reaches the half height, so
         // the direction eases over the whole half height, which leaves no rect for it to snap on.
-        float soft = GlassRefraction.bendReachPx(SOFT, 1f, false);
+        float soft = GlassRefraction.bendReachPx(SOFT, 1f);
         assertEquals(SOFT * (1f + GlassRefraction.SHELF_THICKEN), soft, 1e-3f);
         assertEquals(BY, GlassRefraction.bendNormalRadiusPx(CORNERS, soft, BY), 0f);
         // A tall surface's 3 dp corner under the 16 dp zone: the zone's depth.
-        float ring = GlassRefraction.bendReachPx(SLAB.lensPx(D), 0f, false);
+        float ring = GlassRefraction.bendReachPx(SLAB.lensPx(D), 0f);
         assertEquals(SLAB.lensPx(D), GlassRefraction.bendNormalRadiusPx(CORNERS, ring, 200f * D), 1e-4f);
-        // A live slab's zone leans deeper, and so does the direction's arc.
-        assertEquals(SLAB.lensPx(D) * (1f + GlassRefraction.LAG_BAND),
-            GlassRefraction.bendReachPx(SLAB.lensPx(D), 0f, true), 1e-3f);
         // A corner rounder than the zone is the drawn arc exactly, held at the half side.
         assertEquals(40f * D, GlassRefraction.bendNormalRadiusPx(40f * D, ring, 200f * D), 1e-3f);
         assertEquals(BY, GlassRefraction.bendNormalRadiusPx(BY, ring, BY), 0f);
@@ -105,19 +99,18 @@ public class GlassLoneBandTest {
         assertTrue(agsl.contains("    float hs = min(b.x, b.y);\n"));
         assertTrue(agsl.contains("        float wr = min(w * thick, hs);\n"));
         assertTrue(agsl.contains("        float slabT = min(uDepth * sizeK * sizeShare * thick, hs * kSlabHold);\n"));
-        assertTrue(agsl.contains("    float reach = w * (1.0 + kShelfThick * uShelf) * (live ? 1.0 + kLagBand : 1.0);\n"));
+        assertTrue(agsl.contains("    float reach = w * (1.0 + kShelfThick * uShelf);\n"));
         assertTrue(agsl.contains("        nb = rectNormal(p, b, min(max(cr, reach), hs));\n"));
-        assertTrue(agsl.contains("            wl = min(wr * (1.0 + kLagBand * lean), hs);\n"));
+        assertTrue(agsl.contains("        e = clamp(inside / max(wr, 0.001), 0.0, 1.0);\n"));
         // The shelf turns with the bend's direction, so it does not mitre at a small corner.
         assertTrue(agsl.contains("float lower = uShelf > 0.0 ? max(nb.y, 0.0) * uShelf : 0.0;"));
         assertTrue(agsl.indexOf("nb = rectNormal(") < agsl.indexOf("float lower = "));
         assertTrue(agsl.contains("float2 sampleCoord = fragCoord - nb * shiftG;"));
-        // live is known before the zone's reach is.
-        assertTrue(agsl.indexOf("bool live = ") < agsl.indexOf("float reach = "));
         // The light keeps its normal round the drawn corner.
         assertTrue(agsl.contains("float2 n = rectNormal(p, b, min(cr, min(b.x, b.y)));"));
         assertTrue(agsl.contains("float rc = dot(n, kKeyLight);"));
-        assertTrue(agsl.contains("float nh = max(dot(float3(n * slope, 1.0) * cv, kHalf), 0.0);"));
+        assertTrue(agsl.contains("float3 hv = kHalf;"));
+        assertTrue(agsl.contains("float nh = max(dot(float3(n * slope, 1.0) * cv, hv), 0.0);"));
     }
 
     /**
