@@ -209,6 +209,9 @@ public final class AppDrawerContentView extends FrameLayout
     private boolean mKeyboardDismissedByScroll;
     /** True from the finger starting to drag the list until the list comes to rest. */
     private boolean mGridUserScrolling;
+    private boolean mPagerUserDragging;
+    /** A finger drag on the pages counts as this much scroll down: far past the hide threshold. */
+    private static final int PAGE_SWIPE_SCROLL_PX = 100_000;
     @Nullable private KeyboardScrollListener mKeyboardScrollListener;
     /** True while the Android-keyboard search's text field, not the key stream, owns the query. */
     private boolean mTextFieldSearch;
@@ -391,8 +394,17 @@ public final class AppDrawerContentView extends FrameLayout
             @Override public void onScrollStateChanged(@NonNull RecyclerView recyclerView,
                                                        int newState) {
                 mHorizontalDropGate.onScrollStateChanged(newState);
-                // A sideways page swipe is browsing too, like dragging a list.
-                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) notifyListDragStarted();
+                // A sideways page swipe is browsing too: it takes the search keyboard away whole,
+                // as a long scroll down the list does, and comes to rest the same way.
+                KeyboardScrollListener keyboard = mKeyboardScrollListener;
+                if (keyboard == null) return;
+                if (newState == RecyclerView.SCROLL_STATE_DRAGGING) {
+                    mPagerUserDragging = true;
+                    keyboard.onListScrolledDown(PAGE_SWIPE_SCROLL_PX);
+                } else if (newState == RecyclerView.SCROLL_STATE_IDLE && mPagerUserDragging) {
+                    mPagerUserDragging = false;
+                    keyboard.onListScrollIdle();
+                }
             }
         });
         LayoutParams pagerParams = new LayoutParams(LayoutParams.MATCH_PARENT,

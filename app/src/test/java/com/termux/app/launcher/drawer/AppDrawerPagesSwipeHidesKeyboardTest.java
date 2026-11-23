@@ -30,9 +30,8 @@ public class AppDrawerPagesSwipeHidesKeyboardTest {
         content = new AppDrawerContentView(RuntimeEnvironment.getApplication());
         content.setViewType(AppDrawerViewType.HORIZONTAL);
         content.setKeyboardScrollListener(new AppDrawerContentView.KeyboardScrollListener() {
-            @Override public void onListScrolledDown(int dy) {}
+            @Override public void onListScrolledDown(int dy) { dragStarts++; }
             @Override public void onListScrollIdle() {}
-            @Override public void onListDragStarted() { dragStarts++; }
         });
     }
 
