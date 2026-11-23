@@ -38,9 +38,6 @@ final class PowerSection implements SetupSection {
         SetupState.Values v = state.values();
         SetupUi.toggleRow(page, R.string.setup_power_glass, R.string.setup_power_glass_help,
             v.fancierGlass, 12, (button, checked) -> { state.touch(); v.fancierGlass = checked; });
-        SetupUi.toggleRow(page, R.string.setup_power_motion_light,
-            R.string.setup_power_motion_light_help, v.motionLight, 10,
-            (button, checked) -> { state.touch(); v.motionLight = checked; });
         SetupUi.toggleRow(page, R.string.setup_power_parallax, R.string.setup_power_parallax_help,
             v.parallax, 10, (button, checked) -> { state.touch(); v.parallax = checked; });
         SetupUi.toggleRow(page, R.string.setup_power_lazy, R.string.setup_power_lazy_help,

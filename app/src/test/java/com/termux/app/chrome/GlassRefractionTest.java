@@ -128,9 +128,9 @@ public class GlassRefractionTest {
         assertFalse(GlassRefraction.AGSL.contains("cornerWeight"));
         assertFalse(GlassRefraction.AGSL.contains("kSplitWeight"));
         assertTrue(GlassRefraction.AGSL.contains(
-            "shiftR = tl * snellTan(slope, kIor - kDispRed * dk);"));
+            "shiftR = slabT * snellTan(slope, kIor - kDispRed * dk);"));
         assertTrue(GlassRefraction.AGSL.contains(
-            "shiftB = tl * snellTan(slope, kIor + kDispBlue * dk);"));
+            "shiftB = slabT * snellTan(slope, kIor + kDispBlue * dk);"));
         assertTrue(GlassRefraction.AGSL.contains("    if (max(dot(oR, oR), dot(oB, oB)) > 0.25) {\n"));
         GlassSlab slab = GlassSlab.DEFAULT;
         GlassRefraction.Look clear = new GlassRefraction.Look(27, 18, 10, 0, 40, 76);
@@ -166,7 +166,7 @@ public class GlassRefractionTest {
             "uRadius", "uDepth", "uDisp", "uDensity",
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uSharpEdge", "uFaceClarity", "uTouchActive", "uTouch", "uTouchRadius",
-            "uTouchLens", "uKeyLight", "uSoftRim", "uShelf",
+            "uTouchLens", "uPose", "uPoseLight", "uPoseHalf", "uGlint", "uSoftRim", "uShelf",
             "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap", "uConcave",
         };
         for (String name : written) {
@@ -315,7 +315,7 @@ public class GlassRefractionTest {
             "    return pow(u, kSlabP - 1.0) * pow(1.0 - pow(u, kSlabP), 1.0 / kSlabP - 1.0);\n"));
         assertTrue(agsl.contains("    float si = s * inversesqrt(1.0 + s * s);\n"));
         assertTrue(agsl.contains("    return (s - t2) / (1.0 + s * t2);\n"));
-        assertTrue(agsl.contains("            slope = tl / wl * slabSlope(e);\n"));
+        assertTrue(agsl.contains("            slope = slabT / wr * slabSlope(e);\n"));
         assertTrue(agsl.contains("const float kSlabEMin = 0.0001;"));
         assertEquals(1.0e-4f, GlassSlab.E_MIN, 0f);
     }
@@ -355,9 +355,9 @@ public class GlassRefractionTest {
         assertEquals(bound, slab.shiftPx(0f, w, t), 0.1f * bound);
         assertEquals("outside the outline it reads as the outline", slab.shiftPx(0f, w, t),
             slab.shiftPx(-3f, w, t), 0f);
-        // The tilted face still eases in across the outermost dp.
-        assertTrue(GlassRefraction.AGSL.contains("float rimW = max(kMinRimPx, kRimDp * uDensity);"));
-        assertFalse(GlassRefraction.AGSL.contains("float edge = smoothstep(0.0, rimW, inside);"));
+        // The tilted face's soft shift is gone (#318): a turn shifts the whole picture alike.
+        assertFalse(GlassRefraction.AGSL.contains("rimW"));
+        assertFalse(GlassRefraction.AGSL.contains("tiltOffset"));
     }
 
     @Test
@@ -395,29 +395,6 @@ public class GlassRefractionTest {
         }
     }
 
-    /**
-     * Narrowed from the rest look's wide lobe (exponent 2) to the live glint, the key light
-     * gathers what it does at rest round the whole outline: the narrow lobe's peak is raised by
-     * exactly what its width lost. The counter-lobe is new light on top.
-     */
-    @Test
-    public void theNarrowGlintGathersWhatTheWideLobeDid() {
-        int n = 36000;
-        double wide = 0.0, narrow = 0.0;
-        for (int i = 0; i < n; i++) {
-            double a = 2.0 * Math.PI * i / n;
-            double c = Math.max(Math.cos(a), 0.0);
-            wide += c * c;
-            narrow += GlassRefraction.Look.KEY_PEAK * GlassRefraction.liveKeyLobe((float) Math.cos(a));
-        }
-        assertEquals("the same light round the outline", wide / n, narrow / n, 0.001);
-        assertEquals("the rest look's wide lobe", 2f, GlassRefraction.Look.KEY_EXPONENT, 0f);
-        assertEquals(16f, GlassRefraction.Look.LIVE_KEY_EXPONENT, 0f);
-        // Half its peak about 17 degrees either side: a 3-degree tilt (6 of turn) is a third of it.
-        double half = Math.toDegrees(Math.acos(Math.pow(0.5, 1.0 / GlassRefraction.Look.LIVE_KEY_EXPONENT)));
-        assertEquals(16.8, half, 0.2);
-    }
-
     @Test
     public void theEdgeIsFixedMaterialWhateverTheStoredLightSays() {
         // Two looks that differ only in the stored light and specular draw the same uniforms,
@@ -435,8 +412,6 @@ public class GlassRefractionTest {
         assertEquals(DENSITY, GlassRefraction.Look.rimWidthPx(DENSITY), 1e-4f);
         assertEquals("never under two pixels", 2f, GlassRefraction.Look.rimWidthPx(1f), 1e-4f);
         assertEquals(2f, GlassRefraction.Look.rimWidthPx(0.4f), 1e-4f);
-        assertTrue(GlassRefraction.AGSL.contains("const float kRimDp = 1.0;"));
-        assertTrue(GlassRefraction.AGSL.contains("const float kMinRimPx = 2.0;"));
         assertEquals(1f, GlassRefraction.Look.RIM_WIDTH_DP, 0f);
         assertEquals(2f, GlassRefraction.Look.MIN_RIM_WIDTH_PX, 0f);
     }
@@ -463,7 +438,7 @@ public class GlassRefractionTest {
     @Test
     public void aZoneNeverCollapsesToNothing() {
         // The shader divides by the zone; a zero would push every pixel to the outline.
-        assertTrue(GlassRefraction.AGSL.contains("        e = clamp(inside / max(wl, 0.001), 0.0, 1.0);\n"));
+        assertTrue(GlassRefraction.AGSL.contains("        e = clamp(inside / max(wr, 0.001), 0.0, 1.0);\n"));
         assertTrue(GlassRefraction.AGSL.contains("    float lensMax = max(kLensDp * uDensity, 0.001);\n"));
         assertEquals(0f, GlassSlab.parse("lens=0").shiftPx(0f, 0f, 9f), 0f);
     }
@@ -837,7 +812,7 @@ public class GlassRefractionTest {
         // The tone comes after the picture is chosen and before the light.
         int mix = agsl.indexOf("col = mix(col, sharp.eval(f), half(clarityK));");
         int tone = agsl.indexOf("if (dimK > 0.0) {");
-        int light = agsl.indexOf("if ((inside < lineReach || shelfW > 0.0 || slope > 0.0) && col.a > 0.0) {");
+        int light = agsl.indexOf("if ((inside < lineReach || shelfW > 0.0 || slope > 0.0 || turned) && col.a > 0.0) {");
         assertTrue(mix > 0 && tone > mix && light > tone);
         assertEquals(GlassRefraction.Look.DIM_MAX + "",
             agsl.split("const float kDimMax = ")[1].split(";")[0]);
@@ -867,9 +842,6 @@ public class GlassRefractionTest {
         assertConst("kRimMinSoftPx", GlassRim.MIN_SOFT_PX);
         assertConst("kShelfLipReachDp", GlassRefraction.shelfLipReachDp(rim));
         assertConst("kKeyExp", GlassRefraction.Look.KEY_EXPONENT);
-        assertConst("kLiveKeyExp", GlassRefraction.Look.LIVE_KEY_EXPONENT);
-        assertConst("kKeyPeak", GlassRefraction.Look.KEY_PEAK);
-        assertConst("kCounter", GlassRefraction.Look.COUNTER);
         assertConst("kTouchRim", GlassRefraction.TOUCH_RIM);
         assertTrue(agsl.contains("const float2 kKeyLight = float2("
             + GlassRefraction.KEY_LIGHT_X + ", " + GlassRefraction.KEY_LIGHT_Y + ");"));
@@ -877,7 +849,7 @@ public class GlassRefractionTest {
         assertEquals("the key light is a unit vector", 1f, length, 1e-3f);
         assertTrue("up and to the left", GlassRefraction.KEY_LIGHT_X < 0f && GlassRefraction.KEY_LIGHT_Y < 0f);
         // One rim block, its profile GlassRim.weight's, lit in linear light with no gain.
-        String gate = "    if ((inside < lineReach || shelfW > 0.0 || slope > 0.0) && col.a > 0.0) {\n";
+        String gate = "    if ((inside < lineReach || shelfW > 0.0 || slope > 0.0 || turned) && col.a > 0.0) {\n";
         assertTrue(agsl.contains(gate));
         assertEquals(agsl.indexOf(gate), agsl.lastIndexOf(gate));
         assertTrue(agsl.contains("lineW = min(1.0 - smoothstep(lineCore, lineCore + lineSoft, inside)\n"
@@ -888,19 +860,15 @@ public class GlassRefractionTest {
         assertTrue(agsl.contains("float3 lin = float3(toLinearSrgb(half3(float3(col.rgb) / ca)));"));
         assertTrue(agsl.contains("col.rgb = half3(float3(fromLinearSrgb(half3(lin))) * ca);"));
         assertEquals("one linear round trip", agsl.indexOf("toLinearSrgb"), agsl.lastIndexOf("toLinearSrgb"));
-        // The baseline is outside every term that moves: the lobe is what a glint, a tilt and a
-        // finger change.
-        int tilt = agsl.indexOf("lobe = lobe * (1.0 + kTiltLight * tiltLean);");
-        assertTrue(tilt > agsl.indexOf(gate));
-        assertTrue(tilt < agsl.indexOf("float white = (kRimBase + kRimSpec * lobe)"));
-        // The rest path never reads the live key light.
-        int live = agsl.indexOf("            if (glintW > 0.0) {\n                float lc = dot(n, uKeyLight);");
-        assertTrue(live > agsl.indexOf(gate));
-        assertEquals("read only under the glint", agsl.indexOf("uKeyLight)"), agsl.lastIndexOf("uKeyLight)"));
-        assertTrue(agsl.indexOf("uKeyLight)") > live);
-        // The twin's expressions.
+        // The rim's light is fixed in the room: only a finger moves its lobe (#318 removed the
+        // live glint, its key light and the tilt's lean).
+        assertTrue(agsl.contains("            lobe = lobe + kTouchRim * touchG;\n"
+            + "            float white = (kRimBase + kRimSpec * lobe) * lineW + kRimSpec * shelfW;"));
+        for (String gone : new String[] {"uKeyLight", "glintW", "liveKeyLobe", "kTiltLight", "tiltLean"}) {
+            assertFalse(gone, agsl.contains(gone));
+        }
+        // The twin's expression.
         assertTrue(agsl.contains("    return c > 0.0 ? pow(c, kKeyExp) : 0.0;\n"));
-        assertTrue(agsl.contains("return c > 0.0 ? pow(min(c, 1.0), kLiveKeyExp) : 0.0;"));
     }
 
     @Test
@@ -920,7 +888,7 @@ public class GlassRefractionTest {
     }
 
     @Test
-    public void theRimsLobeFacesTheKeyLightAndTheGlintTravelsWithIt() {
+    public void theRimsLobeFacesTheKeyLight() {
         float kx = GlassRefraction.KEY_LIGHT_X, ky = GlassRefraction.KEY_LIGHT_Y;
         assertEquals(1f, GlassRefraction.rimLobe(kx, ky), 1e-3f);
         assertEquals(0f, GlassRefraction.rimLobe(-kx, -ky), 0f);
@@ -929,17 +897,5 @@ public class GlassRefractionTest {
         float d = (float) Math.sqrt(0.5);
         assertTrue(GlassRefraction.rimLobe(-d, -d) > GlassRefraction.rimLobe(0f, -1f));
         assertTrue(GlassRefraction.rimLobe(0f, -1f) > GlassRefraction.rimLobe(-1f, 0f));
-        // At rest the lobe is the rest lobe whatever the last pose left in the key light.
-        for (float[] l : new float[][] {{1f, 0f}, {0f, 1f}, {kx, ky}}) {
-            assertEquals(GlassRefraction.rimLobe(0f, -1f),
-                GlassRefraction.rimLobe(0f, -1f, l[0], l[1], 0f), 0f);
-        }
-        // Wholly live it is the narrow glint, with a faint counter-lobe facing away.
-        assertEquals(GlassRefraction.Look.KEY_PEAK, GlassRefraction.liveRimLobe(kx, ky, kx, ky), 1e-2f);
-        assertEquals(GlassRefraction.Look.KEY_PEAK * GlassRefraction.Look.COUNTER,
-            GlassRefraction.liveRimLobe(-kx, -ky, kx, ky), 1e-2f);
-        assertEquals(0f, GlassRefraction.liveRimLobe(1f, 0f, 0f, -1f), 1e-6f);
-        assertEquals(GlassRefraction.liveRimLobe(0f, -1f, kx, ky),
-            GlassRefraction.rimLobe(0f, -1f, kx, ky, 1f), 1e-6f);
     }
 }

@@ -1006,7 +1006,6 @@
     <string name="settings_lazy_mode_summary">Stops idle animations and slows status sampling so nothing repaints while you look.</string>
     <string name="settings_fancier_glass_title">Fancier glass</string>
     <string name="settings_fancier_glass_summary">Bends the wallpaper at glass edges. Set the wallpaper with the in-app wallpaper picker.</string>
-    <string name="settings_motion_light_title">Living glass</string>
     <string name="terminal_key_binding_failed">%1$s: %2$s</string>
     <!-- Brief confirmation of the binding that just ran: stroke, then the action's name. -->
     <string name="terminal_key_binding_ran">%1$s · %2$s</string>
@@ -3715,8 +3714,6 @@
     <string name="setup_tier_high">high tier</string>
     <string name="setup_power_glass">Fancier glass</string>
     <string name="setup_power_glass_help">Refraction and edge light on glass</string>
-    <string name="setup_power_motion_light">Glass motion light</string>
-    <string name="setup_power_motion_light_help">The glass highlight follows the phone</string>
     <string name="setup_power_parallax">Wallpaper parallax</string>
     <string name="setup_power_parallax_help">The wallpaper shifts as pages slide</string>
     <string name="setup_power_lazy">Lazy mode</string>
@@ -3732,7 +3729,6 @@
     <string name="setup_row_status_autotiling">Status strip / autotiling</string>
     <string name="setup_row_focus_grows">Focused pane grows</string>
     <string name="setup_group_power">Power &amp; battery</string>
-    <string name="setup_row_glass_motion">Glass / motion light</string>
     <string name="setup_row_parallax_lazy">Parallax / lazy mode</string>
     <string name="setup_row_memory_animation">Low-memory / animation</string>
     <string name="setup_group_cards">Setup cards</string>

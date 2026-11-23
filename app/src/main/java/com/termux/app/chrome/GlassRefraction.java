@@ -37,10 +37,8 @@ import java.util.Arrays;
  * <p>The outline wears one thin, crisp rim ({@link GlassRim}): a line a few px wide that darkens
  * what is behind it and adds white, lit in linear light so it adds no colour of its own, with a
  * baseline of white and dark every side and corner keeps alike, more white facing one key light up
- * and to the left and more dark facing away. That is the glass at rest, on every surface. Only
- * while a slab is live does the key light's lobe gather into a sharp glint that travels with its
- * pose, with a faint one facing away ({@link #glintWeight}); it fades back to the rest look as the
- * springs settle. The rim is fixed material, not a knob (a debug property tunes its numbers), and
+ * and to the left and more dark facing away. That is the glass at rest, on every surface, and it
+ * changes only with the slab's pose ({@link GlassPose}, below). The rim is fixed material, not a knob (a debug property tunes its numbers), and
  * every surface that runs the program wears it. Where a sharp picture of what is behind is handed in
  * ({@link Program#setClarityInput}), the lens zone shows it through the bend in place of the frost,
  * wholly at the rim ({@link #sharpShare}), at rest and in motion alike: a bevel is thin glass, so
@@ -75,20 +73,15 @@ import java.util.Arrays;
  *
  * <p>Nothing here animates. Uniforms are written only when what they describe moved — the
  * surface, the parallax, a knob — so a surface at rest costs nothing; a slide costs one uniform
- * write per moved frame and no allocation. Living glass is the caller's animation as well: a pane
- * that moves writes {@code uLag} from its {@link GlassMotionLight} on the frames its spring moves,
- * which deforms the bend the program already draws; every term it adds is skipped at 0, and at
- * rest it is 0. A press deforms nothing: a rigid slab does not dent under a finger, and the dent
- * that once did read as a ripple (the user, 2026-10-20). A pane that tips as well — the wall's plank
- * under a dragging finger, a held border's press, a pane's own press rig — writes {@code uTilt}
- * ({@link Program#setTilt}): the picture through the face is carried toward the edge going away,
- * as a tilted slab displaces what is behind it, and the rim's lean takes the tilt on top of the
- * lag's. Flat, it is 0 and draws nothing new. While the slab is live the rim's key light
- * narrows into a glint under a key light the tilt and the lag's lean turn ({@code uKeyLight},
- * {@link #keyLight}) as a light fixed in the world turns in the tipping plate's frame, so the
- * glint travels round the corners with the pose, and its rim clears toward the clearer frame
- * where it has one, so the bend has detail to move (glass-perception-research-2026-10-20). Both
- * fade with the springs, and a slab at rest wears the rest look exactly.</p>
+ * write per moved frame and no allocation. Motion is the page's pose, never its speed
+ * ({@link Program#setPose}, {@link GlassPoseOptics}): a slide or a fade changes nothing in the
+ * glass, since a plate moving in its own plane keeps its optics and the picture beneath already
+ * drifts through the aim. A turn (Carousel, the stack's turn, the plank's tip, a press rig) shifts
+ * the picture through the slab's thickness, turns the eye in the slab's frame so the bevel going
+ * away takes more Fresnel light, raises the face's reflectance and sends one soft glint across the
+ * face; a page's scale (Depth, Stack) magnifies the picture a little. A press deforms nothing: a
+ * rigid slab does not dent under a finger (the user, 2026-10-20). Flat and unscaled every pose
+ * term is skipped, and a slab at rest wears the rest look exactly.</p>
  */
 public final class GlassRefraction {
 
@@ -127,9 +120,8 @@ public final class GlassRefraction {
             TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT);
 
         /**
-         * The outermost width a tilted face's shift eases in across: 1 dp and never under 2 px,
-         * so the outline's own pixel shows the picture just outside it. The program's
-         * {@code kRimDp} and {@code kMinRimPx}.
+         * The least the rim reaches in from the outline: 1 dp and never under 2 px
+         * ({@link #rimReachPx}); once the tilted face's ease width.
          */
         static final float RIM_WIDTH_DP = 1f;
         static final float MIN_RIM_WIDTH_PX = 2f;
@@ -186,47 +178,15 @@ public final class GlassRefraction {
         // same name.
 
         /**
-         * The key light's falloff round the outline at rest, a wide lobe ({@code kKeyExp}): the
-         * rim's white above its baseline is {@link GlassRim#spec} times the squared cosine toward
-         * the key light, all of it at the top-left corner and none facing away
-         * ({@link GlassRefraction#rimLobe}). The narrow glint below at rest read on pong as a bright
-         * smear in the top-left corner of every glass surface ("it does not look good when the
-         * glass slabs are static, should it not appear only when in motion?", the user,
-         * 2026-10-20), so the narrow lobe is the live light only
-         * ({@link GlassRefraction#glintWeight}).
+         * The key light's falloff round the outline, a wide lobe ({@code kKeyExp}): the rim's
+         * white above its baseline is {@link GlassRim#spec} times the squared cosine toward the
+         * key light, all of it at the top-left corner and none facing away
+         * ({@link GlassRefraction#rimLobe}). The light is fixed in the room; a narrow glint at
+         * rest read on pong as a bright smear in the top-left corner of every glass surface (the
+         * user, 2026-10-20), and a turned slab's glint crosses its face instead
+         * ({@link GlassPoseOptics#glint}).
          */
         static final float KEY_EXPONENT = 2f;
-        /**
-         * The key light's falloff round the outline while the slab is live
-         * ({@code kLiveKeyExp}): a narrow lobe, the low end of Haze's 16 to 24, half its peak about
-         * 17 degrees either side of the light. The wide lobe ({@link #KEY_EXPONENT}) is so wide
-         * that a tilt only reweights the edges and the light never travels; at 16 a 3-degree tilt,
-         * which turns the light by 6 ({@link GlassRefraction#keyLight}), moves it a third of its
-         * width (glass-perception-research-2026-10-20, recommendation 1: Motoyoshi 2010, a sharp
-         * highlight over a blurred body reads as transparent, a soft one as more frost). Mixed in
-         * by {@link GlassRefraction#glintWeight}, so it is gone at rest.
-         */
-        static final float LIVE_KEY_EXPONENT = 16f;
-        /**
-         * The narrow lobe's peak, as a share of the wide lobe's ({@code kKeyPeak}): the light the
-         * outline catches round its whole length is the wide lobe's, gathered into a sharper and
-         * brighter glint. The mean of {@code max(cos, 0)^n} round the circle is
-         * {@code (n-1)!! / (2 n!!)} for even n: a quarter at 2, 0.0982 at 16, so 0.25 / 0.0982.
-         * The baseline is untouched. Strength "clearly noticeable", Schlüter & Faul 2014's point
-         * where specular takes over from distortion; the rim holds every channel under its alpha
-         * in linear light. Live only.
-         */
-        static final float KEY_PEAK = 2.546f;
-        /**
-         * The counter-lobe ({@code kCounter}): the narrow lobe, this much of it, on the rim facing
-         * straight away from the key light, the light that entered at the lit rim caught again on
-         * the inside of the far one. It turns with the key light, as everything the light draws
-         * does. A faint fifth: at a whole glint the bottom-right corner gathers 0.53 where the rest
-         * look gives it the ambient 0.25, and the slab reads as having an inside (research
-         * recommendation 4; Ohara 2022, specular raises perceived thickness; Schlüter & Faul 2019,
-         * mirror images from inside surfaces are a shape cue). Live only.
-         */
-        static final float COUNTER = 0.2f;
         public final int bendDp;
         public final int edgeWidthDp;
         /**
@@ -375,7 +335,7 @@ public final class GlassRefraction {
             return share(sizeLensPercent);
         }
 
-        /** The tilted face's ease width in px at {@code density}, as the program computes it; see {@link #RIM_WIDTH_DP}. */
+        /** {@link #RIM_WIDTH_DP} in px at {@code density}, never under {@link #MIN_RIM_WIDTH_PX}. */
         public static float rimWidthPx(float density) {
             return Math.max(MIN_RIM_WIDTH_PX, RIM_WIDTH_DP * density);
         }
@@ -536,18 +496,21 @@ public final class GlassRefraction {
         "uniform float2 uTouch;\n" +
         "uniform float uTouchRadius;\n" +
         "uniform float uTouchLens;\n" +
-        // Living glass (GlassMotionLight): how far the slab is ahead of its bend, px (the lag
-        // spring's L). 0 at rest.
-        "uniform float2 uLag;\n" +
-        // How far the slab is tipped: the sine of its tilt about its own y axis and about its x
-        // axis, as a vector in its own px axes pointing at the edge going away from the viewer.
-        // (0, 0) flat, which is every surface but a tipping pane. tiltVector in Java.
-        "uniform float2 uTilt;\n" +
-        // The live glint's key light, a unit vector in the slab's own px axes: kKeyLight while
-        // still, turned by the slab's pose (its tilt and its lag's lean) as a light fixed in the
-        // world turns in a tipping plate's frame. keyLight in Java; never written by time, and
-        // read only while the slab is live (glintW > 0).
-        "uniform float2 uKeyLight;\n" +
+        // The page's pose (GlassPose; GlassPoseOptics.uniforms in Java). uPose: x, y the sine of
+        // the slab's turn as a vector in its own px axes pointing at the edge going away from the
+        // viewer, z the turn's cosine, w how far the picture shifts through the slab per px of its
+        // thickness (tan θi - tan θt). (0, 0, 1, 0) flat.
+        "uniform float4 uPose;\n" +
+        // uPoseLight: x the magnification of the picture through the glass (1 unscaled), y how
+        // much the face's reflectance rises over head-on, z the share of the turn's Fresnel the
+        // bevel takes (0 flat), w the most the turn shifts the picture, px.
+        "uniform float4 uPoseLight;\n" +
+        // uPoseHalf: xyz the half vector between the room light and the eye in the turned slab's
+        // frame (kHalf flat), w what the bevel's Schlick reflectance takes on to meet the face's.
+        "uniform float4 uPoseHalf;\n" +
+        // uGlint: the turn's glint, its centre from the slab's centre, px, its half width, px,
+        // and its white (0 flat).
+        "uniform float4 uGlint;\n" +
         // The dock surface's own glass (DockSurfaceSpec), 0 on every other surface, which then
         // draws exactly as before: the soft rim band's width in px, how much of the lower shelf
         // the slab wears (0..1). SOFT_RIM_DP and setDockSurface in Java.
@@ -596,10 +559,6 @@ public final class GlassRefraction {
         "const float kConcaveBandShare = " + GlassRefraction.CONCAVE_BAND_MAX_SHARE + ";\n" +
         "const float kConcavePullShare = " + GlassRefraction.CONCAVE_PULL_SHARE + ";\n" +
         "const float kConcaveLipSlope = " + GlassRefraction.CONCAVE_LIP_MAX_SLOPE + ";\n" +
-        // The outermost width a tilted face's shift eases in across, a dp never under two px.
-        // Look.RIM_WIDTH_DP and MIN_RIM_WIDTH_PX in Java.
-        "const float kRimDp = 1.0;\n" +
-        "const float kMinRimPx = 2.0;\n" +
         // uDisp at Edge 100%: Look.MAX_DISPERSION_SHARE in Java.
         "const float kDispFull = " + Look.MAX_DISPERSION_SHARE + ";\n" +
         // The pressed key's added glow at its centre; KEY_GLOW in Java.
@@ -610,16 +569,11 @@ public final class GlassRefraction {
      * them. {@link #agsl} puts the rim's numbers ({@link #rimConstants}) between the two halves.
      */
     private static final String AGSL_BODY =
-        // The rim's key light: up and to the left, the wide lobe at rest; then the live glint's
-        // (its key light is uKeyLight): the narrow lobe, its peak and the counter-lobe's share of
-        // it. KEY_LIGHT_X, KEY_LIGHT_Y, LUMA_R/G/B and Look.KEY_EXPONENT, LIVE_KEY_EXPONENT,
-        // KEY_PEAK and COUNTER in Java; how much of the lobe a finger adds, TOUCH_RIM.
+        // The rim's key light: up and to the left, the wide lobe. KEY_LIGHT_X, KEY_LIGHT_Y,
+        // LUMA_R/G/B and Look.KEY_EXPONENT in Java; how much of the lobe a finger adds, TOUCH_RIM.
         "const float2 kKeyLight = float2(" + GlassRefraction.KEY_LIGHT_X + ", " + GlassRefraction.KEY_LIGHT_Y + ");\n" +
         "const float3 kLumaW = float3(0.2126, 0.7152, 0.0722);\n" +
         "const float kKeyExp = " + Look.KEY_EXPONENT + ";\n" +
-        "const float kLiveKeyExp = " + Look.LIVE_KEY_EXPONENT + ";\n" +
-        "const float kKeyPeak = " + Look.KEY_PEAK + ";\n" +
-        "const float kCounter = " + Look.COUNTER + ";\n" +
         "const float kTouchRim = " + GlassRefraction.TOUCH_RIM + ";\n" +
         // Clear's face terms: Look.DIM_MAX, DIM_FROM, DIM_TO, FACE_LIFT, SIZE_REF_DP, SIZE_MIN and
         // SIZE_MAX in Java.
@@ -632,27 +586,6 @@ public final class GlassRefraction {
         "const float kFadeFromDp = " + Look.FACE_FADE_FROM_DP + ";\n" +
         "const float kFadeToDp = " + Look.FACE_FADE_TO_DP + ";\n" +
         "const float kSizeMax = " + Look.SIZE_MAX + ";\n" +
-        // Living glass: the lag that is a whole lean, dp; how much thicker the bend gets on the
-        // edge the lag faces at a whole lean (and thinner behind), and how much deeper its band
-        // reaches; and the least colour split a live bend takes, as a share of its extra bend.
-        // GlassMotionLight.LAG_MAX_DP and LAG_BEND, LAG_BAND and LIVE_DISPERSION in Java.
-        "const float kLagMaxDp = " + GlassMotionLight.LAG_MAX_DP + ";\n" +
-        "const float kLagBend = " + GlassRefraction.LAG_BEND + ";\n" +
-        "const float kLagBand = " + GlassRefraction.LAG_BAND + ";\n" +
-        "const float kLagLean = " + GlassRefraction.LAG_LEAN_GAIN + ";\n" +
-        "const float kLiveDisp = " + GlassRefraction.LIVE_DISPERSION + ";\n" +
-        // The tilted slab: how far its face carries the picture at the tilt's asymptote, dp, and
-        // the sine at which half of that is reached; how much it magnifies across the face per
-        // unit of that share and the most that moves the picture, dp; how many times its sine an
-        // edge's lean takes; and how much more of the key light's lobe an edge at a whole tilt
-        // lean catches (less on the edge going away). TILT_SHIFT_DP, TILT_SOFT, TILT_MAG,
-        // TILT_MAG_MAX_DP, TILT_LEAN_GAIN and TILT_LIGHT in Java.
-        "const float kTiltShiftDp = " + GlassRefraction.TILT_SHIFT_DP + ";\n" +
-        "const float kTiltSoft = " + GlassRefraction.TILT_SOFT + ";\n" +
-        "const float kTiltMag = " + GlassRefraction.TILT_MAG + ";\n" +
-        "const float kTiltMagMaxDp = " + GlassRefraction.TILT_MAG_MAX_DP + ";\n" +
-        "const float kTiltLean = " + GlassRefraction.TILT_LEAN_GAIN + ";\n" +
-        "const float kTiltLight = " + GlassRefraction.TILT_LIGHT + ";\n" +
         // The dock surface's glass: how much thicker and wider the lower edge's lens is per whole
         // shelf; the lower lip's light and how fast it fades inward, dp. SHELF_THICKEN,
         // SHELF_LIP and SHELF_LIP_DP in Java.
@@ -744,34 +677,6 @@ public final class GlassRefraction {
         "float rimLobe(float c) {\n" +
         "    return c > 0.0 ? pow(c, kKeyExp) : 0.0;\n" +
         "}\n" +
-        // The live glint's narrow lobe on an outline facing uKeyLight by c, the cosine: nothing
-        // facing away, and never past 1 (the resting light is a unit vector only to 1e-4, which
-        // the 16th power would make 0.4%). liveKeyLobe in Java.
-        "float liveKeyLobe(float c) {\n" +
-        "    return c > 0.0 ? pow(min(c, 1.0), kLiveKeyExp) : 0.0;\n" +
-        "}\n" +
-        // A tilted slab's face, for a pixel at p (from the centre) of a surface of half size b,
-        // inside px in from the outline: the picture is carried toward the edge going away, as a
-        // thick plate tipped under the eye displaces what is behind it, by a share of
-        // kTiltShiftDp that grows as the sine and gives way toward the asymptote, so a press's
-        // degree reads and a plank's 18 never tears. On it a gentle perspective: the half nearer
-        // the viewer shows its picture a little larger, the half going away a little smaller, a
-        // quadratic along the tilt that averages to nothing across the face and moves the picture
-        // kTiltMagMaxDp at most. Both ease in from the outline over twice their own reach, so the
-        // outline's pixel shows the picture just outside it, as the bend's does, and the picture
-        // never folds back on itself however thin the rim. Only called tilted. tiltOffsetPx in
-        // Java.
-        "float2 tiltOffset(float2 p, float2 b, float inside, float rimW) {\n" +
-        "    float s = length(uTilt);\n" +
-        "    float2 dir = uTilt / s;\n" +
-        "    float share = s / (s + kTiltSoft);\n" +
-        "    float shift = kTiltShiftDp * uDensity * share;\n" +
-        "    float h = max(abs(dir.x) * b.x + abs(dir.y) * b.y, 1.0);\n" +
-        "    float m = min(kTiltMag * share, kTiltMagMaxDp * uDensity / h);\n" +
-        "    float u = dot(p, dir);\n" +
-        "    float ease = smoothstep(0.0, max(rimW, 2.0 * (shift + m * h)), inside);\n" +
-        "    return dir * ((m * (u * u / h - h / 3.0) - shift) * ease);\n" +
-        "}\n" +
         "half4 main(float2 fragCoord) {\n" +
         "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
         "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
@@ -825,10 +730,10 @@ public final class GlassRefraction {
         // and joins the straights without a step. It is the slab's normal too (the field's
         // gradient); only the bend's direction below may take a wider arc.
         "    float2 n = rectNormal(p, b, min(cr, min(b.x, b.y)));\n" +
-        // Whether the slab moves (its lag) or tips (its tilt); both 0 at rest. Asked here, before
-        // the lens, because a live zone reaches deeper (see the live block below).
-        "    bool tilted = uTilt.x != 0.0 || uTilt.y != 0.0;\n" +
-        "    bool live = uLag.x != 0.0 || uLag.y != 0.0 || tilted;\n" +
+        // Whether the page turns the slab or scales it (GlassPose); neither at rest, and then
+        // every pose term below is skipped.
+        "    bool turned = uPose.x != 0.0 || uPose.y != 0.0;\n" +
+        "    bool scaled = uPoseLight.x != 1.0;\n" +
         // Every lens below is held at half the surface's short side, so a one-row strip still
         // bends to nothing on its centre line: the two halves' bends point opposite ways there,
         // and a bend left at the line tears the picture into a seam.
@@ -872,23 +777,9 @@ public final class GlassRefraction {
         "    if (uSoftRim > 0.0) {\n" +
         "        w = beads ? min(max(sSoft, w), kBeadBandShare * cr) : max(w, sSoft);\n" +
         "    }\n" +
-        // Pixels past the deepest zone (a whole shelf's; a live zone reaches deeper on the edge
-        // the lag faces) are the flat face: they skip every lens term below and take one sample
-        // where they are. bendReachPx in Java.
-        "    float reach = w * (1.0 + kShelfThick * uShelf) * (live ? 1.0 + kLagBand : 1.0);\n" +
-        "    float liveK = 0.0;\n" +
-        "    float glintW = 0.0;\n" +
-        "    if (live) {\n" +
-        // How live the slab is, 0..1: the most of a whole lean its lag or its tilt asks, so it
-        // eases back with the springs as they settle. Pose only: a press counts by the tilt its
-        // rig gives the pane. liveness in Java.
-        "        liveK = clamp(max(kLagLean * length(uLag) / (kLagMaxDp * uDensity),\n" +
-        "            kTiltLean * length(uTilt)), 0.0, 1.0);\n" +
-        // How much of the live glint the rim's light takes, 0..1: liveK eased, so the glint
-        // leaves as gently as the springs settle. At 0 the light below is the rest look's,
-        // expression for expression. glintWeight in Java.
-        "        glintW = smoothstep(0.0, 1.0, liveK);\n" +
-        "    }\n" +
+        // Pixels past the deepest zone (a whole shelf's) are the flat face: they skip every lens
+        // term below and take one sample where they are. bendReachPx in Java.
+        "    float reach = w * (1.0 + kShelfThick * uShelf);\n" +
         // The bend's direction. Where the zone is deeper than the drawn corner (a 3 dp Corners, or
         // Docked's square dock, under a 16 dp zone) the drawn field's gradient mitres along each
         // corner's diagonal, and a bend that snapped there would crease the picture from each
@@ -901,7 +792,6 @@ public final class GlassRefraction {
         "    float shiftB = 0.0;\n" +
         "    float slope = 0.0;\n" +
         "    float e = 1.0;\n" +
-        "    float2 bendV = float2(0.0, 0.0);\n" +
         "    if (inside < reach && uDepth > 0.0) {\n" +
         "        nb = rectNormal(p, b, min(max(cr, reach), hs));\n" +
         // The shelf: the lower edge's zone wider and its slab thicker, by how far the bend's
@@ -912,28 +802,13 @@ public final class GlassRefraction {
         "        float thick = 1.0 + kShelfThick * lower;\n" +
         "        float wr = min(w * thick, hs);\n" +
         "        float slabT = min(uDepth * sizeK * sizeShare * thick, hs * kSlabHold);\n" +
-        "        float wl = wr;\n" +
-        "        float tl = slabT;\n" +
-        // Living glass: the slab's lens lags it on a spring. The edge the lag faces is thicker,
-        // its zone deeper; the edge behind it thinner; a tilted slab leans the same way, the edge
-        // rising toward the viewer the thicker, by kTiltLean times the tilt's sine along the
-        // edge's normal, summed with the lag's lean and held to a whole one. liveLean in Java.
-        "        if (live) {\n" +
-        "            float lean = kLagLean * dot(nb, uLag) / (kLagMaxDp * uDensity);\n" +
-        "            if (tilted) {\n" +
-        "                lean = lean + clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n" +
-        "            }\n" +
-        "            lean = clamp(lean, -1.0, 1.0);\n" +
-        "            wl = min(wr * (1.0 + kLagBand * lean), hs);\n" +
-        "            tl = slabT * (1.0 + kLagBend * lean);\n" +
-        "        }\n" +
-        "        e = clamp(inside / max(wl, 0.001), 0.0, 1.0);\n" +
+        "        e = clamp(inside / max(wr, 0.001), 0.0, 1.0);\n" +
         "        if (e < 1.0) {\n" +
         // The slab's slope here, rise over run, and the ray straight down bent by Snell's law at
         // it, travelling the thickness: the picture this pixel shows lies shiftG further in. 0 on
-        // the face, never past tl sqrt(n² - 1) at the outline. GlassSlab.shiftPx in Java.
-        "            slope = tl / wl * slabSlope(e);\n" +
-        "            shiftG = tl * snellTan(slope, kIor);\n" +
+        // the face, never past slabT sqrt(n² - 1) at the outline. GlassSlab.shiftPx in Java.
+        "            slope = slabT / wr * slabSlope(e);\n" +
+        "            shiftG = slabT * snellTan(slope, kIor);\n" +
         "            shiftR = shiftG;\n" +
         "            shiftB = shiftG;\n" +
         // Dispersion (the Edge slider): red and blue refract at their own index, so the colours
@@ -941,29 +816,24 @@ public final class GlassRefraction {
         // GlassSlab.iorRed and iorBlue in Java.
         "            if (uDisp > 0.0) {\n" +
         "                float dk = uDisp / kDispFull;\n" +
-        "                shiftR = tl * snellTan(slope, kIor - kDispRed * dk);\n" +
-        "                shiftB = tl * snellTan(slope, kIor + kDispBlue * dk);\n" +
-        "            }\n" +
-        // How much further the live picture moved than at rest, for the live colour split.
-        "            if (live) {\n" +
-        "                float er = clamp(inside / max(wr, 0.001), 0.0, 1.0);\n" +
-        "                float rest = er < 1.0 ? slabT * snellTan(slabT / wr * slabSlope(er), kIor) : 0.0;\n" +
-        "                bendV = nb * max(shiftG - rest, 0.0);\n" +
+        "                shiftR = slabT * snellTan(slope, kIor - kDispRed * dk);\n" +
+        "                shiftB = slabT * snellTan(slope, kIor + kDispBlue * dk);\n" +
         "            }\n" +
         "        }\n" +
         "    }\n" +
-        // tiltLean keeps the tilt's part of the lean alone, for the rim's light below.
-        "    float tiltLean = 0.0;\n" +
-        "    if (tilted) {\n" +
-        "        tiltLean = clamp(-kTiltLean * dot(nb, uTilt), -1.0, 1.0);\n" +
-        "    }\n" +
         "    float2 sampleCoord = fragCoord - nb * shiftG;\n" +
-        // The tilted slab's face (tiltOffset). It moves the whole face's picture alike, so it
-        // takes no colour split of its own: split there, every edge in the wallpaper would wear a
-        // fringe, and the face would read three samples instead of one.
-        "    float rimW = max(kMinRimPx, kRimDp * uDensity);\n" +
-        "    if (tilted) {\n" +
-        "        sampleCoord = sampleCoord + tiltOffset(p, b, inside, rimW);\n" +
+        // The turned slab (GlassPoseOptics.shiftTan): the ray from the eye meets the slab at the
+        // turn and refracts through its thickness, so the whole picture shifts toward the near
+        // edge by T (tan θi - tan θt), showing it carried toward the edge going away. One shift
+        // for the whole slab, so it takes no colour split of its own.
+        "    if (turned) {\n" +
+        "        float faceT = min(uDepth * sizeK * sizeShare, hs * kSlabHold);\n" +
+        "        sampleCoord = sampleCoord - normalize(uPose.xy) * min(faceT * uPose.w, uPoseLight.w);\n" +
+        "    }\n" +
+        // The scaled page (GlassPoseOptics.magnify): the picture through the glass a little
+        // larger or smaller about the slab's centre as the page rises or recedes.
+        "    if (scaled) {\n" +
+        "        sampleCoord = center + (sampleCoord - center) / uPoseLight.x;\n" +
         "    }\n" +
         // A finger on the glass: its reach, 1 under the fingertip and 0 at uTouchRadius. The
         // picture is drawn a little toward the touch (a shallow lens, uTouchLens of the distance
@@ -1005,16 +875,10 @@ public final class GlassRefraction {
         "    if (faceMix > 0.0) {\n" +
         "        clarityK = mix(clarityK, 1.0, faceMix);\n" +
         "    }\n" +
-        // Where red and blue read from, against green's sample: their own refraction, and while
-        // the slab is live a split along its extra bend (kLiveDisp at least). Three taps only
-        // where a channel parts by more than half a px; every face pixel takes one.
+        // Where red and blue read from, against green's sample: their own refraction. Three taps
+        // only where a channel parts by more than half a px; every face pixel takes one.
         "    float2 oR = nb * (shiftG - shiftR);\n" +
         "    float2 oB = nb * (shiftG - shiftB);\n" +
-        "    if (live) {\n" +
-        "        float2 sv = bendV * max(uDisp, kLiveDisp);\n" +
-        "        oR = oR + sv;\n" +
-        "        oB = oB - sv;\n" +
-        "    }\n" +
         "    half4 col = half4(0.0);\n" +
         "    if (max(dot(oR, oR), dot(oB, oB)) > 0.25) {\n" +
         "        float2 fr = framePx(sampleCoord + oR);\n" +
@@ -1060,11 +924,13 @@ public final class GlassRefraction {
         // darkens what is behind it (the dark line) and adds white (the light line), on every
         // channel alike, so it adds no colour of its own: kRimBase of white and kRimDarkAll of
         // the dark on every side alike, more white where the outline faces the key light
-        // (kKeyLight at rest, its wide lobe) and more dark facing away. While the slab is live the
-        // lobe mixes toward the travelling glint under uKeyLight, a tilt raises the lobe on the
-        // edge rising toward the viewer, and a finger lights the rim near it; the baseline never
-        // moves. The dock's shelf adds its lip's white on the lower edge. GlassRim.weight, white,
-        // darkening and lit, and rimLobe and rimAway in Java.
+        // (kKeyLight, its wide lobe) and more dark facing away. A finger lights the rim near it;
+        // the baseline never moves. The dock's shelf adds its lip's white on the lower edge.
+        // GlassRim.weight, white, darkening and lit, and rimLobe and rimAway in Java.
+        // A turned slab (GlassPoseOptics) is lit from the same fixed room: in its frame the eye
+        // leans toward the near edge, so the bevel going away meets it more steeply and takes
+        // more Schlick Fresnel, the half vector turns, the flat face reflects more of the sky,
+        // and one soft glint crosses the face. All under the alpha, like every light here.
         "    float lineCore = max(kRimLineDp * uDensity, kRimMinLinePx);\n" +
         "    float lineSoft = max(kRimSoftDp * uDensity, kRimMinSoftPx);\n" +
         "    float lineHalo = max(kRimHaloDp * uDensity, 0.01);\n" +
@@ -1074,7 +940,7 @@ public final class GlassRefraction {
         "        shelfW = exp(-max(inside, 0.0) / (kShelfLipDp * uDensity)) * kShelfLip * uShelf\n" +
         "            * smoothstep(0.2, 1.0, n.y);\n" +
         "    }\n" +
-        "    if ((inside < lineReach || shelfW > 0.0 || slope > 0.0) && col.a > 0.0) {\n" +
+        "    if ((inside < lineReach || shelfW > 0.0 || slope > 0.0 || turned) && col.a > 0.0) {\n" +
         "        float lineW = 0.0;\n" +
         "        if (inside < lineReach) {\n" +
         "            lineW = min(1.0 - smoothstep(lineCore, lineCore + lineSoft, inside)\n" +
@@ -1085,27 +951,37 @@ public final class GlassRefraction {
         "        if (slope > 0.0) {\n" +
         "            float cv = inversesqrt(1.0 + slope * slope);\n" +
         "            float fm = 1.0 - cv;\n" +
-        "            float fres = (kF0 + (1.0 - kF0) * fm * fm * fm * fm * fm) * (1.0 - lineW);\n" +
-        "            float nh = max(dot(float3(n * slope, 1.0) * cv, kHalf), 0.0);\n" +
+        "            float fres = kF0 + (1.0 - kF0) * fm * fm * fm * fm * fm;\n" +
+        "            float3 hv = kHalf;\n" +
+        "            if (turned) {\n" +
+        "                float tm = 1.0 - clamp(dot(float3(n * slope, 1.0) * cv, float3(-uPose.xy, uPose.z)), 0.0, 1.0);\n" +
+        "                float tf = kF0 + (1.0 - kF0) * tm * tm * tm * tm * tm + uPoseHalf.w;\n" +
+        "                fres = clamp(fres + uPoseLight.z * (tf - fres), 0.0, 1.0);\n" +
+        "                hv = uPoseHalf.xyz;\n" +
+        "            }\n" +
+        "            fres = fres * (1.0 - lineW);\n" +
+        "            float nh = max(dot(float3(n * slope, 1.0) * cv, hv), 0.0);\n" +
         "            float spec = max(pow(nh, kSpecPow) - kSpecFloor, 0.0) * kSpecK;\n" +
         "            lin = lin * (1.0 - fres) + float3(fres * kEnv + spec);\n" +
+        "        } else if (turned) {\n" +
+        "            float ff = uPoseLight.y * (1.0 - lineW);\n" +
+        "            lin = lin * (1.0 - ff) + float3(ff * kEnv);\n" +
         "        }\n" +
         "        if (lineW > 0.0 || shelfW > 0.0) {\n" +
         "            float rc = dot(n, kKeyLight);\n" +
         "            float lobe = rimLobe(rc);\n" +
         "            float away = rc < 0.0 ? rc * rc : 0.0;\n" +
-        "            if (glintW > 0.0) {\n" +
-        "                float lc = dot(n, uKeyLight);\n" +
-        "                lobe = mix(lobe, kKeyPeak * (liveKeyLobe(lc) + kCounter * liveKeyLobe(-lc)), glintW);\n" +
-        "                away = mix(away, lc < 0.0 ? lc * lc : 0.0, glintW);\n" +
-        "            }\n" +
         "            lobe = lobe + kTouchRim * touchG;\n" +
-        "            if (tilted) {\n" +
-        "                lobe = lobe * (1.0 + kTiltLight * tiltLean);\n" +
-        "            }\n" +
         "            float white = (kRimBase + kRimSpec * lobe) * lineW + kRimSpec * shelfW;\n" +
         "            float keep = 1.0 - kRimDark * (kRimDarkAll + (1.0 - kRimDarkAll) * away) * lineW;\n" +
         "            lin = lin * keep + float3(white);\n" +
+        "        }\n" +
+        "        if (turned && uGlint.w > 0.0) {\n" +
+        "            float2 gd = normalize(uPose.xy);\n" +
+        "            float2 gq = p - uGlint.xy;\n" +
+        "            float ga = dot(gq, gd) / uGlint.z;\n" +
+        "            float gc = dot(gq, float2(-gd.y, gd.x)) / (3.0 * uGlint.z);\n" +
+        "            lin = lin + float3(uGlint.w * exp(-ga * ga - gc * gc));\n" +
         "        }\n" +
         "        lin = min(lin, float3(1.0));\n" +
         "        col.rgb = half3(float3(fromLinearSrgb(half3(lin))) * ca);\n" +
@@ -1193,75 +1069,19 @@ public final class GlassRefraction {
 
     /**
      * The rim's key light, {@code kKeyLight}: up and to the left, a unit vector in the
-     * slab's own px axes (y down). The rest look's fixed light, and what {@code uKeyLight} holds
-     * on a flat, still slab; {@link #keyLight} turns it with a pose for the live glint.
+     * slab's own px axes (y down). Fixed in the room: a turned slab's lens zone takes it through
+     * the turned half vector ({@link GlassPoseOptics#half}).
      */
     static final float KEY_LIGHT_X = -0.552f;
     static final float KEY_LIGHT_Y = -0.834f;
 
     /**
      * How high the key light stands over the glass, as the tangent of its elevation: 1, 45
-     * degrees. The program's light is a direction round the outline; turning it about a tilt axis
-     * needs it in three dimensions, and this is the one number that lifts it there. It changes
-     * nothing at rest. At 45 degrees a tilt across the light turns the glint round the outline by
-     * {@code atan(sin 2θ)}: 6 degrees at 3 of tilt, 30 at 18.
+     * degrees. The rim's light is a direction round the outline; the slab's specular
+     * ({@link GlassSlab#half}) and a turned slab ({@link GlassPoseOptics#half}) need it in three
+     * dimensions, and this is the one number that lifts it there.
      */
     static final float KEY_LIGHT_RISE = 1f;
-    /**
-     * The most of a tilt the light is turned by, as a sine: 20 degrees, so 40 of turn. The
-     * plank's 18 plus a lag's whole lean (about 5) would pass it. Held there, a light standing
-     * at {@link #KEY_LIGHT_RISE} never crosses the slab's normal, where its direction round the
-     * outline would flip to the far side in one frame.
-     */
-    static final float KEY_LIGHT_MAX_SINE = 0.342f;
-
-    /**
-     * {@code uKeyLight}: the key light as the slab's pose turns it, into {@code out}, a unit
-     * vector in the slab's own px axes. A light fixed in the world, seen in the frame of a plate
-     * tipped by θ, turns about the tilt axis; its reflection turns twice that (the law of
-     * reflection), so the light is turned by 2θ about that axis, toward the edge rising toward
-     * the viewer: 6 degrees at 3 degrees of tilt and 36 at 18 (glass-perception research,
-     * recommendation 1; Doerschner et al. 2011 rocked their stimuli ±15 degrees, the same scale).
-     * The pose is the tilt ({@link #tiltVector}) and the lag's lean, which the bend already takes
-     * as a tilt would ({@link #liveLean}): its whole lean, held to one, counts as the tilt that
-     * leans an edge a whole one ({@link #TILT_LEAN_GAIN}), toward the edge the lag faces, so the
-     * glint, the counter-lobe and the dark edge stay with the bend and the slab's shape (Kim et
-     * al. 2011: any misalignment between a highlight and its shape costs gloss). Nothing else
-     * moves it, and nothing on a timer. Exactly {@link #KEY_LIGHT_X}, {@link #KEY_LIGHT_Y} flat
-     * and still.
-     */
-    static void keyLight(float tiltX, float tiltY, float lagXPx, float lagYPx, float density,
-                         @NonNull float[] out) {
-        out[0] = KEY_LIGHT_X;
-        out[1] = KEY_LIGHT_Y;
-        float gain = LAG_LEAN_GAIN / (GlassMotionLight.LAG_MAX_DP * Math.max(density, 1e-3f));
-        float leanX = lagXPx * gain, leanY = lagYPx * gain;
-        float lean = (float) Math.hypot(leanX, leanY);
-        if (lean > 1f) {
-            leanX /= lean;
-            leanY /= lean;
-        }
-        float px = tiltX - leanX / TILT_LEAN_GAIN;
-        float py = tiltY - leanY / TILT_LEAN_GAIN;
-        float s = (float) Math.hypot(px, py);
-        if (!(s > 0f)) return;
-        float dx = px / s, dy = py / s;
-        s = Math.min(s, KEY_LIGHT_MAX_SINE);
-        // 2θ from sin θ: no trigonometry.
-        float cos2 = 1f - 2f * s * s;
-        float sin2 = 2f * s * (float) Math.sqrt(1f - s * s);
-        // The light (KEY_LIGHT, KEY_LIGHT_RISE) over its in-plane length: along the tilt it turns
-        // with the rise toward -d; across it, it is unmoved.
-        float along = KEY_LIGHT_X * dx + KEY_LIGHT_Y * dy;
-        float turned = along * cos2 - KEY_LIGHT_RISE * sin2;
-        float lx = KEY_LIGHT_X + dx * (turned - along);
-        float ly = KEY_LIGHT_Y + dy * (turned - along);
-        float length = (float) Math.hypot(lx, ly);
-        if (!(length > 1e-4f)) return;
-        out[0] = lx / length;
-        out[1] = ly / length;
-    }
-
     /** Rec. 709's luma weights, {@code kLumaW}: how pale a sample is. */
     static final float LUMA_R = 0.2126f;
     static final float LUMA_G = 0.7152f;
@@ -1396,13 +1216,11 @@ public final class GlassRefraction {
 
     /**
      * The deepest the lens zone {@code zonePx} (before the shelf) reaches: grown by a whole
-     * {@code shelf} ({@link #SHELF_THICKEN}) and by a whole lean while the slab is live
-     * ({@link #LAG_BAND}). Pixels further in are the flat face and skip every lens term. The
-     * program's {@code reach}.
+     * {@code shelf} ({@link #SHELF_THICKEN}). Pixels further in are the flat face and skip every
+     * lens term. The program's {@code reach}.
      */
-    static float bendReachPx(float zonePx, float shelf, boolean live) {
-        return Math.max(0f, zonePx) * (1f + SHELF_THICKEN * Math.max(0f, shelf))
-            * (live ? 1f + LAG_BAND : 1f);
+    static float bendReachPx(float zonePx, float shelf) {
+        return Math.max(0f, zonePx) * (1f + SHELF_THICKEN * Math.max(0f, shelf));
     }
 
     /**
@@ -1471,7 +1289,7 @@ public final class GlassRefraction {
         float lensMax = Math.max(slab.lensPx(density), 0.001f);
         float w0 = lensMax * Math.min(slab.share * 2f * hs / lensMax, 1f);
         if (softRimPx > 0f) w0 = Math.max(w0, softRimPx);
-        float reach = bendReachPx(w0, shelf, false);
+        float reach = bendReachPx(w0, shelf);
         if (!(inside < reach) || !(depthPx > 0f)) return;
         float[] n = new float[2];
         rectNormal(n, px, py, bx, by, bendNormalRadiusPx(cr, reach, hs));
@@ -1505,40 +1323,6 @@ public final class GlassRefraction {
     static float rimAway(float nx, float ny) {
         float c = nx * KEY_LIGHT_X + ny * KEY_LIGHT_Y;
         return c < 0f ? c * c : 0f;
-    }
-
-    /**
-     * The program's {@code liveKeyLobe}: the live glint's narrow lobe on an outline facing its
-     * key light by the cosine {@code c}, 0..1.
-     */
-    static float liveKeyLobe(float c) {
-        return c > 0f ? (float) Math.pow(Math.min(c, 1f), Look.LIVE_KEY_EXPONENT) : 0f;
-    }
-
-    /**
-     * The live glint's lobe under the key light {@code (lx, ly)} ({@link #keyLight}): the narrow
-     * lobe at {@link Look#KEY_PEAK}, plus {@link Look#COUNTER} of it facing straight away.
-     */
-    static float liveRimLobe(float nx, float ny, float lx, float ly) {
-        float c = nx * lx + ny * ly;
-        return Look.KEY_PEAK * (liveKeyLobe(c) + Look.COUNTER * liveKeyLobe(-c));
-    }
-
-    /** AGSL's {@code mix}: {@code x (1 - a) + y a}. */
-    static float mix(float x, float y, float a) {
-        return x * (1f - a) + y * a;
-    }
-
-    /**
-     * The lobe the program's rim takes for a slab at glint weight {@code glintW}
-     * ({@link #glintWeight}) under the key light {@code (lx, ly)}: the rest lobe
-     * {@link #rimLobe(float, float)} at 0, by the same expression the program runs there, and
-     * mixed toward {@link #liveRimLobe} as the slab is live.
-     */
-    static float rimLobe(float nx, float ny, float lx, float ly, float glintW) {
-        float rest = rimLobe(nx, ny);
-        if (!(glintW > 0f)) return rest;
-        return mix(rest, liveRimLobe(nx, ny, lx, ly), glintW);
     }
 
     /**
@@ -1588,60 +1372,6 @@ public final class GlassRefraction {
      */
     static final float TOUCH_LENS = 0.10f;
 
-    // Living glass ({@link GlassMotionLight}); each is the program's constant of the matching
-    // name, written from these. It deforms the bend the glass already has, so it reads as glass.
-
-    /**
-     * How much thicker the bend is on the edge a whole lag faces, as a share of its strength:
-     * twice it at a whole lean; the edge behind it thins to flat. {@code kLagBend}.
-     */
-    static final float LAG_BEND = 1.0f;
-    /** How much deeper the lens zone reaches on that edge, and shallower behind it. {@code kLagBand}. */
-    static final float LAG_BAND = 0.8f;
-    /**
-     * How many times its share of {@link GlassMotionLight#LAG_MAX_DP} a lag leans the bend: the
-     * whole lean at a quarter of the clamp, so an ordinary slide shows. {@code kLagLean}.
-     */
-    static final float LAG_LEAN_GAIN = 4f;
-    /**
-     * The least colour split a live bend takes, as a share of how much further it bends than at
-     * rest: the Edge slider's own share where that is more. {@code kLiveDisp}.
-     */
-    static final float LIVE_DISPERSION = 0.15f;
-
-    /**
-     * The program's {@code liveK}: how live the slab is, 0..1, the most of a whole lean its lag
-     * ({@link #lagLean}'s gain over the lag's length) or its tilt ({@link #TILT_LEAN_GAIN} over
-     * the tilt's sine) asks. It is pose, not time: it falls back with the springs as they settle
-     * and is 0 at rest. A press counts only by the tilt its rig gives the pane; there is no dent.
-     */
-    static float liveness(float lagXPx, float lagYPx, float tiltX, float tiltY, float density) {
-        float lag = LAG_LEAN_GAIN * (float) Math.hypot(lagXPx, lagYPx)
-            / (GlassMotionLight.LAG_MAX_DP * density);
-        float tilt = TILT_LEAN_GAIN * (float) Math.hypot(tiltX, tiltY);
-        return Math.max(0f, Math.min(1f, Math.max(lag, tilt)));
-    }
-
-    /**
-     * The program's {@code glintW}: how much of the live glint (the narrow lobe and its
-     * counter-lobe, {@link Look#LIVE_KEY_EXPONENT}) the rim's light takes for a slab {@code liveK} live ({@link #liveness}): {@code liveK} eased
-     * by a smoothstep. The glint is a sign of motion, not of glass at rest: at rest it read as a
-     * bright smear in every surface's top-left corner (the user, 2026-10-20), so a still slab
-     * takes the rest look exactly. It rides the same pose the live rim does, so the glint and the
-     * clearer rim arrive and leave together (Kim et al. 2011: a highlight out of step with its
-     * shape costs gloss), and it is pose, never time: the lag and the tilt, each 0 exactly at rest
-     * ({@link GlassMotionLight}'s rest snap, {@link #TILT_REST_DEG}). The ease makes those snaps
-     * invisible: the last dp or so of lag (a fortieth of a lean) and the last twentieth of a degree
-     * of tilt (a hundredth of one) step the weight by under a two-hundredth where a straight line
-     * would step it by the lean itself, and the glint fades out as the springs settle instead of
-     * leaving on a slope. Its scale is the lean's: about 0.13 at the press rig's 1.1 degrees, 0.7
-     * at 3, whole from about 5 (a held border, a wall page's plank) and at a quarter of the lag's
-     * clamp (a flick).
-     */
-    static float glintWeight(float liveK) {
-        return smoothstep(0f, 1f, liveK);
-    }
-
     /**
      * The program's {@code edgeK}: how much of the sharp picture a pixel at {@code t} across the
      * band (0 at the rim, 1 at its inner edge and on the face) shows where one is bound, on the
@@ -1674,190 +1404,6 @@ public final class GlassRefraction {
     static float sharpMix(float t, boolean soft, float sharpEdge, float faceMix) {
         float k = sharpShare(t, soft) * sharpEdge;
         return faceMix > 0f ? k + (1f - k) * faceMix : k;
-    }
-
-    /**
-     * The program's {@code lean}: how much of a whole lag an edge with outward normal
-     * {@code (nx, ny)} takes for a lag of {@code (lagX, lagY)} px, -1 (behind) to 1 (facing it).
-     */
-    static float lagLean(float nx, float ny, float lagXPx, float lagYPx, float density) {
-        float lean = LAG_LEAN_GAIN * (nx * lagXPx + ny * lagYPx) / (GlassMotionLight.LAG_MAX_DP * density);
-        return Math.max(-1f, Math.min(1f, lean));
-    }
-
-    /**
-     * The program's live {@code shiftG}: the slab's refraction ({@link GlassSlab#shiftPx}) on an
-     * edge at {@code lean}, its zone {@code zonePx} deepened by {@link #LAG_BAND} of itself (held
-     * at the half short side) and its thickness {@code thicknessPx} grown by {@link #LAG_BEND} of
-     * itself per whole lean, thinned and shallowed behind. At lean 0 it is the resting shift.
-     */
-    static float liveShiftPx(@NonNull GlassSlab slab, float insidePx, float zonePx,
-                             float thicknessPx, float halfShortPx, float lean) {
-        if (lean == 0f) return slab.shiftPx(insidePx, zonePx, thicknessPx);
-        return slab.shiftPx(insidePx, Math.min(zonePx * (1f + LAG_BAND * lean), halfShortPx),
-            thicknessPx * (1f + LAG_BEND * lean));
-    }
-
-    // The tilted slab. A pane that tips — the wall's plank under a dragging finger (up to
-    // PlankTilt.MAX_TILT_DEG, 18), a held side border's press (PlankTilt.HOLD_TILT_DEG, 6), a
-    // terminal pane's own press rig (about a degree) — is a plate of glass tipped under the eye.
-    // Its sample is aimed past the whole transform, so without these the wallpaper in it looked
-    // exactly as if it lay flat. Each is the program's constant of the matching name.
-
-    /**
-     * How far the face carries the picture toward the edge going away, in dp, at the asymptote
-     * of {@link #tiltShare} ({@code kTiltShiftDp}). A slab of thickness {@code h} and index
-     * {@code n} tipped by {@code θ} displaces what is behind it by about
-     * {@code h sin θ (1 - 1/n)}: in proportion to the sine at a press's degree or two, giving way
-     * as the tip deepens. Held here under {@code shift(s) = 9 s / (s + 0.10)} dp of sine
-     * {@code s}: about 1.45 dp (4 px on pong) at the pane rig's 1.1 degrees, 3.1 at 3, 4.6 at the
-     * held border's 6, and 6.8 at the plank's 18, never past 8.2 at any tilt. It was
-     * {@code 14 s / (s + 0.12)}, 10.1 dp at 18. A whole face moving alike carries no
-     * distortion (Fleming et al. 2011: the cue is the displacement's divergence), and a picture
-     * moving further than the pane itself reads as the picture moving, a snapshot hovering
-     * (Tamura & Nakauchi 2018). So the shift is kept, a picture moving against the pane is
-     * glass's signature, but held at the outline's own motion under the tilt, about 7 dp for a
-     * 150 dp half-height at 18 (research recommendation 3), and the gradient below carries the
-     * rest. A straight line through the same 7 dp at 18 would leave 0.4 dp at the press rig, a
-     * pixel, which nobody sees through a blurred wallpaper.
-     */
-    static final float TILT_SHIFT_DP = 9f;
-    /** The sine at which the face shift is half its asymptote ({@code kTiltSoft}); see {@link #TILT_SHIFT_DP}. */
-    static final float TILT_SOFT = 0.10f;
-    /**
-     * How much the face magnifies across itself per unit of {@link #tiltShare} ({@code kTiltMag}):
-     * the picture's scale runs from {@code 1 - 2m} on the edge rising toward the viewer to
-     * {@code 1 + 2m} on the edge going away, the perspective of a lens plate, with
-     * {@code m = TILT_MAG * share}: ±2.1% at 1.1 degrees, ±4.4% at 3, ±6.5% at 6 and ±9.7% at 18,
-     * until {@link #TILT_MAG_MAX_DP} holds it. Was 0.028 (±4% at 18): the gradient is the only
-     * thing on the face with divergence, pooled over the whole face, so it is Fleming's cue
-     * where the uniform shift is none, and magnification reads as curvature (Schlüter & Faul
-     * 2019). At 0.064 a pane from about 250 dp across the tilt's half extent reaches the cap at
-     * 18. The picture never folds while {@code m} stays under an eighth ({@link #tiltOffsetPx}),
-     * and it peaks at {@code TILT_MAG / (1 + TILT_SOFT)}, 0.058.
-     */
-    static final float TILT_MAG = 0.064f;
-    /**
-     * The most the magnification moves the picture across the face, in dp
-     * ({@code kTiltMagMaxDp}): {@code m} is held under this over the half extent along the tilt,
-     * so a whole-screen pane, whose ends are far from its middle, tips no further than a mid-sized
-     * one. Two thirds of it shows at the ends against the face's mean, the quadratic averaging to
-     * nothing: 8 dp at the plank's 18, the research's starting size (about 0.24 degrees at 30 cm,
-     * the scale of Kawabe et al. 2015's deformations; recommendation 3). Was 4.
-     */
-    static final float TILT_MAG_MAX_DP = 12f;
-    /**
-     * How many times the tilt's sine along an edge's normal leans that edge's bend
-     * ({@code kTiltLean}), on the same lean the lag drives ({@link #LAG_BEND}, {@link #LAG_BAND}):
-     * a whole lean at about 5 degrees. 0.23 at the pane rig's 1.1 degrees, so the edge the finger
-     * is not on visibly gathers a quarter more bend; 0.63 at 3; whole at the held border's 6 and
-     * the plank's 18. Summed with the lag's lean and held at a whole one, so a slab that slides
-     * and tips at once still never bends more than a whole lean.
-     */
-    static final float TILT_LEAN_GAIN = 12f;
-    /**
-     * How much more of the key light's lobe an edge at a whole tilt lean catches
-     * ({@code kTiltLight}): 1.4 times it on the edge rising toward the viewer, 0.6 times on the
-     * edge going away. The rim's baseline is untouched, so no side vanishes.
-     */
-    static final float TILT_LIGHT = 0.4f;
-    /**
-     * A tilt under this, in degrees, is flat ({@link #tiltVector}): a press rig's spring settles
-     * toward 0 without ever landing on it, and well under a tenth of a degree shifts the face by
-     * a tenth of a dp, so the slab is called flat there and draws the resting look exactly.
-     */
-    static final float TILT_REST_DEG = 0.05f;
-
-    /**
-     * {@code uTilt} for a slab whose transforms on the way up add to {@code rotationXDeg} and
-     * {@code rotationYDeg}, as {@code View.setRotationX}/{@code setRotationY} take them, into
-     * {@code out}: the sines, as a vector in the slab's own px axes (y down) pointing at the edge
-     * going away from the viewer. A positive rotationY takes the right edge away (as
-     * {@code PlankTilt} writes it), a positive rotationX the top edge (as the press rig's
-     * {@code -(ny - 0.5)} leans the pressed bottom away). Exactly {@code (0, 0)} under
-     * {@link #TILT_REST_DEG}, or for a non-finite angle.
-     */
-    public static void tiltVector(float rotationXDeg, float rotationYDeg, @NonNull float[] out) {
-        out[0] = 0f;
-        out[1] = 0f;
-        if (!Float.isFinite(rotationXDeg) || !Float.isFinite(rotationYDeg)) return;
-        float x = (float) Math.sin(Math.toRadians(rotationYDeg));
-        float y = (float) -Math.sin(Math.toRadians(rotationXDeg));
-        if (Math.hypot(x, y) < Math.sin(Math.toRadians(TILT_REST_DEG))) return;
-        out[0] = x;
-        out[1] = y;
-    }
-
-    /** How much of its asymptote a tilt of sine {@code s} carries the face: {@code s / (s + TILT_SOFT)}. */
-    static float tiltShare(float sine) {
-        float s = Math.abs(sine);
-        return s / (s + TILT_SOFT);
-    }
-
-    /** How far the face carries the picture at a tilt of sine {@code s}, px, before its ease and magnification. */
-    static float tiltShiftPx(float sine, float density) {
-        return TILT_SHIFT_DP * density * tiltShare(sine);
-    }
-
-    /**
-     * The program's {@code tiltOffset}: how far the sample of a pixel at {@code (px, py)} from the
-     * centre of a surface of half size {@code (bx, by)}, {@code insidePx} in from its outline,
-     * moves for a tilt {@code (tiltX, tiltY)} ({@link #tiltVector}), into {@code out}. Toward the
-     * edge rising toward the viewer, so the picture shows carried toward the edge going away.
-     * Nothing flat.
-     *
-     * <p>It never folds the picture (Schlüter & Faul 2019: once rays cross, the distortion stops
-     * reading as shape). Along the tilt the offset is {@code D(u) e}, {@code D} the quadratic less
-     * the shift and {@code e} the ease, a smoothstep over {@code L = 2 (shift + m h)}. Walking in
-     * by one px moves the sample by at least {@code 1 - 2m - |D| e'}: {@code |D|} is at most
-     * {@code shift + 2mh/3 < L/2} and {@code e'} at most {@code 1.5 / L}, so the step is over
-     * {@code 1/4 - 2m}, positive while {@code m} stays under an eighth. {@link #TILT_MAG} peaks
-     * at 0.058.</p>
-     */
-    static void tiltOffsetPx(float px, float py, float bx, float by, float insidePx,
-                             float rimWidthPx, float tiltX, float tiltY, float density,
-                             @NonNull float[] out) {
-        out[0] = 0f;
-        out[1] = 0f;
-        float s = (float) Math.hypot(tiltX, tiltY);
-        if (s == 0f) return;
-        float dx = tiltX / s, dy = tiltY / s;
-        float share = tiltShare(s);
-        float shift = TILT_SHIFT_DP * density * share;
-        float h = Math.max(Math.abs(dx) * bx + Math.abs(dy) * by, 1f);
-        float m = Math.min(TILT_MAG * share, TILT_MAG_MAX_DP * density / h);
-        float u = px * dx + py * dy;
-        float ease = smoothstep(0f, Math.max(rimWidthPx, 2f * (shift + m * h)), insidePx);
-        float along = (m * (u * u / h - h / 3f) - shift) * ease;
-        out[0] = dx * along;
-        out[1] = dy * along;
-    }
-
-    /**
-     * The program's {@code tiltLean}: how much of a whole lean an edge with outward normal
-     * {@code (nx, ny)} takes for a tilt {@code (tiltX, tiltY)}, 1 for the edge rising toward the
-     * viewer, -1 for the edge going away.
-     */
-    static float tiltLean(float nx, float ny, float tiltX, float tiltY) {
-        float lean = -TILT_LEAN_GAIN * (nx * tiltX + ny * tiltY);
-        return Math.max(-1f, Math.min(1f, lean));
-    }
-
-    /**
-     * The program's {@code lean} once living: the lag's ({@link #lagLean} before its hold) and
-     * the tilt's ({@link #tiltLean}) summed, held to a whole lean. With no tilt it is
-     * {@link #lagLean} exactly.
-     */
-    static float liveLean(float nx, float ny, float lagXPx, float lagYPx, float tiltX, float tiltY,
-                          float density) {
-        float lean = LAG_LEAN_GAIN * (nx * lagXPx + ny * lagYPx) / (GlassMotionLight.LAG_MAX_DP * density);
-        if (tiltX != 0f || tiltY != 0f) lean += tiltLean(nx, ny, tiltX, tiltY);
-        return Math.max(-1f, Math.min(1f, lean));
-    }
-
-    /** The program's rim lobe on an edge at tilt lean {@code tiltLean}, as a factor; 1 flat. */
-    static float tiltLight(float tiltLean) {
-        return 1f + TILT_LIGHT * tiltLean;
     }
 
     // The dock surface's glass (com.termux.app.dock.DockSurfaceSpec): what a Home dock style turns
@@ -1984,11 +1530,12 @@ public final class GlassRefraction {
         private boolean mInputBound;
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
-        private float mLagX = Float.NaN, mLagY;
-        private float mTiltX = Float.NaN, mTiltY;
-        /** {@code uKeyLight} as last written, and scratch for the next. */
-        private float mKeyX = Float.NaN, mKeyY;
-        private final float[] mKeyNext = new float[2];
+        /** The pose as last written, and the pose uniforms as written and next, with scratch. */
+        private final GlassPose mPose = new GlassPose();
+        private final float[] mPoseWritten = new float[GlassPoseOptics.UNIFORMS];
+        private final float[] mPoseNext = new float[GlassPoseOptics.UNIFORMS];
+        private final float[] mPoseScratch = new float[4];
+        private boolean mPoseWrittenValid;
         /** Whether {@code sharp} is a clearer frame of its own, not the frost bound in its place. */
         private boolean mSharpDistinct;
         /** The dock surface's glass as last written: {@code uSoftRim} in px and {@code uShelf}. */
@@ -2019,7 +1566,7 @@ public final class GlassRefraction {
             clearLens();
             mTouchOn = true;
             clearTouch();
-            clearMotion();
+            clearPose();
             setDockSurface(0f, 0f);
             clearBeads();
         }
@@ -2367,66 +1914,51 @@ public final class GlassRefraction {
         }
 
         /**
-         * Living glass's lag ({@link GlassMotionLight#lagXPx}): how far the slab is ahead of its
-         * bend, px. 0 is the resting look.
+         * The page's pose ({@link GlassPose}): a turn shifts the picture through the slab and
+         * lights it as a turned plate, a scale magnifies the picture a little
+         * ({@link GlassPoseOptics}). The rest pose is the rest look; the caller hands a pose only
+         * while the glass may move ({@link GlassMotionGate}). Written only when it moved, so a
+         * still slab costs nothing; allocates nothing.
          */
-        public void setLag(float xPx, float yPx) {
-            if (Float.isNaN(xPx)) xPx = 0f;
-            if (Float.isNaN(yPx)) yPx = 0f;
-            if (mLagX == xPx && mLagY == yPx) return;
-            mLagX = xPx;
-            mLagY = yPx;
-            mShader.setFloatUniform("uLag", xPx, yPx);
-            syncKeyLight();
+        public void setPose(@NonNull GlassPose pose) {
+            setPose(pose.tiltX, pose.tiltY, pose.scale);
         }
 
-        /** What {@code light} has now, or the resting look for none; nothing written when unchanged. */
-        public void setMotionLight(@Nullable GlassMotionLight light) {
-            if (light == null) {
-                clearMotion();
-                return;
+        /** {@link #setPose(GlassPose)} from its three numbers; non-finite reads as rest. */
+        public void setPose(float tiltX, float tiltY, float scale) {
+            if (!Float.isFinite(tiltX) || !Float.isFinite(tiltY)) {
+                tiltX = 0f;
+                tiltY = 0f;
             }
-            setLag(light.lagXPx(), light.lagYPx());
+            if (!Float.isFinite(scale) || !(scale > 0f)) scale = 1f;
+            if (mPoseWrittenValid && mPose.tiltX == tiltX && mPose.tiltY == tiltY
+                && mPose.scale == scale) return;
+            mPose.tiltX = tiltX;
+            mPose.tiltY = tiltY;
+            mPose.scale = scale;
+            float[] u = mPoseNext;
+            GlassPoseOptics.active().uniforms(mPose, GlassSlab.active(), mDensity, u, mPoseScratch);
+            float[] w = mPoseWritten;
+            boolean first = !mPoseWrittenValid;
+            if (first || u[0] != w[0] || u[1] != w[1] || u[2] != w[2] || u[3] != w[3]) {
+                mShader.setFloatUniform("uPose", u[0], u[1], u[2], u[3]);
+            }
+            if (first || u[4] != w[4] || u[5] != w[5] || u[6] != w[6] || u[7] != w[7]) {
+                mShader.setFloatUniform("uPoseLight", u[4], u[5], u[6], u[7]);
+            }
+            if (first || u[8] != w[8] || u[9] != w[9] || u[10] != w[10] || u[11] != w[11]) {
+                mShader.setFloatUniform("uPoseHalf", u[8], u[9], u[10], u[11]);
+            }
+            if (first || u[12] != w[12] || u[13] != w[13] || u[14] != w[14] || u[15] != w[15]) {
+                mShader.setFloatUniform("uGlint", u[12], u[13], u[14], u[15]);
+            }
+            System.arraycopy(u, 0, w, 0, GlassPoseOptics.UNIFORMS);
+            mPoseWrittenValid = true;
         }
 
-        /**
-         * How far the slab is tipped ({@link GlassRefraction#tiltVector}): the sines of its tilt
-         * about its own y and x axes, pointing at the edge going away. (0, 0) is flat, the resting
-         * look; the caller hands it only while Living glass may move.
-         */
-        public void setTilt(float x, float y) {
-            if (Float.isNaN(x)) x = 0f;
-            if (Float.isNaN(y)) y = 0f;
-            if (mTiltX == x && mTiltY == y) return;
-            mTiltX = x;
-            mTiltY = y;
-            mShader.setFloatUniform("uTilt", x, y);
-            syncKeyLight();
-        }
-
-        /**
-         * {@code uKeyLight} for the pose written so far ({@link GlassRefraction#keyLight}): the
-         * resting light until a tilt or a lag turns it, and written only when it moved, so a
-         * still slab and every surface that never moves pay nothing. The program reads it only
-         * while the slab is live; at rest the light is the fixed {@code kKeyLight}.
-         */
-        private void syncKeyLight() {
-            float tiltX = Float.isNaN(mTiltX) ? 0f : mTiltX;
-            float tiltY = Float.isNaN(mTiltX) ? 0f : mTiltY;
-            float lagX = Float.isNaN(mLagX) ? 0f : mLagX;
-            float lagY = Float.isNaN(mLagX) ? 0f : mLagY;
-            float[] key = mKeyNext;
-            keyLight(tiltX, tiltY, lagX, lagY, mDensity, key);
-            if (mKeyX == key[0] && mKeyY == key[1]) return;
-            mKeyX = key[0];
-            mKeyY = key[1];
-            mShader.setFloatUniform("uKeyLight", key[0], key[1]);
-        }
-
-        /** No lag and no tilt: the resting look, which is every surface at rest. */
-        public void clearMotion() {
-            setLag(0f, 0f);
-            setTilt(0f, 0f);
+        /** The rest pose: the rest look, which is every surface at rest. */
+        public void clearPose() {
+            setPose(0f, 0f, 1f);
         }
 
         /**

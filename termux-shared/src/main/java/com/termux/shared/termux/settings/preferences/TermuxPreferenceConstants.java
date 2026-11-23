@@ -1606,17 +1606,6 @@ public final class TermuxPreferenceConstants {
         public static final int MAX_FANCIER_GLASS_FACE_TERM = 100;
 
         /**
-         * Living glass (the key keeps its first name, Motion light): a glass pane's bend lags it
-         * on a spring as it moves, thicker on the edge that leads and thinner behind, rocks back
-         * once as it lands, and a press dents the glass under the finger until it lifts; all of
-         * it settles to exactly the resting look. Fancier Glass only (Android 13+); the phone's
-         * animations being off, Animation speed's Off, lazy mode and battery saver all keep it
-         * still.
-         */
-        public static final String KEY_FANCIER_GLASS_MOTION_LIGHT = "fancier_glass_motion_light";
-        public static final boolean DEFAULT_VALUE_FANCIER_GLASS_MOTION_LIGHT = true;
-
-        /**
          * Widgets on glass: whether the built-in widgets wear the Look's glass (Global's values).
          * A widget's own Glass choice (on or off) still overrides it. On by default, for existing
          * installs too: the key is deliberately not pinned in adoptShippedSurfaceDefaults.

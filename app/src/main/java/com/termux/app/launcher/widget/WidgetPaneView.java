@@ -38,7 +38,8 @@ import java.util.List;
 
 /** The widget grid's own body, a page of the pane wall; it has no authority over the wall or the terminal's geometry. */
 public final class WidgetPaneView extends FrameLayout
-        implements com.termux.app.chrome.LiveBackdrop.Container {
+        implements com.termux.app.chrome.LiveBackdrop.Container,
+        com.termux.app.chrome.GlassPose.Pages {
     /** How far two fingers must close in before a pinch opens the page overview. */
     private static final float PINCH_COMMIT_DP = 48f;
 
@@ -1790,6 +1791,12 @@ public final class WidgetPaneView extends FrameLayout
 
     private void applyTransform(@NonNull View view) {
         applyTransform(view, contentTransform);
+    }
+
+    /** A page's scale here is only ever the page transition's ({@link #applyTransform}). */
+    @Override
+    public float glassPoseScale(@NonNull View page) {
+        return page.getScaleX();
     }
 
     private void applyTransform(@NonNull View view, @NonNull HomePageTransition.Transform t) {

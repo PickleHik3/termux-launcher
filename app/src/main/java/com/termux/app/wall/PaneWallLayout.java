@@ -70,7 +70,7 @@ import java.util.WeakHashMap;
  * ignored.
  */
 public final class PaneWallLayout extends ViewGroup
-        implements com.termux.app.chrome.LiveBackdrop.Wall {
+        implements com.termux.app.chrome.LiveBackdrop.Wall, com.termux.app.chrome.GlassPose.Pages {
 
     // A slide is a page's spring (SettleSpring.page, the one the Home pages settle on too) that
     // starts where the finger let go and at the finger's own speed, so the release has no seam,
@@ -3651,6 +3651,12 @@ public final class PaneWallLayout extends ViewGroup
             mSlides.put(view, slide);
         }
         return slide;
+    }
+
+    /** The glass on {@code page} answers the transition's scale only, never the sink's. */
+    @Override
+    public float glassPoseScale(@NonNull View page) {
+        return poseScale(page);
     }
 
     /** The scale the transition's pose gives {@code view}: 1 unless it is posed. */

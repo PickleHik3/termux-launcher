@@ -11,6 +11,7 @@ import android.graphics.Rect;
 import android.graphics.Shader;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.LayerDrawable;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -84,6 +85,22 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
     private float mLookDensity;
     private float mRimRadiusPx;
     private int mSeams;
+    /**
+     * The host view's pose ({@link GlassPose}) as the programs were last handed it, scratch to read
+     * the next into, the gate's answer for the pose under way, and the draws in a row it read the
+     * same: as on a pane's slab, a pose held still for {@link #POSE_STILL_DRAWS} draws asks for no
+     * more frames, and a pose at rest asks for none.
+     */
+    @NonNull private final GlassPose mPose = new GlassPose();
+    @NonNull private final GlassPose mPoseNext = new GlassPose();
+    private int mPoseAllowed = POSE_UNASKED;
+    private int mPoseStillDraws;
+    @Nullable private GlassMotionGate.Gate mMotionGate;
+    private static final int POSE_UNASKED = -1;
+    private static final int POSE_NO = 0;
+    private static final int POSE_YES = 1;
+    private static final int POSE_STILL_DRAWS = 6;
+
     /** The program the frame draws through while {@link #mLook} is set and the phone runs one. */
     @Nullable private GlassRefraction.Program mProgram;
     @Nullable private GlassRefraction.Program mPreviousProgram;
@@ -404,6 +421,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
             // The same aim, as uniforms: the program samples the frame by its own pixels.
             program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
             program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
+            syncPose(program, mPreviousProgram);
         } else {
             matrixOf(mMatrix, mAim);
             shader.setLocalMatrix(mMatrix);
@@ -463,6 +481,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         if (program != null) {
             program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
             program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
+            syncPose(program, null);
         } else {
             matrixOf(mMatrix, mAim);
             live.shader.setLocalMatrix(mMatrix);
@@ -470,6 +489,46 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         LiveSceneFrame.noteDrawn(this);
         mPaint.setAlpha(mAlpha);
         canvas.drawRect(bounds, mPaint);
+    }
+
+    /**
+     * Hands the programs the host view's pose ({@link GlassPose#read}): the page's turn and scale
+     * and any turn on the way up (the plank's tip), never its slide. The gate is asked once, as
+     * the pose leaves rest; where the glass may not move the surface draws at rest. While the
+     * pose moves the surface asks for its next frame, since a page's turn changes its view
+     * properties without redrawing it; at rest it asks for none. Allocates nothing.
+     */
+    private void syncPose(@NonNull GlassRefraction.Program program,
+                          @Nullable GlassRefraction.Program previous) {
+        GlassRefraction.Look look = mLook;
+        View host = look == null || look.concave ? null : GlassPose.hostOf(this);
+        GlassPose next = mPoseNext;
+        if (host == null) next.reset();
+        else GlassPose.read(host, next);
+        if (next.isRest()) {
+            mPoseAllowed = POSE_UNASKED;
+        } else if (host != null) {
+            if (mPoseAllowed == POSE_UNASKED) {
+                GlassMotionGate.Gate gate = mMotionGate;
+                if (gate == null) {
+                    gate = GlassMotionGate.of(host.getContext());
+                    mMotionGate = gate;
+                }
+                mPoseAllowed = gate.allowed() ? POSE_YES : POSE_NO;
+            }
+            if (mPoseAllowed == POSE_NO) next.reset();
+        }
+        boolean moved = !next.same(mPose);
+        mPose.set(next);
+        program.setPose(mPose);
+        if (previous != null) previous.setPose(mPose);
+        if (mPose.isRest()) {
+            mPoseStillDraws = 0;
+            return;
+        }
+        if (moved) mPoseStillDraws = 0;
+        else mPoseStillDraws++;
+        if (mPoseStillDraws < POSE_STILL_DRAWS) invalidateSelf();
     }
 
     /** A new live frame is out: draw it. */

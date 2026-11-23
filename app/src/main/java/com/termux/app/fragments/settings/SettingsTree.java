@@ -398,7 +398,6 @@ public final class SettingsTree {
                     || key.equals("in_app_keyboard_color_scheme_editor"))
                     return "KeyboardPreferencesFragment";
                 if (key.equals("theme_templates_enabled")) return "TuiAppThemesPreferencesFragment";
-                if (key.equals("fancier_glass_motion_light")) return "PerformancePreferencesFragment";
                 return null;
             case "TerminalPreferencesFragment":
             case "TerminalStatusPreferencesFragment":

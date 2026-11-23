@@ -12,7 +12,6 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
 import android.view.View;
-import android.view.animation.AnimationUtils;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -21,7 +20,7 @@ import com.termux.app.chrome.FrameCrossfade;
 import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.chrome.GlassFilters;
 import com.termux.app.chrome.GlassMotionGate;
-import com.termux.app.chrome.GlassMotionLight;
+import com.termux.app.chrome.GlassPose;
 import com.termux.app.chrome.GlassRefraction;
 import com.termux.app.chrome.LiveGlassEffect;
 import com.termux.app.chrome.LivePicture;
@@ -70,11 +69,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     /** The live scene frame the paint was last pointed at, or {@link #NOT_LIVE}: the still frame is bound. */
     private int mLiveGen = NOT_LIVE;
 
-    /** Frame-source counter for the idle audit: paneGlass.motion. */
-    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_MOTION = com.termux.terminal.FrameProbe.source("paneGlass.motion");
-
-    /** Frame-source counter for the idle audit: paneGlass.tilt. */
-    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_TILT = com.termux.terminal.FrameProbe.source("paneGlass.tilt");
+    /** Frame-source counter for the idle audit: paneGlass.pose. */
+    private static final com.termux.terminal.FrameProbe.Source PANEGLASS_POSE = com.termux.terminal.FrameProbe.source("paneGlass.pose");
 
     /** Frame-source counter for the idle audit: paneGlass.crossfade. */
     private static final com.termux.terminal.FrameProbe.Source PANEGLASS_CROSSFADE = com.termux.terminal.FrameProbe.source("paneGlass.crossfade");
@@ -91,38 +87,32 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     private final int[] mRootLocation = new int[2];
     private final Rect mFrameRect = new Rect();
     private final RectF mClipRect = new RectF();
+    /** The motion gate, asked as the slab's pose leaves rest; built on first use. */
+    @Nullable private GlassMotionGate.Gate mMotionGate;
     /**
-     * Living glass ({@link GlassMotionLight}): fed this slab's screen rect on every draw it already
-     * makes, built on the first draw through the program. Null until then, and while the slab
-     * draws plain.
+     * The slab's pose ({@link GlassPose}): what the program was last handed, the rest pose at
+     * rest, and scratch to read the next one into. Read off the views on the way up on every draw
+     * through the program.
      */
-    @Nullable private GlassMotionLight mMotionLight;
-    /** Scratch for the slab's corners on screen; a draw never allocates. */
-    private final float[] mMotionCorners = new float[4];
-    /** Living glass's gate, shared by the motion light and the tilt; built on first use. */
-    @Nullable private GlassMotionLight.Gate mMotionGate;
+    private final GlassPose mPose = new GlassPose();
+    private final GlassPose mPoseNext = new GlassPose();
+    /** The gate's answer for the pose under way, or {@link #POSE_UNASKED} while the slab is at rest. */
+    private int mPoseAllowed = POSE_UNASKED;
+    /** Draws in a row the pose has read the same; see {@link #POSE_STILL_DRAWS}. */
+    private int mPoseStillDraws;
+    private static final int POSE_UNASKED = -1;
+    private static final int POSE_NO = 0;
+    private static final int POSE_YES = 1;
     /**
-     * The tilted slab ({@link GlassRefraction#tiltVector}): what the program was last handed,
-     * {@code (0, 0)} flat. Read off the rotations on the way up on every draw through the program.
-     */
-    private final float[] mTilt = new float[2];
-    /** The gate's answer for the tilt under way, or {@link #TILT_UNASKED} while the slab lies flat. */
-    private int mTiltAllowed = TILT_UNASKED;
-    /** Draws in a row the tilt has read the same; see {@link #TILT_STILL_DRAWS}. */
-    private int mTiltStillDraws;
-    private static final int TILT_UNASKED = -1;
-    private static final int TILT_NO = 0;
-    private static final int TILT_YES = 1;
-    /**
-     * How many draws in a row a tilt may read unchanged before the slab stops asking for frames
+     * How many draws in a row a pose may read unchanged before the slab stops asking for frames
      * to follow it. A pane's press rig tips its frame on a spring of its own and never redraws
-     * the slab, whose program only learns the tilt when it draws; so while tipped the slab asks
-     * for the next frame itself, until the tilt has held still this long (a finger resting on a
-     * tipped pane costs no frames) or lies flat again (the resting look, written on that draw).
+     * the slab, whose program only learns the pose when it draws; so while posed the slab asks
+     * for the next frame itself, until the pose has held still this long (a finger resting on a
+     * tipped pane costs no frames) or is at rest again (the rest look, written on that draw).
      * A press or a release on the slab starts it asking again; the wall re-aims its pages' slabs
-     * on every frame it tips them anyway.
+     * on every frame it poses them anyway.
      */
-    private static final int TILT_STILL_DRAWS = 6;
+    private static final int POSE_STILL_DRAWS = 6;
 
     @Nullable private Bitmap mFrame;
     @Nullable private BitmapShader mFrameShader;
@@ -336,21 +326,15 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             builder = new LiveGlassEffect(density);
             mLiveEffect = builder;
         }
-        // The slab's light and tilt follow it as on the stored frame; at rest neither moves and
+        // The slab's pose follows the page as on the stored frame; at rest it does not move and
         // the effect stands as it was.
         GlassAnchor.place(this, mPlacement);
-        if (movesWithLight() && driveMotionLight(width, height)) {
-            PANEGLASS_MOTION.tick();
+        if (movesWithPose() && readPose()) {
+            PANEGLASS_POSE.tick();
             postInvalidateOnAnimation();
         }
-        if (movesWithLight() && readTilt()) {
-            PANEGLASS_TILT.tick();
-            postInvalidateOnAnimation();
-        }
-        GlassMotionLight light = mMotionLight;
         android.graphics.RenderEffect effect = builder.effect(width, height, mRadiusPx, look,
-            light == null ? 0f : light.lagXPx(), light == null ? 0f : light.lagYPx(),
-            mTilt[0], mTilt[1]);
+            mPose);
         if (effect == null) return false;
         android.graphics.RenderNode node = mLiveNode;
         if (node == null) {
@@ -740,11 +724,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /**
-     * Whether the bend and the light follow the slab's motion (Living glass): every convex look.
-     * The concave lens draws neither, so a slab wearing it asks for no frames to follow a spring
-     * it would draw the same through.
+     * Whether the glass answers the slab's pose: every convex look. The concave lens draws none of
+     * it, so a slab wearing it asks for no frames to follow a pose it would draw the same through.
      */
-    private boolean movesWithLight() {
+    private boolean movesWithPose() {
         GlassRefraction.Look look = mLook;
         return look == null || !look.concave;
     }
@@ -848,45 +831,35 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
 
     /**
      * A finger came down on this slab: its pane's press rig starts to tip it, and the slab follows
-     * the tilt ({@link #followTilt}). The glass itself does not dent: a rigid slab does not deform
+     * the pose ({@link #followPose}). The glass itself does not dent: a rigid slab does not deform
      * under a finger, and the dent it once had read as a ripple (the user, 2026-10-20). Nothing on
      * a slab drawn plain.
      */
     public void pressGlass() {
         if (mProgram == null || getWidth() <= 0 || getHeight() <= 0) return;
-        followTilt();
+        followPose();
     }
 
     /** The finger lifted or the gesture went elsewhere: the rig tips back. Safe to repeat. */
     public void releaseGlass() {
-        followTilt();
+        followPose();
     }
 
     /**
      * A press or a release sets the press rig's tilt moving: ask for frames to follow it again,
      * even where it had held still long enough for the slab to stop asking.
      */
-    private void followTilt() {
-        mTiltStillDraws = 0;
-        if (mProgram != null && (mTilt[0] != 0f || mTilt[1] != 0f)) {
-            PANEGLASS_TILT.tick();
+    private void followPose() {
+        mPoseStillDraws = 0;
+        if (mProgram != null && !mPose.isRest()) {
+            PANEGLASS_POSE.tick();
             postInvalidateOnAnimation();
         }
     }
 
     @NonNull
-    private GlassMotionLight motionLight() {
-        GlassMotionLight light = mMotionLight;
-        if (light == null) {
-            light = new GlassMotionLight(getResources().getDisplayMetrics().density, motionGate());
-            mMotionLight = light;
-        }
-        return light;
-    }
-
-    @NonNull
-    private GlassMotionLight.Gate motionGate() {
-        GlassMotionLight.Gate gate = mMotionGate;
+    private GlassMotionGate.Gate motionGate() {
+        GlassMotionGate.Gate gate = mMotionGate;
         if (gate == null) {
             gate = GlassMotionGate.of(getContext());
             mMotionGate = gate;
@@ -895,66 +868,37 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
     }
 
     /**
-     * How far this slab is tipped now, into {@link #mTilt}, and whether to ask for the next frame
-     * to follow it. The rotations of every view on the way up add: the wall page's plank tip and
-     * a held border's press ({@code rotationY}), and a terminal pane's own press rig on its frame
-     * ({@code rotationX} and {@code rotationY}), which the aim leaves out on purpose
-     * ({@link GlassAnchor#place}) but which tips the glass all the same. The gate is asked once,
-     * as the slab leaves flat, never per frame; where Living glass may not move, the slab draws
-     * flat whatever tips it. Walks the tree without allocating.
+     * The slab's pose now, into {@link #mPose} ({@link GlassPose#read}): the turns of every view on
+     * the way up — a Carousel or stack page, the plank's tip, a held border's press, a terminal
+     * pane's own press rig on its frame, which the aim leaves out on purpose
+     * ({@link GlassAnchor#place}) but which tips the glass all the same — and the scale the page
+     * transition gives the page. The gate is asked once, as the slab leaves rest, never per frame;
+     * where the glass may not move the slab draws at rest whatever poses it. Walks the tree
+     * without allocating.
      *
-     * @return true when the slab should draw again next frame to follow its tilt
+     * @return true when the slab should draw again next frame to follow its pose
      */
-    private boolean readTilt() {
-        float rotationX = 0f;
-        float rotationY = 0f;
-        View current = this;
-        while (true) {
-            rotationX += current.getRotationX();
-            rotationY += current.getRotationY();
-            android.view.ViewParent parent = current.getParent();
-            if (!(parent instanceof View)) break;
-            current = (View) parent;
-        }
-        float lastX = mTilt[0];
-        float lastY = mTilt[1];
-        GlassRefraction.tiltVector(rotationX, rotationY, mTilt);
-        if (mTilt[0] == 0f && mTilt[1] == 0f) {
-            // Flat: the next tip asks the gate afresh.
-            mTiltAllowed = TILT_UNASKED;
+    private boolean readPose() {
+        GlassPose next = mPoseNext;
+        GlassPose.read(this, next);
+        if (next.isRest()) {
+            // At rest: the next pose asks the gate afresh.
+            mPoseAllowed = POSE_UNASKED;
         } else {
-            if (mTiltAllowed == TILT_UNASKED) {
-                mTiltAllowed = motionGate().multiplier() > 0f ? TILT_YES : TILT_NO;
+            if (mPoseAllowed == POSE_UNASKED) {
+                mPoseAllowed = motionGate().allowed() ? POSE_YES : POSE_NO;
             }
-            if (mTiltAllowed == TILT_NO) {
-                mTilt[0] = 0f;
-                mTilt[1] = 0f;
-            }
+            if (mPoseAllowed == POSE_NO) next.reset();
         }
-        if (mTilt[0] == 0f && mTilt[1] == 0f) {
-            mTiltStillDraws = 0;
+        boolean moved = !next.same(mPose);
+        mPose.set(next);
+        if (mPose.isRest()) {
+            mPoseStillDraws = 0;
             return false;
         }
-        if (mTilt[0] != lastX || mTilt[1] != lastY) mTiltStillDraws = 0;
-        else mTiltStillDraws++;
-        return mTiltStillDraws < TILT_STILL_DRAWS;
-    }
-
-    /**
-     * Hands the light this slab's rect on screen, read off the placement this draw already took
-     * (the page's slide, sink and tilt and any published motion in it). True while its springs
-     * still move.
-     */
-    private boolean driveMotionLight(int width, int height) {
-        float[] corners = mMotionCorners;
-        corners[0] = 0f;
-        corners[1] = 0f;
-        corners[2] = width;
-        corners[3] = height;
-        mPlacement.toScreen.mapPoints(corners);
-        return motionLight().onDraw(AnimationUtils.currentAnimationTimeMillis(),
-            Math.min(corners[0], corners[2]), Math.min(corners[1], corners[3]),
-            Math.max(corners[0], corners[2]), Math.max(corners[1], corners[3]));
+        if (moved) mPoseStillDraws = 0;
+        else mPoseStillDraws++;
+        return mPoseStillDraws < POSE_STILL_DRAWS;
     }
 
     @Override
@@ -973,12 +917,10 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mSlabAim.detach();
         // The pane stops counting but keeps its answer for its return (onAttachedToWindow).
         if (mVeilSource != null) mVeilSource.paneGlassPark(this, true);
-        // A slab that comes back starts from rest, never from the bend it left with.
-        if (mMotionLight != null) mMotionLight.reset();
-        mTilt[0] = 0f;
-        mTilt[1] = 0f;
-        mTiltAllowed = TILT_UNASKED;
-        mTiltStillDraws = 0;
+        // A slab that comes back starts from rest, never from the pose it left with.
+        mPose.reset();
+        mPoseAllowed = POSE_UNASKED;
+        mPoseStillDraws = 0;
     }
 
     /** The colour laid over the arcs: the wall's dim over its wallpaper, or a flat colour alone. */
@@ -1263,24 +1205,16 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             }
             float parallax = mParallax == null || liveFrame != null ? 0f : mParallax.offsetPx();
             GlassRefraction.Program program = mProgram;
-            if (program != null && movesWithLight()) {
-                // Where the slab stands now against where it stood last draw: its bend follows on
-                // a spring and asks for the frames it needs to settle. At rest it asks for none
-                // and the program draws the resting look.
-                if (driveMotionLight(width, height)) {
-                    PANEGLASS_MOTION.tick();
+            if (program != null && movesWithPose()) {
+                // The page's pose, never its speed: a turn or a scale changes the glass as it
+                // would change a real slab; a slide changes nothing. At rest it asks for no
+                // frames and the program draws the rest look.
+                if (readPose()) {
+                    PANEGLASS_POSE.tick();
                     postInvalidateOnAnimation();
                 }
-                program.setMotionLight(mMotionLight);
-                if (mPreviousProgram != null) mPreviousProgram.setMotionLight(mMotionLight);
-                // How far the slab is tipped, so the picture through it is displaced as through a
-                // tipped plate and its rim leans with the tip. Flat, (0, 0): the resting look.
-                if (readTilt()) {
-                    PANEGLASS_TILT.tick();
-                    postInvalidateOnAnimation();
-                }
-                program.setTilt(mTilt[0], mTilt[1]);
-                if (mPreviousProgram != null) mPreviousProgram.setTilt(mTilt[0], mTilt[1]);
+                program.setPose(mPose);
+                if (mPreviousProgram != null) mPreviousProgram.setPose(mPose);
             }
             if (mAimStale || aimShader != mLastAimShader || !mPlacement.toScreen.equals(mLastToScreen)
                 || width != mLastWidth || height != mLastHeight || parallax != mLastParallax) {

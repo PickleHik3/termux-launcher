@@ -50,7 +50,6 @@ final class SetupState {
         boolean desktopApps;
         boolean ai;
         boolean fancierGlass;
-        boolean motionLight;
         boolean parallax;
         boolean lazy;
         boolean lowMemory;
@@ -73,7 +72,6 @@ final class SetupState {
             v.desktopApps = desktopApps;
             v.ai = ai;
             v.fancierGlass = fancierGlass;
-            v.motionLight = motionLight;
             v.parallax = parallax;
             v.lazy = lazy;
             v.lowMemory = lowMemory;
@@ -357,7 +355,6 @@ final class SetupState {
         DeviceTier.Defaults d = DeviceTier.defaults(mDetected.tier);
         mValues.ai = d.ai;
         mValues.fancierGlass = d.fancierGlass;
-        mValues.motionLight = d.motionLight;
         mValues.parallax = d.parallax;
         mValues.lazy = d.lazy;
         mValues.lowMemory = d.lowMemory;
@@ -424,7 +421,6 @@ final class SetupState {
         v.autotiling = prefs.isDwindleDefaultLayoutEnabled();
         v.focusGrows = prefs.isFocusedPaneGrowsEnabled();
         v.fancierGlass = prefs.isFancierGlassEnabled();
-        v.motionLight = prefs.isFancierGlassMotionLightEnabled();
         v.parallax = prefs.isWallpaperParallaxEnabled();
         v.lazy = prefs.isLazyModeEnabled();
         v.lowMemory = prefs.isLowMemoryPresetEnabled();
@@ -472,8 +468,6 @@ final class SetupState {
         }
         if (prefs.isFancierGlassEnabled() != v.fancierGlass)
             prefs.setFancierGlassEnabled(v.fancierGlass);
-        if (prefs.isFancierGlassMotionLightEnabled() != v.motionLight)
-            prefs.setFancierGlassMotionLightEnabled(v.motionLight);
         if (prefs.isWallpaperParallaxEnabled() != v.parallax)
             prefs.setWallpaperParallaxEnabled(v.parallax);
         if (prefs.isLazyModeEnabled() != v.lazy)
