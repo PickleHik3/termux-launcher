@@ -121,6 +121,11 @@ impl SurfaceMap {
         (x0 as i32, y0 as i32, (x1 - x0).max(0) as i32, (y1 - y0).max(0) as i32)
     }
 
+    /// Buffer pixels per logical unit, per axis.
+    pub fn density(&self) -> (f64, f64) {
+        (if self.kx > 0.0 { self.kx } else { 1.0 }, if self.ky > 0.0 { self.ky } else { 1.0 })
+    }
+
     /// A buffer rectangle back in logical coordinates.
     pub fn to_logical(&self, r: Rect) -> RectF {
         let kx = if self.kx > 0.0 { self.kx } else { 1.0 };
@@ -254,6 +259,13 @@ mod tests {
         let c = m.logical_content(Some((10, 10, 360, 720)));
         assert_eq!(m.to_buffer(c, 1140, 2220), (30, 30, 1080, 2160));
         assert_eq!(m.to_logical((30, 30, 1080, 2160)), c);
+    }
+
+    #[test]
+    fn density_is_buffer_pixels_per_logical_unit() {
+        assert_eq!(surface_map(1140, 2220, 3, None, None).density(), (3.0, 3.0));
+        assert_eq!(surface_map(1050, 2100, 1, None, Some((400, 800))).density(), (2.625, 2.625));
+        assert_eq!(surface_map(0, 0, 1, None, None).density(), (1.0, 1.0));
     }
 
     #[test]

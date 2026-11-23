@@ -73,6 +73,12 @@ impl NativeWindow {
     /// Copies a `width` x `height` client image (`stride` bytes per row) into the window and
     /// posts it. The window's buffers take the client's size; TextureView scales to the view.
     pub fn post(&mut self, src: &[u8], stride: usize, width: i32, height: i32, format: pixels::PixelFormat) -> Result<PostTiming, i32> {
+        self.post_with(width, height, |dst, dst_stride, w, h| pixels::convert(src, stride, dst, dst_stride, w, h, format))
+    }
+
+    /// Posts a `width` x `height` frame that `fill` draws: it gets the locked RGBA_8888 buffer,
+    /// its stride in bytes and the size it may draw (never more than asked).
+    pub fn post_with(&mut self, width: i32, height: i32, fill: impl FnOnce(&mut [u8], usize, usize, usize)) -> Result<PostTiming, i32> {
         let start = Instant::now();
         unsafe {
             if self.geometry != (width, height) {
@@ -100,7 +106,7 @@ impl NativeWindow {
                 let h = height.min(buf.height).max(0) as usize;
                 let dst_stride = buf.stride as usize * 4;
                 let dst = std::slice::from_raw_parts_mut(buf.bits as *mut u8, dst_stride * buf.height as usize);
-                pixels::convert(src, stride, dst, dst_stride, w, h, format);
+                fill(dst, dst_stride, w, h);
             }
             let copy_us = copy_start.elapsed().as_micros() as u64;
             let rc = ANativeWindow_unlockAndPost(self.ptr);

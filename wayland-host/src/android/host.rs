@@ -1,11 +1,17 @@
 //! The compositor: smithay's wayland frontend on its own calloop thread.
 //!
-//! Presentation is a CPU copy of each toplevel's root wl_shm buffer into that toplevel's
-//! ANativeWindow, paced by one frame tick (`paced.rs` has the rules): a commit only holds the
-//! buffer, the tick copies each shown dirty toplevel once and then releases replaced buffers and
-//! answers frame callbacks. Hidden toplevels (not visible, or no Surface) copy nothing and are
-//! let go only on a slow keep-alive. Subsurfaces, popups and cursor surfaces are acknowledged on
-//! the tick (buffers released, frame callbacks answered) but never shown.
+//! Presentation is a CPU copy of each toplevel's view into that toplevel's ANativeWindow, paced
+//! by one frame tick (`paced.rs` has the rules): a commit only holds the buffer, the tick copies
+//! each shown dirty toplevel once and then releases replaced buffers and answers frame callbacks.
+//! Hidden toplevels (not visible, or no Surface) copy nothing and are let go only on a slow
+//! keep-alive.
+//!
+//! A view is the toplevel's surface tree (its subsurfaces, below and above, nested), then the
+//! override-redirect X windows it owns, then its xdg popups in stacking order, each with its own
+//! subsurface tree (`compose.rs` places, cuts and blends them). Every surface of a view holds its
+//! buffer like the toplevel does (`Part`), and releases and frame callbacks go on the same tick.
+//! A toplevel with no other surface keeps the single-copy path. Input goes to the surface under
+//! the point; cursor and drag icons are acknowledged on the tick but never shown.
 
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -40,13 +46,14 @@ use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, ListeningSocket, Resource};
-use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{Logical, Rectangle, Serial, Transform, SERIAL_COUNTER};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier};
 use smithay::wayland::compositor::{
-    get_parent, send_surface_state, with_states, with_surface_tree_downward, BufferAssignment, CompositorClientState,
-    CompositorHandler, CompositorState, SurfaceAttributes, TraversalAction,
+    get_parent, send_surface_state, with_states, with_surface_tree_downward, with_surface_tree_upward, BufferAssignment,
+    CompositorClientState, CompositorHandler, CompositorState, RectangleKind, SubsurfaceCachedState, SurfaceAttributes,
+    SurfaceData, TraversalAction,
 };
 use smithay::wayland::fractional_scale::{with_fractional_scale, FractionalScaleHandler, FractionalScaleManagerState};
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
@@ -56,8 +63,8 @@ use smithay::wayland::selection::data_device::{
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::shell::xdg::decoration::{XdgDecorationHandler, XdgDecorationState};
 use smithay::wayland::shell::xdg::{
-    PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgShellHandler, XdgShellState,
-    XdgToplevelSurfaceData,
+    PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgPopupSurfaceData, XdgShellHandler,
+    XdgShellState, XdgToplevelSurfaceData,
 };
 use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
@@ -67,6 +74,7 @@ use smithay::xwayland::{X11Surface, XWaylandClientData};
 use smithay::backend::input::KeyState;
 use smithay::input::keyboard::{FilterResult, Keycode};
 
+use crate::compose::{self, HitLayer};
 use crate::geometry::{
     clamp_to_limit, content_span, integer_scale, logical_size, post_limit, surface_map, view_to_surface, Rect, RectF,
 };
@@ -334,6 +342,18 @@ pub struct Toplevel {
     /// The kind of the last buffer copied, so a change is logged once.
     last_kind: Option<Kind>,
     paced: Paced<WlBuffer, WlCallback>,
+    /// The root buffer's logical size and density, for composing a view of many surfaces.
+    root_draw: DrawState,
+    /// Every other surface of the view that holds a buffer. Empty means the single-copy path.
+    parts: Vec<Part>,
+    /// The surfaces the last composed view had, so a change is logged once.
+    layer_count: usize,
+    /// A tap outside a grabbing popup dismissed it: the rest of that touch sequence, or that
+    /// button's release, goes nowhere.
+    swallow_touch: bool,
+    swallow_button: bool,
+    /// The pointer's last position in the root surface's logical coordinates.
+    pointer_at: (f64, f64),
     stats: CopyStats,
     last_log: Instant,
 }
@@ -342,6 +362,73 @@ impl Toplevel {
     fn is_shown(&self) -> bool {
         self.visible && self.window.is_some()
     }
+
+    /// The buffer and placement of `surface` when it is part of this view and holds one.
+    fn draw_of(&self, surface: &WlSurface) -> Option<(WlBuffer, DrawState)> {
+        if self.shell.is(surface) {
+            return self.paced.current().map(|b| (b.clone(), self.root_draw));
+        }
+        self.parts.iter().find(|p| p.surface == *surface).map(|p| (p.buffer.clone(), p.draw))
+    }
+
+    fn holds(&self, buffer: &WlBuffer) -> bool {
+        self.paced.current() == Some(buffer) || self.parts.iter().any(|p| p.buffer == *buffer)
+    }
+}
+
+/// What places a surface's buffer in its view: its logical size and how buffer pixels map to it.
+#[derive(Clone, Copy, Default)]
+struct DrawState {
+    size: (f64, f64),
+    buffer_scale: i32,
+    viewport_src: Option<RectF>,
+    viewport_dst: Option<(i32, i32)>,
+}
+
+impl DrawState {
+    fn of(buffer: &WlBuffer, buffer_scale: i32, viewport: (Option<RectF>, Option<(i32, i32)>)) -> DrawState {
+        let (w, h) = source::buffer_size(buffer).unwrap_or((0, 0));
+        let map = surface_map(w, h, buffer_scale, viewport.0, viewport.1);
+        DrawState { size: (map.width, map.height), buffer_scale, viewport_src: viewport.0, viewport_dst: viewport.1 }
+    }
+}
+
+/// A surface of a view other than the toplevel's own (a subsurface, a popup or one of its
+/// subsurfaces, an override-redirect X window), holding its buffer until the client replaces it.
+struct Part {
+    surface: WlSurface,
+    buffer: WlBuffer,
+    draw: DrawState,
+}
+
+/// One mapped surface of a view, back to front, with its origin in the root surface's logical
+/// coordinates.
+struct Layer {
+    surface: WlSurface,
+    buffer: WlBuffer,
+    origin: (f64, f64),
+    draw: DrawState,
+    /// Drawn over the window rather than part of it (popups, override-redirect X windows), so
+    /// not in the content's bounding box.
+    overlay: bool,
+    popup: bool,
+    /// Its input region in `State::hit_rects`, when asked for.
+    region: Option<(usize, usize)>,
+}
+
+struct Popup {
+    surface: PopupSurface,
+    /// The client asked for a grab: a tap outside the popups dismisses them.
+    grab: bool,
+    /// popup_done was sent; it is not shown again, and goes when the client destroys it.
+    dismissed: bool,
+}
+
+/// An override-redirect X window (menu, tooltip) shown in the view of the X toplevel it belongs to.
+pub struct OrWindow {
+    pub window: X11Surface,
+    /// The owner's window id.
+    pub owner: i64,
 }
 
 pub struct State {
@@ -373,8 +460,14 @@ pub struct State {
     output_scale: f64,
     pub toplevels: Vec<Toplevel>,
     /// The toplevel with keyboard focus, as the launcher set it.
-    focused: Option<i64>,
-    popups: Vec<PopupSurface>,
+    pub focused: Option<i64>,
+    /// xdg popups in creation order, which is their stacking order within a toplevel.
+    popups: Vec<Popup>,
+    pub or_windows: Vec<OrWindow>,
+    /// Reused by every composed copy and hit test.
+    scene: Vec<Layer>,
+    hit_layers: Vec<HitLayer>,
+    hit_rects: Vec<(bool, Rect)>,
     /// Buffers and frame callbacks of surfaces that are not shown (subsurfaces, popups,
     /// cursors) and of removed toplevels, let go on the next frame tick.
     loose_releases: Vec<WlBuffer>,
@@ -560,6 +653,10 @@ fn setup(
         toplevels: Vec::new(),
         focused: None,
         popups: Vec::new(),
+        or_windows: Vec::new(),
+        scene: Vec::new(),
+        hit_layers: Vec::new(),
+        hit_rects: Vec::new(),
         loose_releases: Vec::new(),
         loose_frames: Vec::new(),
         scratch_frames: Vec::new(),
@@ -610,6 +707,7 @@ impl State {
         let mut frames = std::mem::take(&mut self.tick_frames);
         for mut t in self.toplevels.drain(..) {
             t.paced.take_all(&mut releases, &mut frames);
+            releases.extend(t.parts.drain(..).map(|p| p.buffer));
         }
         releases.append(&mut self.loose_releases);
         for b in releases {
@@ -632,6 +730,10 @@ impl State {
             lwarn!("dump: window {id} has no frame");
             return;
         };
+        if !self.toplevels[i].parts.is_empty() {
+            self.dump_tree(i, id, path);
+            return;
+        }
         let layout = Layout::of(&self.toplevels[i], self.output_size);
         let result = source::with_pixels(&buffer, &mut self.maps, |ptr, len, desc| {
             let (shown, _, _) = shown_rect(layout, desc)?;
@@ -650,6 +752,28 @@ impl State {
             },
             Ok(None) => lwarn!("dump window={id}: its buffer cannot be read"),
             Err(e) => lwarn!("dump window={id}: {e}"),
+        }
+    }
+
+    /// `dump` for a view of many surfaces: the composed canvas, exactly as a copy draws it.
+    fn dump_tree(&mut self, i: usize, id: i64, path: &str) {
+        self.build_scene(i, false);
+        let Some((canvas, origin, k, _)) = self.canvas(i) else {
+            lwarn!("dump window={id}: nothing to show");
+            return;
+        };
+        let (w, h) = (canvas.0 as usize, canvas.1 as usize);
+        let mut rgba = vec![0u8; w * h * 4];
+        let scene = std::mem::take(&mut self.scene);
+        compose_into(&scene, &mut self.maps, &mut rgba, w * 4, canvas, origin, k);
+        let (layers, over) = (scene.len(), scene.iter().filter(|l| l.overlay).count());
+        self.scene = scene;
+        match png::encode_rgba(w as u32, h as u32, &rgba) {
+            Some(png) => match std::fs::write(path, &png) {
+                Ok(()) => linfo!("dump window={id} kind=tree surfaces={layers} over={over} size={w}x{h} bytes={} path={path}", png.len()),
+                Err(e) => lwarn!("dump window={id}: cannot write {path}: {e}"),
+            },
+            None => lwarn!("dump window={id}: cannot encode {w}x{h}"),
         }
     }
 
@@ -699,6 +823,9 @@ impl State {
     fn set_visible(&mut self, id: i64, visible: bool) {
         let Some(i) = self.toplevel_index(id) else { return };
         self.toplevels[i].visible = visible;
+        if !visible {
+            self.dismiss_popups(i);
+        }
         // Shown again: what was committed while hidden is still dirty and is copied now.
         self.schedule();
     }
@@ -767,11 +894,18 @@ impl State {
         let old = std::mem::replace(&mut self.focused, new);
         if let Some(i) = old.and_then(|id| self.toplevel_index(id)) {
             self.toplevels[i].shell.set_activated(false);
+            // A grab ends when its window loses the keyboard.
+            if self.has_grab(i) {
+                self.dismiss_popups(i);
+            }
         }
-        let target = new.and_then(|id| self.toplevel_index(id)).map(|i| {
-            self.toplevels[i].shell.set_activated(true);
-            self.toplevels[i].shell.keyboard_focus()
-        });
+        let target = match new.and_then(|id| self.toplevel_index(id)) {
+            Some(i) => {
+                self.toplevels[i].shell.set_activated(true);
+                Some(self.keyboard_target(i))
+            }
+            None => None,
+        };
         if let Some(keyboard) = self.seat.get_keyboard() {
             keyboard.set_focus(self, target, SERIAL_COUNTER.next_serial());
         }
@@ -792,29 +926,43 @@ impl State {
         }
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(touch) = self.seat.get_touch() else { return };
-        let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
         if action == TOUCH_CANCEL {
+            self.toplevels[i].swallow_touch = false;
             touch.cancel(self);
             return;
         }
+        let count = points.count.min(MAX_TOUCH_POINTS);
+        if action == TOUCH_DOWN {
+            // The first finger: outside a grabbing popup it only dismisses the popups.
+            if let Some(&(_, x, y)) = usize::try_from(action_index).ok().filter(|&k| k < count).and_then(|k| points.points.get(k)) {
+                let at = Self::surface_point(&self.toplevels[i], x, y);
+                self.toplevels[i].swallow_touch = self.press_dismisses(i, at);
+            }
+        }
+        if self.toplevels[i].swallow_touch {
+            if action == TOUCH_UP {
+                self.toplevels[i].swallow_touch = false;
+            }
+            return;
+        }
         // One MotionEvent is one wl_touch frame: the pointer at action_index goes down or up,
-        // every other pointer moves.
-        for (k, &(pointer_id, x, y)) in points.points[..points.count.min(MAX_TOUCH_POINTS)].iter().enumerate() {
+        // every other pointer moves. A point stays with the surface it went down on (smithay
+        // keeps each slot's focus from its down).
+        for (k, &(pointer_id, x, y)) in points.points[..count].iter().enumerate() {
             let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
             let slot = Some(pointer_id.max(0) as u32).into();
             let acting = k as i32 == action_index;
             match action {
                 TOUCH_DOWN | TOUCH_POINTER_DOWN if acting => {
-                    let focus = Some((surface.clone(), (0.0, 0.0).into()));
+                    let Some((surface, origin)) = self.input_target(i, (sx, sy)) else { continue };
                     let serial = SERIAL_COUNTER.next_serial();
-                    touch.down(self, focus, &DownEvent { slot, location: (sx, sy).into(), serial, time });
+                    touch.down(self, Some((surface, origin.into())), &DownEvent { slot, location: (sx, sy).into(), serial, time });
                 }
                 TOUCH_UP | TOUCH_POINTER_UP if acting => {
                     touch.up(self, &UpEvent { slot, serial: SERIAL_COUNTER.next_serial(), time });
                 }
                 TOUCH_MOVE | TOUCH_POINTER_DOWN | TOUCH_POINTER_UP => {
-                    let focus = Some((surface.clone(), (0.0, 0.0).into()));
-                    touch.motion(self, focus, &TouchMotion { slot, location: (sx, sy).into(), time });
+                    touch.motion(self, None, &TouchMotion { slot, location: (sx, sy).into(), time });
                 }
                 _ => {}
             }
@@ -851,14 +999,26 @@ impl State {
     fn pointer(&mut self, id: i64, action: i32, button: i32, x: f32, y: f32, time: u32) {
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(pointer) = self.seat.get_pointer() else { return };
-        let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
         let serial = SERIAL_COUNTER.next_serial();
         match action {
             POINTER_MOTION => {
-                let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
-                pointer.motion(self, Some((surface, (0.0, 0.0).into())), &PointerMotion { location: (sx, sy).into(), serial, time });
+                let at = Self::surface_point(&self.toplevels[i], x, y);
+                self.toplevels[i].pointer_at = at;
+                let Some((surface, origin)) = self.input_target(i, at) else { return };
+                pointer.motion(self, Some((surface, origin.into())), &PointerMotion { location: at.into(), serial, time });
             }
             POINTER_BUTTON_DOWN | POINTER_BUTTON_UP => {
+                // Outside a grabbing popup a press only dismisses the popups, and its release
+                // goes nowhere either.
+                if action == POINTER_BUTTON_DOWN {
+                    let at = self.toplevels[i].pointer_at;
+                    if self.press_dismisses(i, at) {
+                        self.toplevels[i].swallow_button = true;
+                        return;
+                    }
+                } else if std::mem::take(&mut self.toplevels[i].swallow_button) {
+                    return;
+                }
                 let state = if action == POINTER_BUTTON_DOWN {
                     smithay::backend::input::ButtonState::Pressed
                 } else {
@@ -964,7 +1124,7 @@ impl State {
         let worked = copied || !releases.is_empty() || !frames.is_empty();
         for b in releases.drain(..) {
             // A buffer another toplevel still shows is released when that one lets it go.
-            if b.is_alive() && !self.toplevels.iter().any(|t| t.paced.current() == Some(&b)) {
+            if b.is_alive() && !self.toplevels.iter().any(|t| t.holds(&b)) {
                 b.release();
             }
         }
@@ -990,15 +1150,18 @@ impl State {
         if !buffer.is_alive() {
             return;
         }
-        let output = self.output_size;
-        let maps = &mut self.maps;
+        let posted = if self.toplevels[i].parts.is_empty() {
+            // One surface: the client's pixels straight into the window, as always.
+            self.toplevels[i].layer_count = 1;
+            let output = self.output_size;
+            post_buffer(&mut self.toplevels[i], buffer, output, &mut self.maps)
+        } else {
+            self.post_tree(i)
+        };
         let t = &mut self.toplevels[i];
-        match post_buffer(t, buffer, output, maps) {
-            Ok(()) => {}
-            Err(rc) => {
-                lwarn!("toplevel {}: post failed ({rc}); the Surface is dropped until a new one comes", t.id);
-                t.window = None;
-            }
+        if let Err(rc) = posted {
+            lwarn!("toplevel {}: post failed ({rc}); the Surface is dropped until a new one comes", t.id);
+            t.window = None;
         }
         let size = (t.shown.2, t.shown.3);
         if size != t.reported_size && t.announced {
@@ -1007,6 +1170,414 @@ impl State {
             let id = t.id;
             self.events.window_changed(id, &title, &app_id, size.0, size.1);
         }
+    }
+
+    /// The toplevel's own surface committed.
+    fn commit_root(
+        &mut self,
+        i: usize,
+        assignment: Option<BufferAssignment>,
+        scale: i32,
+        viewport: (Option<RectF>, Option<(i32, i32)>),
+        frames: &mut Vec<WlCallback>,
+    ) {
+        // Window geometry, scale and viewport are double-buffered with the buffer.
+        self.toplevels[i].geometry = self.toplevels[i].shell.geometry();
+        match assignment {
+            Some(BufferAssignment::Removed) => {
+                self.toplevels[i].paced.remove_buffer();
+                if let Shell::Xdg(t) = &self.toplevels[i].shell {
+                    // An unmapped xdg_toplevel starts over: its next bufferless commit must get
+                    // an initial configure again, and it maps as a new window.
+                    t.reset_initial_configure_sent();
+                    self.withdraw(i);
+                }
+            }
+            Some(BufferAssignment::NewBuffer(buffer)) => {
+                let t = &mut self.toplevels[i];
+                t.buffer_scale = scale;
+                t.viewport_src = viewport.0;
+                t.viewport_dst = viewport.1;
+                t.root_draw = DrawState::of(&buffer, scale, viewport);
+                t.paced.commit_buffer(buffer);
+                if !t.announced {
+                    self.announce(i);
+                }
+            }
+            None => {
+                let t = &mut self.toplevels[i];
+                if !t.parts.is_empty() {
+                    // Subsurface positions and order apply with this commit.
+                    t.paced.repaint();
+                }
+                if !t.announced && t.shell.is_initial_configure_sent() {
+                    // The initial (bufferless) commit: title and app id are set by now.
+                    self.announce(i);
+                }
+            }
+        }
+        self.toplevels[i].paced.add_frames(frames);
+    }
+
+    /// Another surface of toplevel `i`'s view committed: it holds its new buffer, the replaced
+    /// one waits for the tick, and the view is composed again on the next tick.
+    fn commit_part(
+        &mut self,
+        i: usize,
+        surface: &WlSurface,
+        assignment: Option<BufferAssignment>,
+        scale: i32,
+        viewport: (Option<RectF>, Option<(i32, i32)>),
+        frames: &mut Vec<WlCallback>,
+    ) {
+        let t = &mut self.toplevels[i];
+        let at = t.parts.iter().position(|p| p.surface == *surface);
+        match assignment {
+            Some(BufferAssignment::NewBuffer(buffer)) => {
+                let draw = DrawState::of(&buffer, scale, viewport);
+                match at {
+                    Some(k) => {
+                        let p = &mut t.parts[k];
+                        p.draw = draw;
+                        if p.buffer != buffer {
+                            let old = std::mem::replace(&mut p.buffer, buffer);
+                            t.paced.release_later(old);
+                        }
+                    }
+                    None => {
+                        self.output.enter(surface);
+                        t.parts.push(Part { surface: surface.clone(), buffer, draw });
+                    }
+                }
+            }
+            Some(BufferAssignment::Removed) => {
+                if let Some(k) = at {
+                    let p = t.parts.swap_remove(k);
+                    t.paced.release_later(p.buffer);
+                }
+            }
+            None => {
+                if let Some(k) = at {
+                    let p = &mut t.parts[k];
+                    p.draw = DrawState::of(&p.buffer, scale, viewport);
+                }
+            }
+        }
+        t.paced.repaint();
+        t.paced.add_frames(frames);
+    }
+
+    /// The toplevel whose view shows `surface`: its own tree, a popup's (through the popup's
+    /// parents) or an override-redirect X window's. A dismissed popup is in no view.
+    fn owner_of(&self, surface: &WlSurface) -> Option<usize> {
+        let mut root = root_of(surface)?;
+        for _ in 0..=self.popups.len() {
+            if let Some(i) = self.toplevel_index_for(&root) {
+                return Some(i);
+            }
+            if let Some(p) = self.popups.iter().find(|p| p.surface.wl_surface() == &root) {
+                if p.dismissed || !p.surface.alive() {
+                    return None;
+                }
+                root = root_of(&p.surface.get_parent_surface()?)?;
+                continue;
+            }
+            let owner = self.or_windows.iter().find(|o| o.window.wl_surface().as_ref() == Some(&root))?.owner;
+            return self.toplevel_index(owner);
+        }
+        None
+    }
+
+    /// Where `surface` (toplevel `i`'s own, or one of its popups') has its origin, in the
+    /// root surface's logical coordinates.
+    fn view_origin(&self, i: usize, surface: &WlSurface, depth: usize) -> Option<(f64, f64)> {
+        if !surface.is_alive() {
+            return None;
+        }
+        if self.toplevels[i].shell.is(surface) {
+            return Some((0.0, 0.0));
+        }
+        if depth > self.popups.len() {
+            return None;
+        }
+        let p = self.popups.iter().find(|p| p.surface.wl_surface() == surface && p.surface.alive())?;
+        let parent = p.surface.get_parent_surface().filter(|s| s.is_alive())?;
+        let parent_origin = self.view_origin(i, &parent, depth + 1)?;
+        Some(compose::popup_origin(parent_origin, geometry_origin(&parent), popup_position(&p.surface), geometry_origin(surface)))
+    }
+
+    /// Toplevel `i`'s window in its root surface's logical coordinates: what the view shows,
+    /// else its window geometry, else the view's logical size.
+    fn window_area(&self, i: usize) -> RectF {
+        let t = &self.toplevels[i];
+        if t.content.2 > 0.0 && t.content.3 > 0.0 {
+            return t.content;
+        }
+        if let Some((x, y, w, h)) = t.geometry.filter(|g| g.2 > 0 && g.3 > 0) {
+            return (x as f64, y as f64, w as f64, h as f64);
+        }
+        let (w, h) = t.view_size.map(|v| logical_size(v, t.scale)).unwrap_or(self.output_size);
+        (0.0, 0.0, w as f64, h as f64)
+    }
+
+    /// The popup's geometry from `positioner`, kept inside its window (flip, slide and resize as
+    /// the positioner allows; smithay computes it).
+    fn constrained(&self, popup: &PopupSurface, positioner: PositionerState) -> Rectangle<i32, Logical> {
+        let fallback = positioner.get_geometry();
+        if !popup.alive() {
+            return fallback;
+        }
+        let Some(parent) = popup.get_parent_surface().filter(|s| s.is_alive()) else { return fallback };
+        let Some(i) = self.owner_of(&parent) else { return fallback };
+        let Some(parent_origin) = self.view_origin(i, &parent, 0) else { return fallback };
+        let (gx, gy) = geometry_origin(&parent);
+        let area = self.window_area(i);
+        let bound = |v: f64| v.round().clamp(-compose::MAX_COORD, compose::MAX_COORD) as i32;
+        let target = Rectangle::new(
+            (bound(area.0 - parent_origin.0 - gx as f64), bound(area.1 - parent_origin.1 - gy as f64)).into(),
+            (bound(area.2).max(1), bound(area.3).max(1)).into(),
+        );
+        positioner.get_unconstrained_geometry(target)
+    }
+
+    /// Sends popup_done to every popup of toplevel `i`, topmost first, and gives the keyboard back.
+    fn dismiss_popups(&mut self, i: usize) {
+        let mut any = false;
+        for k in (0..self.popups.len()).rev() {
+            if self.popups[k].dismissed || !self.popups[k].surface.alive() {
+                continue;
+            }
+            if self.owner_of(self.popups[k].surface.wl_surface()) == Some(i) {
+                self.popups[k].surface.send_popup_done();
+                self.popups[k].dismissed = true;
+                any = true;
+            }
+        }
+        if any {
+            self.toplevels[i].paced.repaint();
+            self.refocus();
+            self.schedule();
+        }
+    }
+
+    fn has_grab(&self, i: usize) -> bool {
+        self.popups.iter().any(|p| p.grab && !p.dismissed && p.surface.alive() && self.owner_of(p.surface.wl_surface()) == Some(i))
+    }
+
+    /// The keyboard target of toplevel `i`: its topmost grabbing popup, else itself.
+    fn keyboard_target(&self, i: usize) -> KeyboardFocus {
+        for p in self.popups.iter().rev() {
+            if p.grab && !p.dismissed && p.surface.alive() && self.owner_of(p.surface.wl_surface()) == Some(i) {
+                return KeyboardFocus::Wl(p.surface.wl_surface().clone());
+            }
+        }
+        self.toplevels[i].shell.keyboard_focus()
+    }
+
+    /// Moves the keyboard to the focused toplevel's target after a popup grab began or ended.
+    fn refocus(&mut self) {
+        let Some(i) = self.focused.and_then(|id| self.toplevel_index(id)) else { return };
+        let target = self.keyboard_target(i);
+        let Some(keyboard) = self.seat.get_keyboard() else { return };
+        if keyboard.current_focus().as_ref() != Some(&target) {
+            keyboard.set_focus(self, Some(target), SERIAL_COUNTER.next_serial());
+        }
+    }
+
+    /// A press at `at` (root logical) in toplevel `i`: with a grabbing popup open and the press
+    /// on none of its popups, the popups are dismissed and the press is consumed (true).
+    fn press_dismisses(&mut self, i: usize, at: (f64, f64)) -> bool {
+        if !self.has_grab(i) {
+            return false;
+        }
+        if self.hit(i, at).is_some_and(|h| h.2) {
+            return false;
+        }
+        self.dismiss_popups(i);
+        true
+    }
+
+    /// The surface of toplevel `i`'s view under `at`, its origin, and whether it is a popup's.
+    fn hit(&mut self, i: usize, at: (f64, f64)) -> Option<(WlSurface, (f64, f64), bool)> {
+        self.build_scene(i, true);
+        self.hit_layers.clear();
+        for l in &self.scene {
+            self.hit_layers.push(HitLayer { rect: (l.origin.0, l.origin.1, l.draw.size.0, l.draw.size.1), region: l.region });
+        }
+        let (k, _) = compose::hit_test(&self.hit_layers, &self.hit_rects, at.0, at.1)?;
+        let l = self.scene.get(k)?;
+        Some((l.surface.clone(), l.origin, l.popup))
+    }
+
+    /// Where input at `at` goes: the surface under it and that surface's origin; the root
+    /// surface when it is on none (a margin), as for a lone surface.
+    fn input_target(&mut self, i: usize, at: (f64, f64)) -> Option<(WlSurface, (f64, f64))> {
+        if !self.toplevels[i].parts.is_empty() {
+            if let Some((surface, origin, _)) = self.hit(i, at) {
+                return Some((surface, origin));
+            }
+        }
+        self.toplevels[i].shell.wl_surface().map(|s| (s, (0.0, 0.0)))
+    }
+
+    /// Fills `self.scene` with toplevel `i`'s view, back to front: its tree, the
+    /// override-redirect X windows it owns, its popups. With `regions`, input regions go to
+    /// `self.hit_rects`.
+    fn build_scene(&mut self, i: usize, regions: bool) {
+        let mut scene = std::mem::take(&mut self.scene);
+        let mut rects = std::mem::take(&mut self.hit_rects);
+        scene.clear();
+        rects.clear();
+        let t = &self.toplevels[i];
+        if let Some(root) = t.shell.wl_surface().filter(|s| s.is_alive()) {
+            push_tree(t, &root, (0.0, 0.0), false, false, &mut scene, regions.then_some(&mut rects));
+        }
+        if let Shell::X11(w) = &t.shell {
+            let base = w.geometry().loc;
+            for o in self.or_windows.iter().filter(|o| o.owner == t.id && t.id > 0) {
+                let Some(surface) = o.window.wl_surface().filter(|s| s.is_alive()) else { continue };
+                let loc = o.window.geometry().loc;
+                let origin = (loc.x as f64 - base.x as f64, loc.y as f64 - base.y as f64);
+                push_tree(t, &surface, origin, true, false, &mut scene, regions.then_some(&mut rects));
+            }
+        }
+        for p in &self.popups {
+            if p.dismissed || !p.surface.alive() {
+                continue;
+            }
+            let surface = p.surface.wl_surface();
+            if self.owner_of(surface) != Some(i) {
+                continue;
+            }
+            let Some(origin) = self.view_origin(i, surface, 0) else { continue };
+            push_tree(t, surface, origin, true, true, &mut scene, regions.then_some(&mut rects));
+        }
+        self.scene = scene;
+        self.hit_rects = rects;
+    }
+
+    /// Lets go of parts no longer in toplevel `i`'s view (the surface is gone, left the tree,
+    /// or its popup was dismissed); their buffers are released at the end of this tick.
+    fn prune_parts(&mut self, i: usize) {
+        let mut k = 0;
+        while k < self.toplevels[i].parts.len() {
+            let surface = &self.toplevels[i].parts[k].surface;
+            if surface.is_alive() && self.owner_of(surface) == Some(i) {
+                k += 1;
+            } else {
+                let p = self.toplevels[i].parts.swap_remove(k);
+                self.loose_releases.push(p.buffer);
+            }
+        }
+    }
+
+    /// The canvas for `self.scene` of toplevel `i`: its size (cut to the post limit), the
+    /// logical origin of the content, the density, and the uncut size. None when empty.
+    fn canvas(&self, i: usize) -> Option<((i32, i32), (f64, f64), (f64, f64), (i32, i32))> {
+        let t = &self.toplevels[i];
+        let (w, h) = source::buffer_size(t.paced.current()?)?;
+        let d = t.root_draw;
+        let k = surface_map(w, h, d.buffer_scale, d.viewport_src, d.viewport_dst).density();
+        let tree = compose::bounds(self.scene.iter().filter(|l| !l.overlay).map(|l| (l.origin.0, l.origin.1, l.draw.size.0, l.draw.size.1)))?;
+        let content = compose::window_content(t.geometry, tree);
+        let full = compose::canvas_size(content, k);
+        let shown = clamp_to_limit((0, 0, full.0, full.1), post_limit(t.view_size, self.output_size));
+        if shown.2 <= 0 || shown.3 <= 0 {
+            return None;
+        }
+        Some(((shown.2, shown.3), (content.0, content.1), k, full))
+    }
+
+    /// Composes toplevel `i`'s view of many surfaces into its window. Err with the platform's
+    /// code when the post failed.
+    fn post_tree(&mut self, i: usize) -> Result<(), i32> {
+        self.prune_parts(i);
+        self.build_scene(i, false);
+        let Some((canvas, origin, k, full)) = self.canvas(i) else { return Ok(()) };
+        let output = self.output_size;
+        let scene = std::mem::take(&mut self.scene);
+        let maps = &mut self.maps;
+        let t = &mut self.toplevels[i];
+        let id = t.id;
+        if scene.len() != t.layer_count {
+            t.layer_count = scene.len();
+            linfo!("toplevel {id}: view of {} surfaces, {} over the window", scene.len(), scene.iter().filter(|l| l.overlay).count());
+        }
+        if (full.0 > canvas.0 || full.1 > canvas.1) && !t.clamp_logged {
+            t.clamp_logged = true;
+            let limit = post_limit(t.view_size, output);
+            lwarn!("toplevel {id}: view {}x{} is over the limit {}x{}; showing its top-left part", full.0, full.1, limit.0, limit.1);
+        }
+        t.content = (origin.0, origin.1, canvas.0 as f64 / k.0, canvas.1 as f64 / k.1);
+        t.shown = ((origin.0 * k.0).round() as i32, (origin.1 * k.1).round() as i32, canvas.0, canvas.1);
+        let result = match t.window.as_mut() {
+            Some(window) => window
+                .post_with(canvas.0, canvas.1, |dst, dst_stride, w, h| {
+                    compose_into(&scene, maps, dst, dst_stride, (w as i32, h as i32), origin, k)
+                })
+                .map(|timing| {
+                    let s = &mut t.stats;
+                    s.frames += 1;
+                    s.copy_us_sum += timing.copy_us;
+                    s.copy_us_max = s.copy_us_max.max(timing.copy_us);
+                    s.total_us_sum += timing.total_us;
+                    s.last_copy_us = timing.copy_us;
+                }),
+            None => Ok(()),
+        };
+        if COPY_LOG.load(Ordering::Relaxed) && t.last_log.elapsed() >= LOG_INTERVAL && t.stats.frames > 0 {
+            let s = &t.stats;
+            linfo!(
+                "copy toplevel={id} kind=tree surfaces={} shown={}x{} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
+                scene.len(),
+                canvas.0,
+                canvas.1,
+                s.frames,
+                s.last_copy_us,
+                s.copy_us_sum / s.frames as u64,
+                s.copy_us_max,
+                s.total_us_sum / s.frames as u64
+            );
+            t.stats = CopyStats::default();
+            t.last_log = Instant::now();
+        }
+        self.scene = scene;
+        result
+    }
+
+    /// Marks the view of window `id` for a new copy (an override-redirect X window moved, came
+    /// or went).
+    pub fn repaint_id(&mut self, id: i64) {
+        if let Some(i) = self.toplevel_index(id) {
+            self.toplevels[i].paced.repaint();
+            self.schedule();
+        }
+    }
+
+    /// The X toplevel an override-redirect X window is shown with: the window it is transient
+    /// for, else the focused X window of the same client, else the newest X window of the same
+    /// client, else the focused or the newest X window.
+    pub fn or_owner(&self, w: &X11Surface) -> Option<i64> {
+        let x11 = |t: &&Toplevel| t.announced && t.shell.is_x11();
+        if let Some(parent) = w.is_transient_for() {
+            let owner = self.toplevels.iter().filter(x11).find(|t| matches!(&t.shell, Shell::X11(s) if s.window_id() == parent));
+            if let Some(t) = owner {
+                return Some(t.id);
+            }
+            if let Some(o) = self.or_windows.iter().find(|o| o.window.window_id() == parent) {
+                return Some(o.owner);
+            }
+        }
+        let pid = w.pid();
+        let same_client = |t: &&Toplevel| pid.is_some() && matches!(&t.shell, Shell::X11(s) if s.pid() == pid);
+        let focused = self.focused.and_then(|id| self.toplevel_index(id)).map(|i| &self.toplevels[i]).filter(x11);
+        if let Some(t) = focused.filter(|t| pid.is_none() || same_client(t)) {
+            return Some(t.id);
+        }
+        if let Some(t) = self.toplevels.iter().filter(x11).filter(same_client).last() {
+            return Some(t.id);
+        }
+        focused.or_else(|| self.toplevels.iter().filter(x11).last()).map(|t| t.id)
     }
 
     pub fn announce(&mut self, i: usize) {
@@ -1045,6 +1616,12 @@ impl State {
             clamp_logged: false,
             last_kind: None,
             paced: Paced::new(),
+            root_draw: DrawState::default(),
+            parts: Vec::new(),
+            layer_count: 1,
+            swallow_touch: false,
+            swallow_button: false,
+            pointer_at: (0.0, 0.0),
             stats: CopyStats::default(),
             last_log: Instant::now(),
         });
@@ -1053,6 +1630,7 @@ impl State {
     /// Takes the toplevel off the launcher's screen: its id ends, its window and view go. The
     /// toplevel itself may stay (an unmapped xdg_toplevel maps again with a new id).
     fn withdraw(&mut self, i: usize) {
+        self.dismiss_popups(i);
         let t = &mut self.toplevels[i];
         let id = t.id;
         let was_announced = t.announced;
@@ -1075,6 +1653,7 @@ impl State {
         self.withdraw(i);
         let mut t = self.toplevels.remove(i);
         t.paced.take_all(&mut self.loose_releases, &mut self.loose_frames);
+        self.loose_releases.extend(t.parts.drain(..).map(|p| p.buffer));
         self.schedule();
     }
 
@@ -1097,6 +1676,119 @@ fn toplevel_names(surface: &ToplevelSurface) -> (String, String) {
             .and_then(|d| d.lock().ok().map(|d| (d.title.clone().unwrap_or_default(), d.app_id.clone().unwrap_or_default())))
             .unwrap_or_default()
     })
+}
+
+/// The root of `surface`'s subsurface tree; None for a gone surface.
+fn root_of(surface: &WlSurface) -> Option<WlSurface> {
+    let mut root = surface.clone();
+    for _ in 0..1024 {
+        if !root.is_alive() {
+            return None;
+        }
+        match get_parent(&root) {
+            Some(parent) => root = parent,
+            None => return Some(root),
+        }
+    }
+    None
+}
+
+/// A surface's origin in a tree walk, from its parent's: a subsurface adds its position.
+fn tree_origin(states: &SurfaceData, parent: (f64, f64)) -> (f64, f64) {
+    if states.role == Some("subsurface") {
+        let l = states.cached_state.get::<SubsurfaceCachedState>().current().location;
+        (parent.0 + l.x as f64, parent.1 + l.y as f64)
+    } else {
+        parent
+    }
+}
+
+/// The committed xdg window geometry origin of an alive surface, (0, 0) when it has none.
+fn geometry_origin(surface: &WlSurface) -> (i32, i32) {
+    with_states(surface, |states| {
+        states.cached_state.get::<SurfaceCachedState>().current().geometry.map(|g| (g.loc.x, g.loc.y)).unwrap_or((0, 0))
+    })
+}
+
+/// A popup's committed position, relative to its parent's window geometry.
+fn popup_position(popup: &PopupSurface) -> (i32, i32) {
+    with_states(popup.wl_surface(), |states| {
+        states
+            .data_map
+            .get::<XdgPopupSurfaceData>()
+            .and_then(|d| d.lock().ok().map(|d| (d.current.geometry.loc.x, d.current.geometry.loc.y)))
+            .unwrap_or((0, 0))
+    })
+}
+
+/// Appends the mapped surfaces of the tree at `root` to `out`, back to front (smithay keeps
+/// each parent's place among its children, so below and above come out in protocol order),
+/// with `root` at `base`; with `rects`, their input regions too. A surface without a buffer is
+/// not mapped, and neither are its subsurfaces.
+fn push_tree(
+    t: &Toplevel,
+    root: &WlSurface,
+    base: (f64, f64),
+    overlay: bool,
+    popup: bool,
+    out: &mut Vec<Layer>,
+    mut rects: Option<&mut Vec<(bool, Rect)>>,
+) {
+    with_surface_tree_upward(
+        root,
+        base,
+        |s, states, parent| {
+            if t.draw_of(s).is_some() {
+                TraversalAction::DoChildren(tree_origin(states, *parent))
+            } else {
+                TraversalAction::SkipChildren
+            }
+        },
+        |s, states, parent| {
+            let Some((buffer, draw)) = t.draw_of(s) else { return };
+            let region = rects.as_deref_mut().and_then(|rects| {
+                let mut guard = states.cached_state.get::<SurfaceAttributes>();
+                let region = guard.current().input_region.as_ref()?;
+                let start = rects.len();
+                rects.extend(
+                    region.rects.iter().map(|(kind, r)| (matches!(kind, RectangleKind::Add), (r.loc.x, r.loc.y, r.size.w, r.size.h))),
+                );
+                Some((start, rects.len()))
+            });
+            out.push(Layer { surface: s.clone(), buffer, origin: tree_origin(states, *parent), draw, overlay, popup, region });
+        },
+        |_, _, _| true,
+    );
+}
+
+/// Draws `scene` onto an RGBA canvas, back to front: the first surface replaces, the others
+/// blend. A surface whose buffer cannot be read is left out.
+fn compose_into(
+    scene: &[Layer],
+    maps: &mut DmabufMaps,
+    dst: &mut [u8],
+    dst_stride: usize,
+    canvas: (i32, i32),
+    origin: (f64, f64),
+    k: (f64, f64),
+) {
+    if !compose::clear(dst, dst_stride, canvas) {
+        return;
+    }
+    for (n, l) in scene.iter().enumerate() {
+        let mode = if n == 0 { compose::Mode::Copy } else { compose::Mode::Over };
+        let _ = source::with_pixels(&l.buffer, maps, |ptr, len, desc| {
+            let offset = usize::try_from(desc.offset).ok()?;
+            let stride = usize::try_from(desc.stride).ok()?;
+            let d = l.draw;
+            let map = surface_map(desc.width, desc.height, d.buffer_scale, d.viewport_src, d.viewport_dst);
+            let src_rect = map.to_buffer((0.0, 0.0, map.width, map.height), desc.width, desc.height);
+            let dst_rect = compose::place(l.origin, (map.width, map.height), origin, k);
+            // SAFETY: the pool or dmabuf mapping is `len` readable bytes for this closure.
+            let src = unsafe { std::slice::from_raw_parts(ptr, len) };
+            Some(compose::draw(src, offset, stride, src_rect, desc.format, dst, dst_stride, canvas, dst_rect, mode))
+        });
+    }
 }
 
 /// What decides the shown rectangle, copied out of a toplevel so the copy can borrow its window.
@@ -1230,106 +1922,63 @@ impl CompositorHandler for State {
         panic!("client without compositor state")
     }
 
+    /// smithay calls this for each surface whose state it applies, so a synchronised
+    /// subsurface comes here when its parent's commit applies its cached state.
     fn commit(&mut self, surface: &WlSurface) {
-        let mut root = surface.clone();
-        while let Some(parent) = get_parent(&root) {
-            root = parent;
-        }
-
-        // Popups need their first configure to proceed; they are never shown.
-        if let Some(popup) = self.popups.iter().find(|p| p.wl_surface() == surface) {
-            if !popup.is_initial_configure_sent() {
-                let _ = popup.send_configure();
+        // Popups need their first configure to proceed.
+        if let Some(p) = self.popups.iter().find(|p| p.surface.wl_surface() == surface) {
+            if !p.surface.is_initial_configure_sent() {
+                let _ = p.surface.send_configure();
             }
         }
-        self.popups.retain(|p| p.alive());
+        self.popups.retain(|p| p.surface.alive());
 
-        let index = self.toplevel_index_for(&root);
-        if let Some(i) = index {
+        let Some(root) = root_of(surface) else { return };
+        let root_index = self.toplevel_index_for(&root);
+        if let Some(i) = root_index {
             let t = &mut self.toplevels[i];
             if !t.shell.is_initial_configure_sent() {
                 t.shell.send_configure();
             }
         }
 
-        // Walk the whole tree: synced subsurfaces apply their state on the parent's commit.
-        let mut root_buffer: Option<BufferAssignment> = None;
-        let mut root_scale = 1;
-        let mut root_viewport: (Option<RectF>, Option<(i32, i32)>) = (None, None);
         let mut frames = std::mem::take(&mut self.scratch_frames);
-        let loose = &mut self.loose_releases;
-        with_surface_tree_downward(
-            &root,
-            (),
-            |_, _, _| TraversalAction::DoChildren(()),
-            |s, states, _| {
-                let is_root = *s == root && index.is_some();
-                {
-                    let mut guard = states.cached_state.get::<SurfaceAttributes>();
-                    let attrs = guard.current();
-                    frames.append(&mut attrs.frame_callbacks);
-                    if is_root {
-                        root_scale = attrs.buffer_scale;
-                    }
-                    if let Some(assignment) = attrs.buffer.take() {
-                        if is_root {
-                            root_buffer = Some(assignment);
-                        } else if let BufferAssignment::NewBuffer(b) = assignment {
-                            // Subsurfaces, popups and cursors are not shown; released on the tick.
-                            loose.push(b);
-                        }
-                    }
-                }
-                if is_root {
-                    let mut guard = states.cached_state.get::<ViewportCachedState>();
-                    let v = guard.current();
-                    root_viewport = (
-                        v.src.map(|r| (r.loc.x, r.loc.y, r.size.w, r.size.h)),
-                        v.dst.map(|d| (d.w, d.h)),
-                    );
-                }
-            },
-            |_, _, _| true,
-        );
+        let (assignment, scale, viewport) = with_states(surface, |states| {
+            let (assignment, scale) = {
+                let mut guard = states.cached_state.get::<SurfaceAttributes>();
+                let attrs = guard.current();
+                frames.append(&mut attrs.frame_callbacks);
+                (attrs.buffer.take(), attrs.buffer_scale)
+            };
+            let mut guard = states.cached_state.get::<ViewportCachedState>();
+            let v = guard.current();
+            let viewport = (v.src.map(|r| (r.loc.x, r.loc.y, r.size.w, r.size.h)), v.dst.map(|d| (d.w, d.h)));
+            (assignment, scale, viewport)
+        });
 
-        let Some(i) = index else {
+        if let Some(i) = root_index.filter(|_| root == *surface) {
+            self.commit_root(i, assignment, scale, viewport, &mut frames);
+        } else if let Some(i) = self.owner_of(surface) {
+            self.commit_part(i, surface, assignment, scale, viewport, &mut frames);
+        } else {
+            // Cursors, drag icons and surfaces of no window: acknowledged on the tick.
+            if let Some(BufferAssignment::NewBuffer(b)) = assignment {
+                self.loose_releases.push(b);
+            }
             self.loose_frames.append(&mut frames);
-            self.scratch_frames = frames;
-            self.schedule();
-            return;
-        };
+        }
+        self.scratch_frames = frames;
+        self.schedule();
+    }
 
-        // Window geometry, scale and viewport are double-buffered with the buffer.
-        self.toplevels[i].geometry = self.toplevels[i].shell.geometry();
-        match root_buffer {
-            Some(BufferAssignment::Removed) => {
-                self.toplevels[i].paced.remove_buffer();
-                if let Shell::Xdg(t) = &self.toplevels[i].shell {
-                    // An unmapped xdg_toplevel starts over: its next bufferless commit must get
-                    // an initial configure again, and it maps as a new window.
-                    t.reset_initial_configure_sent();
-                    self.withdraw(i);
-                }
-            }
-            Some(BufferAssignment::NewBuffer(buffer)) => {
-                let t = &mut self.toplevels[i];
-                t.buffer_scale = root_scale;
-                t.viewport_src = root_viewport.0;
-                t.viewport_dst = root_viewport.1;
-                t.paced.commit_buffer(buffer);
-                if !t.announced {
-                    self.announce(i);
-                }
-            }
-            None => {
-                if !self.toplevels[i].announced && self.toplevels[i].shell.is_initial_configure_sent() {
-                    // The initial (bufferless) commit: title and app id are set by now.
-                    self.announce(i);
-                }
+    fn destroyed(&mut self, surface: &WlSurface) {
+        for t in &mut self.toplevels {
+            if let Some(k) = t.parts.iter().position(|p| p.surface == *surface) {
+                let p = t.parts.swap_remove(k);
+                t.paced.release_later(p.buffer);
+                t.paced.repaint();
             }
         }
-        self.toplevels[i].paced.add_frames(&mut frames);
-        self.scratch_frames = frames;
         self.schedule();
     }
 }
@@ -1338,6 +1987,7 @@ impl BufferHandler for State {
     fn buffer_destroyed(&mut self, buffer: &WlBuffer) {
         for t in &mut self.toplevels {
             t.paced.forget(buffer);
+            t.parts.retain(|p| p.buffer != *buffer);
         }
         self.loose_releases.retain(|b| b != buffer);
         self.maps.forget(buffer);
@@ -1385,18 +2035,45 @@ impl XdgShellHandler for State {
         self.add_toplevel(Shell::Xdg(surface));
     }
 
-    fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
-        self.popups.push(surface);
+    fn new_popup(&mut self, surface: PopupSurface, positioner: PositionerState) {
+        let geometry = self.constrained(&surface, positioner);
+        surface.with_pending_state(|s| s.geometry = geometry);
+        self.popups.push(Popup { surface, grab: false, dismissed: false });
     }
 
-    fn grab(&mut self, _surface: PopupSurface, _seat: WlSeat, _serial: Serial) {}
+    /// The popup takes the keyboard while its toplevel has it; a tap outside the popups
+    /// dismisses them (`press_dismisses`).
+    fn grab(&mut self, surface: PopupSurface, _seat: WlSeat, _serial: Serial) {
+        if let Some(p) = self.popups.iter_mut().find(|p| p.surface == surface) {
+            p.grab = true;
+        }
+        self.refocus();
+    }
 
     fn reposition_request(&mut self, surface: PopupSurface, positioner: PositionerState, token: u32) {
+        let geometry = self.constrained(&surface, positioner);
         surface.with_pending_state(|s| {
-            s.geometry = positioner.get_geometry();
+            s.geometry = geometry;
             s.positioner = positioner;
         });
         surface.send_repositioned(token);
+    }
+
+    fn popup_destroyed(&mut self, surface: PopupSurface) {
+        let owner = self.owner_of(surface.wl_surface());
+        self.popups.retain(|p| p.surface != surface && p.surface.alive());
+        // Popups left without their parent are dismissed.
+        for k in (0..self.popups.len()).rev() {
+            if !self.popups[k].dismissed && self.owner_of(self.popups[k].surface.wl_surface()).is_none() {
+                self.popups[k].surface.send_popup_done();
+                self.popups[k].dismissed = true;
+            }
+        }
+        if let Some(i) = owner {
+            self.toplevels[i].paced.repaint();
+        }
+        self.refocus();
+        self.schedule();
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
@@ -1438,11 +2115,7 @@ impl XdgDecorationHandler for State {
 impl FractionalScaleHandler for State {
     /// A surface asked for its fractional scale: its toplevel's, else the output's.
     fn new_fractional_scale(&mut self, surface: WlSurface) {
-        let mut root = surface.clone();
-        while let Some(parent) = get_parent(&root) {
-            root = parent;
-        }
-        let scale = self.toplevel_index_for(&root).map(|i| self.toplevels[i].scale).unwrap_or(self.output_scale);
+        let scale = self.owner_of(&surface).map(|i| self.toplevels[i].scale).unwrap_or(self.output_scale);
         with_states(&surface, |states| with_fractional_scale(states, |f| f.set_preferred_scale(scale)));
     }
 }

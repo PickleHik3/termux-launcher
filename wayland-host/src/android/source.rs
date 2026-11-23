@@ -145,6 +145,16 @@ fn sync(dmabuf: &Dmabuf, flags: DmabufSyncFlags) {
     }
 }
 
+/// A buffer's size in pixels without reading its pixels; None for a buffer that is neither shm
+/// nor dmabuf.
+pub fn buffer_size(buffer: &WlBuffer) -> Option<(i32, i32)> {
+    if let Ok(dmabuf) = get_dmabuf(buffer) {
+        let size = dmabuf.size();
+        return Some((size.w, size.h));
+    }
+    with_buffer_contents(buffer, |_, _, data| (data.width, data.height)).ok()
+}
+
 /// Calls `f` with the buffer's readable bytes (pointer and length) and its description. Ok(None)
 /// when the buffer is of a format the copy does not take, or its dmabuf could not be mapped (the
 /// window keeps its previous frame); Err for a buffer that is neither shm nor dmabuf.
