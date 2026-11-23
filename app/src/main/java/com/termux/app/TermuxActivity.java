@@ -36182,6 +36182,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return mProperties == null ? null : mProperties.getPropertyValue(key, null, true);
         }
 
+        @Override public int longestRow(@NonNull String value) {
+            int longest = 0;
+            for (java.util.List<com.termux.app.terminal.io.ExtraKeysLayoutModel.Key> row
+                    : com.termux.app.terminal.io.ExtraKeysLayoutModel.parse(
+                        com.termux.app.terminal.io.ExtraKeysDefaultRow.forWall(value, availableWallPages())).rows()) {
+                longest = Math.max(longest, row.size());
+            }
+            return longest;
+        }
+
         @Nullable @Override public com.termux.shared.termux.extrakeys.ExtraKeysInfo parsePage(
                 @NonNull String value, @NonNull String fallback, int page) {
             return TermuxTerminalExtraKeys.parsePage(TermuxActivity.this, value, page, fallback);

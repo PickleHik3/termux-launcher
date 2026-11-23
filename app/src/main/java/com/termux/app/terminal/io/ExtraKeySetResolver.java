@@ -21,7 +21,26 @@ public final class ExtraKeySetResolver {
         @Nullable String get(@NonNull String key);
     }
 
+    /** How many keys the longest row of one page value holds. */
+    public interface RowWidth {
+        int of(@NonNull String pageValue);
+    }
+
     public enum Source { OWN, GLOBAL }
+
+    /**
+     * The column count every page lays its keys on: the longest row of any set a target can show,
+     * so a key keeps one width whichever page is in front.
+     */
+    public static int steadyColumns(@NonNull Lines lines, @NonNull RowWidth width) {
+        int columns = 0;
+        for (ExtraKeysTarget target : ExtraKeysTarget.values()) {
+            Resolved resolved = resolve(target, lines);
+            columns = Math.max(columns, width.of(resolved.page1));
+            if (resolved.page2 != null) columns = Math.max(columns, width.of(resolved.page2));
+        }
+        return columns;
+    }
 
     /** The answer: immutable. */
     public static final class Resolved {
