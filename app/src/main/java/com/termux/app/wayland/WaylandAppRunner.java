@@ -66,6 +66,12 @@ public final class WaylandAppRunner {
         void failed();
     }
 
+    /** Told, on the main thread, when the launches waiting for the host are no longer waiting. */
+    public interface PendingListener {
+        /** {@code started}: the host ran and the apps were started; false: the host did not come up. */
+        void onPendingEnded(boolean started);
+    }
+
     @Nullable private static WaylandAppRunner sShared;
 
     /** The process's runner. Main thread only. */
@@ -84,6 +90,7 @@ public final class WaylandAppRunner {
     @NonNull private final Context context;
     @NonNull private final Handler main = new Handler(Looper.getMainLooper());
     @NonNull private final List<Launch> pending = new ArrayList<>();
+    @Nullable private PendingListener pendingListener;
 
     @Nullable private ILinuxWindows service;
     @Nullable private IBinder binder;
@@ -187,6 +194,16 @@ public final class WaylandAppRunner {
 
     private WaylandAppRunner(@NonNull Context context) {
         this.context = context.getApplicationContext();
+    }
+
+    /** Whether a launch is waiting for the host to run (the Linux windows screen says "Opening" only then). */
+    public boolean launchPending() {
+        return !pending.isEmpty();
+    }
+
+    /** The one listener for {@link #launchPending} ending; null clears it. */
+    public void setPendingListener(@Nullable PendingListener listener) {
+        pendingListener = listener;
     }
 
     /**
@@ -381,6 +398,7 @@ public final class WaylandAppRunner {
         String x = xwaylandDisplay();
         for (Launch launch : launches) launch.run(wayland, x);
         openWindowsScreen();
+        if (pendingListener != null) pendingListener.onPendingEnded(true);
     }
 
     private void failPending() {
@@ -391,6 +409,7 @@ public final class WaylandAppRunner {
         List<Launch> launches = new ArrayList<>(pending);
         pending.clear();
         for (Launch launch : launches) launch.failed();
+        if (pendingListener != null) pendingListener.onPendingEnded(false);
     }
 
     private void armIdleStop() {
@@ -425,6 +444,7 @@ public final class WaylandAppRunner {
     private void openWindowsScreen() {
         try {
             context.startActivity(new Intent(context, LinuxWindowsActivity.class)
+                .putExtra(LinuxWindowsActivity.EXTRA_OPENING, true)
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
         } catch (RuntimeException e) {
             Log.w(LOG_TAG, "cannot open the Linux windows screen: " + e);

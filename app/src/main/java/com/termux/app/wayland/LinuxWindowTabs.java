@@ -13,6 +13,37 @@ final class LinuxWindowTabs {
     /** No window: the id the host never gives a window. */
     static final long NONE = 0L;
 
+    /** A title shorter than this says too little to be a tab's label. */
+    static final int MIN_TITLE_LENGTH = 2;
+
+    /**
+     * A tab's label: the window's title, else its app id, else {@code fallback}. A title of one
+     * character or none is no label; a lone character still beats the fallback when there is no app id.
+     */
+    static String label(String title, String appId, String fallback) {
+        String t = title == null ? "" : title.trim();
+        String a = appId == null ? "" : appId.trim();
+        if (t.length() >= MIN_TITLE_LENGTH) return t;
+        if (!a.isEmpty()) return a;
+        return t.isEmpty() ? fallback : t;
+    }
+
+    /** The width of each tab: the row's width shared, never under {@code min} (the row then scrolls). */
+    static int tabWidth(int viewport, int count, int min) {
+        if (count <= 0) return min;
+        return Math.max(min, viewport / count);
+    }
+
+    /**
+     * The row's scroll offset that shows the whole tab {@code left..right} (its end included),
+     * moving as little as it can; the tab's start when it is wider than the viewport.
+     */
+    static int scrollTarget(int scrollX, int viewport, int left, int right) {
+        if (right - left >= viewport || left < scrollX) return left;
+        if (right > scrollX + viewport) return right - viewport;
+        return scrollX;
+    }
+
     private final List<Long> ids = new ArrayList<>();
     private long shown = NONE;
 

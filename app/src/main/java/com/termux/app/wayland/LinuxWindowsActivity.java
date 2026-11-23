@@ -34,7 +34,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.BuildConfig;
+import com.termux.app.theme.TermuxThemeManager;
 import com.termux.R;
 
 import java.io.File;
@@ -61,14 +63,32 @@ public final class LinuxWindowsActivity extends Activity {
     private static final int DUMP_TRIES = 5;
 
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
-    /** The widest a tab's title grows before it is ellipsized. */
-    private static final int TAB_TITLE_MAX_DP = 200;
+    /** {@code putExtra(EXTRA_OPENING, true)}: the runner opened the screen with an app just started. */
+    static final String EXTRA_OPENING = "opening";
+    /** How long "no Linux apps" shows before the screen closes itself. */
+    private static final long NO_APPS_CLOSE_MS = 2500;
+    /** Used only when the theme gives no colour for a role. */
+    private static final int FALLBACK_SURFACE = 0xFF202020;
+    private static final int FALLBACK_ON_SURFACE = 0xFFFFFFFF;
+
+    /**
+     * The tab row's colours, read from the launcher's own roles (the Material roles the scheme
+     * and the wallpaper palette override, see TermuxThemeManager): the row sits on the panel
+     * surface, a tab's title is on-surface-variant, and the shown tab is the primary container.
+     */
+    private int mSurface = FALLBACK_SURFACE;
+    private int mOnSurface = FALLBACK_ON_SURFACE;
+    private int mOnSurfaceVariant = FALLBACK_ON_SURFACE;
+    private int mShownTab = Color.TRANSPARENT;
+    private int mOnShownTab = FALLBACK_ON_SURFACE;
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private final LongSparseArray<Pane> mPanes = new LongSparseArray<>();
     private final LinuxWindowTabs mTabs = new LinuxWindowTabs();
 
+    private HorizontalScrollView mTabScroll;
     private LinearLayout mTabRow;
+    private int mTabViewportWidth;
     private FrameLayout mWindowHost;
     private TextView mEmpty;
     /** The developer controls, shown by a long press on the tab row. */
@@ -81,6 +101,27 @@ public final class LinuxWindowsActivity extends Activity {
     private boolean mDumpPending;
     /** The host reported running and has not since stopped. */
     private boolean mHostRunning;
+    private boolean mHostStarting;
+    /** The host has said its state, or could not be reached. */
+    private boolean mStateKnown;
+    /** The host died or could not be reached. */
+    private boolean mStopped;
+    /** The runner's launch gave up waiting for the host. */
+    private boolean mLaunchFailed;
+    /** The runner opened this screen for an app it just started: "Opening" until it has a window. */
+    private boolean mOpeningExtra;
+    private boolean mOpeningExpired;
+    private final Runnable mCloseWhenEmpty = () -> {
+        if (mTabs.size() == 0 && !isFinishing()) finish();
+    };
+    private final Runnable mOpeningExpiry = () -> {
+        mOpeningExpired = true;
+        settle();
+    };
+    private final WaylandAppRunner.PendingListener mPendingListener = started -> {
+        if (!started) mLaunchFailed = true;
+        settle();
+    };
 
     private ILinuxWindows mService;
     private IBinder mServiceBinder;
@@ -172,6 +213,7 @@ public final class LinuxWindowsActivity extends Activity {
         final long id;
         final LinearLayout tab;
         final TextView label;
+        final TextView close;
         final TextureView view;
         Surface surface;
         String title = "";
@@ -193,15 +235,18 @@ public final class LinuxWindowsActivity extends Activity {
             tab.setGravity(Gravity.CENTER_VERTICAL);
             tab.setOnClickListener(v -> showWindow(id));
             tab.setOnLongClickListener(v -> toggleDevBar());
-            label = shadowedText();
+            tab.setMinimumWidth(res(R.dimen.linux_windows_tab_min_width));
+            label = chromeText();
+            label.setTextSize(TypedValue.COMPLEX_UNIT_PX, getResources().getDimension(R.dimen.linux_windows_tab_text));
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
-            label.setMaxWidth(dp(TAB_TITLE_MAX_DP));
-            label.setPadding(dp(12), dp(8), dp(4), dp(8));
-            TextView close = shadowedText();
+            label.setGravity(Gravity.CENTER_VERTICAL);
+            // The title starts at the row's start edge, and ends where the close target begins.
+            label.setPaddingRelative(res(R.dimen.linux_windows_start_padding), 0, 0, 0);
+            close = chromeText();
             close.setText("✕");
+            close.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
             close.setContentDescription(getString(R.string.linux_windows_close));
-            close.setPadding(dp(8), dp(8), dp(12), dp(8));
             close.setOnClickListener(v -> {
                 if (mService != null) {
                     try {
@@ -210,10 +255,9 @@ public final class LinuxWindowsActivity extends Activity {
                     }
                 }
             });
-            tab.addView(label, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
-            tab.addView(close, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT));
+            tab.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.MATCH_PARENT, 1f));
+            int target = res(R.dimen.linux_windows_close_target);
+            tab.addView(close, new LinearLayout.LayoutParams(target, target));
 
             view = new TextureView(LinuxWindowsActivity.this);
             view.setOpaque(false);
@@ -227,11 +271,13 @@ public final class LinuxWindowsActivity extends Activity {
         }
 
         void updateTab() {
-            String name = !TextUtils.isEmpty(title) ? title
-                : !TextUtils.isEmpty(appId) ? appId : getString(R.string.linux_windows_untitled);
+            String name = LinuxWindowTabs.label(title, appId, getString(R.string.linux_windows_untitled));
             if (!TextUtils.equals(label.getText(), name)) label.setText(name);
             label.setTypeface(null, shown() ? Typeface.BOLD : Typeface.NORMAL);
-            tab.setAlpha(shown() ? 1f : 0.7f);
+            int text = shown() ? mOnShownTab : mOnSurfaceVariant;
+            label.setTextColor(text);
+            close.setTextColor(text);
+            tab.setBackgroundColor(shown() ? mShownTab : Color.TRANSPARENT);
         }
 
         /** Hands the Surface to the host. */
@@ -385,6 +431,18 @@ public final class LinuxWindowsActivity extends Activity {
         return t;
     }
 
+    /** Text on the tab row's or developer row's surface: the on-surface colour, no shadow. */
+    private TextView chromeText() {
+        TextView t = new TextView(this);
+        t.setTextColor(mOnSurface);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        return t;
+    }
+
+    private int themeColor(int attr, int fallback) {
+        return MaterialColors.getColor(this, attr, fallback);
+    }
+
     private Button button(String text, View.OnClickListener listener) {
         Button b = new Button(this);
         b.setText(text);
@@ -400,6 +458,10 @@ public final class LinuxWindowsActivity extends Activity {
         return LinuxDisplayScale.current(this);
     }
 
+    private int res(int dimenId) {
+        return getResources().getDimensionPixelSize(dimenId);
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -412,21 +474,38 @@ public final class LinuxWindowsActivity extends Activity {
             finish();
             return;
         }
+        // The launcher's scheme or wallpaper palette, as every launcher activity gets it.
+        TermuxThemeManager.applyThemeOverlays(this);
+        mSurface = themeColor(com.termux.shared.R.attr.termuxColorSurfacePanel, FALLBACK_SURFACE);
+        mOnSurface = themeColor(com.termux.shared.R.attr.termuxColorOnSurface, FALLBACK_ON_SURFACE);
+        mOnSurfaceVariant = themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant, FALLBACK_ON_SURFACE);
+        mShownTab = themeColor(com.termux.shared.R.attr.termuxColorPrimaryContainer, FALLBACK_SURFACE);
+        mOnShownTab = themeColor(com.termux.shared.R.attr.termuxColorOnPrimaryContainer, FALLBACK_ON_SURFACE);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         // Below the status bar and above the navigation bar; the keyboard is not handled yet.
         root.setFitsSystemWindows(true);
 
         HorizontalScrollView tabScroll = new HorizontalScrollView(this);
+        mTabScroll = tabScroll;
         tabScroll.setHorizontalScrollBarEnabled(false);
         tabScroll.setFillViewport(true);
+        tabScroll.setBackgroundColor(mSurface);
         mTabRow = new LinearLayout(this);
         mTabRow.setOrientation(LinearLayout.HORIZONTAL);
         mTabRow.setGravity(Gravity.CENTER_VERTICAL);
-        mTabRow.setMinimumHeight(dp(40));
+        mTabRow.setMinimumHeight(res(R.dimen.linux_windows_tab_height));
         mTabRow.setOnLongClickListener(v -> toggleDevBar());
         tabScroll.addView(mTabRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
+        // The tabs share the row's width; a changed width sets theirs after this layout pass.
+        tabScroll.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
+            int width = r - l;
+            if (width == mTabViewportWidth) return;
+            mTabViewportWidth = width;
+            mTabRow.post(this::sizeTabs);
+        });
         root.addView(tabScroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
@@ -439,27 +518,69 @@ public final class LinuxWindowsActivity extends Activity {
         mEmpty = shadowedText();
         mEmpty.setGravity(Gravity.CENTER);
         mEmpty.setPadding(dp(24), dp(24), dp(24), dp(24));
-        mEmpty.setText(R.string.linux_windows_opening);
         mWindowHost.addView(mEmpty, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(mWindowHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         setContentView(root);
 
+        mOpeningExtra = getIntent() != null && getIntent().getBooleanExtra(EXTRA_OPENING, false);
+        WaylandAppRunner.shared(this).setPendingListener(mPendingListener);
+        settle();
         handleDumpIntent(getIntent());
         connect();
     }
 
+    /**
+     * What the empty area says, and whether the screen closes itself. "Opening" only while a launch
+     * is in flight; with no host and nothing launching it says so plainly and closes after a moment
+     * (never starting the host: its Start is the developer row's).
+     */
+    private void settle() {
+        if (isDestroyed() || mEmpty == null) return;
+        mMain.removeCallbacks(mCloseWhenEmpty);
+        if (mTabs.size() > 0) return;
+        boolean opening = WaylandAppRunner.shared(this).launchPending() || mHostStarting
+            || (mOpeningExtra && !mOpeningExpired && (mHostRunning || !mStateKnown));
+        boolean close = false;
+        int text;
+        if (mStopped && mHadWindow) {
+            text = R.string.linux_windows_stopped;
+        } else if (opening) {
+            text = R.string.linux_windows_opening;
+        } else if (mLaunchFailed) {
+            text = R.string.linux_wayland_start_failed;
+            close = true;
+        } else if (!mStateKnown) {
+            text = 0;
+        } else {
+            text = R.string.linux_windows_no_apps;
+            close = true;
+        }
+        CharSequence current = mEmpty.getText();
+        CharSequence wanted = text == 0 ? "" : getString(text);
+        if (!TextUtils.equals(current, wanted)) mEmpty.setText(wanted);
+        mEmpty.setVisibility(View.VISIBLE);
+        // The developer row open means the developer is driving the host by hand.
+        if (close && mDevBar.getVisibility() != View.VISIBLE) mMain.postDelayed(mCloseWhenEmpty, NO_APPS_CLOSE_MS);
+    }
+
     /** Developer controls; their words are not product copy. */
     private View devBar() {
-        HorizontalScrollView scroll = new HorizontalScrollView(this);
-        LinearLayout bar = new LinearLayout(this);
-        bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setGravity(Gravity.CENTER_VERTICAL);
-        bar.setPadding(dp(8), 0, dp(8), 0);
-        mStatus = shadowedText();
+        // The status on its own line, the buttons wrapping below it within the screen's width.
+        LinearLayout box = new LinearLayout(this);
+        box.setOrientation(LinearLayout.VERTICAL);
+        box.setBackgroundColor(mSurface);
+        // The same start edge as the tab titles.
+        int pad = res(R.dimen.linux_windows_start_padding);
+        box.setPaddingRelative(pad, 0, pad, 0);
+        mStatus = chromeText();
         mStatus.setSingleLine(true);
-        mStatus.setPadding(0, 0, dp(8), 0);
-        bar.addView(mStatus);
+        mStatus.setEllipsize(TextUtils.TruncateAt.END);
+        box.addView(mStatus, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+        WrapRow bar = new WrapRow(this);
+        box.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
         bar.addView(button("Start", v -> {
             if (mService == null) connect();
             else startHost();
@@ -497,12 +618,66 @@ public final class LinuxWindowsActivity extends Activity {
         bar.addView(mCopyLogButton);
         mDumpButton = button("Dump", v -> dumpAll(1));
         bar.addView(mDumpButton);
-        scroll.addView(bar);
-        return scroll;
+        return box;
+    }
+
+    /** Children left to right, starting a new line when the next does not fit the width. */
+    private static final class WrapRow extends ViewGroup {
+        WrapRow(android.content.Context context) {
+            super(context);
+        }
+
+        @Override
+        protected void onMeasure(int widthSpec, int heightSpec) {
+            int available = MeasureSpec.getSize(widthSpec);
+            int x = 0;
+            int lineHeight = 0;
+            int height = 0;
+            int widest = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE) continue;
+                child.measure(MeasureSpec.makeMeasureSpec(available, MeasureSpec.AT_MOST),
+                    MeasureSpec.makeMeasureSpec(0, MeasureSpec.UNSPECIFIED));
+                int w = child.getMeasuredWidth();
+                if (x > 0 && x + w > available) {
+                    height += lineHeight;
+                    x = 0;
+                    lineHeight = 0;
+                }
+                x += w;
+                widest = Math.max(widest, x);
+                lineHeight = Math.max(lineHeight, child.getMeasuredHeight());
+            }
+            height += lineHeight;
+            setMeasuredDimension(resolveSize(widest, widthSpec), resolveSize(height, heightSpec));
+        }
+
+        @Override
+        protected void onLayout(boolean changed, int l, int t, int r, int b) {
+            int available = r - l;
+            int x = 0;
+            int y = 0;
+            int lineHeight = 0;
+            for (int i = 0; i < getChildCount(); i++) {
+                View child = getChildAt(i);
+                if (child.getVisibility() == GONE) continue;
+                int w = child.getMeasuredWidth();
+                if (x > 0 && x + w > available) {
+                    y += lineHeight;
+                    x = 0;
+                    lineHeight = 0;
+                }
+                child.layout(x, y, x + w, y + child.getMeasuredHeight());
+                x += w;
+                lineHeight = Math.max(lineHeight, child.getMeasuredHeight());
+            }
+        }
     }
 
     private boolean toggleDevBar() {
         mDevBar.setVisibility(mDevBar.getVisibility() == View.VISIBLE ? View.GONE : View.VISIBLE);
+        settle();
         return true;
     }
 
@@ -558,9 +733,16 @@ public final class LinuxWindowsActivity extends Activity {
     private void hostState(int state, String message) {
         if (isDestroyed()) return;
         mHostRunning = state == ILinuxWindows.STATE_RUNNING;
+        mHostStarting = state == ILinuxWindows.STATE_STARTING;
+        mStateKnown = true;
+        if (mHostRunning || mHostStarting) mStopped = false;
         switch (state) {
             case ILinuxWindows.STATE_RUNNING:
                 mStatus.setText("Host pid " + mHostPid + ". " + message);
+                if (mOpeningExtra && !mOpeningExpired) {
+                    mMain.removeCallbacks(mOpeningExpiry);
+                    mMain.postDelayed(mOpeningExpiry, WaylandAppRunner.START_TIMEOUT_MS);
+                }
                 if (mDumpPending) {
                     mDumpPending = false;
                     // The replayed windows arrive after the state; give them a moment.
@@ -579,14 +761,17 @@ public final class LinuxWindowsActivity extends Activity {
                 mStatus.setText(TextUtils.isEmpty(message) ? "Stopped." : message);
                 break;
         }
+        settle();
     }
 
     /** The host is gone: the empty area says so; the developer bar says why. */
     private void showStopped(String why) {
         if (mStatus != null) mStatus.setText(why);
-        if (mEmpty == null) return;
-        mEmpty.setText(R.string.linux_windows_stopped);
-        mEmpty.setVisibility(mTabs.size() == 0 ? View.VISIBLE : View.GONE);
+        mStopped = true;
+        mStateKnown = true;
+        mHostRunning = false;
+        mHostStarting = false;
+        settle();
     }
 
     /** The host process died: drop its views and say so once. */
@@ -631,8 +816,9 @@ public final class LinuxWindowsActivity extends Activity {
         mPanes.put(id, pane);
         mHadWindow = true;
         mEmpty.setVisibility(View.GONE);
-        mTabRow.addView(pane.tab, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT));
+        mTabRow.addView(pane.tab, new LinearLayout.LayoutParams(res(R.dimen.linux_windows_tab_min_width),
+            LinearLayout.LayoutParams.MATCH_PARENT));
+        sizeTabs();
         mWindowHost.addView(pane.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT));
         long before = mTabs.shown();
@@ -648,6 +834,7 @@ public final class LinuxWindowsActivity extends Activity {
         mWindowHost.removeView(pane.view);
         if (mFocusedId == id) mFocusedId = 0;
         mTabs.remove(id);
+        sizeTabs();
         if (mTabs.size() == 0) {
             // The last window closed: nothing is left to show here.
             if (mHadWindow && !isFinishing()) finish();
@@ -669,10 +856,44 @@ public final class LinuxWindowsActivity extends Activity {
         if (mEmpty != null) mEmpty.setVisibility(View.VISIBLE);
     }
 
+    /** Gives every tab its share of the row ({@link LinuxWindowTabs#tabWidth}); only a changed width is set. */
+    private void sizeTabs() {
+        int count = mTabRow.getChildCount();
+        int width = LinuxWindowTabs.tabWidth(mTabViewportWidth, count, res(R.dimen.linux_windows_tab_min_width));
+        for (int i = 0; i < count; i++) {
+            View tab = mTabRow.getChildAt(i);
+            ViewGroup.LayoutParams lp = tab.getLayoutParams();
+            if (lp.width != width) {
+                lp.width = width;
+                tab.setLayoutParams(lp);
+            }
+        }
+        // Widths moved: the shown tab, end included, stays in view.
+        scrollToShown();
+    }
+
+    /** Scrolls the row so {@code tab} is in view, once the row has laid it out. */
+    private void scrollToTab(View tab) {
+        mTabScroll.post(() -> {
+            int viewport = mTabScroll.getWidth();
+            int left = tab.getLeft();
+            int right = left + tab.getWidth();
+            int scroll = mTabScroll.getScrollX();
+            int target = LinuxWindowTabs.scrollTarget(scroll, viewport, left, right);
+            if (target != scroll) mTabScroll.smoothScrollTo(target, 0);
+        });
+    }
+
+    private void scrollToShown() {
+        Pane shown = mPanes.get(mTabs.shown());
+        if (shown != null) scrollToTab(shown.tab);
+    }
+
     /** A tab was tapped. */
     private void showWindow(long id) {
         long before = mTabs.shown();
         if (mTabs.show(id)) applyShown(before);
+        else scrollToShown();
     }
 
     /**
@@ -693,6 +914,7 @@ public final class LinuxWindowsActivity extends Activity {
             if (old != null) old.setVisible(false);
         }
         Pane now = mPanes.get(shown);
+        if (now != null) scrollToTab(now.tab);
         if (now != null) {
             now.setVisible(mVisible);
             if (mVisible) focus(shown);
@@ -711,6 +933,12 @@ public final class LinuxWindowsActivity extends Activity {
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         setIntent(intent);
+        if (intent != null && intent.getBooleanExtra(EXTRA_OPENING, false)) {
+            mOpeningExtra = true;
+            mOpeningExpired = false;
+            mLaunchFailed = false;
+            settle();
+        }
         handleDumpIntent(intent);
     }
 
@@ -787,6 +1015,9 @@ public final class LinuxWindowsActivity extends Activity {
     @Override
     protected void onDestroy() {
         // The host keeps running; only this screen's views and listener go.
+        WaylandAppRunner.shared(this).setPendingListener(null);
+        mMain.removeCallbacks(mCloseWhenEmpty);
+        mMain.removeCallbacks(mOpeningExpiry);
         if (mService != null) {
             for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).detach();
             try {
