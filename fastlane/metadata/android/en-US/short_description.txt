@@ -1,1 +1,0 @@
-A fork of Termux-App with Material You theming and other features
