@@ -6,6 +6,7 @@
 //! into it.
 
 pub mod geometry;
+pub mod held;
 pub mod keymap;
 pub mod pixels;
 

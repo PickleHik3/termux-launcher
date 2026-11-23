@@ -1,8 +1,9 @@
 //! The compositor: smithay's wayland frontend on its own calloop thread.
 //!
 //! Presentation is a CPU copy of each toplevel's root wl_shm buffer into that toplevel's
-//! ANativeWindow. Subsurfaces, popups and cursor surfaces are acknowledged (buffers released,
-//! frame callbacks answered) but never shown.
+//! ANativeWindow. The root buffer stays held until the client commits the next one, so a new
+//! or resized Surface is repainted at once. Subsurfaces, popups and cursor surfaces are
+//! acknowledged (buffers released, frame callbacks answered) but never shown.
 
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
@@ -58,6 +59,7 @@ use smithay::input::keyboard::{FilterResult, Keycode};
 use smithay::wayland::shell::xdg::SurfaceCachedState;
 
 use crate::geometry::{content_rect, content_span, view_to_surface, Rect};
+use crate::held::Held;
 use crate::keymap::android_to_evdev;
 
 use super::focus::KeyboardFocus;
@@ -240,8 +242,9 @@ pub struct Toplevel {
     geometry: Option<Rect>,
     /// The part of the buffer shown: the window geometry clipped to the buffer.
     content: Rect,
-    /// The newest buffer, kept only while there is no window to post it to.
-    waiting_buffer: Option<WlBuffer>,
+    /// The buffer on screen, held unreleased until the client commits another, so a new or
+    /// resized Surface is repainted at once (an idle client commits nothing).
+    current: Held<WlBuffer>,
     /// Frame callbacks held while the toplevel has no window.
     held_frames: Vec<WlCallback>,
     stats: CopyStats,
@@ -439,11 +442,28 @@ impl State {
 
     fn shutdown(&mut self) {
         super::xwayland::stop(self);
-        for t in self.toplevels.drain(..) {
-            if let Some(b) = t.waiting_buffer {
-                b.release();
+        for mut t in self.toplevels.drain(..) {
+            if let Some(b) = t.current.remove() {
+                if b.is_alive() {
+                    b.release();
+                }
             }
         }
+    }
+
+    /// Posts the held buffer into the toplevel's window again; true when there was one.
+    fn repaint(&mut self, i: usize) -> bool {
+        let t = &mut self.toplevels[i];
+        if t.window.is_none() {
+            return false;
+        }
+        let Some(buffer) = t.current.current().cloned() else { return false };
+        if !buffer.is_alive() {
+            t.current.forget(&buffer);
+            return false;
+        }
+        post_buffer(t, &buffer);
+        true
     }
 
     pub fn now_ms(&self) -> u32 {
@@ -480,11 +500,9 @@ impl State {
         if !has_window {
             return;
         }
-        if let Some(buffer) = self.toplevels[i].waiting_buffer.take() {
-            post_buffer(&mut self.toplevels[i], &buffer);
-            buffer.release();
-        } else if self.toplevels[i].shell.is_initial_configure_sent() {
-            // Nothing to show yet in the new window: a configure makes most clients draw again.
+        // A fresh Surface is blank: show the held buffer at once.
+        if !self.repaint(i) && self.toplevels[i].shell.is_initial_configure_sent() {
+            // Nothing held yet: a configure makes most clients draw.
             self.toplevels[i].shell.send_configure();
         }
         let held = std::mem::take(&mut self.toplevels[i].held_frames);
@@ -500,6 +518,9 @@ impl State {
         }
         t.view_size = Some((width, height));
         t.shell.configure(width, height);
+        // Until the client answers with a buffer of the new size, the view shows the old
+        // contents stretched rather than whatever the resized texture holds.
+        self.repaint(i);
     }
 
     /// View pixels to surface coordinates: the shown content (window geometry) fills the view.
@@ -655,7 +676,7 @@ impl State {
             buffer_size: (0, 0),
             geometry: None,
             content: (0, 0, 0, 0),
-            waiting_buffer: None,
+            current: Held::new(),
             held_frames: Vec::new(),
             stats: CopyStats::default(),
             last_log: Instant::now(),
@@ -664,8 +685,8 @@ impl State {
     }
 
     pub fn remove_toplevel_at(&mut self, i: usize) {
-        let t = self.toplevels.remove(i);
-        if let Some(b) = t.waiting_buffer {
+        let mut t = self.toplevels.remove(i);
+        if let Some(b) = t.current.remove() {
             if b.is_alive() {
                 b.release();
             }
@@ -837,13 +858,19 @@ impl CompositorHandler for State {
         // Window geometry is double-buffered with the buffer, so read it on every commit.
         self.toplevels[i].geometry = self.toplevels[i].shell.geometry();
 
-        if let Some(BufferAssignment::NewBuffer(buffer)) = root_buffer {
-            // Without a window this only measures; the buffer waits for the window.
-            let measured = post_buffer(&mut self.toplevels[i], &buffer);
-            if self.toplevels[i].window.is_some() {
-                buffer.release();
-            } else if let Some(old) = self.toplevels[i].waiting_buffer.replace(buffer) {
+        if let Some(BufferAssignment::Removed) = root_buffer {
+            if let Some(old) = self.toplevels[i].current.remove() {
                 old.release();
+            }
+        }
+        if let Some(BufferAssignment::NewBuffer(buffer)) = root_buffer {
+            // Without a window this only measures; the held buffer is posted when one comes.
+            let measured = post_buffer(&mut self.toplevels[i], &buffer);
+            // Hold the new buffer, release the one it replaces.
+            if let Some(old) = self.toplevels[i].current.attach(buffer) {
+                if old.is_alive() {
+                    old.release();
+                }
             }
             if !self.toplevels[i].announced {
                 self.announce(i);
@@ -874,9 +901,7 @@ impl CompositorHandler for State {
 impl BufferHandler for State {
     fn buffer_destroyed(&mut self, buffer: &WlBuffer) {
         for t in &mut self.toplevels {
-            if t.waiting_buffer.as_ref() == Some(buffer) {
-                t.waiting_buffer = None;
-            }
+            t.current.forget(buffer);
         }
     }
 }
