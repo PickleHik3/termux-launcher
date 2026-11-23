@@ -24,14 +24,15 @@ public class AppearanceLooksTest {
     // ------------------------------------------------------------------------------ the slider
 
     @Test
-    public void theStopsAreClearMistTintSolidThenCustom() {
-        assertEquals(5, AppearanceLooks.STOP_COUNT);
+    public void theStopsAreClearFrostedTintedSolidLiquidThenCustom() {
+        assertEquals(6, AppearanceLooks.STOP_COUNT);
         assertEquals("minimal", AppearanceLooks.presetIdForStop(0));
         assertEquals("frost", AppearanceLooks.presetIdForStop(1));
         assertEquals("stock", AppearanceLooks.presetIdForStop(2));
         assertEquals("solid", AppearanceLooks.presetIdForStop(3));
-        assertNull("the last stop is Custom", AppearanceLooks.presetIdForStop(4));
-        assertEquals(4, AppearanceLooks.CUSTOM_STOP);
+        assertEquals("liquid", AppearanceLooks.presetIdForStop(4));
+        assertNull("the last stop is Custom", AppearanceLooks.presetIdForStop(5));
+        assertEquals(5, AppearanceLooks.CUSTOM_STOP);
     }
 
     /** The slider's stops are the shipped Looks in the shipped order, one for one. */

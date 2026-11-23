@@ -52,7 +52,6 @@ public class FreshInstallLookTest {
         com.termux.app.WallReworkMigration.migrateIfNeeded(store);
         store.edit().putInt(com.termux.shared.termux.settings.preferences.PageLookKeys.KEY_TERMINAL_PAGE_ID, 0).apply();
         preferences.migrateLookGrid(java.util.Collections.emptyList(), fresh);
-        SurfacePresets.readoptMovedLooks(preferences);
     }
 
     /** The start-up chain's look steps, in TermuxApplication's order, deciding freshness first. */
@@ -87,8 +86,8 @@ public class FreshInstallLookTest {
     /** Clear as the editor lists it for this store's glass theme. */
     private SurfacePresets.Preset clearFor() {
         for (SurfacePresets.Preset preset : SurfacePresets.presets(preferences))
-            if ("minimal".equals(preset.id)) return preset;
-        throw new AssertionError("Clear is a shipped Look");
+            if ("frost".equals(preset.id)) return preset;
+        throw new AssertionError("Frosted is a shipped Look");
     }
 
     @Test
@@ -106,15 +105,14 @@ public class FreshInstallLookTest {
         java.util.Map<String, Object> afterSecond = new java.util.HashMap<>(store.getAll());
         assertEquals(Boolean.TRUE, afterSecond.remove("look_grid_migrated"));
         assertEquals("every stored value, the LookGrid cells included", afterFirst, afterSecond);
-        assertEquals(90, GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp(),
-            preferences.getFancierGlassEdgeWidthDp()));
+        assertEquals(60, GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp()));
         assertTrue(SurfacePresets.matches(preferences, clear()));
     }
 
     private static SurfacePresets.Preset clear() {
         for (SurfacePresets.Preset preset : SurfacePresets.presets())
-            if ("minimal".equals(preset.id)) return preset;
-        throw new AssertionError("Clear is a shipped Look");
+            if ("frost".equals(preset.id)) return preset;
+        throw new AssertionError("Frosted is a shipped Look");
     }
 
     private static int stored(String key) {
@@ -122,7 +120,7 @@ public class FreshInstallLookTest {
     }
 
     @Test
-    public void aFirstRunStoresClearsValues() {
+    public void aFirstRunStoresFrostedsValues() {
         launch();
 
         assertEquals(com.termux.shared.termux.settings.preferences.FrostStops.blurDpFor(stored(SurfacePresets.cellKey(null, SurfaceProperty.BLUR))),
@@ -132,34 +130,24 @@ public class FreshInstallLookTest {
         assertEquals(stored(SurfacePresets.cellKey(null, SurfaceProperty.GRAIN)),
             preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_BEND), preferences.getFancierGlassBendDp());
-        assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH),
-            preferences.getFancierGlassEdgeWidthDp());
-        assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION),
-            preferences.getFancierGlassDispersionPercent());
-        assertEquals(stored(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY),
-            preferences.getFancierGlassClarityPercent());
+        assertEquals(stored(TERMUX_APP.KEY_SURFACE_GLASS_SHINE), preferences.getGlassShine());
         // Written, not read through from a default: a later change to the DEFAULT_* constants
         // cannot restyle this install.
         assertTrue(store.contains("look.depth"));
-        assertTrue(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH));
+        assertTrue(store.contains("look.shine"));
         assertTrue(SurfacePresets.matches(preferences, clear()));
     }
 
     @Test
-    public void aFirstRunsDepthReadsClearsPositionAndItsFirstStepIsOneStep() {
+    public void aFirstRunsDepthReadsTheRealisticPosition() {
         launch();
 
-        int depth = GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp(),
-            preferences.getFancierGlassEdgeWidthDp());
-        assertEquals("Clear's own position on the curve", 90, depth);
-        assertEquals(GlassEdgeControls.depthFor(stored(TERMUX_APP.KEY_FANCIER_GLASS_BEND),
-            stored(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH)), depth);
-        // On the curve, so the position writes back exactly what is stored.
+        int depth = GlassEdgeControls.depthFor(preferences.getFancierGlassBendDp());
+        assertEquals("the realistic slab's own position", 60, depth);
+        assertEquals(GlassEdgeControls.depthFor(stored(TERMUX_APP.KEY_FANCIER_GLASS_BEND)), depth);
         assertEquals(preferences.getFancierGlassBendDp(), GlassEdgeControls.bendForDepth(depth));
-        assertEquals(preferences.getFancierGlassEdgeWidthDp(), GlassEdgeControls.widthForDepth(depth));
-        // One step down is a neighbour on the curve, not the jump from the off-curve 9/20.
-        assertEquals(26, GlassEdgeControls.bendForDepth(depth - 1));
-        assertEquals(17, GlassEdgeControls.widthForDepth(depth - 1));
+        // Down the slider the slab thins to nothing.
+        assertEquals(0, GlassEdgeControls.bendForDepth(0));
     }
 
     @Test
@@ -171,10 +159,7 @@ public class FreshInstallLookTest {
         launch();
 
         assertFalse(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_BEND));
-        assertFalse(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH));
         assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_BEND, preferences.getFancierGlassBendDp());
-        assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH,
-            preferences.getFancierGlassEdgeWidthDp());
         assertFalse(SurfacePresets.matches(preferences, clear()));
     }
 
@@ -182,29 +167,23 @@ public class FreshInstallLookTest {
     public void anInstallWithItsOwnAppearanceKeepsEveryValue() {
         store.edit()
             .putInt(TERMUX_APP.KEY_FANCIER_GLASS_BEND, 12)
-            .putInt(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, 30)
-            .putInt(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, 5)
             .commit();
 
         launch();
 
         assertEquals(12, preferences.getFancierGlassBendDp());
-        assertEquals(30, preferences.getFancierGlassEdgeWidthDp());
-        assertEquals(5, preferences.getFancierGlassClarityPercent());
         assertFalse(SurfacePresets.matches(preferences, clear()));
     }
 
     @Test
     public void theFirstRunHappensOnce() {
-        // Clear goes in on the first launch only; what the user does after that survives every
+        // Frosted goes in on the first launch only; what the user does after that survives every
         // later launch.
         launch();
         preferences.setFancierGlassBendDp(15);
-        preferences.setFancierGlassEdgeWidthDp(10);
 
         launch();
 
         assertEquals(15, preferences.getFancierGlassBendDp());
-        assertEquals(10, preferences.getFancierGlassEdgeWidthDp());
     }
 }

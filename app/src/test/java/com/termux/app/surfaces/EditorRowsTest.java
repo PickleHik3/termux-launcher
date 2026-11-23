@@ -178,8 +178,7 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.GRAIN, Row.SHINE, Row.DEPTH,
-            Row.VIBRANCY, Row.RIM, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
+        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
             Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
             Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
             Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.PAGE_TRANSITION),

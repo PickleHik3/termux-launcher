@@ -3343,6 +3343,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             setSurfaceGlobalValue(SurfaceProperty.BLUR, FRESH_INSTALL_BASE_BLUR);
             setSurfaceGlobalValue(SurfaceProperty.OPACITY, FRESH_INSTALL_BASE_OPACITY);
             setSurfaceGlobalValue(SurfaceProperty.GRAIN, FRESH_INSTALL_BASE_GRAIN);
+            setSurfaceMaterial(TERMUX_APP.SURFACE_MATERIAL_FROST);
             setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_OBSIDIAN);
             setSurfaceGlassMotion(TERMUX_APP.GLASS_MOTION_MIST);
             setFancierGlassBendDp(FRESH_INSTALL_GLASS_BEND);

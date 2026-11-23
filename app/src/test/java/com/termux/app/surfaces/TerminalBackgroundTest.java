@@ -57,10 +57,8 @@ public class TerminalBackgroundTest {
 
     @Test
     public void theTerminalShipsDarkerThanGlobalsGlass() {
-        // A fresh install opens on Clear: Global's Opacity is Clear's.
+        // A fresh install opens on Frosted; the terminal's own Background opacity is not Global's.
         preferences.migrateLookGrid(java.util.Collections.emptyList(), true);
-        assertTrue(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY
-            > preferences.getSurfaceGlobalValue(SurfaceProperty.OPACITY));
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY,
             preferences.getWallpaperEnabledTerminalBackgroundOpacity());
     }

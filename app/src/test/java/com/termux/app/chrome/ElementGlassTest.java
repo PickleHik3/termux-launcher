@@ -50,8 +50,6 @@ public class ElementGlassTest {
         assertEquals(expected.cornersDp, actual.cornersDp);
         assertEquals(expected.ownHue, actual.ownHue);
         assertEquals(expected.ownRim, actual.ownRim);
-        assertEquals(expected.ownDepthDp, actual.ownDepthDp);
-        assertEquals(expected.ownEdgePercent, actual.ownEdgePercent);
     }
 
     @Test
@@ -108,12 +106,12 @@ public class ElementGlassTest {
             assertSame(FANCIER, ElementGlass.refraction(preferences, element, PAGE, FANCIER));
             assertNull(ElementGlass.refraction(preferences, element, PAGE, null));
         }
+        // Depth and Shine are app-wide: a surface's own Depth cell is not read.
         preferences.lookGrid().write(LookGrid.Property.DEPTH, LookGrid.Element.KEYBOARD, 2);
-        // One look on every page (ADR 0031): the keyboard's own Depth holds on each.
-        assertEquals(2, ElementGlass.refraction(preferences, LookGrid.Element.KEYBOARD, PAGE,
-            FANCIER).bendDp);
-        assertEquals(2, ElementGlass.refraction(preferences, LookGrid.Element.KEYBOARD,
-            OTHER_PAGE, FANCIER).bendDp);
+        assertSame(FANCIER, ElementGlass.refraction(preferences, LookGrid.Element.KEYBOARD, PAGE,
+            FANCIER));
+        assertSame(FANCIER, ElementGlass.refraction(preferences, LookGrid.Element.KEYBOARD,
+            OTHER_PAGE, FANCIER));
         assertSame(FANCIER, ElementGlass.refraction(preferences, LookGrid.Element.DOCK, PAGE,
             FANCIER));
         } finally {
@@ -124,18 +122,12 @@ public class ElementGlassTest {
     public void elementCell_changesOnlyThatElement() {
         LookGrid grid = globalOnly();
         grid.write(LookGrid.Property.OPACITY, LookGrid.Element.SHEETS, 80);
-        grid.write(LookGrid.Property.DEPTH, LookGrid.Element.SHEETS, 3);
-        grid.write(LookGrid.Property.EDGE, LookGrid.Element.SHEETS, 70);
         grid.write(LookGrid.Property.TINT_HUE, LookGrid.Element.SHEETS,
             LookGrid.TINT_HUE_TERTIARY);
         grid.write(LookGrid.Property.RIM, LookGrid.Element.SHEETS, LookGrid.RIM_OFF);
         ElementGlass sheets = ElementGlass.resolve(grid, LookGrid.Element.SHEETS, -1);
         assertEquals(80, sheets.opacityPercent);
-        GlassRefraction.Look look = sheets.refraction(FANCIER);
-        assertEquals(3, look.bendDp);
-        assertEquals(70, look.dispersionPercent);
-        assertEquals(FANCIER.edgeWidthDp, look.edgeWidthDp);
-        assertEquals(FANCIER.specularPercent, look.specularPercent);
+        assertSame(FANCIER, sheets.refraction(FANCIER));
         GlassLook wall = GlassLook.of(null, "gradient", "secondary");
         assertEquals(GlassLook.Hue.TERTIARY, sheets.look(wall).hue);
         assertFalse(sheets.look(wall).gradientRim);

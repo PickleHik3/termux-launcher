@@ -356,7 +356,9 @@ public final class GlassRefraction {
          */
         @NonNull
         public static Look of(@NonNull TermuxAppSharedPreferences preferences) {
-            return new Look(preferences.getFancierGlassBendDp(), 0, 0)
+            return new Look(preferences.getFancierGlassBendDp(),
+                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH,
+                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT)
                 .withShine(preferences.getGlassShine());
         }
 

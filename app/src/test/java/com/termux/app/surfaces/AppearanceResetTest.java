@@ -262,7 +262,7 @@ public class AppearanceResetTest {
         assertFalse(fonts.containsKey("active_family_id"));
         assertFalse(fonts.containsKey("weight"));
         assertEquals(Boolean.TRUE, fonts.get("metered_warning_acknowledged"));
-        // Clear, as the editor lists it.
+        // Frosted, as the editor lists it.
         assertTrue(SurfacePresets.matches(prefs[0], clear()));
     }
 
@@ -448,7 +448,7 @@ public class AppearanceResetTest {
 
     private static SurfacePresets.Preset clear() {
         for (SurfacePresets.Preset preset : SurfacePresets.presets())
-            if ("minimal".equals(preset.id)) return preset;
-        throw new AssertionError("Clear is a shipped Look");
+            if ("frost".equals(preset.id)) return preset;
+        throw new AssertionError("Frosted is a shipped Look");
     }
 }

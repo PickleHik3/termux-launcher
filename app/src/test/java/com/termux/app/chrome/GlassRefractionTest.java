@@ -300,7 +300,9 @@ public class GlassRefractionTest {
     public void theDepthHasNoCapOfItsOwn() {
         // Snell's law bounds the bend (GlassSlab.snellTan), so the Depth goes to the program as
         // it is; only the half short side holds the slab (lensThicknessPx).
-        assertEquals(30f * DENSITY, new GlassRefraction.Look(30, 10, 30).thicknessPx(DENSITY), 1e-3f);
+        // Past the realistic slab the higher index is folded in (GlassMaterial.thicknessBoost).
+        assertEquals(30f * DENSITY * com.termux.shared.termux.settings.preferences.GlassMaterial
+            .thicknessBoost(30), new GlassRefraction.Look(30, 10, 30).thicknessPx(DENSITY), 1e-3f);
         assertEquals(6f * DENSITY, new GlassRefraction.Look(6, 28, 30).thicknessPx(DENSITY), 1e-4f);
         int[] shipped = {27, 24, 21, 9};
         for (int depth : shipped)

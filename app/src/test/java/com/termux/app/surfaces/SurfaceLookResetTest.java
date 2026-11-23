@@ -161,8 +161,8 @@ public class SurfaceLookResetTest {
             preferences.getInAppKeyboardBlurRadius(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()), preferences.getInAppKeyboardGrain(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId())));
         assertEquals(clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_VIBRANCY),
             preferences.getSurfaceGlassVibrancy());
-        assertEquals(clear.values.get(TERMUX_APP.KEY_FANCIER_GLASS_DISPERSION),
-            preferences.getFancierGlassDispersionPercent());
+        assertEquals(clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_SHINE),
+            preferences.getGlassShine());
         assertEquals(clear.values.get(TERMUX_APP.KEY_SURFACE_GLASS_TINT_HUE),
             preferences.getSurfaceGlassTintHue());
     }

@@ -75,9 +75,7 @@ public class GlassRowsTest {
 
     @Test
     public void theCellRowsAreTheGridsProperties() {
-        assertEquals(LookGrid.Property.GRAIN, GlassRows.cellProperty(Row.GRAIN));
-        assertEquals(LookGrid.Property.RIM, GlassRows.cellProperty(Row.RIM));
-        assertEquals(LookGrid.Property.EDGE, GlassRows.cellProperty(Row.SHINE));
+        assertEquals(LookGrid.Property.SHINE, GlassRows.cellProperty(Row.SHINE));
         assertEquals(LookGrid.Property.DEPTH, GlassRows.cellProperty(Row.DEPTH));
         assertEquals("Colour has an element column", LookGrid.Property.TINT_HUE,
             GlassRows.cellProperty(Row.TINT_HUE));
@@ -132,15 +130,16 @@ public class GlassRowsTest {
     @Test
     public void marginAndVibrancyAreTheWhereChipsAllGlassWhateverWhatNames() {
         assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
-        assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));
+        assertTrue("Depth and Shine are app-wide", GlassRows.allGlassOnly(Row.DEPTH));
+        assertTrue(GlassRows.allGlassOnly(Row.SHINE));
         assertFalse(GlassRows.allGlassOnly(Row.OPACITY));
         EditorChips dock = new EditorChips(LookGrid.Element.DOCK);
         LookGrid.Key margin = dock.cell(GlassRows.cellProperty(Row.MARGIN));
         assertNull("no element column", margin.element);
         assertNull(margin.kind);
-        LookGrid.Key vibrancy = dock.cell(GlassRows.cellProperty(Row.VIBRANCY));
-        assertNull(vibrancy.element);
-        assertEquals(LookGrid.NO_PAGE, vibrancy.page);
+        LookGrid.Key shine = dock.cell(GlassRows.cellProperty(Row.SHINE));
+        assertNull(shine.element);
+        assertEquals(LookGrid.NO_PAGE, shine.page);
     }
 
 }

@@ -49,6 +49,8 @@ public final class GlassMaterial {
     /** The lowest Depth position whose thickness is nearest {@code bendDp}. */
     public static int depthForBend(int bendDp) {
         int bend = clamp(bendDp, 0, MAX_BEND_DP);
+        // The realistic slab reads as the default position, not the first one that writes it.
+        if (bendForDepth(DEPTH_DEFAULT) == bend) return DEPTH_DEFAULT;
         int best = MIN;
         int bestError = Integer.MAX_VALUE;
         for (int t = MIN; t <= MAX; t++) {
