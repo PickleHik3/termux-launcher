@@ -329,6 +329,8 @@ public final class PaneWallLayout extends ViewGroup
     /** The Terminal's pane host: its page's view while a terminal window is in front. */
     @Nullable private View mTerminalHost;
     private boolean mReducedMotion;
+    /** Uptime the wall last came to rest, for the grabbers' fade-in; -1 while it is off its rest. */
+    private long mGrabberRestSinceMs;
     private boolean mGesturesEnabled = true;
     /**
      * A slide from one view to another ({@link #goTo} to a different page) is under way. Outside
@@ -2875,12 +2877,26 @@ public final class PaneWallLayout extends ViewGroup
         boolean bottom = isGrabberShown();
         boolean top = isStatusGrabberShown();
         if (!bottom && !top) return;
+        // The pills hide while the wall is off its rest and fade in once, by time, from the first
+        // frame drawn at rest: derived from the wall's own state each draw, so a cancelled
+        // transition cannot leave them hidden.
+        long now = SystemClock.uptimeMillis();
+        boolean atRest = !isMoving() && mOffsetPx == 0f;
+        if (!atRest) mGrabberRestSinceMs = -1L;
+        else if (mGrabberRestSinceMs < 0L) mGrabberRestSinceMs = now;
+        long sinceLand = atRest ? now - mGrabberRestSinceMs : 0L;
+        float bottomLanded = BorderGrabber.landedVisibility(atRest, sinceLand, mReducedMotion,
+            mGrabber.isPressed());
+        float topLanded = BorderGrabber.landedVisibility(atRest, sinceLand, mReducedMotion,
+            mStatusGrabber.isPressed());
+        if (atRest && sinceLand < BorderGrabber.LANDING_FADE_MS && !mReducedMotion) {
+            postInvalidateOnAnimation();
+        }
         int width = getWidth();
         for (PageKind place : mKinds) {
             View page = mPageViews.get(place);
             if (page == null || page.getVisibility() != VISIBLE || page.getWidth() <= 0) continue;
-            float visibility = PaneWallPolicy.pageOutlineAlpha(slidePx(page), width);
-            if (!(visibility > 0f)) continue;
+            if (!(Math.abs(slidePx(page)) < 0.5f)) continue;
             float centreX = grabberCentreX(page, page.getTranslationX());
             float pivotY = page.getTop() + page.getTranslationY() + page.getPivotY();
             if (bottom && place == PageKind.HOME && loadHomeGrabber(page)) {
@@ -2890,20 +2906,20 @@ public final class PaneWallLayout extends ViewGroup
                 mDrawnHomeDashes = homeDockShowsPageDashes();
                 if (!mDrawnHomeDashes) {
                     mGrabber.drawHome(canvas, mHomePill[0], mHomePill[1], mHomePill[2],
-                        mHomePill[3], page.getTranslationX(), visibility);
+                        mHomePill[3], page.getTranslationX(), bottomLanded);
                 }
             } else if (bottom) {
                 float bottomY = pivotY + (page.getHeight() - page.getPivotY()) * page.getScaleY();
-                mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), visibility);
+                mGrabber.draw(canvas, centreX, bottomY, page.getScaleY(), bottomLanded);
             }
             if (top && place == PageKind.HOME) {
                 float topY = pivotY - page.getPivotY() * page.getScaleY();
-                mStatusGrabber.draw(canvas, centreX, topY, page.getScaleY(), visibility);
+                mStatusGrabber.draw(canvas, centreX, topY, page.getScaleY(), topLanded);
             } else if (top) {
                 // Over a window it hangs from the status bar's bottom border, which stays put as
                 // the page sinks.
                 mStatusGrabber.drawUnderBorder(canvas, centreX, statusBorderY(page),
-                    page.getScaleY(), visibility);
+                    page.getScaleY(), topLanded);
             }
         }
     }
@@ -3381,6 +3397,9 @@ public final class PaneWallLayout extends ViewGroup
 
     private void stopSlide() {
         mSliding = false;
+        // The grabbers fade in from the first frame drawn at rest: make sure one follows a landing
+        // whose last offset frame was already drawn (also the fail-safe for a cancelled slide).
+        if (isGrabberShown() || isStatusGrabberShown()) invalidate();
         mSlideFromPx = Float.NaN;
         ValueAnimator slide = mSlide;
         mSlide = null;
