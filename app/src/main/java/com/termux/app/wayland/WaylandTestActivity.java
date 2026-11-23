@@ -20,6 +20,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.LongSparseArray;
 import android.util.TypedValue;
+import android.view.Display;
 import android.view.Gravity;
 import android.view.InputDevice;
 import android.view.KeyEvent;
@@ -55,7 +56,7 @@ public final class WaylandTestActivity extends Activity {
     public static final String SOCKET_DIR = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/tl-wayland";
     public static final String EXTRA_XWAYLAND = "xwayland";
 
-    private static final int MAX_POINTS = 10;
+    private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private final LongSparseArray<Pane> mPanes = new LongSparseArray<>();
@@ -66,15 +67,22 @@ public final class WaylandTestActivity extends Activity {
     private Button mStartButton;
     private Button mStopButton;
     private Button mCrashButton;
+    private Button mProbeButton;
+    private Button mCopyLogButton;
+    private boolean mCopyLog;
 
     private ILinuxWindows mService;
     private IBinder mServiceBinder;
     private boolean mBound;
+    /** The debug interface, bound beside the host for Crash, Probe and the copy log. */
+    private ILinuxWindowsDebug mDebug;
+    private boolean mDebugBound;
     /** Start the compositor when the service reports it is not running. */
     private boolean mAutoStart = true;
     /** The activity is visible: panes hand their Surfaces to the host. */
     private boolean mVisible;
     private long mFocusedId;
+    private int mHostPid;
 
     private final IBinder.DeathRecipient mDeath = () -> mMain.post(this::onHostDied);
 
@@ -97,34 +105,42 @@ public final class WaylandTestActivity extends Activity {
         }
     };
 
+    private final ServiceConnection mDebugConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            mDebug = ILinuxWindowsDebug.Stub.asInterface(binder);
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            mDebug = null;
+        }
+    };
+
     /** Host events arrive on binder threads; everything is handled on the main thread. */
     private final ILinuxWindowsCallback.Stub mCallback = new ILinuxWindowsCallback.Stub() {
         @Override
-        public void onHostState(boolean running, int pid, String message) {
-            mMain.post(() -> hostState(running, pid, message));
+        public void onAttached(int interfaceVersion, int hostPid) {
+            mMain.post(() -> attached(interfaceVersion, hostPid));
         }
 
         @Override
-        public void onToplevelCreated(long id, String title, String appId) {
-            mMain.post(() -> toplevelCreated(id, title, appId));
+        public void onHostState(int state, String message) {
+            mMain.post(() -> hostState(state, message));
         }
 
         @Override
-        public void onToplevelTitle(long id, String title, String appId) {
+        public void onWindowCreated(long id, String title, String appId, int clientPid, int flags) {
+            mMain.post(() -> windowCreated(id, title, appId, clientPid, flags));
+        }
+
+        @Override
+        public void onWindowChanged(long id, String title, String appId, int width, int height) {
             mMain.post(() -> {
                 Pane pane = mPanes.get(id);
                 if (pane == null) return;
                 pane.title = title;
                 pane.appId = appId;
-                pane.updateLabel();
-            });
-        }
-
-        @Override
-        public void onToplevelSize(long id, int width, int height) {
-            mMain.post(() -> {
-                Pane pane = mPanes.get(id);
-                if (pane == null) return;
                 pane.width = width;
                 pane.height = height;
                 pane.updateLabel();
@@ -132,7 +148,7 @@ public final class WaylandTestActivity extends Activity {
         }
 
         @Override
-        public void onToplevelDestroyed(long id) {
+        public void onWindowDestroyed(long id) {
             mMain.post(() -> removePane(id));
         }
     };
@@ -146,6 +162,8 @@ public final class WaylandTestActivity extends Activity {
         Surface surface;
         String title = "";
         String appId = "";
+        int clientPid;
+        int flags;
         int width;
         int height;
         int mouseButton;
@@ -195,17 +213,29 @@ public final class WaylandTestActivity extends Activity {
             StringBuilder sb = new StringBuilder();
             sb.append(TextUtils.isEmpty(title) ? "(untitled)" : title);
             if (!TextUtils.isEmpty(appId)) sb.append(" · ").append(appId);
+            if ((flags & ILinuxWindows.WINDOW_X11) != 0) sb.append(" · X11");
+            if (clientPid > 0) sb.append(" · pid ").append(clientPid);
             if (width > 0) sb.append(" · ").append(width).append('×').append(height);
             label.setText(sb);
             label.setTypeface(null, id == mFocusedId ? Typeface.BOLD : Typeface.NORMAL);
         }
 
-        /** Hands the Surface to the host while the activity is visible. */
+        /** Hands the Surface to the host. */
         void attach() {
-            if (mService == null || surface == null || !mVisible) return;
+            if (mService == null || surface == null) return;
             try {
-                mService.configure(id, view.getWidth(), view.getHeight());
+                mService.configure(id, view.getWidth(), view.getHeight(), density());
                 mService.setSurface(id, surface);
+                mService.setVisible(id, mVisible);
+            } catch (RemoteException ignored) {
+            }
+        }
+
+        /** The host draws only visible windows; a hidden one keeps its last frame. */
+        void setVisible(boolean visible) {
+            if (mService == null) return;
+            try {
+                mService.setVisible(id, visible);
             } catch (RemoteException ignored) {
             }
         }
@@ -228,7 +258,7 @@ public final class WaylandTestActivity extends Activity {
         public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture texture, int width, int height) {
             if (mService == null) return;
             try {
-                mService.configure(id, width, height);
+                mService.configure(id, width, height, density());
             } catch (RemoteException ignored) {
             }
         }
@@ -246,55 +276,31 @@ public final class WaylandTestActivity extends Activity {
         @Override
         public void onSurfaceTextureUpdated(@NonNull SurfaceTexture texture) {}
 
-        private void sendTouch(int action, int count) {
+        private void sendPointer(int action, int button, float x, float y, long time) {
             if (mService == null) return;
             try {
-                mService.touch(id, action, count, slots, xs, ys);
+                mService.pointer(id, action, button, x, y, time);
             } catch (RemoteException ignored) {
             }
         }
 
-        private void sendPointer(int action, int button, float x, float y) {
-            if (mService == null) return;
-            try {
-                mService.pointer(id, action, button, x, y);
-            } catch (RemoteException ignored) {
-            }
-        }
-
+        /** The whole MotionEvent in one call: a second finger going down is one wl_touch frame. */
         private boolean onTouch(MotionEvent e) {
             if (e.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) return onMouse(e);
-            switch (e.getActionMasked()) {
-                case MotionEvent.ACTION_DOWN:
-                case MotionEvent.ACTION_POINTER_DOWN:
-                case MotionEvent.ACTION_UP:
-                case MotionEvent.ACTION_POINTER_UP: {
-                    boolean down = e.getActionMasked() == MotionEvent.ACTION_DOWN
-                        || e.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN;
-                    if (down) focus(id);
-                    int i = e.getActionIndex();
-                    slots[0] = e.getPointerId(i);
-                    xs[0] = e.getX(i);
-                    ys[0] = e.getY(i);
-                    sendTouch(down ? WaylandHost.TOUCH_DOWN : WaylandHost.TOUCH_UP, 1);
-                    return true;
-                }
-                case MotionEvent.ACTION_MOVE: {
-                    int n = Math.min(e.getPointerCount(), MAX_POINTS);
-                    for (int i = 0; i < n; i++) {
-                        slots[i] = e.getPointerId(i);
-                        xs[i] = e.getX(i);
-                        ys[i] = e.getY(i);
-                    }
-                    sendTouch(WaylandHost.TOUCH_MOTION, n);
-                    return true;
-                }
-                case MotionEvent.ACTION_CANCEL:
-                    sendTouch(WaylandHost.TOUCH_CANCEL, 0);
-                    return true;
-                default:
-                    return true;
+            int action = e.getActionMasked();
+            if (action == MotionEvent.ACTION_DOWN) focus(id);
+            int n = Math.min(e.getPointerCount(), MAX_POINTS);
+            for (int i = 0; i < n; i++) {
+                slots[i] = e.getPointerId(i);
+                xs[i] = e.getX(i);
+                ys[i] = e.getY(i);
             }
+            if (mService == null) return true;
+            try {
+                mService.touch(id, action, e.getActionIndex(), e.getEventTime(), n, slots, xs, ys);
+            } catch (RemoteException ignored) {
+            }
+            return true;
         }
 
         private boolean onMouse(MotionEvent e) {
@@ -302,15 +308,15 @@ public final class WaylandTestActivity extends Activity {
                 case MotionEvent.ACTION_DOWN:
                     focus(id);
                     mouseButton = linuxButton(e.getButtonState());
-                    sendPointer(WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
-                    sendPointer(WaylandHost.POINTER_BUTTON_DOWN, mouseButton, e.getX(), e.getY());
+                    sendPointer(ILinuxWindows.POINTER_MOTION, 0, e.getX(), e.getY(), e.getEventTime());
+                    sendPointer(ILinuxWindows.POINTER_BUTTON_DOWN, mouseButton, e.getX(), e.getY(), e.getEventTime());
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    sendPointer(WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
+                    sendPointer(ILinuxWindows.POINTER_MOTION, 0, e.getX(), e.getY(), e.getEventTime());
                     return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    sendPointer(WaylandHost.POINTER_BUTTON_UP, mouseButton, e.getX(), e.getY());
+                    sendPointer(ILinuxWindows.POINTER_BUTTON_UP, mouseButton, e.getX(), e.getY(), e.getEventTime());
                     return true;
                 default:
                     return true;
@@ -322,14 +328,15 @@ public final class WaylandTestActivity extends Activity {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_HOVER_ENTER:
                 case MotionEvent.ACTION_HOVER_MOVE:
-                    sendPointer(WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
+                    sendPointer(ILinuxWindows.POINTER_MOTION, 0, e.getX(), e.getY(), e.getEventTime());
                     return true;
                 case MotionEvent.ACTION_HOVER_EXIT:
-                    sendPointer(WaylandHost.POINTER_LEAVE, 0, 0f, 0f);
+                    sendPointer(ILinuxWindows.POINTER_LEAVE, 0, 0f, 0f, e.getEventTime());
                     return true;
                 case MotionEvent.ACTION_SCROLL:
-                    sendPointer(WaylandHost.POINTER_AXIS, 0,
-                        e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 15f, -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 15f);
+                    sendPointer(ILinuxWindows.POINTER_SCROLL, 0,
+                        e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 15f, -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 15f,
+                        e.getEventTime());
                     return true;
                 default:
                     return false;
@@ -338,9 +345,9 @@ public final class WaylandTestActivity extends Activity {
     }
 
     private static int linuxButton(int buttonState) {
-        if ((buttonState & MotionEvent.BUTTON_SECONDARY) != 0) return WaylandHost.BTN_RIGHT;
-        if ((buttonState & MotionEvent.BUTTON_TERTIARY) != 0) return WaylandHost.BTN_MIDDLE;
-        return WaylandHost.BTN_LEFT;
+        if ((buttonState & MotionEvent.BUTTON_SECONDARY) != 0) return ILinuxWindows.BTN_RIGHT;
+        if ((buttonState & MotionEvent.BUTTON_TERTIARY) != 0) return ILinuxWindows.BTN_MIDDLE;
+        return ILinuxWindows.BTN_LEFT;
     }
 
     /** Key codes the host maps to evdev (see wayland-host/src/keymap.rs); others stay with Android. */
@@ -372,6 +379,10 @@ public final class WaylandTestActivity extends Activity {
         b.setMinimumWidth(0);
         b.setOnClickListener(listener);
         return b;
+    }
+
+    private float density() {
+        return getResources().getDisplayMetrics().density;
     }
 
     private int dp(int value) {
@@ -410,17 +421,40 @@ public final class WaylandTestActivity extends Activity {
             }
         });
         mCrashButton = button("Crash compositor", v -> {
-            if (mService == null) return;
+            if (mDebug == null) return;
             try {
-                mService.crash();
+                mDebug.crash();
+            } catch (RemoteException ignored) {
+            }
+        });
+        mProbeButton = button("Probe", v -> {
+            if (mDebug == null) return;
+            try {
+                mDebug.probe();
+            } catch (RemoteException ignored) {
+            }
+        });
+        mCopyLogButton = button("Log copies", v -> {
+            if (mDebug == null) return;
+            mCopyLog = !mCopyLog;
+            mCopyLogButton.setText(mCopyLog ? "Stop copy log" : "Log copies");
+            try {
+                mDebug.setCopyLog(mCopyLog);
             } catch (RemoteException ignored) {
             }
         });
         bar.addView(mStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
         bar.addView(mStartButton);
         bar.addView(mStopButton);
-        bar.addView(mCrashButton);
         root.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+        LinearLayout debugBar = new LinearLayout(this);
+        debugBar.setOrientation(LinearLayout.HORIZONTAL);
+        debugBar.setPadding(dp(8), 0, dp(8), 0);
+        debugBar.addView(mCrashButton);
+        debugBar.addView(mProbeButton);
+        debugBar.addView(mCopyLogButton);
+        root.addView(debugBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
         mPaneHost = new LinearLayout(this);
@@ -443,6 +477,10 @@ public final class WaylandTestActivity extends Activity {
             // Started as well as bound, so the host outlives this activity.
             startService(intent);
             mBound = bindService(intent, mConnection, BIND_AUTO_CREATE);
+            if (mBound && !mDebugBound) {
+                Intent debug = new Intent(this, LinuxWindowsService.class).setAction(LinuxWindowsService.ACTION_DEBUG);
+                mDebugBound = bindService(debug, mDebugConnection, 0);
+            }
         } catch (RuntimeException e) {
             Log.w(LOG_TAG, "cannot reach the host service: " + e);
             mBound = false;
@@ -470,30 +508,60 @@ public final class WaylandTestActivity extends Activity {
             if (bin.canExecute()) xwayland = bin.getAbsolutePath();
             else Log.w(LOG_TAG, "no executable " + bin);
         }
+        Display display = getWindowManager().getDefaultDisplay();
         Point size = new Point();
-        getWindowManager().getDefaultDisplay().getRealSize(size);
+        display.getRealSize(size);
+        float refresh = display.getRefreshRate();
+        long framePeriodNanos = refresh > 1f ? (long) (1_000_000_000L / refresh) : 0L;
         try {
-            mService.start(SOCKET_DIR, xkbRoot, xwayland, size.x, size.y);
+            mService.start(SOCKET_DIR, xkbRoot, xwayland, size.x, size.y, density(), framePeriodNanos);
         } catch (RemoteException ignored) {
         }
     }
 
-    private void hostState(boolean running, int pid, String message) {
+    private void attached(int interfaceVersion, int hostPid) {
         if (isDestroyed()) return;
-        if (running) {
-            mAutoStart = false;
-            mStatus.setText("Host pid " + pid);
-            mStartButton.setVisibility(View.GONE);
-            mStopButton.setVisibility(View.VISIBLE);
-            mCrashButton.setVisibility(View.VISIBLE);
-            mEmpty.setText("Waiting for Linux windows.\n" + message);
-        } else if (mAutoStart) {
-            mAutoStart = false;
-            mStatus.setText("Starting…");
-            startHost();
-        } else {
-            showStopped(TextUtils.isEmpty(message) ? "Stopped." : message, true);
-            mStartButton.setText("Start");
+        if (interfaceVersion != ILinuxWindows.VERSION) {
+            Log.w(LOG_TAG, "host speaks version " + interfaceVersion + ", this screen " + ILinuxWindows.VERSION);
+            onHostDied();
+            showStopped("The Linux windows host is a different version.", false);
+            return;
+        }
+        mHostPid = hostPid;
+    }
+
+    private void hostState(int state, String message) {
+        if (isDestroyed()) return;
+        switch (state) {
+            case ILinuxWindows.STATE_RUNNING:
+                mAutoStart = false;
+                mStatus.setText("Host pid " + mHostPid);
+                mStartButton.setVisibility(View.GONE);
+                mStopButton.setVisibility(View.VISIBLE);
+                mCrashButton.setVisibility(View.VISIBLE);
+                mEmpty.setText("Waiting for Linux windows.\n" + message);
+                break;
+            case ILinuxWindows.STATE_STARTING:
+                mStatus.setText("Starting…");
+                break;
+            case ILinuxWindows.STATE_STOPPED:
+                if (mAutoStart) {
+                    mAutoStart = false;
+                    mStatus.setText("Starting…");
+                    startHost();
+                    break;
+                }
+                showStopped(TextUtils.isEmpty(message) ? "Stopped." : message, true);
+                mStartButton.setText("Start");
+                break;
+            case ILinuxWindows.STATE_DIED:
+                clearPanes();
+                showStopped(message, true);
+                mStartButton.setText("Restart");
+                break;
+            default:
+                showStopped(message, false);
+                break;
         }
     }
 
@@ -517,6 +585,14 @@ public final class WaylandTestActivity extends Activity {
         }
         mServiceBinder = null;
         mService = null;
+        mDebug = null;
+        if (mDebugBound) {
+            try {
+                unbindService(mDebugConnection);
+            } catch (IllegalArgumentException ignored) {
+            }
+            mDebugBound = false;
+        }
         if (mBound) {
             // Unbind so Android does not bring the service back on its own; Restart does.
             try {
@@ -531,11 +607,13 @@ public final class WaylandTestActivity extends Activity {
         mStartButton.setText("Restart");
     }
 
-    private void toplevelCreated(long id, String title, String appId) {
+    private void windowCreated(long id, String title, String appId, int clientPid, int flags) {
         if (mPanes.get(id) != null || isDestroyed()) return;
         Pane pane = new Pane(id);
         pane.title = title;
         pane.appId = appId;
+        pane.clientPid = clientPid;
+        pane.flags = flags;
         pane.updateLabel();
         mPanes.put(id, pane);
         mEmpty.setVisibility(View.GONE);
@@ -562,6 +640,12 @@ public final class WaylandTestActivity extends Activity {
         if (mFocusedId == id) return;
         long old = mFocusedId;
         mFocusedId = id;
+        if (mService != null) {
+            try {
+                mService.setFocus(id);
+            } catch (RemoteException ignored) {
+            }
+        }
         Pane before = mPanes.get(old);
         if (before != null) before.updateLabel();
         Pane now = mPanes.get(id);
@@ -577,7 +661,7 @@ public final class WaylandTestActivity extends Activity {
             // The client repeats held keys itself (wl_keyboard.repeat_info).
             if (event.getRepeatCount() == 0) {
                 try {
-                    mService.key(mFocusedId, event.getKeyCode(), action == KeyEvent.ACTION_DOWN);
+                    mService.key(mFocusedId, event.getKeyCode(), action == KeyEvent.ACTION_DOWN, event.getEventTime());
                 } catch (RemoteException ignored) {
                 }
             }
@@ -590,14 +674,17 @@ public final class WaylandTestActivity extends Activity {
     protected void onStart() {
         super.onStart();
         mVisible = true;
-        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).attach();
+        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).setVisible(true);
     }
 
     @Override
     protected void onStop() {
-        // A hidden window gets no frames: its client stops drawing until it is shown again.
-        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).detach();
+        // A hidden window copies nothing and its client gets only the slow keep-alive; it keeps
+        // its Surface and last frame, so it shows again at once.
+        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).setVisible(false);
         mVisible = false;
+        // Keys held as the screen goes must not stay down in the window.
+        focus(0);
         super.onStop();
     }
 
@@ -621,7 +708,12 @@ public final class WaylandTestActivity extends Activity {
             unbindService(mConnection);
             mBound = false;
         }
+        if (mDebugBound) {
+            unbindService(mDebugConnection);
+            mDebugBound = false;
+        }
         mService = null;
+        mDebug = null;
         mPanes.clear();
         super.onDestroy();
     }

@@ -1,14 +1,16 @@
-//! libtlwayland: a Wayland compositor that runs in the launcher's `:linuxwindows` process
-//! (spike).
+//! libtlwayland: a Wayland compositor that runs in the launcher's `:linuxwindows` process.
 //!
-//! Each xdg_toplevel is shown in its own Android TextureView: the launcher hands this library
-//! one `Surface` per toplevel over binder and the compositor copies the client's wl_shm buffer
-//! into it.
+//! Each toplevel is shown in its own Android view: the launcher hands this library one
+//! `Surface` per toplevel over binder and the compositor copies the client's wl_shm buffer into
+//! it, at most once per frame tick.
 
 pub mod geometry;
 pub mod held;
 pub mod keymap;
+pub mod paced;
 pub mod pixels;
+pub mod protocol;
+pub mod xlock;
 
 #[cfg(target_os = "android")]
 mod android;

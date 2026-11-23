@@ -1,20 +1,25 @@
 //! The compositor: smithay's wayland frontend on its own calloop thread.
 //!
 //! Presentation is a CPU copy of each toplevel's root wl_shm buffer into that toplevel's
-//! ANativeWindow. The root buffer stays held until the client commits the next one, so a new
-//! or resized Surface is repainted at once. Subsurfaces, popups and cursor surfaces are
-//! acknowledged (buffers released, frame callbacks answered) but never shown.
+//! ANativeWindow, paced by one frame tick (`paced.rs` has the rules): a commit only holds the
+//! buffer, the tick copies each shown dirty toplevel once and then releases replaced buffers and
+//! answers frame callbacks. Hidden toplevels (not visible, or no Surface) copy nothing and are
+//! let go only on a slow keep-alive. Subsurfaces, popups and cursor surfaces are acknowledged on
+//! the tick (buffers released, frame callbacks answered) but never shown.
 
 use std::os::unix::net::UnixStream;
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicBool, AtomicI64, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use smithay::delegate_compositor;
 use smithay::delegate_data_device;
+use smithay::delegate_fractional_scale;
 use smithay::delegate_output;
 use smithay::delegate_seat;
 use smithay::delegate_shm;
+use smithay::delegate_viewporter;
 use smithay::delegate_xdg_decoration;
 use smithay::delegate_xdg_shell;
 use smithay::input::keyboard::XkbConfig;
@@ -25,7 +30,7 @@ use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Sub
 use smithay::reexports::calloop::channel::{self, Channel, Sender};
 use smithay::reexports::calloop::generic::Generic;
 use smithay::reexports::calloop::timer::{TimeoutAction, Timer};
-use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, LoopSignal, Mode, PostAction};
+use smithay::reexports::calloop::{EventLoop, Interest, LoopHandle, LoopSignal, Mode, PostAction, RegistrationToken};
 use smithay::reexports::wayland_protocols::xdg::decoration::zv1::server::zxdg_toplevel_decoration_v1::Mode as DecorationMode;
 use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::backend::{ClientData, ClientId, DisconnectReason};
@@ -36,13 +41,12 @@ use smithay::reexports::wayland_server::protocol::wl_shm;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, ListeningSocket, Resource};
 use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
-use smithay::wayland::xwayland_shell::XWaylandShellState;
-use smithay::xwayland::{X11Surface, XWaylandClientData};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
-    get_parent, with_states, with_surface_tree_downward, BufferAssignment, CompositorClientState, CompositorHandler,
-    CompositorState, SurfaceAttributes, TraversalAction,
+    get_parent, send_surface_state, with_states, with_surface_tree_downward, BufferAssignment, CompositorClientState,
+    CompositorHandler, CompositorState, SurfaceAttributes, TraversalAction,
 };
+use smithay::wayland::fractional_scale::{with_fractional_scale, FractionalScaleHandler, FractionalScaleManagerState};
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::selection::data_device::{
     ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
@@ -50,58 +54,62 @@ use smithay::wayland::selection::data_device::{
 use smithay::wayland::selection::SelectionHandler;
 use smithay::wayland::shell::xdg::decoration::{XdgDecorationHandler, XdgDecorationState};
 use smithay::wayland::shell::xdg::{
-    PopupSurface, PositionerState, ToplevelSurface, XdgShellHandler, XdgShellState, XdgToplevelSurfaceData,
+    PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgShellHandler, XdgShellState,
+    XdgToplevelSurfaceData,
 };
 use smithay::wayland::shm::{with_buffer_contents, ShmHandler, ShmState};
+use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
+use smithay::wayland::xwayland_shell::XWaylandShellState;
+use smithay::xwayland::{X11Surface, XWaylandClientData};
 
 use smithay::backend::input::KeyState;
 use smithay::input::keyboard::{FilterResult, Keycode};
-use smithay::wayland::shell::xdg::SurfaceCachedState;
 
-use crate::geometry::{content_rect, content_span, view_to_surface, Rect};
-use crate::held::Held;
+use crate::geometry::{
+    clamp_to_limit, content_span, integer_scale, logical_size, post_limit, surface_map, view_to_surface, Rect, RectF,
+};
 use crate::keymap::android_to_evdev;
+use crate::paced::Paced;
+use crate::protocol::*;
 
 use super::focus::KeyboardFocus;
 use super::java::HostEvents;
 use super::log::{lerror, linfo, lwarn};
 use super::window::NativeWindow;
 
-/// Frame callbacks are answered at most this often.
-const FRAME_INTERVAL: Duration = Duration::from_millis(16);
-/// At most one copy-time line per toplevel per this interval.
+/// A hidden toplevel's waiting frame callbacks and buffers are let go this often.
+const KEEPALIVE: Duration = Duration::from_secs(1);
+/// At most one copy-time line per toplevel per this interval, while the copy log is on.
 const LOG_INTERVAL: Duration = Duration::from_secs(1);
+/// Titles and app ids longer than this are cut before they cross to Java.
+const MAX_NAME_CHARS: usize = 256;
 
-pub const TOUCH_DOWN: i32 = 0;
-pub const TOUCH_UP: i32 = 1;
-pub const TOUCH_MOTION: i32 = 2;
-pub const TOUCH_CANCEL: i32 = 3;
-
-pub const POINTER_MOTION: i32 = 0;
-pub const POINTER_BUTTON_DOWN: i32 = 1;
-pub const POINTER_BUTTON_UP: i32 = 2;
-pub const POINTER_AXIS: i32 = 3;
-pub const POINTER_LEAVE: i32 = 4;
+/// Window ids are unique for the life of the process, across stop and start, so a late call
+/// for a gone window can never reach a new one.
+static NEXT_ID: AtomicI64 = AtomicI64::new(1);
+/// The per-toplevel copy-time log line (debug interface).
+pub static COPY_LOG: AtomicBool = AtomicBool::new(false);
 
 /// Touch points one MotionEvent can carry here; more are dropped.
-pub const MAX_TOUCH_POINTS: usize = 10;
+pub const MAX_TOUCH_POINTS: usize = MAX_TOUCH_POINTERS as usize;
 
-/// One MotionEvent's worth of touch points: (slot, x, y) in view pixels.
+/// One MotionEvent's pointers: (pointer id, x, y) in view pixels.
 #[derive(Clone, Copy)]
 pub struct TouchPoints {
     pub count: usize,
     pub points: [(i32, f32, f32); MAX_TOUCH_POINTS],
 }
 
-/// What Java asks of the compositor thread.
+/// What Java asks of the compositor thread. Times are Android uptime milliseconds.
 pub enum Command {
     SetWindow { id: i64, window: Option<NativeWindow> },
-    Configure { id: i64, width: i32, height: i32 },
-    /// Every point gets `action`, then one wl_touch.frame.
-    Touch { id: i64, action: i32, points: TouchPoints },
-    Pointer { id: i64, action: i32, button: i32, x: f32, y: f32 },
+    Configure { id: i64, width: i32, height: i32, scale: f64 },
+    SetVisible { id: i64, visible: bool },
+    SetFocus { id: i64 },
+    Touch { id: i64, action: i32, action_index: i32, time: u32, points: TouchPoints },
+    Pointer { id: i64, action: i32, button: i32, x: f32, y: f32, time: u32 },
     /// An Android key code; the host maps it to evdev.
-    Key { id: i64, android_keycode: i32, down: bool },
+    Key { id: i64, android_keycode: i32, down: bool, time: u32 },
     Close { id: i64 },
 }
 
@@ -109,6 +117,8 @@ pub struct StartConfig {
     pub socket_path: PathBuf,
     pub output_width: i32,
     pub output_height: i32,
+    pub scale: f64,
+    pub frame_period: Duration,
     pub xwayland: Option<super::xwayland::XwaylandConfig>,
 }
 
@@ -117,7 +127,12 @@ pub struct HostHandle {
     pub sender: Sender<Command>,
     pub signal: LoopSignal,
     pub thread: std::thread::JoinHandle<()>,
+    /// Set before a requested stop, so the thread's end is not reported as a death.
+    pub stopping: Arc<AtomicBool>,
 }
+
+/// Reports the compositor thread's unrequested end to Java; `true` when it panicked.
+pub type EndReporter = Box<dyn FnOnce(bool)>;
 
 #[derive(Default)]
 pub struct ClientState {
@@ -153,10 +168,10 @@ impl Shell {
         }
     }
 
-    fn keyboard_focus(&self) -> Option<KeyboardFocus> {
+    fn keyboard_focus(&self) -> KeyboardFocus {
         match self {
-            Shell::Xdg(t) => Some(KeyboardFocus::Wl(t.wl_surface().clone())),
-            Shell::X11(w) => Some(KeyboardFocus::X11(w.clone())),
+            Shell::Xdg(t) => KeyboardFocus::Wl(t.wl_surface().clone()),
+            Shell::X11(w) => KeyboardFocus::X11(w.clone()),
         }
     }
 
@@ -182,10 +197,28 @@ impl Shell {
         }
     }
 
+    fn is_x11(&self) -> bool {
+        matches!(self, Shell::X11(_))
+    }
+
     fn names(&self) -> (String, String) {
-        match self {
+        let (title, app_id) = match self {
             Shell::Xdg(t) => toplevel_names(t),
             Shell::X11(w) => (w.title(), w.class()),
+        };
+        (capped(title), capped(app_id))
+    }
+
+    /// The client's process id, 0 when unknown.
+    fn client_pid(&self, dh: &DisplayHandle) -> i32 {
+        match self {
+            Shell::Xdg(t) => t
+                .wl_surface()
+                .client()
+                .and_then(|c| c.get_credentials(dh).ok())
+                .map(|c| c.pid)
+                .unwrap_or(0),
+            Shell::X11(w) => w.pid().and_then(|p| i32::try_from(p).ok()).unwrap_or(0),
         }
     }
 
@@ -207,12 +240,17 @@ impl Shell {
         }
     }
 
-    fn configure(&self, width: i32, height: i32) {
+    /// Asks for a window of `size`: logical units for xdg, pixels for X11.
+    fn configure(&self, size: (i32, i32), activated: bool) {
         match self {
             Shell::Xdg(t) => {
                 t.with_pending_state(|s| {
-                    s.size = Some((width, height).into());
-                    s.states.set(xdg_toplevel::State::Activated);
+                    s.size = Some(size.into());
+                    if activated {
+                        s.states.set(xdg_toplevel::State::Activated);
+                    } else {
+                        s.states.unset(xdg_toplevel::State::Activated);
+                    }
                     s.states.set(xdg_toplevel::State::TiledLeft);
                     s.states.set(xdg_toplevel::State::TiledRight);
                     s.states.set(xdg_toplevel::State::TiledTop);
@@ -224,31 +262,75 @@ impl Shell {
             }
             Shell::X11(w) => {
                 let loc = w.geometry().loc;
-                let _ = w.configure(Rectangle::new(loc, (width, height).into()));
+                let _ = w.configure(Rectangle::new(loc, size.into()));
+            }
+        }
+    }
+
+    /// Only the keyboard-focus window is told it is active (focused chrome, caret).
+    fn set_activated(&self, activated: bool) {
+        match self {
+            Shell::Xdg(t) => {
+                t.with_pending_state(|s| {
+                    if activated {
+                        s.states.set(xdg_toplevel::State::Activated);
+                    } else {
+                        s.states.unset(xdg_toplevel::State::Activated);
+                    }
+                });
+                if t.is_initial_configure_sent() {
+                    t.send_pending_configure();
+                }
+            }
+            Shell::X11(w) => {
+                let _ = w.set_activated(activated);
             }
         }
     }
 }
 
+fn capped(mut s: String) -> String {
+    if let Some((cut, _)) = s.char_indices().nth(MAX_NAME_CHARS) {
+        s.truncate(cut);
+    }
+    s
+}
+
 pub struct Toplevel {
+    /// 0 until the toplevel is announced to Java; a new id each time it is (re)mapped.
     pub id: i64,
     pub shell: Shell,
     announced: bool,
     window: Option<NativeWindow>,
+    /// The launcher's setVisible; drawn only while visible and with a window.
+    visible: bool,
     view_size: Option<(i32, i32)>,
-    /// The whole wl_buffer, for the log.
-    buffer_size: (i32, i32),
+    /// The display density the launcher shows this toplevel at.
+    scale: f64,
+    /// The last root commit's surface state, for mapping logical to buffer pixels.
+    buffer_scale: i32,
+    viewport_src: Option<RectF>,
+    viewport_dst: Option<(i32, i32)>,
     /// xdg_surface.set_window_geometry as last committed (None for X11 windows).
     geometry: Option<Rect>,
-    /// The part of the buffer shown: the window geometry clipped to the buffer.
-    content: Rect,
-    /// The buffer on screen, held unreleased until the client commits another, so a new or
-    /// resized Surface is repainted at once (an idle client commits nothing).
-    current: Held<WlBuffer>,
-    /// Frame callbacks held while the toplevel has no window.
-    held_frames: Vec<WlCallback>,
+    /// The part of the buffer shown, in logical coordinates, for input.
+    content: RectF,
+    /// The whole buffer and the posted rectangle of the last copy, for the log.
+    buffer_size: (i32, i32),
+    shown: Rect,
+    /// The size last reported to Java.
+    reported_size: (i32, i32),
+    /// The size limit was hit; logged once per toplevel.
+    clamp_logged: bool,
+    paced: Paced<WlBuffer, WlCallback>,
     stats: CopyStats,
     last_log: Instant,
+}
+
+impl Toplevel {
+    fn is_shown(&self) -> bool {
+        self.visible && self.window.is_some()
+    }
 }
 
 pub struct State {
@@ -257,65 +339,89 @@ pub struct State {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
     pub shm_state: ShmState,
-    /// Held only to keep its globals alive.
+    /// Held only to keep their globals alive.
     #[allow(dead_code)]
     pub output_manager_state: OutputManagerState,
+    #[allow(dead_code)]
+    pub fractional_scale_state: FractionalScaleManagerState,
+    #[allow(dead_code)]
+    pub viewporter_state: ViewporterState,
     pub seat_state: SeatState<State>,
     pub data_device_state: DataDeviceState,
-    /// Held only to keep its global alive.
     #[allow(dead_code)]
     pub decoration_state: XdgDecorationState,
     pub xwayland_shell_state: XWaylandShellState,
     pub seat: Seat<State>,
     pub output: Output,
+    output_size: (i32, i32),
+    output_scale: f64,
     pub toplevels: Vec<Toplevel>,
-    next_id: i64,
+    /// The toplevel with keyboard focus, as the launcher set it.
+    focused: Option<i64>,
     popups: Vec<PopupSurface>,
-    pending_frames: Vec<WlCallback>,
-    /// Reused by every commit so collecting frame callbacks does not allocate.
+    /// Buffers and frame callbacks of surfaces that are not shown (subsurfaces, popups,
+    /// cursors) and of removed toplevels, let go on the next frame tick.
+    loose_releases: Vec<WlBuffer>,
+    loose_frames: Vec<WlCallback>,
+    /// Reused by every commit and tick so neither allocates once grown.
     scratch_frames: Vec<WlCallback>,
-    frame_timer_armed: bool,
-    last_frame_tick: Instant,
-    start: Instant,
+    tick_releases: Vec<WlBuffer>,
+    tick_frames: Vec<WlCallback>,
+    frame_period: Duration,
+    /// The one frame timer and its deadline, while armed.
+    timer: Option<(RegistrationToken, Instant)>,
+    last_tick: Instant,
+    last_keepalive: Instant,
     events: Box<dyn HostEvents>,
     pub xwayland: Option<super::xwayland::XwaylandState>,
 }
 
-pub fn spawn(config: StartConfig, events: impl FnOnce() -> Option<Box<dyn HostEvents>> + Send + 'static) -> std::io::Result<HostHandle> {
+pub fn spawn(
+    config: StartConfig,
+    events: impl FnOnce() -> Option<(Box<dyn HostEvents>, EndReporter)> + Send + 'static,
+) -> std::io::Result<HostHandle> {
     let (sender, channel) = channel::channel::<Command>();
     let (signal_tx, signal_rx) = std::sync::mpsc::channel::<Result<LoopSignal, String>>();
+    let stopping = Arc::new(AtomicBool::new(false));
+    let stop_requested = stopping.clone();
     let thread = std::thread::Builder::new().name("tl-wayland".into()).spawn(move || {
-        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(move || {
-            let Some(events) = events() else {
-                let _ = signal_tx.send(Err("cannot attach to the VM".into()));
-                return;
-            };
-            match setup(config, channel, events) {
-                Ok((mut event_loop, mut state)) => {
-                    let _ = signal_tx.send(Ok(event_loop.get_signal()));
-                    linfo!("compositor running");
-                    let run = event_loop.run(None, &mut state, |state| {
-                        if let Err(e) = state.display_handle.flush_clients() {
-                            lwarn!("flush_clients: {e}");
-                        }
-                    });
-                    if let Err(e) = run {
-                        lerror!("event loop ended with an error: {e}");
+        let Some((events, report_end)) = events() else {
+            let _ = signal_tx.send(Err("cannot attach to the VM".into()));
+            return;
+        };
+        let running = AtomicBool::new(false);
+        let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| match setup(config, channel, events) {
+            Ok((mut event_loop, mut state)) => {
+                running.store(true, Ordering::SeqCst);
+                let _ = signal_tx.send(Ok(event_loop.get_signal()));
+                linfo!("compositor running");
+                let run = event_loop.run(None, &mut state, |state| {
+                    if let Err(e) = state.display_handle.flush_clients() {
+                        lwarn!("flush_clients: {e}");
                     }
-                    state.shutdown();
-                    linfo!("compositor stopped");
+                });
+                if let Err(e) = run {
+                    lerror!("event loop ended with an error: {e}");
                 }
-                Err(e) => {
-                    let _ = signal_tx.send(Err(e.to_string()));
-                }
+                state.shutdown();
+                linfo!("compositor stopped");
+            }
+            Err(e) => {
+                let _ = signal_tx.send(Err(e.to_string()));
             }
         }));
-        if result.is_err() {
+        let panicked = result.is_err();
+        if panicked {
             lerror!("compositor thread panicked; the host is down");
+        }
+        // Whatever ended a running host unasked (a panic, a loop error) is reported, so Java
+        // clears its windows and a later start works.
+        if running.load(Ordering::SeqCst) && !stop_requested.load(Ordering::SeqCst) {
+            report_end(panicked);
         }
     })?;
     match signal_rx.recv() {
-        Ok(Ok(signal)) => Ok(HostHandle { sender, signal, thread }),
+        Ok(Ok(signal)) => Ok(HostHandle { sender, signal, thread, stopping }),
         Ok(Err(e)) => {
             let _ = thread.join();
             Err(std::io::Error::other(e))
@@ -342,6 +448,8 @@ fn setup(
     // ARGB8888 and XRGB8888 are always advertised.
     let shm_state = ShmState::new::<State>(&dh, vec![]);
     let output_manager_state = OutputManagerState::new_with_xdg_output::<State>(&dh);
+    let fractional_scale_state = FractionalScaleManagerState::new::<State>(&dh);
+    let viewporter_state = ViewporterState::new::<State>(&dh);
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<State>(&dh);
     let decoration_state = XdgDecorationState::new::<State>(&dh);
@@ -351,9 +459,10 @@ fn setup(
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
     seat.add_touch();
+    // XKB_CONFIG_ROOT was set by nativeStart before this thread existed.
     match seat.add_keyboard(XkbConfig::default(), 400, 25) {
-        Ok(_) => linfo!("keyboard on the seat (XKB_CONFIG_ROOT={:?})", std::env::var("XKB_CONFIG_ROOT").ok()),
-        Err(e) => lwarn!("no keyboard on the seat: {e:?} (XKB_CONFIG_ROOT={:?})", std::env::var("XKB_CONFIG_ROOT").ok()),
+        Ok(_) => linfo!("keyboard on the seat"),
+        Err(e) => lwarn!("no keyboard on the seat: {e:?}"),
     }
 
     let output = Output::new(
@@ -362,18 +471,20 @@ fn setup(
             size: (0, 0).into(),
             subpixel: Subpixel::Unknown,
             make: "Termux Launcher".into(),
-            model: "Wayland spike".into(),
+            model: "Linux windows".into(),
         },
     );
     output.create_global::<State>(&dh);
-    let mode = OutputMode { size: (config.output_width.max(1), config.output_height.max(1)).into(), refresh: 60_000 };
-    output.change_current_state(Some(mode), Some(Transform::Normal), Some(Scale::Integer(1)), Some((0, 0).into()));
+    let output_size = (config.output_width.max(1), config.output_height.max(1));
+    let refresh_mhz = (1_000_000_000_000u128 / config.frame_period.as_nanos().max(1)) as i32;
+    let mode = OutputMode { size: output_size.into(), refresh: refresh_mhz };
+    output.change_current_state(Some(mode), Some(Transform::Normal), Some(output_scale(config.scale)), Some((0, 0).into()));
     output.set_preferred(mode);
 
     // bind_absolute takes `<path>.lock` and removes a stale socket left by a dead host; a live
     // host keeps its lock and the bind fails instead of stealing its socket.
     let listener = ListeningSocket::bind_absolute(config.socket_path.clone())?;
-    linfo!("listening on {}", config.socket_path.display());
+    linfo!("listening on {} (scale {}, frame {:?})", config.socket_path.display(), config.scale, config.frame_period);
     loop_handle.insert_source(Generic::new(listener, Interest::READ, Mode::Level), |_, listener, state| {
         loop {
             match listener.accept() {
@@ -403,6 +514,7 @@ fn setup(
         }
     })?;
 
+    let now = Instant::now();
     let mut state = State {
         display_handle: dh,
         loop_handle,
@@ -410,20 +522,28 @@ fn setup(
         xdg_shell_state,
         shm_state,
         output_manager_state,
+        fractional_scale_state,
+        viewporter_state,
         seat_state,
         data_device_state,
         decoration_state,
         xwayland_shell_state,
         seat,
         output,
+        output_size,
+        output_scale: config.scale,
         toplevels: Vec::new(),
-        next_id: 1,
+        focused: None,
         popups: Vec::new(),
-        pending_frames: Vec::new(),
+        loose_releases: Vec::new(),
+        loose_frames: Vec::new(),
         scratch_frames: Vec::new(),
-        frame_timer_armed: false,
-        last_frame_tick: Instant::now(),
-        start: Instant::now(),
+        tick_releases: Vec::new(),
+        tick_frames: Vec::new(),
+        frame_period: config.frame_period,
+        timer: None,
+        last_tick: now,
+        last_keepalive: now,
         events,
         xwayland: None,
     };
@@ -431,6 +551,19 @@ fn setup(
         super::xwayland::start(&mut state, xw);
     }
     Ok((event_loop, state))
+}
+
+fn output_scale(scale: f64) -> Scale {
+    Scale::Custom { advertised_integer: integer_scale(scale), fractional: scale }
+}
+
+/// CLOCK_MONOTONIC in milliseconds, the clock of Android's event times (uptimeMillis), cut to
+/// the protocol's 32 bits.
+pub fn now_ms() -> u32 {
+    let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: a valid out pointer to a timespec on this stack.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+    (ts.tv_sec as u64).wrapping_mul(1000).wrapping_add(ts.tv_nsec as u64 / 1_000_000) as u32
 }
 
 impl State {
@@ -442,36 +575,24 @@ impl State {
 
     fn shutdown(&mut self) {
         super::xwayland::stop(self);
+        let mut releases = std::mem::take(&mut self.tick_releases);
+        let mut frames = std::mem::take(&mut self.tick_frames);
         for mut t in self.toplevels.drain(..) {
-            if let Some(b) = t.current.remove() {
-                if b.is_alive() {
-                    b.release();
-                }
+            t.paced.take_all(&mut releases, &mut frames);
+        }
+        releases.append(&mut self.loose_releases);
+        for b in releases {
+            if b.is_alive() {
+                b.release();
             }
         }
     }
 
-    /// Posts the held buffer into the toplevel's window again; true when there was one.
-    fn repaint(&mut self, i: usize) -> bool {
-        let t = &mut self.toplevels[i];
-        if t.window.is_none() {
-            return false;
-        }
-        let Some(buffer) = t.current.current().cloned() else { return false };
-        if !buffer.is_alive() {
-            t.current.forget(&buffer);
-            return false;
-        }
-        post_buffer(t, &buffer);
-        true
-    }
-
-    pub fn now_ms(&self) -> u32 {
-        self.start.elapsed().as_millis() as u32
-    }
-
     pub fn toplevel_index(&self, id: i64) -> Option<usize> {
-        self.toplevels.iter().position(|t| t.id == id)
+        if id <= 0 {
+            return None;
+        }
+        self.toplevels.iter().position(|t| t.id == id && t.announced)
     }
 
     pub fn toplevel_index_for(&self, surface: &WlSurface) -> Option<usize> {
@@ -485,10 +606,12 @@ impl State {
     fn handle_command(&mut self, cmd: Command) {
         match cmd {
             Command::SetWindow { id, window } => self.set_window(id, window),
-            Command::Configure { id, width, height } => self.configure(id, width, height),
-            Command::Touch { id, action, points } => self.touch(id, action, &points),
-            Command::Pointer { id, action, button, x, y } => self.pointer(id, action, button, x, y),
-            Command::Key { id, android_keycode, down } => self.key(id, android_keycode, down),
+            Command::Configure { id, width, height, scale } => self.configure(id, width, height, scale),
+            Command::SetVisible { id, visible } => self.set_visible(id, visible),
+            Command::SetFocus { id } => self.set_focus(id),
+            Command::Touch { id, action, action_index, time, points } => self.touch(id, action, action_index, time, &points),
+            Command::Pointer { id, action, button, x, y, time } => self.pointer(id, action, button, x, y, time),
+            Command::Key { id, android_keycode, down, time } => self.key(id, android_keycode, down, time),
             Command::Close { id } => self.close(id),
         }
     }
@@ -497,82 +620,150 @@ impl State {
         let Some(i) = self.toplevel_index(id) else { return };
         let has_window = window.is_some();
         self.toplevels[i].window = window;
-        if !has_window {
-            return;
+        if has_window {
+            // A fresh Surface is blank: show the held buffer on the next tick.
+            if !self.toplevels[i].paced.repaint() && self.toplevels[i].shell.is_initial_configure_sent() {
+                // Nothing held yet: a configure makes most clients draw.
+                self.toplevels[i].shell.send_configure();
+            }
         }
-        // A fresh Surface is blank: show the held buffer at once.
-        if !self.repaint(i) && self.toplevels[i].shell.is_initial_configure_sent() {
-            // Nothing held yet: a configure makes most clients draw.
-            self.toplevels[i].shell.send_configure();
-        }
-        let held = std::mem::take(&mut self.toplevels[i].held_frames);
-        self.pending_frames.extend(held);
-        self.schedule_frames();
+        self.schedule();
     }
 
-    fn configure(&mut self, id: i64, width: i32, height: i32) {
+    fn set_visible(&mut self, id: i64, visible: bool) {
         let Some(i) = self.toplevel_index(id) else { return };
+        self.toplevels[i].visible = visible;
+        // Shown again: what was committed while hidden is still dirty and is copied now.
+        self.schedule();
+    }
+
+    fn configure(&mut self, id: i64, width: i32, height: i32, scale: f64) {
+        let Some(i) = self.toplevel_index(id) else { return };
+        if width <= 0 || height <= 0 {
+            return;
+        }
         let t = &mut self.toplevels[i];
-        if width <= 0 || height <= 0 || t.view_size == Some((width, height)) {
+        if t.view_size == Some((width, height)) && t.scale == scale {
             return;
         }
         t.view_size = Some((width, height));
-        t.shell.configure(width, height);
+        let scale_changed = t.scale != scale;
+        t.scale = scale;
+        let activated = self.focused == Some(t.id);
+        let size = if t.shell.is_x11() { (width, height) } else { logical_size((width, height), scale) };
+        t.shell.configure(size, activated);
+        if scale_changed {
+            self.apply_scale(i);
+        }
         // Until the client answers with a buffer of the new size, the view shows the old
         // contents stretched rather than whatever the resized texture holds.
-        self.repaint(i);
+        self.toplevels[i].paced.repaint();
+        self.schedule();
     }
 
-    /// View pixels to surface coordinates: the shown content (window geometry) fills the view.
+    /// Tells the toplevel's surfaces their preferred scale (fractional and integer), and the
+    /// output its scale: one display, so the newest density wins.
+    fn apply_scale(&mut self, i: usize) {
+        let scale = self.toplevels[i].scale;
+        if scale != self.output_scale {
+            self.output_scale = scale;
+            self.output.change_current_state(None, None, Some(output_scale(scale)), None);
+        }
+        if self.toplevels[i].shell.is_x11() {
+            return;
+        }
+        let Some(root) = self.toplevels[i].shell.wl_surface() else { return };
+        with_surface_tree_downward(
+            &root,
+            (),
+            |_, _, _| TraversalAction::DoChildren(()),
+            |s, states, _| {
+                with_fractional_scale(states, |f| f.set_preferred_scale(scale));
+                send_surface_state(s, states, integer_scale(scale), Transform::Normal);
+            },
+            |_, _, _| true,
+        );
+    }
+
+    /// View pixels to surface coordinates: the shown content fills the view.
     fn surface_point(t: &Toplevel, x: f32, y: f32) -> (f64, f64) {
         view_to_surface(x, y, t.view_size, t.content)
     }
 
-    /// Gives the toplevel keyboard focus unless it already has it.
-    fn focus_keyboard(&mut self, i: usize) {
-        let Some(keyboard) = self.seat.get_keyboard() else { return };
-        let Some(target) = self.toplevels[i].shell.keyboard_focus() else { return };
-        if keyboard.current_focus().as_ref() != Some(&target) {
-            keyboard.set_focus(self, Some(target), SERIAL_COUNTER.next_serial());
+    /// Moves keyboard focus. Keys held at the change are released first, so neither the old
+    /// window nor the new one sees a key stuck down.
+    fn set_focus(&mut self, id: i64) {
+        let new = self.toplevel_index(id).map(|i| self.toplevels[i].id);
+        if new == self.focused {
+            return;
+        }
+        self.release_all_keys();
+        let old = std::mem::replace(&mut self.focused, new);
+        if let Some(i) = old.and_then(|id| self.toplevel_index(id)) {
+            self.toplevels[i].shell.set_activated(false);
+        }
+        let target = new.and_then(|id| self.toplevel_index(id)).map(|i| {
+            self.toplevels[i].shell.set_activated(true);
+            self.toplevels[i].shell.keyboard_focus()
+        });
+        if let Some(keyboard) = self.seat.get_keyboard() {
+            keyboard.set_focus(self, target, SERIAL_COUNTER.next_serial());
         }
     }
 
-    fn touch(&mut self, id: i64, action: i32, points: &TouchPoints) {
+    /// Clears the seat's pressed keys without telling the client; it gets wl_keyboard.leave
+    /// next, which releases them on its side.
+    fn release_all_keys(&mut self) {
+        let Some(keyboard) = self.seat.get_keyboard() else { return };
+        for key in keyboard.pressed_keys() {
+            keyboard.input_intercept::<(), _>(self, key, KeyState::Released, |_, _, _| ());
+        }
+    }
+
+    fn touch(&mut self, id: i64, action: i32, action_index: i32, time: u32, points: &TouchPoints) {
+        if !matches!(action, TOUCH_DOWN | TOUCH_UP | TOUCH_MOVE | TOUCH_CANCEL | TOUCH_POINTER_DOWN | TOUCH_POINTER_UP) {
+            return;
+        }
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(touch) = self.seat.get_touch() else { return };
         let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
-        let time = self.now_ms();
         if action == TOUCH_CANCEL {
             touch.cancel(self);
             return;
         }
-        if action == TOUCH_DOWN {
-            self.focus_keyboard(i);
-        }
-        for &(slot, x, y) in &points.points[..points.count.min(MAX_TOUCH_POINTS)] {
+        // One MotionEvent is one wl_touch frame: the pointer at action_index goes down or up,
+        // every other pointer moves.
+        for (k, &(pointer_id, x, y)) in points.points[..points.count.min(MAX_TOUCH_POINTS)].iter().enumerate() {
             let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
-            let slot = Some(slot.max(0) as u32).into();
-            let focus = Some((surface.clone(), (0.0, 0.0).into()));
+            let slot = Some(pointer_id.max(0) as u32).into();
+            let acting = k as i32 == action_index;
             match action {
-                TOUCH_DOWN => {
+                TOUCH_DOWN | TOUCH_POINTER_DOWN if acting => {
+                    let focus = Some((surface.clone(), (0.0, 0.0).into()));
                     let serial = SERIAL_COUNTER.next_serial();
                     touch.down(self, focus, &DownEvent { slot, location: (sx, sy).into(), serial, time });
                 }
-                TOUCH_UP => touch.up(self, &UpEvent { slot, serial: SERIAL_COUNTER.next_serial(), time }),
-                TOUCH_MOTION => touch.motion(self, focus, &TouchMotion { slot, location: (sx, sy).into(), time }),
-                _ => return,
+                TOUCH_UP | TOUCH_POINTER_UP if acting => {
+                    touch.up(self, &UpEvent { slot, serial: SERIAL_COUNTER.next_serial(), time });
+                }
+                TOUCH_MOVE | TOUCH_POINTER_DOWN | TOUCH_POINTER_UP => {
+                    let focus = Some((surface.clone(), (0.0, 0.0).into()));
+                    touch.motion(self, focus, &TouchMotion { slot, location: (sx, sy).into(), time });
+                }
+                _ => {}
             }
         }
         touch.frame(self);
     }
 
-    fn key(&mut self, id: i64, android_keycode: i32, down: bool) {
+    fn key(&mut self, id: i64, android_keycode: i32, down: bool, time: u32) {
+        // Keys go only to the window the launcher focused; a late key for another is dropped.
+        if id <= 0 || self.focused != Some(id) {
+            return;
+        }
         let Some(evdev) = android_to_evdev(android_keycode) else { return };
-        let Some(i) = self.toplevel_index(id) else { return };
         let Some(keyboard) = self.seat.get_keyboard() else { return };
-        self.focus_keyboard(i);
         let state = if down { KeyState::Pressed } else { KeyState::Released };
-        let time = self.now_ms();
         // xkb key codes are evdev codes + 8.
         keyboard.input::<(), _>(self, Keycode::new(evdev + 8), state, SERIAL_COUNTER.next_serial(), time, |_, _, _| {
             FilterResult::Forward
@@ -591,11 +782,10 @@ impl State {
         }
     }
 
-    fn pointer(&mut self, id: i64, action: i32, button: i32, x: f32, y: f32) {
+    fn pointer(&mut self, id: i64, action: i32, button: i32, x: f32, y: f32, time: u32) {
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(pointer) = self.seat.get_pointer() else { return };
         let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
-        let time = self.now_ms();
         let serial = SERIAL_COUNTER.next_serial();
         match action {
             POINTER_MOTION => {
@@ -603,24 +793,24 @@ impl State {
                 pointer.motion(self, Some((surface, (0.0, 0.0).into())), &PointerMotion { location: (sx, sy).into(), serial, time });
             }
             POINTER_BUTTON_DOWN | POINTER_BUTTON_UP => {
-                if action == POINTER_BUTTON_DOWN {
-                    self.focus_keyboard(i);
-                }
                 let state = if action == POINTER_BUTTON_DOWN {
                     smithay::backend::input::ButtonState::Pressed
                 } else {
                     smithay::backend::input::ButtonState::Released
                 };
-                pointer.button(self, &ButtonEvent { serial, time, button: button as u32, state });
+                pointer.button(self, &ButtonEvent { serial, time, button: button.max(0) as u32, state });
             }
-            POINTER_AXIS => {
-                // x/y carry scroll distances in surface pixels.
+            POINTER_SCROLL => {
+                // View pixels to surface units, like a motion's distance.
+                let (ox, oy) = Self::surface_point(&self.toplevels[i], 0.0, 0.0);
+                let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
+                let (dx, dy) = (sx - ox, sy - oy);
                 let mut frame = AxisFrame::new(time).source(smithay::backend::input::AxisSource::Wheel);
-                if x != 0.0 {
-                    frame = frame.value(smithay::backend::input::Axis::Horizontal, x as f64);
+                if dx != 0.0 {
+                    frame = frame.value(smithay::backend::input::Axis::Horizontal, dx);
                 }
-                if y != 0.0 {
-                    frame = frame.value(smithay::backend::input::Axis::Vertical, y as f64);
+                if dy != 0.0 {
+                    frame = frame.value(smithay::backend::input::Axis::Vertical, dy);
                 }
                 pointer.axis(self, frame);
             }
@@ -632,77 +822,201 @@ impl State {
         pointer.frame(self);
     }
 
-    /// Answers held frame callbacks on the next ~16 ms tick; no timer runs while nothing waits.
-    fn schedule_frames(&mut self) {
-        if self.frame_timer_armed || self.pending_frames.is_empty() {
-            return;
+    /// When the next tick is due: a frame period after the last one while a shown toplevel or
+    /// a loose surface waits, else the next keep-alive while only hidden ones do, else never.
+    fn next_deadline(&self) -> Option<Instant> {
+        let mut hidden_waits = false;
+        let mut frame_due = !self.loose_releases.is_empty() || !self.loose_frames.is_empty();
+        for t in &self.toplevels {
+            if t.is_shown() {
+                frame_due |= t.paced.has_work();
+            } else {
+                hidden_waits |= t.paced.has_waiting();
+            }
         }
-        self.frame_timer_armed = true;
-        let due = self.last_frame_tick + FRAME_INTERVAL;
-        let delay = due.saturating_duration_since(Instant::now());
-        let res = self.loop_handle.insert_source(Timer::from_duration(delay), |_, _, state| {
-            state.frame_timer_armed = false;
-            state.last_frame_tick = Instant::now();
-            let time = state.now_ms();
-            for cb in state.pending_frames.drain(..) {
+        if frame_due {
+            Some(self.last_tick + self.frame_period)
+        } else if hidden_waits {
+            Some(self.last_keepalive + KEEPALIVE)
+        } else {
+            None
+        }
+    }
+
+    /// Arms the one frame timer for the next deadline, unless it already fires by then. The
+    /// timer re-arms itself while work remains, so a running animation inserts nothing.
+    fn schedule(&mut self) {
+        let Some(deadline) = self.next_deadline() else { return };
+        if let Some((token, armed)) = self.timer {
+            if armed <= deadline {
+                return;
+            }
+            self.loop_handle.remove(token);
+            self.timer = None;
+        }
+        let res = self.loop_handle.insert_source(Timer::from_deadline(deadline), |_, _, state| match state.tick() {
+            Some(next) => {
+                if let Some(timer) = state.timer.as_mut() {
+                    timer.1 = next;
+                }
+                TimeoutAction::ToInstant(next)
+            }
+            None => {
+                state.timer = None;
+                TimeoutAction::Drop
+            }
+        });
+        match res {
+            Ok(token) => self.timer = Some((token, deadline)),
+            Err(e) => lwarn!("frame timer: {e}"),
+        }
+    }
+
+    /// One frame tick: copy each shown dirty toplevel once, then release what waited and answer
+    /// frame callbacks. Returns the next deadline.
+    fn tick(&mut self) -> Option<Instant> {
+        let now = Instant::now();
+        self.last_tick = now;
+        let keepalive = now.duration_since(self.last_keepalive) >= KEEPALIVE;
+        if keepalive {
+            self.last_keepalive = now;
+        }
+        let mut releases = std::mem::take(&mut self.tick_releases);
+        let mut frames = std::mem::take(&mut self.tick_frames);
+        let mut copied = false;
+        for i in 0..self.toplevels.len() {
+            let shown = self.toplevels[i].is_shown();
+            if let Some(buffer) = self.toplevels[i].paced.tick(shown, keepalive, &mut releases, &mut frames) {
+                self.copy(i, &buffer);
+                copied = true;
+            }
+        }
+        releases.append(&mut self.loose_releases);
+        frames.append(&mut self.loose_frames);
+        // A client answered now usually commits again within the period: keep the timer armed
+        // for one more tick, so a running animation re-arms instead of inserting a timer per frame.
+        let worked = copied || !releases.is_empty() || !frames.is_empty();
+        for b in releases.drain(..) {
+            // A buffer another toplevel still shows is released when that one lets it go.
+            if b.is_alive() && !self.toplevels.iter().any(|t| t.paced.current() == Some(&b)) {
+                b.release();
+            }
+        }
+        let time = now_ms();
+        for cb in frames.drain(..) {
+            if cb.is_alive() {
                 cb.done(time);
             }
-            TimeoutAction::Drop
-        });
-        if res.is_err() {
-            self.frame_timer_armed = false;
+        }
+        self.tick_releases = releases;
+        self.tick_frames = frames;
+        if worked {
+            Some(now + self.frame_period)
+        } else {
+            self.next_deadline()
+        }
+    }
+
+    /// Copies `buffer` into toplevel `i`'s window and reports a new shown size. A window whose
+    /// post fails (its consumer is gone) is dropped, as if detached, so nothing is drawn into it
+    /// again until the launcher hands a new Surface.
+    fn copy(&mut self, i: usize, buffer: &WlBuffer) {
+        if !buffer.is_alive() {
+            return;
+        }
+        let output = self.output_size;
+        let t = &mut self.toplevels[i];
+        match post_buffer(t, buffer, output) {
+            Ok(()) => {}
+            Err(rc) => {
+                lwarn!("toplevel {}: post failed ({rc}); the Surface is dropped until a new one comes", t.id);
+                t.window = None;
+            }
+        }
+        let size = (t.shown.2, t.shown.3);
+        if size != t.reported_size && t.announced {
+            t.reported_size = size;
+            let (title, app_id) = t.shell.names();
+            let id = t.id;
+            self.events.window_changed(id, &title, &app_id, size.0, size.1);
         }
     }
 
     pub fn announce(&mut self, i: usize) {
+        let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let (title, app_id) = self.toplevels[i].shell.names();
-        let id = self.toplevels[i].id;
-        self.toplevels[i].announced = true;
-        if let Some(surface) = self.toplevels[i].shell.wl_surface() {
+        let pid = self.toplevels[i].shell.client_pid(&self.display_handle);
+        let flags = if self.toplevels[i].shell.is_x11() { WINDOW_X11 } else { 0 };
+        let t = &mut self.toplevels[i];
+        t.id = id;
+        t.announced = true;
+        t.reported_size = (0, 0);
+        if let Some(surface) = t.shell.wl_surface() {
             self.output.enter(&surface);
         }
-        self.events.toplevel_created(id, &title, &app_id);
+        self.apply_scale(i);
+        self.events.window_created(id, &title, &app_id, pid, flags);
     }
 
-    pub fn add_toplevel(&mut self, shell: Shell) -> i64 {
-        let id = self.next_id;
-        self.next_id += 1;
+    pub fn add_toplevel(&mut self, shell: Shell) {
         self.toplevels.push(Toplevel {
-            id,
+            id: 0,
             shell,
             announced: false,
             window: None,
+            visible: true,
             view_size: None,
-            buffer_size: (0, 0),
+            scale: self.output_scale,
+            buffer_scale: 1,
+            viewport_src: None,
+            viewport_dst: None,
             geometry: None,
-            content: (0, 0, 0, 0),
-            current: Held::new(),
-            held_frames: Vec::new(),
+            content: (0.0, 0.0, 0.0, 0.0),
+            buffer_size: (0, 0),
+            shown: (0, 0, 0, 0),
+            reported_size: (0, 0),
+            clamp_logged: false,
+            paced: Paced::new(),
             stats: CopyStats::default(),
             last_log: Instant::now(),
         });
-        id
+    }
+
+    /// Takes the toplevel off the launcher's screen: its id ends, its window and view go. The
+    /// toplevel itself may stay (an unmapped xdg_toplevel maps again with a new id).
+    fn withdraw(&mut self, i: usize) {
+        let t = &mut self.toplevels[i];
+        let id = t.id;
+        let was_announced = t.announced;
+        t.announced = false;
+        t.id = 0;
+        t.window = None;
+        t.visible = true;
+        t.view_size = None;
+        t.clamp_logged = false;
+        if self.focused == Some(id) && id > 0 {
+            self.release_all_keys();
+            self.focused = None;
+        }
+        if was_announced {
+            self.events.window_destroyed(id);
+        }
     }
 
     pub fn remove_toplevel_at(&mut self, i: usize) {
+        self.withdraw(i);
         let mut t = self.toplevels.remove(i);
-        if let Some(b) = t.current.remove() {
-            if b.is_alive() {
-                b.release();
-            }
-        }
-        self.pending_frames.extend(t.held_frames.into_iter().filter(|cb| cb.is_alive()));
-        self.schedule_frames();
-        if t.announced {
-            self.events.toplevel_destroyed(t.id);
-        }
+        t.paced.take_all(&mut self.loose_releases, &mut self.loose_frames);
+        self.schedule();
     }
 
     pub fn rename_at(&mut self, i: usize) {
-        if self.toplevels[i].announced {
-            let (title, app_id) = self.toplevels[i].shell.names();
-            let id = self.toplevels[i].id;
-            self.events.toplevel_title(id, &title, &app_id);
+        let t = &self.toplevels[i];
+        if t.announced {
+            let (title, app_id) = t.shell.names();
+            let size = t.reported_size;
+            let id = t.id;
+            self.events.window_changed(id, &title, &app_id, size.0, size.1);
         }
     }
 }
@@ -712,64 +1026,75 @@ fn toplevel_names(surface: &ToplevelSurface) -> (String, String) {
         states
             .data_map
             .get::<XdgToplevelSurfaceData>()
-            .map(|d| {
-                let d = d.lock().unwrap();
-                (d.title.clone().unwrap_or_default(), d.app_id.clone().unwrap_or_default())
-            })
+            .and_then(|d| d.lock().ok().map(|d| (d.title.clone().unwrap_or_default(), d.app_id.clone().unwrap_or_default())))
             .unwrap_or_default()
     })
 }
 
-/// Copies the shown part of `buffer` (the window geometry clipped to the buffer) into the
-/// toplevel's window, if it has one, and logs the copy time at most once a second. Returns the
-/// whole buffer's size and the shown rectangle when the buffer could be read; without a window
-/// it only measures.
-fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer) -> Option<((i32, i32), Rect)> {
+/// Copies the shown part of `buffer` into the toplevel's window: the window geometry, mapped
+/// from logical to buffer pixels, clipped to the buffer and cut to the size limit, so a client
+/// never decides how much the launcher allocates. Err with the platform's code when the post
+/// failed; Ok also when the buffer could not be read (logged, nothing posted).
+fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32)) -> Result<(), i32> {
     let id = t.id;
-    let geometry = t.geometry;
-    let window = &mut t.window;
+    let (geometry, bs, src, dst) = (t.geometry, t.buffer_scale, t.viewport_src, t.viewport_dst);
+    let limit = post_limit(t.view_size, output);
+    let Some(window) = t.window.as_mut() else { return Ok(()) };
     let stats = &mut t.stats;
     let result = with_buffer_contents(buffer, |ptr, len, data| {
         let (w, h, stride, offset) = (data.width, data.height, data.stride, data.offset);
         if w <= 0 || h <= 0 || stride < w * 4 || offset < 0 {
             return None;
         }
-        let content = content_rect(w, h, geometry);
-        let (start, bytes) = content_span(offset as usize, stride as usize, content, len)?;
+        let map = surface_map(w, h, bs, src, dst);
+        let logical = map.logical_content(geometry);
+        let full = map.to_buffer(logical, w, h);
+        let shown = clamp_to_limit(full, limit);
+        let (start, bytes) = content_span(offset as usize, stride as usize, shown, len)?;
         let opaque = match data.format {
             wl_shm::Format::Argb8888 => false,
             wl_shm::Format::Xrgb8888 => true,
-            _ => return Some(((w, h), content)),
+            _ => return None,
         };
-        if let Some(win) = window.as_mut() {
-            // SAFETY: smithay holds the pool mapping for the duration of this closure and
-            // content_span checked the range against its length.
-            let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
-            match win.post(src, stride as usize, content.2, content.3, opaque) {
-                Ok(timing) => {
-                    stats.frames += 1;
-                    stats.copy_us_sum += timing.copy_us;
-                    stats.copy_us_max = stats.copy_us_max.max(timing.copy_us);
-                    stats.total_us_sum += timing.total_us;
-                    stats.last_copy_us = timing.copy_us;
-                }
-                Err(rc) => lwarn!("toplevel {id}: post failed ({rc})"),
-            }
-        }
-        Some(((w, h), content))
+        // SAFETY: smithay holds the pool mapping for the duration of this closure and
+        // content_span checked the range against its length.
+        let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
+        let posted = window.post(src, stride as usize, shown.2, shown.3, opaque).map(|timing| {
+            stats.frames += 1;
+            stats.copy_us_sum += timing.copy_us;
+            stats.copy_us_max = stats.copy_us_max.max(timing.copy_us);
+            stats.total_us_sum += timing.total_us;
+            stats.last_copy_us = timing.copy_us;
+        });
+        Some((posted, (w, h), shown, full, map.to_logical(shown)))
     });
-    if t.last_log.elapsed() >= LOG_INTERVAL && t.stats.frames > 0 {
+    let (posted, size, shown, full, logical) = match result {
+        Ok(Some(v)) => v,
+        Ok(None) => return Ok(()),
+        Err(e) => {
+            lwarn!("toplevel {id}: unreadable buffer: {e:?}");
+            return Ok(());
+        }
+    };
+    if shown != full && !t.clamp_logged {
+        t.clamp_logged = true;
+        lwarn!("toplevel {id}: frame {}x{} is over the limit {}x{}; showing its top-left part", full.2, full.3, limit.0, limit.1);
+    }
+    t.buffer_size = size;
+    t.shown = shown;
+    t.content = logical;
+    if COPY_LOG.load(Ordering::Relaxed) && t.last_log.elapsed() >= LOG_INTERVAL && t.stats.frames > 0 {
         let s = &t.stats;
         linfo!(
             "copy toplevel={} buffer={}x{} shown={}x{}+{}+{} bytes={} frames={} copy_us_last={} copy_us_avg={} copy_us_max={} post_us_avg={}",
             id,
             t.buffer_size.0,
             t.buffer_size.1,
-            t.content.2,
-            t.content.3,
-            t.content.0,
-            t.content.1,
-            t.content.2 as i64 * t.content.3 as i64 * 4,
+            shown.2,
+            shown.3,
+            shown.0,
+            shown.1,
+            shown.2 as i64 * shown.3 as i64 * 4,
             s.frames,
             s.last_copy_us,
             s.copy_us_sum / s.frames as u64,
@@ -779,13 +1104,7 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer) -> Option<((i32, i32), Rect)
         t.stats = CopyStats::default();
         t.last_log = Instant::now();
     }
-    match result {
-        Ok(size) => size,
-        Err(e) => {
-            lwarn!("toplevel {id}: unreadable buffer: {e:?}");
-            None
-        }
-    }
+    posted
 }
 
 impl CompositorHandler for State {
@@ -800,6 +1119,7 @@ impl CompositorHandler for State {
         if let Some(state) = client.get_data::<XWaylandClientData>() {
             return &state.compositor_state;
         }
+        // Every client is inserted with one of the two above; unreachable.
         panic!("client without compositor state")
     }
 
@@ -827,82 +1147,92 @@ impl CompositorHandler for State {
 
         // Walk the whole tree: synced subsurfaces apply their state on the parent's commit.
         let mut root_buffer: Option<BufferAssignment> = None;
+        let mut root_scale = 1;
+        let mut root_viewport: (Option<RectF>, Option<(i32, i32)>) = (None, None);
         let mut frames = std::mem::take(&mut self.scratch_frames);
+        let loose = &mut self.loose_releases;
         with_surface_tree_downward(
             &root,
             (),
             |_, _, _| TraversalAction::DoChildren(()),
             |s, states, _| {
-                let mut guard = states.cached_state.get::<SurfaceAttributes>();
-                let attrs = guard.current();
-                frames.append(&mut attrs.frame_callbacks);
-                if let Some(assignment) = attrs.buffer.take() {
-                    if *s == root && index.is_some() {
-                        root_buffer = Some(assignment);
-                    } else if let BufferAssignment::NewBuffer(b) = assignment {
-                        // Subsurfaces, popups and cursors are not shown: release at once.
-                        b.release();
+                let is_root = *s == root && index.is_some();
+                {
+                    let mut guard = states.cached_state.get::<SurfaceAttributes>();
+                    let attrs = guard.current();
+                    frames.append(&mut attrs.frame_callbacks);
+                    if is_root {
+                        root_scale = attrs.buffer_scale;
                     }
+                    if let Some(assignment) = attrs.buffer.take() {
+                        if is_root {
+                            root_buffer = Some(assignment);
+                        } else if let BufferAssignment::NewBuffer(b) = assignment {
+                            // Subsurfaces, popups and cursors are not shown; released on the tick.
+                            loose.push(b);
+                        }
+                    }
+                }
+                if is_root {
+                    let mut guard = states.cached_state.get::<ViewportCachedState>();
+                    let v = guard.current();
+                    root_viewport = (
+                        v.src.map(|r| (r.loc.x, r.loc.y, r.size.w, r.size.h)),
+                        v.dst.map(|d| (d.w, d.h)),
+                    );
                 }
             },
             |_, _, _| true,
         );
 
         let Some(i) = index else {
-            self.pending_frames.append(&mut frames);
+            self.loose_frames.append(&mut frames);
             self.scratch_frames = frames;
-            self.schedule_frames();
+            self.schedule();
             return;
         };
 
-        // Window geometry is double-buffered with the buffer, so read it on every commit.
+        // Window geometry, scale and viewport are double-buffered with the buffer.
         self.toplevels[i].geometry = self.toplevels[i].shell.geometry();
-
-        if let Some(BufferAssignment::Removed) = root_buffer {
-            if let Some(old) = self.toplevels[i].current.remove() {
-                old.release();
-            }
-        }
-        if let Some(BufferAssignment::NewBuffer(buffer)) = root_buffer {
-            // Without a window this only measures; the held buffer is posted when one comes.
-            let measured = post_buffer(&mut self.toplevels[i], &buffer);
-            // Hold the new buffer, release the one it replaces.
-            if let Some(old) = self.toplevels[i].current.attach(buffer) {
-                if old.is_alive() {
-                    old.release();
+        match root_buffer {
+            Some(BufferAssignment::Removed) => {
+                self.toplevels[i].paced.remove_buffer();
+                if let Shell::Xdg(t) = &self.toplevels[i].shell {
+                    // An unmapped xdg_toplevel starts over: its next bufferless commit must get
+                    // an initial configure again, and it maps as a new window.
+                    t.reset_initial_configure_sent();
+                    self.withdraw(i);
                 }
             }
-            if !self.toplevels[i].announced {
-                self.announce(i);
-            }
-            if let Some((size, content)) = measured {
-                self.toplevels[i].buffer_size = size;
-                if (content.2, content.3) != (self.toplevels[i].content.2, self.toplevels[i].content.3) {
-                    let id = self.toplevels[i].id;
-                    self.events.toplevel_buffer_size(id, content.2, content.3);
+            Some(BufferAssignment::NewBuffer(buffer)) => {
+                let t = &mut self.toplevels[i];
+                t.buffer_scale = root_scale;
+                t.viewport_src = root_viewport.0;
+                t.viewport_dst = root_viewport.1;
+                t.paced.commit_buffer(buffer);
+                if !t.announced {
+                    self.announce(i);
                 }
-                self.toplevels[i].content = content;
             }
-        } else if !self.toplevels[i].announced && self.toplevels[i].shell.is_initial_configure_sent() {
-            // The initial (bufferless) commit: title and app id are set by now.
-            self.announce(i);
+            None => {
+                if !self.toplevels[i].announced && self.toplevels[i].shell.is_initial_configure_sent() {
+                    // The initial (bufferless) commit: title and app id are set by now.
+                    self.announce(i);
+                }
+            }
         }
-
-        if self.toplevels[i].window.is_some() {
-            self.pending_frames.append(&mut frames);
-            self.schedule_frames();
-        } else {
-            self.toplevels[i].held_frames.append(&mut frames);
-        }
+        self.toplevels[i].paced.add_frames(&mut frames);
         self.scratch_frames = frames;
+        self.schedule();
     }
 }
 
 impl BufferHandler for State {
     fn buffer_destroyed(&mut self, buffer: &WlBuffer) {
         for t in &mut self.toplevels {
-            t.current.forget(buffer);
+            t.paced.forget(buffer);
         }
+        self.loose_releases.retain(|b| b != buffer);
     }
 }
 
@@ -972,6 +1302,18 @@ impl XdgDecorationHandler for State {
     }
 }
 
+impl FractionalScaleHandler for State {
+    /// A surface asked for its fractional scale: its toplevel's, else the output's.
+    fn new_fractional_scale(&mut self, surface: WlSurface) {
+        let mut root = surface.clone();
+        while let Some(parent) = get_parent(&root) {
+            root = parent;
+        }
+        let scale = self.toplevel_index_for(&root).map(|i| self.toplevels[i].scale).unwrap_or(self.output_scale);
+        with_states(&surface, |states| with_fractional_scale(states, |f| f.set_preferred_scale(scale)));
+    }
+}
+
 impl OutputHandler for State {}
 
 impl SeatHandler for State {
@@ -1004,3 +1346,5 @@ delegate_xdg_decoration!(State);
 delegate_output!(State);
 delegate_seat!(State);
 delegate_data_device!(State);
+delegate_fractional_scale!(State);
+delegate_viewporter!(State);

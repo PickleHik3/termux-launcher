@@ -2,6 +2,7 @@
 //! under `TLWayland`, prefixed `probe`. A driver that cannot be loaded is a logged result.
 
 use std::ffi::{c_char, c_void, CStr};
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use ash::vk;
 
@@ -22,16 +23,30 @@ const EGL_DISPLAY_EXTENSIONS: [&str; 4] = [
     "EGL_ANDROID_image_native_buffer",
 ];
 
-/// Runs both probes on a thread of its own so the host's start does not wait on driver loading.
+/// One probe at a time.
+static RUNNING: AtomicBool = AtomicBool::new(false);
+
+/// Runs both probes on a thread of its own, on request only (the debug interface): a driver
+/// that crashes in them is not a panic and takes the process down, and the driver stays mapped
+/// afterwards.
 pub fn spawn() {
-    let _ = std::thread::Builder::new().name("tl-probe".into()).spawn(|| {
+    if RUNNING.swap(true, Ordering::SeqCst) {
+        linfo!("probe: already running");
+        return;
+    }
+    let started = std::thread::Builder::new().name("tl-probe".into()).spawn(|| {
+        // SAFETY (both): FFI into the system's Vulkan loader and EGL, as their APIs define.
         if std::panic::catch_unwind(|| unsafe { vulkan() }).is_err() {
             lwarn!("probe vulkan: panicked");
         }
         if std::panic::catch_unwind(|| unsafe { egl() }).is_err() {
             lwarn!("probe egl: panicked");
         }
+        RUNNING.store(false, Ordering::SeqCst);
     });
+    if started.is_err() {
+        RUNNING.store(false, Ordering::SeqCst);
+    }
 }
 
 fn version(v: u32) -> String {

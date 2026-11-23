@@ -1,15 +1,20 @@
 package com.termux.app.wayland;
 
 /**
- * What the Linux windows host tells the launcher. Oneway, so a slow or gone launcher never
- * blocks the host. Arrives on binder threads.
+ * What the Linux windows host tells the launcher (ILinuxWindows has the contract). Oneway, so a
+ * slow or gone launcher never blocks the host. Arrives on binder threads, in the host's order.
  */
 oneway interface ILinuxWindowsCallback {
-    /** running: the compositor runs in process pid. message: one line for the screen. */
-    void onHostState(boolean running, int pid, String message);
-    void onToplevelCreated(long id, String title, String appId);
-    void onToplevelTitle(long id, String title, String appId);
-    /** The shown size: the window geometry, or the whole buffer when there is none. */
-    void onToplevelSize(long id, int width, int height);
-    void onToplevelDestroyed(long id);
+    /** First on every addCallback: the host's ILinuxWindows.VERSION and its process id. */
+    void onAttached(int interfaceVersion, int hostPid);
+    /** state: an ILinuxWindows.STATE_*. message: one line for the screen, may be empty. */
+    void onHostState(int state, String message);
+    /**
+     * A window to show. clientPid: the app's process id, 0 when unknown. flags: ILinuxWindows.WINDOW_*.
+     * A window the app hides and shows again comes back as a new window with a new id.
+     */
+    void onWindowCreated(long id, String title, String appId, int clientPid, int flags);
+    /** Title, app id or the drawn size (pixels, 0 before the first frame) changed. */
+    void onWindowChanged(long id, String title, String appId, int width, int height);
+    void onWindowDestroyed(long id);
 }

@@ -1,7 +1,8 @@
 //! JNI surface of libtlwayland, loaded only in the `:linuxwindows` process. Every entry point
 //! catches panics all the same.
 //!
-//! Java side: `com.termux.app.wayland.WaylandHost`, driven by `LinuxWindowsService`.
+//! Java side: `com.termux.app.wayland.WaylandHost`, driven by `LinuxWindowsService`. The numbers
+//! these calls carry are `crate::protocol`'s, mirrored from `ILinuxWindows.aidl`.
 
 pub mod log;
 mod focus;
@@ -12,18 +13,23 @@ mod window;
 mod xwayland;
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 
 use jni::objects::{JClass, JFloatArray, JIntArray, JObject, JString};
 use jni::sys::{jboolean, jfloat, jint, jlong, JNI_FALSE, JNI_TRUE};
 use jni::JNIEnv;
 
+use crate::geometry::sane_scale;
+use crate::paced::frame_period;
 use host::{Command, HostHandle, StartConfig};
 use log::{lerror, linfo, lwarn};
 use window::NativeWindow;
 
 static HOST: Mutex<Option<HostHandle>> = Mutex::new(None);
+/// "compositor thread is gone" is logged once per host, not once per call.
+static GONE_LOGGED: AtomicBool = AtomicBool::new(false);
 
 fn guarded<T>(name: &str, fallback: T, f: impl FnOnce() -> T) -> T {
     match catch_unwind(AssertUnwindSafe(f)) {
@@ -35,16 +41,25 @@ fn guarded<T>(name: &str, fallback: T, f: impl FnOnce() -> T) -> T {
     }
 }
 
-fn send(cmd: Command) {
-    let guard = match HOST.lock() {
+fn host_lock() -> std::sync::MutexGuard<'static, Option<HostHandle>> {
+    match HOST.lock() {
         Ok(g) => g,
         Err(p) => p.into_inner(),
-    };
+    }
+}
+
+fn send(cmd: Command) {
+    let guard = host_lock();
     if let Some(host) = guard.as_ref() {
-        if host.sender.send(cmd).is_err() {
+        if host.sender.send(cmd).is_err() && !GONE_LOGGED.swap(true, Ordering::Relaxed) {
             lwarn!("compositor thread is gone");
         }
     }
+}
+
+/// Android event times are uptime milliseconds; the protocol's are 32 bits of the same clock.
+fn event_time(ms: jlong) -> u32 {
+    ms as u64 as u32
 }
 
 /// This process's name, from /proc/self/cmdline (e.g. `com.termux:linuxwindows`).
@@ -62,10 +77,20 @@ fn java_string(env: &mut JNIEnv, s: &JString) -> Option<String> {
     env.get_string(s).ok().map(|s| s.into())
 }
 
+/// Sets an environment variable unless it already has that value. Called only from nativeStart
+/// on the Java thread before the compositor thread exists and with no probe thread started, so
+/// no thread of ours reads the environment meanwhile; in practice each is set once per process.
+fn set_env_once(name: &str, value: &Path) {
+    if std::env::var_os(name).as_deref() != Some(value.as_os_str()) {
+        std::env::set_var(name, value);
+    }
+}
+
 /// Starts the compositor. `socketDir` is the clients' XDG_RUNTIME_DIR; the socket is
 /// `wayland-0` in it. `xkbConfigRoot` (nullable) becomes XKB_CONFIG_ROOT for the seat's keymap.
-/// `xwaylandBinary` (nullable) starts rootless Xwayland when set. Returns false when the host
-/// could not start or is already running.
+/// `xwaylandBinary` (nullable) starts rootless Xwayland when set. `scale` is the display density
+/// and `framePeriodNanos` its refresh period (the frame tick). Returns false when the host could
+/// not start or is already running.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
     mut env: JNIEnv<'l>,
@@ -75,25 +100,32 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
     xwayland_binary: JString<'l>,
     output_width: jint,
     output_height: jint,
+    scale: jfloat,
+    frame_period_nanos: jlong,
 ) -> jboolean {
     guarded("nativeStart", JNI_FALSE, || {
-        let mut guard = match HOST.lock() {
-            Ok(g) => g,
-            Err(p) => p.into_inner(),
-        };
-        if guard.is_some() {
-            lwarn!("nativeStart: already running");
-            return JNI_FALSE;
+        let mut guard = host_lock();
+        if let Some(handle) = guard.take() {
+            if !handle.thread.is_finished() {
+                *guard = Some(handle);
+                lwarn!("nativeStart: already running");
+                return JNI_FALSE;
+            }
+            // The last host ended on its own; its thread is done, so this join is immediate.
+            let _ = handle.thread.join();
+            linfo!("nativeStart: the previous host had ended");
         }
         let Some(dir) = java_string(&mut env, &socket_dir) else { return JNI_FALSE };
         linfo!("host starting in pid {} ({})", std::process::id(), process_name());
-        probe::spawn();
+        // Both are read later on the compositor thread (libxkbcommon, smithay's X11 sockets);
+        // set here, before it exists.
         if let Some(root) = java_string(&mut env, &xkb_config_root) {
-            // Read by libxkbcommon when the seat's keyboard builds its keymap, on the compositor
-            // thread, which does not exist yet.
-            std::env::set_var("XKB_CONFIG_ROOT", root);
+            set_env_once("XKB_CONFIG_ROOT", Path::new(&root));
         }
         let xwayland = java_string(&mut env, &xwayland_binary).map(|binary| xwayland::XwaylandConfig::new(binary, &dir));
+        if let Some(tmp) = xwayland.as_ref().and_then(|x| x.tmp_dir()) {
+            set_env_once("SMITHAY_X11_TMPDIR", &tmp);
+        }
         let callbacks = match java::JavaCallbacks::resolve(&mut env) {
             Ok(c) => c,
             Err(e) => {
@@ -106,11 +138,18 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
             socket_path: PathBuf::from(&dir).join("wayland-0"),
             output_width,
             output_height,
+            scale: sane_scale(scale),
+            frame_period: frame_period(frame_period_nanos),
             xwayland,
         };
-        let events = move || callbacks.attach().map(|a| Box::new(a) as Box<dyn java::HostEvents>);
+        let events = move || {
+            callbacks.attach().map(|(events, ended)| {
+                (Box::new(events) as Box<dyn java::HostEvents>, Box::new(move |panicked| ended.report(panicked)) as host::EndReporter)
+            })
+        };
         match host::spawn(config, events) {
             Ok(handle) => {
+                GONE_LOGGED.store(false, Ordering::Relaxed);
                 *guard = Some(handle);
                 JNI_TRUE
             }
@@ -122,16 +161,14 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
     })
 }
 
-/// Stops the compositor and waits for its thread. Clients are disconnected and the socket
-/// is removed.
+/// Stops the compositor and waits for its thread. Clients are disconnected and the socket is
+/// removed. Also clears a host that ended on its own.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStop<'l>(_env: JNIEnv<'l>, _class: JClass<'l>) {
     guarded("nativeStop", (), || {
-        let handle = match HOST.lock() {
-            Ok(mut g) => g.take(),
-            Err(p) => p.into_inner().take(),
-        };
+        let handle = host_lock().take();
         if let Some(handle) = handle {
+            handle.stopping.store(true, std::sync::atomic::Ordering::SeqCst);
             handle.signal.stop();
             handle.signal.wakeup();
             if handle.thread.join().is_err() {
@@ -142,7 +179,7 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStop<'l>(_e
     })
 }
 
-/// Hands the toplevel `id` the Surface it is shown in, or takes it away when `surface` is null.
+/// Hands the window `id` the Surface it is drawn into, or takes it away when `surface` is null.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetSurface<'l>(
     env: JNIEnv<'l>,
@@ -157,7 +194,7 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetSurface<
             // SAFETY: a live env on this thread and a Surface reference from Java.
             let w = unsafe { NativeWindow::from_surface(env.get_raw(), surface.as_raw()) };
             if w.is_none() {
-                lwarn!("nativeSetSurface: no native window for toplevel {id}");
+                lwarn!("nativeSetSurface: no native window for window {id}");
                 return;
             }
             w
@@ -166,7 +203,7 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetSurface<
     })
 }
 
-/// Tells the toplevel `id` the size, in pixels, of the view that shows it.
+/// The size, in pixels, of the view that shows window `id`, and the density it is shown at.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeConfigure<'l>(
     _env: JNIEnv<'l>,
@@ -174,21 +211,41 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeConfigure<'
     id: jlong,
     width: jint,
     height: jint,
+    scale: jfloat,
 ) {
-    guarded("nativeConfigure", (), || send(Command::Configure { id, width, height }))
+    guarded("nativeConfigure", (), || send(Command::Configure { id, width, height, scale: sane_scale(scale) }))
 }
 
-/// One MotionEvent's touch points for the toplevel `id`, in view pixels; they share `action`
-/// (0 down, 1 up, 2 motion, 3 cancel) and are followed by one wl_touch.frame. `slots` are
-/// Android pointer ids; only the first `count` entries (at most 10) are read.
+/// Whether window `id`'s view is on screen.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetVisible<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    id: jlong,
+    visible: jboolean,
+) {
+    guarded("nativeSetVisible", (), || send(Command::SetVisible { id, visible: visible != JNI_FALSE }))
+}
+
+/// Gives window `id` keyboard focus; 0 takes it from every window.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetFocus<'l>(_env: JNIEnv<'l>, _class: JClass<'l>, id: jlong) {
+    guarded("nativeSetFocus", (), || send(Command::SetFocus { id }))
+}
+
+/// One MotionEvent for window `id`: the masked action, the action index, the event time and
+/// every pointer (id, x, y in view pixels); one wl_touch.frame. Only the first `count` entries
+/// (at most MAX_TOUCH_POINTERS) are read.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeTouch<'l>(
     env: JNIEnv<'l>,
     _class: JClass<'l>,
     id: jlong,
     action: jint,
+    action_index: jint,
+    event_time_ms: jlong,
     count: jint,
-    slots: JIntArray<'l>,
+    pointer_ids: JIntArray<'l>,
     xs: JFloatArray<'l>,
     ys: JFloatArray<'l>,
 ) {
@@ -198,7 +255,7 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeTouch<'l>(
         let mut x = [0f32; host::MAX_TOUCH_POINTS];
         let mut y = [0f32; host::MAX_TOUCH_POINTS];
         if n > 0
-            && (env.get_int_array_region(&slots, 0, &mut s[..n]).is_err()
+            && (env.get_int_array_region(&pointer_ids, 0, &mut s[..n]).is_err()
                 || env.get_float_array_region(&xs, 0, &mut x[..n]).is_err()
                 || env.get_float_array_region(&ys, 0, &mut y[..n]).is_err())
         {
@@ -209,12 +266,12 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeTouch<'l>(
         for k in 0..n {
             points.points[k] = (s[k], x[k], y[k]);
         }
-        send(Command::Touch { id, action, points });
+        send(Command::Touch { id, action, action_index, time: event_time(event_time_ms), points });
     })
 }
 
-/// A hardware key for the toplevel `id`: an Android key code, mapped to evdev here. The
-/// toplevel takes keyboard focus first.
+/// A hardware key for window `id`: an Android key code, mapped to evdev here. Only the focused
+/// window takes keys.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeKey<'l>(
     _env: JNIEnv<'l>,
@@ -222,26 +279,20 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeKey<'l>(
     id: jlong,
     android_keycode: jint,
     down: jboolean,
+    event_time_ms: jlong,
 ) {
-    guarded("nativeKey", (), || send(Command::Key { id, android_keycode, down: down != JNI_FALSE }))
+    guarded("nativeKey", (), || {
+        send(Command::Key { id, android_keycode, down: down != JNI_FALSE, time: event_time(event_time_ms) })
+    })
 }
 
-/// Asks the toplevel `id` to close (xdg_toplevel.close, or WM_DELETE_WINDOW for X11).
+/// Asks window `id` to close (xdg_toplevel.close, or WM_DELETE_WINDOW for X11).
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeClose<'l>(_env: JNIEnv<'l>, _class: JClass<'l>, id: jlong) {
     guarded("nativeClose", (), || send(Command::Close { id }))
 }
 
-/// Debug: kills this process with abort(), to check that the launcher survives it.
-#[no_mangle]
-pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeAbort<'l>(_env: JNIEnv<'l>, _class: JClass<'l>) {
-    lerror!("aborting on request (Crash compositor)");
-    std::process::abort();
-}
-
-/// A pointer event for the toplevel `id`. `action`: 0 motion (x, y in view pixels),
-/// 1 button down, 2 button up (`button` is a Linux BTN_* code), 3 axis (x, y are scroll
-/// distances), 4 leave.
+/// A pointer event for window `id`; `action` is a POINTER_* of the protocol.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativePointer<'l>(
     _env: JNIEnv<'l>,
@@ -251,6 +302,29 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativePointer<'l>
     button: jint,
     x: jfloat,
     y: jfloat,
+    event_time_ms: jlong,
 ) {
-    guarded("nativePointer", (), || send(Command::Pointer { id, action, button, x, y }))
+    guarded("nativePointer", (), || {
+        send(Command::Pointer { id, action, button, x, y, time: event_time(event_time_ms) })
+    })
+}
+
+/// Debug: kills this process with abort(), to check that the launcher survives it.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeAbort<'l>(_env: JNIEnv<'l>, _class: JClass<'l>) {
+    lerror!("aborting on request (Crash compositor)");
+    std::process::abort();
+}
+
+/// Debug: logs what the GPU drivers offer, on a thread of its own. Never runs unless asked: a
+/// driver that crashes in it takes this process down.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeProbe<'l>(_env: JNIEnv<'l>, _class: JClass<'l>) {
+    guarded("nativeProbe", (), probe::spawn)
+}
+
+/// Debug: turns the once-a-second copy-time line per window on or off.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetCopyLog<'l>(_env: JNIEnv<'l>, _class: JClass<'l>, on: jboolean) {
+    host::COPY_LOG.store(on != JNI_FALSE, Ordering::Relaxed);
 }
