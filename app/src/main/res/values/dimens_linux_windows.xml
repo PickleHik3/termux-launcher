@@ -6,6 +6,5 @@
     <!-- A few characters of the label plus the close target. -->
     <dimen name="linux_windows_tab_min_width">112dp</dimen>
     <dimen name="linux_windows_close_target">48dp</dimen>
-    <dimen name="linux_windows_tab_label_padding">12dp</dimen>
-    <dimen name="linux_windows_dev_padding">8dp</dimen>
+    <dimen name="linux_windows_start_padding">12dp</dimen>
 </resources>

@@ -72,6 +72,14 @@ public class LinuxWindowTabsTest {
     }
 
     @Test
+    public void scrollShowsTheWholeTabWithItsEnd() {
+        assertEquals(0, LinuxWindowTabs.scrollTarget(0, 400, 100, 300));
+        assertEquals(150, LinuxWindowTabs.scrollTarget(0, 400, 350, 550));
+        assertEquals(60, LinuxWindowTabs.scrollTarget(200, 400, 60, 260));
+        assertEquals(200, LinuxWindowTabs.scrollTarget(500, 400, 200, 700));
+    }
+
+    @Test
     public void labelIsTheTitleElseTheAppIdElseTheFallback() {
         assertEquals("~/src", LinuxWindowTabs.label("~/src", "kitty", "Window"));
         assertEquals("kitty", LinuxWindowTabs.label("~", "kitty", "Window"));

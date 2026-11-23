@@ -34,7 +34,9 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
+import com.google.android.material.color.MaterialColors;
 import com.termux.BuildConfig;
+import com.termux.app.theme.TermuxThemeManager;
 import com.termux.R;
 
 import java.io.File;
@@ -65,9 +67,20 @@ public final class LinuxWindowsActivity extends Activity {
     static final String EXTRA_OPENING = "opening";
     /** How long "no Linux apps" shows before the screen closes itself. */
     private static final long NO_APPS_CLOSE_MS = 2500;
-    private static final float UNSHOWN_TAB_ALPHA = 0.7f;
-    /** The shown tab's wash over the wallpaper. */
-    private static final int SHOWN_TAB_BACKGROUND = 0x33FFFFFF;
+    /** Used only when the theme gives no colour for a role. */
+    private static final int FALLBACK_SURFACE = 0xFF202020;
+    private static final int FALLBACK_ON_SURFACE = 0xFFFFFFFF;
+
+    /**
+     * The tab row's colours, read from the launcher's own roles (the Material roles the scheme
+     * and the wallpaper palette override, see TermuxThemeManager): the row sits on the panel
+     * surface, a tab's title is on-surface-variant, and the shown tab is the primary container.
+     */
+    private int mSurface = FALLBACK_SURFACE;
+    private int mOnSurface = FALLBACK_ON_SURFACE;
+    private int mOnSurfaceVariant = FALLBACK_ON_SURFACE;
+    private int mShownTab = Color.TRANSPARENT;
+    private int mOnShownTab = FALLBACK_ON_SURFACE;
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
     private final LongSparseArray<Pane> mPanes = new LongSparseArray<>();
@@ -200,6 +213,7 @@ public final class LinuxWindowsActivity extends Activity {
         final long id;
         final LinearLayout tab;
         final TextView label;
+        final TextView close;
         final TextureView view;
         Surface surface;
         String title = "";
@@ -222,15 +236,16 @@ public final class LinuxWindowsActivity extends Activity {
             tab.setOnClickListener(v -> showWindow(id));
             tab.setOnLongClickListener(v -> toggleDevBar());
             tab.setMinimumWidth(res(R.dimen.linux_windows_tab_min_width));
-            label = shadowedText();
+            label = chromeText();
             label.setTextSize(TypedValue.COMPLEX_UNIT_PX, getResources().getDimension(R.dimen.linux_windows_tab_text));
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
             label.setGravity(Gravity.CENTER_VERTICAL);
-            label.setPadding(res(R.dimen.linux_windows_tab_label_padding), 0, 0, 0);
-            TextView close = shadowedText();
+            // The title starts at the row's start edge, and ends where the close target begins.
+            label.setPaddingRelative(res(R.dimen.linux_windows_start_padding), 0, 0, 0);
+            close = chromeText();
             close.setText("✕");
-            close.setGravity(Gravity.CENTER);
+            close.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
             close.setContentDescription(getString(R.string.linux_windows_close));
             close.setOnClickListener(v -> {
                 if (mService != null) {
@@ -259,8 +274,10 @@ public final class LinuxWindowsActivity extends Activity {
             String name = LinuxWindowTabs.label(title, appId, getString(R.string.linux_windows_untitled));
             if (!TextUtils.equals(label.getText(), name)) label.setText(name);
             label.setTypeface(null, shown() ? Typeface.BOLD : Typeface.NORMAL);
-            tab.setAlpha(shown() ? 1f : UNSHOWN_TAB_ALPHA);
-            tab.setBackgroundColor(shown() ? SHOWN_TAB_BACKGROUND : Color.TRANSPARENT);
+            int text = shown() ? mOnShownTab : mOnSurfaceVariant;
+            label.setTextColor(text);
+            close.setTextColor(text);
+            tab.setBackgroundColor(shown() ? mShownTab : Color.TRANSPARENT);
         }
 
         /** Hands the Surface to the host. */
@@ -414,6 +431,18 @@ public final class LinuxWindowsActivity extends Activity {
         return t;
     }
 
+    /** Text on the tab row's or developer row's surface: the on-surface colour, no shadow. */
+    private TextView chromeText() {
+        TextView t = new TextView(this);
+        t.setTextColor(mOnSurface);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        return t;
+    }
+
+    private int themeColor(int attr, int fallback) {
+        return MaterialColors.getColor(this, attr, fallback);
+    }
+
     private Button button(String text, View.OnClickListener listener) {
         Button b = new Button(this);
         b.setText(text);
@@ -445,6 +474,14 @@ public final class LinuxWindowsActivity extends Activity {
             finish();
             return;
         }
+        // The launcher's scheme or wallpaper palette, as every launcher activity gets it.
+        TermuxThemeManager.applyThemeOverlays(this);
+        mSurface = themeColor(com.termux.shared.R.attr.termuxColorSurfacePanel, FALLBACK_SURFACE);
+        mOnSurface = themeColor(com.termux.shared.R.attr.termuxColorOnSurface, FALLBACK_ON_SURFACE);
+        mOnSurfaceVariant = themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant, FALLBACK_ON_SURFACE);
+        mShownTab = themeColor(com.termux.shared.R.attr.termuxColorPrimaryContainer, FALLBACK_SURFACE);
+        mOnShownTab = themeColor(com.termux.shared.R.attr.termuxColorOnPrimaryContainer, FALLBACK_ON_SURFACE);
+
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
         // Below the status bar and above the navigation bar; the keyboard is not handled yet.
@@ -454,6 +491,7 @@ public final class LinuxWindowsActivity extends Activity {
         mTabScroll = tabScroll;
         tabScroll.setHorizontalScrollBarEnabled(false);
         tabScroll.setFillViewport(true);
+        tabScroll.setBackgroundColor(mSurface);
         mTabRow = new LinearLayout(this);
         mTabRow.setOrientation(LinearLayout.HORIZONTAL);
         mTabRow.setGravity(Gravity.CENTER_VERTICAL);
@@ -531,9 +569,11 @@ public final class LinuxWindowsActivity extends Activity {
         // The status on its own line, the buttons wrapping below it within the screen's width.
         LinearLayout box = new LinearLayout(this);
         box.setOrientation(LinearLayout.VERTICAL);
-        int pad = res(R.dimen.linux_windows_dev_padding);
-        box.setPadding(pad, 0, pad, 0);
-        mStatus = shadowedText();
+        box.setBackgroundColor(mSurface);
+        // The same start edge as the tab titles.
+        int pad = res(R.dimen.linux_windows_start_padding);
+        box.setPaddingRelative(pad, 0, pad, 0);
+        mStatus = chromeText();
         mStatus.setSingleLine(true);
         mStatus.setEllipsize(TextUtils.TruncateAt.END);
         box.addView(mStatus, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
@@ -828,6 +868,8 @@ public final class LinuxWindowsActivity extends Activity {
                 tab.setLayoutParams(lp);
             }
         }
+        // Widths moved: the shown tab, end included, stays in view.
+        scrollToShown();
     }
 
     /** Scrolls the row so {@code tab} is in view, once the row has laid it out. */
@@ -837,15 +879,21 @@ public final class LinuxWindowsActivity extends Activity {
             int left = tab.getLeft();
             int right = left + tab.getWidth();
             int scroll = mTabScroll.getScrollX();
-            if (left < scroll) mTabScroll.smoothScrollTo(left, 0);
-            else if (right > scroll + viewport) mTabScroll.smoothScrollTo(right - viewport, 0);
+            int target = LinuxWindowTabs.scrollTarget(scroll, viewport, left, right);
+            if (target != scroll) mTabScroll.smoothScrollTo(target, 0);
         });
+    }
+
+    private void scrollToShown() {
+        Pane shown = mPanes.get(mTabs.shown());
+        if (shown != null) scrollToTab(shown.tab);
     }
 
     /** A tab was tapped. */
     private void showWindow(long id) {
         long before = mTabs.shown();
         if (mTabs.show(id)) applyShown(before);
+        else scrollToShown();
     }
 
     /**

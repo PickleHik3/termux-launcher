@@ -34,6 +34,16 @@ final class LinuxWindowTabs {
         return Math.max(min, viewport / count);
     }
 
+    /**
+     * The row's scroll offset that shows the whole tab {@code left..right} (its end included),
+     * moving as little as it can; the tab's start when it is wider than the viewport.
+     */
+    static int scrollTarget(int scrollX, int viewport, int left, int right) {
+        if (right - left >= viewport || left < scrollX) return left;
+        if (right > scrollX + viewport) return right - viewport;
+        return scrollX;
+    }
+
     private final List<Long> ids = new ArrayList<>();
     private long shown = NONE;
 
