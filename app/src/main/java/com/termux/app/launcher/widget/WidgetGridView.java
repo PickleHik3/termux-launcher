@@ -350,8 +350,14 @@ public final class WidgetGridView extends ViewGroup {
         // A glass recording made against the old parents could now draw a loop through the cells
         // (a card's own picture drawing the grid that now holds the card): those drop before the
         // next frame syncs and record again against the new parents.
-        com.termux.app.glass.GlassService glass = com.termux.app.glass.GlassService.of(this);
-        if (glass != null) glass.reparented(moved, other);
+        for (android.view.ViewParent parent = getParent(); parent != null;
+                parent = parent.getParent()) {
+            if (parent instanceof com.termux.app.launcher.widget.builtin.BuiltinWidgetView.GlassSource) {
+                ((com.termux.app.launcher.widget.builtin.BuiltinWidgetView.GlassSource) parent)
+                    .cellsReparented(moved, other);
+                break;
+            }
+        }
     }
 
     @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {

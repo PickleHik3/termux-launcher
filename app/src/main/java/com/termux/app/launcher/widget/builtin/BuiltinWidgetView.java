@@ -195,6 +195,11 @@ public abstract class BuiltinWidgetView extends FrameLayout
         }
         /** {@code slab} stopped wearing glass or left: its glass entry, picture and layer go. */
         default void detachLiveGlass(@NonNull View slab) {}
+        /**
+         * {@code cells} moved to another grid from {@code from} without a layout (a mid-swipe
+         * page swap): any glass recording the move turned into a loop drops before the next frame.
+         */
+        default void cellsReparented(@NonNull java.util.List<View> cells, @NonNull View from) {}
     }
 
     @NonNull protected final BuiltinWidgetKind kind;

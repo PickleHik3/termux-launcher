@@ -157,6 +157,10 @@ public final class WidgetPaneFrame extends PaneContentFrame
         if (mLiveGlass != null) mLiveGlass.drop(slab);
     }
 
+    @Override public void cellsReparented(@NonNull java.util.List<View> cells, @NonNull View from) {
+        if (mLiveGlass != null) mLiveGlass.reparented(cells, from);
+    }
+
     /** Where a widget's glass is worn and given back; the Home page's glass. */
     public interface Glass {
         /** The slab's live picture at {@code blurDp}; null while another kind is granted. */
@@ -166,6 +170,9 @@ public final class WidgetPaneFrame extends PaneContentFrame
 
         /** The slab gave its glass back. */
         void drop(@NonNull View slab);
+
+        /** {@code cells} left {@code from} for another grid without a layout. */
+        default void reparented(@NonNull java.util.List<View> cells, @NonNull View from) {}
     }
 
     public void setGlass(@Nullable Glass glass) {

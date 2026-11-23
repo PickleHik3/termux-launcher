@@ -22,6 +22,7 @@ import java.util.function.IntSupplier;
  */
 public final class HomeGlass implements WidgetPaneFrame.Glass {
 
+    @NonNull private final GlassService mGlass;
     @NonNull private final DeclaredSlabs mSlabs;
     @NonNull private final IntSupplier mFloatBlurDp;
 
@@ -31,6 +32,7 @@ public final class HomeGlass implements WidgetPaneFrame.Glass {
      */
     public HomeGlass(@NonNull GlassService glass, @NonNull Runnable redeclare,
                      @NonNull IntSupplier floatBlurDp) {
+        mGlass = glass;
         mSlabs = new DeclaredSlabs(glass, redeclare);
         mFloatBlurDp = floatBlurDp;
     }
@@ -62,6 +64,15 @@ public final class HomeGlass implements WidgetPaneFrame.Glass {
     @Override
     public void drop(@NonNull View slab) {
         mSlabs.drop(slab);
+    }
+
+    /**
+     * {@link WidgetPaneFrame.Glass}: a mid-swipe page swap moved widget cells between grids; the
+     * service drops any recording that move turned into a loop.
+     */
+    @Override
+    public void reparented(@NonNull List<View> cells, @NonNull View from) {
+        mGlass.reparented(cells, from);
     }
 
     /** Adds one entry per slab that wears glass. */
