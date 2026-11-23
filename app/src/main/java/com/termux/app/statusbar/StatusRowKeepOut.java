@@ -325,6 +325,104 @@ public final class StatusRowKeepOut {
         return sum;
     }
 
+    /** {@link #partAtGap}'s answer, indexes into its {@code out}: row pixels from the row's left. */
+    public static final int PART_CHIPS_LEFT = 0;
+    public static final int PART_CHIPS_RIGHT = 1;
+    public static final int PART_READINGS_LEFT = 2;
+    public static final int PART_READINGS_RIGHT = 3;
+    /** How many of the readings' items stand, the first ones in their order. */
+    public static final int PART_READINGS_KEPT = 4;
+    public static final int PART_SIZE = 5;
+
+    /**
+     * How many of the readings' items fit {@code roomPx}: the first ones in the user's order,
+     * whole, so the readings at the far end go first. {@code chromePx} (the group's own margins
+     * and padding) counts once when anything stands; a dot ({@code mark}) never stands last,
+     * since it shows only between two readings. 0 when not even the first reading fits.
+     */
+    public static int readingsThatFit(@NonNull int[] itemWidth, @NonNull boolean[] mark,
+                                      int count, int chromePx, int roomPx) {
+        int used = Math.max(0, chromePx);
+        int kept = 0;
+        while (kept < count && used + itemWidth[kept] <= roomPx) {
+            used += itemWidth[kept];
+            kept++;
+        }
+        while (kept > 0 && mark[kept - 1]) kept--;
+        return kept;
+    }
+
+    /** What the first {@code kept} items take with the group's chrome; 0 when none stand. */
+    public static int readingsWidth(@NonNull int[] itemWidth, int kept, int chromePx) {
+        if (kept <= 0) return 0;
+        int width = Math.max(0, chromePx);
+        for (int i = 0; i < kept; i++) width += itemWidth[i];
+        return width;
+    }
+
+    /**
+     * The row parted at the camera gap: the chips stand before the gap and the readings after it,
+     * each within its own stretch, nothing under the camera. Before and after are in reading
+     * order: in a right-to-left row the chips stand right of the camera and the readings left of
+     * it. The chips fill their stretch; the readings hug the row's far end and keep as many whole
+     * items as fit ({@link #readingsThatFit}). Two cameras near an end are handled too: when the
+     * chips' stretch cannot hold {@code chipFloorPx} (one whole chip), chips and readings both
+     * stand after the camera, the readings in what the floor leaves; when not one reading fits
+     * after the camera, they stand before it, just ahead of the gap, in what the floor leaves.
+     *
+     * @param start   where the row's content starts (its left corner inset), row pixels
+     * @param end     where it ends (the row's width less its right corner inset)
+     * @param itemWidth each item's width with its margins, in the readings' own order (the order
+     *                the user set; in a right-to-left row the first stands rightmost)
+     * @param out     {@link #PART_SIZE} values, see the {@code PART_} indexes
+     */
+    public static void partAtGap(int start, int end, int gapStart, int gapEnd, boolean rtl,
+                                 int chipFloorPx, @NonNull int[] itemWidth,
+                                 @NonNull boolean[] mark, int count, int chromePx,
+                                 @NonNull int[] out) {
+        // Worked in reading order (x mirrored in a right-to-left row), turned back at the end.
+        int gs = Math.max(start, Math.min(end, gapStart));
+        int ge = Math.max(gs, Math.min(end, gapEnd));
+        int s = rtl ? -end : start;
+        int e = rtl ? -start : end;
+        int before = rtl ? -ge : gs;
+        int after = rtl ? -gs : ge;
+        int floor = Math.max(0, chipFloorPx);
+        int chipsLeft;
+        int chipsRight;
+        int readingsLeft;
+        int readingsRight;
+        int kept;
+        if (before - s >= floor) {
+            kept = readingsThatFit(itemWidth, mark, count, chromePx, e - after);
+            if (kept > 0 || count == 0) {
+                chipsLeft = s;
+                chipsRight = before;
+                readingsRight = e;
+                readingsLeft = e - readingsWidth(itemWidth, kept, chromePx);
+            } else {
+                kept = readingsThatFit(itemWidth, mark, count, chromePx, before - s - floor);
+                int width = readingsWidth(itemWidth, kept, chromePx);
+                chipsLeft = s;
+                chipsRight = before - width;
+                readingsLeft = before - width;
+                readingsRight = before;
+            }
+        } else {
+            kept = readingsThatFit(itemWidth, mark, count, chromePx, e - after - floor);
+            int width = readingsWidth(itemWidth, kept, chromePx);
+            chipsLeft = after;
+            chipsRight = Math.max(after, e - width);
+            readingsLeft = e - width;
+            readingsRight = e;
+        }
+        out[PART_CHIPS_LEFT] = rtl ? -chipsRight : chipsLeft;
+        out[PART_CHIPS_RIGHT] = rtl ? -chipsLeft : chipsRight;
+        out[PART_READINGS_LEFT] = rtl ? -readingsRight : readingsLeft;
+        out[PART_READINGS_RIGHT] = rtl ? -readingsLeft : readingsRight;
+        out[PART_READINGS_KEPT] = kept;
+    }
+
     /** Whether {@code flow} dropped child {@code i}: a fixed child that had width and got none. */
     public static boolean isDropped(int width, float weight, int outWidth) {
         return weight <= 0f && width > 0 && outWidth == 0;

@@ -353,7 +353,7 @@
                          below is the shipped one, and StatusBarWidgets moves the pairs when the
                          order changes. A dot shows only between two shown items. The deck look
                          draws its display window around this group. -->
-                    <LinearLayout
+                    <com.termux.app.statusbar.StatusReadingsCluster
                         android:id="@+id/terminal_status_stats_cluster"
                         android:layout_width="wrap_content"
                         android:layout_height="match_parent"
@@ -516,7 +516,7 @@
                             android:layout_marginStart="3dp"
                             android:visibility="gone"
                             android:contentDescription="@string/termux_status_widget_mouse_content_description" />
-                    </LinearLayout>
+                    </com.termux.app.statusbar.StatusReadingsCluster>
 
                     </LinearLayout>
                 </com.termux.app.statusbar.StatusRowLayout>
