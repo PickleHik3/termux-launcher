@@ -7,6 +7,7 @@ import android.content.ServiceConnection;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.Typeface;
+import android.hardware.HardwareBuffer;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
@@ -60,6 +61,16 @@ public final class LinuxWindowsActivity extends Activity {
     private static final long DUMP_DELAY_MS = 1000;
     private static final int DUMP_TRIES = 5;
 
+    /** Feasibility probe: {@code --es ahb view|layout|client} starts that AHB experiment. */
+    public static final String EXTRA_AHB = "ahb";
+    /** E3's buffer usage, E2's index (0 a .. 4 e); default 0. */
+    public static final String EXTRA_AHB_VARIANT = "ahbVariant";
+    /** E3's modifier: 0 linear (default), 1 Qualcomm compressed. */
+    public static final String EXTRA_AHB_MODIFIER = "ahbModifier";
+    private static final String AHB_VIEW = "view";
+    private static final String AHB_LAYOUT = "layout";
+    private static final String AHB_CLIENT = "client";
+
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
     /** The widest a tab's title grows before it is ellipsized. */
     private static final int TAB_TITLE_MAX_DP = 200;
@@ -95,7 +106,34 @@ public final class LinuxWindowsActivity extends Activity {
     private long mFocusedId;
     private int mHostPid;
 
-    private final IBinder.DeathRecipient mDeath = () -> mMain.post(this::onHostDied);
+    /** Feasibility probe: the view showing an AHB experiment's buffer, while one is shown. */
+    private AhbTestView mAhbView;
+    private int mAhbVariant;
+    private int mAhbModifier;
+
+    private final IAhbTestCallback.Stub mAhbCallback = new IAhbTestCallback.Stub() {
+        @Override
+        public void onBuffer(HardwareBuffer buffer, String experiment) {
+            mMain.post(() -> showAhbBuffer(buffer, experiment));
+        }
+
+        @Override
+        public void onFrame(int frame) {
+            mMain.post(() -> {
+                if (mAhbView != null) mAhbView.onHostFrame(frame);
+            });
+        }
+
+        @Override
+        public void onDone(String experiment, String message) {
+            mMain.post(() -> {
+                Log.i(AhbProbe.LOG_TAG, experiment.toUpperCase() + " launcher: host done: " + message);
+                if (mAhbView != null) mAhbView.logSummary(message);
+            });
+        }
+    };
+
+    private final IBinder.DeathRecipient mDeath =() -> mMain.post(this::onHostDied);
 
     private final ServiceConnection mConnection = new ServiceConnection() {
         @Override
@@ -446,6 +484,7 @@ public final class LinuxWindowsActivity extends Activity {
         setContentView(root);
 
         handleDumpIntent(getIntent());
+        handleAhbIntent(getIntent());
         connect();
     }
 
@@ -497,8 +536,74 @@ public final class LinuxWindowsActivity extends Activity {
         bar.addView(mCopyLogButton);
         mDumpButton = button("Dump", v -> dumpAll(1));
         bar.addView(mDumpButton);
+        bar.addView(button("AHB view test", v -> startAhb(AHB_VIEW, 1)));
+        bar.addView(button("AHB layout", v -> startAhb(AHB_LAYOUT, 1)));
+        bar.addView(button("AHB client", v -> startAhb(AHB_CLIENT, 1)));
         scroll.addView(bar);
         return scroll;
+    }
+
+    /**
+     * Feasibility probe: starts an AHB experiment on the host (logcat TLWaylandAHB). Waits for the
+     * debug interface like {@link #dumpAll}.
+     */
+    private void startAhb(String which, int triesLeft) {
+        if (isDestroyed()) return;
+        if (mDebug == null) {
+            if (triesLeft > 1) mMain.postDelayed(() -> startAhb(which, triesLeft - 1), DUMP_DELAY_MS);
+            else Log.w(AhbProbe.LOG_TAG, "AHB " + which + ": the debug interface is not connected");
+            return;
+        }
+        try {
+            switch (which) {
+                case AHB_VIEW:
+                    mDebug.ahbViewTest(mAhbCallback);
+                    break;
+                case AHB_LAYOUT:
+                    mDebug.ahbLayoutProbe();
+                    break;
+                case AHB_CLIENT:
+                    Log.i(AhbProbe.LOG_TAG, "E3 launcher: variant " + mAhbVariant + " modifier " + mAhbModifier
+                        + "; run tlwayland-ahbclient " + AhbProbe.SOCKET_PATH + " within 120 s");
+                    mDebug.ahbClientTest(mAhbVariant, mAhbModifier, mAhbCallback);
+                    break;
+                default:
+                    Log.w(AhbProbe.LOG_TAG, "AHB: unknown experiment " + which);
+            }
+        } catch (RemoteException e) {
+            Log.w(AhbProbe.LOG_TAG, "AHB " + which + ": " + e);
+        }
+    }
+
+    /** Shows a buffer the host handed over, on top of the windows; a tap takes it away. */
+    private void showAhbBuffer(HardwareBuffer buffer, String experiment) {
+        if (isDestroyed()) {
+            buffer.close();
+            return;
+        }
+        if (mAhbView == null) {
+            mAhbView = new AhbTestView(this);
+            mAhbView.setOnClickListener(v -> closeAhbView());
+            mWindowHost.addView(mAhbView, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        }
+        mAhbView.setBuffer(buffer, experiment);
+    }
+
+    private void closeAhbView() {
+        if (mAhbView == null) return;
+        mAhbView.release();
+        mWindowHost.removeView(mAhbView);
+        mAhbView = null;
+    }
+
+    /** {@code --es ahb view|layout|client [--ei ahbVariant N] [--ei ahbModifier 0|1]}. */
+    private void handleAhbIntent(Intent intent) {
+        String which = intent == null ? null : intent.getStringExtra(EXTRA_AHB);
+        if (which == null) return;
+        mAhbVariant = intent.getIntExtra(EXTRA_AHB_VARIANT, mAhbVariant);
+        mAhbModifier = intent.getIntExtra(EXTRA_AHB_MODIFIER, mAhbModifier);
+        startAhb(which, DUMP_TRIES);
     }
 
     private boolean toggleDevBar() {
@@ -712,6 +817,7 @@ public final class LinuxWindowsActivity extends Activity {
         super.onNewIntent(intent);
         setIntent(intent);
         handleDumpIntent(intent);
+        handleAhbIntent(intent);
     }
 
     /** Asks the host to write every window to files/wayland-dumps/<id>.png (see logcat TLWayland). */
@@ -810,6 +916,8 @@ public final class LinuxWindowsActivity extends Activity {
         }
         mService = null;
         mDebug = null;
+        if (mAhbView != null) mAhbView.release();
+        mAhbView = null;
         mPanes.clear();
         super.onDestroy();
     }

@@ -173,6 +173,21 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
             }
             if (mLoaded && mRunning) WaylandHost.nativeDumpWindow(id, checked);
         }
+
+        @Override
+        public void ahbViewTest(IAhbTestCallback cb) {
+            if (mLoaded) AhbProbe.viewTest(cb);
+        }
+
+        @Override
+        public void ahbLayoutProbe() {
+            if (mLoaded) AhbProbe.layoutProbe();
+        }
+
+        @Override
+        public void ahbClientTest(int variant, int modifier, IAhbTestCallback cb) {
+            if (mLoaded) AhbProbe.clientTest(variant, modifier, cb);
+        }
     };
 
     /**

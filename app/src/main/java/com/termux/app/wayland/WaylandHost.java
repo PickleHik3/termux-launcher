@@ -1,5 +1,6 @@
 package com.termux.app.wayland;
 
+import android.hardware.HardwareBuffer;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Log;
@@ -88,6 +89,16 @@ public final class WaylandHost {
     public static native void nativeSetCopyLog(boolean on);
     /** Debug: write window id's shown pixels as a PNG to path (already checked). */
     public static native void nativeDumpWindow(long id, String path);
+    /** Debug (AHB probe E1): write the test pattern for frame into buffer; false when it cannot. */
+    public static native boolean nativeAhbFill(HardwareBuffer buffer, int frame);
+    /** Debug (AHB probe E2): log the layout of AHardwareBuffers, on a thread of its own. */
+    public static native void nativeAhbLayoutProbe();
+    /**
+     * Debug (AHB probe E3): serve one buffer's fd to tlwayland-ahbclient on socketPath, read it
+     * back; the buffer, or null. Blocks up to about three minutes.
+     */
+    @Nullable
+    public static native HardwareBuffer nativeAhbServeClient(int variant, int modifier, String socketPath);
 
     // Called from native code on the compositor thread.
 
