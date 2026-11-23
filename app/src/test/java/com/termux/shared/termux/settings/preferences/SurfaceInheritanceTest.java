@@ -329,11 +329,11 @@ public class SurfaceInheritanceTest {
     }
 
     @Test
-    public void freshInstall_wearsTheClearLookWithAnEightDpMargin() {
+    public void freshInstall_wearsTheFrostedLookWithAnEightDpMargin() {
         preferences.migrateLookGrid(java.util.Collections.emptyList());
 
-        assertEquals("the shared layer", 10, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals("the dock follows it", 10, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals("the shared layer", 60, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals("the dock follows it", 60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         assertEquals(8, preferences.getDockHorizontalInset());
         assertEquals(8, preferences.getTerminalPaneGap());
         for (SurfaceSlot slot : SurfaceSlot.values())
@@ -341,22 +341,22 @@ public class SurfaceInheritanceTest {
         assertTrue(preferences.isTerminalBorderEnabled());
         assertEquals(TERMUX_APP.DEFAULT_TERMINAL_CORNER_RADIUS,
             preferences.getTerminalCornerRadius());
-        // The editor sees exactly the Clear look, so its ring sits on Clear rather than Custom.
-        com.termux.app.surfaces.SurfacePresets.Preset clear = null;
+        // The editor sees exactly the Frosted look, so its ring sits on Frosted rather than Custom.
+        com.termux.app.surfaces.SurfacePresets.Preset frosted = null;
         for (com.termux.app.surfaces.SurfacePresets.Preset preset
                 : com.termux.app.surfaces.SurfacePresets.presets())
-            if ("minimal".equals(preset.id)) clear = preset;
-        assertTrue(clear != null
-            && com.termux.app.surfaces.SurfacePresets.matches(preferences, clear));
+            if ("frost".equals(preset.id)) frosted = preset;
+        assertTrue(frosted != null
+            && com.termux.app.surfaces.SurfacePresets.matches(preferences, frosted));
     }
 
     @Test
-    public void freshInstall_applyingAWallpaperKeepsTheClearLook() {
+    public void freshInstall_applyingAWallpaperKeepsTheFrostedLook() {
         preferences.migrateLookGrid(java.util.Collections.emptyList());
         com.termux.app.chrome.ChromePolicy.applyWallpaperModePreferences(preferences, true);
 
-        assertEquals(10, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
-        assertEquals(10, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(60, preferences.getStatusBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
+        assertEquals(60, preferences.getAppBarOpacity(com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.terminalPageId()));
         for (SurfaceSlot slot : SurfaceSlot.values())
             assertEquals(slot.toString(), 0, preferences.surfaceOverrideCount(slot));
     }
