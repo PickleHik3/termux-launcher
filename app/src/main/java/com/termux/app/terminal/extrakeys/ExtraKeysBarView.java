@@ -68,6 +68,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
     private final float mDensity;
     private final int mTouchSlop;
     private final List<ExtraKeysPageView> mKeyPages = new ArrayList<>();
+    private int mMinColumns;
     @Nullable private View mTextInput;
     /** The field in the text input page that takes focus, or the page itself when it has none. */
     @Nullable private View mTextInputFocusTarget;
@@ -222,6 +223,12 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
     }
 
     /** Builds or rebuilds one page per entry; an empty or null array leaves no key pages. */
+    /** The column count every key page lays its keys on; see {@link ExtraKeysPageView#setMinColumns}. */
+    public void setMinColumns(int minColumns) {
+        mMinColumns = Math.max(0, minColumns);
+        for (int i = 0; i < mKeyPages.size(); i++) mKeyPages.get(i).setMinColumns(mMinColumns);
+    }
+
     public void setKeySet(@Nullable ExtraKeysInfo[] pages) {
         setKeySet(pages, mScale, Transition.RELOAD);
     }
@@ -262,6 +269,7 @@ public final class ExtraKeysBarView extends android.view.ViewGroup {
             ExtraKeysPageView page = new ExtraKeysPageView(getContext());
             page.setModifiers(mModifiers);
             page.setClient(mClient);
+            page.setMinColumns(mMinColumns);
             page.setKeys(pages[i]);
             if (mPageStyler != null) mPageStyler.style(page, i);
             mKeyPageRows[i] = page.rowCount();

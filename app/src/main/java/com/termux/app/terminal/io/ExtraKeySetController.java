@@ -32,6 +32,9 @@ public final class ExtraKeySetController {
         /** The stored value of a property line as written, or null when absent. */
         @Nullable String rawLine(@NonNull String key);
 
+        /** The keys in the longest row of a page value, 0 when it does not parse; raises no notice. */
+        int longestRow(@NonNull String value);
+
         /** One page of keys from its value; {@code fallback} is the value a bad row falls back to. */
         @Nullable ExtraKeysInfo parsePage(@NonNull String value, @NonNull String fallback, int page);
 
@@ -54,12 +57,18 @@ public final class ExtraKeySetController {
     @Nullable private ExtraKeySetResolver.Resolved mResolved;
     @NonNull private ExtraKeysInfo[] mPages = new ExtraKeysInfo[0];
     private float mScale = 1f;
+    private int mSteadyColumns = -1;
     private int mEdgeRows = -1;
     private float mEdgeScale = -1f;
     @Nullable private ExtraKeysBarView.Transition mLastTransition;
 
     public ExtraKeySetController(@NonNull Host host) {
         mHost = host;
+    }
+
+    /** The column count every page lays its keys on, or -1 before the first apply. */
+    public int steadyColumns() {
+        return mSteadyColumns;
     }
 
     /** The last applied pages: one entry (null if it failed to parse) or two once applied. */
@@ -107,7 +116,9 @@ public final class ExtraKeySetController {
             mHost.homeFloatFocused(), mHost.homeFloatIsDisplay());
         ExtraKeySetResolver.Resolved resolved = ExtraKeySetResolver.resolve(target, mHost::rawLine);
         boolean first = mTarget == null;
-        if (!first && target == mTarget && resolved.equals(mResolved)) return;
+        int steady = ExtraKeySetResolver.steadyColumns(mHost::rawLine, mHost::longestRow);
+        boolean steadyChanged = steady != mSteadyColumns;
+        if (!first && !steadyChanged && target == mTarget && resolved.equals(mResolved)) return;
         boolean targetChanged = !first && target != mTarget;
         if (targetChanged) mHost.modifiers().clear();
 
@@ -134,7 +145,11 @@ public final class ExtraKeySetController {
         mScale = resolved.scale;
         mLastTransition = transition;
 
+        mSteadyColumns = steady;
         ExtraKeysBarView bar = mHost.bar();
+        if (bar != null) bar.setMinColumns(steady);
+        ExtraKeysPageView edgeFirst = mHost.edgePage();
+        if (edgeFirst != null) edgeFirst.setMinColumns(steady);
         if (bar != null) bar.setKeySet(pages, resolved.scale, transition);
         ExtraKeysPageView edge = mHost.edgePage();
         if (edge != null) {

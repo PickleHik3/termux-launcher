@@ -61,6 +61,11 @@ public class ExtraKeySetControllerTest {
             @Override public boolean homeFloatFocused() { return false; }
             @Override public boolean homeFloatIsDisplay() { return false; }
             @Nullable @Override public String rawLine(@NonNull String key) { return lines.get(key); }
+            @Override public int longestRow(@NonNull String value) {
+                int longest = 0;
+                for (com.termux.shared.termux.extrakeys.ExtraKeyButton[] row : info(value).getMatrix()) longest = Math.max(longest, row.length);
+                return longest;
+            }
             @Nullable @Override public ExtraKeysInfo parsePage(@NonNull String value,
                                                                @NonNull String fallback, int page) {
                 return info(value);
@@ -128,6 +133,23 @@ public class ExtraKeySetControllerTest {
 
         controller.reload();
         assertEquals(Transition.RELOAD, controller.lastTransition());
+    }
+
+    @Test
+    public void everyPageKeepsTheCellPitchOfTheWidestSet() {
+        lines.put("extra-keys", "[['A','B']]");
+        lines.put(ExtraKeysTarget.TERMINAL.pageKeys()[0], "[['A','B','C','D']]");
+        place = PageKind.TERMINAL;
+        controller.refresh(false);
+        layout();
+        int pitch = bar.keyPage(0).getChildAt(0).getWidth();
+        assertEquals(WIDTH / 4, pitch);
+
+        place = PageKind.ASSISTANT;
+        controller.refresh(false);
+        layout();
+        assertEquals(4, controller.steadyColumns());
+        assertEquals(pitch, bar.keyPage(0).getChildAt(0).getWidth());
     }
 
     @Test

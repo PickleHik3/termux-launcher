@@ -157,6 +157,7 @@ public final class ExtraKeysPageView extends ViewGroup {
     private final Map<ExtraKeyColorRole, int[]> mRoleColors = new java.util.HashMap<>();
     private int mMatrixRows;
     private int mMatrixColumns;
+    private int mMinColumns;
     private boolean mVertical;
 
     private int mButtonTextColor;
@@ -898,12 +899,28 @@ public final class ExtraKeysPageView extends ViewGroup {
 
     // ---- Layout: equal cells, the rows filling the height.
 
+    /**
+     * The column count the keys lay out on at least: pages with shorter rows keep the same key
+     * width as the longest page and leave the end of the row empty.
+     */
+    public void setMinColumns(int minColumns) {
+        int value = Math.max(0, minColumns);
+        if (value == mMinColumns) return;
+        mMinColumns = value;
+        requestLayout();
+    }
+
+    /** The keys a line lays out on: the longest row, or the steady minimum when that is more. */
+    private int lineColumns() {
+        return Math.max(mMatrixColumns, mMinColumns);
+    }
+
     private int columns() {
-        return mVertical ? mMatrixRows : mMatrixColumns;
+        return mVertical ? mMatrixRows : lineColumns();
     }
 
     private int rows() {
-        return mVertical ? mMatrixColumns : mMatrixRows;
+        return mVertical ? lineColumns() : mMatrixRows;
     }
 
     @Override

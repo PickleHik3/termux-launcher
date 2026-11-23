@@ -183,4 +183,13 @@ public class ExtraKeySetResolverTest {
         assertEquals(PageKind.HOME, ExtraKeysTarget.HOME.markingPlace());
         assertEquals(PageKind.ASSISTANT, ExtraKeysTarget.ASSISTANT.markingPlace());
     }
+
+    @Test
+    public void steadyColumnsIsTheLongestRowOfAnySetAnyTargetCanShow() {
+        ExtraKeySetResolver.Lines lines = lines("extra-keys", "[[A]]", "extra-keys-home", "[[BBBB]]",
+            "extra-keys-display2", "[[CC]]");
+        assertEquals(8, ExtraKeySetResolver.steadyColumns(lines, value -> value.length()));
+        assertEquals(5, ExtraKeySetResolver.steadyColumns(lines("extra-keys", "[[A]]", "extra-keys2", ""),
+            value -> value.length()));
+    }
 }
