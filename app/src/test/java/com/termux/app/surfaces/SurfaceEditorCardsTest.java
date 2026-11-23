@@ -165,9 +165,8 @@ public class SurfaceEditorCardsTest {
         EditorCardSheet.Model model = model(editor);
         // Overhaul §2: Customization's Appearance shows every slider at every preset stop.
         assertTrue("a Look stop shows its sliders", model.shown(Row.FROST));
-        assertTrue(model.shown(Row.GRAIN));
-        if (!model.enabled(Row.GLASS_EDGE))
-            assertEquals("Not on this phone.", model.readout(Row.GLASS_EDGE, 0));
+        if (!model.enabled(Row.SHINE))
+            assertEquals("Not on this phone.", model.readout(Row.SHINE, 0));
 
         model.onValue(Row.LOOK, AppearanceLooks.CUSTOM_STOP, false);
         model.onReleased(Row.LOOK);

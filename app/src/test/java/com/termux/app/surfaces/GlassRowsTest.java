@@ -23,8 +23,8 @@ public class GlassRowsTest {
 
     /** The shared Appearance block, after its heading (appearance-cards overhaul §2). */
     private static final java.util.List<Row> BLOCK = Arrays.asList(Row.SECTION_APPEARANCE,
-        Row.LOOK, Row.OPACITY, Row.FROST, Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE,
-        Row.DEPTH, Row.RIM, Row.TINT_HUE);
+        Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT, Row.CORNERS, Row.SHINE,
+        Row.DEPTH, Row.TINT_HUE);
 
     /** The terminal's glass card wears the whole Appearance block until #287 turns it into Background. */
     @Test
@@ -42,7 +42,7 @@ public class GlassRowsTest {
 
     /**
      * The status bar, the dock and the keyboard own Opacity and Blur only (ADR 0031 §2): their
-     * Appearance holds those two and the surface's own extras, never Grain, Tint or the rest.
+     * Appearance holds those two and the surface's own extras, never Tint or the rest.
      */
     @Test
     public void theChromeCardsHoldOpacityAndBlurOnly() {
@@ -51,8 +51,8 @@ public class GlassRowsTest {
             java.util.List<Row> rows = rowsOf(card, ALL);
             assertTrue(card + " Opacity", rows.contains(Row.OPACITY));
             assertTrue(card + " Blur", rows.contains(Row.FROST));
-            for (Row gone : new Row[] {Row.LOOK, Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS,
-                    Row.RIM, Row.GLASS_EDGE, Row.DEPTH, Row.VIBRANCY, Row.LINK_GLASS_REFRACTION})
+            for (Row gone : new Row[] {Row.LOOK, Row.TINT, Row.TINT_HUE, Row.CORNERS,
+                    Row.SHINE, Row.DEPTH, Row.LINK_GLASS_REFRACTION})
                 assertFalse(card + " " + gone, rows.contains(gone));
         }
     }
@@ -61,7 +61,7 @@ public class GlassRowsTest {
     public void depthAndEdgeStayWhereTheDeviceCannotDrawThem() {
         assertEquals(rowsOf(EditorCard.DOCK, ALL), rowsOf(EditorCard.DOCK, NO_EDGE));
         assertTrue(rowsOf(EditorCard.APPEARANCE, NO_EDGE).contains(Row.DEPTH));
-        assertTrue(GlassRows.needsGlassEdge(Row.GLASS_EDGE));
+        assertTrue(GlassRows.needsGlassEdge(Row.SHINE));
         assertTrue(GlassRows.needsGlassEdge(Row.DEPTH));
         assertFalse(GlassRows.needsGlassEdge(Row.FROST));
     }
@@ -75,9 +75,7 @@ public class GlassRowsTest {
 
     @Test
     public void theCellRowsAreTheGridsProperties() {
-        assertEquals(LookGrid.Property.GRAIN, GlassRows.cellProperty(Row.GRAIN));
-        assertEquals(LookGrid.Property.RIM, GlassRows.cellProperty(Row.RIM));
-        assertEquals(LookGrid.Property.EDGE, GlassRows.cellProperty(Row.GLASS_EDGE));
+        assertEquals(LookGrid.Property.SHINE, GlassRows.cellProperty(Row.SHINE));
         assertEquals(LookGrid.Property.DEPTH, GlassRows.cellProperty(Row.DEPTH));
         assertEquals("Colour has an element column", LookGrid.Property.TINT_HUE,
             GlassRows.cellProperty(Row.TINT_HUE));
@@ -132,15 +130,16 @@ public class GlassRowsTest {
     @Test
     public void marginAndVibrancyAreTheWhereChipsAllGlassWhateverWhatNames() {
         assertTrue(GlassRows.allGlassOnly(Row.MARGIN));
-        assertTrue(GlassRows.allGlassOnly(Row.VIBRANCY));
+        assertTrue("Depth and Shine are app-wide", GlassRows.allGlassOnly(Row.DEPTH));
+        assertTrue(GlassRows.allGlassOnly(Row.SHINE));
         assertFalse(GlassRows.allGlassOnly(Row.OPACITY));
         EditorChips dock = new EditorChips(LookGrid.Element.DOCK);
         LookGrid.Key margin = dock.cell(GlassRows.cellProperty(Row.MARGIN));
         assertNull("no element column", margin.element);
         assertNull(margin.kind);
-        LookGrid.Key vibrancy = dock.cell(GlassRows.cellProperty(Row.VIBRANCY));
-        assertNull(vibrancy.element);
-        assertEquals(LookGrid.NO_PAGE, vibrancy.page);
+        LookGrid.Key shine = dock.cell(GlassRows.cellProperty(Row.SHINE));
+        assertNull(shine.element);
+        assertEquals(LookGrid.NO_PAGE, shine.page);
     }
 
 }

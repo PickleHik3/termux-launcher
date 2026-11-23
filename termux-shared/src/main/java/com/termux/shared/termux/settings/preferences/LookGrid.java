@@ -70,14 +70,17 @@ public final class LookGrid {
         DEPTH("depth", TermuxPreferenceConstants.TERMUX_APP.MIN_FANCIER_GLASS_BEND,
             TermuxPreferenceConstants.TERMUX_APP.MAX_FANCIER_GLASS_BEND,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_BEND, true),
-        /** The dispersion, 0 to 100: the Edge slider's own unit. */
+        /** Retired by Shine: only the upgrade ({@code GlassControlsMigration}) reads and deletes it. */
         EDGE("edge", TermuxPreferenceConstants.TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION,
             TermuxPreferenceConstants.TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_DISPERSION, true),
         /** Corner radius in dp, or {@link #CORNERS_AUTO}. */
         CORNERS("corners", CORNERS_AUTO, 40,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLOBAL_CORNER_RADIUS, true),
+        /** Retired by Shine: only the upgrade reads and deletes it. */
         RIM("rim", RIM_OFF, RIM_GRADIENT, RIM_HAIRLINE, true),
+        /** Shine, 0 to 100, app-wide: the light on the rim and lens ({@link GlassMaterial}). */
+        SHINE("shine", GlassMaterial.MIN, GlassMaterial.MAX, GlassMaterial.SHINE_DEFAULT, false),
         VIBRANCY("vibrancy", TermuxPreferenceConstants.TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY,
             TermuxPreferenceConstants.TERMUX_APP.DEFAULT_SURFACE_GLASS_VIBRANCY, false),

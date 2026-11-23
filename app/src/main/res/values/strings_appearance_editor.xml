@@ -76,7 +76,7 @@
     <string name="appearance_row_tint_colour">Tint colour</string>
     <string name="appearance_row_design">Design</string>
     <!-- Clear to frosted: how much the glass blurs what is behind it, and its grain with it. -->
-    <string name="appearance_row_frost">Blur</string>
+    <string name="appearance_row_frost">Frost</string>
     <string name="appearance_row_corners">Corner radius</string>
     <string name="appearance_row_margin">Margin</string>
     <string name="appearance_row_depth">Depth</string>
@@ -132,14 +132,7 @@
     <string name="appearance_row_wallpaper_colours">Dynamic colour</string>
     <string name="appearance_row_full_screen">Full screen</string>
     <string name="appearance_row_minimal">Minimal</string>
-    <string name="appearance_row_vibrancy">Vibrancy</string>
     <string name="appearance_row_tint_hue">Accent</string>
-    <string name="appearance_row_grain">Grain</string>
-    <!-- The light line around the glass: none, a hairline, or a bright one. -->
-    <string name="appearance_row_rim">Rim strength</string>
-    <string name="appearance_rim_none">None</string>
-    <string name="appearance_rim_hairline">Thin</string>
-    <string name="appearance_rim_bright">Bright</string>
     <!-- The Pane borders card under the Terminal card (#206). -->
     <string name="appearance_row_pane_borders">Pane borders</string>
     <string name="appearance_row_border_colour">Border colour</string>
@@ -164,7 +157,7 @@
     <!-- A subcard's back arrow; %1$s is the card it returns to (Home, Terminal). -->
     <string name="appearance_subcard_back">Back to %1$s</string>
     <!-- The coloured light along the glass's edge, from none to bold. -->
-    <string name="appearance_row_glass_edge">Edge</string>
+    <string name="appearance_row_shine">Shine</string>
     <string name="appearance_row_tool_colours">TUI app themes</string>
     <!-- The dot after a row's label, as accessibility reads it. -->
     <string name="appearance_row_own_value">Set here</string>
@@ -183,7 +176,6 @@
     <!-- Row values. -->
     <string name="appearance_readout_percent">%1$d%%</string>
     <string name="appearance_readout_dp">%1$d dp</string>
-    <string name="appearance_readout_times">%1$s×</string>
 
     <!-- Segment choices: short, so three fit a phone at a large font size. -->
     <string name="appearance_contrast_softer">Softer</string>

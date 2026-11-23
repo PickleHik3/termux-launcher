@@ -601,7 +601,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
     /**
      * The cells a card's Reset clears at {@code chips}: every glass property's cells there. A
-     * property with no element column or kind row (Vibrancy, Margin) is Global's, cleared only by
+     * property with no element column or kind row (Margin) is Global's, cleared only by
      * Customization's Reset.
      */
     @VisibleForTesting
@@ -3036,7 +3036,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return layout == null ? 0 : Math.max(0, DockStyle.CHOICES.indexOf(layout.dockStyle()));
                 case CORNERS: return AppearanceLooks.cornersDp(prefs.getLayoutCornersDp(false));
                 case MARGIN: return AppearanceLooks.marginDp(prefs.getGlobalMarginDp());
-                case DEPTH: return glassEdgeOf(prefs).depth(mDepthSet);
+                case DEPTH: return GlassEdgeControls.read(prefs.getFancierGlassBendDp(), mDepthSet);
                 case REFLECTION: return PeekGlassPreferences.reflection(prefs.getSharedPreferences());
                 case TEXT_SIZE:
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
@@ -3093,10 +3093,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return AppearanceSettingsStore.getBoolean(context,
                         AppearanceSettingsStore.KEY_FULLSCREEN, false) ? 1 : 0;
                 case MINIMAL: return mHost.isMinimalMode() ? 1 : 0;
-                case VIBRANCY:
-                    return Control.VIBRANCY.clamp(mHeldVibrancy != NO_HELD_VIBRANCY
-                        ? mHeldVibrancy : prefs.getSurfaceGlassVibrancy());
-                case GLASS_EDGE: return Control.EDGE.clamp(prefs.getFancierGlassDispersionPercent());
+                case SHINE: return Control.SHINE.clamp(prefs.getGlassShine());
                 default: return cardRowValue(row);
             }
         }
@@ -3114,10 +3111,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case TEXT_SIZE: return Control.TEXT_SIZE.min;
                 case KEY_OPACITY: return Control.KEY_OPACITY.min;
                 case LOOK: return 0;
-                case GRAIN: return com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.min;
-                case RIM: return com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM.min;
-                case VIBRANCY: return Control.VIBRANCY.min;
-                case GLASS_EDGE: return Control.EDGE.min;
+                case SHINE: return Control.SHINE.min;
                 default: return cardRowFrom(row);
             }
         }
@@ -3145,10 +3139,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case KEY_CORNERS: return AppearanceLooks.KEY_CORNERS_MAX_DP;
                 case KEY_SPACING: return AppearanceLooks.KEY_SPACING_MAX_TENTHS;
                 case LOOK: return AppearanceLooks.CUSTOM_STOP;
-                case GRAIN: return com.termux.shared.termux.settings.preferences.LookGrid.Property.GRAIN.max;
-                case RIM: return com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM.max;
-                case VIBRANCY: return Control.VIBRANCY.max;
-                case GLASS_EDGE: return Control.EDGE.max;
+                case SHINE: return Control.SHINE.max;
                 default: return cardRowTo(row);
             }
         }
@@ -3171,9 +3162,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case DEPTH:
                 case TEXT_SIZE:
                 case KEY_OPACITY:
-                case GLASS_EDGE:
+                case SHINE:
                 case REFLECTION:
-                case GRAIN:
                 case WALLPAPER_DIM:
                 case TERMINAL_OPACITY:
                     return getString(R.string.appearance_readout_percent, value);
@@ -3192,9 +3182,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     // Tenths of a dp, read "3 dp" or "2.5 dp" (overhaul §4: value with its unit).
                     return value % 10 == 0 ? getString(R.string.appearance_readout_dp, value / 10)
                         : String.format(Locale.getDefault(), "%.1f dp", value / 10f);
-                case VIBRANCY:
-                    return getString(R.string.appearance_readout_times,
-                        String.format(Locale.getDefault(), "%.2f", value / 100f));
                 case LOOK:
                     return lookStopName(value);
                 default:
@@ -3341,9 +3328,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case THEME:
                     return strings(R.string.appearance_theme_system, R.string.appearance_theme_light,
                         R.string.appearance_theme_dark);
-                case RIM:
-                    return strings(R.string.appearance_rim_none, R.string.appearance_rim_hairline,
-                        R.string.appearance_rim_bright);
                 case LOOK: {
                     String[] out = new String[AppearanceLooks.STOP_COUNT];
                     for (int i = 0; i < out.length; i++)
@@ -3438,14 +3422,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     ((ViewGroup) page.getParent()).removeView(page);
                 return page;
             }
-            if (row == Row.RIM) {
-                // Rim's three words beside its name, as the cards' own segment rows stand.
-                Context context = mHost.context();
-                mRimRow = com.termux.app.surfaces.rows.SegmentRow.words(context, row.iconRes,
-                    context.getString(row.labelRes), choices(row), value(row), widthPx,
-                    index -> onValue(Row.RIM, index, false));
-                return mRimRow.root;
-            }
             if (row == Row.TINT_HUE && card != null) {
                 mTintHueRow = tintHueRow(card, widthPx);
                 return mTintHueRow.root;
@@ -3472,11 +3448,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             EditorCard card = mCard;
             if (row == Row.ICON_PACK_PAGE)
                 return;
-            if (row == Row.RIM) {
-                com.termux.app.surfaces.rows.SegmentRow rim = mRimRow;
-                if (rim != null && rim.root == view) rim.select(value(row));
-                return;
-            }
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
                     && row != Row.CAMERA_CUTOUT)
                 return;
@@ -3539,8 +3510,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return entries.length > 0 ? entries[0] : id;
     }
 
-    /** The Rim row the card up shows, read again on restate. */
-    @Nullable private com.termux.app.surfaces.rows.SegmentRow mRimRow;
     /**
      * A link as a list row: its name over a one-line subtitle, › where it opens a card or the
      * page overview, ↗ where it opens a Settings page (the subtitle names it).
@@ -3629,24 +3598,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @NonNull private final java.util.Set<EditorChips> mHeldCustomCells = new java.util.HashSet<>();
 
     /**
-     * Whether {@code row} of {@code card} reads and writes the chips' grid cell itself: Grain and
-     * Rim everywhere; an element's Look; Corners, Depth and Edge on element and page cards, and
-     * on the Appearance card (Vibrancy too) once Where stands on a page.
+     * Whether {@code row} of {@code card} reads and writes the chips' grid cell itself: an
+     * element's Look; Corners, Depth and Shine on element and page cards, and on the Appearance
+     * card once Where stands on a page.
      */
     private boolean cellRow(@NonNull EditorCard card, @NonNull Row row) {
         if (row == Row.LOOK)
             return card.slot != null || isScreenCard(card);
         if (GlassRows.cellProperty(row) == null)
             return false;
-        if (row == Row.GRAIN || row == Row.RIM)
-            return true;
         // Margin is one number for every page, Global's alone: whatever Where says, it keeps its
         // own writer (writeMargin), and no page holds a Margin of its own.
         if (row == Row.MARGIN)
             return false;
         if (card == EditorCard.APPEARANCE)
             return !chipsPlain(card);
-        return row != Row.VIBRANCY;
+        return true;
     }
 
     /** The value a cell row shows, or null for a row that is not one ({@link #cellRow}). */
@@ -3870,8 +3837,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 mHost.setMinimalMode(value != 0);
                 syncDirty();
                 break;
-            case VIBRANCY: writeVibrancy(value); break;
-            case GLASS_EDGE: writeGlassEdge(value); break;
+            case SHINE: writeGlassShine(value); break;
             default:
                 writeCardRow(row, value, dragging);
                 break;
@@ -4423,9 +4389,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (prefs == null)
             return;
         int written = Control.DEPTH.clamp(value);
-        GlassEdgeControls.Edge next = glassEdgeOf(prefs).withDepth(written);
-        prefs.setFancierGlassBendDp(next.bend);
-        prefs.setFancierGlassEdgeWidthDp(next.width);
+        prefs.setFancierGlassBendDp(GlassEdgeControls.bendForDepth(written));
         mDepthSet = written;
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
     }
@@ -4452,24 +4416,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         requestPreview(SurfaceEditorProperties.PREVIEW_BLUR);
     }
 
-    private static final int NO_HELD_VIBRANCY = Integer.MIN_VALUE;
-    /** The Vibrancy a slider drag stands at, written on release: every value re-bakes the frames. */
-    private int mHeldVibrancy = NO_HELD_VIBRANCY;
-
-    private void writeVibrancy(int value) {
-        int clamped = Control.VIBRANCY.clamp(value);
-        if (mSliderDragActive) {
-            mHeldVibrancy = clamped;
-            return;
-        }
-        mHeldVibrancy = NO_HELD_VIBRANCY;
-        TermuxAppSharedPreferences prefs = prefs();
-        if (prefs == null)
-            return;
-        prefs.setSurfaceGlassVibrancy(clamped);
-        requestPreview(SurfaceEditorProperties.PREVIEW_BLUR
-            | SurfaceEditorProperties.PREVIEW_SURFACES);
-    }
 
     /** Which accent Tint mixes in, global ({@link GlobalGlass#writeTintHue}). */
     private void writeTintHue(@NonNull String id) {
@@ -4481,21 +4427,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             | SurfaceEditorProperties.PREVIEW_KEYBOARD);
     }
 
-    /** The glass edge's colour split, global like Depth. */
-    private void writeGlassEdge(int value) {
+    /** Shine, the light on the rim and lens: global like Depth. */
+    private void writeGlassShine(int value) {
         TermuxAppSharedPreferences prefs = prefs();
         if (prefs == null)
             return;
-        prefs.setFancierGlassDispersionPercent(Control.EDGE.clamp(value));
+        prefs.setGlassShine(Control.SHINE.clamp(value));
         requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
-    }
-
-    @NonNull
-    private static GlassEdgeControls.Edge glassEdgeOf(@NonNull TermuxAppSharedPreferences prefs) {
-        return new GlassEdgeControls.Edge(prefs.getFancierGlassBendDp(),
-            prefs.getFancierGlassEdgeWidthDp(), prefs.getFancierGlassEdgeLightPercent(),
-            prefs.getFancierGlassSpecularPercent(), prefs.getFancierGlassDispersionPercent(),
-            prefs.getFancierGlassClarityPercent());
     }
 
     /** Key spacing, previewed live on the keyboard. */
@@ -5742,8 +5680,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mDragRanLightPass = false;
             requestPreview(SurfaceEditorProperties.PREVIEW_SURFACES);
         }
-        if (mHeldVibrancy != NO_HELD_VIBRANCY)
-            writeVibrancy(mHeldVibrancy);
         releaseFrameBakes();
         settleLookDrag();
         if (mDockSizeHeld) {
@@ -6809,7 +6745,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LINK_PAGES: return R.drawable.ic_ms_view_carousel;
             case WALLPAPER_COLOURS: return EditorGlyphs.WALLPAPER_COLOURS;
             case TINT_HUE: return R.drawable.ic_ms_format_color_fill;
-            case VIBRANCY: return R.drawable.ic_ms_auto_awesome;
+            case SHINE: return R.drawable.ic_ms_auto_awesome;
             case DEPTH: return R.drawable.ic_ms_layers;
             case FULL_SCREEN: return R.drawable.ic_ms_fullscreen;
             case MINIMAL: return R.drawable.ic_ms_crop_free;

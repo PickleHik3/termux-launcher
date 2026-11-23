@@ -38,15 +38,10 @@ public final class ElementGlass {
     @Nullable public final GlassLook.Hue ownHue;
     /** The rim ({@link LookGrid#RIM_OFF} and friends) of its own, or null while it follows Global. */
     @Nullable public final Integer ownRim;
-    /** The refraction bend in dp of its own, or null while it follows Global. */
-    @Nullable public final Integer ownDepthDp;
-    /** The dispersion of its own, or null while it follows Global. */
-    @Nullable public final Integer ownEdgePercent;
 
     private ElementGlass(@Nullable LookGrid.Element element, int blurDp, int opacityPercent,
                          int grainPercent, int tintPercent, int cornersDp,
-                         @Nullable GlassLook.Hue ownHue, @Nullable Integer ownRim,
-                         @Nullable Integer ownDepthDp, @Nullable Integer ownEdgePercent) {
+                         @Nullable GlassLook.Hue ownHue, @Nullable Integer ownRim) {
         this.element = element;
         this.blurDp = blurDp;
         this.opacityPercent = opacityPercent;
@@ -55,8 +50,6 @@ public final class ElementGlass {
         this.cornersDp = cornersDp;
         this.ownHue = ownHue;
         this.ownRim = ownRim;
-        this.ownDepthDp = ownDepthDp;
-        this.ownEdgePercent = ownEdgePercent;
     }
 
     /**
@@ -68,8 +61,6 @@ public final class ElementGlass {
                                        int pageId) {
         LookGrid.Resolved hue = grid.resolve(LookGrid.Property.TINT_HUE, element);
         LookGrid.Resolved rim = grid.resolve(LookGrid.Property.RIM, element);
-        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element);
-        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element);
         return new ElementGlass(element,
             clamp(FrostStops.blurDpFor(grid.value(LookGrid.Property.FROST, element)),
                 0, MAX_BLUR_DP),
@@ -78,9 +69,7 @@ public final class ElementGlass {
             clamp(grid.value(LookGrid.Property.TINT, element), 0, 100),
             grid.value(LookGrid.Property.CORNERS, element),
             ownCell(hue) ? hueOf(hue.value) : null,
-            ownCell(rim) ? rim.value : null,
-            ownCell(depth) ? depth.value : null,
-            ownCell(edge) ? edge.value : null);
+            ownCell(rim) ? rim.value : null);
     }
 
     /** {@link #resolve} over the live store; the shipped look when there is none. */
@@ -97,7 +86,7 @@ public final class ElementGlass {
     ElementGlass withOpacityFloor(int floorPercent) {
         if (opacityPercent >= floorPercent) return this;
         return new ElementGlass(element, blurDp, floorPercent, grainPercent, tintPercent,
-            cornersDp, ownHue, ownRim, ownDepthDp, ownEdgePercent);
+            cornersDp, ownHue, ownRim);
     }
 
     /**
@@ -112,7 +101,7 @@ public final class ElementGlass {
         }
         return new ElementGlass(element, clamp(blurDp, 0, MAX_BLUR_DP),
             clamp(opacityPercent, 0, 100), clamp(grainPercent, 0, 100), tintPercent, cornersDp,
-            ownHue, ownRim, ownDepthDp, ownEdgePercent);
+            ownHue, ownRim);
     }
 
     /**
@@ -139,40 +128,19 @@ public final class ElementGlass {
 
     /**
      * The refraction this element draws with: {@code global} (the Fancier Glass look, null while
-     * it is off) with the element's own Depth and Edge in place of the wall's. Off stays off.
+     * it is off). Depth and Shine are app-wide, so no surface holds a look of its own.
      */
     @Nullable
     public GlassRefraction.Look refraction(@Nullable GlassRefraction.Look global) {
-        return withOwn(global, ownDepthDp, ownEdgePercent);
+        return global;
     }
 
-    /**
-     * {@link #refraction} for {@code element} on {@code pageId} straight from the store, reading
-     * only Depth and Edge, and nothing at all while Fancier Glass is off: the path a surface that
-     * re-asks for its refraction on every dress pass takes.
-     */
+    /** {@link #refraction(GlassRefraction.Look)} for the path a surface takes on every dress pass. */
     @Nullable
     public static GlassRefraction.Look refraction(@Nullable TermuxAppSharedPreferences preferences,
                                                   @NonNull LookGrid.Element element, int pageId,
                                                   @Nullable GlassRefraction.Look global) {
-        if (global == null || preferences == null) return global;
-        LookGrid grid = preferences.lookGrid();
-        LookGrid.Resolved depth = grid.resolve(LookGrid.Property.DEPTH, element);
-        LookGrid.Resolved edge = grid.resolve(LookGrid.Property.EDGE, element);
-        return withOwn(global, ownCell(depth) ? depth.value : null,
-            ownCell(edge) ? edge.value : null);
-    }
-
-    @Nullable
-    private static GlassRefraction.Look withOwn(@Nullable GlassRefraction.Look global,
-                                                @Nullable Integer depthDp,
-                                                @Nullable Integer edgePercent) {
-        if (global == null || (depthDp == null && edgePercent == null)) return global;
-        return new GlassRefraction.Look(depthDp != null ? depthDp : global.bendDp,
-            global.edgeWidthDp, global.edgeLightPercent, global.specularPercent,
-            edgePercent != null ? edgePercent : global.dispersionPercent,
-            global.clarityPercent).withFaceTerms(global.faceClarityPercent, global.dimPercent,
-            global.sizeLensPercent);
+        return global;
     }
 
     /** {@code base} (the wall's tint colour and rim style) as this element wears it. */

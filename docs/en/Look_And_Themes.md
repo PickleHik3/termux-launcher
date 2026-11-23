@@ -36,11 +36,11 @@ those changes appear when you turn the phone.
 Global is the look every surface wears. Change it once and the status bar, the dock, the keyboard,
 menus and widgets on glass all follow.
 
-- **Look**: **Presets** (**Clear**, **Mist**, **Tint**, **Solid** and **Custom**), **Opacity**,
-  **Blur** (clear to frosted, in eight steps, with a fine grain that grows with it) and **Tint**,
-  with the accent it takes.
-- **Fine-tune** (closed until you open it): **Grain**, **Rim**, **Edge** where the glass edge is
-  drawn (see [Glass](#glass)), **Depth** and **Vibrancy**.
+- **Look**: **Presets** (**Clear**, **Frosted**, **Tinted**, **Solid**, **Liquid** and **Custom**;
+  a new install starts on **Frosted**), **Opacity**, **Frost** (clear to frosted, in eight steps)
+  and **Tint**, with the accent it takes.
+- **Fine-tune** (closed until you open it): **Depth** and **Shine**, the two glass sliders that
+  apply to every surface (see [Glass](#glass)).
 - **Shape**: **Style** (Docked or Floating), **Corner radius**, **Margin** and **Icon size**, one
   size for Home's icons and the dock's.
 - **Colours**: **Theme** (**System**, **Light** or **Dark**), **Contrast**, **Accent**,
@@ -124,6 +124,16 @@ Heights, places and Type are one for Home and the Terminal, so nothing moves whe
 `launcherctl wallpaper set FILE --home|--lock|--both`; see [launcherctl](LauncherCtl.md).
 
 ### Glass
+
+Three sliders set the glass. **Frost** is how rough the face is: clear glass at one end, ground
+glass at the other; Opacity and Frost can differ per surface. **Depth** is how thick the glass
+is, so how strongly it bends the wallpaper at its edge; the far end is a thick lens. **Shine** is
+how bright the light on the edge and lens is; the far end throws a little colour. Depth and Shine
+are the same on every surface. The presets set them: **Clear** is clear glass with a visible
+edge, **Frosted** a blurred face with the same edge, **Tinted** coloured glass, **Solid** near
+opaque for easy reading, and **Liquid** a thick, bright, dramatic lens. An existing look keeps
+its feel when you update: your blur, depth, rim and edge settings map to the nearest Frost,
+Depth and Shine, and the old Clear, Mist, Tint and Solid become Clear, Frosted, Tinted and Solid.
 
 Every glass surface bends the wallpaper at its edge, as deeply as Global's Depth says, where the
 phone can. That needs Android 13 and a wallpaper set through Appearance or

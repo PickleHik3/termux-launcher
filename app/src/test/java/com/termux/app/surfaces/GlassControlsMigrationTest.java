@@ -61,10 +61,6 @@ public class GlassControlsMigrationTest {
         grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.TINT_HUE, null);
         grid.clear(com.termux.shared.termux.settings.preferences.LookGrid.Property.VIBRANCY, null);
         preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 100);
-        // Clear's face terms came with generation 6; a store this old has none.
-        preferences.setFancierGlassFaceClarityPercent(0);
-        preferences.setFancierGlassDimPercent(0);
-        preferences.setFancierGlassSizeLensPercent(0);
         switch (id) {
             case "minimal":
                 preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 4);
@@ -103,35 +99,6 @@ public class GlassControlsMigrationTest {
             default:
                 return BASE;
         }
-    }
-
-    @Test
-    public void everyShippedLookStoredBeforeIsTheLookAsItShipsAndDrawsTheSameColour() {
-        for (String id : new String[] {"minimal", "frost", "stock", "solid"}) {
-            store.edit().clear().commit();
-            storeOldLook(id);
-            assertFalse(id, SurfacePresets.matches(preferences, preset(id)));
-
-            foldThenRun();
-
-            assertTrue(id + " keeps its stop", SurfacePresets.matches(preferences, preset(id)));
-            assertEquals(id + " draws the colour it drew", oldColour(id), dockColourNow());
-            assertEquals(GlassControlsMigration.FORMAT,
-                store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
-        }
-    }
-
-    /** A Look at an earlier generation's edge is recognised too, and readopted whole. */
-    @Test
-    public void anOldClearAtAnEarlierEdgeIsStillClear() {
-        storeOldLook("minimal");
-        preferences.setFancierGlassBendDp(26);
-        preferences.setFancierGlassEdgeWidthDp(26);
-        preferences.setFancierGlassEdgeLightPercent(50);
-        preferences.setFancierGlassDispersionPercent(35);
-        preferences.setFancierGlassClarityPercent(100);
-        foldThenRun();
-        assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
     }
 
     @Test
@@ -466,30 +433,6 @@ public class GlassControlsMigrationTest {
             preferences.getSurfaceGlassPosition(SurfaceSlot.DOCK));
     }
 
-    /**
-     * At start-up the migration runs, then the moved-Looks re-adoption: an install on Clear as two
-     * builds ago left it (its old blur and grain, the full tint, generation 1's edge) comes up
-     * on Clear as it ships, with both markers written.
-     */
-    @Test
-    public void atStartUpTheMigrationRunsBeforeTheLooksAreReadopted() {
-        storeOldLook("minimal");
-        preferences.setFancierGlassBendDp(11);
-        preferences.setFancierGlassEdgeWidthDp(28);
-        preferences.setFancierGlassEdgeLightPercent(70);
-        preferences.setFancierGlassDispersionPercent(25);
-        preferences.setFancierGlassClarityPercent(100);
-        store.edit().remove(SurfacePresets.KEY_LOOKS_GENERATION).commit();
-
-        GlassControlsMigration.runAtStartUp(preferences);
-
-        assertTrue(SurfacePresets.matches(preferences, preset("minimal")));
-        assertEquals(GlassControlsMigration.FORMAT,
-            store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
-        assertEquals(SurfacePresets.LOOKS_GENERATION,
-            store.getInt(SurfacePresets.KEY_LOOKS_GENERATION, 0));
-    }
-
     // ------------------------------------------------------------- format 3: Shade is retired
 
     /**
@@ -501,14 +444,12 @@ public class GlassControlsMigrationTest {
         store.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 2)
             .putInt(SurfacePresets.RETIRED_SHADE_KEY, 60).commit();
         preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 50);
-        preferences.setFancierGlassDispersionPercent(80);
 
         foldThenRun();
 
         assertFalse("the Shade is gone from the store", store.contains(SurfacePresets.RETIRED_SHADE_KEY));
-        assertEquals(3, store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
+        assertEquals(GlassControlsMigration.FORMAT, store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
         assertEquals(50, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
-        assertEquals("Edge keeps its stored value", 80, preferences.getFancierGlassDispersionPercent());
     }
 
     /** A store from before the controls takes the drop in the same edit as the rest. */
@@ -518,7 +459,6 @@ public class GlassControlsMigrationTest {
         store.edit().putInt(SurfacePresets.RETIRED_SHADE_KEY, 100).commit();
         foldThenRun();
         assertFalse(store.contains(SurfacePresets.RETIRED_SHADE_KEY));
-        assertTrue(SurfacePresets.matches(preferences, preset("frost")));
     }
 
     /** A saved look that names a Shade sheds it on read and on the rewrite, so it applies as Shade 0. */
@@ -560,4 +500,46 @@ public class GlassControlsMigrationTest {
         GlassControlsMigration.run(preferences);
     }
 
+
+    // ------------------------------------------------- format 4: Frost, Depth and Shine
+
+    @Test
+    public void formatFourMapsRimAndEdgeToShineOnceAndDropsTheRetiredKeys() {
+        store.edit().putInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 3)
+            .putInt(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, 18)
+            .putInt(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, 76).commit();
+        preferences.lookGrid().write(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM, null,
+            com.termux.shared.termux.settings.preferences.LookGrid.RIM_GRADIENT);
+        preferences.lookGrid().write(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.EDGE, null, 100);
+
+        GlassControlsMigration.run(preferences);
+
+        assertEquals(100, preferences.getGlassShine());
+        assertFalse(preferences.lookGrid().has(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM, null));
+        assertFalse(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH));
+        assertFalse(store.contains(TERMUX_APP.KEY_FANCIER_GLASS_CLARITY));
+        assertEquals(GlassControlsMigration.FORMAT,
+            store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
+
+        // Once: a later start-up changes nothing.
+        preferences.setGlassShine(33);
+        GlassControlsMigration.run(preferences);
+        assertEquals(33, preferences.getGlassShine());
+    }
+
+    @Test
+    public void formatFourNeverTouchesAFreshInstall() {
+        preferences.setGlassShine(77);
+        preferences.lookGrid().write(
+            com.termux.shared.termux.settings.preferences.LookGrid.Property.EDGE, null, 100);
+
+        GlassControlsMigration.run(preferences, true);
+
+        assertEquals(77, preferences.getGlassShine());
+        assertEquals(GlassControlsMigration.FORMAT,
+            store.getInt(TERMUX_APP.KEY_SURFACE_GLASS_CONTROLS_FORMAT, 0));
+    }
 }

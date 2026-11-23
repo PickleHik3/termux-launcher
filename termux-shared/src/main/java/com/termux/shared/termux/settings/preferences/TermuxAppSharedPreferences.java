@@ -922,104 +922,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         lookGrid().write(LookGrid.Property.DEPTH, null, value);
     }
 
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_EDGE_WIDTH}. Clamped, in dp. */
-    public int getFancierGlassEdgeWidthDp() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-                TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH),
-            TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH);
+    /** Shine, 0 to 100, app-wide ({@link GlassMaterial}). */
+    public int getGlassShine() {
+        return lookGrid().value(LookGrid.Property.SHINE, null);
     }
 
-    public void setFancierGlassEdgeWidthDp(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_WIDTH,
-            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH,
-                TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH), false);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_EDGE_LIGHT}. Clamped, a percentage. */
-    public int getFancierGlassEdgeLightPercent() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-                TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT),
-            TERMUX_APP.MIN_FANCIER_GLASS_EDGE_LIGHT, TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT);
-    }
-
-    public void setFancierGlassEdgeLightPercent(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_EDGE_LIGHT,
-            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_EDGE_LIGHT,
-                TERMUX_APP.MAX_FANCIER_GLASS_EDGE_LIGHT), false);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_SPECULAR}. Clamped, a percentage. */
-    public int getFancierGlassSpecularPercent() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-                TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_SPECULAR),
-            TERMUX_APP.MIN_FANCIER_GLASS_SPECULAR, TERMUX_APP.MAX_FANCIER_GLASS_SPECULAR);
-    }
-
-    public void setFancierGlassSpecularPercent(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_SPECULAR,
-            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_SPECULAR,
-                TERMUX_APP.MAX_FANCIER_GLASS_SPECULAR), false);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_DISPERSION}. Clamped, a percentage. */
-    public int getFancierGlassDispersionPercent() {
-        return lookGrid().value(LookGrid.Property.EDGE, null);
-    }
-
-    public void setFancierGlassDispersionPercent(int value) {
-        lookGrid().write(LookGrid.Property.EDGE, null, value);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_CLARITY}. Clamped, a percentage. */
-    public int getFancierGlassClarityPercent() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-                TERMUX_APP.KEY_FANCIER_GLASS_CLARITY, TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_CLARITY),
-            TERMUX_APP.MIN_FANCIER_GLASS_CLARITY, TERMUX_APP.MAX_FANCIER_GLASS_CLARITY);
-    }
-
-    public void setFancierGlassClarityPercent(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_FANCIER_GLASS_CLARITY,
-            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_CLARITY,
-                TERMUX_APP.MAX_FANCIER_GLASS_CLARITY), false);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_FACE_CLARITY}. Clamped, a percentage. */
-    public int getFancierGlassFaceClarityPercent() {
-        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY);
-    }
-
-    public void setFancierGlassFaceClarityPercent(int value) {
-        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_FACE_CLARITY, value);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_DIM}. Clamped, a percentage. */
-    public int getFancierGlassDimPercent() {
-        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_DIM);
-    }
-
-    public void setFancierGlassDimPercent(int value) {
-        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_DIM, value);
-    }
-
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_FANCIER_GLASS_SIZE_LENS}. Clamped, a percentage. */
-    public int getFancierGlassSizeLensPercent() {
-        return faceTerm(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS);
-    }
-
-    public void setFancierGlassSizeLensPercent(int value) {
-        setFaceTerm(TERMUX_APP.KEY_FANCIER_GLASS_SIZE_LENS, value);
-    }
-
-    private int faceTerm(String key) {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences, key,
-                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_FACE_TERM),
-            TERMUX_APP.MIN_FANCIER_GLASS_FACE_TERM, TERMUX_APP.MAX_FANCIER_GLASS_FACE_TERM);
-    }
-
-    private void setFaceTerm(String key, int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, key,
-            DataUtils.clamp(value, TERMUX_APP.MIN_FANCIER_GLASS_FACE_TERM,
-                TERMUX_APP.MAX_FANCIER_GLASS_FACE_TERM), false);
+    public void setGlassShine(int value) {
+        lookGrid().write(LookGrid.Property.SHINE, null, value);
     }
 
     /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_WIDGETS_ON_GLASS}. */
@@ -3414,24 +3323,19 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             return;
 
         if (freshInstall) {
-            // A fresh install opens on the Clear look with an 8dp margin. Written here rather than
-            // by moving the DEFAULT_* constants: an install that went through this branch under an
-            // earlier build never stored these keys, and a changed constant would restyle it.
-            // Every surface stays linked to Global, so the editor shows Clear selected; the material,
-            // tint, rim, motion and specular are already Clear's defaults. The edge (26/26/50/0/35/100)
-            // is written whole: its defaults are what an install that never stored the keys has
-            // always read, and stay.
+            // A fresh install opens on the Frosted look with an 8dp margin (Frosted is Mist's
+            // face on Clear's edge, GlassMaterial's realistic Depth and Shine). Written here
+            // rather than by moving the DEFAULT_* constants: an install that went through this
+            // branch under an earlier build never stored these keys, and a changed constant would
+            // restyle it. Every surface stays linked to Global, so the editor shows Frosted.
             setSurfaceGlobalValue(SurfaceProperty.BLUR, FRESH_INSTALL_BASE_BLUR);
             setSurfaceGlobalValue(SurfaceProperty.OPACITY, FRESH_INSTALL_BASE_OPACITY);
             setSurfaceGlobalValue(SurfaceProperty.GRAIN, FRESH_INSTALL_BASE_GRAIN);
+            setSurfaceMaterial(TERMUX_APP.SURFACE_MATERIAL_FROST);
+            setSurfaceGlassTint(TERMUX_APP.GLASS_TINT_OBSIDIAN);
+            setSurfaceGlassMotion(TERMUX_APP.GLASS_MOTION_MIST);
             setFancierGlassBendDp(FRESH_INSTALL_GLASS_BEND);
-            setFancierGlassEdgeWidthDp(FRESH_INSTALL_GLASS_EDGE_WIDTH);
-            setFancierGlassEdgeLightPercent(FRESH_INSTALL_GLASS_EDGE_LIGHT);
-            setFancierGlassDispersionPercent(FRESH_INSTALL_GLASS_DISPERSION);
-            setFancierGlassClarityPercent(FRESH_INSTALL_GLASS_CLARITY);
-            setFancierGlassFaceClarityPercent(100);
-            setFancierGlassDimPercent(0);
-            setFancierGlassSizeLensPercent(100);
+            setGlassShine(GlassMaterial.SHINE_DEFAULT);
             // The Layout margin writes both of these; the pane gap matches it at this size.
             setSurfaceGlobalValue(SurfaceProperty.SIDE_GAP, FRESH_INSTALL_MARGIN);
             setTerminalPaneGap(FRESH_INSTALL_MARGIN);
@@ -3464,14 +3368,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
      * store matches it.
      */
     // Clear's blur and grain are its point on the editor's Glass curve (Glass 20).
-    private static final int FRESH_INSTALL_BASE_BLUR = 7;
-    private static final int FRESH_INSTALL_BASE_OPACITY = 10;
-    private static final int FRESH_INSTALL_BASE_GRAIN = 0;
-    private static final int FRESH_INSTALL_GLASS_BEND = 27;
-    private static final int FRESH_INSTALL_GLASS_EDGE_WIDTH = 18;
-    private static final int FRESH_INSTALL_GLASS_EDGE_LIGHT = 10;
-    private static final int FRESH_INSTALL_GLASS_DISPERSION = 40;
-    private static final int FRESH_INSTALL_GLASS_CLARITY = 76;
+    private static final int FRESH_INSTALL_BASE_BLUR = 25;
+    private static final int FRESH_INSTALL_BASE_OPACITY = 60;
+    private static final int FRESH_INSTALL_BASE_GRAIN = 7;
+    private static final int FRESH_INSTALL_GLASS_BEND = GlassMaterial.REALISTIC_BEND_DP;
     private static final int FRESH_INSTALL_MARGIN = 8;
 
     /**
@@ -4055,18 +3955,13 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             tint == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_TINT : tint, false);
     }
 
-    /** The glass rim a preset chose; {@code hairline} unless it named another that we know. */
+    /** The Global rim cell, which only {@code launcherctl look} writes now; {@code hairline} by default. */
     @NonNull
     public String getSurfaceGlassRim() {
         switch (lookGrid().value(LookGrid.Property.RIM, null)) {
             case LookGrid.RIM_GRADIENT: return TERMUX_APP.GLASS_RIM_GRADIENT;
             default: return TERMUX_APP.GLASS_RIM_HAIRLINE;
         }
-    }
-
-    public void setSurfaceGlassRim(@Nullable String rim) {
-        lookGrid().write(LookGrid.Property.RIM, null,
-            LookGridMigration.rimOf(rim == null ? TERMUX_APP.DEFAULT_SURFACE_GLASS_RIM : rim));
     }
 
     /** The glass motion profile a preset chose; {@code classic} unless it named another we know. */

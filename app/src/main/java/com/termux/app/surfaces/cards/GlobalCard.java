@@ -25,8 +25,7 @@ public final class GlobalCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
             .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT)
-            .tier(3, Row.SECTION_FINE_TUNE, Row.GRAIN, Row.RIM, Row.GLASS_EDGE, Row.DEPTH,
-                Row.VIBRANCY);
+            .tier(3, Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE);
         // Out for a setting the user can change: the way to it stands under them.
         if (offers.refractionLink) rows.tier(3, Row.LINK_GLASS_REFRACTION);
         return rows
@@ -43,6 +42,6 @@ public final class GlobalCard {
      * Look (the screens' Looks live on their own cards).
      */
     public static boolean isGlassMaterial(@NonNull Row row) {
-        return row == Row.VIBRANCY || row == Row.GLASS_EDGE || row == Row.DEPTH;
+        return row == Row.SHINE || row == Row.DEPTH;
     }
 }

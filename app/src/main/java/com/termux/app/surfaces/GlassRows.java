@@ -17,22 +17,22 @@ public final class GlassRows {
 
     /**
      * The Appearance section every glass card wears (appearance-cards overhaul §2), under its
-     * heading, in {@code tier}: Presets, Opacity, Blur, Grain, Tint with its colour swatches
-     * under it, Corner radius, Rim strength, Edge and Depth. Edge and Depth are always listed;
+     * heading, in {@code tier}: Presets, Opacity, Frost, Tint with its colour swatches
+     * under it, Corner radius, Depth and Shine. Depth and Shine are always listed;
      * where the phone cannot draw them they read "Not on this phone." and stay put.
      */
     @NonNull
     public static EditorRows.CardRows appearance(@NonNull EditorRows.CardRows rows,
                                                  @NonNull Offers offers, int tier) {
         rows.tier(tier, Row.SECTION_APPEARANCE, Row.LOOK, Row.OPACITY, Row.FROST,
-            Row.GRAIN, Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.RIM, Row.GLASS_EDGE, Row.DEPTH);
+            Row.TINT, Row.TINT_HUE, Row.CORNERS, Row.DEPTH, Row.SHINE);
         // Out for a setting the user can change: the way to it stands under them.
         return offers.refractionLink ? rows.tier(tier, Row.LINK_GLASS_REFRACTION) : rows;
     }
 
     /** Whether {@code row} is drawn only where the phone draws the glass edge. */
     public static boolean needsGlassEdge(@NonNull Row row) {
-        return row == Row.GLASS_EDGE || row == Row.DEPTH;
+        return row == Row.SHINE || row == Row.DEPTH;
     }
 
     /**
@@ -45,21 +45,18 @@ public final class GlassRows {
             case CORNERS: return LookGrid.Property.CORNERS;
             case TINT_HUE: return LookGrid.Property.TINT_HUE;
             case DEPTH: return LookGrid.Property.DEPTH;
-            case GLASS_EDGE: return LookGrid.Property.EDGE;
-            case GRAIN: return LookGrid.Property.GRAIN;
-            case RIM: return LookGrid.Property.RIM;
-            case VIBRANCY: return LookGrid.Property.VIBRANCY;
+            case SHINE: return LookGrid.Property.SHINE;
             case MARGIN: return LookGrid.Property.MARGIN;
             default: return null;
         }
     }
 
     /**
-     * Whether a row is set for all glass whatever the What chip names: Margin and Vibrancy have
+     * Whether a row is set for all glass whatever the What chip names: Margin, Depth and Shine have
      * no element column, so they read and write the Where chip's all-glass cell and say so.
      */
     public static boolean allGlassOnly(@NonNull Row row) {
-        return row == Row.MARGIN || row == Row.VIBRANCY;
+        return row == Row.MARGIN || row == Row.DEPTH || row == Row.SHINE;
     }
 
     /** The grid property whose cell a row's dot and Reset this row speak of, or null. */

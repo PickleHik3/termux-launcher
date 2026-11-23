@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.dock.DockLayoutPolicy;
+import com.termux.shared.termux.settings.preferences.GlassMaterial;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -12,8 +13,8 @@ import java.util.List;
 /**
  * The Appearance editor's arithmetic (appearance-layout-editor SPEC §3.3–3.4), as pure functions.
  *
- * <p>The Look slider has five stops: the four Looks in {@link SurfacePresets#presets()} order —
- * Clear, Mist, Tint, Solid — and Custom last; a surface's own value leaves a half at Custom by
+ * <p>The Look slider has six stops: the five Looks in {@link SurfacePresets#presets()} order —
+ * Clear, Frosted, Tinted, Solid, Liquid — and Custom last; a surface's own value leaves a half at Custom by
  * itself. The ranges and conversions of the cards' controls ({@link Control}) are here too, and
  * the shape no Look sets: Corners and Margin.</p>
  *
@@ -26,9 +27,9 @@ public final class AppearanceLooks {
     // ------------------------------------------------------------------------------ the slider
 
     /** The Look ids, in slider order. Held against {@link SurfacePresets#presets()} by a test. */
-    static final String[] LOOK_IDS = {"minimal", "frost", "stock", "solid"};
+    static final String[] LOOK_IDS = {"minimal", "frost", "stock", "solid", "liquid"};
 
-    /** Four Looks and Custom. */
+    /** Five Looks and Custom. */
     public static final int STOP_COUNT = LOOK_IDS.length + 1;
 
     /** Custom is the last stop. */
@@ -78,10 +79,9 @@ public final class AppearanceLooks {
      * the Style ({@link #iconSizeRangeDp}); the bounds here are only the ones no dock passes, the
      * icon's floor and the deepest row. Key spacing is the key margin scale in tenths; Key opacity
      * the caps' opacity in percent (stored -1 leaves it to the theme); the others are their own units (dp, percent, a count, a stop). Glass is 0 to 100 over blur and grain
-     * ({@link GlassControls}); Vibrancy the frame's saturation in percent, 70 to 150. Edge and
-     * Depth are the glass edge's: Edge the stored dispersion itself, 0 (no fringe) to 100 (a bold
-     * coloured edge), Glint at 40; Depth 0 to 100 over the bend and the edge width
-     * ({@link GlassEdgeControls}). Text size is the shared size of the type the launcher draws, in
+     * ({@link GlassControls}); Shine and
+     * Depth are the glass's, app-wide, both 0 to 100 ({@link GlassMaterial},
+     * {@link GlassEdgeControls}). Text size is the shared size of the type the launcher draws, in
      * percent of each surface's own, 80 to 150 in steps of 5. Split gap is the terminal's own: the
      * gutter between split panes, 0 to 24 dp.
      */
@@ -89,8 +89,7 @@ public final class AppearanceLooks {
         GLASS(GlassControls.GLASS_MIN, GlassControls.GLASS_MAX, 1),
         OPACITY(0, OPACITY_MAX, 1),
         TINT(0, TINT_MAX, 1),
-        EDGE(TERMUX_APP.MIN_FANCIER_GLASS_DISPERSION, TERMUX_APP.MAX_FANCIER_GLASS_DISPERSION, 1),
-        VIBRANCY(TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY, TERMUX_APP.MAX_SURFACE_GLASS_VIBRANCY, 1),
+        SHINE(GlassMaterial.MIN, GlassMaterial.MAX, 1),
         KEY_OPACITY(TERMUX_APP.MIN_IN_APP_KEYBOARD_KEY_OPACITY,
             TERMUX_APP.MAX_IN_APP_KEYBOARD_KEY_OPACITY, 1),
         KEY_RADIUS(0, KEY_CORNERS_MAX_DP, 1),

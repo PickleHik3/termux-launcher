@@ -344,7 +344,7 @@ public final class LookGridMigration {
         return LookGrid.TINT_HUE_PRIMARY;
     }
 
-    static int rimOf(@NonNull String rim) {
+    public static int rimOf(@NonNull String rim) {
         if (TERMUX_APP.GLASS_RIM_GRADIENT.equals(rim)) return LookGrid.RIM_GRADIENT;
         if (TERMUX_APP.GLASS_RIM_HAIRLINE.equals(rim)) return LookGrid.RIM_HAIRLINE;
         return LookGrid.RIM_OFF;

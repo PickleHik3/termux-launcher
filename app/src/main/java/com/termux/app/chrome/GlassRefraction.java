@@ -14,6 +14,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.RequiresApi;
 
 import com.termux.shared.logger.Logger;
+import com.termux.shared.termux.settings.preferences.GlassMaterial;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
@@ -223,6 +224,8 @@ public final class GlassRefraction {
          * page bar asks for it ({@code PageBarGlassStyle}).
          */
         public final boolean concave;
+        /** Shine, 0..100 ({@link GlassMaterial}); the default is the glass as it ships. */
+        public final int shine;
 
         public Look(int bendDp, int edgeWidthDp, int edgeLightPercent) {
             this(bendDp, edgeWidthDp, edgeLightPercent, 0, 0, 0);
@@ -249,6 +252,16 @@ public final class GlassRefraction {
         private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
                      int dispersionPercent, int clarityPercent,
                      int faceClarityPercent, int dimPercent, int sizeLensPercent, boolean concave) {
+            this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
+                clarityPercent, faceClarityPercent, dimPercent, sizeLensPercent, concave,
+                GlassMaterial.SHINE_DEFAULT);
+        }
+
+        private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
+                     int dispersionPercent, int clarityPercent,
+                     int faceClarityPercent, int dimPercent, int sizeLensPercent, boolean concave,
+                     int shine) {
+            this.shine = Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, shine));
             this.concave = concave;
             this.faceClarityPercent = Math.max(0, Math.min(100, faceClarityPercent));
             this.dimPercent = Math.max(0, Math.min(100, dimPercent));
@@ -267,29 +280,46 @@ public final class GlassRefraction {
             if (concave == this.concave) return this;
             return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
                 dispersionPercent, clarityPercent, faceClarityPercent, dimPercent,
-                sizeLensPercent, concave);
+                sizeLensPercent, concave, shine);
         }
 
         /** This look with Clear's face terms set (percentages, 0 for none). */
         @NonNull
         public Look withFaceTerms(int faceClarity, int dim, int sizeLens) {
             Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, faceClarity, dim, sizeLens, concave);
+                dispersionPercent, clarityPercent, faceClarity, dim, sizeLens, concave, shine);
             return next.equals(this) ? this : next;
         }
 
-        /** The user's knobs, already clamped by their accessors. */
+        /**
+         * This look at {@code shine}: the light's multiple ({@link #shineScale}) and the colour
+         * split that rides with it ({@link GlassMaterial#dispersionPercent}).
+         */
+        @NonNull
+        public Look withShine(int shine) {
+            int s = Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, shine));
+            Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
+                GlassMaterial.dispersionPercent(s), clarityPercent, faceClarityPercent,
+                dimPercent, sizeLensPercent, concave, s);
+            return next.equals(this) ? this : next;
+        }
+
+        /** {@code uShine}: the light's multiple of the room light, 0..2.5. */
+        public float shineScale() {
+            return GlassMaterial.shineScale(shine);
+        }
+
+        /**
+         * The user's knobs: Depth's thickness and Shine, both app-wide. The edge width, light,
+         * specular, clarity and face terms are gone: the lens zone's width is the slab's, the
+         * rim is fixed material and the face is the Frost stop's.
+         */
         @NonNull
         public static Look of(@NonNull TermuxAppSharedPreferences preferences) {
             return new Look(preferences.getFancierGlassBendDp(),
-                preferences.getFancierGlassEdgeWidthDp(),
-                preferences.getFancierGlassEdgeLightPercent(),
-                preferences.getFancierGlassSpecularPercent(),
-                preferences.getFancierGlassDispersionPercent(),
-                preferences.getFancierGlassClarityPercent())
-                .withFaceTerms(preferences.getFancierGlassFaceClarityPercent(),
-                    preferences.getFancierGlassDimPercent(),
-                    preferences.getFancierGlassSizeLensPercent());
+                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH,
+                TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT)
+                .withShine(preferences.getGlassShine());
         }
 
         /** A percentage as 0..1, clamped. */
@@ -304,7 +334,7 @@ public final class GlassRefraction {
          * width is the slab's ({@link GlassSlab#lensWidthPx}).
          */
         public float thicknessPx(float density) {
-            return Math.max(0f, bendDp * density);
+            return Math.max(0f, bendDp * density * GlassMaterial.thicknessBoost(bendDp));
         }
 
         /**
@@ -363,15 +393,15 @@ public final class GlassRefraction {
                 && faceClarityPercent == that.faceClarityPercent
                 && dimPercent == that.dimPercent
                 && sizeLensPercent == that.sizeLensPercent
-                && concave == that.concave;
+                && concave == that.concave && shine == that.shine;
         }
 
         @Override
         public int hashCode() {
-            return ((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
+            return (((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
                 + dispersionPercent) * 31 + clarityPercent) * 31
                 + faceClarityPercent) * 31 + dimPercent) * 31 + sizeLensPercent) * 31
-                + (concave ? 1 : 0);
+                + (concave ? 1 : 0)) * 31 + shine;
         }
 
         @NonNull
@@ -380,7 +410,7 @@ public final class GlassRefraction {
             return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%, specular="
                 + specularPercent + "%, dispersion=" + dispersionPercent + "%, clarity=" + clarityPercent
                 + "%, face=" + faceClarityPercent + "%, dim=" + dimPercent
-                + "%, sizeLens=" + sizeLensPercent + "%" + (concave ? ", concave" : "") + "}";
+                + "%, sizeLens=" + sizeLensPercent + "%, shine=" + shine + (concave ? ", concave" : "") + "}";
         }
     }
 
@@ -484,6 +514,9 @@ public final class GlassRefraction {
         "uniform float uDepth;\n" +
         // The colour split, 0..kDispFull: Look.dispersion.
         "uniform float uDisp;\n" +
+        // The light's multiple of the room light on the rim and the lens, 0..2.5: Look.shine
+        // (GlassMaterial.shineScale); 1 is the glass as it ships.
+        "uniform float uShine;\n" +
         // 1 while sharp is a clearer picture of its own, 0 while it is the frost bound in its
         // place (or nothing): the lens zone then shows that picture wholly toward the rim.
         "uniform float uSharpEdge;\n" +
@@ -962,6 +995,7 @@ public final class GlassRefraction {
         "            fres = fres * (1.0 - lineW);\n" +
         "            float nh = max(dot(float3(n * slope, 1.0) * cv, hv), 0.0);\n" +
         "            float spec = max(pow(nh, kSpecPow) - kSpecFloor, 0.0) * kSpecK;\n" +
+        "            spec = spec * uShine;\n" +
         "            lin = lin * (1.0 - fres) + float3(fres * kEnv + spec);\n" +
         "        } else if (turned) {\n" +
         "            float ff = uPoseLight.y * (1.0 - lineW);\n" +
@@ -973,6 +1007,7 @@ public final class GlassRefraction {
         "            float away = rc < 0.0 ? rc * rc : 0.0;\n" +
         "            lobe = lobe + kTouchRim * touchG;\n" +
         "            float white = (kRimBase + kRimSpec * lobe) * lineW + kRimSpec * shelfW;\n" +
+        "            white = white * uShine;\n" +
         "            float keep = 1.0 - kRimDark * (kRimDarkAll + (1.0 - kRimDarkAll) * away) * lineW;\n" +
         "            lin = lin * keep + float3(white);\n" +
         "        }\n" +
@@ -1556,6 +1591,7 @@ public final class GlassRefraction {
             mShader = new RuntimeShader(source());
             mDensity = density;
             mShader.setFloatUniform("uDensity", density);
+            mShader.setFloatUniform("uShine", 1f);
             mShader.setFloatUniform("uLensStrength", LENS_STRENGTH);
             mShader.setFloatUniform("uLensFeather", density * LENS_FEATHER_DP);
             mShader.setFloatUniform("uTouchLens", TOUCH_LENS);
@@ -1877,6 +1913,7 @@ public final class GlassRefraction {
             mLook = look;
             mShader.setFloatUniform("uDepth", look.thicknessPx(mDensity));
             mShader.setFloatUniform("uDisp", look.dispersion());
+            mShader.setFloatUniform("uShine", look.shineScale());
             mShader.setFloatUniform("uSizeLens", look.sizeLens());
             mShader.setFloatUniform("uConcave", look.concave ? 1f : 0f,
                 CONCAVE_BAND_DP * mDensity);

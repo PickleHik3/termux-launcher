@@ -214,7 +214,7 @@ public class AppearanceSnapshotTest {
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
 
         store.edit().remove(SurfacePresets.RETIRED_SHADE_KEY).commit();
-        preferences.setFancierGlassDispersionPercent(65);
+        preferences.setGlassShine(65);
         entry.restore(preferences);
         assertEquals(signature, AppearanceSnapshot.signatureOf(preferences));
         assertFalse(store.contains(SurfacePresets.RETIRED_SHADE_KEY));
@@ -235,7 +235,8 @@ public class AppearanceSnapshotTest {
     @Test
     public void theSignatureSeesTintRimMotionAndDepth() {
         String before = AppearanceSnapshot.signatureOf(preferences);
-        preferences.setSurfaceGlassRim(TERMUX_APP.GLASS_RIM_GRADIENT);
+        preferences.lookGrid().write(com.termux.shared.termux.settings.preferences.LookGrid.Property.RIM,
+            null, com.termux.shared.termux.settings.preferences.LookGrid.RIM_GRADIENT);
         assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
 
         before = AppearanceSnapshot.signatureOf(preferences);
@@ -248,19 +249,15 @@ public class AppearanceSnapshotTest {
     }
 
     @Test
-    public void theSpecularAndDispersionAreSnapshottedAndRestored() {
+    public void theShineIsSnapshottedAndRestored() {
         AppearanceSnapshot entry = AppearanceSnapshot.capture(preferences);
         String before = AppearanceSnapshot.signatureOf(preferences);
 
-        preferences.setFancierGlassSpecularPercent(70);
+        preferences.setGlassShine(90);
         assertNotEquals(before, AppearanceSnapshot.signatureOf(preferences));
-        preferences.setFancierGlassDispersionPercent(40);
-        preferences.setFancierGlassClarityPercent(65);
         entry.restore(preferences);
 
-        assertEquals(0, preferences.getFancierGlassSpecularPercent());
-        assertEquals(0, preferences.getFancierGlassDispersionPercent());
-        assertEquals(0, preferences.getFancierGlassClarityPercent());
+        assertEquals(50, preferences.getGlassShine());
         assertEquals(before, AppearanceSnapshot.signatureOf(preferences));
     }
 

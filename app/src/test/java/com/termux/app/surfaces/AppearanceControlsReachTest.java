@@ -43,7 +43,7 @@ public class AppearanceControlsReachTest {
 
     private static final int HOME_PAGE = 0, TERMINAL_PAGE = 1, DISPLAY_PAGE = 2;
     private static final int[] PAGES = {HOME_PAGE, TERMINAL_PAGE, DISPLAY_PAGE};
-    private static final Row[] ROWS = {Row.OPACITY, Row.FROST, Row.GRAIN, Row.DEPTH};
+    private static final Row[] ROWS = {Row.OPACITY, Row.FROST, Row.DEPTH};
 
     private SharedPreferences mStore;
 
@@ -99,16 +99,6 @@ public class AppearanceControlsReachTest {
                 }
         }
         assertTrue(String.join("\n", wrong), wrong.isEmpty());
-    }
-
-    @Test
-    public void customizationVibrancyIsSetForAllGlass() {
-        TermuxAppSharedPreferences prefs = fresh();
-        EditorCardSheet.Model model = open(prefs, EditorCard.APPEARANCE);
-        int to = prefs.getSurfaceGlassVibrancy() == 120 ? 90 : 120;
-        model.onValue(Row.VIBRANCY, to, false);
-        model.onReleased(Row.VIBRANCY);
-        assertEquals(to, prefs.getSurfaceGlassVibrancy());
     }
 
     // ------------------------------------------------------------------- what stays the user's
@@ -214,7 +204,6 @@ public class AppearanceControlsReachTest {
         switch (row) {
             case OPACITY: return glass.opacityPercent;
             case FROST: return glass.blurDp;
-            case GRAIN: return glass.grainPercent;
             case DEPTH: return grid.value(LookGrid.Property.DEPTH, element);
             default: throw new IllegalArgumentException(row.name());
         }
@@ -224,7 +213,6 @@ public class AppearanceControlsReachTest {
         switch (row) {
             case OPACITY: return was == 37 ? 63 : 37;
             case FROST: return was == 2 ? 5 : 2;
-            case GRAIN: return was == 17 ? 43 : 17;
             case DEPTH: return was == 30 ? 80 : 30;
             default: return was;
         }

@@ -26,12 +26,11 @@ public class EditorCardSectionsTest {
 
     /** The glass block in group order (EditorRows.Group): Look, sliders, toggles, colours. */
     private static final List<Row> SLIDERS = Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST,
-        Row.GRAIN, Row.TINT, Row.CORNERS, Row.GLASS_EDGE, Row.DEPTH);
+        Row.TINT, Row.CORNERS, Row.SHINE, Row.DEPTH);
 
-    /** The block with {@code toggles} after Rim, its other toggle, and Tint colour last. */
+    /** The block with {@code toggles} after its toggles, and Tint colour last. */
     private static List<Row> block(Row... toggles) {
         List<Row> out = new ArrayList<>(SLIDERS);
-        out.add(Row.RIM);
         out.addAll(Arrays.asList(toggles));
         out.add(Row.TINT_HUE);
         return out;
@@ -91,8 +90,7 @@ public class EditorCardSectionsTest {
     public void global() {
         check(EditorCard.APPEARANCE, expect(
             "SECTION_LOOK", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
-            "SECTION_FINE_TUNE", Arrays.asList(Row.GRAIN, Row.GLASS_EDGE, Row.DEPTH,
-                Row.VIBRANCY, Row.RIM),
+            "SECTION_FINE_TUNE", Arrays.asList(Row.DEPTH, Row.SHINE),
             "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN,
                 Row.HOME_ICON_SIZE),
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,

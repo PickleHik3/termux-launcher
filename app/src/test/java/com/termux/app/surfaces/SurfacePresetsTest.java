@@ -51,11 +51,11 @@ public class SurfacePresetsTest {
     }
 
     @Test
-    public void theLooksAreOrderedClearMistTintSolid() {
+    public void theLooksAreOrderedClearFrostedTintedSolidLiquid() {
         java.util.List<String> ids = new java.util.ArrayList<>();
         for (SurfacePresets.Preset preset : SurfacePresets.presets())
             ids.add(preset.id);
-        assertEquals(java.util.Arrays.asList("minimal", "frost", "stock", "solid"), ids);
+        assertEquals(java.util.Arrays.asList("minimal", "frost", "stock", "solid", "liquid"), ids);
     }
 
     @Test

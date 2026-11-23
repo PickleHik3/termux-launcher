@@ -50,20 +50,15 @@ public class FancierGlassPreferencesTest {
     }
 
     @Test
-    public void theKnobsDefaultToTheDocksOwnRefraction() {
-        // GlassRefraction.Look.DEFAULT is built from these same three numbers; see its test.
+    public void depthAndShineDefaultToTheRealisticGlass() {
         assertEquals(9, preferences.getFancierGlassBendDp());
-        assertEquals(20, preferences.getFancierGlassEdgeWidthDp());
-        assertEquals(18, preferences.getFancierGlassEdgeLightPercent());
         assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_BEND, preferences.getFancierGlassBendDp());
-        assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_WIDTH,
-            preferences.getFancierGlassEdgeWidthDp());
-        assertEquals(TERMUX_APP.DEFAULT_VALUE_FANCIER_GLASS_EDGE_LIGHT,
-            preferences.getFancierGlassEdgeLightPercent());
+        assertEquals(50, preferences.getGlassShine());
+        assertEquals(GlassRefraction.Look.DEFAULT, GlassRefraction.Look.of(preferences));
     }
 
     @Test
-    public void everyKnobRoundTripsAndStaysInsideItsTrack() {
+    public void depthAndShineRoundTripAndStayInsideTheirTracks() {
         preferences.setFancierGlassBendDp(14);
         assertEquals(14, preferences.getFancierGlassBendDp());
         preferences.setFancierGlassBendDp(999);
@@ -71,37 +66,26 @@ public class FancierGlassPreferencesTest {
         preferences.setFancierGlassBendDp(-5);
         assertEquals(TERMUX_APP.MIN_FANCIER_GLASS_BEND, preferences.getFancierGlassBendDp());
 
-        preferences.setFancierGlassEdgeWidthDp(33);
-        assertEquals(33, preferences.getFancierGlassEdgeWidthDp());
-        preferences.setFancierGlassEdgeWidthDp(0);
-        assertEquals("a band of nothing would divide by zero in the shader",
-            TERMUX_APP.MIN_FANCIER_GLASS_EDGE_WIDTH, preferences.getFancierGlassEdgeWidthDp());
-        preferences.setFancierGlassEdgeWidthDp(400);
-        assertEquals(TERMUX_APP.MAX_FANCIER_GLASS_EDGE_WIDTH, preferences.getFancierGlassEdgeWidthDp());
-
-        preferences.setFancierGlassEdgeLightPercent(70);
-        assertEquals(70, preferences.getFancierGlassEdgeLightPercent());
-        preferences.setFancierGlassEdgeLightPercent(150);
-        assertEquals(100, preferences.getFancierGlassEdgeLightPercent());
-        preferences.setFancierGlassEdgeLightPercent(-1);
-        assertEquals(0, preferences.getFancierGlassEdgeLightPercent());
+        preferences.setGlassShine(70);
+        assertEquals(70, preferences.getGlassShine());
+        preferences.setGlassShine(500);
+        assertEquals(100, preferences.getGlassShine());
+        preferences.setGlassShine(-3);
+        assertEquals(0, preferences.getGlassShine());
+        assertEquals(0, GlassRefraction.Look.of(preferences).shine);
     }
 
     @Test
-    public void theBevelAndTheDispersionDefaultToOffAndStayInsideTheirTracks() {
-        assertEquals(0, preferences.getFancierGlassSpecularPercent());
-        assertEquals(0, preferences.getFancierGlassDispersionPercent());
-        assertEquals(GlassRefraction.Look.DEFAULT, GlassRefraction.Look.of(preferences));
-
-        preferences.setFancierGlassSpecularPercent(70);
-        preferences.setFancierGlassDispersionPercent(40);
-        assertEquals(70, preferences.getFancierGlassSpecularPercent());
-        assertEquals(40, preferences.getFancierGlassDispersionPercent());
-        assertEquals(new GlassRefraction.Look(9, 20, 18, 70, 40), GlassRefraction.Look.of(preferences));
-        preferences.setFancierGlassSpecularPercent(500);
-        assertEquals(100, preferences.getFancierGlassSpecularPercent());
-        preferences.setFancierGlassDispersionPercent(-3);
-        assertEquals(0, preferences.getFancierGlassDispersionPercent());
+    public void theLookCarriesTheThicknessAndTheShinesColourSplit() {
+        preferences.setFancierGlassBendDp(27);
+        preferences.setGlassShine(100);
+        GlassRefraction.Look look = GlassRefraction.Look.of(preferences);
+        assertEquals(27, look.bendDp);
+        assertEquals(100, look.shine);
+        assertEquals(2.5f, look.shineScale(), 1e-6f);
+        assertEquals(60, look.dispersionPercent);
+        preferences.setGlassShine(50);
+        assertEquals(0, GlassRefraction.Look.of(preferences).dispersionPercent);
     }
 
     @Test

@@ -71,9 +71,8 @@ public class EditorScreenLookTest {
         preferences.setSurfaceGlobalValue(SurfaceProperty.BLUR, 3);
         preferences.setSurfaceGlobalValue(SurfaceProperty.GRAIN, 3);
         preferences.setSurfaceGlobalValue(SurfaceProperty.TINT, 0);
-        preferences.setFancierGlassDispersionPercent(40);
+        preferences.setGlassShine(70);
         preferences.setFancierGlassBendDp(30);
-        preferences.setSurfaceGlassRim("gradient");
     }
 
     private void assertCustomValues() {
@@ -81,9 +80,8 @@ public class EditorScreenLookTest {
         assertEquals(3, preferences.getSurfaceGlobalValue(SurfaceProperty.GRAIN));
         assertEquals(1, preferences.lookGrid().value(LookGrid.Property.FROST, null));
         assertEquals(0, preferences.getSurfaceGlobalValue(SurfaceProperty.TINT));
-        assertEquals(40, preferences.getFancierGlassDispersionPercent());
+        assertEquals(70, preferences.getGlassShine());
         assertEquals(30, preferences.getFancierGlassBendDp());
-        assertEquals("gradient", preferences.getSurfaceGlassRim());
     }
 
     @Test

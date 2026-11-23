@@ -1544,10 +1544,16 @@ public final class TermuxPreferenceConstants {
          * Glass on changes nothing about the dock and only lends the same rim to the other
          * surfaces.
          */
+        /**
+         * Shine's key in a saved look (format 7): the light on the rim and lens, 0 to 100. It
+         * replaces the look's rim string and its dispersion, edge width, light, specular, clarity
+         * and face-term keys, which an older saved look still carries and the app now ignores.
+         */
+        public static final String KEY_SURFACE_GLASS_SHINE = "surface_glass_shine";
         public static final String KEY_FANCIER_GLASS_BEND = "fancier_glass_bend";
         public static final int DEFAULT_VALUE_FANCIER_GLASS_BEND = 9;
         public static final int MIN_FANCIER_GLASS_BEND = 0;
-        public static final int MAX_FANCIER_GLASS_BEND = 30;
+        public static final int MAX_FANCIER_GLASS_BEND = 45;
 
         /** How far in from the rim the bend reaches, in dp. */
         public static final String KEY_FANCIER_GLASS_EDGE_WIDTH = "fancier_glass_edge_width";
