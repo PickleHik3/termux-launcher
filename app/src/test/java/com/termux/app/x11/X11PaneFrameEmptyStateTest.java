@@ -2,7 +2,6 @@ package com.termux.app.x11;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
-import static org.junit.Assert.assertNotNull;
 
 import android.app.Activity;
 import android.app.Application;
@@ -76,7 +75,9 @@ public class X11PaneFrameEmptyStateTest {
 
     /**
      * The JVM has no prefix, so the probe answers "missing": the install button stands where
-     * Start does, the guide link is gone, and a tap hands the host this edition's command.
+     * Start does, the guide link is gone, and a tap hands the host this edition's command. Nix
+     * has no such command (it installs the data from home.nix), so there the guide link stands
+     * instead and the install button stays out.
      */
     @Test
     public void missingKeyboardDataOffersTheInstallAndHandsTheHostTheCommand() {
@@ -92,6 +93,14 @@ public class X11PaneFrameEmptyStateTest {
         page.refreshEmptyStateReadiness();
 
         View install = page.findViewById(R.id.x11_pane_install);
+        java.util.List<String> expected = KeyboardDataInstall.command(
+            com.termux.app.tour.TourEdition.of(activity.getPackageName()));
+        if (expected == null) {
+            assertEquals(View.GONE, install.getVisibility());
+            assertEquals(View.GONE, page.findViewById(R.id.x11_pane_start).getVisibility());
+            assertEquals(View.VISIBLE, page.findViewById(R.id.x11_pane_guide).getVisibility());
+            return;
+        }
         assertEquals(View.VISIBLE, install.getVisibility());
         assertEquals(View.GONE, page.findViewById(R.id.x11_pane_start).getVisibility());
         assertEquals(View.GONE, page.findViewById(R.id.x11_pane_guide).getVisibility());
@@ -99,9 +108,6 @@ public class X11PaneFrameEmptyStateTest {
         install.performClick();
 
         assertEquals(1, asked.size());
-        java.util.List<String> expected = KeyboardDataInstall.command(
-            com.termux.app.tour.TourEdition.of(activity.getPackageName()));
-        assertNotNull(expected);
         assertEquals(expected, asked.get(0));
     }
 
