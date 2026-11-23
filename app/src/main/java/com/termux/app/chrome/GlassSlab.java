@@ -61,11 +61,11 @@ public final class GlassSlab {
     public static final String PROP = "debug.tl.glass_slab";
 
     /** The lens zone's width on a large surface, dp: wide, so the eased profile meets the face gently. {@code kLensDp}. */
-    static final float LENS_DP = 24f;
+    static final float LENS_DP = 32f;
     /** The lens zone's width on a small piece, as a share of its short side. {@code kLensShare}. */
     static final float SHARE = 0.25f;
     /** Glass's index of refraction. {@code kIor}. */
-    static final float IOR = 1.5f;
+    static final float IOR = 1.7f;
     /** Glass's reflectance head-on, Schlick's F0: {@code ((n - 1) / (n + 1))²} at 1.5. {@code kF0}. */
     static final float F0 = 0.04f;
     /**

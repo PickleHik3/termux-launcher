@@ -41,9 +41,9 @@ public final class GlassRim {
     /** Where the line is whole to, dp in from the outline. {@code kRimLineDp}. */
     static final float LINE_DP = 0.5f;
     /** How far past {@link #LINE_DP} the line fades to nothing, dp. {@code kRimSoftDp}. */
-    static final float SOFT_DP = 1f;
+    static final float SOFT_DP = 0.2f;
     /** The halo's share at the line's inner edge. {@code kRimHalo}. */
-    static final float HALO = 0.25f;
+    static final float HALO = 0f;
     /** The halo's e-fold, dp. {@code kRimHaloDp}. */
     static final float HALO_DP = 0.75f;
     /** The white every side keeps, linear. {@code kRimBase}. */
