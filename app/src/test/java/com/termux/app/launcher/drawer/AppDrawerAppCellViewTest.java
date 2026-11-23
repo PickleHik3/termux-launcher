@@ -125,6 +125,30 @@ public class AppDrawerAppCellViewTest {
         assertEquals(1, gateChecks[0]);
     }
 
+    /**
+     * Two long names side by side ran into each other, and a right-column label ended a few
+     * pixels from the card's edge: every layout's label keeps one inset of air inside its own cell
+     * on both sides, so neighbours never touch and the outer columns stand off the card's edge.
+     */
+    @Test public void everyLabelKeepsAnInsetInsideItsCell() {
+        float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics()
+            .density;
+        int inset = Math.round(AppDrawerGridMetrics.labelSideInsetPx(density));
+        assertTrue(inset > 0);
+        AppDrawerAppCellView vertical = cell();
+        AppDrawerAppCellView pages = cell();
+        AppDrawerAppCellView category = cell();
+        vertical.bind(null, entry("Obsidian Music"), AppDrawerGridMetrics.resolve(400f, 1f, 11f, 4),
+            AppDrawerAppCellView.ALLOW_CLICKS);
+        pages.bind(null, entry("Obsidian Music"), AppDrawerHorizontalGridMetrics.resolve(
+            400f, 200f, 1f, 11f, 4, 2), AppDrawerAppCellView.ALLOW_CLICKS);
+        category.bind(null, entry("Banana Native"), 37, 91, AppDrawerAppCellView.ALLOW_CLICKS);
+        for (AppDrawerAppCellView cell : new AppDrawerAppCellView[] {vertical, pages, category}) {
+            assertEquals(inset, cell.label.getPaddingLeft());
+            assertEquals(inset, cell.label.getPaddingRight());
+        }
+    }
+
     private static AppDrawerAppCellView cell() {
         AppDrawerAppCellView cell = new AppDrawerAppCellView(RuntimeEnvironment.getApplication());
         cell.setLayoutParams(new ViewGroup.LayoutParams(100, 100));

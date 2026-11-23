@@ -90,6 +90,8 @@ public final class AppDrawerRopeColumnView extends View {
     @Nullable private Callbacks mCallbacks;
     @Nullable private SuggestionBarView mDock;
     @Nullable private AppDrawerRopeMetrics mMetrics;
+    /** See {@link #setVisibleBottomPx}. */
+    private float mVisibleBottomPx = Float.POSITIVE_INFINITY;
 
     @NonNull private char[] mLetters = NO_LETTERS;
     /** One string per letter, built with the letter set: {@code drawText} takes a CharSequence. */
@@ -327,12 +329,29 @@ public final class AppDrawerRopeColumnView extends View {
         return mLetters[mActiveIndex];
     }
 
+    /**
+     * Where the plane's visible bottom stands, in the parent's coordinates, while the keyboard's
+     * reveal moves the card's bottom across the strip; {@code +∞} when it does not cut it. The
+     * letters are spaced over the part of the strip above it: a redraw, never a layout.
+     */
+    public void setVisibleBottomPx(float bottomPx) {
+        if (bottomPx == mVisibleBottomPx) return;
+        mVisibleBottomPx = bottomPx;
+        if (isActive()) invalidate();
+    }
+
     /** The rope's own geometry, or null before layout or with no letters. */
     @Nullable
     public AppDrawerRopeMetrics metrics() {
-        if (mMetrics != null) return mMetrics;
         if (mLetters.length == 0 || getHeight() <= 0) return null;
-        mMetrics = AppDrawerRopeMetrics.resolve(getHeight(), mLetters.length, mDensity);
+        float height = AppDrawerRopeMetrics.visibleTrackHeightPx(getHeight(), getTop(),
+            mVisibleBottomPx);
+        if (mMetrics == null) {
+            mMetrics = AppDrawerRopeMetrics.resolve(height, mLetters.length, mDensity);
+        } else {
+            // In place: this runs from onDraw on every frame of the reveal.
+            mMetrics.resizeTo(height);
+        }
         return mMetrics;
     }
 

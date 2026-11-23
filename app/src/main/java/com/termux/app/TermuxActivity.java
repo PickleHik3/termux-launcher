@@ -11759,6 +11759,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (mRaisingDisplayFrameKeyboard) return;
             // A keyboard the wall's slide raised or put away on its own is nobody's intent either.
             if (mQuietKeyboardChange) return;
+            mDrawerRaisedKeyboardClaimed = true;
             if (mX11Display != null) mX11Display.onUserKeyboardIntent(shown);
         });
         mTermuxTerminalViewClient.setInAppKeyboardController(mInAppKeyboard);
@@ -12678,6 +12679,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         public TerminalView getTerminalView() {
             // Route in-app keyboard input to the focused pane.
             return TermuxActivity.this.getTerminalView();
+        }
+
+        @Override
+        public boolean offerBindingChord(@NonNull KeyEvent down) {
+            return mTermuxTerminalViewClient != null
+                && mTermuxTerminalViewClient.consumeInAppKeyboardChord(down);
+        }
+
+        @Override
+        public boolean isBindingSequencePending() {
+            return com.termux.app.terminal.TerminalKeyBindingResolver.getInstance()
+                .hasPendingSequence();
         }
 
         @Override
@@ -15567,6 +15580,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             setAppDrawerDecorNavStripAlpha(alpha);
         }
 
+        @Override public void setHomeContentAlpha(float alpha) {
+            View pane = findViewById(R.id.widget_pane);
+            if (pane != null && pane.getAlpha() != alpha) pane.setAlpha(alpha);
+        }
+
         @Override public void flushPendingAccessoryGeometry() {
             TermuxActivity.this.flushPendingAccessoryGeometry();
         }
@@ -15583,6 +15601,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void restoreSystemKeyboard() {
+            lowerDrawerSearchKeyboard();
             if (!mSystemImeHiddenForDrawer) return;
             mSystemImeHiddenForDrawer = false;
             if (getWindow() == null || isSystemImeSuppressedByInAppKeyboard()) return;
@@ -15595,6 +15614,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void requestSearchKeyboard() {
             requestAppDrawerSearchKeyboard();
+        }
+
+        @Override public void dismissSearchSystemKeyboard() {
+            // Scrolled away, as launchers do: the field keeps its focus and its query, so a tap on
+            // the search brings the keyboard straight back.
+            if (getWindow() == null) return;
+            WindowCompat.getInsetsController(getWindow(), getWindow().getDecorView())
+                .hide(Type.ime());
         }
 
         @Override public void beginTextFieldSearch(@NonNull EditText field) {
@@ -15647,9 +15674,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * <p>Deliberately does not go through {@link #getAppDrawerController()}: a drawer that was never
      * opened has nothing to close, and building the controller here would defeat the lazy accessor.
      */
-    private void closeAppDrawerImmediate() {
+    private void closeAppDrawerImmediate(boolean homePress) {
         try {
-            if (mAppDrawerController != null) mAppDrawerController.closeImmediate();
+            if (mAppDrawerController != null) mAppDrawerController.closeImmediate(homePress);
         } finally {
             flushPendingAccessoryGeometry();
         }
@@ -15979,7 +16006,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return isFolderRenameActive() || isAppDrawerOpen();
             }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
-                closeAppDrawerImmediate();
+                closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             }
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
@@ -16382,6 +16409,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }, -1, null, -1, null, null);
     }
 
+    /** The display keyboard the drawer's search raised, and whether the user has claimed it since. */
+    private boolean mDrawerRaisedKeyboard;
+    private boolean mDrawerRaisedKeyboardClaimed;
+
+    /** The drawer closed: put back down what its search raised over the display, quietly. */
+    private void lowerDrawerSearchKeyboard() {
+        boolean raised = mDrawerRaisedKeyboard;
+        mDrawerRaisedKeyboard = false;
+        if (!com.termux.app.x11.DisplayKeyboardRoute.drawerCloseLowers(raised,
+                mDrawerRaisedKeyboardClaimed, mInAppKeyboard != null && mInAppKeyboard.isVisible()))
+            return;
+        if (isDisplayTouchpadFrame() && mFrameContent.isKeyboardContent()) {
+            applyDisplayFrameDecision(mFrameContent.onTextFocus(false));
+        } else {
+            lowerDisplayFrameKeyboard();
+        }
+    }
+
     /**
      * Summons the system IME for the drawer's search, with <b>no focus change</b>.
      *
@@ -16393,18 +16438,43 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * {@link #handleAppDrawerCodePoint}.
      */
     private void requestAppDrawerSearchKeyboard() {
-        // Over a running display the focus is the display's, so the system keyboard below is
-        // refused as "not served" and the search would have no keyboard at all: raise the
-        // launcher's, which the drawer types through, in whatever frame the place keeps it.
-        if (com.termux.app.x11.DisplayKeyboardRoute.drawerSearchRaisesBuiltIn(
-                isDisplayPageShowing(), isEmbeddedDisplayRunning(),
-                mInAppKeyboard != null && mInAppKeyboard.isEnabled())) {
-            if (isDisplayTouchpadFrame()) {
-                applyDisplayFrameDecision(mFrameContent.onKeyboardIntent(true));
-            } else {
-                mInAppKeyboard.show(
-                    com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.ShowReason.TOOL);
+        // With the built-in keyboard selected the search raises it, on every place: the drawer
+        // types through it and reveals it through the plane. Only the Android keyboard gets the
+        // system ask below (over a running display that ask would not even be served).
+        com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch route = mInAppKeyboard == null
+            ? com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK
+            : com.termux.app.x11.DisplayKeyboardRoute.drawerSearch(mInAppKeyboard.isEnabled(),
+                mInAppKeyboard.isTurnedOff(), false /* 1.x has no yield-to-hardware-keyboard setting */);
+        // A keyboard that stands aside for a physical one raises nothing; the keys type into the
+        // search through the layer's own key route.
+        if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.NONE) return;
+        if (route != com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.SYSTEM_ASK) {
+            boolean wasUp = mInAppKeyboard.isVisible();
+            if (route == com.termux.app.x11.DisplayKeyboardRoute.DrawerSearch.TURN_ON_AND_RAISE) {
+                // Switched off with the keyboard key, and tapping the search asks for it back.
+                // Nobody's pin either: held off from the visibility listener like the raise below.
+                mRaisingDisplayFrameKeyboard = true;
+                try {
+                    mInAppKeyboard.setTurnedOff(false);
+                } finally {
+                    mRaisingDisplayFrameKeyboard = false;
+                }
             }
+            // The drawer's raise is nobody's pin: it goes down again with the drawer
+            // (lowerDrawerSearchKeyboard) unless the keyboard was up first or the user claims it.
+            if (isDisplayTouchpadFrame()) {
+                if (mFrameContent.isKeyboardContent()) return;
+                applyDisplayFrameDecision(mFrameContent.onTextFocus(true));
+                mDrawerRaisedKeyboard = true;
+                mDrawerRaisedKeyboardClaimed = false;
+            } else if (!mInAppKeyboard.isVisible()) {
+                raiseDisplayFrameKeyboard();
+                mDrawerRaisedKeyboard = true;
+                mDrawerRaisedKeyboardClaimed = false;
+            }
+            // Raised after the pull, the keyboard was not among the bands the drawer measured;
+            // it measures them again so the reveal can bring it up through the plane.
+            if (mAppDrawerController != null) mAppDrawerController.onBuiltInKeyboardRaised();
             return;
         }
         onSystemImeRequested();
@@ -21606,6 +21676,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (decision.releaseFrame) lowerDisplayFrameKeyboard();
         syncMouseModeMark();
         if (mX11Display == null) return;
+        if (decision.intent != com.termux.app.x11.DisplayFrameContentPolicy.Intent.NONE)
+            mDrawerRaisedKeyboardClaimed = true;
         switch (decision.intent) {
             case PIN:
                 // A keyboard the user asked for is theirs — but only if one is actually up: the

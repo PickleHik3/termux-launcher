@@ -16,7 +16,46 @@ public class AppDrawerCategoryGridMetricsTest {
         assertEquals(2, metrics(300f, 600f).columns);
         assertEquals(2, metrics(455f, 600f).columns);
         assertEquals(3, metrics(456f, 600f).columns);
-        assertEquals(3, metrics(1200f, 600f).columns);
+        // A 1200dp body would be 380dp cards at three columns, past MAX_TILE_DP: it adds columns.
+        assertEquals(5, metrics(1200f, 600f).columns);
+    }
+
+    @Test public void phonesKeepTodaysColumnsTileIconAndSpacing() {
+        // Values captured from the pre-change maths (density 1, so px == dp).
+        AppDrawerCategoryGridMetrics p411 = metrics(411f, 800f);
+        assertEquals(2, p411.columns);
+        assertEquals(187.5f, p411.tileSidePx, EPS);
+        assertEquals(72, p411.largeIconPx);
+        assertEquals(14.5f, p411.innerPaddingPx, EPS);
+        assertEquals(14.5f, p411.slotGapPx, EPS);
+        AppDrawerCategoryGridMetrics p360 = metrics(360f, 640f);
+        assertEquals(2, p360.columns);
+        assertEquals(162f, p360.tileSidePx, EPS);
+        assertEquals(63, p360.largeIconPx);
+        assertEquals(12f, p360.innerPaddingPx, EPS);
+        assertEquals(12f, p360.slotGapPx, EPS);
+        // Top of the three-column regime (768dp body, 240dp cards) is untouched too.
+        AppDrawerCategoryGridMetrics edge = metrics(768f, 1200f);
+        assertEquals(3, edge.columns);
+        assertEquals(240f, edge.tileSidePx, EPS);
+        assertEquals(72, edge.largeIconPx);
+        assertEquals(32f, edge.innerPaddingPx, EPS);
+    }
+
+    @Test public void wideTabletBodyGetsMoreSmallerRoughlySquareCards() {
+        // 1368dp landscape tablet at density 2.0, 1824px (912dp) tall viewport.
+        AppDrawerCategoryGridMetrics m = AppDrawerCategoryGridMetrics.resolve(
+            1368f * 2f, 1824f, 2f, 16f * 2f, 16f * 2f, 80f, BUDGET);
+        assertTrue(m.columns >= 5);
+        assertTrue(m.tileSidePx / 2f <= AppDrawerCategoryGridMetrics.MAX_TILE_DP + EPS);
+        assertTrue(m.innerPaddingPx / 2f <= AppDrawerCategoryGridMetrics.MAX_SPACING_DP + EPS);
+        float cardH = m.tileSidePx + m.headingGapPx + m.headingHeightPx;
+        float aspect = cardH / m.tileSidePx;
+        assertTrue("aspect " + aspect, aspect >= 0.85f && aspect <= 1.25f);
+    }
+
+    @Test public void portraitTabletGetsAtLeastFourColumns() {
+        assertTrue(metrics(912f, 1400f).columns >= 4);
     }
 
     @Test public void expandedGridIsTheRedesignsFixedThreeColumns() {
@@ -49,7 +88,13 @@ public class AppDrawerCategoryGridMetricsTest {
             // Inside: pad, icon, gap, icon, pad — one number, and it is the card's whole width.
             assertEquals(at, m.innerPaddingPx, m.slotGapPx, EPS);
             assertEquals(at, m.innerPaddingPx, m.headingGapPx, EPS);
-            assertEquals(at, m.tileSidePx, 3f * m.innerPaddingPx + 2f * m.largeIconPx, 1.5f);
+            float used = 3f * m.innerPaddingPx + 2f * m.largeIconPx;
+            if (m.innerPaddingPx < AppDrawerCategoryGridMetrics.MAX_SPACING_DP * input[2] - EPS) {
+                assertEquals(at, m.tileSidePx, used, 1.5f);
+            } else {
+                // Wide layout: spacing is capped, so the card may carry a little slack.
+                assertTrue(at, m.tileSidePx >= used - 1.5f);
+            }
             // The icon fills its half of the card: slot and icon are the same size, so nothing
             // floats in a ring of dead space, and the spacing never drops below the 12dp rhythm.
             assertEquals(at, m.largeIconPx, m.largeSlotPx, EPS);

@@ -2,6 +2,8 @@ package com.termux.app.launcher.drawer;
 
 import android.content.Context;
 import android.graphics.Color;
+import android.graphics.drawable.Drawable;
+import android.graphics.drawable.GradientDrawable;
 import android.text.TextUtils;
 import android.util.TypedValue;
 import android.view.Gravity;
@@ -14,6 +16,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.SuggestionBarView;
+import com.termux.app.chrome.ChromeShade;
 import com.termux.app.launcher.icon.AsyncIconBinder;
 import com.termux.app.launcher.model.LauncherAppEntry;
 
@@ -34,8 +37,16 @@ public class AppDrawerAppCellView extends LinearLayout {
 
     public static final ClickGate ALLOW_CLICKS = () -> false;
 
+    /** Highlight ring and wash, seeds resolved against the chrome's polarity when drawn. */
+    private static final int HIGHLIGHT_RADIUS_DP = 16;
+    private static final int HIGHLIGHT_STROKE_DP = 2;
+    private static final int HIGHLIGHT_RING_SEED = 0xE6FFFFFF;
+    private static final int HIGHLIGHT_WASH_SEED = 0x26FFFFFF;
+    private static final int HIGHLIGHT_WASH_REST = 0x08FFFFFF;
+
     @NonNull public final ImageView icon;
     @NonNull public final TextView label;
+    private boolean mKeyboardHighlighted;
 
     public AppDrawerAppCellView(@NonNull Context context) {
         super(context);
@@ -100,6 +111,15 @@ public class AppDrawerAppCellView extends LinearLayout {
         bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, null, categoryChoiceListener);
     }
 
+    /** Category detail grid: the popup's category row plus the drawer's pickup, as in grid and list. */
+    void bind(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
+              int iconPx, int rowHeightPx, @NonNull ClickGate clickGate,
+              @Nullable AppDrawerPickupDelegate pickupDelegate,
+              @Nullable AppDrawerCategoryChoiceListener categoryChoiceListener) {
+        bindInternal(dock, entry, iconPx, rowHeightPx, clickGate, pickupDelegate,
+            categoryChoiceListener);
+    }
+
     private void bindInternal(@Nullable SuggestionBarView dock, @NonNull LauncherAppEntry entry,
                               float iconSize, float rowHeight,
                               @NonNull ClickGate clickGate) {
@@ -155,9 +175,15 @@ public class AppDrawerAppCellView extends LinearLayout {
             iconParams.height = iconPx;
             icon.setLayoutParams(iconParams);
         }
-        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP
-            * getResources().getDisplayMetrics().density);
-        if (label.getPaddingTop() != gap) label.setPadding(0, gap, 0, 0);
+        float density = getResources().getDisplayMetrics().density;
+        int gap = Math.round(AppDrawerGridMetrics.LABEL_GAP_DP * density);
+        // Air inside the cell on both sides: neighbouring labels never touch, and the outer
+        // columns' labels stand off the card's edge.
+        int side = Math.round(AppDrawerGridMetrics.labelSideInsetPx(density));
+        if (label.getPaddingTop() != gap || label.getPaddingLeft() != side
+            || label.getPaddingRight() != side) {
+            label.setPadding(side, gap, side, 0);
+        }
     }
 
     /**
@@ -177,8 +203,41 @@ public class AppDrawerAppCellView extends LinearLayout {
         setScaleY(scale);
     }
 
+    /**
+     * The result a physical keyboard's arrow keys are on: a ring and wash, reported to screen
+     * readers as selected. Drawn by the background, set when the highlight moves — never per frame.
+     */
+    public final void setKeyboardHighlight(boolean highlighted) {
+        if (mKeyboardHighlighted == highlighted && !highlighted) return;
+        mKeyboardHighlighted = highlighted;
+        setSelected(highlighted);
+        refreshBackground();
+    }
+
+    public final boolean isKeyboardHighlighted() {
+        return mKeyboardHighlighted;
+    }
+
+    /** The grid cell has no background at rest; a presentation with one overrides this. */
+    protected void refreshBackground() {
+        setBackground(mKeyboardHighlighted ? highlightDrawable(getResources()
+            .getDisplayMetrics().density) : null);
+    }
+
+    /** Ring over a faint wash, both resolved against the chrome so light, dark and black all read. */
+    @NonNull
+    static Drawable highlightDrawable(float density) {
+        GradientDrawable ring = new GradientDrawable();
+        ring.setCornerRadius(HIGHLIGHT_RADIUS_DP * density);
+        ring.setColor(ChromeShade.stateFill(HIGHLIGHT_WASH_SEED, HIGHLIGHT_WASH_REST));
+        ring.setStroke(Math.round(HIGHLIGHT_STROKE_DP * density),
+            ChromeShade.rim(HIGHLIGHT_RING_SEED));
+        return ring;
+    }
+
     /** Releases rendered artwork, app-specific listeners and transient scrub state. */
     public void unbind() {
+        if (mKeyboardHighlighted) setKeyboardHighlight(false);
         cancelLongPress();
         setOnClickListener(null);
         setOnLongClickListener(null);
