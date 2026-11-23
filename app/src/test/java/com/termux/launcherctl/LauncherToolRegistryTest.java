@@ -73,6 +73,16 @@ public class LauncherToolRegistryTest {
     }
 
     @Test
+    public void openingTheAppDrawer_narratesItself() {
+        // The drawer coming up is the read-out: an "App drawer" pill over its search field for
+        // the length of the hint was clutter over the thing it named.
+        LauncherToolRegistry.ToolMetadata tool =
+            registry.getTool(LauncherToolRegistry.TOOL_APP_OPEN_APP_DRAWER);
+        assertNotNull(tool);
+        assertTrue(tool.selfEvident);
+    }
+
+    @Test
     public void sessionRenameAtIndex_requiresIndexBeforeNameAndClaimsNoStroke() {
         LauncherToolRegistry.ToolMetadata tool = registry.getTool("session.rename_at_index");
         assertNotNull(tool);

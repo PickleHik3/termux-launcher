@@ -1,6 +1,7 @@
 package com.termux.launcherctl;
 
 import android.content.Context;
+import android.os.SystemClock;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -114,7 +115,8 @@ public class LauncherCtlApiServer {
     private volatile String token;
     private volatile boolean authRequired = true;
     private volatile String bindMode = TaiSettings.BIND_MODE_LOCALHOST;
-    private volatile long lanSessionDeadlineMs;
+    /** When the LAN exposure window ends, on {@link SystemClock#elapsedRealtime()}; 0 when not in LAN mode. */
+    private volatile long lanSessionDeadlineElapsedMs;
     private volatile boolean lanSessionExpiring;
     private volatile int port;
     private ServerSocket serverSocket;
@@ -146,8 +148,9 @@ public class LauncherCtlApiServer {
             String bindMode = settings.getApiBindMode();
             this.bindMode = bindMode;
             long lanStartedAt = settings.getLanSessionStartedAt();
-            lanSessionDeadlineMs = TaiSettings.BIND_MODE_LAN.equals(bindMode) && lanStartedAt > 0
-                ? lanStartedAt + TaiSettings.LAN_SESSION_MAX_MS : 0L;
+            lanSessionDeadlineElapsedMs = TaiSettings.BIND_MODE_LAN.equals(bindMode)
+                ? lanDeadlineOnElapsedClock(lanStartedAt, System.currentTimeMillis(), SystemClock.elapsedRealtime())
+                : 0L;
             lanSessionExpiring = false;
             authRequired = effectiveAuthRequired(settings);
             serverSocket = createLoopbackServerSocket(settings.getApiPort(), bindMode);
@@ -163,6 +166,25 @@ public class LauncherCtlApiServer {
         } finally {
             starting = false;
         }
+    }
+
+    /**
+     * Carries the persisted LAN window (a wall-clock start, so it survives a restart) onto the
+     * monotonic clock once at start, so a wall-clock change while listening neither stretches nor
+     * cuts the window. Returns 0 when there is no window.
+     */
+    static long lanDeadlineOnElapsedClock(long startedAtWallMs, long nowWallMs, long nowElapsedMs) {
+        if (startedAtWallMs <= 0L) return 0L;
+        // A start stamped in the future (the clock moved back) earns no more than one full window.
+        long remainingMs = Math.min(TaiSettings.LAN_SESSION_MAX_MS,
+            startedAtWallMs + TaiSettings.LAN_SESSION_MAX_MS - nowWallMs);
+        // Never 0, which means no window: an already-spent window ends at once.
+        return Math.max(1L, nowElapsedMs + remainingMs);
+    }
+
+    /** Whether a window from {@link #lanDeadlineOnElapsedClock} has ended at {@code nowElapsedMs}. */
+    static boolean isLanSessionOver(long deadlineElapsedMs, long nowElapsedMs) {
+        return deadlineElapsedMs > 0L && nowElapsedMs > deadlineElapsedMs;
     }
 
     /**
@@ -316,10 +338,13 @@ public class LauncherCtlApiServer {
     }
 
     private void startAcceptLoop(Context context) {
+        // The loop owns the socket it was started for: the field is guarded by this object's lock,
+        // which the loop does not hold, and a restart puts a new socket there that is not this loop's.
+        final ServerSocket socket = serverSocket;
         acceptLoop = controlExecutor.submit(() -> {
-            while (running && serverSocket != null && !serverSocket.isClosed()) {
+            while (running && !socket.isClosed()) {
                 try {
-                    Socket client = serverSocket.accept();
+                    Socket client = socket.accept();
                     try {
                         clientExecutor.submit(() -> handleClient(client, context));
                     } catch (RejectedExecutionException rejected) {
@@ -352,7 +377,7 @@ public class LauncherCtlApiServer {
             }
             route = request.method + " " + request.path;
 
-            if (lanSessionDeadlineMs > 0 && System.currentTimeMillis() > lanSessionDeadlineMs) {
+            if (isLanSessionOver(lanSessionDeadlineElapsedMs, SystemClock.elapsedRealtime())) {
                 beginLanSessionExpiry();
                 writeResponse(output, forbiddenResponse("lan_session_expired",
                     "The LAN exposure window has ended; re-enable LAN mode and collect the new token"));

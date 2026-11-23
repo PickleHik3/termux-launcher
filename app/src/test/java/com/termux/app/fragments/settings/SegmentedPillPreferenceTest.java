@@ -145,6 +145,38 @@ public class SegmentedPillPreferenceTest {
     @Test
     @GraphicsMode(GraphicsMode.Mode.NATIVE)
     @Config(qualifiers = PHONE)
+    public void aLabelThatFitsWithTrimmedPaddingKeepsTheRowWhole() {
+        // A word just too wide for the style's 12dp sides but not for 4dp: on the emulator, the
+        // Grid row's "Categories" at font scale 1.3.
+        MaterialButtonToggleGroup probe = bind(1.3f, DRAWER);
+        MaterialButton segment = button(probe, 2);
+        float density = segment.getResources().getDisplayMetrics().density;
+        int roomAtStyle = segment.getWidth() - Math.round(24 * density);
+        int roomTrimmed = segment.getWidth() - Math.round(8 * density);
+        String word = "Categories";
+        while (segment.getPaint().measureText(word) <= roomAtStyle) word = word + "s";
+        assertTrue("the probe word fits trimmed: " + word,
+            segment.getPaint().measureText(word) <= roomTrimmed);
+
+        MaterialButtonToggleGroup group = bind(1.3f, "Vertical", "Pages", word);
+
+        assertOneRow(group);
+        assertEquals(Math.round(4 * density), button(group, 2).getPaddingStart());
+        assertEquals(Math.round(4 * density), button(group, 0).getPaddingEnd());
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = PHONE)
+    public void aRowThatFitsKeepsTheStylesPadding() {
+        MaterialButtonToggleGroup group = bind(1f, TOUCH);
+        float density = button(group, 0).getResources().getDisplayMetrics().density;
+        assertEquals(Math.round(12 * density), button(group, 1).getPaddingStart());
+    }
+
+    @Test
+    @GraphicsMode(GraphicsMode.Mode.NATIVE)
+    @Config(qualifiers = PHONE)
     public void onlyTheSelectedSegmentCarriesTheCheck() {
         MaterialButtonToggleGroup group = bind(1f, DRAWER);
         assertNotNull("the selected segment shows its check", button(group, 0).getIcon());

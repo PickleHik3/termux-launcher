@@ -212,8 +212,9 @@ public class ResizeTest extends TerminalTestCase {
 	/** The bottom-anchored resize the host surfaces use: it may only anchor an actual bottom prompt. */
 	public void testBottomAnchoredResizeAnchorsOnlyAPromptNearTheBottomEdge() {
 		final int cols = 3;
-		// A prompt parked against the bottom edge keeps its distance from that edge as rows arrive.
-		withTerminalSized(cols, 3).enterString("\r\n\r\n$ ").assertCursorAt(2, 2);
+		// A prompt parked against the bottom edge, with history to pull down, keeps its distance
+		// from that edge as rows arrive.
+		withTerminalSized(cols, 3).enterString("000\r\n111\r\n222\r\n333\r\n$ ").assertCursorAt(2, 2);
 		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
 		assertInvariants();
 		assertCursorAt(4, 2);
@@ -224,6 +225,52 @@ public class ResizeTest extends TerminalTestCase {
 		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
 		assertInvariants();
 		assertCursorAt(0, 2);
+	}
+
+	/** Anchored growth with history enough for every new row: the transcript fills the top. */
+	public void testBottomAnchoredGrowthWithEnoughHistoryKeepsThePromptAtTheBottom() {
+		final int cols = 3;
+		withTerminalSized(cols, 3).enterString("111\r\n222\r\n333\r\n444\r\n$ ").assertCursorAt(2, 2)
+			.assertLinesAre("333", "444", "$  ");
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(4, 2).assertLinesAre("111", "222", "333", "444", "$  ");
+	}
+
+	/** Anchored growth with no history: the output stays at the top, the new rows go below. */
+	public void testBottomAnchoredGrowthWithoutHistoryKeepsTheOutputAtTheTop() {
+		final int cols = 3;
+		withTerminalSized(cols, 3).enterString("a\r\nb\r\n$ ").assertCursorAt(2, 2)
+			.assertLinesAre("a  ", "b  ", "$  ");
+		mTerminal.resize(cols, 5, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(2, 2).assertLinesAre("a  ", "b  ", "$  ", "   ", "   ");
+		assertEquals(0, mTerminal.getScreen().getActiveTranscriptRows());
+	}
+
+	/** Anchored growth with some history: it fills as far as it goes, the rest go below. */
+	public void testBottomAnchoredGrowthWithSomeHistoryPullsDownWhatThereIs() {
+		final int cols = 3;
+		withTerminalSized(cols, 3).enterString("111\r\n222\r\n333\r\n$ ").assertCursorAt(2, 2)
+			.assertLinesAre("222", "333", "$  ");
+		mTerminal.resize(cols, 6, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(3, 2).assertLinesAre("111", "222", "333", "$  ", "   ", "   ");
+		assertEquals(0, mTerminal.getScreen().getActiveTranscriptRows());
+	}
+
+	/** Anchored shrinking is the plain shrink: blank rows below the cursor go first, then the top. */
+	public void testBottomAnchoredShrinkIsUnchanged() {
+		final int cols = 3;
+		withTerminalSized(cols, 5).enterString("111\r\n222\r\n333\r\n444\r\n$ ").assertCursorAt(4, 2);
+		mTerminal.resize(cols, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(2, 2).assertLinesAre("333", "444", "$  ");
+
+		withTerminalSized(cols, 5).enterString("111\r\n$ ").assertCursorAt(1, 2);
+		mTerminal.resize(cols, 3, INITIAL_CELL_WIDTH_PIXELS, INITIAL_CELL_HEIGHT_PIXELS, true);
+		assertInvariants();
+		assertCursorAt(1, 2).assertLinesAre("111", "$  ", "   ");
 	}
 
 }

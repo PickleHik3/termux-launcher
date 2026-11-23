@@ -1240,6 +1240,70 @@ public class TerminalPaneController {
         }
     }
 
+    /**
+     * The grid's pause over a finger drag that resizes panes (a split divider, a floating pane's
+     * corner): held while the finger moves, resized each time it pauses ({@link DragResizePause})
+     * and once more at the lift if it moved since. A pause ends the hold through the same
+     * {@link GridHold#release} every hold ends with, so the pending size still lands after the
+     * final layout pass; the next move opens a new one.
+     */
+    private final class PausedDragHold {
+        @Nullable private GridHold mHold;
+        @Nullable private View mHost;
+        @Nullable private DragResizePause mPause;
+        private final Runnable mPauseCheck = this::onPauseCheck;
+
+        /** The drag began at ({@code x}, {@code y}) on {@code host}, which posts its timer. */
+        void start(@NonNull View host, float x, float y) {
+            end();
+            mHost = host;
+            if (mPause == null) {
+                mPause = new DragResizePause(
+                    ViewConfiguration.get(host.getContext()).getScaledTouchSlop());
+            }
+            mHold = new GridHold();
+            mPause.start(x, y, SystemClock.uptimeMillis());
+            armTimer();
+        }
+
+        /** The finger moved; call before the move changes the layout. */
+        void move(float x, float y) {
+            if (mPause == null || mHost == null) return;
+            int moved = mPause.onMove(x, y, SystemClock.uptimeMillis());
+            if (moved == DragResizePause.MOVE_STILL) return;
+            if (mHold == null) mHold = new GridHold();
+            armTimer();
+        }
+
+        /** The finger lifted or the drag was cancelled: the panes resize if they moved since. */
+        void end() {
+            if (mHost != null) mHost.removeCallbacks(mPauseCheck);
+            if (mPause != null) mPause.onRelease();
+            releaseHold();
+            mHost = null;
+        }
+
+        boolean isActive() {
+            return mHost != null;
+        }
+
+        private void armTimer() {
+            if (mHost == null) return;
+            mHost.removeCallbacks(mPauseCheck);
+            mHost.postDelayed(mPauseCheck, DragResizePause.PAUSE_MS);
+        }
+
+        private void onPauseCheck() {
+            if (mPause != null && mPause.onTimer(SystemClock.uptimeMillis())) releaseHold();
+        }
+
+        private void releaseHold() {
+            GridHold hold = mHold;
+            mHold = null;
+            if (hold != null) hold.release();
+        }
+    }
+
     /** Coalesce a host-surface animation into one final PTY resize. */
     public void beginHostSurfaceResize() {
         mHostSurfaceResizeDepth++;
@@ -4172,6 +4236,8 @@ public class TerminalPaneController {
         private final RectF mGeometryPaneRect = new RectF();
         /** Scratch for pane rects read while hit-testing a touch stream. */
         private final RectF mHitPaneRect = new RectF();
+        /** {@link #dividerGapsAt}'s scratch for each divider's frame. */
+        private final RectF mHitDividerRect = new RectF();
         /** The tab itself, laid over the whole host and pointed at whichever pane was tapped. */
         private final PaneControlsView mControls;
 
@@ -4192,8 +4258,8 @@ public class TerminalPaneController {
         private float mYWeightA;
         private float mYWeightB;
         private boolean mDraggingDivider;
-        /** The grid's pause for the divider drag under way, released at the finger's lift. */
-        @Nullable private GridHold mDividerHold;
+        /** The grid's pause for the divider drag under way: resized at each pause and the lift. */
+        private final PausedDragHold mDividerDrag = new PausedDragHold();
         /** A finger went down in a divider's gap: the gesture is the divider's, not a corner's. */
         private boolean mGapGesture;
         /** The splits whose gap held that finger, until its first movement says which it drags. */
@@ -4410,7 +4476,8 @@ public class TerminalPaneController {
 
                     if (mControls.isControlsShown() && !isMaximized()) dismissControls();
                     // The gap between two panes is the divider's: a finger down in it drags the
-                    // split at once, with no hold. It never reaches over a pane's content.
+                    // split at once, with no hold. Over a pane's content it reaches only as far as
+                    // its least touch strip, centred on the seam.
                     List<SplitDividerHit.Gap> gaps = dividerGapsAt(x, y);
                     if (!gaps.isEmpty()) {
                         mGapGesture = true;
@@ -4462,6 +4529,7 @@ public class TerminalPaneController {
                             x - mDownX, y - mDownY));
                         mDownX = x;
                         mDownY = y;
+                        if (mDraggingDivider) mDividerDrag.start(this, x, y);
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved = true;
@@ -4472,6 +4540,8 @@ public class TerminalPaneController {
                         mHandleX = x;
                         mHandleY = y;
                         mTouchMoved |= distance(x, y, mDownX, mDownY) > dp(3);
+                        // Held while the finger travels, resized when it pauses (ADR 0019).
+                        mDividerDrag.move(x, y);
                         applySplitDrag(mXSplit, x - mDownX, mXWeightA, mXWeightB);
                         applySplitDrag(mYSplit, y - mDownY, mYWeightA, mYWeightB);
                         invalidate();
@@ -4724,26 +4794,26 @@ public class TerminalPaneController {
 
         /**
          * The splits whose gap holds a point, in host coordinates. A gap is the divider view's own
-         * frame: the whole shared edge, as thick as the gutter between the two panes, so it stops
-         * where a pane's frame starts and {@link SplitDividerHit} drops any point on a pane.
+         * frame: the whole shared edge, as thick as the gutter between the two panes (0 when they
+         * touch); {@link SplitDividerHit} gives it its minimum touch strip.
          */
         @NonNull
         private List<SplitDividerHit.Gap> dividerGapsAt(float x, float y) {
             List<SplitDividerHit.Gap> gaps = new ArrayList<>(mSplitLayouts.size());
-            int[] host = location(mHostView);
+            RectF at = mHitDividerRect;
             for (Map.Entry<Split, LinearLayout> entry : mSplitLayouts.entrySet()) {
                 LinearLayout layout = entry.getValue();
                 if (layout.getChildCount() < 3) continue;
                 View divider = layout.getChildAt(1);
-                if (!isOnHost(divider) || divider.getWidth() <= 0 || divider.getHeight() <= 0) {
+                boolean dragsX = entry.getKey().orientation == LinearLayout.HORIZONTAL;
+                // A gap of 0 is a divider with no thickness, but it still runs the seam's length.
+                if (!isOnHost(divider)
+                    || (dragsX ? divider.getHeight() : divider.getWidth()) <= 0) {
                     continue;
                 }
-                int[] at = location(divider);
-                float left = at[0] - host[0];
-                float top = at[1] - host[1];
-                gaps.add(new SplitDividerHit.Gap(entry.getKey(),
-                    entry.getKey().orientation == LinearLayout.HORIZONTAL,
-                    left, top, left + divider.getWidth(), top + divider.getHeight()));
+                laidOutRect(divider, at);
+                gaps.add(new SplitDividerHit.Gap(entry.getKey(), dragsX,
+                    at.left, at.top, at.right, at.bottom));
             }
             if (gaps.isEmpty() || mActiveWindow == null) return gaps;
             List<SplitDividerHit.Pane> panes = new ArrayList<>();
@@ -4753,7 +4823,7 @@ public class TerminalPaneController {
                     panes.add(new SplitDividerHit.Pane(rect.left, rect.top, rect.right, rect.bottom));
                 }
             }
-            return SplitDividerHit.gapsAt(gaps, panes, x, y);
+            return SplitDividerHit.gapsAt(gaps, panes, x, y, dp(SplitDividerHit.MIN_TOUCH_DP));
         }
 
         /** The drag starts on the split whose gap the finger took, from the weights it has now. */
@@ -4771,13 +4841,10 @@ public class TerminalPaneController {
             mYWeightB = split.weightB;
             mDraggingDivider = true;
             releaseDividerHold();
-            mDividerHold = new GridHold();
         }
 
         private void releaseDividerHold() {
-            GridHold hold = mDividerHold;
-            mDividerHold = null;
-            if (hold != null) hold.release();
+            mDividerDrag.end();
         }
 
         private void applySplitDrag(@Nullable Split split, float delta,
@@ -4894,6 +4961,12 @@ public class TerminalPaneController {
         private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
             FrameLayout frame = mPaneFrames.get(leaf.session);
             if (frame == null || !isOnHost(frame)) return null;
+            return laidOutRect(frame, out);
+        }
+
+        /** {@code view}'s laid-out frame in this overlay's space; see {@link #paneRect}. */
+        @NonNull
+        private RectF laidOutRect(@NonNull View frame, @NonNull RectF out) {
             // Laid-out positions up to the host, not getLocationOnScreen: that maps the corner
             // through the frame's tilt and scale (the glass plank's press, still springing back
             // when the tab comes out) while the size stays unscaled, which hung the tab off a
@@ -5343,6 +5416,10 @@ public class TerminalPaneController {
                         candidate.right += dx;
                         candidate.bottom += dy;
                     }
+                    // Held while the corner travels, resized when it pauses (ADR 0019).
+                    if (mDragMode == DRAG_RESIZE) {
+                        mResizeDrag.move(event.getRawX(), event.getRawY());
+                    }
                     mLeaf.floatFrac = clampFloatFractions(candidate, hostWidth, hostHeight,
                         dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), dp(FLOAT_MIN_VISIBLE_DP));
                     applyFloatBounds(mLeaf, this);
@@ -5387,12 +5464,12 @@ public class TerminalPaneController {
             // MOVE branch still writes floatFrac: a deliberate gesture IS new intent.
             RectF seed = mLeaf.appliedFloatFrac != null ? mLeaf.appliedFloatFrac : mLeaf.floatFrac;
             mDownFrac = seed != null ? new RectF(seed) : defaultFloatFrac(0);
-            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(true);
+            if (mDragMode == DRAG_RESIZE) mResizeDrag.start(this, mDownRawX, mDownRawY);
             getParent().requestDisallowInterceptTouchEvent(true);
         }
 
         private void endDrag() {
-            if (mDragMode == DRAG_RESIZE) setSizeUpdatesPaused(false);
+            if (mDragMode == DRAG_RESIZE) mResizeDrag.end();
             mDragMode = DRAG_NONE;
             mDragMoved = false;
             mDownFrac = null;
@@ -5457,15 +5534,8 @@ public class TerminalPaneController {
             invalidate();
         }
 
-        /** The grid's pause for the resize drag under way. */
-        @Nullable private GridHold mResizeHold;
-
-        /** Coalesce the resize drag into one final PTY resize, like divider drags do. */
-        private void setSizeUpdatesPaused(boolean paused) {
-            GridHold previous = mResizeHold;
-            mResizeHold = paused ? new GridHold() : null;
-            if (previous != null) previous.release();
-        }
+        /** The grid's pause for the resize drag under way: resized at each pause and the lift. */
+        private final PausedDragHold mResizeDrag = new PausedDragHold();
 
         /**
          * Resize from the bottom-trailing corner, move from the top-leading one, and the pill in

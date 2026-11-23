@@ -21,6 +21,7 @@ public final class AppDrawerCategoryTileAdapter
     @Nullable private AppDrawerCategoryGridMetrics metrics;
     @Nullable private AppDrawerCategoryTileView.ExpansionListener expansionListener;
     @Nullable private AppDrawerCategoryChoiceListener categoryChoiceListener;
+    @Nullable private AppDrawerPickupDelegate pickupDelegate;
     @NonNull private AppDrawerAppCellView.ClickGate clickGate = AppDrawerAppCellView.ALLOW_CLICKS;
 
     public AppDrawerCategoryTileAdapter(@Nullable SuggestionBarView dock) {
@@ -39,6 +40,11 @@ public final class AppDrawerCategoryTileAdapter
     }
     public void setCategoryChoiceListener(@Nullable AppDrawerCategoryChoiceListener listener) {
         categoryChoiceListener = listener;
+    }
+    /** The drawer's drag controller, so a tile's launch icons can be picked up for Home. */
+    public void setPickupDelegate(@Nullable AppDrawerPickupDelegate delegate) {
+        pickupDelegate = delegate;
+        notifyDataSetChanged();
     }
     public void setClickGate(@NonNull AppDrawerAppCellView.ClickGate gate) { clickGate = gate; }
     public void submit(@NonNull List<AppDrawerCategoryBucket> buckets) {
@@ -73,7 +79,8 @@ public final class AppDrawerCategoryTileAdapter
             holder.tile.unbind();
             return;
         }
-        holder.tile.bind(dock, buckets.get(position), current, listener, clickGate, categoryChoiceListener);
+        holder.tile.bind(dock, buckets.get(position), current, listener, clickGate, categoryChoiceListener,
+            pickupDelegate);
     }
 
     @Override public void onViewRecycled(@NonNull Holder holder) {

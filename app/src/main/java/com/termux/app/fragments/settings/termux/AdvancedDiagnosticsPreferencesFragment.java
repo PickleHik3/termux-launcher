@@ -97,12 +97,25 @@ public final class AdvancedDiagnosticsPreferencesFragment extends MaterialPrefer
                 }
             } catch (Exception error) { report.append("Unable to collect logcat: ").append(error.getMessage()).append('\n'); }
             report.append("```\n");
-            ReportInfo info = new ReportInfo("export logs", TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME,
-                getString(R.string.settings_export_logs_title));
-            info.setReportString(report.toString());
+            ReportInfo info = exportLogsReport(getString(R.string.settings_export_logs_title), report.toString(),
+                android.os.Environment.getExternalStorageDirectory());
             if (isAdded() && getActivity() != null) getActivity().runOnUiThread(() -> ReportActivity.startReportActivity(context, info));
         }).start();
     }
+
+    /**
+     * The report Export logs opens. It names where Save to file writes, because the report screen
+     * turns that item off for a report with no save path.
+     */
+    static ReportInfo exportLogsReport(String title, String report, java.io.File saveDir) {
+        ReportInfo info = new ReportInfo(EXPORT_LOGS_ACTION, TermuxConstants.TERMUX_APP.TERMUX_SETTINGS_ACTIVITY_NAME, title);
+        info.setReportString(report);
+        info.setReportSaveFileLabelAndPath(title, new java.io.File(saveDir, com.termux.shared.file.FileUtils.sanitizeFileName(
+            TermuxConstants.TERMUX_APP_NAME + "-" + EXPORT_LOGS_ACTION + ".log", true, true)).getPath());
+        return info;
+    }
+
+    private static final String EXPORT_LOGS_ACTION = "export logs";
 
     private void clearLogs(Context context) {
         new Thread(() -> {

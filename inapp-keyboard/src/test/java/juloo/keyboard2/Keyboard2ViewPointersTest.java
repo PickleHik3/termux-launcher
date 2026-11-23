@@ -64,6 +64,16 @@ public class Keyboard2ViewPointersTest
   }
 
   @Test
+  public void aCancelledPressTypesNothing()
+  {
+    // The system or the launcher took the stream (quick switch, home, a page swipe): no tap.
+    touch(MotionEvent.ACTION_DOWN, 150f, 25f);
+    touch(MotionEvent.ACTION_CANCEL, 150f, 25f);
+
+    assertEquals(Arrays.asList("mods:1", "down:a:false", "mods:0"), handler.events);
+  }
+
+  @Test
   public void resetCancelsPendingLongPressAndRepeatCallbacks()
   {
     touch(MotionEvent.ACTION_DOWN, 150f, 25f);
