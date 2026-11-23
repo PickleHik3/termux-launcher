@@ -66,6 +66,20 @@ public final class StatusRowLayout extends LinearLayout {
     @Nullable private StatusRowKeepOut.Screen mScreen;
     /** The answer the last measure was made for. */
     @NonNull private StatusRowKeepOut.Answer mKeepOut = StatusRowKeepOut.Answer.NONE;
+    /**
+     * Whether the last measure parted the row at the camera ({@link StatusRowKeepOut#partAtGap}):
+     * the chips on one side, the readings on the other. Then {@link #mPartAnswer} holds where each
+     * stands, and the layout places {@link #mPartStrip} and {@link #mPartGroup} there.
+     */
+    private boolean mParted;
+    private final int[] mPartAnswer = new int[StatusRowKeepOut.PART_SIZE];
+    @Nullable private View mPartStrip;
+    @Nullable private View mPartGroup;
+    /** {@link #partAtGap}'s scratch: each reading's width with its margins, and which are dots. */
+    @NonNull private int[] mPartItemWidth = new int[16];
+    @NonNull private boolean[] mPartItemMark = new boolean[16];
+    private final View[] mPartChildren = new View[2];
+    private final int[] mPartWidths = new int[2];
     /** Whether the last measure laid the children out by {@link StatusRowKeepOut#flow}. */
     private boolean mFlowing;
     /** The least the chip strip may be given, from the last measure; 0 with no chips to keep. */
@@ -169,6 +183,10 @@ public final class StatusRowLayout extends LinearLayout {
      * then given exactly the stretch its side of the gap has for it.
      */
     private void measureRow(int widthMeasureSpec, int heightMeasureSpec) {
+        // Every reading is measured as it stands before the row decides how many fit.
+        mParted = false;
+        StatusReadingsCluster cluster = readingsCluster();
+        if (cluster != null) cluster.setKept(StatusReadingsCluster.ALL, this);
         boolean keepOut = keepOutApplies(widthMeasureSpec);
         if (!keepOut) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -192,6 +210,10 @@ public final class StatusRowLayout extends LinearLayout {
                 MeasureSpec.EXACTLY), heightMeasureSpec);
             mStripMinPx = stripMinPx();
             mFlowing = true;
+            if (partAtGap(start, end)) {
+                setMeasuredDimension(width, getMeasuredHeight());
+                return;
+            }
         }
         View[] children = visualChildren();
         int[] left = new int[children.length];
@@ -222,6 +244,10 @@ public final class StatusRowLayout extends LinearLayout {
         }
         if (!mHaveSpecs || !mFlowing) {
             applyDropped(null, null);
+            return;
+        }
+        if (mParted && mPartStrip != null && mPartGroup != null) {
+            layOutParted(mPartStrip, mPartGroup);
             return;
         }
         int width = r - l;
@@ -362,6 +388,120 @@ public final class StatusRowLayout extends LinearLayout {
             if (child.getVisibility() != GONE) children[at++] = child;
         }
         return children;
+    }
+
+    /** The readings' own row, when it is the one that can leave readings out for room. */
+    @Nullable
+    private StatusReadingsCluster readingsCluster() {
+        View view = findViewById(R.id.terminal_status_stats_cluster);
+        return view instanceof StatusReadingsCluster ? (StatusReadingsCluster) view : null;
+    }
+
+    /**
+     * Parts the row at the camera ({@link StatusRowKeepOut#partAtGap}) when it is the row the
+     * layout builds: the chip strip's slot and one group holding the readings, side by side. The
+     * readings that fit their side stand, the rest are left out from the far end; the strip and
+     * the group are measured to their stretches. Any other row keeps the flow.
+     */
+    private boolean partAtGap(int start, int end) {
+        StatusReadingsCluster cluster = readingsCluster();
+        View strip = stripSlot();
+        if (!mKeepOut.hasGap() || cluster == null || strip == null
+            || cluster.getVisibility() == GONE || cluster.getOrientation() != HORIZONTAL) {
+            return false;
+        }
+        View group = cluster;
+        while (group.getParent() != this) {
+            if (!(group.getParent() instanceof View)) return false;
+            group = (View) group.getParent();
+        }
+        View[] children = visualChildren();
+        boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+        if (children.length != 2 || group == strip || weightOf(group) > 0f
+            || children[rtl ? 1 : 0] != strip || children[rtl ? 0 : 1] != group) {
+            return false;
+        }
+        int count = 0;
+        for (int i = 0; i < cluster.getChildCount(); i++) {
+            if (cluster.getChildAt(i).getVisibility() != GONE) count++;
+        }
+        if (mPartItemWidth.length < count) {
+            mPartItemWidth = new int[count];
+            mPartItemMark = new boolean[count];
+        }
+        int item = 0;
+        for (int i = 0; i < cluster.getChildCount(); i++) {
+            View child = cluster.getChildAt(i);
+            if (child.getVisibility() == GONE) continue;
+            mPartItemWidth[item] = leftMargin(child) + child.getMeasuredWidth() + rightMargin(child);
+            mPartItemMark[item] = child instanceof MaterialDotSeparatorView;
+            item++;
+        }
+        // Everything the group takes besides the items: its margins and padding, whatever else
+        // it holds, the cluster's margins and padding. The cluster is measured whole here.
+        int chrome = leftMargin(group) + rightMargin(group) + group.getMeasuredWidth()
+            - cluster.getMeasuredWidth() + cluster.getPaddingLeft() + cluster.getPaddingRight();
+        // The readings' far end already keeps its own air from the row's edge (the group's end
+        // margin and padding, which clear the lens and the bar's corner); the screen's corner
+        // takes only what reaches past that, not its whole inset on top of it.
+        int farAir = rtl ? leftMargin(group) + group.getPaddingLeft()
+            : rightMargin(group) + group.getPaddingRight();
+        int readingsStart = rtl ? start - Math.min(mKeepOut.leftInsetPx, farAir) : start;
+        int readingsEnd = rtl ? end : end + Math.min(mKeepOut.rightInsetPx, farAir);
+        int[] out = mPartAnswer;
+        StatusRowKeepOut.partAtGap(readingsStart, readingsEnd, mKeepOut.gapStartPx,
+            mKeepOut.gapEndPx, rtl, mStripMinPx, mPartItemWidth, mPartItemMark, count, chrome,
+            out);
+        // The chips carry no such air: they never reach past the corner's inset.
+        out[StatusRowKeepOut.PART_CHIPS_LEFT] = Math.max(start,
+            out[StatusRowKeepOut.PART_CHIPS_LEFT]);
+        out[StatusRowKeepOut.PART_CHIPS_RIGHT] = Math.max(out[StatusRowKeepOut.PART_CHIPS_LEFT],
+            Math.min(end, out[StatusRowKeepOut.PART_CHIPS_RIGHT]));
+        int kept = out[StatusRowKeepOut.PART_READINGS_KEPT];
+        cluster.setKept(kept, this);
+        if (kept > 0) {
+            int groupWidth = out[StatusRowKeepOut.PART_READINGS_RIGHT]
+                - out[StatusRowKeepOut.PART_READINGS_LEFT] - leftMargin(group) - rightMargin(group);
+            group.measure(MeasureSpec.makeMeasureSpec(Math.max(0, groupWidth),
+                MeasureSpec.EXACTLY), MeasureSpec.makeMeasureSpec(group.getMeasuredHeight(),
+                MeasureSpec.EXACTLY));
+        }
+        int stripWidth = out[StatusRowKeepOut.PART_CHIPS_RIGHT]
+            - out[StatusRowKeepOut.PART_CHIPS_LEFT] - leftMargin(strip) - rightMargin(strip);
+        strip.measure(MeasureSpec.makeMeasureSpec(Math.max(0, stripWidth), MeasureSpec.EXACTLY),
+            MeasureSpec.makeMeasureSpec(strip.getMeasuredHeight(), MeasureSpec.EXACTLY));
+        mPartStrip = strip;
+        mPartGroup = group;
+        mParted = true;
+        return true;
+    }
+
+    /** Places the parted strip and readings where {@link #partAtGap} answered. */
+    private void layOutParted(@NonNull View strip, @NonNull View group) {
+        int[] out = mPartAnswer;
+        int chipsLeft = out[StatusRowKeepOut.PART_CHIPS_LEFT] + leftMargin(strip);
+        strip.layout(chipsLeft, strip.getTop(), chipsLeft + strip.getMeasuredWidth(),
+            strip.getTop() + strip.getMeasuredHeight());
+        boolean none = out[StatusRowKeepOut.PART_READINGS_KEPT] <= 0;
+        int groupLeft = out[StatusRowKeepOut.PART_READINGS_LEFT] + (none ? 0 : leftMargin(group));
+        group.layout(groupLeft, group.getTop(), groupLeft + (none ? 0 : group.getMeasuredWidth()),
+            group.getTop() + group.getMeasuredHeight());
+        // A group with not one reading standing is hidden like any child the flow drops.
+        mPartChildren[0] = strip;
+        mPartChildren[1] = group;
+        mPartWidths[0] = strip.getMeasuredWidth();
+        mPartWidths[1] = none ? 0 : group.getMeasuredWidth();
+        applyDropped(mPartChildren, mPartWidths);
+    }
+
+    private static int leftMargin(@NonNull View view) {
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        return params instanceof MarginLayoutParams ? ((MarginLayoutParams) params).leftMargin : 0;
+    }
+
+    private static int rightMargin(@NonNull View view) {
+        ViewGroup.LayoutParams params = view.getLayoutParams();
+        return params instanceof MarginLayoutParams ? ((MarginLayoutParams) params).rightMargin : 0;
     }
 
     private void flowAroundKeepOut(@NonNull View[] children, int start, int end,
