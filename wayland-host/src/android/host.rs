@@ -34,7 +34,9 @@ use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_shm;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, ListeningSocket, Resource};
-use smithay::utils::{Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::wayland::xwayland_shell::XWaylandShellState;
+use smithay::xwayland::{X11Surface, XWaylandClientData};
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::compositor::{
     get_parent, with_states, with_surface_tree_downward, BufferAssignment, CompositorClientState, CompositorHandler,
@@ -112,9 +114,79 @@ struct CopyStats {
     last_copy_us: u64,
 }
 
+/// What a toplevel is to the protocol: an xdg_toplevel, or an X11 window from Xwayland.
+pub enum Shell {
+    Xdg(ToplevelSurface),
+    X11(X11Surface),
+}
+
+impl Shell {
+    /// An X11 window has a wl_surface only once Xwayland has associated one.
+    pub fn wl_surface(&self) -> Option<WlSurface> {
+        match self {
+            Shell::Xdg(t) => Some(t.wl_surface().clone()),
+            Shell::X11(w) => w.wl_surface(),
+        }
+    }
+
+    fn is(&self, surface: &WlSurface) -> bool {
+        match self {
+            Shell::Xdg(t) => t.wl_surface() == surface,
+            Shell::X11(w) => w.wl_surface().as_ref() == Some(surface),
+        }
+    }
+
+    fn names(&self) -> (String, String) {
+        match self {
+            Shell::Xdg(t) => toplevel_names(t),
+            Shell::X11(w) => (w.title(), w.class()),
+        }
+    }
+
+    fn is_initial_configure_sent(&self) -> bool {
+        match self {
+            Shell::Xdg(t) => t.is_initial_configure_sent(),
+            Shell::X11(_) => true,
+        }
+    }
+
+    fn send_configure(&self) {
+        match self {
+            Shell::Xdg(t) => {
+                t.send_configure();
+            }
+            Shell::X11(w) => {
+                let _ = w.configure(None);
+            }
+        }
+    }
+
+    fn configure(&self, width: i32, height: i32) {
+        match self {
+            Shell::Xdg(t) => {
+                t.with_pending_state(|s| {
+                    s.size = Some((width, height).into());
+                    s.states.set(xdg_toplevel::State::Activated);
+                    s.states.set(xdg_toplevel::State::TiledLeft);
+                    s.states.set(xdg_toplevel::State::TiledRight);
+                    s.states.set(xdg_toplevel::State::TiledTop);
+                    s.states.set(xdg_toplevel::State::TiledBottom);
+                });
+                if t.is_initial_configure_sent() {
+                    t.send_pending_configure();
+                }
+            }
+            Shell::X11(w) => {
+                let loc = w.geometry().loc;
+                let _ = w.configure(Rectangle::new(loc, (width, height).into()));
+            }
+        }
+    }
+}
+
 pub struct Toplevel {
     pub id: i64,
-    pub surface: ToplevelSurface,
+    pub shell: Shell,
     announced: bool,
     window: Option<NativeWindow>,
     view_size: Option<(i32, i32)>,
@@ -133,16 +205,23 @@ pub struct State {
     pub compositor_state: CompositorState,
     pub xdg_shell_state: XdgShellState,
     pub shm_state: ShmState,
+    /// Held only to keep its globals alive.
+    #[allow(dead_code)]
     pub output_manager_state: OutputManagerState,
     pub seat_state: SeatState<State>,
     pub data_device_state: DataDeviceState,
+    /// Held only to keep its global alive.
+    #[allow(dead_code)]
     pub decoration_state: XdgDecorationState,
+    pub xwayland_shell_state: XWaylandShellState,
     pub seat: Seat<State>,
     pub output: Output,
     pub toplevels: Vec<Toplevel>,
     next_id: i64,
     popups: Vec<PopupSurface>,
     pending_frames: Vec<WlCallback>,
+    /// Reused by every commit so collecting frame callbacks does not allocate.
+    scratch_frames: Vec<WlCallback>,
     frame_timer_armed: bool,
     last_frame_tick: Instant,
     start: Instant,
@@ -214,6 +293,8 @@ fn setup(
     let mut seat_state = SeatState::new();
     let data_device_state = DataDeviceState::new::<State>(&dh);
     let decoration_state = XdgDecorationState::new::<State>(&dh);
+    // Only Xwayland's client sees this global.
+    let xwayland_shell_state = XWaylandShellState::new::<State>(&dh);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -280,12 +361,14 @@ fn setup(
         seat_state,
         data_device_state,
         decoration_state,
+        xwayland_shell_state,
         seat,
         output,
         toplevels: Vec::new(),
         next_id: 1,
         popups: Vec::new(),
         pending_frames: Vec::new(),
+        scratch_frames: Vec::new(),
         frame_timer_armed: false,
         last_frame_tick: Instant::now(),
         start: Instant::now(),
@@ -318,12 +401,16 @@ impl State {
         self.start.elapsed().as_millis() as u32
     }
 
-    fn toplevel_index(&self, id: i64) -> Option<usize> {
+    pub fn toplevel_index(&self, id: i64) -> Option<usize> {
         self.toplevels.iter().position(|t| t.id == id)
     }
 
-    fn toplevel_index_for(&self, surface: &WlSurface) -> Option<usize> {
-        self.toplevels.iter().position(|t| t.surface.wl_surface() == surface)
+    pub fn toplevel_index_for(&self, surface: &WlSurface) -> Option<usize> {
+        self.toplevels.iter().position(|t| t.shell.is(surface))
+    }
+
+    pub fn view_size(&self, i: usize) -> Option<(i32, i32)> {
+        self.toplevels[i].view_size
     }
 
     fn handle_command(&mut self, cmd: Command) {
@@ -345,9 +432,9 @@ impl State {
         if let Some(buffer) = self.toplevels[i].waiting_buffer.take() {
             post_buffer(&mut self.toplevels[i], &buffer);
             buffer.release();
-        } else if self.toplevels[i].surface.is_initial_configure_sent() {
+        } else if self.toplevels[i].shell.is_initial_configure_sent() {
             // Nothing to show yet in the new window: a configure makes most clients draw again.
-            self.toplevels[i].surface.send_configure();
+            self.toplevels[i].shell.send_configure();
         }
         let held = std::mem::take(&mut self.toplevels[i].held_frames);
         self.pending_frames.extend(held);
@@ -361,17 +448,7 @@ impl State {
             return;
         }
         t.view_size = Some((width, height));
-        t.surface.with_pending_state(|s| {
-            s.size = Some((width, height).into());
-            s.states.set(xdg_toplevel::State::Activated);
-            s.states.set(xdg_toplevel::State::TiledLeft);
-            s.states.set(xdg_toplevel::State::TiledRight);
-            s.states.set(xdg_toplevel::State::TiledTop);
-            s.states.set(xdg_toplevel::State::TiledBottom);
-        });
-        if t.surface.is_initial_configure_sent() {
-            t.surface.send_pending_configure();
-        }
+        t.shell.configure(width, height);
     }
 
     /// View pixels to surface coordinates: the buffer is scaled to fill the view.
@@ -388,7 +465,7 @@ impl State {
     fn touch(&mut self, id: i64, action: i32, slot: i32, x: f32, y: f32) {
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(touch) = self.seat.get_touch() else { return };
-        let surface = self.toplevels[i].surface.wl_surface().clone();
+        let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
         let (sx, sy) = Self::surface_point(&self.toplevels[i], x, y);
         let time = self.now_ms();
         let slot = Some(slot.max(0) as u32).into();
@@ -412,7 +489,7 @@ impl State {
     fn pointer(&mut self, id: i64, action: i32, button: i32, x: f32, y: f32) {
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(pointer) = self.seat.get_pointer() else { return };
-        let surface = self.toplevels[i].surface.wl_surface().clone();
+        let Some(surface) = self.toplevels[i].shell.wl_surface() else { return };
         let time = self.now_ms();
         let serial = SERIAL_COUNTER.next_serial();
         match action {
@@ -475,22 +552,21 @@ impl State {
     }
 
     pub fn announce(&mut self, i: usize) {
-        let (title, app_id) = toplevel_names(&self.toplevels[i].surface);
+        let (title, app_id) = self.toplevels[i].shell.names();
         let id = self.toplevels[i].id;
         self.toplevels[i].announced = true;
-        self.output.enter(self.toplevels[i].surface.wl_surface());
+        if let Some(surface) = self.toplevels[i].shell.wl_surface() {
+            self.output.enter(&surface);
+        }
         self.events.toplevel_created(id, &title, &app_id);
     }
 
-    pub fn add_toplevel(&mut self, surface: ToplevelSurface) -> i64 {
+    pub fn add_toplevel(&mut self, shell: Shell) -> i64 {
         let id = self.next_id;
         self.next_id += 1;
-        surface.with_pending_state(|s| {
-            s.decoration_mode = Some(DecorationMode::ServerSide);
-        });
         self.toplevels.push(Toplevel {
             id,
-            surface,
+            shell,
             announced: false,
             window: None,
             view_size: None,
@@ -503,27 +579,25 @@ impl State {
         id
     }
 
-    pub fn remove_toplevel(&mut self, surface: &WlSurface) {
-        if let Some(i) = self.toplevel_index_for(surface) {
-            let t = self.toplevels.remove(i);
-            if let Some(b) = t.waiting_buffer {
-                if b.is_alive() {
-                    b.release();
-                }
+    pub fn remove_toplevel_at(&mut self, i: usize) {
+        let t = self.toplevels.remove(i);
+        if let Some(b) = t.waiting_buffer {
+            if b.is_alive() {
+                b.release();
             }
-            if t.announced {
-                self.events.toplevel_destroyed(t.id);
-            }
+        }
+        self.pending_frames.extend(t.held_frames.into_iter().filter(|cb| cb.is_alive()));
+        self.schedule_frames();
+        if t.announced {
+            self.events.toplevel_destroyed(t.id);
         }
     }
 
-    pub fn toplevel_renamed(&mut self, surface: &WlSurface) {
-        if let Some(i) = self.toplevel_index_for(surface) {
-            if self.toplevels[i].announced {
-                let (title, app_id) = toplevel_names(&self.toplevels[i].surface);
-                let id = self.toplevels[i].id;
-                self.events.toplevel_title(id, &title, &app_id);
-            }
+    pub fn rename_at(&mut self, i: usize) {
+        if self.toplevels[i].announced {
+            let (title, app_id) = self.toplevels[i].shell.names();
+            let id = self.toplevels[i].id;
+            self.events.toplevel_title(id, &title, &app_id);
         }
     }
 }
@@ -613,15 +687,13 @@ impl CompositorHandler for State {
         if let Some(state) = client.get_data::<ClientState>() {
             return &state.compositor_state;
         }
-        if let Some(state) = client.get_data::<super::xwayland::XwaylandClientData>() {
+        if let Some(state) = client.get_data::<XWaylandClientData>() {
             return &state.compositor_state;
         }
         panic!("client without compositor state")
     }
 
     fn commit(&mut self, surface: &WlSurface) {
-        super::xwayland::commit_hook(self, surface);
-
         let mut root = surface.clone();
         while let Some(parent) = get_parent(&root) {
             root = parent;
@@ -638,14 +710,14 @@ impl CompositorHandler for State {
         let index = self.toplevel_index_for(&root);
         if let Some(i) = index {
             let t = &mut self.toplevels[i];
-            if !t.surface.is_initial_configure_sent() {
-                t.surface.send_configure();
+            if !t.shell.is_initial_configure_sent() {
+                t.shell.send_configure();
             }
         }
 
         // Walk the whole tree: synced subsurfaces apply their state on the parent's commit.
         let mut root_buffer: Option<BufferAssignment> = None;
-        let mut frames: Vec<WlCallback> = Vec::new();
+        let mut frames = std::mem::take(&mut self.scratch_frames);
         with_surface_tree_downward(
             &root,
             (),
@@ -668,6 +740,7 @@ impl CompositorHandler for State {
 
         let Some(i) = index else {
             self.pending_frames.append(&mut frames);
+            self.scratch_frames = frames;
             self.schedule_frames();
             return;
         };
@@ -694,7 +767,7 @@ impl CompositorHandler for State {
                     self.events.toplevel_buffer_size(id, size.0, size.1);
                 }
             }
-        } else if !self.toplevels[i].announced && self.toplevels[i].surface.is_initial_configure_sent() {
+        } else if !self.toplevels[i].announced && self.toplevels[i].shell.is_initial_configure_sent() {
             // The initial (bufferless) commit: title and app id are set by now.
             self.announce(i);
         }
@@ -705,6 +778,7 @@ impl CompositorHandler for State {
         } else {
             self.toplevels[i].held_frames.append(&mut frames);
         }
+        self.scratch_frames = frames;
     }
 }
 
@@ -730,7 +804,8 @@ impl XdgShellHandler for State {
     }
 
     fn new_toplevel(&mut self, surface: ToplevelSurface) {
-        self.add_toplevel(surface);
+        surface.with_pending_state(|s| s.decoration_mode = Some(DecorationMode::ServerSide));
+        self.add_toplevel(Shell::Xdg(surface));
     }
 
     fn new_popup(&mut self, surface: PopupSurface, _positioner: PositionerState) {
@@ -748,15 +823,21 @@ impl XdgShellHandler for State {
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {
-        self.remove_toplevel(surface.wl_surface());
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.remove_toplevel_at(i);
+        }
     }
 
     fn title_changed(&mut self, surface: ToplevelSurface) {
-        self.toplevel_renamed(surface.wl_surface());
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.rename_at(i);
+        }
     }
 
     fn app_id_changed(&mut self, surface: ToplevelSurface) {
-        self.toplevel_renamed(surface.wl_surface());
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.rename_at(i);
+        }
     }
 }
 

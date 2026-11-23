@@ -1,0 +1,55 @@
+--- a/src/xwayland/x11_sockets.rs
++++ b/src/xwayland/x11_sockets.rs
+@@ -44,6 +44,12 @@
+     ))
+ }
+ 
++/// The directory that holds `.X11-unix/` and the `.X<n>-lock` files: `$SMITHAY_X11_TMPDIR`,
++/// else `/tmp`. Android has no `/tmp`; Termux's X clients look under `$PREFIX/tmp`.
++fn x11_tmp_dir() -> String {
++    std::env::var("SMITHAY_X11_TMPDIR").unwrap_or_else(|_| "/tmp".to_string())
++}
++
+ #[derive(Debug)]
+ pub(crate) struct X11Lock {
+     display: u32,
+@@ -53,7 +59,7 @@
+     /// Try to grab a lockfile for given X display number
+     fn grab(number: u32) -> Result<X11Lock, ()> {
+         debug!(display = number, "Attempting to aquire an X11 display lock");
+-        let filename = format!("/tmp/.X{}-lock", number);
++        let filename = format!("{}/.X{}-lock", x11_tmp_dir(), number);
+         let lockfile = ::std::fs::OpenOptions::new()
+             .write(true)
+             .create_new(true)
+@@ -124,10 +130,10 @@
+     fn drop(&mut self) {
+         info!("Cleaning up X11 lock.");
+         // Cleanup all the X11 files
+-        if let Err(e) = ::std::fs::remove_file(format!("/tmp/.X11-unix/X{}", self.display)) {
++        if let Err(e) = ::std::fs::remove_file(format!("{}/.X11-unix/X{}", x11_tmp_dir(), self.display)) {
+             warn!(error = ?e, "Failed to remove X11 socket");
+         }
+-        if let Err(e) = ::std::fs::remove_file(format!("/tmp/.X{}-lock", self.display)) {
++        if let Err(e) = ::std::fs::remove_file(format!("{}/.X{}-lock", x11_tmp_dir(), self.display)) {
+             warn!(error = ?e, "Failed to remove X11 lockfile");
+         }
+     }
+@@ -141,7 +147,7 @@
+     display: u32,
+     open_abstract_socket: bool,
+ ) -> rustix::io::Result<Vec<UnixStream>> {
+-    let path = format!("/tmp/.X11-unix/X{}", display);
++    let path = format!("{}/.X11-unix/X{}", x11_tmp_dir(), display);
+     let _ = ::std::fs::remove_file(&path);
+     // We know this path is not too long, these unwrap cannot fail
+     let fs_addr = SocketAddrUnix::new(path.as_bytes()).unwrap();
+@@ -161,7 +167,7 @@
+     display: u32,
+     _open_abstract_socket: bool,
+ ) -> rustix::io::Result<Vec<UnixStream>> {
+-    let path = format!("/tmp/.X11-unix/X{}", display);
++    let path = format!("{}/.X11-unix/X{}", x11_tmp_dir(), display);
+     let _ = ::std::fs::remove_file(&path);
+     // We know this path is not too long, these unwrap cannot fail
+     let fs_addr = SocketAddrUnix::new(path.as_bytes()).unwrap();

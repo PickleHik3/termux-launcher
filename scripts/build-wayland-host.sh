@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Builds the Wayland host spike (wayland-host/) for arm64-v8a and x86_64:
 #   - libxkbcommon as a static library (smithay links it unconditionally),
+#   - smithay 0.7.0 with wayland-host/patches/*.patch applied (its Xwayland support hardcodes
+#     /tmp, which Android does not have), in wayland-host/target/patched/,
 #   - libtlwayland.so, copied into app/src/main/jniLibs/<abi>/ (gitignored),
 #   - the test client, left in wayland-host/target/<triple>/release/tlwayland-testclient.
 # Needs: rustup with the two Android targets, cargo-ndk, the NDK, ninja, bison, and meson
@@ -14,6 +16,9 @@ export PATH="$HOME/.cargo/bin:$PATH"
 export ANDROID_NDK_HOME="${ANDROID_NDK_HOME:-$HOME/Android/Sdk/ndk/29.0.14206865}"
 API=26
 ABIS=(arm64-v8a x86_64)
+
+SMITHAY_VERSION=0.7.0
+SMITHAY_SHA256=740cea6927892bc182d5bf70c8f79806c8bc9f68f2fb96e55a30be171b63af98
 
 XKB_VERSION=1.9.2
 XKB_SHA256=8d68a8b45796f34f7cace357b9f89b8c92b158557274fef5889b03648b55fe59
@@ -90,6 +95,25 @@ EOF
     ninja -C "$build" >/dev/null
     ninja -C "$build" install >/dev/null
 }
+
+prepare_smithay() {
+    local dir="$TARGET_DIR/patched/smithay-$SMITHAY_VERSION"
+    local crate="$TARGET_DIR/patched/smithay-$SMITHAY_VERSION.crate"
+    if [[ -f "$dir/.patched" ]]; then
+        return
+    fi
+    rm -rf "$dir"
+    mkdir -p "$TARGET_DIR/patched"
+    curl -sSL -o "$crate" "https://static.crates.io/crates/smithay/smithay-$SMITHAY_VERSION.crate"
+    echo "$SMITHAY_SHA256  $crate" | sha256sum -c -
+    tar -xzf "$crate" -C "$TARGET_DIR/patched"
+    patch -d "$dir" -p1 < "$CRATE/patches/smithay-$SMITHAY_VERSION-x11-tmpdir.patch"
+    touch "$dir/.patched"
+}
+
+# Cargo resolves the [patch] path before anything builds, so this comes first (also before a
+# plain `cargo test` on the host).
+prepare_smithay
 
 for abi in "${ABIS[@]}"; do
     build_xkbcommon "$abi"
