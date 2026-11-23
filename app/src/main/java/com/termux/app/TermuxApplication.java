@@ -87,6 +87,12 @@ public class TermuxApplication extends Application {
             Logger.logInfo(LOG_TAG, "Starting TAI runtime process");
             return;
         }
+        // The Linux windows host's process runs only LinuxWindowsService.
+        String processName = currentProcessName(context);
+        if (processName != null && processName.endsWith(":linuxwindows")) {
+            Logger.logInfo(LOG_TAG, "Starting Linux windows process");
+            return;
+        }
         Logger.logDebug("Starting Application");
         // Every transient message in the app — including the ones raised from termux-shared, which
         // cannot see the app module — lands in the in-app notice chip rather than a stock toast.

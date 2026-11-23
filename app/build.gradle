@@ -30,6 +30,9 @@ android {
     def releaseKeyAlias = System.getenv("TERMUX_RELEASE_KEY_ALIAS")
     def releaseKeyPassword = System.getenv("TERMUX_RELEASE_KEY_PASSWORD")
     def hasReleaseSigningConfig = releaseStoreFilePath && releaseStorePassword && releaseKeyAlias && releaseKeyPassword
+    // -Pwayland=true builds the Wayland compositor library (wayland-host/, Rust) into the APK and
+    // sets BuildConfig.WAYLAND_DISPLAY; without it no Rust runs and the APK has no library.
+    def waylandEnabled = (project.findProperty('wayland') ?: 'false').toString() == 'true'
     // The embedded X server. Off with -Px11Server=false: the loader and libXlorie.so stay out of
     // the APK and BuildConfig.X11_SERVER tells the app there is no display to offer.
     // `project.` matters: inside the android block a bare hasProperty asks the extension.
@@ -62,6 +65,7 @@ android {
 
         buildConfigField "String", "TERMUX_PACKAGE_VARIANT", "\"" + project.ext.packageVariant + "\"" // Used by TermuxApplication class
         buildConfigField "boolean", "X11_SERVER", String.valueOf(x11ServerEnabled)
+        buildConfigField "boolean", "WAYLAND_DISPLAY", String.valueOf(waylandEnabled)
 
         manifestPlaceholders = [
             TERMUX_PACKAGE_NAME    : "com.termux",
@@ -204,6 +208,27 @@ android {
     sourceSets {
         main.res.srcDir "$buildDir/generated/license-resources"
     }
+}
+
+// scripts/build-wayland-host.sh builds libtlwayland.so for the three shipped ABIs into
+// build/wayland/jniLibs; the task reruns only when the crate, its patch or the script change.
+if ((project.findProperty('wayland') ?: 'false').toString() == 'true') {
+    def waylandScript = rootProject.file('scripts/build-wayland-host.sh')
+    def waylandCrate = rootProject.file('wayland-host')
+    def waylandJniLibs = layout.buildDirectory.dir('wayland/jniLibs').get().asFile
+    def waylandNdkVersion = System.getenv("JITPACK_NDK_VERSION") ?: project.properties.ndkVersion
+
+    def buildWaylandHost = tasks.register('buildWaylandHost', Exec) {
+        inputs.files(waylandScript)
+        inputs.files(fileTree(waylandCrate) { exclude 'target/**' })
+        outputs.dir(waylandJniLibs)
+        doFirst {
+            environment 'ANDROID_NDK_HOME', new File(android.sdkDirectory, "ndk/${waylandNdkVersion}").absolutePath
+        }
+        commandLine 'bash', waylandScript.absolutePath, waylandJniLibs.absolutePath
+    }
+    android.sourceSets.main.jniLibs.srcDirs += waylandJniLibs
+    tasks.named('preBuild') { dependsOn buildWaylandHost }
 }
 
 dependencies {

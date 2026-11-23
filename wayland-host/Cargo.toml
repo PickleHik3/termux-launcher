@@ -1,0 +1,37 @@
+# Spike: a Wayland compositor in the launcher's :linuxwindows process, one Android view per
+# toplevel.
+# Built by scripts/build-wayland-host.sh; nothing here is committed as a binary.
+[workspace]
+members = [".", "testclient"]
+resolver = "2"
+
+[package]
+name = "tlwayland"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+# The compositor only builds for Android; on the host only the pure pixel code compiles, so
+# `cargo test` runs without smithay or libxkbcommon.
+[target.'cfg(target_os = "android")'.dependencies]
+smithay = { version = "=0.7.0", default-features = false, features = ["wayland_frontend", "xwayland"] }
+jni = "0.21.1"
+libc = "0.2"
+# Only for the driver probe; loads the system libvulkan.so at run time.
+ash = "0.38"
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "unwind"
+
+# smithay's Xwayland support puts X11 sockets and locks in /tmp, which Android does not have,
+# and does not tie Xwayland's life to the compositor's; scripts/build-wayland-host.sh unpacks
+# 0.7.0 here and applies patches/.
+[patch.crates-io]
+smithay = { path = "target/patched/smithay-0.7.0" }
