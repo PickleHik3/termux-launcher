@@ -441,9 +441,22 @@ public final class StatusRowLayout extends LinearLayout {
         // it holds, the cluster's margins and padding. The cluster is measured whole here.
         int chrome = leftMargin(group) + rightMargin(group) + group.getMeasuredWidth()
             - cluster.getMeasuredWidth() + cluster.getPaddingLeft() + cluster.getPaddingRight();
+        // The readings' far end already keeps its own air from the row's edge (the group's end
+        // margin and padding, which clear the lens and the bar's corner); the screen's corner
+        // takes only what reaches past that, not its whole inset on top of it.
+        int farAir = rtl ? leftMargin(group) + group.getPaddingLeft()
+            : rightMargin(group) + group.getPaddingRight();
+        int readingsStart = rtl ? start - Math.min(mKeepOut.leftInsetPx, farAir) : start;
+        int readingsEnd = rtl ? end : end + Math.min(mKeepOut.rightInsetPx, farAir);
         int[] out = mPartAnswer;
-        StatusRowKeepOut.partAtGap(start, end, mKeepOut.gapStartPx, mKeepOut.gapEndPx, rtl,
-            mStripMinPx, mPartItemWidth, mPartItemMark, count, chrome, out);
+        StatusRowKeepOut.partAtGap(readingsStart, readingsEnd, mKeepOut.gapStartPx,
+            mKeepOut.gapEndPx, rtl, mStripMinPx, mPartItemWidth, mPartItemMark, count, chrome,
+            out);
+        // The chips carry no such air: they never reach past the corner's inset.
+        out[StatusRowKeepOut.PART_CHIPS_LEFT] = Math.max(start,
+            out[StatusRowKeepOut.PART_CHIPS_LEFT]);
+        out[StatusRowKeepOut.PART_CHIPS_RIGHT] = Math.max(out[StatusRowKeepOut.PART_CHIPS_LEFT],
+            Math.min(end, out[StatusRowKeepOut.PART_CHIPS_RIGHT]));
         int kept = out[StatusRowKeepOut.PART_READINGS_KEPT];
         cluster.setKept(kept, this);
         if (kept > 0) {
