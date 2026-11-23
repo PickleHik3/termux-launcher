@@ -42,6 +42,25 @@ public final class GlassService {
     public interface LiveCore {
         /** Records what moved; whether any Live picture is still held. */
         boolean commitLive();
+
+        /**
+         * {@code cells} left {@code from} for another parent by detach and attach: drops, before
+         * the next frame, any recording that would now draw a loop. How many pictures dropped.
+         */
+        default int reparented(@NonNull java.util.List<android.view.View> cells,
+                               @NonNull android.view.View from) {
+            return 0;
+        }
+    }
+
+    /**
+     * Views moved between parents without a layout ({@link LiveCore#reparented}); the Live core
+     * drops any recording the move turned into a loop. How many pictures dropped.
+     */
+    public int reparented(@NonNull java.util.List<android.view.View> cells,
+                          @NonNull android.view.View from) {
+        LiveCore core = mCore;
+        return core == null ? 0 : core.reparented(cells, from);
     }
 
     /**
