@@ -164,6 +164,21 @@ The promotion, step by step:
 5. Cut the next drop (`X.Y+1.0-pre.1`) straight after. Its merge of `dev` into `pre` meets the
    cherry-picked changes already there; on a conflict, keep `pre`'s side.
 
+## A 1.x line beside 2.0
+
+While 2.0 is in the pre-release channel, 1.x stables carry on from `dev` (decided 2026-11-23 for
+1.3.0; plan in `project-docs/active/v1.3.0-stable-punch-list-2026-11-23.md`). Each is v1 with the
+fixes, and the 1.x-shaped features, ported back from the 2.0 work. Three rules above change for
+them:
+
+- **The channel keeps its 2.0 numbers.** A 1.x stable does not retire the series; the next drop is
+  the next `2.0.0-pre.N`, which still sorts above every 1.x.
+- **A 1.x stable ships on its own**, with no paired drop: the current drop is already newer.
+- **Pong's run of a fix on the channel is its proof.** Step 3 of the promotion runs on the emulator
+  instead (the release build, the two per-drop checks), so pong stays on the channel.
+
+`AppearanceReset` is never ported to the 1.x line; the 2.0 rule for it is unchanged.
+
 ## The pre-release channel
 
 A second, rolling channel beside the stable releases, and **the first stop for new work**: the
