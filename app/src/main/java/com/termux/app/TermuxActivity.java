@@ -11037,17 +11037,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The room the floating strip is allowed to take: the bar's own span along itself, and the
-     * whole screen across it. A column stands inside the canvas band, so its span is exactly the
-     * height the matches may use; a row spans the width the letters do, which is what the band has
-     * always been clamped to.
+     * The room the floating strip is allowed to take, in screen coordinates like the bar it is
+     * measured against: the bar's own span along itself, and the launcher's whole window across
+     * it. The window is not the display in split screen or freeform, so its origin is read from
+     * the root view on screen rather than assumed to be (0, 0).
      */
     @NonNull
     private AzScrubGesture.Bounds azStripCanvasBounds(@NonNull AzScrubGesture.Bounds bar) {
         android.util.DisplayMetrics metrics = getResources().getDisplayMetrics();
-        return mAzBarEdge.isOnSide()
-            ? new AzScrubGesture.Bounds(0f, bar.top, metrics.widthPixels, bar.bottom)
-            : new AzScrubGesture.Bounds(bar.left, 0f, bar.right, metrics.heightPixels);
+        View root = getWindow() != null ? getWindow().getDecorView() : null;
+        int[] origin = mAzViewLocation;
+        float width = metrics.widthPixels;
+        float height = metrics.heightPixels;
+        float originX = 0f;
+        float originY = 0f;
+        if (root != null) {
+            root.getLocationOnScreen(origin);
+            originX = origin[0];
+            originY = origin[1];
+            if (root.getWidth() > 0) width = root.getWidth();
+            if (root.getHeight() > 0) height = root.getHeight();
+        }
+        return AzFloatingStripPolicy.canvasBounds(mAzBarEdge.isOnSide(), bar, originX, originY,
+            width, height);
     }
 
     /** The bar's own rectangle on screen, whether or not it is shown. */
@@ -11583,21 +11595,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPreferences == null) {
             return;
         }
-        String method = mPreferences.getAppLauncherAzLockMethod();
-        if (TermuxPreferenceConstants.TERMUX_APP.APP_LAUNCHER_AZ_LOCK_METHOD_SHIZUKU.equals(method)) {
-            // A-Z lock needs Shizuku specifically, so it keeps the shizuku-only mode rather than
-            // letting the manager settle on su/rish.
-            PrivilegedBackendManager.getInstance().initializeShizukuOnly(this)
-                .exceptionally(throwable -> {
-                    Logger.logWarn(LOG_TAG, "A-Z Shizuku backend refresh failed: " + throwable.getMessage());
-                    return false;
-                });
-            return;
-        }
-        // Everything else that needs privileges (the CPU card's ticks and process list, the
+        // Everything that needs privileges (the CPU card's ticks and process list, the
         // foreground-window resolver) only ever *reads* isPrivilegedAvailable(), so without this
-        // the backend stayed UNINITIALIZED on every start unless the A-Z lock happened to be set
-        // to Shizuku or the user opened the privileged-access settings screen and pressed Connect.
+        // the backend stayed UNINITIALIZED on every start unless the user opened the
+        // privileged-access settings screen and pressed Connect.
         // Initializing here also registers the Shizuku binder-received listener, which is what
         // lets a later Shizuku start recover on its own.
         PrivilegedBackendManager.getInstance().initializeIfNeeded(this)
@@ -11609,13 +11610,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private void lockScreenWithShizuku() {
         PrivilegedBackendManager manager = PrivilegedBackendManager.getInstance();
+        if (manager.isPrivilegedAvailable()) {
+            executePrivilegedLockCommand(manager);
+            return;
+        }
         manager.initializeShizukuOnly(this)
             .thenAccept(available -> {
                 if (!available || !manager.isPrivilegedAvailable()) {
                     manager.requestPrivilegedPermission(ShizukuBackend.PERMISSION_REQUEST_CODE);
                     return;
                 }
-                executeShizukuLockCommand(manager);
+                executePrivilegedLockCommand(manager);
             })
             .exceptionally(throwable -> {
                 Logger.logWarn(LOG_TAG, "A-Z Shizuku lock initialization failed: " + throwable.getMessage());
@@ -11623,7 +11628,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             });
     }
 
-    private void executeShizukuLockCommand(@NonNull PrivilegedBackendManager manager) {
+    private void executePrivilegedLockCommand(@NonNull PrivilegedBackendManager manager) {
         manager.executeCommand("input keyevent 223")
             .thenAccept(output -> {
                 if (isSuccessfulPrivilegedCommandOutput(output)) {
@@ -23414,6 +23419,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             ensureStatsController().start(
                 statsInterval(cardShowing ? STATS_CARD_INTERVAL_MS : STATS_BAR_INTERVAL_MS),
                 cardShowing);
+            // The sampler pauses while nothing shows its numbers (StatsPollCadence).
+            View barHost = findViewById(R.id.terminal_window_bar_host);
+            mStatsController.setConsumerVisible(cardShowing
+                || (barHost != null && barHost.getVisibility() == View.VISIBLE));
         } else if (mStatsController != null) {
             mStatsController.stop();
         }

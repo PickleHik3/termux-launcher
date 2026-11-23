@@ -37,6 +37,17 @@ public class PrivilegedCatalogTest {
     public TemporaryFolder folder = new TemporaryFolder();
 
     @Test
+    public void anAbiDigestOptionMatchesAndABadOneIsIgnored() throws IOException {
+        PrivilegedCatalog catalog = parse(
+            row("btop", "binary", DIGEST_BTOP, "priv=shizuku;x86_64:digest=" + DIGEST_OTHER) + "\n"
+                + row("htop", "binary", DIGEST_PKG, "priv=shizuku;x86_64:digest=nothex") + "\n");
+        assertEquals("btop", catalog.findByDigest(DIGEST_OTHER).name);
+        assertEquals("btop", catalog.findByDigest(DIGEST_BTOP).name);
+        assertEquals("htop", catalog.findByDigest(DIGEST_PKG).name);
+        assertNull(catalog.findByDigest("nothex"));
+    }
+
+    @Test
     public void aBinaryRowWithPrivShizukuMatchesByDigest() throws IOException {
         PrivilegedCatalog catalog = parse(
             "# tlstore catalog\tserial=2026092502\n"

@@ -344,7 +344,7 @@
     <string name="settings_x11_display_summary">Show a Linux desktop or X11 apps beside the terminal.</string>
     <string name="permission_x11_display_label">Run a Linux display</string>
     <string name="settings_x11_category_display">Display</string>
-    <string name="settings_x11_touch_mode_title">Touch</string>
+    <string name="settings_x11_touch_mode_title">Touch mode</string>
     <string name="settings_x11_android_keyboard_title">Use Android keyboard</string>
     <string name="settings_x11_android_keyboard_summary">Type into display apps with the phone keyboard.</string>
     <string name="settings_x11_keyboard_follows_text_title">OSK auto-show</string>
@@ -544,7 +544,10 @@
     <string name="settings_app_drawer_category_sort_dialog_title">Sort apps into categories</string>
     <string name="settings_app_drawer_category_sort_on_device">On this device</string>
     <string name="settings_app_drawer_category_sort_on_device_summary">%1$s · nothing leaves your phone</string>
-    <string name="settings_app_drawer_category_sort_on_device_warning">Takes about %1$d minutes. Keep the phone plugged in.</string>
+    <plurals name="settings_app_drawer_category_sort_on_device_warning">
+        <item quantity="one">Takes about %1$d minute. Keep the phone plugged in.</item>
+        <item quantity="other">Takes about %1$d minutes. Keep the phone plugged in.</item>
+    </plurals>
     <string name="settings_app_drawer_category_sort_paste">Copy a prompt for an AI chat</string>
     <string name="settings_app_drawer_category_sort_paste_summary">Paste it into any AI chat, then paste the answer back</string>
     <string name="settings_app_drawer_category_sort_paste_warning">Sends your installed-app list to that service</string>
@@ -1990,7 +1993,7 @@
                 <string name="termux_app_launcher_az_lock_method_accessibility">Accessibility</string>
                 <string name="termux_app_launcher_set_home_unavailable">Home launcher settings are unavailable on this device.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_title">Enable accessibility lock</string>
-                <string name="termux_app_launcher_accessibility_lock_prompt_message">Enable Termux Launcher Lock Service to lock the screen from the alphabets row.</string>
+                <string name="termux_app_launcher_accessibility_lock_prompt_message">Lets the launcher lock the screen and open notifications or quick settings from your gestures.</string>
                 <string name="termux_app_launcher_accessibility_lock_prompt_enable">Enable</string>
                 <string name="termux_app_launcher_dock_style_default">Docked</string>
                 <string name="termux_app_launcher_dock_style_rounded">Floating</string>
