@@ -16,6 +16,20 @@
             app:title="@string/settings_x11_apps_title"
             app:summary="@string/settings_x11_apps_summary"
             app:fragment="com.termux.app.fragments.settings.termux.X11AppsPreferencesFragment" />
+        <!-- Shown only in a build with the Wayland host (X11DisplayPreferencesFragment). -->
+        <ListPreference
+            app:key="linux_display_backend"
+            app:title="@string/settings_linux_display_title"
+            app:dialogTitle="@string/settings_linux_display_title"
+            app:entries="@array/settings_linux_display_entries"
+            app:entryValues="@array/settings_linux_display_values"
+            android:defaultValue="x11"
+            app:useSimpleSummaryProvider="true" />
+        <Preference
+            app:key="linux_display_backend_hint"
+            app:summary="@string/settings_linux_display_hint"
+            app:selectable="false"
+            app:persistent="false" />
     </PreferenceCategory>
 
     <PreferenceCategory app:title="@string/settings_x11_group_desktop">

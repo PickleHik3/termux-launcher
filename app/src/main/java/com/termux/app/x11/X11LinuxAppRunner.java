@@ -8,6 +8,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.wayland.LinuxDisplayBackend;
+import com.termux.app.wayland.WaylandAppRunner;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -591,12 +593,8 @@ public final class X11LinuxAppRunner {
             boolean noSandbox = !app.session && shouldStartWithNoSandbox(app);
             String display = X11DisplayHostController.displayName();
             // The app's own graphics and scale (a desktop has neither: it follows the display).
-            GpuChoice gpu = installedEnv(X11GpuProbe.probe(context),
-                X11AppLaunchEnv.gpuPick(app.session, profileStore.pick(),
-                    appSettings.gpuProfile(app.id)),
-                X11AppLaunchEnv.drawsInSoftware(app.session, profileStore.drawsInSoftware(app.id)));
-            List<String> env = new java.util.ArrayList<>(gpu.env);
-            env.addAll(X11AppLaunchEnv.scaleLines(app.session, appSettings.scale(app.id)));
+            GpuChoice gpu = appGraphics(app);
+            List<String> env = appEnv(app, gpu);
             // Reading the setting and looking for the binary are both file work, so they happen
             // here beside the probe rather than on the main thread when the desktop ends.
             String configured = app.session || displayJustStarted ? configuredWindowManager() : "";
@@ -628,6 +626,87 @@ public final class X11LinuxAppRunner {
                 runAndWatch(app, script, noSandbox, display, env, restart);
             });
         });
+    }
+
+    /** The graphics {@code app} is launched with. Worker thread: the probe may build a GL context. */
+    @NonNull
+    private GpuChoice appGraphics(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return installedEnv(X11GpuProbe.probe(context),
+            X11AppLaunchEnv.gpuPick(app.session, profileStore.pick(), appSettings.gpuProfile(app.id)),
+            X11AppLaunchEnv.drawsInSoftware(app.session, profileStore.drawsInSoftware(app.id)));
+    }
+
+    /** {@code gpu}'s exports, then {@code app}'s scale lines: what an app's script exports. */
+    @NonNull
+    private List<String> appEnv(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull GpuChoice gpu) {
+        List<String> env = new java.util.ArrayList<>(gpu.env);
+        env.addAll(X11AppLaunchEnv.scaleLines(app.session, appSettings.scale(app.id)));
+        return env;
+    }
+
+    /**
+     * A drawer tap when Settings chooses Wayland Display: {@code app} opens in its own window on
+     * the Linux windows screen, and no Display page or X server is involved. Answers false when the
+     * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} is a
+     * whole desktop session or lives in a proot-distro container, both of which keep using X11
+     * Display for now ({@link LinuxDisplayBackend#forApp}). Main thread.
+     */
+    public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
+        LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
+            app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
+        if (backend != LinuxDisplayBackend.WAYLAND) return false;
+        WaylandAppRunner.shared(context).launch(new WaylandAppRunner.Launch() {
+            @Override
+            public void run(@NonNull String waylandDisplay, @Nullable String xDisplay) {
+                launchOnWayland(app, waylandDisplay, xDisplay);
+            }
+
+            @Override
+            public void failed() {
+                notice(context.getString(com.termux.R.string.linux_wayland_start_failed));
+            }
+        });
+        return true;
+    }
+
+    /**
+     * {@link #launch} for Wayland Display, once its host runs: the same graphics, scale, sound and
+     * D7 watch as on the X11 Display, with {@code WAYLAND_DISPLAY} added and {@code DISPLAY} the
+     * host's Xwayland. No window manager is waited for: the launcher is the window manager.
+     */
+    private void launchOnWayland(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String waylandDisplay,
+                                 @Nullable String xDisplay) {
+        com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
+        sound.onNeed();
+        EXECUTOR.execute(() -> {
+            sound.prepareContainer(app.container);
+            boolean noSandbox = shouldStartWithNoSandbox(app);
+            GpuChoice gpu = appGraphics(app);
+            String display = xDisplay == null ? "" : xDisplay;
+            List<String> env = waylandEnv(waylandDisplay, appEnv(app, gpu));
+            String script = gpuServerBlock(gpu.server) + script(app, display, env, noSandbox, null);
+            handler.post(() -> {
+                Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display"
+                    + (noSandbox ? " with --no-sandbox" : "")
+                    + " with graphics " + (gpu.profile == null ? "default" : gpu.profile.id));
+                if (gpu.fellBack) {
+                    notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
+                }
+                runAndWatch(app, script, noSandbox, display, env);
+            });
+        });
+    }
+
+    /**
+     * An app's exports under Wayland Display: {@code WAYLAND_DISPLAY} (the socket's absolute path,
+     * so {@code XDG_RUNTIME_DIR} is left alone), then {@code appEnv} unchanged. Pure.
+     */
+    @NonNull
+    static List<String> waylandEnv(@NonNull String waylandDisplay, @NonNull List<String> appEnv) {
+        List<String> env = new java.util.ArrayList<>(appEnv.size() + 1);
+        env.add("WAYLAND_DISPLAY=" + waylandDisplay);
+        env.addAll(appEnv);
+        return env;
     }
 
     /** The window manager the user has configured, or empty when there is none. */

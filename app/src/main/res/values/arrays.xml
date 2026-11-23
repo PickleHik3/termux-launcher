@@ -1,5 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string-array name="settings_linux_display_entries">
+        <item>@string/settings_linux_display_x11</item>
+        <item>@string/settings_linux_display_wayland</item>
+    </string-array>
+    <string-array name="settings_linux_display_values" translatable="false">
+        <item>x11</item>
+        <item>wayland</item>
+    </string-array>
     <string-array name="settings_keyboard_input_method_entries">
         <item>@string/settings_keyboard_input_built_in</item>
         <item>@string/settings_keyboard_input_android</item>
