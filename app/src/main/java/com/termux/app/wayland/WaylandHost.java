@@ -9,9 +9,10 @@ import androidx.annotation.Keep;
 import androidx.annotation.Nullable;
 
 /**
- * The Java side of libtlwayland (spike): a Wayland compositor running on its own thread in this
- * process. Callbacks arrive on the compositor thread and are posted to the main thread before
- * they reach the {@link Listener}.
+ * The Java side of libtlwayland (spike): a Wayland compositor running on its own thread. Used
+ * only inside the {@code :linuxwindows} process by {@link LinuxWindowsService}; the launcher
+ * reaches it over {@link ILinuxWindows}. Callbacks arrive on the compositor thread and are
+ * posted to the main thread before they reach the {@link Listener}.
  */
 @Keep
 public final class WaylandHost {
@@ -69,8 +70,12 @@ public final class WaylandHost {
     public static native void nativeStop();
     public static native void nativeSetSurface(long id, @Nullable Surface surface);
     public static native void nativeConfigure(long id, int width, int height);
-    public static native void nativeTouch(long id, int action, int slot, float x, float y);
+    public static native void nativeTouch(long id, int action, int count, int[] slots, float[] xs, float[] ys);
     public static native void nativePointer(long id, int action, int button, float x, float y);
+    public static native void nativeKey(long id, int androidKeyCode, boolean down);
+    public static native void nativeClose(long id);
+    /** Debug: abort() this process. */
+    public static native void nativeAbort();
 
     // Called from native code on the compositor thread.
 

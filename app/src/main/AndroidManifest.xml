@@ -186,13 +186,20 @@
         </activity-alias>
 
         <!-- Spike: Linux Wayland apps, one view per window, over the wallpaper. Started by hand
-             with am start; not part of the product. -->
+             with am start; not part of the product. Recreating it (rotation) re-attaches to the
+             live windows: the compositor runs in LinuxWindowsService's own process. -->
         <activity
             android:name=".app.wayland.WaylandSpikeActivity"
             android:exported="false"
-            android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboard|keyboardHidden|navigation|density|uiMode"
             android:taskAffinity="${TERMUX_PACKAGE_NAME}.wayland"
             android:theme="@style/Theme.TermuxActivity.Wallpaper" />
+
+        <!-- Spike: the Wayland compositor, in a process of its own so its crash is not the
+             launcher's. -->
+        <service
+            android:name=".app.wayland.LinuxWindowsService"
+            android:exported="false"
+            android:process=":linuxwindows" />
 
         <!-- The help centre: the whole guide, read on a screen of its own. -->
         <activity

@@ -1,10 +1,18 @@
 package com.termux.app.wayland;
 
 import android.app.Activity;
+import android.content.ComponentName;
+import android.content.Intent;
+import android.content.ServiceConnection;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.SurfaceTexture;
+import android.graphics.Typeface;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.IBinder;
+import android.os.Looper;
+import android.os.RemoteException;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.TextUtils;
@@ -13,10 +21,12 @@ import android.util.LongSparseArray;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.InputDevice;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.widget.Button;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -27,24 +37,105 @@ import com.termux.shared.termux.TermuxConstants;
 import java.io.File;
 
 /**
- * Spike: runs the in-process Wayland host and shows each Linux toplevel in its own
- * {@link TextureView}, stacked in equal shares of the height over the system wallpaper.
- * Not exported; start it with {@code am start -n <package>/com.termux.app.wayland.WaylandSpikeActivity}
+ * Spike: shows each Linux toplevel of the Wayland host in its own {@link TextureView}, stacked
+ * in equal shares of the height over the system wallpaper.
+ *
+ * The compositor runs in {@link LinuxWindowsService} in the {@code :linuxwindows} process, so it
+ * outlives this activity: reopening re-attaches to the live toplevels, and a crash there leaves
+ * this activity standing with a Restart button. Not exported; start it with
+ * {@code am start -n <package>/com.termux.app.wayland.WaylandSpikeActivity} from the app's uid
  * (add {@code --ez xwayland true} to also start rootless Xwayland from the prefix).
  */
-public final class WaylandSpikeActivity extends Activity implements WaylandHost.Listener {
+public final class WaylandSpikeActivity extends Activity {
 
     private static final String LOG_TAG = "TLWayland";
     /** The clients' XDG_RUNTIME_DIR, under the prefix's tmp. */
     public static final String SOCKET_DIR = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/tl-wayland";
     public static final String EXTRA_XWAYLAND = "xwayland";
 
-    private LinearLayout mRoot;
-    private TextView mEmpty;
-    private boolean mStarted;
+    private static final int MAX_POINTS = 10;
+
+    private final Handler mMain = new Handler(Looper.getMainLooper());
     private final LongSparseArray<Pane> mPanes = new LongSparseArray<>();
 
-    /** One toplevel: a title line over its TextureView. */
+    private LinearLayout mPaneHost;
+    private TextView mStatus;
+    private TextView mEmpty;
+    private Button mStartButton;
+    private Button mStopButton;
+    private Button mCrashButton;
+
+    private ILinuxWindows mService;
+    private IBinder mServiceBinder;
+    private boolean mBound;
+    /** Start the compositor when the service reports it is not running. */
+    private boolean mAutoStart = true;
+    /** The activity is visible: panes hand their Surfaces to the host. */
+    private boolean mVisible;
+    private long mFocusedId;
+
+    private final IBinder.DeathRecipient mDeath = () -> mMain.post(this::onHostDied);
+
+    private final ServiceConnection mConnection = new ServiceConnection() {
+        @Override
+        public void onServiceConnected(ComponentName name, IBinder binder) {
+            mServiceBinder = binder;
+            mService = ILinuxWindows.Stub.asInterface(binder);
+            try {
+                binder.linkToDeath(mDeath, 0);
+                mService.addCallback(mCallback);
+            } catch (RemoteException e) {
+                onHostDied();
+            }
+        }
+
+        @Override
+        public void onServiceDisconnected(ComponentName name) {
+            onHostDied();
+        }
+    };
+
+    /** Host events arrive on binder threads; everything is handled on the main thread. */
+    private final ILinuxWindowsCallback.Stub mCallback = new ILinuxWindowsCallback.Stub() {
+        @Override
+        public void onHostState(boolean running, int pid, String message) {
+            mMain.post(() -> hostState(running, pid, message));
+        }
+
+        @Override
+        public void onToplevelCreated(long id, String title, String appId) {
+            mMain.post(() -> toplevelCreated(id, title, appId));
+        }
+
+        @Override
+        public void onToplevelTitle(long id, String title, String appId) {
+            mMain.post(() -> {
+                Pane pane = mPanes.get(id);
+                if (pane == null) return;
+                pane.title = title;
+                pane.appId = appId;
+                pane.updateLabel();
+            });
+        }
+
+        @Override
+        public void onToplevelSize(long id, int width, int height) {
+            mMain.post(() -> {
+                Pane pane = mPanes.get(id);
+                if (pane == null) return;
+                pane.width = width;
+                pane.height = height;
+                pane.updateLabel();
+            });
+        }
+
+        @Override
+        public void onToplevelDestroyed(long id) {
+            mMain.post(() -> removePane(id));
+        }
+    };
+
+    /** One toplevel: a title line with a close button over its TextureView. */
     private final class Pane implements TextureView.SurfaceTextureListener {
         final long id;
         final LinearLayout row;
@@ -53,28 +144,47 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
         Surface surface;
         String title = "";
         String appId = "";
-        int bufferWidth;
-        int bufferHeight;
+        int width;
+        int height;
         int mouseButton;
+        // Reused for every MotionEvent.
+        final int[] slots = new int[MAX_POINTS];
+        final float[] xs = new float[MAX_POINTS];
+        final float[] ys = new float[MAX_POINTS];
 
         Pane(long id) {
             this.id = id;
             row = new LinearLayout(WaylandSpikeActivity.this);
             row.setOrientation(LinearLayout.VERTICAL);
-            label = new TextView(WaylandSpikeActivity.this);
+
+            LinearLayout titleLine = new LinearLayout(WaylandSpikeActivity.this);
+            titleLine.setOrientation(LinearLayout.HORIZONTAL);
+            titleLine.setGravity(Gravity.CENTER_VERTICAL);
+            label = shadowedText();
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
-            label.setTextColor(Color.WHITE);
-            label.setShadowLayer(4f, 0f, 1f, Color.BLACK);
-            label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
-            int pad = dp(8);
-            label.setPadding(pad, dp(2), pad, dp(2));
+            label.setPadding(dp(8), dp(2), dp(8), dp(2));
+            TextView close = shadowedText();
+            close.setText("✕");
+            close.setPadding(dp(12), dp(2), dp(12), dp(2));
+            close.setOnClickListener(v -> {
+                if (mService != null) {
+                    try {
+                        mService.close(id);
+                    } catch (RemoteException ignored) {
+                    }
+                }
+            });
+            titleLine.addView(label, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+            titleLine.addView(close, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT));
+
             view = new TextureView(WaylandSpikeActivity.this);
             view.setOpaque(false);
             view.setSurfaceTextureListener(this);
             view.setOnTouchListener((v, e) -> onTouch(e));
             view.setOnGenericMotionListener((v, e) -> onGenericMotion(e));
-            row.addView(label, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            row.addView(titleLine, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT));
             row.addView(view, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         }
@@ -83,25 +193,47 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
             StringBuilder sb = new StringBuilder();
             sb.append(TextUtils.isEmpty(title) ? "(untitled)" : title);
             if (!TextUtils.isEmpty(appId)) sb.append(" · ").append(appId);
-            if (bufferWidth > 0) sb.append(" · ").append(bufferWidth).append('×').append(bufferHeight);
+            if (width > 0) sb.append(" · ").append(width).append('×').append(height);
             label.setText(sb);
+            label.setTypeface(null, id == mFocusedId ? Typeface.BOLD : Typeface.NORMAL);
+        }
+
+        /** Hands the Surface to the host while the activity is visible. */
+        void attach() {
+            if (mService == null || surface == null || !mVisible) return;
+            try {
+                mService.configure(id, view.getWidth(), view.getHeight());
+                mService.setSurface(id, surface);
+            } catch (RemoteException ignored) {
+            }
+        }
+
+        void detach() {
+            if (mService == null) return;
+            try {
+                mService.setSurface(id, null);
+            } catch (RemoteException ignored) {
+            }
         }
 
         @Override
         public void onSurfaceTextureAvailable(@NonNull SurfaceTexture texture, int width, int height) {
             surface = new Surface(texture);
-            WaylandHost.nativeConfigure(id, width, height);
-            WaylandHost.nativeSetSurface(id, surface);
+            attach();
         }
 
         @Override
         public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture texture, int width, int height) {
-            WaylandHost.nativeConfigure(id, width, height);
+            if (mService == null) return;
+            try {
+                mService.configure(id, width, height);
+            } catch (RemoteException ignored) {
+            }
         }
 
         @Override
         public boolean onSurfaceTextureDestroyed(@NonNull SurfaceTexture texture) {
-            WaylandHost.nativeSetSurface(id, null);
+            detach();
             if (surface != null) {
                 surface.release();
                 surface = null;
@@ -112,28 +244,51 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
         @Override
         public void onSurfaceTextureUpdated(@NonNull SurfaceTexture texture) {}
 
+        private void sendTouch(int action, int count) {
+            if (mService == null) return;
+            try {
+                mService.touch(id, action, count, slots, xs, ys);
+            } catch (RemoteException ignored) {
+            }
+        }
+
+        private void sendPointer(int action, int button, float x, float y) {
+            if (mService == null) return;
+            try {
+                mService.pointer(id, action, button, x, y);
+            } catch (RemoteException ignored) {
+            }
+        }
+
         private boolean onTouch(MotionEvent e) {
             if (e.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) return onMouse(e);
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                case MotionEvent.ACTION_POINTER_DOWN: {
-                    int i = e.getActionIndex();
-                    WaylandHost.nativeTouch(id, WaylandHost.TOUCH_DOWN, e.getPointerId(i), e.getX(i), e.getY(i));
-                    return true;
-                }
+                case MotionEvent.ACTION_POINTER_DOWN:
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_POINTER_UP: {
+                    boolean down = e.getActionMasked() == MotionEvent.ACTION_DOWN
+                        || e.getActionMasked() == MotionEvent.ACTION_POINTER_DOWN;
+                    if (down) focus(id);
                     int i = e.getActionIndex();
-                    WaylandHost.nativeTouch(id, WaylandHost.TOUCH_UP, e.getPointerId(i), e.getX(i), e.getY(i));
+                    slots[0] = e.getPointerId(i);
+                    xs[0] = e.getX(i);
+                    ys[0] = e.getY(i);
+                    sendTouch(down ? WaylandHost.TOUCH_DOWN : WaylandHost.TOUCH_UP, 1);
                     return true;
                 }
-                case MotionEvent.ACTION_MOVE:
-                    for (int i = 0; i < e.getPointerCount(); i++) {
-                        WaylandHost.nativeTouch(id, WaylandHost.TOUCH_MOTION, e.getPointerId(i), e.getX(i), e.getY(i));
+                case MotionEvent.ACTION_MOVE: {
+                    int n = Math.min(e.getPointerCount(), MAX_POINTS);
+                    for (int i = 0; i < n; i++) {
+                        slots[i] = e.getPointerId(i);
+                        xs[i] = e.getX(i);
+                        ys[i] = e.getY(i);
                     }
+                    sendTouch(WaylandHost.TOUCH_MOTION, n);
                     return true;
+                }
                 case MotionEvent.ACTION_CANCEL:
-                    WaylandHost.nativeTouch(id, WaylandHost.TOUCH_CANCEL, 0, 0f, 0f);
+                    sendTouch(WaylandHost.TOUCH_CANCEL, 0);
                     return true;
                 default:
                     return true;
@@ -143,16 +298,17 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
         private boolean onMouse(MotionEvent e) {
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
+                    focus(id);
                     mouseButton = linuxButton(e.getButtonState());
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_BUTTON_DOWN, mouseButton, e.getX(), e.getY());
+                    sendPointer(WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
+                    sendPointer(WaylandHost.POINTER_BUTTON_DOWN, mouseButton, e.getX(), e.getY());
                     return true;
                 case MotionEvent.ACTION_MOVE:
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
+                    sendPointer(WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
                     return true;
                 case MotionEvent.ACTION_UP:
                 case MotionEvent.ACTION_CANCEL:
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_BUTTON_UP, mouseButton, e.getX(), e.getY());
+                    sendPointer(WaylandHost.POINTER_BUTTON_UP, mouseButton, e.getX(), e.getY());
                     return true;
                 default:
                     return true;
@@ -164,13 +320,13 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_HOVER_ENTER:
                 case MotionEvent.ACTION_HOVER_MOVE:
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
+                    sendPointer(WaylandHost.POINTER_MOTION, 0, e.getX(), e.getY());
                     return true;
                 case MotionEvent.ACTION_HOVER_EXIT:
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_LEAVE, 0, 0f, 0f);
+                    sendPointer(WaylandHost.POINTER_LEAVE, 0, 0f, 0f);
                     return true;
                 case MotionEvent.ACTION_SCROLL:
-                    WaylandHost.nativePointer(id, WaylandHost.POINTER_AXIS, 0,
+                    sendPointer(WaylandHost.POINTER_AXIS, 0,
                         e.getAxisValue(MotionEvent.AXIS_HSCROLL) * 15f, -e.getAxisValue(MotionEvent.AXIS_VSCROLL) * 15f);
                     return true;
                 default:
@@ -185,6 +341,37 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
         return WaylandHost.BTN_LEFT;
     }
 
+    /** Key codes the host maps to evdev (see wayland-host/src/keymap.rs); others stay with Android. */
+    private static boolean isForwardedKey(int code) {
+        return (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9)
+            || (code >= KeyEvent.KEYCODE_DPAD_UP && code <= KeyEvent.KEYCODE_DPAD_RIGHT)
+            || (code >= KeyEvent.KEYCODE_A && code <= KeyEvent.KEYCODE_SPACE)
+            || (code >= KeyEvent.KEYCODE_ENTER && code <= KeyEvent.KEYCODE_SLASH)
+            || code == KeyEvent.KEYCODE_PAGE_UP || code == KeyEvent.KEYCODE_PAGE_DOWN
+            || (code >= KeyEvent.KEYCODE_ESCAPE && code <= KeyEvent.KEYCODE_CAPS_LOCK)
+            || code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT
+            || (code >= KeyEvent.KEYCODE_MOVE_HOME && code <= KeyEvent.KEYCODE_INSERT)
+            || (code >= KeyEvent.KEYCODE_F1 && code <= KeyEvent.KEYCODE_F12);
+    }
+
+    private TextView shadowedText() {
+        TextView t = new TextView(this);
+        t.setTextColor(Color.WHITE);
+        t.setShadowLayer(4f, 0f, 1f, Color.BLACK);
+        t.setTextSize(TypedValue.COMPLEX_UNIT_SP, 13);
+        return t;
+    }
+
+    private Button button(String text, View.OnClickListener listener) {
+        Button b = new Button(this);
+        b.setText(text);
+        b.setAllCaps(false);
+        b.setMinWidth(0);
+        b.setMinimumWidth(0);
+        b.setOnClickListener(listener);
+        return b;
+    }
+
     private int dp(int value) {
         return Math.round(value * getResources().getDisplayMetrics().density);
     }
@@ -192,27 +379,75 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        mRoot = new LinearLayout(this);
-        mRoot.setOrientation(LinearLayout.VERTICAL);
-        mRoot.setFitsSystemWindows(true);
-        mEmpty = new TextView(this);
-        mEmpty.setTextColor(Color.WHITE);
-        mEmpty.setShadowLayer(4f, 0f, 1f, Color.BLACK);
+        LinearLayout root = new LinearLayout(this);
+        root.setOrientation(LinearLayout.VERTICAL);
+        root.setFitsSystemWindows(true);
+
+        LinearLayout bar = new LinearLayout(this);
+        bar.setOrientation(LinearLayout.HORIZONTAL);
+        bar.setGravity(Gravity.CENTER_VERTICAL);
+        bar.setPadding(dp(8), 0, dp(8), 0);
+        mStatus = shadowedText();
+        mStatus.setSingleLine(true);
+        mStatus.setEllipsize(TextUtils.TruncateAt.END);
+        mStartButton = button("Start", v -> {
+            mAutoStart = true;
+            if (mService == null) connect();
+            else startHost();
+        });
+        mStopButton = button("Stop", v -> {
+            if (mService == null) return;
+            try {
+                mService.stop();
+            } catch (RemoteException ignored) {
+            }
+        });
+        mCrashButton = button("Crash compositor", v -> {
+            if (mService == null) return;
+            try {
+                mService.crash();
+            } catch (RemoteException ignored) {
+            }
+        });
+        bar.addView(mStatus, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        bar.addView(mStartButton);
+        bar.addView(mStopButton);
+        bar.addView(mCrashButton);
+        root.addView(bar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
+
+        mPaneHost = new LinearLayout(this);
+        mPaneHost.setOrientation(LinearLayout.VERTICAL);
+        mEmpty = shadowedText();
         mEmpty.setGravity(Gravity.CENTER);
-        int pad = dp(24);
-        mEmpty.setPadding(pad, pad, pad, pad);
-        mRoot.addView(mEmpty, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+        mEmpty.setPadding(dp(24), dp(24), dp(24), dp(24));
+        mPaneHost.addView(mEmpty, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.MATCH_PARENT));
-        setContentView(mRoot);
+        root.addView(mPaneHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        setContentView(root);
 
-        if (!WaylandHost.load()) {
-            mEmpty.setText("This build has no Wayland host (libtlwayland.so).");
-            return;
+        showStopped("Connecting…", false);
+        connect();
+    }
+
+    private void connect() {
+        Intent intent = new Intent(this, LinuxWindowsService.class);
+        try {
+            // Started as well as bound, so the host outlives this activity.
+            startService(intent);
+            mBound = bindService(intent, mConnection, BIND_AUTO_CREATE);
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "cannot reach the host service: " + e);
+            mBound = false;
         }
+        if (!mBound) showStopped("The Linux windows host cannot be reached.", true);
+    }
 
+    private void startHost() {
+        if (mService == null) return;
         File dir = new File(SOCKET_DIR);
         if (!dir.isDirectory() && !dir.mkdirs()) {
-            mEmpty.setText("Cannot create " + SOCKET_DIR);
+            showStopped("Cannot create " + SOCKET_DIR, true);
             return;
         }
         try {
@@ -220,7 +455,6 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
         } catch (ErrnoException e) {
             Log.w(LOG_TAG, "chmod " + SOCKET_DIR + ": " + e.getMessage());
         }
-
         File xkb = new File(TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/X11/xkb");
         String xkbRoot = xkb.isDirectory() ? xkb.getAbsolutePath() : null;
         String xwayland = null;
@@ -229,30 +463,68 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
             if (bin.canExecute()) xwayland = bin.getAbsolutePath();
             else Log.w(LOG_TAG, "no executable " + bin);
         }
-
         Point size = new Point();
         getWindowManager().getDefaultDisplay().getRealSize(size);
-        WaylandHost.setListener(this);
-        mStarted = WaylandHost.nativeStart(SOCKET_DIR, xkbRoot, xwayland, size.x, size.y);
-        mEmpty.setText(mStarted
-            ? "Waiting for Wayland clients.\nXDG_RUNTIME_DIR=" + SOCKET_DIR + "\nWAYLAND_DISPLAY=wayland-0"
-                + (xwayland != null ? "\nDISPLAY: see logcat TLWayland" : "")
-            : "The Wayland host did not start; see logcat TLWayland.");
-    }
-
-    @Override
-    protected void onDestroy() {
-        WaylandHost.setListener(null);
-        if (mStarted) {
-            WaylandHost.nativeStop();
-            mStarted = false;
+        try {
+            mService.start(SOCKET_DIR, xkbRoot, xwayland, size.x, size.y);
+        } catch (RemoteException ignored) {
         }
-        mPanes.clear();
-        super.onDestroy();
     }
 
-    @Override
-    public void onToplevelCreated(long id, String title, String appId) {
+    private void hostState(boolean running, int pid, String message) {
+        if (isDestroyed()) return;
+        if (running) {
+            mAutoStart = false;
+            mStatus.setText("Host pid " + pid);
+            mStartButton.setVisibility(View.GONE);
+            mStopButton.setVisibility(View.VISIBLE);
+            mCrashButton.setVisibility(View.VISIBLE);
+            mEmpty.setText("Waiting for Linux windows.\n" + message);
+        } else if (mAutoStart) {
+            mAutoStart = false;
+            mStatus.setText("Starting…");
+            startHost();
+        } else {
+            showStopped(TextUtils.isEmpty(message) ? "Stopped." : message, true);
+            mStartButton.setText("Start");
+        }
+    }
+
+    private void showStopped(String line, boolean offerStart) {
+        mStatus.setText(line);
+        mEmpty.setText(line);
+        mEmpty.setVisibility(mPanes.size() == 0 ? View.VISIBLE : View.GONE);
+        mStartButton.setVisibility(offerStart ? View.VISIBLE : View.GONE);
+        mStopButton.setVisibility(View.GONE);
+        mCrashButton.setVisibility(View.GONE);
+    }
+
+    /** The host process died: drop its views, say so once, offer Restart. */
+    private void onHostDied() {
+        if (mService == null && !mBound) return;
+        if (mServiceBinder != null) {
+            try {
+                mServiceBinder.unlinkToDeath(mDeath, 0);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        mServiceBinder = null;
+        mService = null;
+        if (mBound) {
+            // Unbind so Android does not bring the service back on its own; Restart does.
+            try {
+                unbindService(mConnection);
+            } catch (IllegalArgumentException ignored) {
+            }
+            mBound = false;
+        }
+        clearPanes();
+        if (isDestroyed()) return;
+        showStopped("The Linux windows host stopped unexpectedly.", true);
+        mStartButton.setText("Restart");
+    }
+
+    private void toplevelCreated(long id, String title, String appId) {
         if (mPanes.get(id) != null || isDestroyed()) return;
         Pane pane = new Pane(id);
         pane.title = title;
@@ -260,33 +532,90 @@ public final class WaylandSpikeActivity extends Activity implements WaylandHost.
         pane.updateLabel();
         mPanes.put(id, pane);
         mEmpty.setVisibility(View.GONE);
-        mRoot.addView(pane.row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        mPaneHost.addView(pane.row, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
     }
 
-    @Override
-    public void onToplevelTitle(long id, String title, String appId) {
-        Pane pane = mPanes.get(id);
-        if (pane == null) return;
-        pane.title = title;
-        pane.appId = appId;
-        pane.updateLabel();
-    }
-
-    @Override
-    public void onToplevelBufferSize(long id, int width, int height) {
-        Pane pane = mPanes.get(id);
-        if (pane == null) return;
-        pane.bufferWidth = width;
-        pane.bufferHeight = height;
-        pane.updateLabel();
-    }
-
-    @Override
-    public void onToplevelDestroyed(long id) {
+    private void removePane(long id) {
         Pane pane = mPanes.get(id);
         if (pane == null) return;
         mPanes.remove(id);
-        mRoot.removeView(pane.row);
+        mPaneHost.removeView(pane.row);
+        if (mFocusedId == id) mFocusedId = 0;
         if (mPanes.size() == 0) mEmpty.setVisibility(View.VISIBLE);
+    }
+
+    private void clearPanes() {
+        for (int i = mPanes.size() - 1; i >= 0; i--) mPaneHost.removeView(mPanes.valueAt(i).row);
+        mPanes.clear();
+        mFocusedId = 0;
+        mEmpty.setVisibility(View.VISIBLE);
+    }
+
+    private void focus(long id) {
+        if (mFocusedId == id) return;
+        long old = mFocusedId;
+        mFocusedId = id;
+        Pane before = mPanes.get(old);
+        if (before != null) before.updateLabel();
+        Pane now = mPanes.get(id);
+        if (now != null) now.updateLabel();
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int action = event.getAction();
+        if (mService != null && mFocusedId != 0 && mPanes.get(mFocusedId) != null
+            && isForwardedKey(event.getKeyCode())
+            && (action == KeyEvent.ACTION_DOWN || action == KeyEvent.ACTION_UP)) {
+            // The client repeats held keys itself (wl_keyboard.repeat_info).
+            if (event.getRepeatCount() == 0) {
+                try {
+                    mService.key(mFocusedId, event.getKeyCode(), action == KeyEvent.ACTION_DOWN);
+                } catch (RemoteException ignored) {
+                }
+            }
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
+    }
+
+    @Override
+    protected void onStart() {
+        super.onStart();
+        mVisible = true;
+        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).attach();
+    }
+
+    @Override
+    protected void onStop() {
+        // A hidden window gets no frames: its client stops drawing until it is shown again.
+        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).detach();
+        mVisible = false;
+        super.onStop();
+    }
+
+    @Override
+    protected void onDestroy() {
+        // The host keeps running; only this activity's views and listener go.
+        if (mService != null) {
+            for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).detach();
+            try {
+                mService.removeCallback(mCallback);
+            } catch (RemoteException ignored) {
+            }
+        }
+        if (mServiceBinder != null) {
+            try {
+                mServiceBinder.unlinkToDeath(mDeath, 0);
+            } catch (RuntimeException ignored) {
+            }
+        }
+        if (mBound) {
+            unbindService(mConnection);
+            mBound = false;
+        }
+        mService = null;
+        mPanes.clear();
+        super.onDestroy();
     }
 }
