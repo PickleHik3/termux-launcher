@@ -128,7 +128,8 @@ Heights, places and Type are one for Home and the Terminal, so nothing moves whe
 Three sliders set the glass. **Frost** is how rough the face is: clear glass at one end, ground
 glass at the other; Opacity and Frost can differ per surface. **Depth** is how thick the glass
 is, so how strongly it bends the wallpaper at its edge; the far end is a thick lens. **Shine** is
-how bright the light on the edge and lens is; the far end throws a little colour. Depth and Shine
+how much of the wallpaper's light shows in the glass: bright, colourful parts of the wallpaper
+next to a surface spill their colour into its edge; the far end throws a little colour. Depth and Shine
 are the same on every surface. The presets set them: **Clear** is clear glass with a visible
 edge, **Frosted** a blurred face with the same edge, **Tinted** coloured glass, **Solid** near
 opaque for easy reading, and **Liquid** a thick, bright, dramatic lens. An existing look keeps

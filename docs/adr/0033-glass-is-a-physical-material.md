@@ -54,3 +54,24 @@ fringe, parity filters that re-add baked colours. Each new complaint so far has 
 - A new look complaint is answered by a physical parameter or a preset, not by a new gain or an
   overlay. A request for a stylised look is a slider end or the Liquid preset.
 - Default numbers are tuned by eye on pong and frozen in one pure parameter class with tests.
+
+## Amendment 2026-11-23: lit by its surroundings
+
+Decisions 1 and 4 said the glass is lit by a fixed room light. Tuning on pong, the developer
+turned that light off everywhere (the lens zone's specular drew "a thick milky line under the top
+border of every glass surface"; the rim's lit side and the turn's glint went with it) and asked
+for the light to come from the wallpaper instead: "I don't like the global light shimmering from
+a set place. Is it possible to have the light dependent on the wallpaper? Like the bright areas
+with colours just come into the glass instead of an invisible white light."
+
+- **The glass has no fixed light.** It is lit by its surroundings: the lens zone reflects the
+  blurred wallpaper just outside its outline (one tap at the pixel mirrored out across the
+  outline), weighted by Schlick Fresnel from the slab's normal, in linear light, added and never
+  multiplied. A bright, colourful patch next to a surface brings its colour into that edge; a
+  dark one brings nothing. A faint constant sky tone stays as a floor.
+- **The rim is an even line**: its baseline white and dark line, the same on every side. A
+  finger still lights it.
+- **Under a turn** the reflected patch follows the slab's normal, so the edge going away sees
+  further out; there is no glint.
+- **Shine** scales how much of the wallpaper's light shows in the glass.
+- The fixed light's terms stay as debug tuning keys that ship at 0.

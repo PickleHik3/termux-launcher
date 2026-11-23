@@ -32,24 +32,34 @@ keyboard frost and the SurfaceView recording rule (research §5.3). They stay.
 - **Rim:** drawn once, by the shader. No rim drawable or stroke over a shader rim (built-in
   widgets restore one today: `BuiltinWidgetView.java:850`). A thin crisp line: a light line
   facing the room light, a dark line, and a baseline of equal strength all round, so no side
-  vanishes in a horizontal motion. White light, not a multiple of the backdrop colour; in linear
+  vanishes in a horizontal motion (since 2026-11-23 the light line ships at 0: no fixed light,
+  so the line is the even baseline). White light, not a multiple of the backdrop colour; in linear
   light (`toLinearSrgb`/`fromLinearSrgb`); premultiplied output. Precision: `float` for
   coordinates, distances and normals.
-- **Lens zone:** the slab curves down to the edge over a lens zone (about 16 dp on large
-  surfaces; on small pieces a share of the short side, capped at the Depth value). A smooth
-  convex profile, C1 where it meets the flat face; its normal is the SDF gradient times the
-  profile's slope. Refraction: Snell's law through the slab's thickness (`refract`, an index
-  of refraction around 1.5 at the defaults), sampling the **sharp** frame, compressing and
-  bending the background strongly toward the edge, with no colour gain. Fresnel (Schlick) from
-  the slab normal and the view. Dispersion only at high Shine, following the bend, never a
-  corner-only split.
+- **Lens zone:** the slab curves down to the edge over a lens zone (24 dp on large surfaces,
+  tuned on pong 2026-11-23; on small pieces a share of the short side, capped at the Depth
+  value). A smooth convex profile (a superellipse, p = 4, easing in from the face), C1 where it
+  meets the flat face; its normal is the SDF gradient times the profile's slope. Refraction:
+  Snell's law through the slab's thickness (`refract`, an index of refraction around 1.5 at the
+  defaults), compressing and bending the background strongly toward the edge, with no colour
+  gain. The zone shows the **sharp** frame by how much it bends there (its steepness): sharp
+  across the steep outer part, easing to the face's frost as the zone flattens, so the nearly
+  flat inner part never reads as an unblurred strip. Fresnel (Schlick) from the slab normal and
+  the view. Dispersion only at high Shine, following the bend, never a corner-only split.
 - **Face:** the flat middle carries frost (roughness), opacity, tint (absorption) and the veil,
   looking as today unless the controls change.
-- **Light:** one fixed room light, upper left, the same for every surface. No gyroscope.
+- **Light:** from the surroundings, no fixed light (ADR 0033 amendment, 2026-11-23). The lens
+  zone reflects the blurred wallpaper just outside its outline (the pixel mirrored out across it,
+  8 dp further), weighted by Schlick Fresnel less its head-on part where the zone is barely
+  steep, in linear light, premultiplied, added and never multiplied (`GlassSlab.reflect`, 2,
+  scaled by Shine), over a faint sky tone (0.1). A bright patch next to a surface colours its
+  edge; a dark one adds nothing. The stored and scene frames are sampled past the surface
+  (clamped at the frame's edge); the live route and the dock's effect hold the tap inside the
+  surface. No gyroscope.
 - **Motion:** from the page's pose (translation, rotation, scale) that each draw already has.
   Slide: optically still (only the background drifts under the glass). Turns (Carousel, Stack's
   turn, the plank's tip): the image shifts through the slab with the angle, the far bevel takes
-  Fresnel light, a soft glint crosses the face. Depth and Stack's scale: a slight magnification
+  more Fresnel and so more of the wallpaper, which it sees further out; no glint. Depth and Stack's scale: a slight magnification
   change. The speed spring (`GlassMotionLight` lag) goes. Reduced motion and Animation speed
   Off keep the glass flat. No frames requested at rest; no per-frame allocation.
 - **Gap between windows:** during a turning space-bar switch the gap between the departure card
@@ -60,8 +70,9 @@ keyboard frost and the SurfaceView recording rule (research §5.3). They stay.
 ## Controls
 
 - **Glass sliders: Frost, Depth, Shine.** Frost = roughness of the face (today's Blur).
-  Depth = thickness and lens zone (today's Depth). Shine = light intensity on the rim and lens,
-  adding a little dispersion at the high end (folds today's Rim and Edge). Realistic values sit
+  Depth = thickness and lens zone (today's Depth). Shine = how much of the wallpaper's light
+  shows in the glass (the reflected surroundings and the rim's white), adding a little
+  dispersion at the high end (folds today's Rim and Edge). Realistic values sit
   at the defaults; the ends go past realism toward a dramatic look.
 - **Per surface:** Opacity and Frost keep their per-surface rows (Dock, Status, Keyboard,
   Terminal). Depth and Shine are app-wide.
