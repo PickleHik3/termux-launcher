@@ -659,10 +659,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (keyboard instanceof com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) {
                 ((com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) keyboard)
                     .setTouchRefused(mViews.keyboardDownLaidOutPx() > 0);
-                // On Home the keyboard is over the dock: no touch of its box falls through.
+                // While the keyboard is up its box is its own on every page: no touch of it
+                // falls through to the dock under it (Home) or the wall's page swipe.
                 ((com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout) keyboard)
-                    .setCoversBelow(covered && mViews.frontIsHome()
-                        && mViews.keyboardDownLaidOutPx() <= 0);
+                    .setCoversBelow(com.termux.app.terminal.inappkeyboard.KeyboardContainerLayout
+                        .ownsItsBox(mViews.keyboardDownLaidOutPx()));
             }
         }
         View body = mViews.view(R.id.terminal_background);

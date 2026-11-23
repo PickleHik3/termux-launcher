@@ -43,12 +43,21 @@ public class KeyboardContainerLayout extends LinearLayout {
     }
 
     /**
-     * Whether the keyboard draws over the dock (Home, #309): a touch inside its bounds is its own
+     * Whether the keyboard is up and owns its box on every page (#309 on Home): a touch inside its bounds is its own
      * even where no key takes it (a split keyboard's gap), so it never reaches the covered dock.
      * A write only on a change.
      */
     public void setCoversBelow(boolean covers) {
         mCoversBelow = covers;
+    }
+
+    /**
+     * The one rule for a touch no key takes: while the keyboard is up (nothing of it laid out
+     * below the screen) its whole box is its own on every page, so a slide on the space bar or in
+     * the band under the bottom row never reaches the wall's page swipe or the dock.
+     */
+    public static boolean ownsItsBox(int keyboardDownLaidOutPx) {
+        return keyboardDownLaidOutPx <= 0;
     }
 
     public boolean isCoversBelow() {
