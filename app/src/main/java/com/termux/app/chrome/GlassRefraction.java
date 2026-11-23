@@ -33,8 +33,10 @@ import java.util.Arrays;
  * so the pixel shows the picture from further in: strongly at the border, nothing on the face,
  * never past {@code T sqrt(n² - 1)}, and held so a small piece never shows its far edge's picture.
  * The zone shows the sharp picture where one is bound; the face keeps its frost. The zone is lit
- * in linear light: Schlick's Fresnel from the slab's normal and the view against a fixed sky tone,
- * and a white specular from the one room light, up and to the left. Face pixels skip all of it.</p>
+ * by its surroundings, in linear light: Schlick's Fresnel from the slab's normal and the view
+ * reflects the frost just outside the outline (one tap, mirrored out across it), so a bright,
+ * colourful patch of wallpaper next to a surface brings its colour into that edge and a dark one
+ * brings nothing, over a faint sky tone. There is no fixed light. Face pixels skip all of it.</p>
  * <p>The outline wears one thin, crisp rim ({@link GlassRim}): a line a few px wide that darkens
  * what is behind it and adds white, lit in linear light so it adds no colour of its own, with a
  * baseline of white and dark every side and corner keeps alike, more white facing one key light up
@@ -514,9 +516,13 @@ public final class GlassRefraction {
         "uniform float uDepth;\n" +
         // The colour split, 0..kDispFull: Look.dispersion.
         "uniform float uDisp;\n" +
-        // The light's multiple of the room light on the rim and the lens, 0..2.5: Look.shine
-        // (GlassMaterial.shineScale); 1 is the glass as it ships.
+        // How much of the light shows, 0..2.5: the rim's white and the wallpaper the lens zone
+        // reflects. Look.shine (GlassMaterial.shineScale); 1 is the glass as it ships.
         "uniform float uShine;\n" +
+        // 1 where content is the surface's own picture (a RenderEffect: the dock, the live
+        // route), which holds nothing past the surface: the reflected tap is held inside the
+        // rect. 0 where content is a frame (stored or scene), whose clamp tile mode holds it.
+        "uniform float uEnvHold;\n" +
         // 1 while sharp is a clearer picture of its own, 0 while it is the frost bound in its
         // place (or nothing): the lens zone then shows that picture wholly toward the rim.
         "uniform float uSharpEdge;\n" +
@@ -824,6 +830,7 @@ public final class GlassRefraction {
         "    float shiftR = 0.0;\n" +
         "    float shiftB = 0.0;\n" +
         "    float slope = 0.0;\n" +
+        "    float steepK = 0.0;\n" +
         "    float e = 1.0;\n" +
         "    if (inside < reach && uDepth > 0.0) {\n" +
         "        nb = rectNormal(p, b, min(max(cr, reach), hs));\n" +
@@ -841,7 +848,11 @@ public final class GlassRefraction {
         // it, travelling the thickness: the picture this pixel shows lies shiftG further in. 0 on
         // the face, never past slabT sqrt(n² - 1) at the outline. GlassSlab.shiftPx in Java.
         "            slope = slabT / wr * slabSlope(e);\n" +
-        "            shiftG = slabT * snellTan(slope, kIor);\n" +
+        "            float bendT = snellTan(slope, kIor);\n" +
+        "            shiftG = slabT * bendT;\n" +
+        // How steep the zone is here, 0..1: the bend over its bound (bendT sqrt(n² - 1) is
+        // bendT * kSlabHold's inverse), whole from kBendFull of it out. GlassSlab.steepness in Java.
+        "            steepK = smoothstep(0.0, kBendFull, bendT * kSlabHold);\n" +
         "            shiftR = shiftG;\n" +
         "            shiftB = shiftG;\n" +
         // Dispersion (the Edge slider): red and blue refract at their own index, so the colours
@@ -948,9 +959,9 @@ public final class GlassRefraction {
         // under the alpha. Pixels past the rim's reach and the lens zone skip it.
         // The lens zone (GlassSlab.lit): the picture let through by 1 - F and F of the sky tone,
         // Schlick's F from the slab's normal and the view; Fresnel stands back under the rim's
-        // line, which already lights the outline. Then the room light's white specular,
-        // Blinn-Phong on the slab's normal (the drawn normal n tipped by the slope) under the one
-        // fixed key light, less its value on the flat face so the face takes none.
+        // line, which already lights the outline. Then the wallpaper just outside the outline,
+        // reflected (below). A room light's white specular (Blinn-Phong on the slab's normal, the
+        // drawn normal n tipped by the slope) stays as a tuning key, skipped at its shipped 0.
         // The rim (GlassRim): one thin, crisp line along the outline, the same distance field on
         // every side and round every corner. Its weight across the depth is whole to kRimLineDp,
         // off on a smoothstep over kRimSoftDp, plus a short halo (BorderBeam's profile). The line
@@ -960,10 +971,10 @@ public final class GlassRefraction {
         // (kKeyLight, its wide lobe) and more dark facing away. A finger lights the rim near it;
         // the baseline never moves. The dock's shelf adds its lip's white on the lower edge.
         // GlassRim.weight, white, darkening and lit, and rimLobe and rimAway in Java.
-        // A turned slab (GlassPoseOptics) is lit from the same fixed room: in its frame the eye
-        // leans toward the near edge, so the bevel going away meets it more steeply and takes
-        // more Schlick Fresnel, the half vector turns, the flat face reflects more of the sky,
-        // and one soft glint crosses the face. All under the alpha, like every light here.
+        // A turned slab (GlassPoseOptics): in its frame the eye leans toward the near edge, so the
+        // bevel going away meets it more steeply and takes more Schlick Fresnel and so more of
+        // the wallpaper, which it sees further out; the flat face reflects more of the sky. All
+        // under the alpha, like every light here.
         "    float lineCore = max(kRimLineDp * uDensity, kRimMinLinePx);\n" +
         "    float lineSoft = max(kRimSoftDp * uDensity, kRimMinSoftPx);\n" +
         "    float lineHalo = max(kRimHaloDp * uDensity, 0.01);\n" +
@@ -992,11 +1003,37 @@ public final class GlassRefraction {
         "                fres = clamp(fres + uPoseLight.z * (tf - fres), 0.0, 1.0);\n" +
         "                hv = uPoseHalf.xyz;\n" +
         "            }\n" +
+        // The wallpaper's share (GlassSlab.envWeight): Fresnel less its head-on part where the
+        // zone is barely steep, so nothing where the zone meets the face.
+        "            float envW = max(fres - kF0 * (1.0 - steepK), 0.0) * (1.0 - lineW);\n" +
         "            fres = fres * (1.0 - lineW);\n" +
-        "            float nh = max(dot(float3(n * slope, 1.0) * cv, hv), 0.0);\n" +
-        "            float spec = max(pow(nh, kSpecPow) - kSpecFloor, 0.0) * kSpecK;\n" +
-        "            spec = spec * uShine;\n" +
-        "            lin = lin * (1.0 - fres) + float3(fres * kEnv + spec);\n" +
+        "            float3 sky = float3(fres * kEnv);\n" +
+        "            if (kSpecK > 0.0) {\n" +
+        "                float nh = max(dot(float3(n * slope, 1.0) * cv, hv), 0.0);\n" +
+        "                sky = sky + float3(max(pow(nh, kSpecPow) - kSpecFloor, 0.0) * kSpecK * uShine);\n" +
+        "            }\n" +
+        // The surroundings' light: one tap of the frost at the pixel mirrored out across the
+        // outline along the field's gradient and kEnvReachDp further (GlassSlab.envTapPx); a
+        // turned slab's reflected ray leans with the turn, so the far edge sees further out.
+        // Linear and premultiplied, added by envW: it reflects colour, it never multiplies the
+        // picture let through. Held inside the rect where content is the surface's own picture.
+        "            float envK = envW * kEnvK * uShine;\n" +
+        "            if (envK > 0.0) {\n" +
+        "                float envReach = kEnvReachDp * uDensity;\n" +
+        "                float2 envAt = fragCoord + n * (2.0 * max(inside, 0.0) + envReach);\n" +
+        "                if (turned) {\n" +
+        "                    envAt = envAt + uPose.xy * envReach;\n" +
+        "                }\n" +
+        "                if (uEnvHold > 0.0) {\n" +
+        "                    envAt = clamp(envAt, rMin + 0.5, rMax - 0.5);\n" +
+        "                }\n" +
+        "                half4 envS = content.eval(framePx(envAt));\n" +
+        "                float envA = float(envS.a);\n" +
+        "                if (envA > 0.0) {\n" +
+        "                    sky = sky + float3(toLinearSrgb(half3(float3(envS.rgb) / envA))) * (envA * envK);\n" +
+        "                }\n" +
+        "            }\n" +
+        "            lin = lin * (1.0 - fres) + sky;\n" +
         "        } else if (turned) {\n" +
         "            float ff = uPoseLight.y * (1.0 - lineW);\n" +
         "            lin = lin * (1.0 - ff) + float3(ff * kEnv);\n" +
@@ -1592,6 +1629,8 @@ public final class GlassRefraction {
             mDensity = density;
             mShader.setFloatUniform("uDensity", density);
             mShader.setFloatUniform("uShine", 1f);
+            // Until a frame is bound (setInput) content is the surface's own picture.
+            mShader.setFloatUniform("uEnvHold", 1f);
             mShader.setFloatUniform("uLensStrength", LENS_STRENGTH);
             mShader.setFloatUniform("uLensFeather", density * LENS_FEATHER_DP);
             mShader.setFloatUniform("uTouchLens", TOUCH_LENS);
@@ -1787,6 +1826,9 @@ public final class GlassRefraction {
                 ((BitmapShader) content).setFilterMode(BitmapShader.FILTER_MODE_LINEAR);
             }
             mShader.setInputShader("content", content);
+            // A frame holds the wallpaper past the surface, held at its edge by the clamp tile
+            // mode: the reflected tap may leave the rect.
+            if (!mInputBound) mShader.setFloatUniform("uEnvHold", 0f);
             mInputBound = true;
             // The clearer picture is the frost itself until a caller hands one in, so the mix
             // reads back what it was given; the clarity term is then free to be written.

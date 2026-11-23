@@ -31,11 +31,15 @@ import java.util.Locale;
  * short side on small ones (chips, pills, keys, beads), and the thickness shrinks with it, so a
  * small piece is the same slab scaled down and stays readable ({@link #thicknessPx}).</li>
  * <li><b>Light.</b> In linear light: the picture let through times {@code 1 - F}, plus
- * {@code F} of a fixed sky tone ({@link #env}), Schlick's {@code F} from the slab's normal and
- * the view ({@link #fresnel}); and a white specular from the one room light up and to the left
- * ({@link GlassRefraction#KEY_LIGHT_X}), Blinn-Phong on the slab's normal ({@link #specular}).
- * The thin rim ({@link GlassRim}) stays the visible outline; Fresnel stands back where the rim
- * line is drawn, so the outline is lit once.</li>
+ * {@code F} of a faint sky tone ({@link #env}), Schlick's {@code F} from the slab's normal and
+ * the view ({@link #fresnel}); and the wallpaper around the surface: the zone reflects the frost
+ * a little past its outline, mirrored out across it along the field's gradient
+ * ({@link #envTapPx}), weighted by {@link #envWeight} and {@link #reflect}, so a bright patch next
+ * to a surface brings its own colour into that edge and a dark one brings nothing. It reflects,
+ * it never multiplies the picture beneath. A white specular from a room light up and to the left
+ * ({@link GlassRefraction#KEY_LIGHT_X}, Blinn-Phong on the slab's normal, {@link #specular})
+ * stays as a tuning key. The thin rim ({@link GlassRim}) stays the visible outline; Fresnel
+ * stands back where the rim line is drawn, so the outline is lit once.</li>
  * <li><b>Dispersion.</b> Only where the look's Edge asks: red and blue refract at their own
  * index ({@link #iorRed}, {@link #iorBlue}), so the split follows the bend, equal on straights
  * and round corners and nothing on the face.</li>
@@ -43,10 +47,10 @@ import java.util.Locale;
  *
  * <p>Tuning: the system property {@value #PROP} overrides any of the numbers, as comma-separated
  * {@code key=value} pairs in {@link GlassRim}'s format, for example
- * {@code adb shell setprop debug.tl.glass_slab 'lens=20,ior=1.6,spec=0.3'}. Keys: {@code lens}
+ * {@code adb shell setprop debug.tl.glass_slab 'lens=20,ior=1.6,reflect=3'}. Keys: {@code lens}
  * (dp, 0..48), {@code share} (0..0.5), {@code ior} (1..2.5), {@code f0} (0..1), {@code env}
  * (0..1), {@code spec} (0..2), {@code power} (1..512), {@code profile} (1.1..8), {@code disp}
- * (0..10). A key not named keeps its default; any unknown key, unreadable number or value out of
+ * (0..10), {@code reflect} (0..8). A key not named keeps its default; any unknown key, unreadable number or value out of
  * range makes the whole value fall back to the defaults. Read once, when the first glass program
  * is built ({@link #active}), and baked into the program as constants, so a new value takes effect
  * after the launcher restarts and tuning costs nothing per frame.</p>
@@ -74,6 +78,20 @@ public final class GlassSlab {
     static final float PROFILE = 2f;
     /** How far the indices of red and blue part from {@link #IOR} at Edge 100%, as a multiple of 1.49 / 1.52. */
     static final float DISP = 1f;
+    /**
+     * How much of the wallpaper outside the outline the zone reflects, as a multiple of what
+     * Fresnel alone gives: 1 is physical, more lets the surroundings' light read past realism.
+     * The app-wide Shine scales it. {@code kEnvK}.
+     */
+    static final float REFLECT = 2f;
+    /** How far past the pixel's mirror across the outline the reflected patch lies, dp. {@code kEnvReachDp}. */
+    static final float ENV_REACH_DP = 8f;
+    /**
+     * The share of the deepest bend ({@code T sqrt(n² - 1)}) by which the zone counts as wholly
+     * steep ({@link #steepness}): from there out the zone takes its head-on reflectance of the
+     * wallpaper outside; the nearly flat inner part takes none. {@code kBendFull}.
+     */
+    static final float BEND_FULL = 0.2f;
 
     /** How far red's index falls under {@link #ior} and blue's rises over it at Edge 100% and {@link #disp} 1. */
     static final float DISP_RED = 0.01f;
@@ -83,7 +101,7 @@ public final class GlassSlab {
 
     /** The shipped numbers. */
     @NonNull public static final GlassSlab DEFAULT =
-        new GlassSlab(LENS_DP, SHARE, IOR, F0, ENV, SPEC, POWER, PROFILE, DISP);
+        new GlassSlab(LENS_DP, SHARE, IOR, F0, ENV, SPEC, POWER, PROFILE, DISP, REFLECT);
 
     public final float lensDp;
     public final float share;
@@ -94,9 +112,10 @@ public final class GlassSlab {
     public final float power;
     public final float profile;
     public final float disp;
+    public final float reflect;
 
     GlassSlab(float lensDp, float share, float ior, float f0, float env, float spec, float power,
-              float profile, float disp) {
+              float profile, float disp, float reflect) {
         this.lensDp = lensDp;
         this.share = share;
         this.ior = ior;
@@ -106,6 +125,7 @@ public final class GlassSlab {
         this.power = power;
         this.profile = profile;
         this.disp = disp;
+        this.reflect = reflect;
     }
 
     @Nullable private static volatile GlassSlab sActive;
@@ -132,7 +152,7 @@ public final class GlassSlab {
     public static GlassSlab parse(@Nullable String value) {
         if (value == null || value.trim().isEmpty()) return DEFAULT;
         float lens = LENS_DP, share = SHARE, ior = IOR, f0 = F0, env = ENV, spec = SPEC;
-        float power = POWER, profile = PROFILE, disp = DISP;
+        float power = POWER, profile = PROFILE, disp = DISP, reflect = REFLECT;
         for (String pair : value.split(",")) {
             String p = pair.trim();
             if (p.isEmpty()) continue;
@@ -156,10 +176,12 @@ public final class GlassSlab {
                 case "power": if (!in(v, 1f, 512f)) return DEFAULT; power = v; break;
                 case "profile": if (!in(v, 1.1f, 8f)) return DEFAULT; profile = v; break;
                 case "disp": if (!in(v, 0f, 10f)) return DEFAULT; disp = v; break;
+                case "reflect": if (!in(v, 0f, 8f)) return DEFAULT; reflect = v; break;
                 default: return DEFAULT;
             }
         }
-        GlassSlab slab = new GlassSlab(lens, share, ior, f0, env, spec, power, profile, disp);
+        GlassSlab slab = new GlassSlab(lens, share, ior, f0, env, spec, power, profile, disp,
+            reflect);
         return slab.equals(DEFAULT) ? DEFAULT : slab;
     }
 
@@ -331,14 +353,64 @@ public final class GlassSlab {
     }
 
     /**
-     * One linear channel {@code lin} under the lens at slope {@code slope}, where the rim's line
-     * weighs {@code lineW}: let through by {@code 1 - F}, reflecting {@code F} of the sky, and
-     * the white {@code specular} added. Fresnel stands back under the rim's line, which already
-     * lights the outline.
+     * How far the slab bends at slope {@code slope} as a share of its deepest bend, 0..1:
+     * {@code tan(θi - θt) / sqrt(n² - 1)}, the refraction shift over its bound.
      */
-    public float lit(float lin, float slope, float lineW, float specular) {
+    public float bendShare(float slope) {
+        float k = (float) Math.sqrt(Math.max(0f, ior * ior - 1f));
+        return k > 0f ? Math.min(1f, snellTan(slope, ior) / k) : 0f;
+    }
+
+    /**
+     * How steep the zone is at slope {@code slope}, 0..1: a smoothstep of {@link #bendShare} up to
+     * {@link #BEND_FULL}. Nothing where the zone meets the face, rising with no step (the bend
+     * itself starts there with zero slope), whole across the steep outer part. The program's
+     * {@code steepK}.
+     */
+    public float steepness(float slope) {
+        float x = Math.max(0f, Math.min(1f, bendShare(slope) / BEND_FULL));
+        return x * x * (3f - 2f * x);
+    }
+
+    /**
+     * The share of the wallpaper outside the outline the zone reflects at slope {@code slope},
+     * where the rim's line weighs {@code lineW}, before {@link #reflect}: Schlick's {@code F},
+     * less its head-on {@link #f0} where the zone is barely steep ({@link #steepness}), so it is
+     * nothing where the zone meets the face (no ring there) and strongest at the outline. It
+     * stands back under the rim's line, as Fresnel does.
+     */
+    public float envWeight(float slope, float lineW) {
+        float f = fresnel(slope) - f0 * (1f - steepness(slope));
+        return Math.max(0f, f) * (1f - Math.max(0f, Math.min(1f, lineW)));
+    }
+
+    /**
+     * How far out along the outline's normal, px, a pixel {@code insidePx} in reads the wallpaper
+     * it reflects: its mirror across the outline, then {@link #ENV_REACH_DP} further.
+     */
+    public float envTapPx(float insidePx, float density) {
+        return 2f * Math.max(0f, insidePx) + ENV_REACH_DP * density;
+    }
+
+    /**
+     * One linear channel {@code lin} under the lens at slope {@code slope}, where the rim's line
+     * weighs {@code lineW}: let through by {@code 1 - F}, reflecting {@code F} of the sky and the
+     * wallpaper outside the outline ({@code outside}, linear, premultiplied) by
+     * {@link #envWeight} times {@link #reflect} at Shine {@code shine}, and the white
+     * {@code specular} added. Fresnel stands back under the rim's line, which already lights the
+     * outline.
+     */
+    public float lit(float lin, float slope, float lineW, float specular, float outside,
+                     float shine) {
         float f = fresnel(slope) * (1f - Math.max(0f, Math.min(1f, lineW)));
-        return Math.min(1f, lin * (1f - f) + f * env + specular);
+        float mirror = envWeight(slope, lineW) * reflect * Math.max(0f, shine)
+            * Math.max(0f, outside);
+        return Math.min(1f, lin * (1f - f) + f * env + mirror + specular);
+    }
+
+    /** {@link #lit(float, float, float, float, float, float)} with a black surround. */
+    public float lit(float lin, float slope, float lineW, float specular) {
+        return lit(lin, slope, lineW, specular, 0f, 1f);
     }
 
     // ------------------------------------------------------------------------- the program
@@ -357,6 +429,9 @@ public final class GlassSlab {
             + "const float kSlabEMin = " + GlassRefraction.agslFloat(E_MIN) + ";\n"
             + "const float kF0 = " + GlassRefraction.agslFloat(f0) + ";\n"
             + "const float kEnv = " + GlassRefraction.agslFloat(env) + ";\n"
+            + "const float kEnvK = " + GlassRefraction.agslFloat(reflect) + ";\n"
+            + "const float kEnvReachDp = " + GlassRefraction.agslFloat(ENV_REACH_DP) + ";\n"
+            + "const float kBendFull = " + GlassRefraction.agslFloat(BEND_FULL) + ";\n"
             + "const float kSpecPow = " + GlassRefraction.agslFloat(power) + ";\n"
             + "const float kSpecFloor = " + GlassRefraction.agslFloat(floor) + ";\n"
             + "const float kSpecK = " + GlassRefraction.agslFloat(spec / (1f - floor)) + ";\n"
@@ -373,7 +448,7 @@ public final class GlassSlab {
         GlassSlab t = (GlassSlab) o;
         return lensDp == t.lensDp && share == t.share && ior == t.ior && f0 == t.f0
             && env == t.env && spec == t.spec && power == t.power && profile == t.profile
-            && disp == t.disp;
+            && disp == t.disp && reflect == t.reflect;
     }
 
     @Override
@@ -386,14 +461,15 @@ public final class GlassSlab {
         h = h * 31 + Float.floatToIntBits(spec);
         h = h * 31 + Float.floatToIntBits(power);
         h = h * 31 + Float.floatToIntBits(profile);
-        return h * 31 + Float.floatToIntBits(disp);
+        h = h * 31 + Float.floatToIntBits(disp);
+        return h * 31 + Float.floatToIntBits(reflect);
     }
 
     @NonNull
     @Override
     public String toString() {
         return String.format(Locale.ROOT,
-            "lens=%s,share=%s,ior=%s,f0=%s,env=%s,spec=%s,power=%s,profile=%s,disp=%s",
-            lensDp, share, ior, f0, env, spec, power, profile, disp);
+            "lens=%s,share=%s,ior=%s,f0=%s,env=%s,spec=%s,power=%s,profile=%s,disp=%s,reflect=%s",
+            lensDp, share, ior, f0, env, spec, power, profile, disp, reflect);
     }
 }

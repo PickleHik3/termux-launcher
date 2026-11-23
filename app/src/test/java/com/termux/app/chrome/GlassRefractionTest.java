@@ -167,7 +167,7 @@ public class GlassRefractionTest {
             "uLensActive", "uLensCenter", "uLensHalf", "uLensRadius", "uLensStrength", "uLensFeather",
             "uSharpEdge", "uFaceClarity", "uTouchActive", "uTouch", "uTouchRadius",
             "uTouchLens", "uPose", "uPoseLight", "uPoseHalf", "uGlint", "uSoftRim", "uShelf",
-            "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap", "uConcave",
+            "uBead", "uBeadXA", "uBeadXB", "uBeadXC", "uBeadCap", "uConcave", "uShine", "uEnvHold",
         };
         for (String name : written) {
             assertTrue(name + " is declared",
@@ -282,11 +282,12 @@ public class GlassRefractionTest {
     }
 
     @Test
-    public void noPixelReadsMoreThanSixSamples() {
-        // 3 + 3 where the colours part, 1 + 1 elsewhere in the lens zone and 1 on the face. Four
-        // of each in the text: three on the split path, one plain; and the concave lens's one,
-        // which reads that sample and returns.
-        assertEquals(5, count(GlassRefraction.AGSL, "content.eval("));
+    public void noPixelReadsMoreThanSevenSamples() {
+        // 3 + 3 where the colours part, 1 + 1 elsewhere in the lens zone and 1 on the face; the
+        // lens zone adds one tap of the wallpaper outside its outline. Four of each in the text:
+        // three on the split path, one plain; the concave lens's one, which reads that sample and
+        // returns; and the outside tap.
+        assertEquals(6, count(GlassRefraction.AGSL, "content.eval("));
         assertEquals(4, count(GlassRefraction.AGSL, "sharp.eval("));
     }
 
@@ -694,6 +695,46 @@ public class GlassRefractionTest {
     }
 
     @Test
+    public void theLensZoneReflectsTheWallpaperOutsideWithOneTapOnLensPixelsOnly() {
+        String agsl = GlassRefraction.AGSL;
+        int lens = agsl.indexOf("        if (slope > 0.0) {\n");
+        int face = agsl.indexOf("        } else if (turned) {\n", lens);
+        assertTrue(lens > 0 && face > lens);
+        String tap = "half4 envS = content.eval(framePx(envAt));";
+        assertTrue(agsl.contains(tap));
+        assertEquals("one tap", agsl.indexOf(tap), agsl.lastIndexOf(tap));
+        assertTrue("only in the lens zone", agsl.indexOf(tap) > lens && agsl.indexOf(tap) < face);
+        // Mirrored out across the outline along the field's gradient, then kEnvReachDp further.
+        assertTrue(agsl.contains("float2 envAt = fragCoord + n * (2.0 * max(inside, 0.0) + envReach);"));
+        // Fresnel less its head-on part where the zone is barely steep: nothing at the face.
+        assertTrue(agsl.contains("float envW = max(fres - kF0 * (1.0 - steepK), 0.0) * (1.0 - lineW);"));
+        // Added in linear light, premultiplied, scaled by Shine: no gain on the picture beneath.
+        assertTrue(agsl.contains("float envK = envW * kEnvK * uShine;"));
+        assertTrue(agsl.contains("sky = sky + float3(toLinearSrgb(half3(float3(envS.rgb) / envA))) * (envA * envK);"));
+        assertTrue(agsl.contains("lin = lin * (1.0 - fres) + sky;"));
+        // Held inside the surface where content is its own picture.
+        assertTrue(agsl.contains("envAt = clamp(envAt, rMin + 0.5, rMax - 0.5);"));
+        assertConst("kEnvK", GlassSlab.DEFAULT.reflect);
+        assertConst("kEnvReachDp", GlassSlab.ENV_REACH_DP);
+        assertConst("kBendFull", GlassSlab.BEND_FULL);
+    }
+
+    @Test
+    public void onlyAFrameLetsTheReflectedTapLeaveTheSurface() throws Exception {
+        java.io.File source = new java.io.File("src/main/java/com/termux/app/chrome/GlassRefraction.java");
+        if (!source.isFile()) source = new java.io.File("app/" + source.getPath());
+        org.junit.Assume.assumeTrue(source.isFile());
+        String text = new String(java.nio.file.Files.readAllBytes(source.toPath()),
+            java.nio.charset.StandardCharsets.UTF_8);
+        int ctor = text.indexOf("        private Program(float density) {");
+        int ctorEnd = text.indexOf("\n        }\n", ctor);
+        assertTrue(text.substring(ctor, ctorEnd).contains("setFloatUniform(\"uEnvHold\", 1f)"));
+        int input = text.indexOf("        public void setInput(@NonNull Shader content) {");
+        int inputEnd = text.indexOf("\n        }\n", input);
+        assertTrue(text.substring(input, inputEnd).contains("setFloatUniform(\"uEnvHold\", 0f)"));
+    }
+
+    @Test
     public void theProgramHoldsNoIconReflection() {
         assertFalse(GlassRefraction.AGSL.contains("reflection"));
         assertFalse(GlassRefraction.AGSL.contains("uReflect"));
@@ -861,7 +902,10 @@ public class GlassRefractionTest {
             "float keep = 1.0 - kRimDark * (kRimDarkAll + (1.0 - kRimDarkAll) * away) * lineW;"));
         assertTrue(agsl.contains("float3 lin = float3(toLinearSrgb(half3(float3(col.rgb) / ca)));"));
         assertTrue(agsl.contains("col.rgb = half3(float3(fromLinearSrgb(half3(lin))) * ca);"));
-        assertEquals("one linear round trip", agsl.indexOf("toLinearSrgb"), agsl.lastIndexOf("toLinearSrgb"));
+        // Two linear conversions: the picture let through, and the wallpaper the lens zone
+        // reflects (one tap, lens pixels only); one way back.
+        assertEquals("two into linear light", 2, agsl.split("toLinearSrgb", -1).length - 1);
+        assertEquals("one way back", agsl.indexOf("fromLinearSrgb"), agsl.lastIndexOf("fromLinearSrgb"));
         // The rim's light is fixed in the room: only a finger moves its lobe (#318 removed the
         // live glint, its key light and the tilt's lean).
         assertTrue(agsl.contains("            lobe = lobe + kTouchRim * touchG;\n"

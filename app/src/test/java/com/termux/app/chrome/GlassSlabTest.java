@@ -45,7 +45,10 @@ public class GlassSlabTest {
         assertEquals(slab, GlassSlab.parse(slab.toString()));
         String[] bad = {"lens", "=2", "lens=", "lens=abc", "lens=NaN", "lens=-1", "lens=49",
             "share=0.6", "ior=0.9", "ior=2.6", "f0=1.1", "env=-0.1", "spec=3", "power=0",
-            "profile=1", "disp=11", "width=3", "lens=16,bogus=1"};
+            "profile=1", "disp=11", "width=3", "lens=16,bogus=1", "reflect=-1", "reflect=9"};
+        assertEquals(3f, GlassSlab.parse("reflect=3").reflect, 0f);
+        assertEquals(0f, GlassSlab.parse("reflect=0").reflect, 0f);
+        assertEquals(GlassSlab.REFLECT, slab.reflect, 0f);
         for (String value : bad) assertSame(value, GlassSlab.DEFAULT, GlassSlab.parse(value));
     }
 
@@ -58,6 +61,8 @@ public class GlassSlabTest {
         assertTrue(GlassRefraction.AGSL.contains("const float kLensShare = 0.25;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float kSlabP = 2.0;\n"));
         assertTrue(GlassRefraction.AGSL.contains("const float3 kHalf = float3("));
+        assertTrue(GlassRefraction.agsl(GlassRim.DEFAULT, GlassSlab.parse("reflect=3"))
+            .contains("const float kEnvK = 3.0;\n"));
     }
 
     // ------------------------------------------------------------------- W and T by size
@@ -225,6 +230,64 @@ public class GlassSlabTest {
         // Along the top and the left edges, not a spot in the corner alone.
         assertTrue(SLAB.specular(0f, -1f, 0.41f) > 0.25f * lit);
         assertTrue(SLAB.specular(-1f, 0f, 0.41f) > 0.05f * lit);
+    }
+
+    @Test
+    public void theWallpapersShareIsNothingWhereTheZoneMeetsTheFaceAndGrowsToTheOutline() {
+        float w = 24f * PONG, t = DEPTH_DP * PONG;
+        assertEquals("flat: nothing", 0f, SLAB.envWeight(0f, 0f), 0f);
+        // Where the zone meets the face the slope is all but 0: no step against the face.
+        assertEquals(0f, SLAB.envWeight(SLAB.slopeAt(0.999f * w, w, t), 0f), 1e-4f);
+        float last = 0f;
+        for (float inside = w; inside >= 0f; inside -= 0.25f) {
+            float weight = SLAB.envWeight(SLAB.slopeAt(inside, w, t), 0f);
+            assertTrue("rises toward the outline at " + inside, weight >= last - 1e-6f);
+            last = weight;
+        }
+        assertTrue("strongest at the steep outer edge", last > 0.5f);
+        assertEquals("standing back under the rim's whole line", 0f, SLAB.envWeight(40f, 1f), 0f);
+        // Wholly steep, it is Fresnel itself.
+        assertEquals(SLAB.fresnel(40f), SLAB.envWeight(40f, 0f), 1e-6f);
+    }
+
+    @Test
+    public void theZoneReflectsColourAndNeverMultipliesThePictureBeneath() {
+        float lin = 0.2f, slope = 3f;
+        float none = SLAB.lit(lin, slope, 0f, 0f);
+        assertEquals("a black surround brings nothing", none, SLAB.lit(lin, slope, 0f, 0f, 0f, 1f), 0f);
+        float bright = SLAB.lit(lin, slope, 0f, 0f, 0.8f, 1f);
+        assertEquals("a bright one adds its own light, by the weight and reflect",
+            none + SLAB.envWeight(slope, 0f) * SLAB.reflect * 0.8f, bright, 1e-6f);
+        // Additive: the same surround adds the same light over a dark or a bright picture.
+        assertEquals(SLAB.lit(0.6f, slope, 0f, 0f, 0.8f, 1f) - SLAB.lit(0.6f, slope, 0f, 0f),
+            bright - none, 1e-6f);
+        assertEquals("Shine scales it", none + 2f * (bright - none),
+            SLAB.lit(lin, slope, 0f, 0f, 0.8f, 2f), 1e-6f);
+        assertEquals("Shine 0 keeps none of it", none, SLAB.lit(lin, slope, 0f, 0f, 0.8f, 0f), 0f);
+        assertEquals("reflect 0 keeps none of it", GlassSlab.parse("reflect=0").lit(lin, slope, 0f, 0f),
+            GlassSlab.parse("reflect=0").lit(lin, slope, 0f, 0f, 0.8f, 1f), 0f);
+        assertTrue("held at 1", SLAB.lit(1f, 40f, 0f, 0f, 1f, 2.5f) <= 1f);
+    }
+
+    @Test
+    public void theReflectedPatchIsTheMirrorAcrossTheOutlineAndAStepFurther() {
+        assertEquals(GlassSlab.ENV_REACH_DP * PONG, SLAB.envTapPx(0f, PONG), 1e-4f);
+        assertEquals(2f * 10f + GlassSlab.ENV_REACH_DP * PONG, SLAB.envTapPx(10f, PONG), 1e-4f);
+        assertEquals("never inward", GlassSlab.ENV_REACH_DP * PONG, SLAB.envTapPx(-3f, PONG), 1e-4f);
+    }
+
+    @Test
+    public void steepnessFollowsTheBendFromNothingAtTheFaceToWholeOutward() {
+        assertEquals(0f, SLAB.steepness(0f), 0f);
+        assertEquals(0f, SLAB.bendShare(0f), 0f);
+        assertEquals(1f, SLAB.bendShare(1.0e5f), 1e-3f);
+        assertEquals(1f, SLAB.steepness(1.0e5f), 0f);
+        float last = 0f;
+        for (float slope = 0.001f; slope < 100f; slope *= 1.3f) {
+            float s = SLAB.steepness(slope);
+            assertTrue(s >= last);
+            last = s;
+        }
     }
 
     // ------------------------------------------------------------------- the one field
