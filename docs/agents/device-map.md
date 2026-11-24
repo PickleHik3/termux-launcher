@@ -133,7 +133,9 @@ then lands on whatever icon is under it.
   the Android app.
 - `ad type` does not reach the field; tap the launcher keyboard's keys (q row y≈1783, a row
   y≈1928, z row y≈2081 at 1080x2412).
-- To open a Linux app for a check that is not about the drawer, use `launcherctl` over ssh.
+- To open a Linux app for a check that is not about the drawer, do not search for it:
+  `ssh termux launcherctl linux-apps` lists ids and names (tab separated), then
+  `ssh termux launcherctl linux-app open <id>` opens it as a drawer tap would.
 
 ## Device quirks
 

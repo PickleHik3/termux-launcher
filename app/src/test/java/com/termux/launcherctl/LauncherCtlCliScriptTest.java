@@ -43,7 +43,7 @@ public class LauncherCtlCliScriptTest {
 
     private static final String[] GROUPS = {"launch", "pane", "window", "agent", "notify", "progress",
         "clipboard", "notifications", "keyboard", "vibrate", "torch", "battery", "motion-log", "look", "volume", "toast",
-        "wallpaper", "x11", "media"};
+        "wallpaper", "x11", "linux-apps", "linux-app", "media"};
 
     @Rule public final TemporaryFolder folder = new TemporaryFolder();
 
@@ -94,7 +94,7 @@ public class LauncherCtlCliScriptTest {
     @Test
     public void aGroupThatNeedsACommandExplainsItselfInsteadOfActing() throws Exception {
         for (String group : new String[]{"launch", "pane", "window", "agent", "progress", "clipboard",
-                "keyboard", "torch", "wallpaper", "x11", "media"}) {
+                "keyboard", "torch", "wallpaper", "x11", "linux-app", "media"}) {
             Run bare = run(null, group);
             assertEquals(group, 2, bare.code);
             assertEquals(group, "", bare.out);
@@ -132,6 +132,11 @@ public class LauncherCtlCliScriptTest {
             {"window", "focus"},
             {"pane", "nonsense"},
             {"media", "nonsense"},
+            {"linux-app", "nonsense"},
+            {"linux-app", "open"},
+            {"linux-app", "open", ""},
+            {"linux-app", "open", "a", "b"},
+            {"linux-apps", "--bogus"},
             {"media", "gone"},
             {"media", "gone", "org.example.NotAPlayer"},
             {"media", "gone", "org.mpris.MediaPlayer2.x&y=1"},
@@ -147,6 +152,32 @@ public class LauncherCtlCliScriptTest {
             assertFalse(Arrays.toString(mistake), result.err.isEmpty());
         }
         assertTrue(server.requests.toString(), server.requests.isEmpty());
+    }
+
+    @Test
+    public void linuxAppsListsAndOpensByIdAndPrintsTheLaunchersLine() throws Exception {
+        server.answer(200, "text/plain; charset=utf-8", "a\tA\ttermux\nb\tB\tarch");
+        Run listed = run(null, "linux-apps");
+        assertEquals(listed.err, 0, listed.code);
+        assertEquals("a\tA\ttermux\nb\tB\tarch\n", listed.out);
+        assertEquals("GET /v1/linux-apps", server.requests.poll().line);
+
+        server.answer(200, "application/json", "{\"apps\":[]}");
+        assertEquals(0, run(null, "linux-apps", "--json").code);
+        assertEquals("GET /v1/linux-apps?format=json", server.requests.poll().line);
+
+        server.answer(200, "text/plain; charset=utf-8", "opened distro:arch:firefox");
+        Run opened = run(null, "linux-app", "open", "distro:arch:firefox");
+        assertEquals(opened.err, 0, opened.code);
+        assertEquals("opened distro:arch:firefox\n", opened.out);
+        Request request = server.requests.poll();
+        assertEquals("POST /v1/linux-apps/open", request.line);
+        assertEquals("{\"id\":\"distro:arch:firefox\"}", request.body);
+
+        server.answer(404, "text/plain; charset=utf-8", "linux-app: no Linux app with id nope");
+        Run unknown = run(null, "linux-app", "open", "nope");
+        assertEquals(1, unknown.code);
+        assertEquals("linux-app: no Linux app with id nope\n", unknown.out);
     }
 
     @Test

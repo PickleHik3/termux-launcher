@@ -59,5 +59,8 @@ distros come up when the home screen is next shown. A check run over ssh before 
 
 ## Checking on a device
 
-Open a Linux app for a check with `launcherctl`, not through the drawer: see "The app drawer's
-search" in [device-map.md](device-map.md). Install with `scripts/pong-install.sh`.
+Open a Linux app for a check with `launcherctl`, not through the drawer (see "The app drawer's
+search" in [device-map.md](device-map.md)): `ssh termux launcherctl linux-apps` lists
+`id<TAB>name<TAB>source[<TAB>desktop]`, and `ssh termux launcherctl linux-app open <id>` opens
+one as a drawer tap does (display choice, second tap raising the window). It needs the home screen
+shown since the launcher started. Install with `scripts/pong-install.sh`.
