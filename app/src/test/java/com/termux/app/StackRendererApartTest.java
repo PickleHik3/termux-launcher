@@ -121,6 +121,29 @@ public class StackRendererApartTest {
         assertEquals(-0.25f * WIDTH, mHost.getTranslationX(), 0.01f);
     }
 
+    /**
+     * The extra-keys card's glass samples where the card is drawn (ADR 0032 section 5): the
+     * scene's pose of it is the rows' layer, its lane's slide and the Terminal's lift, the
+     * translations its ancestors carry, at both rests and across a crossing.
+     */
+    @Test public void theKeysCardsPoseIsWhereItsLaneDrawsIt() {
+        View rows = mViews.get(R.id.accessory_row_stack);
+        mFrontHome = true;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
+        mRenderer.setSidesApart(true, DROP, 21);
+        mRenderer.apply();
+        for (float p : new float[] {0f, 0.25f, 0.75f, 1f}) {
+            mRenderer.setEnds(true, false, p);
+            String at = "p=" + p;
+            assertEquals(at, mKeysRow.getTranslationX() + mKeysCard.getTranslationX(),
+                mRenderer.cardDrawnX(RestCards.StackView.KEYS_CARD), 0.01f);
+            assertEquals(at, rows.getTranslationY() + mKeysRow.getTranslationY(),
+                mRenderer.cardDrawnY(RestCards.StackView.KEYS_CARD), 0.01f);
+        }
+        assertEquals(0f, mRenderer.cardDrawnX(RestCards.StackView.KEYS_CARD), 0f);
+        assertEquals(-21f, mRenderer.cardDrawnY(RestCards.StackView.KEYS_CARD), 0f);
+    }
+
     @Test public void apartAtHomesRestTheHostStandsAtHomesDropAndSlideZero() {
         mFrontHome = true;
         StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
