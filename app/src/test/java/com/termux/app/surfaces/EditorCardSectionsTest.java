@@ -89,6 +89,7 @@ public class EditorCardSectionsTest {
     @Test
     public void global() {
         check(EditorCard.APPEARANCE, expect(
+            CARD, Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER),
             "SECTION_LOOK", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
             "SECTION_FINE_TUNE", Arrays.asList(Row.DEPTH, Row.SHINE),
             "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN,
@@ -96,7 +97,7 @@ public class EditorCardSectionsTest {
             "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
                 Row.WALLPAPER_COLOURS,
                 Row.TINT_HUE, Row.TOOL_COLOURS),
-            "SECTION_SCREEN", Arrays.asList(Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN,
+            "SECTION_SCREEN", Arrays.asList(Row.TEXT_SIZE, Row.FULL_SCREEN,
                 Row.PAGE_TRANSITION)));
     }
 

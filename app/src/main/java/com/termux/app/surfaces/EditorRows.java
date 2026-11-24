@@ -234,6 +234,12 @@ public final class EditorRows {
          */
         CHANGE_WALLPAPER(Kind.SWITCH, R.string.editor_row_change_wallpaper,
             R.drawable.ic_ms_wallpaper),
+        /**
+         * The Global card's first row: the wallpaper's name and the way to its picker (the same
+         * page the Home and Terminal sheets open). Shown or not is {@link #SHOW_WALLPAPER}, which
+         * stands right under it.
+         */
+        WALLPAPER(Kind.WALLPAPER, R.string.editor_row_wallpaper, R.drawable.ic_symbol_wallpaper),
         /** The wallpaper behind both screens, shown or not. */
         SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper,
             R.drawable.ic_ed_show_wallpaper),

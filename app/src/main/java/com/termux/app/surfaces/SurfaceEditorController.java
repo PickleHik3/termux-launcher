@@ -963,6 +963,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mBarUp = true;
         mBar.setPageName(pageName());
         mBar.setBubbles(EditorBubbles.offered(useAs()), EditorBubbles.markedFor(mCard));
+        mBar.setWallpaperThumb(mWallpaperThumb);
         mBar.setOrientation(layout != null && layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
         mCardTrail.clear();
         if (mSheet == null)
@@ -1184,6 +1185,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // Home and Workspace turn the frame to their side first; Global leaves it.
             openMainCard(bubble.card);
             raiseFromPeek();
+        }
+
+        @Override public void onWallpaper() {
+            if (!mOpen)
+                return;
+            // Global, at its top: the Wallpaper row is the first thing it shows.
+            openCard(EditorBar.WALLPAPER_CARD, true);
+            raiseFromPeek();
+            if (mSheet != null) mSheet.scrollToTop();
         }
 
         @Override public void onPageLabel() {
@@ -2386,6 +2396,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private int mWallpaperToken;
     @Nullable private Drawable mEditorWallpaper;
+    /** The wallpaper button's small picture (a few KB), kept for the session; null for none. */
+    @Nullable private android.graphics.Bitmap mWallpaperThumb;
 
     /**
      * The picture the page label stands on, as a small copy centre-cropped to the decor the way
@@ -2421,7 +2433,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 ? sampleLabelPicture(picture, decorWidth, decorHeight)
                 : sampleSystemLabelPicture(rootContainer.getContext(), decorWidth, decorHeight);
             final int sampleHeight = EditorLabelInk.sampleHeight(decorWidth, decorHeight);
-            rootContainer.post(() -> landWallpaper(token, picture, sample, sampleHeight));
+            // The bar button's picture, drawn at its own size here and never the full one.
+            final android.graphics.Bitmap thumb = picture == null ? null
+                : WallpaperThumb.render(picture, EditorBar.wallpaperThumbPx(rootContainer.getResources()
+                    .getDisplayMetrics().density));
+            rootContainer.post(() -> {
+                landWallpaper(token, picture, sample, sampleHeight);
+                if (token == mWallpaperToken) {
+                    mWallpaperThumb = thumb;
+                    if (mBar != null) mBar.setWallpaperThumb(thumb);
+                }
+            });
         }, "appearance-editor-wallpaper");
         reader.setDaemon(true);
         reader.start();
@@ -3099,6 +3121,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return 0;
                 }
                 case LOOK: return lookStop(lookScreen());
+                case WALLPAPER:
                 case CHANGE_WALLPAPER: return 0;
                 case THEME:
                     return indexOf(THEMES, ThemePreview.effective(storedTheme()), 0);
@@ -3829,6 +3852,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case LOOK:
                 writeLook(value, dragging);
                 break;
+            case WALLPAPER:
             case CHANGE_WALLPAPER:
                 // Never written: the tile is a shortcut and its tap goes to onAction.
                 break;
@@ -3884,6 +3908,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case KEYBOARD_THEME:
                 openKeyboardTheme();
                 break;
+            case WALLPAPER:
             case CHANGE_WALLPAPER:
                 if (mPageListener != null) mPageListener.onOpenWallpaper();
                 break;
@@ -5668,6 +5693,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mWallpaperSettled = false;
         mWallpaperWaiter = null;
         mEditorWallpaper = null;
+        mWallpaperThumb = null;
+        if (mBar != null) mBar.setWallpaperThumb(null);
         mLabelPicture = null;
         mLabelInk = 0;
         releaseIconsContent();

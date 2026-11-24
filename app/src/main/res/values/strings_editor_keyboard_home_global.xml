@@ -85,6 +85,7 @@
 
     <!-- Global card. -->
     <string name="editor_row_change_wallpaper">Change wallpaper</string>
+    <string name="editor_row_wallpaper">Wallpaper</string>
     <string name="editor_row_show_wallpaper">Show wallpaper</string>
 
     <!-- Home icon size presets: the Home card's glyphs name them on long-press, and Settings ›

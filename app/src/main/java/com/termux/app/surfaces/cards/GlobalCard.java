@@ -10,7 +10,8 @@ import com.termux.app.surfaces.EditorRows.Spec;
 import java.util.List;
 
 /**
- * The Global card's rows (appearance-one-look spec §3, Global): Look, the glass every surface
+ * The Global card's rows (appearance-one-look spec §3, Global): Wallpaper first (the way to the
+ * picker, and Show wallpaper under it), then Look, the glass every surface
  * wears unless it holds its own Opacity or Blur; Fine-tune, the rest of the glass, closed until
  * opened; Shape, with the one Icon size that sizes Home's icons and the dock's; Colours; Screen,
  * with Text size and Page transition. Where each row lives is the spec's; Status position, Dock type
@@ -24,6 +25,7 @@ public final class GlobalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
+            .tier(1, Row.WALLPAPER, Row.SHOW_WALLPAPER)
             .tier(1, Row.SECTION_LOOK, Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT)
             .tier(3, Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE);
         // Out for a setting the user can change: the way to it stands under them.
@@ -32,7 +34,7 @@ public final class GlobalCard {
             .tier(3, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN, Row.HOME_ICON_SIZE)
             .tier(3, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY, Row.TINT_HUE,
                 Row.WALLPAPER_COLOURS, Row.TOOL_COLOURS)
-            .tier(3, Row.SECTION_SCREEN, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.TEXT_SIZE,
+            .tier(3, Row.SECTION_SCREEN, Row.FULL_SCREEN, Row.TEXT_SIZE,
                 Row.PAGE_TRANSITION)
             .build();
     }

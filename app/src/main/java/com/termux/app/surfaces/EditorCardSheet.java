@@ -1017,6 +1017,16 @@ final class EditorCardSheet {
         });
     }
 
+    /** Scrolls the card's rows to their first. */
+    void scrollToTop() {
+        mScroll.post(() -> {
+            if (ReducedMotion.isEnabled(mContext))
+                mScroll.scrollTo(0, 0);
+            else
+                mScroll.smoothScrollTo(0, 0);
+        });
+    }
+
     private void settle(int detent, boolean animate) {
         settle(detent, animate, 0f);
     }

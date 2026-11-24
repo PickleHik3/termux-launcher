@@ -175,14 +175,15 @@ public class EditorRowsTest {
 
     @Test
     public void theGlobalCardOpensOnTheLookAndKeepsTheRestOfTheGlassUnderFineTune() {
-        assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
+        assertEquals(Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER, Row.SECTION_LOOK, Row.LOOK,
+            Row.OPACITY, Row.FROST, Row.TINT),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
         assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
             Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
             Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
-            Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
+            Row.TEXT_SIZE, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         // Status position and Dock type are on their own cards; the Layout lists on the page
