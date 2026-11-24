@@ -178,10 +178,18 @@ public final class GuiAppsSetupGuide {
     @Nullable
     public static String command(@NonNull SharedPreferences prefs, @NonNull AppEdition edition,
                                  @NonNull Set<GuiAppsSetup.Distro> installed) {
+        return command(prefs, edition, installed, com.termux.app.wayland.LinuxDisplayBackend.X11);
+    }
+
+    /** As above, for the display the user chose (Wayland Display adds Xwayland). */
+    @Nullable
+    public static String command(@NonNull SharedPreferences prefs, @NonNull AppEdition edition,
+                                 @NonNull Set<GuiAppsSetup.Distro> installed,
+                                 @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
         if (GuiAppsSetup.routesFor(edition).isEmpty()) return null;
         Choices choices = read(prefs, edition);
         return GuiAppsSetup.command(choices.route, choices.distro, choices.starters, edition,
-            null, null, installed.contains(choices.distro));
+            null, null, installed.contains(choices.distro), display);
     }
 
     /**

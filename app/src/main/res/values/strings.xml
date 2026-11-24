@@ -490,6 +490,10 @@
     <string name="settings_linux_display_wayland">Wayland Display</string>
     <string name="settings_linux_display_hint">Wayland Display opens each Linux app in its own window. It is new and some apps may not work yet.</string>
     <!-- Wayland Display: the tap's notice when it could not start, and the Linux windows screen. -->
+    <string name="linux_xwayland_missing_title">X11 apps need one more part</string>
+    <string name="linux_xwayland_missing_sub">Run Linux apps set-up to open this app under Wayland Display.</string>
+    <string name="linux_keymap_missing_title">Keyboard layout missing</string>
+    <string name="linux_keymap_missing_sub">Run Linux apps set-up so keys reach Linux apps.</string>
     <string name="linux_mesa_missing_title">Graphics add-on not installed</string>
     <string name="linux_mesa_missing_sub">Linux apps draw without the graphics chip until you install it from Linux apps set-up.</string>
     <string name="linux_mesa_stale_title">Graphics add-on out of date</string>
