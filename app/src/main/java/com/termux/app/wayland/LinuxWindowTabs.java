@@ -30,12 +30,13 @@ final class LinuxWindowTabs {
 
     /**
      * The width of each tab: the row's width, less its side padding and the gaps between tabs,
-     * shared; never under {@code min} (the row then scrolls).
+     * shared; never over {@code max} (a lone tab keeps its natural width) nor under {@code min} (the
+     * row then scrolls).
      */
-    static int tabWidth(int viewport, int count, int min, int gap, int sidePadding) {
+    static int tabWidth(int viewport, int count, int min, int max, int gap, int sidePadding) {
         if (count <= 0) return min;
         int room = viewport - 2 * sidePadding - (count - 1) * gap;
-        return Math.max(min, room / count);
+        return Math.max(min, Math.min(max, room / count));
     }
 
     /**
