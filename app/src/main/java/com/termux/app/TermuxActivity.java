@@ -31184,6 +31184,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     } else {
                         target.row.addAtEnd(target.windows, id);
                     }
+                    // A restore is asked for by a tap, so the window is shown: its session comes
+                    // in front first when another one is.
+                    if (target != mCurrentWSession) {
+                        activateBrowserSession(mWSessions.indexOf(target));
+                    }
                     if (target == mCurrentWSession) goToLinuxWindow(id);
                     else onLinuxRowChanged();
                 }
