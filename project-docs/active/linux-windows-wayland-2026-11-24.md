@@ -195,6 +195,25 @@ ordinary view: clipped by the frame's outline, dressed by `PaneGlass.apply`, mov
    `TerminalWorkspace` (the display window is absent from it today); desktop sessions; text input;
    clipboard; popups.
 
+## Decided on 2026-11-24 (the developer, after the overnight run)
+
+- **Zero copy:** the Android-allocated buffer route (`exp/wayland-ahb`) is the route; it is built
+  after the Linux windows screen is finished. The copy path carries everything until then. The
+  bundled-driver route (`exp/wayland-turnip`) stays an unmerged branch, as the fallback and the
+  number to beat (118 fps, 2.3 ms at 1080x2000 on pong).
+- **Mesa:** the patch ships through tlstore only, as a one-library overlay in its own folder. The
+  launcher adds it to a Wayland app's library path when present, offers it in Linux apps set-up
+  when missing, and on a Mesa version mismatch leaves it out (software rendering) with a notice.
+  No upstream PR.
+- **The Linux windows screen is finished first**, in this order: typing through the launcher
+  keyboard as plain keys, with one small tab-row pass; scale; the tlstore Mesa item; clipboard;
+  whole desktops as one window in a rootful Xwayland; proot-distro apps on the copy path
+  (software rendering inside the distro).
+- Opening an app that is already open brings its window forward.
+- Composed text (the system keyboard, swipe, emoji, other scripts) waits until after the wall page.
+- **Then** the developer runs Wayland Display as the only display on pong for about a week and
+  what they find is fixed; then the wall page; then zero copy.
+
 ## Open
 
 - How a window under Wayland Display is named in the glossary and in copy (the backend is "Wayland
