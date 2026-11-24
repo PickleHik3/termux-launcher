@@ -16,8 +16,9 @@ ADR replaces them and says what holds in their place.
 
 ## 1. The model may propose a settings change; the app checks it and shows a card
 
-- The app looks up the settings nearest the message (keyword match over titles, summaries and
-  complaint phrases; embeddings later) and sends the model only that shortlist of 8, with the
+- The app looks up the settings nearest the message (by meaning, with embeddings, when the
+  embedding model is on the phone; by keyword match over titles, summaries and complaint phrases
+  when it is not or fails) and sends the model only that shortlist of 8, with the
   Assistant's instructions, as tools. A setting the Assistant may not offer is never sent.
 - The model may answer in text, propose up to two changes, ask one question, or decline.
 - The app accepts a proper tool call and the same call written as text. A change must name an id from
