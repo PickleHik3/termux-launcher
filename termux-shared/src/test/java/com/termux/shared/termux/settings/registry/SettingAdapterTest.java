@@ -19,15 +19,23 @@ public class SettingAdapterTest {
     private static final SettingDeclaration FAKE = SettingDeclaration.integer("fake.size",
         SettingDeclaration.Store.APP_PREFERENCES, "fake.size", 0, 10, 1, 5, SettingRefresh.LISTENER);
 
+    private static final SettingDeclaration FOLLOWER = SettingDeclaration.integer("fake.follower",
+        SettingDeclaration.Store.APP_PREFERENCES, "fake.follower", 0, 10, 1, 5,
+        SettingRefresh.LISTENER);
+
     private int held = 5;
 
     private final SettingAdapter adapter = new SettingAdapter() {
         @Nullable @Override public SettingDeclaration declaration(@NonNull String id) {
-            return id.equals(FAKE.id) ? FAKE : null;
+            return id.equals(FAKE.id) ? FAKE : id.equals(FOLLOWER.id) ? FOLLOWER : null;
         }
 
         @NonNull @Override public List<SettingDeclaration> declarations() {
-            return Collections.singletonList(FAKE);
+            return java.util.Arrays.asList(FAKE, FOLLOWER);
+        }
+
+        @Override public boolean overrides(@NonNull SettingDeclaration declaration) {
+            return declaration != FOLLOWER;
         }
 
         @NonNull @Override public String get(@NonNull SettingDeclaration declaration) {
@@ -81,9 +89,18 @@ public class SettingAdapterTest {
     @Test
     public void listHoldsTheAdaptersIdsAfterTheDeclared() {
         List<SettingsRegistry.Entry> entries = registry.list();
-        assertEquals("fake.size", entries.get(entries.size() - 1).declaration.id);
-        assertEquals("5", entries.get(entries.size() - 1).value);
-        assertEquals(SettingDeclarations.ALL.size() + 1, entries.size());
+        assertEquals("fake.size", entries.get(entries.size() - 2).declaration.id);
+        assertEquals("5", entries.get(entries.size() - 2).value);
+        assertEquals(SettingDeclarations.ALL.size() + 2, entries.size());
+    }
+
+    @Test
+    public void aFileCarriesAnAdaptersIdOnlyWhereItHoldsItsOwnValue() {
+        String text = SettingsFile.export(registry);
+        assertTrue(text, text.contains("\nfake.size = 5"));
+        assertTrue(text, !text.contains("fake.follower"));
+        assertTrue(SettingsFile.check("fake.size = 7\nfake.follower = 3", registry)
+            .errors.isEmpty());
     }
 
     @Test

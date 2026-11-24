@@ -155,6 +155,121 @@ public class LayoutSettingsAdapterTest {
     }
 
     @Test
+    public void everyLayoutIdMarkedListenerRedressesWhenItIsSaved() {
+        store.load();
+        registry.set("layout.home.search_field", "true");
+        redressed = 0;
+        com.termux.shared.termux.settings.registry.SettingAdapter adapter =
+            new LayoutSettingsAdapter(store, main, () -> redressed++);
+        int checked = 0;
+        for (com.termux.shared.termux.settings.registry.SettingDeclaration each
+                : adapter.declarations()) {
+            if (each.refresh != com.termux.shared.termux.settings.registry.SettingRefresh.LISTENER
+                    || !adapter.overrides(each)) continue;
+            String value = adapter.get(each);
+            int before = redressed;
+            SettingsRegistry.Outcome outcome = adapter.set(each, value);
+            if (outcome.refusal() != null) continue; // a field the verb will not rewrite as it stands
+            assertEquals(each.id, before + 1, redressed);
+            checked++;
+        }
+        assertTrue("some layout field saved and redressed", checked > 0);
+    }
+
+    @Test
+    public void aTimedOutWaitCancelsTheTaskSoALateSaveCannotLand() throws Exception {
+        java.util.concurrent.FutureTask<String> task =
+            new java.util.concurrent.FutureTask<>(() -> "saved");
+        try {
+            LayoutSettingsAdapter.await(task, 10, java.util.concurrent.TimeUnit.MILLISECONDS);
+            org.junit.Assert.fail("a task nobody ran must time out");
+        } catch (java.util.concurrent.TimeoutException expected) {
+            assertTrue(task.isCancelled());
+        }
+        task.run();
+        assertTrue("a cancelled task does nothing when the main thread gets to it", task.isCancelled());
+    }
+
+    @Test
+    public void aFailureInsideTheWorkComesOutAsItsOwnException() throws Exception {
+        java.util.concurrent.FutureTask<String> task = new java.util.concurrent.FutureTask<>(() -> {
+            throw new org.json.JSONException("bad document");
+        });
+        task.run();
+        try {
+            LayoutSettingsAdapter.await(task, 1, java.util.concurrent.TimeUnit.SECONDS);
+            org.junit.Assert.fail("the work failed");
+        } catch (org.json.JSONException expected) {
+            assertEquals("bad document", expected.getMessage());
+        }
+    }
+
+    @Test
+    public void whenTheMainThreadDoesNotAnswerTheRefusalIsPlainCopy() {
+        SettingsRegistry silent = new SettingsRegistry(which -> {
+            throw new AssertionError("a layout id reads no registry store");
+        }, Collections.emptyList(), Collections.singletonList(new LayoutSettingsAdapter(store,
+            new LayoutSettingsAdapter.Main() {
+                @Override public <T> T call(@NonNull Callable<T> work) throws Exception {
+                    throw new java.util.concurrent.TimeoutException("java.util.concurrent noise");
+                }
+            }, () -> { })));
+        assertEquals(LayoutSettingsAdapter.NOT_ANSWERED,
+            silent.set("layout.home.search_field", "true").refusal().reason);
+        assertEquals(LayoutSettingsAdapter.NOT_ANSWERED,
+            silent.check("layout.home.search_field", "true").reason);
+    }
+
+    @Test
+    public void aSettingsFileCarriesTheFieldsTheDocumentsHoldAndNotTheAbsentOnes() {
+        store.load();
+        registry.set("layout.home.search_field", "true");
+        String file = com.termux.shared.termux.settings.registry.SettingsFile.export(registry);
+        assertTrue(file, file.contains("\nlayout.home.search_field = true"));
+        assertFalse(file, file.contains("layout.sizes.icon_size"));
+        com.termux.shared.termux.settings.registry.SettingsFile.Result result =
+            com.termux.shared.termux.settings.registry.SettingsFile.check(
+                "layout.home.search_field = false", registry);
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+    }
+
+    @Test
+    public void anApplyOfManyLayoutLinesMakesOneHopOntoTheMainThread() throws Exception {
+        store.load();
+        int[] hops = {0};
+        int[] depth = {0};
+        LayoutSettingsAdapter.Main counting = new LayoutSettingsAdapter.Main() {
+            @Override public <T> T call(@NonNull Callable<T> work) throws Exception {
+                if (depth[0]++ == 0) hops[0]++;
+                try {
+                    return work.call();
+                } finally {
+                    depth[0]--;
+                }
+            }
+        };
+        SettingsRegistry counted = new SettingsRegistry(which -> {
+            throw new AssertionError("a layout id reads no registry store");
+        }, Collections.emptyList(), Collections.singletonList(
+            new LayoutSettingsAdapter(store, counting, () -> redressed++)));
+        com.termux.shared.termux.settings.registry.SettingsApplier applier =
+            new com.termux.shared.termux.settings.registry.SettingsApplier(
+                new com.termux.shared.termux.settings.registry.SettingsApplier.Host() {
+                    @Override public boolean isLauncherResumed() { return true; }
+
+                    @Override public void run(
+                        @NonNull com.termux.shared.termux.settings.registry.SettingRefresh r) { }
+                });
+        JSONObject answer = ConfigCommand.handleInOneHop(counted, applier, new JSONObject()
+            .put("op", "apply").put("text",
+                "layout.home.search_field = true\nlayout.display.search_field = true\n"
+                    + "layout.terminal.search_field = true"), counting);
+        assertTrue(answer.toString(), answer.getBoolean("ok"));
+        assertEquals(1, hops[0]);
+        assertEquals(3, redressed);
+    }
+
+    @Test
     public void listHoldsTheLayoutIdsWithTheirCurrentValues() {
         store.load();
         registry.set("layout.home.search_field", "true");

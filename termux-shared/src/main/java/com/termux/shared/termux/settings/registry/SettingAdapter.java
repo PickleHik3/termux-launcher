@@ -31,6 +31,15 @@ public interface SettingAdapter {
     String get(@NonNull SettingDeclaration declaration);
 
     /**
+     * Whether {@code declaration} holds a value of its own, so a settings file carries it: false
+     * for a value that follows another (a surface's opacity that follows Global), so an export
+     * then apply leaves it following. Every id overrides unless the adapter says otherwise.
+     */
+    default boolean overrides(@NonNull SettingDeclaration declaration) {
+        return true;
+    }
+
+    /**
      * What {@link #set} would refuse for {@code value}, without saving or refreshing: the same
      * Refusal, or null when the value would be saved. {@code config apply} checks a whole file
      * with it before writing any line.

@@ -660,12 +660,8 @@ public class LauncherCtlApiServer {
             } else if (DeviceControlRoutes.handles(request.method, request.path)) {
                 JSONObject result = DeviceControlRoutes.handle(context, request.method, request.path, request.body);
                 // A text answer (config list's lines) goes out as text/plain, as print-id does.
-                String text = result.optString(ConfigCommand.TEXT, null);
-                if (text != null) {
-                    return new HttpResponse(200, "text/plain; charset=utf-8",
-                        text.getBytes(StandardCharsets.UTF_8), null);
-                }
-                return jsonResponse(result);
+                HttpResponse text = textAnswer(result);
+                return text != null ? text : jsonResponse(result);
             } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
@@ -4241,6 +4237,15 @@ public class LauncherCtlApiServer {
         response.put("memoryMode", settings.getMemoryMode().id);
         response.put("tier", com.termux.ai.TaiDeviceTier.forDevice(context).number());
         return response;
+    }
+
+    /** A device route's answer that carries {@link ConfigCommand#TEXT} as text/plain, else null. */
+    @Nullable
+    static HttpResponse textAnswer(@NonNull JSONObject result) {
+        String text = result.optString(ConfigCommand.TEXT, null);
+        if (text == null) return null;
+        return new HttpResponse(200, "text/plain; charset=utf-8",
+            text.getBytes(StandardCharsets.UTF_8), null);
     }
 
     private HttpResponse jsonResponse(JSONObject response) {

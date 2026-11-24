@@ -114,6 +114,8 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.place.ResolvedArrangement;
+import com.termux.app.settings.LauncherSettings;
+import com.termux.app.settings.SettingsRefreshScreen;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
@@ -1119,26 +1121,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The surface editor overlay. All of its UI, gestures and dirty tracking live in the
      * controller; the activity lends it {@link SurfaceEditorHost} and keeps only the entry points.
      */
-    private final SurfaceEditorHost mSurfaceEditorHost = new SurfaceEditorHost();
     private final SurfaceEditorController mSurfaceEditor =
-        new SurfaceEditorController(mSurfaceEditorHost);
+        new SurfaceEditorController(new SurfaceEditorHost());
 
-    /**
-     * The Settings applier's way onto this screen while it is resumed ({@code LauncherSettings}):
-     * each refresh runs on the main thread the way the Settings row or the editor runs it, posted
-     * so that one owed at onResume runs after it, never inside it.
-     */
-    private final com.termux.app.settings.LauncherSettings.Screen mSettingsScreen = refresh ->
-        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> runSettingsRefresh(refresh));
+    /** The Settings applier's way onto this screen while it is resumed ({@link LauncherSettings}). */
+    private final SettingsRefreshScreen mSettingsScreen =
+        new SettingsRefreshScreen(new SettingsRefreshHost());
 
-    private void runSettingsRefresh(
-            @NonNull com.termux.shared.termux.settings.registry.SettingRefresh refresh) {
-        if (isFinishing() || isDestroyed() || mPreferences == null) return;
-        switch (refresh) {
-            case RESTYLE: reloadActivityStyling(false); break;
-            case THEME: reloadActivityStyling(true); break;
-            case TEXT_SIZE: mSurfaceEditorHost.applyTextSizePreview(true); break;
-            default: break;
+    private final class SettingsRefreshHost implements SettingsRefreshScreen.Host {
+        @Override public boolean isGone() {
+            return isFinishing() || isDestroyed() || mPreferences == null;
+        }
+
+        @Override public void post(@NonNull Runnable work) {
+            getWindow().getDecorView().post(work);
+        }
+
+        @Override public void restyle(boolean recreate) {
+            reloadActivityStyling(recreate);
+        }
+
+        @Override public void applyTextSize() {
+            mSurfaceEditor.applyTextSize();
         }
     }
 
@@ -3011,7 +3015,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mIsInvalidState)
             return;
         // A setting saved while away (launcherctl config) refreshes now; a field write otherwise.
-        com.termux.app.settings.LauncherSettings.onLauncherResumed(mSettingsScreen);
+        LauncherSettings.onLauncherResumed(mSettingsScreen);
         // The frost under a keyboard over the display was let go at pause; a pass makes it again.
         if (isInAppKeyboardShown() && inAppKeyboardSeesThroughToDisplay())
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
@@ -3437,7 +3441,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
-        com.termux.app.settings.LauncherSettings.onLauncherPaused();
+        LauncherSettings.onLauncherPaused();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();

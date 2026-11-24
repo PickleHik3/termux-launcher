@@ -112,6 +112,58 @@ public class ConfigCommandTest {
             answer.getString(ConfigCommand.TEXT));
     }
 
+    /** An id whose check passes and whose save is then refused, as a store may. */
+    private static final com.termux.shared.termux.settings.registry.SettingAdapter REFUSING =
+        new com.termux.shared.termux.settings.registry.SettingAdapter() {
+            private final com.termux.shared.termux.settings.registry.SettingDeclaration mDeclaration =
+                com.termux.shared.termux.settings.registry.SettingDeclaration.text("late.refuse",
+                    "", SettingRefresh.LISTENER);
+
+            @androidx.annotation.Nullable @Override
+            public com.termux.shared.termux.settings.registry.SettingDeclaration declaration(
+                    @NonNull String id) {
+                return id.equals("late.refuse") ? mDeclaration : null;
+            }
+
+            @NonNull @Override
+            public List<com.termux.shared.termux.settings.registry.SettingDeclaration> declarations() {
+                return Collections.singletonList(mDeclaration);
+            }
+
+            @NonNull @Override public String get(
+                    @NonNull com.termux.shared.termux.settings.registry.SettingDeclaration d) {
+                return "";
+            }
+
+            @androidx.annotation.Nullable @Override
+            public SettingsRegistry.Refusal check(
+                    @NonNull com.termux.shared.termux.settings.registry.SettingDeclaration d,
+                    @NonNull String value) {
+                return null;
+            }
+
+            @NonNull @Override
+            public SettingsRegistry.Outcome set(
+                    @NonNull com.termux.shared.termux.settings.registry.SettingDeclaration d,
+                    @NonNull String value) {
+                return new SettingsRegistry.Refusal("the store said no", null);
+            }
+        };
+
+    @Test
+    public void aLineRefusedOnSavingAfterTheCheckPassedIsAFailureWithItsLine() throws Exception {
+        SettingsRegistry withLate = new SettingsRegistry(which -> store,
+            com.termux.shared.termux.settings.registry.SettingDeclarations.ALL,
+            Collections.singletonList(REFUSING));
+        String file = "text.size = 120\nlate.refuse = 1\n";
+        JSONObject answer = ConfigCommand.handle(withLate, applier,
+            new JSONObject().put("op", "apply").put("text", file));
+        assertFalse(answer.toString(), answer.getBoolean("ok"));
+        assertEquals("apply_failed", answer.getString("error"));
+        assertEquals("line 2: the store said no", answer.getString("message"));
+        assertEquals(1, answer.getInt("changed"));
+    }
+
     @Test
     public void anUnknownOpIsA400() throws Exception {
         JSONObject answer = handle("{\"op\":\"frobnicate\"}");

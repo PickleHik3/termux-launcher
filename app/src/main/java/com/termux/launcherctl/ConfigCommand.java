@@ -27,6 +27,27 @@ final class ConfigCommand {
 
     private ConfigCommand() {}
 
+    /**
+     * As {@link #handle}, with a list, export or apply (which read or save many ids) done in one
+     * hop onto the main thread, where the layout store lives, instead of one hop per id.
+     */
+    @NonNull
+    static JSONObject handleInOneHop(@NonNull SettingsRegistry registry,
+                                     @NonNull SettingsApplier applier, @NonNull JSONObject request,
+                                     @NonNull LayoutSettingsAdapter.Main main) throws JSONException {
+        String op = request.optString("op", "");
+        if (!op.equals("list") && !op.equals("export") && !op.equals("apply"))
+            return handle(registry, applier, request);
+        try {
+            return main.call(() -> handle(registry, applier, request));
+        } catch (JSONException e) {
+            throw e;
+        } catch (Exception e) {
+            return error("unavailable", LayoutSettingsAdapter.NOT_ANSWERED, null)
+                .put("_statusCode", 503);
+        }
+    }
+
     @NonNull
     static JSONObject handle(@NonNull SettingsRegistry registry, @NonNull SettingsApplier applier,
                              @NonNull JSONObject request) throws JSONException {
@@ -94,8 +115,8 @@ final class ConfigCommand {
 
     @NonNull
     private static JSONObject unknown(@NonNull String id) throws JSONException {
-        return error("unknown_setting", "no setting is called \"" + id
-            + "\"; launcherctl config list shows them all", null);
+        return error("unknown_setting", SettingsRegistry.unknown(id).reason
+            + "; launcherctl config list shows them all", null);
     }
 
     @NonNull
