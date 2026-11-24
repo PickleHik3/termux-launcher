@@ -68,6 +68,14 @@ final class AssistantOffersPolicy {
         return out == null ? Collections.<Offer>emptyList() : out;
     }
 
+    /**
+     * The pending count the strip may offer: the drawer's waiting count, or {@link #NONE} when the
+     * count is not in, no sort has run, or the drawer is a plain list that never shows categories.
+     */
+    static long pendingValue(long waiting, boolean drawerShowsCategories) {
+        return drawerShowsCategories && waiting >= 0 ? waiting : NONE;
+    }
+
     static boolean due(long value, long threshold, long dismissed) {
         if (value < threshold) return false;
         return dismissed < 0 || value >= dismissed + threshold;

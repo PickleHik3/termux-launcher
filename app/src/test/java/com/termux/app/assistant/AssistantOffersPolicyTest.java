@@ -101,4 +101,11 @@ public class AssistantOffersPolicyTest {
     @Test public void aFailedClearFreesNothing() {
         assertEquals(0L, AssistantTmpHousekeeping.clearOld(age -> { throw new IllegalStateException(); }));
     }
+
+    @Test
+    public void pendingCountsOnlyInADrawerThatShowsCategories() {
+        assertEquals(12L, AssistantOffersPolicy.pendingValue(12, true));
+        assertEquals(NONE, AssistantOffersPolicy.pendingValue(12, false));
+        assertEquals(NONE, AssistantOffersPolicy.pendingValue(-1, true));
+    }
 }

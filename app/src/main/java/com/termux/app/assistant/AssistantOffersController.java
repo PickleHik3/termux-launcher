@@ -11,7 +11,10 @@ import androidx.annotation.NonNull;
 
 import com.termux.R;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
+import com.termux.app.launcher.drawer.AppDrawerLayoutConfig;
+import com.termux.app.launcher.drawer.AppDrawerViewType;
 import com.termux.app.launcher.data.LauncherCategoryPendingApps;
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.shell.TermuxShellUtils;
 
 import java.util.ArrayList;
@@ -124,12 +127,20 @@ final class AssistantOffersController {
         try {
             LauncherCategoryPendingApps.countWaitingAsync(context,
                 LauncherAppDataProvider.getInstance(context).getAllApps(), waiting -> {
-                    pendingApps = waiting < 0 ? AssistantOffersPolicy.NONE : waiting;
+                    pendingApps = AssistantOffersPolicy.pendingValue(waiting, drawerShowsCategories());
                     apply();
                 });
         } catch (RuntimeException ignored) {
             // An offer is a nicety; no count says nothing.
         }
+    }
+
+    /** The drawer nudge only runs in a drawer that shows categories; a plain list gets no offer either. */
+    private boolean drawerShowsCategories() {
+        TermuxAppSharedPreferences drawerPrefs = TermuxAppSharedPreferences.build(context);
+        if (drawerPrefs == null) return false;
+        AppDrawerViewType type = AppDrawerLayoutConfig.from(drawerPrefs).viewType;
+        return type == AppDrawerViewType.CATEGORIES || type == AppDrawerViewType.DEFAULT;
     }
 
     private void measureTmp(boolean force) {
