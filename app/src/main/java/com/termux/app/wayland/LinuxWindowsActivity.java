@@ -4,6 +4,7 @@ import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.ServiceConnection;
+import android.content.res.ColorStateList;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
 import android.graphics.drawable.GradientDrawable;
@@ -13,6 +14,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.TextUtils;
@@ -30,6 +32,7 @@ import android.view.ViewGroup;
 import android.widget.Button;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
+import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -52,7 +55,9 @@ import java.io.File;
  * it outlives this screen: Back leaves the screen and every app keeps running, and opening it
  * again re-attaches to the live windows. When the last window closes the screen finishes.
  * {@link WaylandAppRunner} opens it after starting an app. A long press on the tab row shows the
- * developer controls (Start, Stop, Crash compositor, Probe, the copy log). Not exported.
+ * developer controls (Start, Stop, Crash compositor, Probe, the copy log). The keyboard glyph at
+ * the row's end shows the launcher's own keyboard below the window, which types into the focused
+ * window as key presses ({@link LinuxWindowsKeyboard}); Back puts it away first. Not exported.
  */
 public final class LinuxWindowsActivity extends Activity {
 
@@ -98,6 +103,20 @@ public final class LinuxWindowsActivity extends Activity {
     private int mTabViewportWidth;
     private FrameLayout mWindowHost;
     private TextView mEmpty;
+    /** The launcher's keyboard below the window area; the window gives up its height to it. */
+    private final LinuxWindowsKeyboard mKeyboard = new LinuxWindowsKeyboard(new LinuxWindowsKeyboard.Host() {
+        @Override
+        public void typeKey(int keyCode, boolean down) {
+            sendKey(keyCode, down, SystemClock.uptimeMillis());
+        }
+
+        @Override
+        public void hideKeyboard() {
+            setKeyboardShown(false);
+        }
+    });
+    private FrameLayout mKeyboardHost;
+    private ImageView mKeyboardToggle;
     /** The developer controls, shown by a long press on the tab row. */
     private View mDevBar;
     private TextView mStatus;
@@ -425,19 +444,6 @@ public final class LinuxWindowsActivity extends Activity {
         return ILinuxWindows.BTN_LEFT;
     }
 
-    /** Key codes the host maps to evdev (see wayland-host/src/keymap.rs); others stay with Android. */
-    private static boolean isForwardedKey(int code) {
-        return (code >= KeyEvent.KEYCODE_0 && code <= KeyEvent.KEYCODE_9)
-            || (code >= KeyEvent.KEYCODE_DPAD_UP && code <= KeyEvent.KEYCODE_DPAD_RIGHT)
-            || (code >= KeyEvent.KEYCODE_A && code <= KeyEvent.KEYCODE_SPACE)
-            || (code >= KeyEvent.KEYCODE_ENTER && code <= KeyEvent.KEYCODE_SLASH)
-            || code == KeyEvent.KEYCODE_PAGE_UP || code == KeyEvent.KEYCODE_PAGE_DOWN
-            || (code >= KeyEvent.KEYCODE_ESCAPE && code <= KeyEvent.KEYCODE_CAPS_LOCK)
-            || code == KeyEvent.KEYCODE_META_LEFT || code == KeyEvent.KEYCODE_META_RIGHT
-            || (code >= KeyEvent.KEYCODE_MOVE_HOME && code <= KeyEvent.KEYCODE_INSERT)
-            || (code >= KeyEvent.KEYCODE_F1 && code <= KeyEvent.KEYCODE_F12);
-    }
-
     private TextView shadowedText() {
         TextView t = new TextView(this);
         t.setTextColor(Color.WHITE);
@@ -500,7 +506,8 @@ public final class LinuxWindowsActivity extends Activity {
 
         LinearLayout root = new LinearLayout(this);
         root.setOrientation(LinearLayout.VERTICAL);
-        // Below the status bar and above the navigation bar; the keyboard is not handled yet.
+        // Below the status bar and above the navigation bar; the launcher's keyboard sits at the
+        // bottom of the root, so the system IME never shows here.
         root.setFitsSystemWindows(true);
 
         HorizontalScrollView tabScroll = new HorizontalScrollView(this);
@@ -530,7 +537,18 @@ public final class LinuxWindowsActivity extends Activity {
             mTabViewportWidth = width;
             mTabRow.post(this::sizeTabs);
         });
-        root.addView(tabScroll, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+        // The tabs take the row; the keyboard glyph sits at its end.
+        LinearLayout topRow = new LinearLayout(this);
+        topRow.setOrientation(LinearLayout.HORIZONTAL);
+        topRow.setGravity(Gravity.CENTER_VERTICAL);
+        topRow.setBackgroundColor(mSurface);
+        topRow.addView(tabScroll, new LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f));
+        mKeyboardToggle = keyboardToggle();
+        int target = res(R.dimen.linux_windows_close_target);
+        LinearLayout.LayoutParams toggleParams = new LinearLayout.LayoutParams(target, target);
+        toggleParams.setMarginEnd(res(R.dimen.linux_windows_tab_gap));
+        topRow.addView(mKeyboardToggle, toggleParams);
+        root.addView(topRow, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
         mDevBar = devBar();
@@ -545,6 +563,13 @@ public final class LinuxWindowsActivity extends Activity {
         mWindowHost.addView(mEmpty, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
             FrameLayout.LayoutParams.MATCH_PARENT));
         root.addView(mWindowHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+        // Shown, it takes its height from the window area, whose view resizes and so re-configures
+        // the window (onSurfaceTextureSizeChanged); hidden, the window has the room back.
+        mKeyboardHost = new FrameLayout(this);
+        mKeyboardHost.setBackgroundColor(mSurface);
+        mKeyboardHost.setVisibility(View.GONE);
+        root.addView(mKeyboardHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+            LinearLayout.LayoutParams.WRAP_CONTENT));
         setContentView(root);
 
         mOpeningExtra = getIntent() != null && getIntent().getBooleanExtra(EXTRA_OPENING, false);
@@ -587,6 +612,44 @@ public final class LinuxWindowsActivity extends Activity {
         mEmpty.setVisibility(View.VISIBLE);
         // The developer row open means the developer is driving the host by hand.
         if (close && mDevBar.getVisibility() != View.VISIBLE) mMain.postDelayed(mCloseWhenEmpty, NO_APPS_CLOSE_MS);
+    }
+
+    /** The glyph that shows and hides the keyboard; it shows the action it does. */
+    private ImageView keyboardToggle() {
+        ImageView toggle = new ImageView(this);
+        toggle.setScaleType(ImageView.ScaleType.CENTER);
+        toggle.setImageTintList(ColorStateList.valueOf(mOnSurfaceVariant));
+        toggle.setOnClickListener(v -> setKeyboardShown(!keyboardShown()));
+        updateKeyboardToggle(toggle, false);
+        return toggle;
+    }
+
+    private void updateKeyboardToggle(ImageView toggle, boolean shown) {
+        toggle.setImageResource(shown ? R.drawable.ic_ms_keyboard_hide : R.drawable.ic_ms_keyboard);
+        toggle.setContentDescription(getString(shown ? R.string.linux_windows_hide_keyboard
+            : R.string.linux_windows_show_keyboard));
+    }
+
+    private boolean keyboardShown() {
+        return mKeyboardHost != null && mKeyboardHost.getVisibility() == View.VISIBLE;
+    }
+
+    /** Shows or hides the keyboard; only a change touches the views. */
+    private void setKeyboardShown(boolean shown) {
+        if (mKeyboardHost == null || shown == keyboardShown()) return;
+        if (shown) {
+            View keys = mKeyboard.view(this);
+            if (keys == null) return;
+            if (keys.getParent() == null) {
+                mKeyboardHost.addView(keys, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.WRAP_CONTENT));
+            }
+            mKeyboardHost.setVisibility(View.VISIBLE);
+        } else {
+            mKeyboard.reset();
+            mKeyboardHost.setVisibility(View.GONE);
+        }
+        updateKeyboardToggle(mKeyboardToggle, shown);
     }
 
     /** Developer controls; their words are not product copy. */
@@ -1015,18 +1078,32 @@ public final class LinuxWindowsActivity extends Activity {
     public boolean dispatchKeyEvent(KeyEvent event) {
         int action = event.getAction();
         if (mService != null && mFocusedId != 0 && mPanes.get(mFocusedId) != null
-            && isForwardedKey(event.getKeyCode())
+            && LinuxWindowKeys.isForwarded(event.getKeyCode())
             && (action == KeyEvent.ACTION_DOWN || action == KeyEvent.ACTION_UP)) {
             // The client repeats held keys itself (wl_keyboard.repeat_info).
-            if (event.getRepeatCount() == 0) {
-                try {
-                    mService.key(mFocusedId, event.getKeyCode(), action == KeyEvent.ACTION_DOWN, event.getEventTime());
-                } catch (RemoteException ignored) {
-                }
-            }
+            if (event.getRepeatCount() == 0) sendKey(event.getKeyCode(), action == KeyEvent.ACTION_DOWN, event.getEventTime());
             return true;
         }
         return super.dispatchKeyEvent(event);
+    }
+
+    /** One key down or up for the focused window; dropped when there is none. */
+    private void sendKey(int keyCode, boolean down, long timeMs) {
+        if (mService == null || mFocusedId == 0 || mPanes.get(mFocusedId) == null) return;
+        try {
+            mService.key(mFocusedId, keyCode, down, timeMs);
+        } catch (RemoteException ignored) {
+        }
+    }
+
+    /** Back puts the keyboard away before it leaves the screen. */
+    @Override
+    public void onBackPressed() {
+        if (keyboardShown()) {
+            setKeyboardShown(false);
+            return;
+        }
+        super.onBackPressed();
     }
 
     @Override
@@ -1046,6 +1123,8 @@ public final class LinuxWindowsActivity extends Activity {
         // its Surface and last frame, so it shows again at once.
         for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).setVisible(false);
         mVisible = false;
+        // A modifier latched on the keyboard does not carry over to the next visit.
+        mKeyboard.reset();
         // Keys held as the screen goes must not stay down in the window.
         focus(0);
         super.onStop();

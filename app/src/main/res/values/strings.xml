@@ -495,6 +495,8 @@
     <string name="linux_windows_stopped">Wayland Display stopped, and its apps closed.</string>
     <string name="linux_windows_untitled">Window</string>
     <string name="linux_windows_close">Close</string>
+    <string name="linux_windows_show_keyboard">Show keyboard</string>
+    <string name="linux_windows_hide_keyboard">Hide keyboard</string>
     <!-- Linux apps › Start with (#166): what opens on the display each time it starts. -->
     <string name="settings_x11_start_with_title">Start with</string>
     <string name="settings_x11_start_with_summary">Open a desktop or a command each time the display starts.</string>
