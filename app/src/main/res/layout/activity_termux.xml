@@ -303,6 +303,27 @@
                             android:layout_marginTop="6dp"
                             android:visibility="gone"
                             android:contentDescription="@string/termux_window_bar_content_description" />
+
+                        <!-- The Marks look's line of page marks, in the chips' place: along the
+                             row, or down the column on a side edge. Only one of the four is
+                             shown (TermuxActivity#syncMarksLine). -->
+                        <com.termux.app.statusbar.MarksLineView
+                            android:id="@+id/terminal_status_marks_row"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:layout_marginStart="6dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/status_marks_content_description" />
+
+                        <com.termux.app.statusbar.MarksLineView
+                            android:id="@+id/terminal_status_marks_column"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginTop="6dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/status_marks_content_description" />
                     </com.termux.app.statusbar.PlaceContentStrip>
 
                     <!-- Home's own chips: one per float on the Home page shown, the window
