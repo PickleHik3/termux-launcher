@@ -110,6 +110,8 @@ public final class WaylandAppRunner {
     @Nullable private ILinuxWindows service;
     @Nullable private IBinder binder;
     private boolean bound;
+    /** This runner started the service (not only bound it), so it is the one to stop it. */
+    private boolean serviceStarted;
     /** This runner asked the host to start and has not heard it run or fail since. */
     private boolean startAsked;
     /** The host should be stopped as soon as the binding connects (Settings went back to X11). */
@@ -311,6 +313,7 @@ public final class WaylandAppRunner {
         try {
             // Started as well as bound, so the host outlives this binding.
             context.startService(intent);
+            serviceStarted = true;
             bound = context.bindService(intent, connection, Context.BIND_AUTO_CREATE);
         } catch (RuntimeException e) {
             Log.w(LOG_TAG, "cannot reach the host service: " + e);
@@ -339,6 +342,16 @@ public final class WaylandAppRunner {
             }
         }
         bound = false;
+        if (serviceStarted) {
+            // Unbound and no longer started: with nobody else bound the service is destroyed and
+            // its process ends (LinuxWindowsService.onDestroy). The next launch starts it afresh.
+            serviceStarted = false;
+            try {
+                context.stopService(new Intent(context, LinuxWindowsService.class));
+            } catch (RuntimeException e) {
+                Log.w(LOG_TAG, "cannot stop the host service: " + e);
+            }
+        }
         binder = null;
         service = null;
         running = false;
@@ -477,20 +490,23 @@ public final class WaylandAppRunner {
                 publishToSessions();
                 main.removeCallbacks(idleStop);
                 main.removeCallbacks(xWaitTimeout);
-                if (startAsked && !startingSeen) {
-                    // A state from before this runner's start; the start's own answer follows.
-                    break;
-                }
-                if (pending.isEmpty() && !connectionWaiting) {
-                    // Nothing to open: let go, so the host's process can end.
-                    disconnect();
-                } else if (!startAsked) {
-                    startHost();
-                } else {
-                    Log.w(LOG_TAG, "the host did not start: " + message);
-                    failPending();
-                    connectionWaiting = false;
-                    disconnect();
+                switch (onHostStopped(startAsked, startingSeen, pending.isEmpty(), connectionWaiting)) {
+                    case IGNORE:
+                        // A state from before this runner's start; the start's own answer follows.
+                        break;
+                    case RELEASE:
+                        // Nothing to open: let go, so the host's process can end.
+                        disconnect();
+                        break;
+                    case RESTART:
+                        startHost();
+                        break;
+                    default:
+                        Log.w(LOG_TAG, "the host did not start: " + message);
+                        failPending();
+                        connectionWaiting = false;
+                        disconnect();
+                        break;
                 }
                 break;
             default:
@@ -499,6 +515,28 @@ public final class WaylandAppRunner {
                 disconnect();
                 break;
         }
+    }
+
+    /** What a stopped or died host asks of the runner. */
+    @VisibleForTesting
+    enum StoppedAction {
+        /** A state from before the runner's start; wait for the start's own answer. */
+        IGNORE,
+        /** Nothing is waiting: unbind and stop the service, so its process ends. */
+        RELEASE,
+        /** Something is waiting and no start is in flight: bind stays, start again. */
+        RESTART,
+        /** The start asked for did not come up: fail the launches, then release. */
+        FAIL
+    }
+
+    @VisibleForTesting
+    @NonNull
+    static StoppedAction onHostStopped(boolean startAsked, boolean startingSeen, boolean pendingEmpty,
+                                       boolean connectionWaiting) {
+        if (startAsked && !startingSeen) return StoppedAction.IGNORE;
+        if (pendingEmpty && !connectionWaiting) return StoppedAction.RELEASE;
+        return startAsked ? StoppedAction.FAIL : StoppedAction.RESTART;
     }
 
     /** The host process died or the binding broke. */
