@@ -51,6 +51,12 @@ public enum FrameStep {
     TOP_STACK,
 
     /**
+     * The Home exit's tick (ADR 0034): the group's alpha and scale, written once a frame by
+     * {@code HomeExit} while it runs, asking for the next frame itself until it ends.
+     */
+    HOME_EXIT,
+
+    /**
      * The glass commit (ADR 0029 section 1), always last: the glass service re-dresses every
      * surface whose kind a policy event moved, back to front, then records the Live layers of
      * this frame. It reads the frame's laid-out places, so it runs only in the pre-draw hook of a
