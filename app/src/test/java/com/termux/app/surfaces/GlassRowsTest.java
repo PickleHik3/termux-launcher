@@ -31,10 +31,11 @@ public class GlassRowsTest {
     public void theTerminalCardWearsItsBackgroundAndNoGlassBlock() {
         // ADR 0031 §4 (#287): Opacity, Blur and Wallpaper dim, its own; the glass block is gone.
         java.util.List<Row> rows = rowsOf(EditorCard.TERMINAL, ALL);
-        int at = rows.indexOf(Row.SECTION_BACKGROUND);
+        // #346: no heading, the paired Opacity and Blur and then the dim, in that order.
+        int at = rows.indexOf(Row.TERMINAL_OPACITY);
         assertTrue(at >= 0);
-        assertEquals(java.util.Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
-            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM), rows.subList(at, at + 4));
+        assertEquals(java.util.Arrays.asList(Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
+            Row.WALLPAPER_DIM), rows.subList(at, at + 3));
         for (Row row : BLOCK)
             assertFalse(row.name(), rows.contains(row));
         assertFalse(rows.contains(Row.SECTION_APPEARANCE));

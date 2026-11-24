@@ -31,8 +31,8 @@ public class EditorScreenCardsTest {
         List<Row> rows = rowsOf(EditorCard.TERMINAL);
         for (Row row : new Row[] {Row.CONTRAST, Row.ELEMENTS, Row.MINIMAL})
             assertEquals(row + " once", 1, java.util.Collections.frequency(rows, row));
-        assertEquals("Minimal layout closes the Layout section",
-            rows.indexOf(Row.ELEMENTS) + 1, rows.indexOf(Row.MINIMAL));
+        // #346: Minimal layout is a switch chip with the others; the list follows them.
+        assertTrue("the list follows the switches", rows.indexOf(Row.MINIMAL) < rows.indexOf(Row.ELEMENTS));
     }
 
     @Test

@@ -120,15 +120,14 @@ public class EditorRowsTest {
 
     @Test
     public void theTerminalCardHoldsTextItsBackgroundPanesEffectsAndLayout() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST,
-            Row.ADAPTIVE_LEGIBILITY, Row.LINK_FONT),
+        // #346: no headings; the sliders in pairs first, the rest in group order.
+        assertEquals(Arrays.asList(Row.FONT_SIZE, Row.SPLIT_GAP, Row.TERMINAL_OPACITY,
+            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
-            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
-            Row.SECTION_PANES, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.PANE_BORDERS, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT,
-            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.MINIMAL),
+        assertEquals(Arrays.asList(Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT,
+            Row.ADAPTIVE_LEGIBILITY, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.ELEMENTS,
+            Row.LINK_FONT, Row.PANE_BORDERS),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
         List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
         assertFalse(all.contains(Row.VISIBLE));
@@ -175,15 +174,15 @@ public class EditorRowsTest {
 
     @Test
     public void theGlobalCardOpensOnTheLookAndKeepsTheRestOfTheGlassUnderFineTune() {
-        assertEquals(Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER, Row.SECTION_LOOK, Row.LOOK,
+        assertEquals(Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER, Row.LOOK,
             Row.OPACITY, Row.FROST, Row.TINT),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
-            Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
-            Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
-            Row.TEXT_SIZE, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
+        assertEquals(Arrays.asList(Row.STYLE, Row.THEME, Row.CORNERS, Row.MARGIN, Row.TEXT_SIZE,
+            Row.HOME_ICON_SIZE, Row.CONTRAST, Row.PAGE_TRANSITION,
+            Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.FULL_SCREEN,
+            Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         // Status position and Dock type are on their own cards; the Layout lists on the page

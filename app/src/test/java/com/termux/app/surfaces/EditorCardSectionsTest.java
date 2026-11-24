@@ -90,16 +90,15 @@ public class EditorCardSectionsTest {
     @Test
     public void global() {
         check(EditorCard.APPEARANCE, expect(
-            CARD, Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER),
-            "SECTION_LOOK", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
-            "SECTION_FINE_TUNE", Arrays.asList(Row.DEPTH, Row.SHINE),
-            "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN,
-                Row.HOME_ICON_SIZE),
-            "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-                Row.WALLPAPER_COLOURS,
+            // No headings but Fine-tune (#346): what it is, the sliders, the choices, the
+            // switches, the colour and the links stand in group order.
+            CARD, Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER, Row.LOOK,
+                Row.OPACITY, Row.FROST, Row.TINT,
+                Row.STYLE, Row.THEME, Row.CORNERS, Row.MARGIN, Row.TEXT_SIZE,
+                Row.HOME_ICON_SIZE, Row.CONTRAST, Row.PAGE_TRANSITION,
+                Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.FULL_SCREEN,
                 Row.TINT_HUE, Row.TOOL_COLOURS),
-            "SECTION_SCREEN", Arrays.asList(Row.TEXT_SIZE, Row.FULL_SCREEN,
-                Row.PAGE_TRANSITION)));
+            "SECTION_FINE_TUNE", Arrays.asList(Row.DEPTH, Row.SHINE)));
     }
 
     @Test
@@ -144,15 +143,13 @@ public class EditorCardSectionsTest {
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            "SECTION_TEXT", Arrays.asList(Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-                Row.LINK_FONT),
-            "SECTION_BACKGROUND", Arrays.asList(Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
-                Row.WALLPAPER_DIM),
-            "SECTION_PANES", Arrays.asList(Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
-                Row.FOCUS_GROWS, Row.PANE_BORDERS),
-            "SECTION_EFFECTS", Arrays.asList(Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
-                Row.COMPOSITE_SIGNAL),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS, Row.MINIMAL)));
+            // One section and no headings (#346); the Layout list stays until #344.
+            CARD, Arrays.asList(Row.FONT_SIZE, Row.SPLIT_GAP, Row.TERMINAL_OPACITY,
+                Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+                Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT, Row.ADAPTIVE_LEGIBILITY,
+                Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SCREEN_EVENTS,
+                Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.ELEMENTS,
+                Row.LINK_FONT, Row.PANE_BORDERS)));
     }
 
     /** Under Use as Terminal only, Pages is the Terminal card's (Home's card is gone). */
@@ -160,7 +157,7 @@ public class EditorCardSectionsTest {
     public void terminalWithoutHomeLinksPages() {
         Map<String, List<Row>> got = sections(EditorCard.TERMINAL,
             new Offers(true, true, false, false));
-        assertEquals(Arrays.asList(Row.LINK_PAGES), got.get("SECTION_LINKS"));
+        assertTrue(got.get(CARD).contains(Row.LINK_PAGES));
     }
 
     @Test
