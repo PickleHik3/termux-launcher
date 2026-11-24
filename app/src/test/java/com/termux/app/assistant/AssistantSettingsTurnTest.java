@@ -201,6 +201,20 @@ public class AssistantSettingsTurnTest {
     }
 
     @Test
+    public void noCallsAndNoTextIsNoMatchingSettingNotAnError() throws Exception {
+        transport.script = (body, sink) -> { };
+        SettingsCard card = ask("make the text bigger");
+        assertEquals(SettingsCard.Kind.NO_MATCH, card.kind);
+        assertEquals("make the text bigger", card.links.get(0).query);
+    }
+
+    @Test
+    public void theNoMatchWordsInTheStringsFileAreTheStoredOnes() {
+        android.content.Context context = androidx.test.core.app.ApplicationProvider.getApplicationContext();
+        assertEquals(SettingsCard.NO_MATCH_TEXT, context.getString(com.termux.R.string.assistant_card_no_match));
+    }
+
+    @Test
     public void anIdOffThisTurnsShortlistIsDropped() throws Exception {
         assertFalse(shortlistIds("make the text bigger").contains("theme.mode"));
         transport.script = (body, sink) ->

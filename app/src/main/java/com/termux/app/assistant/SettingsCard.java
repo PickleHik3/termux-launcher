@@ -21,6 +21,13 @@ public final class SettingsCard {
     public enum Kind { CHANGES, LINKS, NO_MATCH }
 
     /**
+     * The words stored as a no-match answer's text. The engine has no resources, so this constant is
+     * the source and {@code assistant_card_no_match} in strings_assistant.xml mirrors it (a test
+     * keeps them equal).
+     */
+    public static final String NO_MATCH_TEXT = "No matching setting";
+
+    /**
      * Where the card is: offered, applied (Undo works), undone, or applied and then changed from
      * outside, which is when Undo no longer can.
      */
@@ -196,7 +203,7 @@ public final class SettingsCard {
     /** The words stored for the answer: its changes, one per line. */
     @NonNull
     public String summary() {
-        if (kind == Kind.NO_MATCH) return "No matching setting";
+        if (kind == Kind.NO_MATCH) return NO_MATCH_TEXT;
         StringBuilder out = new StringBuilder();
         for (Item item : items) {
             if (out.length() > 0) out.append('\n');
