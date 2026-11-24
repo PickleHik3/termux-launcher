@@ -21091,6 +21091,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void exitViews(@NonNull java.util.List<View> out) {
                 if (mPageOverview != null && mPageOverview.isOpen()) out.add(mPageOverview);
             }
+            @Override public void exitStarted(long durationMs) {
+                if (mPageOverview != null) mPageOverview.exitStarted();
+            }
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.TypedOverlay() {
             // The dictation card floats over every other surface, so its editor is innermost.
