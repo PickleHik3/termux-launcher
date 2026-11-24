@@ -204,6 +204,49 @@ public class StatusBarSwipeLayoutTest {
         assertTrue(toggles.isEmpty());
     }
 
+    @Test
+    public void thinRow_ownsAWindowStreamThatStartsOnItOutsideTheHost() {
+        // The row lies over the top pane, below the host's own bounds: the views' dispatch never
+        // offers it those presses, so the window asks the row first.
+        StatusBarSwipeLayout view = createView();
+        AtomicInteger rowTouches = new AtomicInteger();
+        View row = new View(view.getContext()) {
+            @Override public boolean onTouchEvent(MotionEvent e) {
+                rowTouches.incrementAndGet();
+                return true;
+            }
+        };
+        row.setId(R.id.terminal_status_row);
+        view.addView(row, new FrameLayout.LayoutParams(200, 24));
+        view.setRowPresented(true);
+        view.setRowRect(20, 120, 180, 160, 0);
+        view.measure(exact(200), exact(80));
+        view.layout(0, 0, 200, 80);
+        int[] origin = new int[2];
+        view.getLocationInWindow(origin);
+
+        MotionEvent down = event(MotionEvent.ACTION_DOWN, origin[0] + 60f, origin[1] + 130f);
+        assertTrue(view.dispatchWindowRowTouch(down));
+        // The event goes back to the window's coordinates.
+        assertEquals(origin[1] + 130f, down.getY(), 0.01f);
+        assertTrue(view.dispatchWindowRowTouch(
+            event(MotionEvent.ACTION_UP, origin[0] + 60f, origin[1] + 130f)));
+        assertTrue(rowTouches.get() > 0);
+
+        // Below the thin row is the terminal's first row of text, and outside the row is the pane.
+        assertFalse(view.dispatchWindowRowTouch(
+            event(MotionEvent.ACTION_DOWN, origin[0] + 60f, origin[1] + 400f)));
+        assertFalse(view.dispatchWindowRowTouch(
+            event(MotionEvent.ACTION_MOVE, origin[0] + 60f, origin[1] + 130f)));
+        assertFalse(view.dispatchWindowRowTouch(
+            event(MotionEvent.ACTION_DOWN, origin[0] + 5f, origin[1] + 130f)));
+
+        // As the strip the row owns nothing.
+        view.setRowPresented(false);
+        assertFalse(view.dispatchWindowRowTouch(
+            event(MotionEvent.ACTION_DOWN, origin[0] + 60f, origin[1] + 130f)));
+    }
+
     private static StatusBarSwipeLayout createView() {
         Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
         StatusBarSwipeLayout view = new StatusBarSwipeLayout(

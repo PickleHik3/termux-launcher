@@ -18,7 +18,7 @@ import com.termux.app.page.PageKind;
  * <p>The stack's clear region is built once per kind, on its first draw, and kept; drawing then
  * only moves the canvas, so it allocates nothing after a kind's first stack.
  */
-public final class PageBarGlyphPainter {
+public final class PageBarGlyphPainter implements PageMarkLook {
 
     /** A folded stack's front glyph is scaled by this about the centre, then moved by the translation. */
     static final float STACK_SCALE = 0.85f;
@@ -36,6 +36,19 @@ public final class PageBarGlyphPainter {
 
     private final PageGlyphPainter mGlyphs = new PageGlyphPainter();
     private final Path[] mClear = new Path[PageKind.values().length];
+
+    @Override
+    public void draw(@NonNull Canvas canvas, @NonNull PageKind kind, int number, boolean current,
+                     float lift, float cx, float cy, float size, int ink) {
+        draw(canvas, kind, number, cx, cy, size, ink);
+    }
+
+    @Override
+    public void drawStack(@NonNull Canvas canvas, @NonNull PageKind kind, int count,
+                          boolean current, float lift, float cx, float cy, float size, int ink,
+                          int plateInk) {
+        drawStack(canvas, kind, count, cx, cy, size, ink, plateInk);
+    }
 
     /** {@code kind}'s glyph in {@code ink}, centred on ({@code cx}, {@code cy}). */
     public void draw(@NonNull Canvas canvas, @NonNull PageKind kind, int number, float cx,

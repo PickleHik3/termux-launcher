@@ -189,4 +189,13 @@ public class PaneShapeTest {
         assertEquals(8, PaneShape.verticalInsetPx(10f, 8));
         assertTrue(PaneShape.sideInsetPx(10f, 8) <= PaneShape.contentInsetPx(10f));
     }
+
+    @Test
+    public void edgeBands_startBelowTheThinRow() {
+        // A TUI's coloured first row once painted its left band up through the row (a blue block
+        // left of the row's marks): the bands stop at the row's bottom.
+        assertEquals(0f, PaneShape.fillBandTopPx(0), 0f);
+        assertEquals(42f, PaneShape.fillBandTopPx(42), 0f);
+        assertEquals(0f, PaneShape.fillBandTopPx(-3), 0f);
+    }
 }

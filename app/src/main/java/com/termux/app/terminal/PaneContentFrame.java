@@ -427,6 +427,49 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         return mRetroEffect.style();
     }
 
+    /** The status bar's thin row this pane holds above its content ({@link #setStatusRowPx}). */
+    private int mStatusRowPx;
+
+    /**
+     * Holds the content {@code rowPx} further below the pane's top, where the status bar stands as
+     * the thin row (PaneRowPolicy.paneTopInsetPx: the top pane, while the row stands); 0 gives it
+     * back. Relays out only when it changes, once per change of place, never per frame.
+     */
+    public void setStatusRowPx(int rowPx) {
+        int row = Math.max(0, rowPx);
+        if (row == mStatusRowPx) return;
+        mStatusRowPx = row;
+        requestLayout();
+    }
+
+    /**
+     * Where the enlarged status row lies over this pane, in this frame's coordinates; empty when
+     * it does not. The row is drawn behind the pane, so the content gives way under it.
+     */
+    private final android.graphics.Rect mStatusRowCover = new android.graphics.Rect();
+
+    /**
+     * The enlarged thin row's ground over this pane ({@code left}..{@code bottom} in this frame's
+     * coordinates), or an empty rect once it settles: the content is not drawn under it, so the
+     * first row of text never shows through the row. Redraws only on a change.
+     */
+    public void setStatusRowCover(int left, int top, int right, int bottom) {
+        if (mStatusRowCover.left == left && mStatusRowCover.top == top
+            && mStatusRowCover.right == right && mStatusRowCover.bottom == bottom) return;
+        mStatusRowCover.set(left, top, right, bottom);
+        invalidate();
+    }
+
+    /** The row this pane holds above its content; 0 for every pane but the top one. */
+    public int statusRowPx() {
+        return mStatusRowPx;
+    }
+
+    /** The radius this pane rounds its corners at, as it was asked for. */
+    public float requestedRadiusPx() {
+        return mRequestedRadiusPx;
+    }
+
     /** The span of the top line left unstroked round the camera ({@link #setTopGap}). */
     private int mTopGapStartPx;
     private int mTopGapEndPx;
@@ -622,6 +665,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         if (contentLeft <= 0 && contentTop <= 0 && contentRight >= getWidth() && contentBottom >= getHeight())
             return false;
 
+        // The thin status row stands in the top of this pane's margin, drawn behind the pane: the
+        // bands start below it, so no edge colour paints over the row.
+        float bandTop = PaneShape.fillBandTopPx(mStatusRowPx);
         int save = canvas.save();
         canvas.clipPath(getBandClipPath());
         // Top and bottom bands: one rect per run of equal-coloured columns, directly above/below
@@ -643,7 +689,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             float left = c == 0 ? 0f : contentLeft + terminal.getPaddingColumnLeft(c);
             float right = runEnd == columns
                 ? getWidth() : contentLeft + terminal.getPaddingColumnLeft(runEnd);
-            fillRect(canvas, left, 0f, right, contentTop, topColor);
+            fillRect(canvas, left, bandTop, right, contentTop, topColor);
             fillRect(canvas, left, contentBottom, right, getHeight(), bottomColor);
             c = runEnd;
         }
@@ -661,7 +707,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             int runEnd = r + 1;
             while (runEnd < rows && terminal.getEdgeRowColorLeft(runEnd) == leftColor
                 && terminal.getEdgeRowColorRight(runEnd) == rightColor) runEnd++;
-            float top = r == 0 ? 0f : contentTop + terminal.getPaddingRowTop(r);
+            float top = r == 0 ? bandTop : contentTop + terminal.getPaddingRowTop(r);
             float bottom = runEnd == rows
                 ? getHeight() : contentTop + terminal.getPaddingRowTop(runEnd);
             fillRect(canvas, 0f, top, contentLeft, bottom, leftColor);
@@ -715,6 +761,19 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      */
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child != mContent || mStatusRowCover.isEmpty())
+            return drawChildUncovered(canvas, child, drawingTime);
+        // The enlarged status row lies here, drawn behind the pane: the content gives way.
+        int save = canvas.save();
+        canvas.clipOutRect(mStatusRowCover);
+        try {
+            return drawChildUncovered(canvas, child, drawingTime);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
+    private boolean drawChildUncovered(Canvas canvas, View child, long drawingTime) {
         // A backdrop recording never holds a SurfaceView (the display's): it would move the real surface.
         if (com.termux.app.chrome.BackdropRecording.skips(child)) return false;
         if (child == mContent) drawBezel(canvas);
@@ -821,7 +880,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
                 side = mBezelInsets[0];
                 bottom = mBezelInsets[1];
             }
-            int top = PaneShape.topInsetPx(bottom, contentHeadroomPx());
+            int top = PaneShape.topInsetPx(bottom, contentHeadroomPx(), mStatusRowPx);
             MarginLayoutParams params = (MarginLayoutParams) mContent.getLayoutParams();
             if (params.leftMargin != side || params.topMargin != top
                 || params.rightMargin != side || params.bottomMargin != bottom) {

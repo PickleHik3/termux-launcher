@@ -53,7 +53,7 @@ public final class StatusBarCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.STATUS_POSITION, Row.STATUS_INDICATORS)
+            .tier(1, Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
             .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
@@ -242,15 +242,13 @@ public final class StatusBarCard {
 
     /** What the card's own rows read and write: the editor's side. */
     public interface Host {
-        /** Position's segment ({@link #positionIndex}). */
-        int position();
-        void setPosition(int index);
-        /** The face tile ({@link #faceIndex}). */
-        int clockFace();
-        void setClockFace(int index);
-        /** Clock position's segment ({@link #alignmentIndex}). */
-        int clockPosition();
-        void setClockPosition(int index);
+        /**
+         * The choice row {@code row} stands on: Position ({@link #positionIndex}), Clock face
+         * ({@link #faceIndex}), Clock position ({@link #alignmentIndex}), Page bar (0 Glyphs,
+         * 1 Marks, {@link #PAGE_BAR_MARKS}) or Place (0 Strip, 1 In the pane, {@link #PLACE_PANE}).
+         */
+        int choice(@NonNull Row row);
+        void setChoice(@NonNull Row row, int index);
         /** Option tile {@code index} ({@link #OPTION_12H} and on). */
         boolean option(int index);
         void setOption(int index, boolean on);
@@ -280,6 +278,8 @@ public final class StatusBarCard {
             case STATUS_SECONDS: return clockHeld(context, seconds(context, host), host);
             case STATUS_HOURS: return clockHeld(context, hours(context, widthPx, host), host);
             case STATUS_UNIT: return unit(context, widthPx, host);
+            case STATUS_PAGE_BAR: return pageBar(context, widthPx, host);
+            case STATUS_PLACE: return place(context, widthPx, host);
             case CAMERA_CUTOUT: return cameraCutout(context, host);
             case STATUS_INDICATORS: return indicators(context, widthPx, host);
             default: return null;
@@ -354,8 +354,8 @@ public final class StatusBarCard {
                     context.getString(R.string.editor_st_position_top)),
                 SegmentRow.Segment.both(EditorGlyphs.POS_BOTTOM,
                     context.getString(R.string.editor_st_position_bottom))),
-            host.position(), widthPx, host::setPosition);
-        return new CardRowView(row.root, () -> row.select(host.position()));
+            host.choice(Row.STATUS_POSITION), widthPx, index -> host.setChoice(Row.STATUS_POSITION, index));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_POSITION)));
     }
 
     @NonNull
@@ -364,10 +364,10 @@ public final class StatusBarCard {
         for (int i = 0; i < FACES.length; i++)
             tiles.add(new PreviewTilesRow.Tile(context.getString(FACE_NAMES[i]),
                 facePreview(context, FACES[i])));
-        PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.clockFace(),
-            host::setClockFace);
+        PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.choice(Row.CLOCK_FACE),
+            index -> host.setChoice(Row.CLOCK_FACE, index));
         // The Clock & Weather section's heading stands over the faces: no label of their own.
-        return new CardRowView(row.root, () -> row.select(host.clockFace()));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.CLOCK_FACE)));
     }
 
     /**
@@ -400,8 +400,8 @@ public final class StatusBarCard {
                     context.getString(R.string.editor_st_clock_center)),
                 SegmentRow.Segment.both(EditorGlyphs.CLOCK_ALIGN_RIGHT,
                     context.getString(R.string.editor_st_clock_right))),
-            host.clockPosition(), widthPx, host::setClockPosition);
-        return new CardRowView(row.root, () -> row.select(host.clockPosition()));
+            host.choice(Row.CLOCK_POSITION), widthPx, index -> host.setChoice(Row.CLOCK_POSITION, index));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.CLOCK_POSITION)));
     }
 
     /** Show seconds, a switch row bound to the Seconds option. */
@@ -447,6 +447,66 @@ public final class StatusBarCard {
     /** The segment an on/off option reads in a pair whose first word is on where {@code firstIsOn}. */
     static int pairIndex(boolean on, boolean firstIsOn) {
         return on == firstIsOn ? 0 : 1;
+    }
+
+    /** Page bar's segments, in order: the window chips, then the line of marks. */
+    public static final int PAGE_BAR_GLYPHS = 0;
+    public static final int PAGE_BAR_MARKS = 1;
+
+    /** The Page bar segment of the stored value; Glyphs for none or an unknown one. */
+    public static int pageBarIndex(@Nullable String stored) {
+        return com.termux.app.wall.pageswitch.PageBarLook.fromValue(stored).marksShown()
+            ? PAGE_BAR_MARKS : PAGE_BAR_GLYPHS;
+    }
+
+    /** The value Page bar's segment {@code index} stores. */
+    @NonNull
+    public static String pageBarValue(int index) {
+        return (index == PAGE_BAR_MARKS ? com.termux.app.wall.pageswitch.PageBarLook.MARKS
+            : com.termux.app.wall.pageswitch.PageBarLook.GLYPHS).value;
+    }
+
+    /** Glyphs · Marks, a connected group bound to the global Page bar look. */
+    @NonNull
+    private static CardRowView pageBar(@NonNull Context context, int widthPx, @NonNull Host host) {
+        SegmentRow row = SegmentRow.words(context, R.drawable.ic_ms_more_horiz,
+            context.getString(R.string.editor_st_page_bar),
+            new CharSequence[] {context.getString(R.string.editor_st_page_bar_glyphs),
+                context.getString(R.string.editor_st_page_bar_marks)},
+            host.choice(Row.STATUS_PAGE_BAR), widthPx, index -> host.setChoice(Row.STATUS_PAGE_BAR, index));
+        row.root.setContentDescription(context.getString(R.string.editor_st_page_bar) + ". "
+            + context.getString(R.string.editor_st_page_bar_summary));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_PAGE_BAR)));
+    }
+
+    /** Place's segments, in order: the status bar's own strip, then the thin row in the pane. */
+    public static final int PLACE_STRIP = 0;
+    public static final int PLACE_PANE = 1;
+
+    /** The Place segment of the stored value; Strip for none or an unknown one. */
+    public static int placeIndex(@Nullable String stored) {
+        return com.termux.app.statusbar.StatusPlace.fromValue(stored).inPane()
+            ? PLACE_PANE : PLACE_STRIP;
+    }
+
+    /** The value Place's segment {@code index} stores. */
+    @NonNull
+    public static String placeValue(int index) {
+        return (index == PLACE_PANE ? com.termux.app.statusbar.StatusPlace.PANE
+            : com.termux.app.statusbar.StatusPlace.STRIP).value;
+    }
+
+    /** Strip · In the pane, a connected group bound to the global Place. */
+    @NonNull
+    private static CardRowView place(@NonNull Context context, int widthPx, @NonNull Host host) {
+        SegmentRow row = SegmentRow.words(context, R.drawable.ic_ms_more_horiz,
+            context.getString(R.string.editor_st_place),
+            new CharSequence[] {context.getString(R.string.editor_st_place_strip),
+                context.getString(R.string.editor_st_place_pane)},
+            host.choice(Row.STATUS_PLACE), widthPx, index -> host.setChoice(Row.STATUS_PLACE, index));
+        row.root.setContentDescription(context.getString(R.string.editor_st_place) + ". "
+            + context.getString(R.string.editor_st_place_summary));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_PLACE)));
     }
 
     /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */

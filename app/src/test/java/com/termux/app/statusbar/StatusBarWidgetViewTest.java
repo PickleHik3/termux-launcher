@@ -40,6 +40,22 @@ public class StatusBarWidgetViewTest {
         }
     }
 
+    /** The thin row lays a reading out at 9sp, and the tier's size is back with 0. */
+    @Test
+    public void theValueIsLaidOutAtTheOverrideSizeAndBack() {
+        StatusBarWidgetView widget = new StatusBarWidgetView(
+            ApplicationProvider.getApplicationContext(), null);
+        widget.dressAsCpu();
+        widget.setValue("42%");
+        android.widget.TextView text = (android.widget.TextView) widget.getChildAt(1);
+        float tier = text.getTextSize();
+        widget.setValueSizeOverrideSp(PaneRowPolicy.READING_SP);
+        assertEquals(tier * PaneRowPolicy.READING_SP / StatusBarInk.SIZE_TERTIARY_SP,
+            text.getTextSize(), 0.5f);
+        widget.setValueSizeOverrideSp(0f);
+        assertEquals(tier, text.getTextSize(), 0.01f);
+    }
+
     /** A stat waiting on a backend shows its hint in the value's place, and the value back after. */
     @Test
     public void aNeedsHintTakesTheValuesPlaceAndGivesItBack() {

@@ -334,6 +334,17 @@ Spec: `project-docs/active/page-glyph-switcher-2026-11-16.md` ("Page bar"). Code
 `com.termux.app.wall.pageswitch` (`PageBar*`).
 _Avoid_: glyph row, page panel, dots, ticks (the retired versions), scrubber
 
+**Marks**:
+The second look for the pages, chosen under Status bar › Page bar (Glyphs or Marks; a new install
+wears Marks, an existing one keeps Glyphs). Each page is a plain mark: Home a dot, a Terminal window
+a prompt, a Display a screen, the Assistant a spark; the current page is a solid disc with its
+number or sign cut out, and a window that wants you gets a small burst. In the status bar the
+**Marks line** stands where the window chips were, along the row or down a side edge's column, on
+every page; tap a mark to go to that page. Spec: `project-docs/active/status-row-and-marks-2026-11-23.md`.
+Code: `PageBarLook`, `PageMarkShapes`, `MarksLook`, `MarksLine` in `com.termux.app.wall.pageswitch`;
+`MarksLineView` in `com.termux.app.statusbar`.
+_Avoid_: dots, ticks, glyph row (the page bar's own **Glyphs** look)
+
 **Page switcher**:
 The page switcher key: an optional key on the extra-keys bar whose cap shows the current page's
 glyph; it pops up the **page bar**.

@@ -106,6 +106,10 @@ final class AppearanceSnapshot {
     private final boolean[] mStatusSwitches;
     /** The status row's order, in its one spelling ({@code StatusRowOrder#normalize}). */
     private final String mStatusRowOrder;
+    /** How the status bar marks the pages, in its one spelling ({@code PageBarLook#value}). */
+    private final String mPageBarLook;
+    /** Where the status bar stands, in its one spelling ({@code StatusPlace#value}). */
+    private final String mStatusPlace;
     /**
      * Every half's own key as stored (ADR 0013): a key absent here is absent in the store, so a
      * half that followed the shared value at open follows it again after a restore.
@@ -183,6 +187,10 @@ final class AppearanceSnapshot {
         mStatusSwitches = statusSwitches(prefs);
         mStatusRowOrder = com.termux.app.statusbar.StatusRowOrder.normalize(
             prefs.getStatusRowOrder());
+        mPageBarLook = com.termux.app.wall.pageswitch.PageBarLook.fromValue(
+            prefs.getPageBarLook()).value;
+        mStatusPlace = com.termux.app.statusbar.StatusPlace.fromValue(
+            prefs.getStatusPlace()).value;
         mHalfKeys = halfKeys(prefs);
         mGridCells = gridCells(prefs);
     }
@@ -292,6 +300,12 @@ final class AppearanceSnapshot {
         if (!mStatusRowOrder.equals(com.termux.app.statusbar.StatusRowOrder.normalize(
                 prefs.getStatusRowOrder())))
             prefs.setStatusRowOrder(mStatusRowOrder);
+        if (!mPageBarLook.equals(com.termux.app.wall.pageswitch.PageBarLook.fromValue(
+                prefs.getPageBarLook()).value))
+            prefs.setPageBarLook(mPageBarLook);
+        if (!mStatusPlace.equals(com.termux.app.statusbar.StatusPlace.fromValue(
+                prefs.getStatusPlace()).value))
+            prefs.setStatusPlace(mStatusPlace);
         // Last: every shared write above dropped the halves' own keys.
         restoreHalfKeys(prefs, mHalfKeys);
         restoreGridCells(prefs, mGridCells);
@@ -330,6 +344,8 @@ final class AppearanceSnapshot {
             .append('|').append(mClockAlignment)
             .append('|').append(java.util.Arrays.toString(mStatusSwitches))
             .append('|').append(mStatusRowOrder)
+            .append('|').append(mPageBarLook)
+            .append('|').append(mStatusPlace)
             .append('|').append(mHalfKeys).append('|').append(mGridCells)
             .toString();
     }

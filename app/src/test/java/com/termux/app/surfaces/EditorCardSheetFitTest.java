@@ -946,6 +946,10 @@ public class EditorCardSheetFitTest {
                     R.string.editor_st_hours_24);
                 case STATUS_UNIT: return strings(R.string.editor_st_unit_c,
                     R.string.editor_st_unit_f);
+                case STATUS_PLACE: return strings(R.string.editor_st_place_strip,
+                    R.string.editor_st_place_pane);
+                case STATUS_PAGE_BAR: return strings(R.string.editor_st_page_bar_glyphs,
+                    R.string.editor_st_page_bar_marks);
                 default: return new String[0];
             }
         }
