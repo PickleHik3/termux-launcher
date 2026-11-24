@@ -146,6 +146,43 @@ public class X11LinuxAppRunnerSessionTest {
         }
     }
 
+    @Test public void aDesktopWhoseOwnScreenDidNotStartSaysSoEvenAfterTheQuickFailWindow() {
+        LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
+        runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV);
+        idle(); // the server wait outlasts the quick-fail window
+        assertTrue(host.notices.isEmpty());
+
+        host.listeners.get(0).onExit(com.termux.app.wayland.WaylandDesktopServer.EXIT_NO_SCREEN);
+        assertEquals(Collections.singletonList(
+            context.getString(com.termux.R.string.linux_wayland_desktop_screen_failed)), host.notices);
+        assertEquals("never retried", 1, host.scripts.size());
+        assertFalse("and it no longer holds the screen", X11LinuxAppRunner.isDesktopRunning());
+    }
+
+    @Test public void aQuickScreenFailureIsSaidOnceInItsOwnWords() {
+        LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
+        runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV);
+        host.listeners.get(0).onExit(com.termux.app.wayland.WaylandDesktopServer.EXIT_NO_SCREEN);
+        idle();
+        assertEquals(Collections.singletonList(
+            context.getString(com.termux.R.string.linux_wayland_desktop_screen_failed)), host.notices);
+    }
+
+    @Test public void theDesktopsOwnServerStartsAfterThePidAndTheLogAndBeforeTheDesktop() {
+        LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
+        String start = "START_SERVER\n";
+        String script = X11LinuxAppRunner.sessionScript(xfce, ":3", ENV, null, start);
+        int log = script.indexOf("exec > ");
+        int pid = script.indexOf("echo $$ > ");
+        int server = script.indexOf(start);
+        int desktop = script.indexOf("exec startxfce4");
+        assertTrue(script, log >= 0 && log < pid && pid < server && server < desktop);
+        assertTrue(script.startsWith("export DISPLAY=:3\n"));
+        // With nothing to start, the script is X11 Display's own.
+        assertEquals(X11LinuxAppRunner.sessionScript(xfce, ":3", ENV, null),
+            X11LinuxAppRunner.sessionScript(xfce, ":3", ENV, null, null));
+    }
+
     @Test public void tappingTheDesktopThatIsAlreadyRunningJustShowsIt() {
         LinuxAppCatalog.LinuxApp xfce = session("xfce", "Xfce Session", "startxfce4");
         runner.runAndWatch(xfce, "exec startxfce4\n", false, DISPLAY, ENV);

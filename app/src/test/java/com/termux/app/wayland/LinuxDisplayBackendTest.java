@@ -29,13 +29,16 @@ public class LinuxDisplayBackendTest {
     }
 
     @Test
-    public void onlyPlainAppsInThePrefixFollowWayland() {
+    public void appsAndDesktopsInThePrefixFollowWayland() {
         LinuxDisplayBackend w = LinuxDisplayBackend.WAYLAND;
         assertEquals(LinuxDisplayBackend.WAYLAND, LinuxDisplayBackend.forApp(w, false, false));
-        // A whole desktop keeps X11 Display for now.
-        assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.forApp(w, true, false));
-        // So does an app in a proot-distro container.
+        // A whole desktop opens as one window in its own X server.
+        assertEquals(LinuxDisplayBackend.WAYLAND, LinuxDisplayBackend.forApp(w, true, false));
+        // An app or desktop in a proot-distro container keeps X11 Display for now.
         assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.forApp(w, false, true));
+        assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.forApp(w, true, true));
+        assertEquals(LinuxDisplayBackend.X11,
+            LinuxDisplayBackend.forApp(LinuxDisplayBackend.X11, true, false));
         assertEquals(LinuxDisplayBackend.X11,
             LinuxDisplayBackend.forApp(LinuxDisplayBackend.X11, false, false));
     }

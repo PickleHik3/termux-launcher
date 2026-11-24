@@ -494,6 +494,7 @@
     <string name="linux_mesa_stale_title">Graphics add-on out of date</string>
     <string name="linux_mesa_stale_sub">Update it in Linux apps set-up to draw with the graphics chip again.</string>
     <string name="linux_wayland_start_failed">Wayland Display did not start, so the app could not open.</string>
+    <string name="linux_wayland_desktop_screen_failed">This desktop could not open because its screen did not start.</string>
     <string name="linux_windows_opening">Opening…</string>
     <string name="linux_windows_no_apps">No Linux apps are open.</string>
     <string name="linux_windows_stopped">Wayland Display stopped, and its apps closed.</string>
