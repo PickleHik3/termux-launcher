@@ -10,6 +10,8 @@ import com.termux.app.place.layout.IconSize;
 import com.termux.app.place.layout.LayoutKind;
 import com.termux.app.place.layout.LayoutStore;
 import com.termux.app.place.layout.LayoutsJson;
+import com.termux.app.dock.WallStripRowPolicy;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.registry.SettingAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingRefresh;
@@ -129,7 +131,51 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
     @Override
     public SettingDeclaration declaration(@NonNull String id) {
         Target target = parse(id);
-        return target == null ? null : SettingDeclaration.text(id, "", SettingRefresh.LISTENER);
+        return target == null ? null : describe(
+            SettingDeclaration.text(id, "", SettingRefresh.LISTENER), target);
+    }
+
+    /**
+     * The name and sentence the settings reference page shows, and the range in words: a size's
+     * limits are scales and dp, set per orientation, not numbers a reader could type blind.
+     */
+    @NonNull
+    private static SettingDeclaration describe(@NonNull SettingDeclaration declaration,
+                                               @NonNull Target target) {
+        if (!LayoutCommand.SIZES.equals(target.document)) return declaration;
+        String orientation = target.path.startsWith(LayoutsJson.LANDSCAPE + ".") ? " in landscape"
+            : target.path.startsWith(LayoutsJson.PORTRAIT + ".") ? " in portrait" : "";
+        String field = target.path.substring(target.path.lastIndexOf('.') + 1);
+        switch (field) {
+            case IconSize.FIELD:
+                return declaration.described("Icon size", "How large app icons are on Home.")
+                    .shownAs("s, m, l or xl", IconSize.DEFAULT.key);
+            case LayoutsJson.DOCK_HEIGHT:
+                return declaration.described("Dock height" + orientation,
+                    "How tall the dock is, as a multiple of the standard height.")
+                    .shownAs(TERMUX_APP.MIN_APP_LAUNCHER_BAR_HEIGHT + " to "
+                        + TERMUX_APP.MAX_APP_LAUNCHER_BAR_HEIGHT,
+                        String.valueOf(TERMUX_APP.DEFAULT_APP_LAUNCHER_BAR_HEIGHT));
+            case LayoutsJson.KEYBOARD_HEIGHT:
+                return declaration.described("Keyboard height" + orientation,
+                    "How tall the in-app keyboard is, as a multiple of the standard height.")
+                    .shownAs(TERMUX_APP.MIN_IN_APP_KEYBOARD_HEIGHT_SCALE + " to "
+                        + TERMUX_APP.MAX_IN_APP_KEYBOARD_HEIGHT_SCALE, "The standard height");
+            case LayoutsJson.KEYBOARD_CHIN:
+                return declaration.described("Keyboard bottom space" + orientation,
+                    "The space under the in-app keyboard, in dp.")
+                    .shownAs(TERMUX_APP.MIN_IN_APP_KEYBOARD_BOTTOM_PADDING + " to "
+                        + TERMUX_APP.MAX_IN_APP_KEYBOARD_BOTTOM_PADDING,
+                        String.valueOf(TERMUX_APP.DEFAULT_IN_APP_KEYBOARD_BOTTOM_PADDING));
+            case LayoutsJson.WALL_STRIP_HEIGHT:
+                return declaration.described("Wall strip height" + orientation,
+                    "How tall the strip of wall controls is, in dp.")
+                    .shownAs(WallStripRowPolicy.MIN_HEIGHT_DP + " to "
+                        + WallStripRowPolicy.MAX_HEIGHT_DP,
+                        String.valueOf(WallStripRowPolicy.DEFAULT_HEIGHT_DP));
+            default:
+                return declaration;
+        }
     }
 
     @NonNull
@@ -162,8 +208,9 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
             });
             for (Map.Entry<String, Map<String, String>> document : fields.entrySet()) {
                 for (String path : document.getValue().keySet()) {
-                    all.add(SettingDeclaration.text(PREFIX + document.getKey() + "." + path, "",
-                        SettingRefresh.LISTENER));
+                    all.add(describe(SettingDeclaration.text(
+                        PREFIX + document.getKey() + "." + path, "", SettingRefresh.LISTENER),
+                        new Target(document.getKey(), path)));
                 }
             }
         } catch (Exception e) {

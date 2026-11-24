@@ -107,8 +107,9 @@ public class WindowSourceRulesTest {
 
     /** Longer cycles that no pair explains. */
     static final List<String> LONGER_CYCLES = Arrays.asList(
-        // settings reaches the privileged lane through the terminal
-        "privileged -> terminal -> settings -> privileged"
+        // the layout adapter reads the wall strip's height range from the dock; the terminal
+        // reads launcher.properties from settings
+        "terminal -> settings -> dock -> terminal"
     );
 
     /** Files outside the activity's package that name TermuxActivity. */

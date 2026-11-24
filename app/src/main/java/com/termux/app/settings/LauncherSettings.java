@@ -95,6 +95,12 @@ public final class LauncherSettings {
         return sRegistry != null || sApplier != null;
     }
 
+    /** The app's shared preferences as a registry store, for an adapter that reads them itself. */
+    @NonNull
+    public static SettingStore preferencesStore(@Nullable SharedPreferences prefs) {
+        return new PreferencesStore(prefs);
+    }
+
     /** The device's stores: the app's shared preferences, and termux.properties. */
     private static final class DeviceStores implements SettingStore.Stores {
         @NonNull private final Context mContext;
