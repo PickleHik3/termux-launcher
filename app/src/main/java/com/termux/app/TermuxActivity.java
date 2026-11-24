@@ -30156,7 +30156,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (column.getVisibility() != columnShown) column.setVisibility(columnShown);
         if (!marks) return;
         com.termux.app.statusbar.MarksLineView line = vertical ? column : row;
-        if (mMarksNavigator == null) mMarksNavigator = pageSwitchNavigator();
+        if (mMarksNavigator == null) {
+            mMarksNavigator = pageSwitchNavigator();
+            // The slide's tick and its lift read the page bar's own switches.
+            java.util.function.BooleanSupplier haptics =
+                () -> mPreferences != null && mPreferences.isAppHapticsEnabled();
+            row.setSlideSupport(haptics, this::isReducedMotionEnabled);
+            column.setSlideSupport(haptics, this::isReducedMotionEnabled);
+        }
         line.setNavigator(mMarksNavigator);
         line.setVertical(vertical);
         line.setChromeInk(mChrome.ink());
