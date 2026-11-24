@@ -658,7 +658,10 @@ public class LauncherCtlApiServer {
             } else if (signalToolFor(request.method, request.path) != null) {
                 return jsonResponse(runSignalRequest(request));
             } else if (DeviceControlRoutes.handles(request.method, request.path)) {
-                return jsonResponse(DeviceControlRoutes.handle(context, request.method, request.path, request.body));
+                JSONObject result = DeviceControlRoutes.handle(context, request.method, request.path, request.body);
+                // A text answer (config list's lines) goes out as text/plain, as print-id does.
+                HttpResponse text = textAnswer(result);
+                return text != null ? text : jsonResponse(result);
             } else if (LinuxAppsRoutes.handles(request.method, request.path)) {
                 LinuxAppsRoutes.Result linux = LinuxAppsRoutes.handle(context, request.path,
                     queryParameters(request.query).get("format"), request.body);
@@ -2117,6 +2120,7 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/look", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/config", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("GET:/v1/linux-apps", new SimpleRateLimiter(60, 60_000));
         rateLimiters.put("POST:/v1/linux-apps/open", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/motion-log", new SimpleRateLimiter(30, 60_000));
@@ -3035,6 +3039,7 @@ public class LauncherCtlApiServer {
             "  launcherctl battery\n" +
             "  launcherctl motion-log dump|clear\n" +
             "  launcherctl look get|set|reset ...\n" +
+            "  launcherctl config get ID | set ID VALUE | list [--json] | export | apply FILE\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
@@ -3046,7 +3051,7 @@ public class LauncherCtlApiServer {
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
-            "battery, motion-log, look, volume, toast, wallpaper, x11, linux-apps, linux-app and media.\n" +
+            "battery, motion-log, look, config, volume, toast, wallpaper, x11, linux-apps, linux-app and media.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -3313,6 +3318,31 @@ public class LauncherCtlApiServer {
             "  launcherctl look get opacity --element dock\n" +
             "  launcherctl look reset --element dock\n" +
             "  launcherctl look set dim 30 --element background\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    config) cat <<'EOF'\n" +
+            "launcherctl config - the launcher's settings\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl config get ID\n" +
+            "  launcherctl config set ID VALUE\n" +
+            "  launcherctl config list [--json]\n" +
+            "  launcherctl config export\n" +
+            "  launcherctl config apply FILE\n" +
+            "\n" +
+            "list prints every setting as ID = VALUE; with --json, each one's kind, range or\n" +
+            "choices, default and current value. set changes the screen the way the Settings\n" +
+            "row does, at once while the launcher is open, else when it next opens. A value\n" +
+            "outside a setting's range is refused with the range, and nothing changes.\n" +
+            "\n" +
+            "export prints the setup as a file of ID = VALUE lines (# starts a comment). apply\n" +
+            "checks every line of FILE first and changes nothing when any is wrong, naming each\n" +
+            "bad line (line 12: look.dock.opacity is 0-100); FILE - reads standard input.\n" +
+            "\n" +
+            "Examples:\n" +
+            "  launcherctl config set terminal.contrast harder\n" +
+            "  launcherctl config get text.size\n" +
+            "  launcherctl config set theme.mode dark\n" +
             "EOF\n" +
             "      ;;\n" +
             "    volume) cat <<'EOF'\n" +
@@ -3860,6 +3890,39 @@ public class LauncherCtlApiServer {
             "      ;;\n" +
             "  esac\n" +
             "}\n" +
+            "config_cmd() {\n" +
+            "  usage='usage: launcherctl config get ID | set ID VALUE | list [--json] | export | apply FILE'\n" +
+            "  case \"${1:-}\" in\n" +
+            "    get)\n" +
+            "      [ \"$#\" -eq 2 ] && [ -n \"$2\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      api POST /v1/config \"{\\\"op\\\":\\\"get\\\",\\\"id\\\":$(printf '%s' \"$2\" | json_str)}\"\n" +
+            "      ;;\n" +
+            "    set)\n" +
+            "      [ \"$#\" -eq 3 ] && [ -n \"$2\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      api POST /v1/config \"{\\\"op\\\":\\\"set\\\",\\\"id\\\":$(printf '%s' \"$2\" | json_str),\\\"value\\\":$(printf '%s' \"$3\" | json_str)}\"\n" +
+            "      ;;\n" +
+            "    list)\n" +
+            "      case \"$#:${2:-}\" in\n" +
+            "        1:) api POST /v1/config '{\"op\":\"list\",\"format\":\"text\"}' ;;\n" +
+            "        2:--json) api POST /v1/config '{\"op\":\"list\"}' ;;\n" +
+            "        *) echo \"$usage\" >&2; exit 2 ;;\n" +
+            "      esac\n" +
+            "      ;;\n" +
+            "    export)\n" +
+            "      [ \"$#\" -eq 1 ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      api POST /v1/config '{\"op\":\"export\"}'\n" +
+            "      ;;\n" +
+            "    apply)\n" +
+            "      [ \"$#\" -eq 2 ] && [ -n \"$2\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      if [ \"$2\" = - ]; then body=$(json_str); else\n" +
+            "        [ -r \"$2\" ] || { echo \"launcherctl config: cannot read $2\" >&2; exit 2; }\n" +
+            "        body=$(json_str < \"$2\")\n" +
+            "      fi\n" +
+            "      api POST /v1/config \"{\\\"op\\\":\\\"apply\\\",\\\"text\\\":$body}\"\n" +
+            "      ;;\n" +
+            "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
+            "  esac\n" +
+            "}\n" +
             "look_cmd() {\n" +
             "  usage='usage: launcherctl look get|set|reset ... (see launcherctl look --help)'\n" +
             "  op=\"${1:-}\"\n" +
@@ -3933,7 +3996,7 @@ public class LauncherCtlApiServer {
             "esac\n" +
             "if [ \"$#\" -eq 1 ]; then\n" +
             "  case \"$cmd\" in\n" +
-            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11|linux-app|media)\n" +
+            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11|linux-app|media|config)\n" +
             "      group_help \"$cmd\" >&2\n" +
             "      exit 2\n" +
             "      ;;\n" +
@@ -4018,6 +4081,10 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  layout)\n" +
             "    shift || true; layout_cmd \"$@\"\n" +
+            "    ;;\n" +
+            "  config)\n" +
+            "    shift || true\n" +
+            "    config_cmd \"$@\"\n" +
             "    ;;\n" +
             "  look)\n" +
             "    shift || true\n" +
@@ -4126,7 +4193,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, volume, toast, wallpaper, x11, linux-apps, linux-app, media. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, config, volume, toast, wallpaper, x11, linux-apps, linux-app, media. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";
@@ -4229,6 +4296,15 @@ public class LauncherCtlApiServer {
         response.put("memoryMode", settings.getMemoryMode().id);
         response.put("tier", com.termux.ai.TaiDeviceTier.forDevice(context).number());
         return response;
+    }
+
+    /** A device route's answer that carries {@link ConfigCommand#TEXT} as text/plain, else null. */
+    @Nullable
+    static HttpResponse textAnswer(@NonNull JSONObject result) {
+        String text = result.optString(ConfigCommand.TEXT, null);
+        if (text == null) return null;
+        return new HttpResponse(200, "text/plain; charset=utf-8",
+            text.getBytes(StandardCharsets.UTF_8), null);
     }
 
     private HttpResponse jsonResponse(JSONObject response) {

@@ -114,6 +114,8 @@ import com.termux.app.place.PlaceLayoutStore;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.PlaceSizePreferences;
 import com.termux.app.place.ResolvedArrangement;
+import com.termux.app.settings.LauncherSettings;
+import com.termux.app.settings.SettingsRefreshScreen;
 import com.termux.app.surfaces.SurfaceEditorController;
 import com.termux.app.launcher.animation.LauncherTransitionController;
 import com.termux.app.launcher.az.AzBarFrame;
@@ -1121,6 +1123,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final SurfaceEditorController mSurfaceEditor =
         new SurfaceEditorController(new SurfaceEditorHost());
+
+    /** The Settings applier's way onto this screen while it is resumed ({@link LauncherSettings}). */
+    private final SettingsRefreshScreen mSettingsScreen =
+        new SettingsRefreshScreen(new SettingsRefreshHost());
+
+    private final class SettingsRefreshHost implements SettingsRefreshScreen.Host {
+        @Override public boolean isGone() {
+            return isFinishing() || isDestroyed() || mPreferences == null;
+        }
+
+        @Override public void post(@NonNull Runnable work) {
+            getWindow().getDecorView().post(work);
+        }
+
+        @Override public void restyle(boolean recreate) {
+            reloadActivityStyling(recreate);
+        }
+
+        @Override public void applyTextSize() {
+            mSurfaceEditor.applyTextSize();
+        }
+    }
 
     /** The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). */
     private final com.termux.app.surfaces.SurfaceLongPress mSurfaceLongPress =
@@ -2990,6 +3014,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // A setting saved while away (launcherctl config) refreshes now; a field write otherwise.
+        LauncherSettings.onLauncherResumed(mSettingsScreen);
         // The frost under a keyboard over the display was let go at pause; a pass makes it again.
         if (isInAppKeyboardShown() && inAppKeyboardSeesThroughToDisplay())
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
@@ -3415,6 +3441,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
+        LauncherSettings.onLauncherPaused();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();

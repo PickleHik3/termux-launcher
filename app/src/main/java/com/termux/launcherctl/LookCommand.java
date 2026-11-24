@@ -44,6 +44,18 @@ final class LookCommand {
     private LookCommand() {
     }
 
+    /** The look grid's key for a property word: {@code colour} is tint_hue, {@code blur} is frost. */
+    @NonNull
+    static String gridKey(@NonNull String word) {
+        return word.equals("colour") ? "tint_hue" : word.equals("blur") ? "frost" : word;
+    }
+
+    /** The Background setting's key for a property word: {@code frost} is {@code blur}. */
+    @NonNull
+    static String backgroundKey(@NonNull String word) {
+        return word.equals("frost") ? "blur" : word;
+    }
+
     /** The cell named by an element, or all glass, in the CLI's words. */
     @NonNull
     static String describeCell(@Nullable LookGrid.Element element) {
@@ -137,8 +149,7 @@ final class LookCommand {
         LookGrid.Property property = null;
         if (!propertyName.isEmpty()) {
             if (propertyName.equals("dim")) return error(DIM_IS_TERMINALS);
-            property = LookGrid.Property.forKey(propertyName.equals("colour") ? "tint_hue"
-                : propertyName.equals("blur") ? "frost" : propertyName);
+            property = LookGrid.Property.forKey(gridKey(propertyName));
             if (property == null)
                 return error("'property' must be one of blur, opacity, tint, colour, corners, depth,"
                     + " edge, grain, rim, vibrancy, margin");
@@ -173,7 +184,7 @@ final class LookCommand {
                                          @NonNull Runnable onChanged) throws JSONException {
         Setting setting = null;
         if (!propertyName.isEmpty()) {
-            setting = Setting.forKey(propertyName.equals("frost") ? "blur" : propertyName);
+            setting = Setting.forKey(backgroundKey(propertyName));
             if (setting == null) return error("the Terminal's Background takes opacity, blur and dim");
         }
         switch (op) {

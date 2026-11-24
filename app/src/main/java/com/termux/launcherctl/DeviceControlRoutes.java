@@ -28,6 +28,7 @@ import com.termux.app.wall.pageswitch.PageBarGlassStyle;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.RootSystemCommands;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.app.settings.LauncherSettings;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
@@ -67,6 +68,7 @@ final class DeviceControlRoutes {
             case "/v1/toast":
             case "/v1/look":
             case "/v1/layout":
+            case "/v1/config":
                 return "POST".equals(method);
             case "/v1/root/lock":
             case "/v1/root/reboot":
@@ -118,6 +120,9 @@ final class DeviceControlRoutes {
                 return look(context, arguments);
             case "/v1/layout":
                 return layout(context, arguments);
+            case "/v1/config":
+                return ConfigCommand.handleInOneHop(LauncherSettings.registry(context),
+                    LauncherSettings.applier(), arguments, LayoutSettingsAdapter.DEVICE);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":
@@ -315,7 +320,7 @@ final class DeviceControlRoutes {
 
     /** The Terminal's Background, over its own preferences. */
     @NonNull
-    private static LookCommand.TerminalBackground terminalBackground(
+    static LookCommand.TerminalBackground terminalBackground(
             @NonNull TermuxAppSharedPreferences preferences) {
         return new LookCommand.TerminalBackground() {
             @Override

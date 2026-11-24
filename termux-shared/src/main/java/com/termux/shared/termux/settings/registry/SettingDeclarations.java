@@ -1,0 +1,57 @@
+package com.termux.shared.termux.settings.registry;
+
+import androidx.annotation.NonNull;
+
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
+import com.termux.shared.theme.NightMode;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+
+/**
+ * The launcher's setting declarations. Each is a constant the store's getter clamps with, so a
+ * range or a list of choices is written once. Adding a setting is one constant here plus its place
+ * in {@link #ALL}; the registry's index is built from {@link #ALL} only when something asks.
+ */
+public final class SettingDeclarations {
+
+    private SettingDeclarations() {}
+
+    /** Theme: System, Light or Dark, kept in termux.properties as night-mode system, false or true. */
+    @NonNull
+    public static final SettingDeclaration THEME_MODE = SettingDeclaration.choice("theme.mode",
+        SettingDeclaration.Store.PROPERTIES, "night-mode",
+        Arrays.asList("system", "light", "dark"),
+        Arrays.asList(NightMode.SYSTEM.getName(), NightMode.FALSE.getName(), NightMode.TRUE.getName()),
+        "system", false, SettingRefresh.THEME);
+
+    /** The terminal palette's contrast, Softer to Harder ({@link TerminalContrastLevel}). */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_CONTRAST = SettingDeclaration.choice(
+        "terminal.contrast", SettingDeclaration.Store.APP_PREFERENCES,
+        TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL, contrastLevels(), contrastLevels(),
+        TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL, true, SettingRefresh.RESTYLE);
+
+    /** The shared Text size, in percent. */
+    @NonNull
+    public static final SettingDeclaration TEXT_SIZE = SettingDeclaration.integer("text.size",
+        SettingDeclaration.Store.APP_PREFERENCES, TERMUX_APP.KEY_TEXT_SIZE_PERCENT,
+        TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT,
+        TERMUX_APP.TEXT_SIZE_PERCENT_STEP, TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT,
+        SettingRefresh.TEXT_SIZE);
+
+    /** Every declaration, in the order {@code config list} shows them. */
+    @NonNull
+    public static final List<SettingDeclaration> ALL =
+        Collections.unmodifiableList(Arrays.asList(THEME_MODE, TERMINAL_CONTRAST, TEXT_SIZE));
+
+    @NonNull
+    private static List<String> contrastLevels() {
+        List<String> values = new ArrayList<>();
+        for (TerminalContrastLevel level : TerminalContrastLevel.values()) values.add(level.value);
+        return values;
+    }
+}
