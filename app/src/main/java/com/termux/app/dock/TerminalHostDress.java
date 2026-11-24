@@ -1,10 +1,6 @@
 package com.termux.app.dock;
 
-import android.graphics.Bitmap;
 import android.graphics.Outline;
-import android.graphics.Rect;
-import android.graphics.RenderEffect;
-import android.os.Build;
 import android.view.View;
 import android.view.ViewOutlineProvider;
 import android.widget.ImageView;
@@ -14,14 +10,7 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.ChromeEdgeRule;
-import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
-import com.termux.app.chrome.GlassAnchor;
-import com.termux.app.chrome.GlassEffects;
-import com.termux.app.chrome.GlassRefraction;
-import com.termux.app.chrome.GlassStack;
-import com.termux.app.chrome.GroundUnderGlass;
-import com.termux.app.chrome.SharedFrameDrawable;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.place.ChromeShape.EdgeKind;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -54,62 +43,39 @@ public final class TerminalHostDress {
     @NonNull private final DockController mDock;
     @NonNull private final DockController.Host mHost;
     @NonNull private final Source mSource;
-    @NonNull private final GlassEffects mEffects;
     @NonNull private final CardOutline mOutline = new CardOutline();
 
-    private float mCover = -1f;
     /** The card's glass radius ({@link #capsuleRadiusPx}): 0 under Docked. */
     private float mRadiusPx;
-    private boolean mProgramEdge;
-    private boolean mShown;
     private int mRimEdges = ChromeEdgeRule.NONE;
-    @Nullable private GroundUnderGlass mGround;
-    private int mDressedWidthPx;
-    private int mDressedHeightPx;
-    @Nullable private View mWatched;
-    @NonNull private final int[] mOrigin = new int[2];
-    @NonNull private final int[] mRoot = new int[2];
-    @NonNull private final float[] mCap = new float[4];
-    @NonNull private final Rect mFrameRect = new Rect();
+    @NonNull private final GlassBackdropDress mBackdrop;
 
     public TerminalHostDress(@NonNull DockController dock, @NonNull Source source) {
         mDock = dock;
         mHost = dock.host();
         mSource = source;
-        mEffects = new GlassEffects(new GlassEffects.Host() {
-            @Override public float density() {
-                return mHost.density();
+        mBackdrop = new GlassBackdropDress(dock, source, new GlassBackdropDress.Owner() {
+            @Override public float glassRadiusPx(int heightPx) {
+                return mRadiusPx;
             }
-            @Nullable @Override public View dockBackdrop() {
-                return mHost.findViewById(R.id.terminal_dock_blur_backdrop);
+            @Override public int seams() {
+                // Docked: radius 0, and every edge but the rim's a seam the rim rect is pushed past.
+                // Floating (#305, rows beside the keys): the capsule's radius, a rim all round.
+                return ChromeEdgeRule.ALL & ~mRimEdges;
             }
-            @Nullable @Override public float[] peekGlassRect() {
-                return null;
+            @Override public void dressShape(@NonNull View surface) {
+                RestCards.Card card = mSource.card();
+                if (card != null) TerminalHostDress.this.dressShape(surface, card);
             }
-            @Nullable @Override public GlassRefraction.Look fancierLook() {
-                return mSource.fancierLook();
-            }
-            @Override public float dockCover() {
-                return mCover;
-            }
-            @Override public void applyDockSurfaceGlass(@NonNull GlassRefraction.Program program) {
+            @Override public void syncShelf(@Nullable ChromeSpec state) {
                 // Docked: the slab does not float, so no shelf under it.
-                DockSurface.applySlabGlass(program, mDock.keysCardSlabSpec(), false);
             }
-            @Override public boolean keyLensActive() {
-                return false;
-            }
-            @Override public float keyLensIntensity() {
-                return 0f;
-            }
-            @Override public void keyLens(@NonNull float[] out) {
-            }
-        });
+        }, SurfaceDirtyLedger.Backdrop.TERMINAL_HOST, R.id.terminal_dock_blur_backdrop, false);
     }
 
     /** Whether the host's glass is up (dressed and not released). */
     public boolean shown() {
-        return mShown;
+        return mBackdrop.shown();
     }
 
     /**
@@ -143,14 +109,14 @@ public final class TerminalHostDress {
 
     /** Lets the host's glass go: its picture and glass entry, its effect, its layers. */
     public void release() {
-        if (!mShown && mWatched == null) return;
-        mShown = false;
+        if (!mBackdrop.shown() && !mBackdrop.watching()) return;
+        mBackdrop.setShown(false);
         ImageView backdrop = mHost.findViewById(R.id.terminal_dock_blur_backdrop);
-        if (backdrop != null) clearBackdrop(backdrop);
-        hide(R.id.terminal_dock_top_edge_fx);
-        hide(R.id.terminal_dock_background);
-        hide(R.id.terminal_dock_edge_glow_fx);
-        hide(R.id.terminal_dock_specular_fx);
+        if (backdrop != null) mBackdrop.clearBackdrop(backdrop);
+        mBackdrop.hide(R.id.terminal_dock_top_edge_fx);
+        mBackdrop.hide(R.id.terminal_dock_background);
+        mBackdrop.hide(R.id.terminal_dock_edge_glow_fx);
+        mBackdrop.hide(R.id.terminal_dock_specular_fx);
         View host = mHost.findViewById(R.id.terminal_dock_host);
         if (host != null && host.getBackground() != null) host.setBackground(null);
     }
@@ -162,8 +128,8 @@ public final class TerminalHostDress {
         ImageView backdrop = mHost.findViewById(R.id.terminal_dock_blur_backdrop);
         RestCards.Card card = mSource.card();
         if (host == null || backdrop == null || card == null) return;
-        watch(host);
-        mShown = true;
+        mBackdrop.watch(host);
+        mBackdrop.setShown(true);
         mRimEdges = rimEdges(card);
         mRadiusPx = capsuleRadiusPx(card);
         float barAlpha = state.barAlpha;
@@ -184,7 +150,7 @@ public final class TerminalHostDress {
                 mSource.outlineColor());
         }
         dressShape(host, card);
-        updateBackdrop(state, host, backdrop, atRest);
+        mBackdrop.updateBackdrop(state, host, backdrop, atRest);
     }
 
     /**
@@ -212,132 +178,13 @@ public final class TerminalHostDress {
     private void dressShape(@NonNull View host, @NonNull RestCards.Card card) {
         // The program's gathered light is the edge wherever it runs; a rim under it would be a
         // second one.
-        int stroke = mProgramEdge ? ChromeEdgeRule.NONE : mRimEdges;
+        int stroke = mBackdrop.programEdge() ? ChromeEdgeRule.NONE : mRimEdges;
         host.setBackground(mHost.chrome().glass().rimUnderGlass(mRadiusPx, stroke));
         boolean changed = mOutline.set(card.corners.topLeft, card.corners.topRight,
             card.corners.bottomRight, card.corners.bottomLeft);
         if (host.getOutlineProvider() != mOutline) host.setOutlineProvider(mOutline);
         else if (changed) host.invalidateOutline();
         host.setClipToOutline(true);
-    }
-
-    private void setProgramEdge(@NonNull View host, boolean drawsEdge) {
-        if (mProgramEdge == drawsEdge) return;
-        mProgramEdge = drawsEdge;
-        RestCards.Card card = mSource.card();
-        if (card != null) dressShape(host, card);
-    }
-
-    private void updateBackdrop(@NonNull ChromeSpec state, @NonNull View host,
-                                @NonNull ImageView backdrop, boolean atRest) {
-        View measured = atRest ? host : null;
-        backdrop.setAlpha(1f);
-        if (host.getWidth() <= 0 || host.getHeight() <= 0) {
-            if (mSource.blurWanted(state) && mSource.pictureUp(backdrop)) {
-                backdrop.setVisibility(View.VISIBLE);
-            } else {
-                clearBackdrop(backdrop);
-            }
-            return;
-        }
-        if (!mSource.blurWanted(state)) {
-            clearBackdrop(backdrop);
-            return;
-        }
-        boolean managed = mSource.managedSource();
-        int hOver = CapsuleGlass.horizontalOverscanPx(
-            mHost.dpToPx(Math.max(0, state.blurRadiusDp)), mHost.density());
-        // The foot under the gesture pill is the host's own bottom: the backdrop reaches past it.
-        int seamOver = CapsuleGlass.seamOverscanPx(mSource.footPx(), hOver);
-        int width = host.getWidth();
-        int height = host.getHeight();
-        CapsuleGlass.applyOverscan(backdrop, width, height, hOver, seamOver);
-        // The laid-out origin: the lane's slide and lift are the anchor's, not the key.
-        GlassAnchor.layoutOriginOnScreen(host, mOrigin, mRoot);
-        Rect target = CapsuleGlass.targetRect(mOrigin, width, height, hOver, seamOver);
-        SharedFrameDrawable installed = SharedFrameDrawable.of(backdrop.getDrawable());
-        SurfaceDirtyLedger ledger = mHost.chrome().ledger();
-        float cover = mDock.dockGlassCover();
-        boolean drag = mSource.glassDragPreview();
-        if (!ledger.isDirty(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST) && cover == mCover
-            && (drag || ledger.lastRadiusDp(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST)
-                == state.blurRadiusDp)
-            && ledger.lastManagedSource(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST) == managed
-            && ledger.matchesLastRect(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST, target)
-            && mSource.pictureUp(backdrop)) {
-            backdrop.setColorFilter(mSource.frostFilter(drag ? null : measured));
-            backdrop.setVisibility(View.VISIBLE);
-            return;
-        }
-        Bitmap frame = mSource.blurFrame(state.blurRadiusDp, mFrameRect);
-        if (frame == null) {
-            if ((installed != null && installed.frameRect().equals(mFrameRect))
-                || mSource.pictureUp(backdrop)) {
-                backdrop.invalidate();
-                backdrop.setVisibility(View.VISIBLE);
-            } else {
-                backdrop.setImageDrawable(null);
-                backdrop.setVisibility(View.GONE);
-                ledger.markDirty(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST);
-                setProgramEdge(host, false);
-            }
-            return;
-        }
-        android.graphics.drawable.Drawable live = mSource.attachLive(backdrop,
-            state.blurRadiusDp);
-        mGround = mSource.ground(mGround, backdrop);
-        mSource.installPicture(backdrop, installed, frame, mFrameRect, state.blurRadiusDp, live);
-        mCover = cover;
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            // Docked: radius 0, and every edge but the rim's a seam the rim rect is pushed past.
-            // Floating (#305, rows beside the keys): the capsule's radius, a rim all round.
-            int seams = ChromeEdgeRule.ALL & ~mRimEdges;
-            CapsuleGlass.capRect(mCap, hOver, width, height, seamOver,
-                GlassRefraction.seamReachPx(GlassStack.lookFor(mSource.fancierLook()),
-                    mHost.density(), mRadiusPx), seams);
-            RenderEffect glass = mEffects.buildDockAndRemember(0f, mCap[0], mCap[1], mCap[2],
-                mCap[3], mRadiusPx);
-            backdrop.setRenderEffect(glass);
-        }
-        backdrop.setColorFilter(mSource.frostFilter(measured));
-        backdrop.setVisibility(View.VISIBLE);
-        setProgramEdge(host, mEffects.paramsValid());
-        ledger.recordApplied(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST, state.blurRadiusDp,
-            managed, target);
-    }
-
-    private void clearBackdrop(@NonNull ImageView backdrop) {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) backdrop.setRenderEffect(null);
-        mSource.releaseLive(backdrop);
-        backdrop.setImageDrawable(null);
-        backdrop.setVisibility(View.GONE);
-        mEffects.invalidateParams();
-        mHost.chrome().ledger().reset(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST);
-        mProgramEdge = false;
-        mCover = -1f;
-    }
-
-    private void hide(int id) {
-        View view = mHost.findViewById(id);
-        if (view != null && view.getVisibility() != View.GONE) view.setVisibility(View.GONE);
-    }
-
-    /** Asks for the chrome pass once when the host's size moves while it is dressed. */
-    private void watch(@NonNull View host) {
-        if (mWatched == host) return;
-        mWatched = host;
-        host.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> {
-            int w = r - l;
-            int h = b - t;
-            if (!mShown || (w == mDressedWidthPx && h == mDressedHeightPx)) return;
-            mDressedWidthPx = w;
-            mDressedHeightPx = h;
-            ChromeRenderer chrome = mHost.chrome();
-            if (chrome != null) {
-                chrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME
-                    | ChromeRenderer.SCOPE_ACCESSORY_RENDER);
-            }
-        });
     }
 
     /**
