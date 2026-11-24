@@ -417,7 +417,7 @@ public final class AssistantEngine {
 
     /**
      * A settings card is not sent back to the model: an applied one becomes the one line saying what
-     * was applied, any other card leaves its answer out.
+     * was applied, any other card leaves its answer and the request before it out.
      */
     @NonNull
     private static List<AssistantMessage> withoutCards(@NonNull List<AssistantMessage> history) {
@@ -433,6 +433,9 @@ public final class AssistantEngine {
             String note = card.note();
             if (note != null) {
                 out.add(new AssistantMessage(m.id, m.chatId, m.role, note, m.state, m.errorCode, m.createdMs));
+            } else if (!out.isEmpty() && out.get(out.size() - 1).isUser()) {
+                // Nothing is sent for the card, so its request goes too: turns keep alternating.
+                out.remove(out.size() - 1);
             }
         }
         return out == null ? history : out;

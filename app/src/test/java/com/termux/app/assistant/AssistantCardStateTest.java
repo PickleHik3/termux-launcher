@@ -243,6 +243,47 @@ public class AssistantCardStateTest {
         assertEquals("", assistantTexts(transport.bodies.get(transport.bodies.size() - 1)));
     }
 
+    @Test
+    public void anOfferedOrUndoneCardTakesItsRequestWithIt() throws Exception {
+        long chat = store.createChat(1);
+        long answer = askBigger(chat);
+        transport.call = false;
+        assertTrue(engine.send(chat, "what is the weather"));
+        assertAlternates(transport.bodies.get(transport.bodies.size() - 1), "what is the weather");
+
+        cards.apply(answer, registry, applier);
+        cards.undo(answer, registry, applier);
+        assertTrue(engine.send(chat, "and tomorrow"));
+        assertAlternates(transport.bodies.get(transport.bodies.size() - 1), "and tomorrow");
+    }
+
+    @Test
+    public void anAppliedCardKeepsItsRequestAndNote() throws Exception {
+        long chat = store.createChat(1);
+        long answer = askBigger(chat);
+        cards.apply(answer, registry, applier);
+        transport.call = false;
+        assertTrue(engine.send(chat, "what is the weather"));
+        JSONArray messages = new JSONObject(transport.bodies.get(transport.bodies.size() - 1))
+            .getJSONArray("messages");
+        List<String> roles = new ArrayList<>();
+        for (int i = 0; i < messages.length(); i++) roles.add(messages.getJSONObject(i).getString("role"));
+        assertTrue(roles.toString(), roles.contains("assistant"));
+        assertEquals("user", roles.get(roles.indexOf("assistant") - 1));
+    }
+
+    /** No two user messages in a row, and the last one is {@code lastUser}. */
+    private static void assertAlternates(String body, String lastUser) throws Exception {
+        JSONArray messages = new JSONObject(body).getJSONArray("messages");
+        String previous = "";
+        for (int i = 0; i < messages.length(); i++) {
+            String role = messages.getJSONObject(i).getString("role");
+            assertFalse("two user turns in a row: " + body, role.equals("user") && previous.equals("user"));
+            previous = role;
+        }
+        assertEquals(lastUser, messages.getJSONObject(messages.length() - 1).getString("content"));
+    }
+
     private static String assistantTexts(String body) throws Exception {
         JSONArray messages = new JSONObject(body).getJSONArray("messages");
         StringBuilder out = new StringBuilder();
