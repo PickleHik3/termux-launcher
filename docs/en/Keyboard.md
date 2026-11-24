@@ -20,8 +20,8 @@ your system keyboard in other apps is unchanged.
 A hidden keyboard comes back the next time you tap the terminal. To keep it off:
 
 - run **Keyboard on/off** from the [command palette](Command_Palette_And_Actions.md);
-- or, in **Appearance → Layout**, drag the keyboard onto the eye-off button (its tile in the
-  hidden row switches it back on);
+- or, in **Appearance**, drag the keyboard onto the **Hidden** column beside the screen, or tap it
+  and tap **Hide** (drag its chip back onto the screen to bring it back);
 - or set **Settings → Keyboard → On-screen keyboard** to **Off**.
 
 A swipe up from the bottom border always turns it back on. On the Widgets place the keyboard goes
@@ -102,7 +102,7 @@ The keyboard has three types:
   two thumbs.
 
 To change type, swipe up on the **Keyboard** key (it cycles docked, floating, split), select the
-keyboard in **Appearance → Layout** and pick one of the three type chips, or run **Keyboard type**
+keyboard in **Appearance** and pick one of the three type chips, or run **Keyboard type**
 or **Next keyboard type** from the palette. The type is kept per place and per orientation, so the
 terminal in landscape can float while Home in portrait stays docked.
 
@@ -127,7 +127,7 @@ each set separately for portrait and landscape:
 
 ## Size and look
 
-- **Height**: in **Appearance → Layout**, drag the keyboard's top edge. The handle on the bottom
+- **Height**: in **Appearance**, drag the grip on the keyboard's top edge. The handle on the bottom
   of the keys sets the padding under the last row. Both are kept per orientation.
 - **Surface**: tap the keyboard in Appearance for its card: **Opacity** and **Blur** (its own, or
   following Global, with a reset arrow while they are its own), **Key opacity**, **Key corners**
