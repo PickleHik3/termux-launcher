@@ -852,6 +852,54 @@
                     android:visibility="gone" />
             </com.termux.app.DockSurfaceHostLayout>
 
+            <!-- The Terminal's Docked card while it stands apart from Home's (ADR 0032, #304): a
+                 second back host beside the glass host, laid out once per Terminal rest from the
+                 rest's answer (SideCardsController) and carried on the Terminal's lane by the
+                 stack's renderer. Gone whenever the cards stand together or the dock floats. -->
+            <FrameLayout
+                android:id="@+id/terminal_surface_host"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_alignParentBottom="true"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/terminal_surface_blur_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_surface_top_edge_fx"
+                    android:layout_width="match_parent"
+                    android:layout_height="12dp"
+                    android:layout_gravity="top"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_surface_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    android:background="?attr/termuxColorSurfacePanelHigh"/>
+
+                <com.termux.app.DockEdgeGlowView
+                    android:id="@+id/terminal_surface_edge_glow_fx"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_surface_specular_fx"
+                    android:layout_width="300dp"
+                    android:layout_height="300dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+            </FrameLayout>
+
             <!-- The whole bottom edge: the pinned apps, the alphabets index, the extra keys and —
                  when the place stands it here — the status bar, in the order
                  EdgeStackPolicy.stack(BOTTOM) gives them. The status bar used to have a stack of

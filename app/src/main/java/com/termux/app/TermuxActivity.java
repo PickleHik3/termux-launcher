@@ -7798,6 +7798,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // like the docked one does. Bands under the keyboard wear a card of their own below it,
         // and one material spanning the dock and the keyboard would run on down behind that card.
         if (underKeyboardBandsShown()) return false;
+        // Apart under Docked (#304) the keyboard is one surface with the Terminal's own host
+        // exactly where the Terminal's rest's answer puts it on that host, and never with Home's
+        // pinned host: the two agree while the cards stand apart.
+        if (mSideCards.terminalHostOn()) {
+            com.termux.app.place.RestCards.Card card = mSideCards.terminalHostCard();
+            if (card == null || stackDressPage() != com.termux.app.page.PageKind.TERMINAL
+                || !card.pieces.contains(com.termux.app.place.ChromeShape.PieceId.KEYBOARD))
+                return false;
+        }
         // The page whose rows the stack stands (stackDressPage: the committed page at rest, the
         // seam's stack page mid-crossing): on Home the keyboard covers the dock and is never one
         // surface with it, unless Home's keyboard is always on and the dock rides it.
@@ -9256,7 +9265,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /** The expanded surface's own geometry: laid out over the dock and the keyboard together. */
     private boolean isUnifiedAccessorySurfaceLaidOut(@NonNull ChromeSpec state) {
-        View surfaceHost = findViewById(R.id.accessory_surface_host);
+        // Apart under Docked the unified surface is the Terminal's own host (#304).
+        View surfaceHost = findViewById(mSideCards.terminalHostOn() ? R.id.terminal_surface_host
+            : R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
         if (surfaceHost == null || accessoryContainer == null || keyboardContainer == null
@@ -9281,6 +9292,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * keyboard's reveal fell to its backstop on every open.
      */
     private boolean isUnifiedAccessoryCropInstalled(@NonNull ChromeSpec state) {
+        if (mSideCards.terminalHostOn()) {
+            // Apart under Docked the unified surface is the Terminal's own host (#304): its
+            // dress keeps its own record, clean once its crop is installed for this geometry.
+            ImageView terminal = findViewById(R.id.terminal_surface_blur_backdrop);
+            return mTerminalHostDress.shown() && terminal != null
+                && terminal.getDrawable() != null && terminal.getVisibility() == View.VISIBLE
+                && !mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST);
+        }
         ImageView backdrop = findViewById(R.id.accessory_blur_backdrop);
         View surfaceHost = findViewById(R.id.accessory_surface_host);
         if (backdrop == null || surfaceHost == null || backdrop.getDrawable() == null
@@ -9911,7 +9930,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The edge rule is the model's: Docked, the dock's sides, its bottom and its joins
             // are seams and the rim rect is pushed past them; only the edge facing the opening
             // keeps the rim and the bend. The capsule is unchanged.
-            int dockSeams = capsuleDock ? 0 : com.termux.app.chrome.LiveChromeShape.seamEdges(
+            // Apart under Docked (#304) the host is Home's card: its seams are Home's cut's.
+            com.termux.app.place.RestCards.Card homeDock = mSideCards.homeDockCard();
+            int dockSeams = capsuleDock ? 0 : homeDock != null
+                ? com.termux.app.chrome.ChromeEdgeRule.ALL
+                    & ~com.termux.app.dock.TerminalHostDress.rimEdges(homeDock)
+                : com.termux.app.chrome.LiveChromeShape.seamEdges(
                 chromeShape(), dockPieceIds(shouldUseUnifiedDefaultKeyboardGlassSurface(state)));
             float[] capRect = new float[4];
             com.termux.app.dock.CapsuleGlass.capRect(capRect, horizontalOverscanPx,
@@ -10011,10 +10035,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private android.graphics.ColorFilter hostFrostFilter(@NonNull View surfaceHost,
                                                          boolean dragAware) {
         com.termux.app.place.RestCards.HostLook look = mSideCards.hostLook();
-        boolean liveFront = !mStackRenderer.keysCardStands() && !mCrossing.crossing();
+        boolean liveFront = !mStackRenderer.terminalCardStands() && !mCrossing.crossing();
         boolean drag = dragAware && mGlassDragPreview;
         if (look == null || drag) {
-            return dockFrostFilter(drag || mStackRenderer.keysCardStands() ? null : surfaceHost);
+            return dockFrostFilter(drag || mStackRenderer.terminalCardStands() ? null
+                : surfaceHost);
         }
         // Home in front at rest: the live memo is measured (the row's inks stand on it); the
         // frost put up is Home's rest's, the same one the parked host wore.
@@ -10206,6 +10231,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.endSection();
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             mKeysCardDress.release();
+            mTerminalHostDress.release();
             resetAzOverflowAffordanceState();
             if (mDock.dockPlankController() != null) {
                 mDock.dockPlankController().setEnabled(false);
@@ -10250,6 +10276,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         Trace.beginSection("Chrome.renderEffectBackdrop");
         updateAccessoryRenderEffectBackdrop(state);
         mKeysCardDress.update(state);
+        mTerminalHostDress.update(state);
+        // Apart under Docked the unified surface is the Terminal's own host (#304): the keyboard's
+        // own coat comes off once that host's crop is up, as it does for the one host.
+        if (mSideCards.terminalHostOn()
+            && mKeyboardTravelSolidness == KeyboardMaterialPolicy.NO_TRAVEL
+            && isUnifiedAccessoryBackdropReady(state)) {
+            View keyboardSurfaceHost = findViewById(R.id.inapp_keyboard_view_host);
+            if (keyboardSurfaceHost != null) setKeyboardHostBackground(keyboardSurfaceHost, null);
+            clearInAppKeyboardBackdrop();
+        }
         Trace.endSection();
         mChrome.requestSync(ChromeRenderer.SCOPE_TOP_PANE_FROST);
         updateAzOverflowAffordance();
@@ -11162,8 +11198,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private static final String KEYS_CARD_GLASS = "keys_card";
 
     /** The Terminal's extra-keys card wearing the dock capsule's glass (ADR 0032, #302). */
-    private final com.termux.app.dock.KeysCardDress mKeysCardDress =
-        new com.termux.app.dock.KeysCardDress(mDock, new com.termux.app.dock.KeysCardDress.Source() {
+    private final com.termux.app.dock.KeysCardDress.Source mKeysCardSource =
+        new com.termux.app.dock.KeysCardDress.Source() {
             @Override public boolean crossing() { return mCrossing.crossing(); }
             @Override public boolean blurWanted(@NonNull ChromeSpec state) {
                 return shouldUseAccessoryRenderEffectBlur(state);
@@ -11220,6 +11256,78 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
                     @Nullable android.graphics.drawable.Drawable live) {
                 installBackdropPicture(backdrop, installed, frame, frameRect, radiusDp, live);
+            }
+        };
+
+    private final com.termux.app.dock.KeysCardDress mKeysCardDress =
+        new com.termux.app.dock.KeysCardDress(mDock, mKeysCardSource);
+
+    /** The glass element of the Terminal's Docked host, one more Live entry while it is on screen. */
+    private static final String TERMINAL_HOST_GLASS = "terminal_host";
+
+    /**
+     * The Terminal's Docked card on a host of its own while the cards stand apart (ADR 0032,
+     * #304): the keys card's source, with its own glass entry, its own rest rect for the frost,
+     * the foot it wears and the stack's stand-down on a frame.
+     */
+    private final com.termux.app.dock.TerminalHostDress mTerminalHostDress =
+        new com.termux.app.dock.TerminalHostDress(mDock,
+            new com.termux.app.dock.TerminalHostDress.Source() {
+            @Override public boolean crossing() { return mKeysCardSource.crossing(); }
+            @Override public boolean blurWanted(@NonNull ChromeSpec state) {
+                return mKeysCardSource.blurWanted(state);
+            }
+            @Override public boolean pictureUp(@NonNull ImageView backdrop) {
+                return mKeysCardSource.pictureUp(backdrop);
+            }
+            @Nullable @Override public android.graphics.drawable.Drawable attachLive(
+                    @NonNull ImageView backdrop, int radiusDp) {
+                com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, radiusDp,
+                    com.termux.app.chrome.LiveBackdrop.RANK_CHROME, TERMINAL_HOST_GLASS,
+                    mDockGlassRedress);
+                return picture == null ? null : picture.drawable();
+            }
+            @Override public void releaseLive(@NonNull ImageView backdrop) {
+                if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+                mGlass.unregister(TERMINAL_HOST_GLASS);
+            }
+            @Nullable @Override public Bitmap blurFrame(int radiusDp, @NonNull Rect outRect) {
+                return mKeysCardSource.blurFrame(radiusDp, outRect);
+            }
+            @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
+                // Dressed as a crossing toward it begins, it measures no view (it is parked): its
+                // frost is the Terminal's rest's own, under the host's rest rect.
+                if (surface == null && !mGlassDragPreview && mSideCards.hostLook() != null) {
+                    android.graphics.ColorFilter rest = restFrostFilter(mCardRestFrost,
+                        com.termux.app.wall.PageRef.TERMINAL, mSideCards.terminalHostRestRect());
+                    if (rest != null) return rest;
+                }
+                return dockFrostFilter(surface);
+            }
+            @Override public boolean managedSource() { return mKeysCardSource.managedSource(); }
+            @Override public boolean glassDragPreview() { return mKeysCardSource.glassDragPreview(); }
+            @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
+                return mKeysCardSource.fancierLook();
+            }
+            // The host wears the Terminal's rest's foot under the gesture pill, as the answer cuts it.
+            @Override public int footPx() { return mSideCards.terminalHostFootPx(); }
+            @Nullable @Override public Drawable plate(float barAlpha) {
+                return mKeysCardSource.plate(barAlpha);
+            }
+            @Override public int outlineColor() { return mKeysCardSource.outlineColor(); }
+            @Nullable @Override public com.termux.app.chrome.GroundUnderGlass ground(
+                    @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop) {
+                return syncGround(held, backdrop, "terminal-host", false);
+            }
+            @Override public void installPicture(@NonNull ImageView backdrop,
+                    @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                    @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
+                    @Nullable android.graphics.drawable.Drawable live) {
+                mKeysCardSource.installPicture(backdrop, installed, frame, frameRect, radiusDp, live);
+            }
+            @Override public boolean standsDownOnFrame() { return stackStandsDownOnFrame(); }
+            @Nullable @Override public com.termux.app.place.RestCards.Card card() {
+                return mSideCards.terminalHostCard();
             }
         });
 
@@ -14530,8 +14638,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         beginDockGroundBlend(here, there);
         // The Terminal's extra-keys card is dressed as it first shows (its glass entry registers
         // here, once), not at the landing.
-        if (there.kind == com.termux.app.page.PageKind.TERMINAL && mSideCards.apart())
-            mKeysCardDress.onCrossingBegin(buildChromeSpec());
+        if (there.kind == com.termux.app.page.PageKind.TERMINAL && mSideCards.apart()) {
+            ChromeSpec spec = buildChromeSpec();
+            mKeysCardDress.onCrossingBegin(spec);
+            mTerminalHostDress.onCrossingBegin(spec);
+        }
         beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
@@ -25779,6 +25890,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override
         public List<com.termux.app.place.ChromeShape.PieceId> dockPieceIds(boolean withKeyboard) {
             return TermuxActivity.this.dockPieceIds(withKeyboard);
+        }
+
+        @Nullable
+        @Override
+        public com.termux.app.place.RestCards.Card pinnedHomeDockCard() {
+            return mSideCards.homeDockCard();
         }
 
         @NonNull

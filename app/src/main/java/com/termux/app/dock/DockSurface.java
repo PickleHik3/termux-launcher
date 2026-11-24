@@ -80,6 +80,8 @@ final class DockSurface {
     // ------------------------------------------------------------------ Shape
 
     /** The dock's clip: its slice of the Docked frame, or its own card under Floating. */
+    /** Home's card's outline while the host is pinned as Home's under Docked (#304). */
+    private final TerminalHostDress.CardOutline mHomeOutline = new TerminalHostDress.CardOutline();
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mDockOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
 
@@ -145,6 +147,26 @@ final class DockSurface {
                     surface.setClipToOutline(false);
                 return;
             }
+        }
+        com.termux.app.place.RestCards.Card home = !capsule
+            && surface.getId() == R.id.accessory_surface_host ? mHost.pinnedHomeDockCard() : null;
+        if (home != null) {
+            // Apart under Docked (#304) the host is Home's card at every rest: it wears Home's
+            // cut from Home's rest's answer, never the page in front's, so the Terminal's rest
+            // leaves it as Home's.
+            int strokeEdges = innerRim && !dockGlassDrawsEdge()
+                ? TerminalHostDress.rimEdges(home) : com.termux.app.chrome.ChromeEdgeRule.NONE;
+            surface.setBackground(mHost.chrome().glass().rimUnderGlass(0f, strokeEdges));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                boolean changed = mHomeOutline.set(home.corners.topLeft, home.corners.topRight,
+                    home.corners.bottomRight, home.corners.bottomLeft);
+                if (surface.getOutlineProvider() != mHomeOutline)
+                    surface.setOutlineProvider(mHomeOutline);
+                else if (changed)
+                    surface.invalidateOutline();
+                surface.setClipToOutline(true);
+            }
+            return;
         }
         if (!capsule) {
             // Docked, the dock is a slice of the one frame. The model says which of its edges

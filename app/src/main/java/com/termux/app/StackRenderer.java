@@ -214,7 +214,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /** The Terminal's extra-keys card's slot, after the scene's ({@link StackScene#V_COUNT}). */
     private static final int SLOT_KEYS_CARD = StackScene.V_COUNT;
-    private static final int SLOTS = StackScene.V_COUNT + 1;
+    /** The Terminal's Docked host's slot (#304), after the keys card's. */
+    private static final int SLOT_TERMINAL_HOST = StackScene.V_COUNT + 1;
+    private static final int SLOTS = StackScene.V_COUNT + 2;
     // What was last written, per view slot (StackScene.V_*), and to which view object.
     private final View[] mWrittenView = new View[SLOTS];
     private final float[] mWrittenTy = new float[SLOTS];
@@ -592,6 +594,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             // a transform alone redraws nothing, so they are re-aimed here.
             invalidateIfShown(R.id.accessory_blur_backdrop);
             invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
+            invalidateIfShown(R.id.terminal_surface_blur_backdrop);
             invalidateIfDressed(R.id.inapp_keyboard_view_host);
             invalidateIfDressed(R.id.accessory_under_keyboard_stack);
         }
@@ -634,10 +637,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         View keysCard = mViews.view(R.id.extra_keys_card);
         if (keysCard != null) {
             // The card's glass samples where the card is drawn: a move of the card alone redraws it.
-            if (writeTy(SLOT_KEYS_CARD, keysCard, keysTilt ? plankTy(PLANK_HOST) : 0f))
+            boolean keysStands = keysCardStands();
+            if (writeTy(SLOT_KEYS_CARD, keysCard, keysStands ? plankTy(PLANK_HOST) : 0f))
                 invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
-            writePlank(SLOT_KEYS_CARD, keysCard, keysTilt ? PLANK_HOST : PLANK_NONE, 0f);
+            writePlank(SLOT_KEYS_CARD, keysCard, keysStands ? PLANK_HOST : PLANK_NONE, 0f);
         }
+        writeTerminalHost(keysTilt);
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
         if (layersMoved) invalidateIfShown(R.id.accessory_blur_backdrop);
         // The keyboard's column is the front page's: it carries the Terminal's lift by its share.
@@ -817,7 +822,61 @@ public final class StackRenderer implements DockPlankController.SlabSink {
 
     /** Whether the plank's host tilt goes to the Terminal's card: apart, the Terminal in front. */
     private boolean keysCardTilts() {
-        return keysCardStands();
+        return keysCardStands() || terminalHostStands();
+    }
+
+    /**
+     * The Terminal's Docked host (#304) on the Terminal's lane: the rows' layer's translation, the
+     * Terminal side's slide and the Terminal lane's lift, as the extra-keys row host draws them,
+     * so the host travels with the Terminal's rows; the plank tilts it while it stands. Its glass
+     * samples where it is drawn, so the offset beyond its layout goes to its anchor.
+     */
+    private void writeTerminalHost(boolean tilts) {
+        View host = mViews.view(R.id.terminal_surface_host);
+        if (host == null) return;
+        boolean on = mApart && host.getVisibility() == View.VISIBLE;
+        float tx = on ? mFrame.sideTx[Side.TERMINAL.ordinal()] : 0f;
+        float ty = on ? mFrame.ty[StackScene.V_LAYER0 + StackGeometry.ROWS]
+            + com.termux.app.place.SideCards.laneTyPx(StackLanes.TERMINAL, true, mHomeDropPx,
+                mTerminalLiftPx, mTerminalShare) : 0f;
+        boolean stands = tilts && terminalHostStands();
+        boolean moved = writeTy(SLOT_TERMINAL_HOST, host, ty + (stands ? plankTy(PLANK_HOST) : 0f));
+        float txWas = host.getTranslationX();
+        writePlank(SLOT_TERMINAL_HOST, host, stands ? PLANK_HOST : PLANK_NONE, tx);
+        moved |= host.getTranslationX() != txWas;
+        moved |= writeTerminalHostMotion(host, on, tx, ty);
+        if (moved) invalidateIfShown(R.id.terminal_surface_blur_backdrop);
+    }
+
+    private boolean writeTerminalHostMotion(@NonNull View host, boolean on, float tx, float ty) {
+        if (!on) {
+            if (!mTerminalHostMotionSet) return false;
+            mTerminalHostMotionSet = false;
+            com.termux.app.chrome.GlassAnchor.clearMotion(host);
+            return true;
+        }
+        if (mTerminalHostMotionSet && com.termux.app.chrome.GlassAnchor.motionX(host) == tx
+            && com.termux.app.chrome.GlassAnchor.motionY(host) == ty) return false;
+        mTerminalHostMotionSet = true;
+        com.termux.app.chrome.GlassAnchor.setMotion(host, tx, ty);
+        return true;
+    }
+    private boolean mTerminalHostMotionSet;
+
+    /** Whether the Terminal's own card (the extra-keys card or, Docked, its host) is the slab now. */
+    public boolean terminalCardStands() {
+        return keysCardStands() || terminalHostStands();
+    }
+
+    /**
+     * Whether the Terminal's Docked host is the dock's slab now (#304): the cards stand apart, the
+     * Terminal is in front and the host is laid out (it is only under Docked). The plank's tilt,
+     * its specular and its rim glow follow it.
+     */
+    public boolean terminalHostStands() {
+        if (!mApart || mViews.frontIsHome()) return false;
+        View host = mViews.view(R.id.terminal_surface_host);
+        return host != null && host.getVisibility() == View.VISIBLE;
     }
 
     /**
@@ -825,11 +884,16 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * the Terminal is in front. The plank's tilt, its specular and its rim glow follow it.
      */
     public boolean keysCardStands() {
-        return mApart && !mViews.frontIsHome() && mViews.view(R.id.extra_keys_card) != null;
+        if (!mApart || mViews.frontIsHome()) return false;
+        // Under Docked the card is gone and the Terminal's own host stands instead (#304).
+        View card = mViews.view(R.id.extra_keys_card);
+        return card != null && card.getVisibility() != View.GONE;
     }
 
     @Nullable
     private View plankView(int target) {
+        if (target == PLANK_HOST && terminalHostStands())
+            return mViews.view(R.id.terminal_surface_host);
         if (target == PLANK_HOST && keysCardTilts()) return mViews.view(R.id.extra_keys_card);
         return target == PLANK_HOST ? mViews.view(R.id.accessory_surface_host)
             : target == PLANK_CONTAINER ? mViews.view(R.id.accessory_stack_container) : null;

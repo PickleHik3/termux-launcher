@@ -142,6 +142,22 @@ public final class SideCardsController {
         return mKeysCardRestRect;
     }
 
+    @Nullable private RestCards.Card mHomeDockCard;
+
+    /** Docked: the Terminal's card is its own host, so Home's host wears Home's Docked cut. */
+    private static boolean standsOnItsOwnHost(@NonNull RestCards answer) {
+        return answer.laidOut(RestCards.StackView.TERMINAL_HOST) != null;
+    }
+
+    /**
+     * Home's Docked card on the pinned host while the cards stand apart under Docked (#304), as
+     * Home's rest's answer cuts it, whichever page is in front; null otherwise.
+     */
+    @Nullable
+    public RestCards.Card homeDockCard() {
+        return mHomeDockCard;
+    }
+
     /** Whether the glass host is laid out from the answer: Home's card, while the cards stand apart. */
     public boolean hostPinned() {
         return mHostPinned;
@@ -232,6 +248,17 @@ public final class SideCardsController {
         }
         mHostLook = look;
         mHostRestRect = pinned && look != null ? answer.homeHostRect() : null;
+        RestCards.Card homeDock = null;
+        if (pinned && standsOnItsOwnHost(answer)) {
+            RestCards.Card card = answer.cardOn(RestCards.StackView.HOST);
+            if (card != null && card.id == RestCards.CardId.DOCK) homeDock = card;
+        }
+        if (!java.util.Objects.equals(homeDock == null ? null : homeDock.box,
+                mHomeDockCard == null ? null : mHomeDockCard.box)) {
+            moved = true;
+            mHostLookRevision++;
+        }
+        mHomeDockCard = homeDock;
         moved |= pinned != mHostPinned || left != mHostLeftPx || right != mHostRightPx
             || height != mHostHeightPx || above != mHostAboveContainerBottomPx;
         mHostPinned = pinned;
@@ -242,6 +269,7 @@ public final class SideCardsController {
 
         mTerminalLiftPx = apart ? answer.terminalSideLiftPx() : 0;
         applyKeysCard(answer);
+        moved |= applyTerminalHost(answer, margin);
         mHost.sidesApart(apart, drop, mTerminalLiftPx);
         return moved;
     }
@@ -295,6 +323,103 @@ public final class SideCardsController {
         card.setBounds(mKeysCardLeftPx, mKeysCardRightPx, mKeysCardHeightPx);
         card.setCornerRadiusPx(mKeysCardRadiusPx);
         if (card.getVisibility() != View.VISIBLE) card.setVisibility(View.VISIBLE);
+    }
+
+    /**
+     * The Terminal's Docked host (#304): laid out from the answer while the cards stand apart
+     * under Docked, pinned to the container's bottom (which pads nothing while apart) at the
+     * answer's height, and gone otherwise. Compares before it writes.
+     *
+     * @return whether its bounds or its standing moved
+     */
+    private boolean applyTerminalHost(@Nullable RestCards answer, int containerMarginPx) {
+        Box box = answer != null && answer.apart()
+            ? answer.laidOut(RestCards.StackView.TERMINAL_HOST) : null;
+        RestCards.Card dock = null;
+        int foot = 0;
+        if (box != null) {
+            for (RestCards.Card card : answer.cards()) collectTerminalHost(card);
+            for (RestCards.Card card : answer.parked()) collectTerminalHost(card);
+            dock = mCollectedDock;
+            foot = mCollectedFootPx;
+            mCollectedDock = null;
+            mCollectedFootPx = 0;
+        }
+        boolean on = box != null && dock != null;
+        boolean moved = on != mTerminalHostOn || !java.util.Objects.equals(
+            on ? dock.box : null, mTerminalHostRestRect);
+        mTerminalHostOn = on;
+        mTerminalHostCard = on ? dock : null;
+        mTerminalHostRestRect = on ? dock.box : null;
+        mTerminalHostFootPx = on ? foot : 0;
+        View view = mHost.view(R.id.terminal_surface_host);
+        if (view == null) return moved;
+        if (!on) {
+            if (view.getVisibility() != View.GONE) view.setVisibility(View.GONE);
+            return moved;
+        }
+        if (view.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) view.getLayoutParams();
+            int left = Math.round(box.left);
+            int right = Math.round(mHost.displayMetrics().widthPixels - box.right);
+            int height = Math.round(box.height());
+            int bottom = Math.max(0, Math.round(mHost.displayMetrics().heightPixels
+                - containerMarginPx - box.bottom));
+            if (params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) != RelativeLayout.TRUE
+                || params.leftMargin != left || params.rightMargin != right
+                || params.bottomMargin != bottom || params.height != height
+                || params.width != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM, RelativeLayout.TRUE);
+                params.leftMargin = left;
+                params.rightMargin = right;
+                params.topMargin = 0;
+                params.bottomMargin = bottom;
+                params.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+                params.height = height;
+                view.setLayoutParams(params);
+                moved = true;
+            }
+        }
+        if (view.getVisibility() != View.VISIBLE) view.setVisibility(View.VISIBLE);
+        return moved;
+    }
+
+    private void collectTerminalHost(@NonNull RestCards.Card card) {
+        if (card.view != RestCards.StackView.TERMINAL_HOST) return;
+        if (card.id == RestCards.CardId.FOOT) mCollectedFootPx = Math.round(card.box.height());
+        else mCollectedDock = card;
+    }
+
+    @Nullable private RestCards.Card mCollectedDock;
+    private int mCollectedFootPx;
+    private boolean mTerminalHostOn;
+    @Nullable private RestCards.Card mTerminalHostCard;
+    @Nullable private Box mTerminalHostRestRect;
+    private int mTerminalHostFootPx;
+
+    /** Whether the Terminal's Docked host stands now (the last rest): apart, under Docked. */
+    public boolean terminalHostOn() {
+        return mTerminalHostOn;
+    }
+
+    /**
+     * The Terminal's Docked card on its host at the Terminal's rest (box in screen px, corners,
+     * each edge's kind), the shape its dress cuts; null unless {@link #terminalHostOn}.
+     */
+    @Nullable
+    public RestCards.Card terminalHostCard() {
+        return mTerminalHostCard;
+    }
+
+    /** Where the Terminal's Docked card is drawn at its rest; null unless {@link #terminalHostOn}. */
+    @Nullable
+    public Box terminalHostRestRect() {
+        return mTerminalHostRestRect;
+    }
+
+    /** The foot under the gesture pill the Terminal's Docked host wears, px; 0 for none. */
+    public int terminalHostFootPx() {
+        return mTerminalHostFootPx;
     }
 
     /** Whether the keys card stands now (the last rest). */

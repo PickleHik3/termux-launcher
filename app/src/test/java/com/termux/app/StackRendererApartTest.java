@@ -1,6 +1,7 @@
 package com.termux.app;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 
 import android.app.Application;
@@ -87,6 +88,36 @@ public class StackRendererApartTest {
             @Override public boolean keyboardShown() { return mKeyboardShown; }
             @Override public boolean frontIsHome() { return mFrontHome; }
         });
+    }
+
+    /**
+     * Docked (#304): the Terminal's own host rides the Terminal's lane, the rows' layer, the
+     * Terminal side's slide and its lift, exactly where the extra-keys row host is drawn, at both
+     * rests and across a crossing; Home's host keeps Home's slide.
+     */
+    @Test public void dockedTheTerminalsHostRidesTheTerminalsLane() {
+        View terminalHost = new FrameLayout(RuntimeEnvironment.getApplication());
+        mViews.put(R.id.terminal_surface_host, terminalHost);
+        mKeysCard.setVisibility(View.GONE);
+        View rows = mViews.get(R.id.accessory_row_stack);
+        for (boolean frontHome : new boolean[] {true, false}) {
+            mFrontHome = frontHome;
+            mRenderer.setSidesApart(true, DROP, 21);
+            mRenderer.apply();
+            String at = frontHome ? "Home's rest" : "the Terminal's rest";
+            assertEquals(at, mKeysRow.getTranslationX(), terminalHost.getTranslationX(), 0f);
+            assertEquals(at, rows.getTranslationY() + mKeysRow.getTranslationY(),
+                terminalHost.getTranslationY(), 0f);
+            assertEquals(at, frontHome ? WIDTH : 0f, terminalHost.getTranslationX(), 0f);
+            assertEquals(at, !frontHome, mRenderer.terminalHostStands());
+            assertFalse(at, mRenderer.keysCardStands());
+        }
+        mFrontHome = true;
+        mRenderer.apply();
+        mRenderer.setEnds(true, false, 0.25f);
+        assertEquals(mKeysRow.getTranslationX(), terminalHost.getTranslationX(), 0.01f);
+        assertEquals(0.75f * WIDTH, terminalHost.getTranslationX(), 0.01f);
+        assertEquals(-0.25f * WIDTH, mHost.getTranslationX(), 0.01f);
     }
 
     @Test public void apartAtHomesRestTheHostStandsAtHomesDropAndSlideZero() {
