@@ -130,9 +130,4 @@ public class MigratedRowsSaveThroughRegistryTest {
     public void theLowMemoryPresetRewritesTheLookSoItIsNotOffered() {
         assertFalse(new LowMemoryPresetAdapter(null).declaration(LowMemoryPresetAdapter.ID).mayOffer);
     }
-
-    @Test
-    public void theLowMemoryPresetRewritesTheLookSoItIsNotOffered() {
-        assertFalse(new LowMemoryPresetAdapter(null).declaration(LowMemoryPresetAdapter.ID).mayOffer);
-    }
 }
