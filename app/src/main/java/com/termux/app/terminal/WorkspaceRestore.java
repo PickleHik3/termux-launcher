@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 
@@ -13,10 +14,17 @@ import java.util.List;
  * starts it. The activity only creates the shell this answer describes.
  *
  * <p>Loading a saved session and the autosave's rebuild after a kill both come through
- * {@link #plan}, so they follow the same rules. A resume-by-id for agents hooks in here: it
- * rewrites {@link PanePlan#command} before the script is built.
+ * {@link #plan}, so they follow the same rules. A pane that ran an agent in {@link AgentResume}
+ * comes back resumed by the id it saved, or started fresh with one line saying so.
  */
 public final class WorkspaceRestore {
+
+    /**
+     * A resume that fails inside this many seconds is a conversation that is gone (all three
+     * agents exit 1 at once), so the pane starts the agent fresh; one that ran longer was a
+     * session the user ended.
+     */
+    public static final int RESUME_FAILS_WITHIN_S = 10;
 
     private WorkspaceRestore() {}
 
@@ -24,6 +32,9 @@ public final class WorkspaceRestore {
     public interface Notices {
         /** The program is not on the shell's PATH. */
         @NonNull String programMissing(@NonNull String program);
+
+        /** An agent came back without its conversation: "Claude started a new conversation". */
+        @NonNull String agentStartedFresh(@NonNull String agentName);
 
         /** The saved folder is gone; {@code program} is what was running there, or null. */
         @NonNull String folderMissing(@NonNull String folder, @Nullable String program);
@@ -42,11 +53,25 @@ public final class WorkspaceRestore {
         @NonNull public final List<String> command;
         /** The one line printed first, or null. */
         @Nullable public final String note;
+        /**
+         * When {@link #command} is a resume that may find its conversation gone: what to start
+         * instead. Empty otherwise.
+         */
+        @NonNull public final List<String> fallback;
+        /** Printed before an agent starts fresh (no id, or the id was stale); null otherwise. */
+        @Nullable public final String freshLine;
 
         PanePlan(@NonNull String cwd, @NonNull List<String> command, @Nullable String note) {
+            this(cwd, command, note, Collections.<String>emptyList(), null);
+        }
+
+        PanePlan(@NonNull String cwd, @NonNull List<String> command, @Nullable String note,
+                 @NonNull List<String> fallback, @Nullable String freshLine) {
             this.cwd = cwd;
             this.command = command;
             this.note = note;
+            this.fallback = fallback;
+            this.freshLine = freshLine;
         }
     }
 
@@ -55,12 +80,28 @@ public final class WorkspaceRestore {
                                 @NonNull String defaultCwd, @NonNull Notices notices) {
         String saved = pane.cwd;
         if (saved == null || saved.isEmpty())
-            return new PanePlan(defaultCwd, pane.command, null);
-        if (folders.exists(saved)) return new PanePlan(saved, pane.command, null);
+            return agentPlan(defaultCwd, pane, notices);
+        if (folders.exists(saved)) return agentPlan(saved, pane, notices);
         // A program started in the wrong folder would not be the one that was saved.
         String program = pane.command.isEmpty() ? null : pane.command.get(0);
         return new PanePlan(defaultCwd, Collections.<String>emptyList(),
             notices.folderMissing(saved, program));
+    }
+
+    /** The plan for a pane whose folder is fine: an agent resumes by its id, else starts fresh. */
+    @NonNull
+    private static PanePlan agentPlan(@NonNull String cwd, @NonNull TerminalWorkspace.Pane pane,
+                                      @NonNull Notices notices) {
+        AgentResume.Row row = AgentResume.forCommand(pane.command);
+        if (row == null) return new PanePlan(cwd, pane.command, null);
+        String line = notices.agentStartedFresh(row.displayName);
+        boolean resumable = row.agent.equals(pane.agent)
+            && AgentResume.isValidSessionId(pane.agentSessionId);
+        if (!resumable) {
+            return new PanePlan(cwd, pane.command, null, Collections.<String>emptyList(), line);
+        }
+        return new PanePlan(cwd, row.resume(pane.agentSessionId), null,
+            new ArrayList<>(pane.command), line);
     }
 
     /**
@@ -77,8 +118,13 @@ public final class WorkspaceRestore {
             String program = plan.command.get(0);
             String missing = print(notices.programMissing(program), fishStyle);
             String check = "if command -v " + shellQuote(program, fishStyle) + " >/dev/null 2>&1; ";
-            String run = commandLine(plan.command, fishStyle);
             script.append(check);
+            String run = commandLine(plan.command, fishStyle);
+            if (!plan.fallback.isEmpty() && plan.freshLine != null) {
+                run = resumeOrStartFresh(plan, fishStyle);
+            } else if (plan.freshLine != null) {
+                run = print(plan.freshLine, fishStyle) + "; " + run;
+            }
             script.append(fishStyle ? run + "; else; " + missing + "; end"
                 : "then " + run + "; else " + missing + "; fi");
         } else {
@@ -86,6 +132,23 @@ public final class WorkspaceRestore {
         }
         return script.append("; exec ").append(shellQuote(shellPath, fishStyle)).append(" -l")
             .toString();
+    }
+
+    /**
+     * Resume, and when that fails at once start the saved command fresh. The two shell families
+     * differ in how they time it and chain a failure, so both spellings are here.
+     */
+    @NonNull
+    private static String resumeOrStartFresh(@NonNull PanePlan plan, boolean fishStyle) {
+        String resume = commandLine(plan.command, fishStyle);
+        String fresh = print(plan.freshLine, fishStyle) + "; "
+            + commandLine(plan.fallback, fishStyle);
+        if (fishStyle) {
+            return "set -l t (date +%s); " + resume + "; or begin; if test (math (date +%s) - $t) -lt "
+                + RESUME_FAILS_WITHIN_S + "; " + fresh + "; end; end";
+        }
+        return "t=$(date +%s); " + resume + " || { [ $(( $(date +%s) - t )) -lt "
+            + RESUME_FAILS_WITHIN_S + " ] && { " + fresh + "; }; }";
     }
 
     @NonNull

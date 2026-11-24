@@ -24,6 +24,8 @@ public class LauncherCtlApiServerPaneRoutesTest {
         assertEquals("pane.read", LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/text"));
         assertEquals("agent.status", LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/agent"));
         assertNull(LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/agent"));
+        assertEquals("agent.session", LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/agent-session"));
+        assertNull(LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/agent-session"));
         assertNull(LauncherCtlApiServer.paneToolFor("GET", "/v1/panes/abc-1/write"));
         assertNull(LauncherCtlApiServer.paneToolFor("POST", "/v1/panes/abc-1/kill"));
         assertNull(LauncherCtlApiServer.paneToolFor("POST", "/v1/panes//focus"));

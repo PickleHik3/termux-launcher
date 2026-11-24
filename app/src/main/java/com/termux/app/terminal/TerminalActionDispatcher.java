@@ -141,6 +141,7 @@ public final class TerminalActionDispatcher {
     static final String[] PANE_API_FEATURES =
         {"placement", "resize", "geometry", "windows", "info", "wait", "print-id"};
     public static final String TOOL_AGENT_STATUS = "agent.status";
+    public static final String TOOL_AGENT_SESSION = "agent.session";
     /**
      * The signals a program sends around the terminal — a shade notification, the progress ring,
      * the clipboard — offered over the local API for processes that have no terminal to write the
@@ -377,6 +378,7 @@ public final class TerminalActionDispatcher {
             case TOOL_WINDOW_CLOSE_BY_ID:
             case TOOL_PANE_INFO:
             case TOOL_AGENT_STATUS:
+            case TOOL_AGENT_SESSION:
             case TOOL_WINDOW_NEW:
             case TOOL_WINDOW_CLOSE:
             case TOOL_WINDOW_NEXT:
@@ -1049,6 +1051,21 @@ public final class TerminalActionDispatcher {
                     host.reportAgentStatus(target, agent.isEmpty() ? null : agent, state);
                     return ok().put("id", target.mHandle)
                         .put("state", clear ? "clear" : raw.toLowerCase(java.util.Locale.ROOT));
+                }
+                case TOOL_AGENT_SESSION: {
+                    TerminalSession target = paneArgument(host, arguments);
+                    if (target == null) return paneNotFound(arguments);
+                    // Like agent.status: the agent reports on the pane it runs in.
+                    String agent = arguments.optString("agent", "").trim().toLowerCase(java.util.Locale.ROOT);
+                    String sessionId = arguments.optString("session_id", "").trim();
+                    if (AgentResume.forAgent(agent) == null) {
+                        return error(400, "bad_request", "'agent' must be claude, codex or opencode");
+                    }
+                    if (!AgentResume.isValidSessionId(sessionId)) {
+                        return error(400, "bad_request", "'session_id' is missing or not a plain id");
+                    }
+                    host.reportAgentSession(target, agent, sessionId);
+                    return ok().put("id", target.mHandle).put("agent", agent);
                 }
                 case TOOL_SHELL_NOTIFY: {
                     TermuxTerminalSessionActivityClient client = host.sessionClient();

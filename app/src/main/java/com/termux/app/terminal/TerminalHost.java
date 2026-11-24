@@ -392,6 +392,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     default void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
                                    @Nullable AgentStatus.State state) {}
 
+    /**
+     * The conversation id an agent's session hook reported for its pane. Kept on the pane and
+     * saved with the arrangement, so a restored pane resumes the same conversation.
+     */
+    default void reportAgentSession(@NonNull TerminalSession pane, @NonNull String agent,
+                                    @NonNull String sessionId) {}
+
     // --- Shells ---
 
     /** The service holding every live shell, or null while it is not bound. */

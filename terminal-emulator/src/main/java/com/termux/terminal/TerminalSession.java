@@ -55,6 +55,14 @@ public class TerminalSession extends TerminalOutput {
      */
     public final String mHandle;
 
+    /**
+     * The AI coding agent that last reported a conversation id for this pane, and that id (both
+     * null when none did). Written by {@code launcherctl agent session} through the launcher and
+     * read when the arrangement is saved, so a restored pane resumes its own conversation.
+     */
+    public volatile String mAgentName;
+    public volatile String mAgentSessionId;
+
     TerminalEmulator mEmulator;
 
     static final int PROCESS_OUTPUT_QUEUE_BYTES = 64 * 1024;

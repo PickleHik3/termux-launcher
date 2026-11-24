@@ -53,6 +53,9 @@ public class WorkspaceRestoreTest {
 
     private static final WorkspaceRestore.Notices NOTICES = new WorkspaceRestore.Notices() {
         @Override public String programMissing(String program) { return program + " is not installed"; }
+        @Override public String agentStartedFresh(String agent) {
+            return agent + " started a new conversation";
+        }
         @Override public String folderMissing(String folder, String program) {
             return program == null ? "folder " + folder + " is gone"
                 : program + " did not start, folder " + folder + " is gone";
@@ -159,6 +162,106 @@ public class WorkspaceRestoreTest {
             TerminalWorkspace loaded = TerminalWorkspace.fromJson(json);
             assertEquals(1, loaded.commandCount());
         }
+    }
+
+    private static TerminalWorkspace.Pane agentPane(String cwd, String agent, String id, String... argv) {
+        return new TerminalWorkspace.Pane(cwd, null, Arrays.asList(argv), agent, id);
+    }
+
+    private static WorkspaceRestore.PanePlan planOf(TerminalWorkspace.Pane pane) {
+        return WorkspaceRestore.plan(pane, dir -> true, "/home", NOTICES);
+    }
+
+    @Test
+    public void aSavedIdRewritesTheCommandToItsResumeAndKeepsTheOriginalAsFallback() {
+        WorkspaceRestore.PanePlan plan = planOf(agentPane("/h", "claude", "id-1", "claude", "--model", "x"));
+        assertEquals(Arrays.asList("claude", "--resume", "id-1"), plan.command);
+        assertEquals(Arrays.asList("claude", "--model", "x"), plan.fallback);
+        assertEquals("Claude started a new conversation", plan.freshLine);
+        WorkspaceRestore.PanePlan codex = planOf(agentPane("/h", "codex", "c-9", "codex"));
+        assertEquals(Arrays.asList("codex", "resume", "c-9"), codex.command);
+        WorkspaceRestore.PanePlan open = planOf(agentPane("/h", "opencode", "ses_1", "opencode"));
+        assertEquals(Arrays.asList("opencode", "--session", "ses_1"), open.command);
+    }
+
+    @Test
+    public void anAgentWithNoIdStartsFreshWithOneLine() {
+        WorkspaceRestore.PanePlan plan = planOf(agentPane("/h", null, null, "claude"));
+        assertEquals(Arrays.asList("claude"), plan.command);
+        assertTrue(plan.fallback.isEmpty());
+        assertEquals("Claude started a new conversation", plan.freshLine);
+        assertEquals("if command -v 'claude' >/dev/null 2>&1; then "
+                + "printf '%s\\n' 'Claude started a new conversation'; 'claude'; "
+                + "else printf '%s\\n' 'claude is not installed'; fi; exec '/bin/bash' -l",
+            WorkspaceRestore.script(plan, "/bin/bash", false, NOTICES));
+    }
+
+    @Test
+    public void anIdFromAnotherAgentOrAnOrdinaryProgramIsIgnored() {
+        WorkspaceRestore.PanePlan other = planOf(agentPane("/h", "codex", "id", "claude"));
+        assertEquals(Arrays.asList("claude"), other.command);
+        WorkspaceRestore.PanePlan nvim = planOf(agentPane("/h", "claude", "id", "nvim", "a"));
+        assertEquals(Arrays.asList("nvim", "a"), nvim.command);
+        assertNull(nvim.freshLine);
+    }
+
+    @Test
+    public void aStaleIdFallsBackToAFreshStartInBothShellFamilies() {
+        WorkspaceRestore.PanePlan plan = planOf(agentPane("/h", "claude", "id-1", "claude", "-c"));
+        assertEquals("if command -v 'claude' >/dev/null 2>&1; then t=$(date +%s); "
+                + "'claude' '--resume' 'id-1' || { [ $(( $(date +%s) - t )) -lt "
+                + WorkspaceRestore.RESUME_FAILS_WITHIN_S + " ] && { "
+                + "printf '%s\\n' 'Claude started a new conversation'; 'claude' '-c'; }; }; "
+                + "else printf '%s\\n' 'claude is not installed'; fi; exec '/bin/bash' -l",
+            WorkspaceRestore.script(plan, "/bin/bash", false, NOTICES));
+        assertEquals("if command -v 'claude' >/dev/null 2>&1; set -l t (date +%s); "
+                + "'claude' '--resume' 'id-1'; or begin; if test (math (date +%s) - $t) -lt "
+                + WorkspaceRestore.RESUME_FAILS_WITHIN_S + "; "
+                + "printf '%s\\n' 'Claude started a new conversation'; 'claude' '-c'; end; end; "
+                + "else; printf '%s\\n' 'claude is not installed'; end; exec '/bin/fish' -l",
+            WorkspaceRestore.script(plan, "/bin/fish", true, NOTICES));
+    }
+
+    @Test
+    public void twoClaudePanesInOneFolderEachResumeTheirOwnIdThroughSaveAndRestore() throws Exception {
+        TerminalWorkspace.Node tree = new TerminalWorkspace.Split(TerminalWorkspace.Split.VERTICAL,
+            1f, 1f, agentPane("/h/proj", "claude", "aaaa-1111", "claude"),
+            agentPane("/h/proj", "claude", "bbbb-2222", "claude"));
+        TerminalWorkspace saved = new TerminalWorkspace("w", 1L, 0,
+            Collections.singletonList(new TerminalWorkspace.Session(null, 0,
+                Collections.singletonList(new TerminalWorkspace.Window(0, tree)))));
+        saved.validate();
+        TerminalWorkspace loaded = TerminalWorkspace.fromJson(saved.toJson());
+        loaded.validate();
+        List<TerminalWorkspace.Pane> panes = new ArrayList<>();
+        collect(loaded.sessions.get(0).windows.get(0).root, panes);
+        assertEquals(Arrays.asList("claude", "--resume", "aaaa-1111"), planOf(panes.get(0)).command);
+        assertEquals(Arrays.asList("claude", "--resume", "bbbb-2222"), planOf(panes.get(1)).command);
+    }
+
+    @Test
+    public void aWorkspaceWithAnAgentIdIsWrittenAsVersionSixAndAV5FileStillLoads() throws Exception {
+        assertEquals(6, TerminalWorkspace.VERSION);
+        TerminalWorkspace with = new TerminalWorkspace("w", 1L, 0,
+            Collections.singletonList(new TerminalWorkspace.Session(null, 0,
+                Collections.singletonList(new TerminalWorkspace.Window(0,
+                    agentPane("/h", "claude", "id-1", "claude"))))));
+        org.json.JSONObject json = with.toJson();
+        assertEquals(6, json.getInt("version"));
+        TerminalWorkspace.Pane back = (TerminalWorkspace.Pane)
+            TerminalWorkspace.fromJson(json).sessions.get(0).windows.get(0).root;
+        assertEquals("claude", back.agent);
+        assertEquals("id-1", back.agentSessionId);
+        // A v5 file has neither key.
+        json.put("version", 5);
+        org.json.JSONObject node = json.getJSONArray("sessions").getJSONObject(0)
+            .getJSONArray("windows").getJSONObject(0).getJSONObject("root");
+        node.remove("agent");
+        node.remove("agentSessionId");
+        TerminalWorkspace.Pane old = (TerminalWorkspace.Pane)
+            TerminalWorkspace.fromJson(json).sessions.get(0).windows.get(0).root;
+        assertNull(old.agentSessionId);
+        assertEquals(Arrays.asList("claude"), old.command);
     }
 
     private static void collect(TerminalWorkspace.Node node, List<TerminalWorkspace.Pane> out) {

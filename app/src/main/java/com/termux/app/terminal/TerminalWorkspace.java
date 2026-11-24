@@ -14,12 +14,13 @@ import java.util.List;
 /** Versioned, declarative description of a terminal workspace. */
 public final class TerminalWorkspace {
 
-    public static final int VERSION = 5;
+    public static final int VERSION = 6;
     /**
      * Oldest schema this build still loads. Version 2 added per-window floating panes, version 3
      * per-window names, version 4 a Home float's page and shape ({@code homeFloat}), version 5 the
      * float's page by id ({@code pageId}; a v4 file's {@code page} is a position, read once
-     * against the Home pages as they stand). All are optional keys, so every older file still loads.
+     * against the Home pages as they stand), version 6 a pane's agent and its conversation id
+     * ({@code agent}, {@code agentSessionId}). All are optional keys, so every older file still loads.
      */
     private static final int MIN_VERSION = 1;
     public static final int MAX_SESSIONS = 64;
@@ -171,10 +172,22 @@ public final class TerminalWorkspace {
         /** Full argv, or an empty list when command capture was disabled/unavailable. */
         @NonNull public final List<String> command;
 
+        /** The agent whose conversation {@link #agentSessionId} is ({@code claude}), or null. */
+        @Nullable public final String agent;
+        /** The id that agent reported for this pane, which restore resumes; null when none. */
+        @Nullable public final String agentSessionId;
+
         public Pane(@Nullable String cwd, @Nullable String title, @Nullable List<String> command) {
+            this(cwd, title, command, null, null);
+        }
+
+        public Pane(@Nullable String cwd, @Nullable String title, @Nullable List<String> command,
+                    @Nullable String agent, @Nullable String agentSessionId) {
             this.cwd = cwd;
             this.title = title;
             this.command = command == null ? Collections.emptyList() : immutable(command);
+            this.agent = agent;
+            this.agentSessionId = agentSessionId;
         }
     }
 
@@ -267,7 +280,9 @@ public final class TerminalWorkspace {
         // A Home float is written by page id, which only a v5 reader knows.
         int written = version;
         for (Session session : sessions) {
-            for (Window window : session.windows) if (window.homeFloat != null) written = Math.max(version, VERSION);
+            for (Window window : session.windows) {
+                if (window.homeFloat != null) written = Math.max(version, VERSION);
+            }
         }
         json.put("version", written);
         json.put("name", name);
@@ -463,6 +478,11 @@ public final class TerminalWorkspace {
             for (String argument : pane.command) requireText(argument, "command argument", true);
             if (!pane.command.isEmpty() && pane.command.get(0).isEmpty())
                 invalid("command executable must not be empty");
+            if (pane.agent != null) requireText(pane.agent, "agent", false);
+            // The id reaches a shell command line on restore, so a hand-edited file cannot slip
+            // anything else through.
+            if (pane.agentSessionId != null && !AgentResume.isValidSessionId(pane.agentSessionId))
+                invalid("agentSessionId must be a plain id");
             return 1;
         }
         if (!(node instanceof Split)) invalid("unknown pane node type");
@@ -499,6 +519,10 @@ public final class TerminalWorkspace {
                 for (String argument : pane.command) command.put(argument);
                 json.put("command", command);
             }
+            if (pane.agentSessionId != null && pane.agent != null) {
+                json.put("agent", pane.agent);
+                json.put("agentSessionId", pane.agentSessionId);
+            }
             return json;
         }
         Split split = (Split) node;
@@ -526,7 +550,8 @@ public final class TerminalWorkspace {
             } else if (json.has("command") && !json.isNull("command")) {
                 invalid("command must be an array");
             }
-            return new Pane(optionalString(json, "cwd"), optionalString(json, "title"), command);
+            return new Pane(optionalString(json, "cwd"), optionalString(json, "title"), command,
+                optionalString(json, "agent"), optionalString(json, "agentSessionId"));
         }
         if ("split".equals(type)) {
             return new Split(requiredString(json, "orientation"),

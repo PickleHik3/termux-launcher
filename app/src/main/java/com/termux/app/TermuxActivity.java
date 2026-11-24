@@ -23698,8 +23698,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
             java.util.List<String> command =
                 com.termux.app.statusbar.WindowForegroundResolver.captureCommand(shell.getPid());
+            // The conversation id the agent in this pane reported, kept only while that agent is
+            // still what runs there.
+            String sessionId = com.termux.app.terminal.AgentResume.sessionToSave(
+                command, shell.mAgentName, shell.mAgentSessionId);
             return new com.termux.app.terminal.TerminalWorkspace.Pane(
-                cwd, shell.mSessionName, command);
+                cwd, shell.mSessionName, command,
+                sessionId == null ? null : shell.mAgentName, sessionId);
         };
         // Home floats are windows of the current session (the drawer lists them under it): they
         // are saved after its row's windows, in the order they were opened, as the chips run.
@@ -31335,6 +31340,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The agents running in a live pane that have no resume hook set up yet, for the Save
+     * dialog's offer. Reads each pane's program fresh, once per call.
+     */
+    @NonNull
+    public java.util.List<String> agentsNeedingResumeSetup() {
+        java.util.List<java.util.List<String>> commands = new java.util.ArrayList<>();
+        if (mPaneController != null) {
+            java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
+                new java.util.ArrayList<>(chipFloats());
+            for (WSession ws : mWSessions) windows.addAll(ws.windows);
+            for (com.termux.app.terminal.TerminalPaneController.Window window : windows) {
+                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                    commands.add(com.termux.app.statusbar.WindowForegroundResolver
+                        .captureCommand(shell.getPid()));
+                }
+            }
+        }
+        final java.io.File home = new java.io.File(
+            com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH);
+        final String launcherctl =
+            com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
+        return com.termux.app.terminal.AgentResume.agentsNeedingSetup(commands,
+            agent -> com.termux.launcherctl.ClaudeHooksInstaller.isInstalled(agent, home, launcherctl));
+    }
+
+    /**
+     * Set up resume for {@code agents} (the Save dialog's button): their hook or plugin files
+     * are written under the home folder.
+     */
+    public void installAgentResume(@NonNull java.util.List<String> agents) {
+        java.io.File home = new java.io.File(
+            com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH);
+        String launcherctl =
+            com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
+        for (String agent : agents) {
+            try {
+                com.termux.launcherctl.ClaudeHooksInstaller.installAll(home, launcherctl, agent);
+            } catch (org.json.JSONException ignored) {
+                // Building the answer cannot fail on these values; a file that could not be
+                // written shows as the offer staying.
+            }
+        }
+    }
+
+    /**
+     * An agent's session hook named the conversation this pane is in: it is kept on the pane, and
+     * the autosave follows so a kill right after still resumes it.
+     */
+    void reportAgentSession(@NonNull TerminalSession pane, @NonNull String agent,
+                            @NonNull String sessionId) {
+        if (agent.equals(pane.mAgentName) && sessionId.equals(pane.mAgentSessionId)) return;
+        pane.mAgentName = agent;
+        pane.mAgentSessionId = sessionId;
+        scheduleArrangementAutosave();
+    }
+
+    /**
      * The rolled-up agent reading for one window: what each of its panes says, folded blocked over
      * working over idle. Null when no pane in it is running an agent, which is the ordinary case and
      * costs one map lookup per pane.
@@ -32964,6 +33026,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return res.getString(R.string.workspace_restore_program_missing, program);
                 }
 
+                @NonNull @Override public String agentStartedFresh(@NonNull String agentName) {
+                    return res.getString(R.string.workspace_restore_agent_fresh, agentName);
+                }
+
                 @NonNull @Override public String folderMissing(@NonNull String folder,
                                                                @Nullable String program) {
                     return program == null
@@ -32979,7 +33045,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         String shell = wrapperShellPath();
         String script = shell == null ? null : com.termux.app.terminal.WorkspaceRestore.script(
             plan, shell, isFishShell(shell), notices);
-        if (script == null) return createCommandShell(plan.command, plan.cwd, pane.title);
+        if (script == null)
+            return carryAgentSession(createCommandShell(plan.command, plan.cwd, pane.title), pane);
         if (mTermuxService == null || mTermuxService.getTermuxSessionsSize()
                 >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS)
             return null;
@@ -32991,7 +33058,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
             mTermuxService.createTermuxSession(login != null ? login : shell, arguments, null,
                 plan.cwd, false, pane.title == null || pane.title.isEmpty() ? null : pane.title);
-        return created == null ? null : created.getTerminalSession();
+        return carryAgentSession(created == null ? null : created.getTerminalSession(), pane);
+    }
+
+    /**
+     * The restored shell is a new pane with a new pane id, so the saved conversation is put on it
+     * here: an autosave before the resumed agent reports again still keeps it, and the agent's own
+     * report then replaces it.
+     */
+    @Nullable private static TerminalSession carryAgentSession(@Nullable TerminalSession shell,
+            @NonNull com.termux.app.terminal.TerminalWorkspace.Pane pane) {
+        if (shell != null && pane.agentSessionId != null) {
+            shell.mAgentName = pane.agent;
+            shell.mAgentSessionId = pane.agentSessionId;
+        }
+        return shell;
     }
 
     /**
@@ -34485,6 +34566,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                                                @Nullable String agent,
                                                @Nullable com.termux.app.terminal.AgentStatus.State state) {
             TermuxActivity.this.reportAgentStatus(pane, agent, state);
+        }
+
+        @Override public void reportAgentSession(@NonNull TerminalSession pane,
+                                                @NonNull String agent, @NonNull String sessionId) {
+            TermuxActivity.this.reportAgentSession(pane, agent, sessionId);
         }
 
         @Override @Nullable public TerminalSession findPaneById(@NonNull String id) {

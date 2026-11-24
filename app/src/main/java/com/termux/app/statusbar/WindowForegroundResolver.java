@@ -520,12 +520,8 @@ public final class WindowForegroundResolver {
                                                   @NonNull CpuDelta cpu, long atMs) {
         if (payload.isEmpty()) return null;
         String[] argv = payload.split("\t");
-        String process = basename(argv[0]);
-        if (process.isEmpty()) return null;
-        process = process.toLowerCase(Locale.ROOT);
-        String wrapped = unwrapInterpreter(process, argv);
-        if (wrapped == null) wrapped = unwrapLane(process, argv);
-        if (wrapped != null) process = wrapped;
+        String process = processName(argv);
+        if (process == null) return null;
         String openFile = null;
         if (TerminalWindowBar.isEditor(process)) {
             for (int i = argv.length - 1; i >= 1; i--) {
@@ -539,6 +535,21 @@ public final class WindowForegroundResolver {
         Collections.addAll(command, argv);
         return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpu.fraction,
             cpu.sinceMs, atMs);
+    }
+
+    /**
+     * The program an argv runs, as the window chips name it: argv[0]'s lowercase basename, or the
+     * script behind an interpreter or the privileged-lane relay. Null for an empty argv.
+     */
+    @Nullable
+    public static String processName(@NonNull String[] argv) {
+        if (argv.length == 0) return null;
+        String process = basename(argv[0]);
+        if (process.isEmpty()) return null;
+        process = process.toLowerCase(Locale.ROOT);
+        String wrapped = unwrapInterpreter(process, argv);
+        if (wrapped == null) wrapped = unwrapLane(process, argv);
+        return wrapped != null ? wrapped : process;
     }
 
     /** A foreground process's CPU use since the previous poll, and when that poll was. */
