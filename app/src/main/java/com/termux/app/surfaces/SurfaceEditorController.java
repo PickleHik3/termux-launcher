@@ -5462,20 +5462,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard,
                                    @NonNull Runnable keep) {
+        // Every way out answers once: a button, or a dismissal with none (Back, a tap outside, the
+        // surface closing under the dialog), which keeps editing.
+        SingleAnswer question = new SingleAnswer();
+        Runnable keepOnce = question.answer(keep);
+        Runnable discardOnce = question.answer(() -> {
+            if (mOpen)
+                revertToEntry();
+            discard.run();
+        });
+        Runnable saveOnce = question.answer(save);
         new MaterialAlertDialogBuilder(mHost.context())
             .setTitle(R.string.termux_surface_tuning_unsaved_title)
             .setMessage(R.string.termux_layout_editor_unsaved_message)
-            .setOnCancelListener(dialog -> keep.run())
+            .setOnDismissListener(dialog -> question.dismissed(keep))
             .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing,
-                (dialog, which) -> keep.run())
+                (dialog, which) -> keepOnce.run())
             .setNegativeButton(R.string.termux_surface_tuning_unsaved_discard,
-                (dialog, which) -> {
-                    if (mOpen)
-                        revertToEntry();
-                    discard.run();
-                })
+                (dialog, which) -> discardOnce.run())
             .setPositiveButton(R.string.termux_surface_tuning_unsaved_save,
-                (dialog, which) -> save.run())
+                (dialog, which) -> saveOnce.run())
             .show();
     }
 
