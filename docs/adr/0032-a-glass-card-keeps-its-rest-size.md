@@ -152,6 +152,16 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   end only still re-sizes Home's bar: both ends are Home's side, so one card per side cannot part
   them. The views (the second edge host, the foot's own view, the second keyboard card) are not
   built yet.
+- **2026-11-25, what the crossing test still names.** `RestCardsCrossingTest.KNOWN_FAILURES`
+  holds 52 entries after the review fixes (the one host is shared only while the Terminal's
+  Peek card is Home's at Home's rect; none of the fixes moved the list): the container's top
+  moving where the two sides' stacks differ in height (×16); the dock/keyboard and
+  keyboard/under-band edges; the split keyboard's and the floating keyboard's edges against the
+  rows and bands beside them; the rows band with the A–Z row on both docks; the foot's two owners
+  under Docked (×8); and an A–Z bar on a side edge from Home to Home with the keyboard up at one
+  end only (×16). The foot's entries wait on the foot's own view (#307). The A–Z Home to Home
+  entries wait on a decision, not a view: both ends are Home's side. The others are layout and
+  shape-model cases no #307 view removes.
 
 ## Consequences
 
