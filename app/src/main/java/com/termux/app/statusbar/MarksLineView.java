@@ -129,6 +129,11 @@ public final class MarksLineView extends View {
         mReducedMotion = reducedMotion;
     }
 
+    /** Whether {@link #setSlideSupport} has handed this line its switches. */
+    public boolean hasSlideSupport() {
+        return mHaptics != null;
+    }
+
     /** The largest a mark is drawn, in px; 0 for no cap beyond the line's own (the strip). */
     private float mMarkCapPx;
 

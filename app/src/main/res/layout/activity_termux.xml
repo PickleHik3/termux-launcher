@@ -335,6 +335,23 @@
                         android:paddingStart="14dp"
                         android:gravity="center_vertical">
 
+                        <!-- The Marks line on Home's side, ahead of Home's float chips, which the
+                             line does not mark: the two share the row (MarksLineController). -->
+                        <com.termux.app.statusbar.MarksLineView
+                            android:id="@+id/terminal_status_home_marks_row"
+                            android:layout_width="0dp"
+                            android:layout_height="match_parent"
+                            android:layout_weight="1"
+                            android:visibility="gone"
+                            android:contentDescription="@string/status_marks_content_description" />
+                        <com.termux.app.statusbar.MarksLineView
+                            android:id="@+id/terminal_status_home_marks_column"
+                            android:layout_width="match_parent"
+                            android:layout_height="0dp"
+                            android:layout_weight="1"
+                            android:layout_marginTop="6dp"
+                            android:visibility="gone"
+                            android:contentDescription="@string/status_marks_content_description" />
                         <com.termux.app.terminal.TerminalWindowBar
                             android:id="@+id/terminal_home_float_bar"
                             android:layout_width="0dp"

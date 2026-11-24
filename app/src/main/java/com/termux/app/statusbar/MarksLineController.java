@@ -63,28 +63,33 @@ public final class MarksLineController {
      * line compares before it rebuilds, so a call with nothing new costs the model and a compare.
      */
     public void syncMarksLine() {
-        com.termux.app.statusbar.MarksLineView row = find(R.id.terminal_status_marks_row);
-        com.termux.app.statusbar.MarksLineView column =
-            find(R.id.terminal_status_marks_column);
-        if (row == null || column == null) return;
         boolean marks = marksLookShown();
         boolean vertical = mHost.statusBarVertical();
+        // The Terminal's side and Home's side each carry the line, so it stands in the strip on
+        // every page; on Home it leads Home's float chips, which it does not mark.
+        syncLine(R.id.terminal_status_marks_row, R.id.terminal_status_marks_column, marks,
+            vertical);
+        syncLine(R.id.terminal_status_home_marks_row, R.id.terminal_status_home_marks_column,
+            marks, vertical);
+    }
+
+    private void syncLine(int rowId, int columnId, boolean marks, boolean vertical) {
+        com.termux.app.statusbar.MarksLineView row = find(rowId);
+        com.termux.app.statusbar.MarksLineView column = find(columnId);
+        if (row == null || column == null) return;
         int rowShown = marks && !vertical ? View.VISIBLE : View.GONE;
         int columnShown = marks && vertical ? View.VISIBLE : View.GONE;
         if (row.getVisibility() != rowShown) row.setVisibility(rowShown);
         if (column.getVisibility() != columnShown) column.setVisibility(columnShown);
         if (!marks) return;
         com.termux.app.statusbar.MarksLineView line = vertical ? column : row;
-        if (mMarksNavigator == null) {
-            mMarksNavigator = mHost.pageSwitchNavigator();
+        if (mMarksNavigator == null) mMarksNavigator = mHost.pageSwitchNavigator();
+        if (!line.hasSlideSupport()) {
             // The slide's tick and its lift read the page bar's own switches.
-            java.util.function.BooleanSupplier haptics =
-                () -> {
-                    TermuxAppSharedPreferences preferences = mHost.preferences();
-                    return preferences != null && preferences.isAppHapticsEnabled();
-                };
-            row.setSlideSupport(haptics, mHost::isReducedMotionEnabled);
-            column.setSlideSupport(haptics, mHost::isReducedMotionEnabled);
+            line.setSlideSupport(() -> {
+                TermuxAppSharedPreferences preferences = mHost.preferences();
+                return preferences != null && preferences.isAppHapticsEnabled();
+            }, mHost::isReducedMotionEnabled);
         }
         line.setNavigator(mMarksNavigator);
         line.setVertical(vertical);
