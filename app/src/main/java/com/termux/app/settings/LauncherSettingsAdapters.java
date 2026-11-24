@@ -33,6 +33,7 @@ public final class LauncherSettingsAdapters {
         if (preferences != null) {
             adapters.add(new LookSettingsAdapter(preferences.lookGrid(),
                 terminalBackground(preferences), redress));
+            adapters.add(new LowMemoryPresetAdapter(LowMemoryPresetAdapter.over(preferences)));
             // launcherctl config addresses the default display: the bare keys.
             adapters.add(new FontSizeSettingsAdapter(
                 LauncherSettings.preferencesStore(preferences.getSharedPreferences()),

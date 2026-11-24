@@ -80,4 +80,13 @@ public class BooleanSettingTest {
         assertEquals(said.phrases, kept.phrases);
         assertEquals("lamp.lit", kept.id);
     }
+
+    @Test
+    public void everyDeclaredSettingHasPhrasesAndATitle() {
+        for (SettingDeclaration each : SettingDeclarations.ALL) {
+            assertFalse(each.id + " has no title", each.title.isEmpty());
+            assertFalse(each.id + " has no summary", each.summary.isEmpty());
+            assertFalse(each.id + " has no complaint phrases", each.phrases.isEmpty());
+        }
+    }
 }

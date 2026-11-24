@@ -29,7 +29,9 @@ public final class SettingDeclarations {
         Arrays.asList("system", "light", "dark"),
         Arrays.asList(NightMode.SYSTEM.getName(), NightMode.FALSE.getName(), NightMode.TRUE.getName()),
         "system", false, SettingRefresh.THEME).described("Theme",
-        "Whether the launcher follows the system's light or dark setting, or stays light or dark.");
+        "Whether the launcher follows the system's light or dark setting, or stays light or dark.")
+        .saidAs("too bright", "my eyes hurt at night", "eyes hurt at night", "dark mode",
+            "light mode", "switch to the dark theme", "the screen is blinding");
 
     /** The terminal palette's contrast, Softer to Harder ({@link TerminalContrastLevel}). */
     @NonNull
@@ -38,7 +40,9 @@ public final class SettingDeclarations {
         TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL, contrastLevels(), contrastLevels(),
         TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL, true, SettingRefresh.RESTYLE).resetBy(SettingDeclaration.ResetGroup.APPEARANCE)
         .described("Terminal contrast",
-            "How hard the terminal's colours are, from soft pastels to the deepest background and brightest text.");
+            "How hard the terminal's colours are, from soft pastels to the deepest background and brightest text.")
+        .saidAs("hard to read", "text is hard to read on my wallpaper", "colours are too harsh",
+            "colours look washed out", "my eyes hurt at night");
 
     /** The shared Text size, in percent. */
     @NonNull
@@ -47,12 +51,224 @@ public final class SettingDeclarations {
         TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT,
         TERMUX_APP.TEXT_SIZE_PERCENT_STEP, TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT,
         SettingRefresh.TEXT_SIZE).resetBy(SettingDeclaration.ResetGroup.APPEARANCE)
-        .described("Text size", "How large text is across the launcher's own screens, in percent.");
+        .described("Text size", "How large text is across the launcher's own screens, in percent.")
+        .saidAs("too small", "too big", "hard to read", "can't read the text", "make the text bigger",
+            "make the text smaller");
+
+
+    // ---- Motion: how the launcher moves ----
+
+    /** How fast the launcher's own motion runs; the phone's reduce-motion setting still wins. */
+    @NonNull
+    public static final SettingDeclaration ANIMATION_SPEED = SettingDeclaration.choice(
+        "motion.animation_speed", SettingDeclaration.Store.APP_PREFERENCES, "animation_speed",
+        Arrays.asList("slower", "normal", "faster", "off"),
+        Arrays.asList("slower", "normal", "faster", "off"), "normal", true,
+        SettingRefresh.LISTENER).described("Animation speed",
+        "How fast the launcher's own animations run, or whether they play at all.")
+        .saidAs("animations are too slow", "animations are too fast", "my phone feels slow",
+            "turn the animations off", "the motion makes me dizzy");
+
+    /** How a page turns on Home, between Home and the Terminal, and from window to window. */
+    @NonNull
+    public static final SettingDeclaration PAGE_TRANSITION = SettingDeclaration.choice(
+        "motion.page_transition", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_home_page_transition",
+        Arrays.asList("slide", "depth", "fade", "carousel", "stack"),
+        Arrays.asList("slide", "depth", "fade", "carousel", "stack"), "slide", false,
+        SettingRefresh.LISTENER).described("Page transition",
+        "How a page turns when you swipe between Home pages, the Terminal and windows.")
+        .saidAs("swiping between pages looks odd", "change the page animation",
+            "pages slide too much", "swiping between pages is laggy");
+
+    /** Little glitches that play on an idle terminal. */
+    @NonNull
+    public static final SettingDeclaration IDLE_ANIMATIONS = SettingDeclaration.bool(
+        "motion.idle_animations", SettingDeclaration.Store.APP_PREFERENCES, "idle_animations",
+        false, SettingRefresh.LISTENER).described("Idle animations",
+        "Lets the retro screen effect play small glitches while the terminal sits idle.")
+        .saidAs("the screen keeps moving", "my battery drains too fast", "stop the glitching")
+        .notOffered();
+
+    /** How often an idle terminal glitches. */
+    @NonNull
+    public static final SettingDeclaration IDLE_TEAR_RATE = SettingDeclaration.choice(
+        "motion.idle_tear_rate", SettingDeclaration.Store.APP_PREFERENCES, "idle_tear_rate",
+        Arrays.asList("rare", "sometimes", "often"), Arrays.asList("rare", "sometimes", "often"),
+        "rare", true, SettingRefresh.LISTENER).described("Idle glitch rate",
+        "How often the idle animations glitch the terminal.")
+        .saidAs("the glitches happen too often", "glitch less", "glitch more");
+
+    /** The streak that follows the terminal's cursor. */
+    @NonNull
+    public static final SettingDeclaration CURSOR_TRAIL = SettingDeclaration.bool(
+        "motion.cursor_trail", SettingDeclaration.Store.APP_PREFERENCES, "terminal_cursor_trail",
+        true, SettingRefresh.RESTYLE).described("Cursor trail",
+        "Draws a trail behind the terminal's cursor as it moves.")
+        .saidAs("the cursor leaves a streak", "my phone feels slow", "turn off the cursor effect");
+
+    /** Whether the wallpaper pans a little as pages and windows slide. */
+    @NonNull
+    public static final SettingDeclaration WALLPAPER_PARALLAX = SettingDeclaration.bool(
+        "motion.wallpaper_parallax", SettingDeclaration.Store.APP_PREFERENCES, "wallpaper_parallax",
+        true, SettingRefresh.RESTYLE).described("Wallpaper parallax",
+        "Moves the wallpaper a little as pages and windows slide.")
+        .saidAs("swiping between pages is laggy", "the wallpaper moves when I swipe",
+            "my phone feels slow");
+
+    /** Whether windows stay live while a swipe moves them. */
+    @NonNull
+    public static final SettingDeclaration LIVE_WINDOWS = SettingDeclaration.bool(
+        "motion.live_windows", SettingDeclaration.Store.APP_PREFERENCES,
+        "live_windows_while_swiping", true, SettingRefresh.LISTENER).described("Live windows",
+        "Keeps windows updating while you swipe between them.")
+        .saidAs("swiping between pages is laggy", "windows freeze when I swipe",
+            "my phone feels slow");
+
+    // ---- Battery and performance ----
+
+    /** Lets the launcher do less while nothing is happening. */
+    @NonNull
+    public static final SettingDeclaration REDUCE_IDLE = SettingDeclaration.bool(
+        "battery.reduce_idle", SettingDeclaration.Store.APP_PREFERENCES, "lazy_mode", false,
+        SettingRefresh.LISTENER).described("Reduce idle activity",
+        "Lets the launcher do less in the background while you are not using it.")
+        .saidAs("my battery drains too fast", "my phone feels slow", "save battery");
+
+    /** Glass that bends what is behind it. */
+    @NonNull
+    public static final SettingDeclaration GLASS_REFRACTION = SettingDeclaration.bool(
+        "glass.refraction", SettingDeclaration.Store.APP_PREFERENCES, "fancier_glass", true,
+        SettingRefresh.LISTENER).described("Glass refraction",
+        "Makes glass surfaces bend and shine the way real glass does.")
+        .saidAs("swiping between pages is laggy", "my phone feels slow",
+            "the glass looks too fancy");
+
+    /** Glass that blurs the live picture behind it as it changes. */
+    @NonNull
+    public static final SettingDeclaration LIVE_BLUR = SettingDeclaration.bool(
+        "glass.live_blur", SettingDeclaration.Store.APP_PREFERENCES, "live_blur", false,
+        SettingRefresh.RESTYLE).described("Live blur",
+        "Blurs whatever moves behind glass surfaces, not just the wallpaper.")
+        .saidAs("my battery drains too fast", "swiping between pages is laggy",
+            "the blur looks stale").notOffered();
+
+    /** The retro look of the terminal screen. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_EFFECT = SettingDeclaration.choice(
+        "terminal.effect", SettingDeclaration.Store.APP_PREFERENCES, "terminal_retro_effect",
+        Arrays.asList("none", "crt", "crt_green", "crt_amber", "crt_material", "tft"),
+        Arrays.asList("none", "crt", "crt_green", "crt_amber", "crt_material", "tft"), "none",
+        false, SettingRefresh.RESTYLE).described("Terminal effect",
+        "Gives the terminal an old monitor look, or none.")
+        .saidAs("I don't like the retro screen effect", "the screen looks like an old TV",
+            "remove the scanlines", "I want a retro look");
+
+    /** Whether the terminal's bell and other events flash the screen effect. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_SCREEN_EVENTS = SettingDeclaration.bool(
+        "terminal.screen_events", SettingDeclaration.Store.APP_PREFERENCES,
+        "terminal_screen_events", true, SettingRefresh.LISTENER).described("Screen events",
+        "Lets the terminal's bell and other events flicker the screen effect.")
+        .saidAs("the screen flickers when something beeps", "stop the flashing");
+
+    /** The extra layer that blends the retro effect into the terminal. */
+    @NonNull
+    public static final SettingDeclaration TERMINAL_EFFECT_COMPOSITE = SettingDeclaration.bool(
+        "terminal.effect_composite", SettingDeclaration.Store.APP_PREFERENCES,
+        "terminal_retro_composite", false, SettingRefresh.LISTENER).described("Effect blending",
+        "Blends the retro effect into the terminal's colours.")
+        .saidAs("my battery drains too fast", "my phone feels slow").notOffered();
+
+    // ---- Status bar chips ----
+
+    @NonNull
+    public static final SettingDeclaration STATUS_BATTERY = SettingDeclaration.bool(
+        "status.battery", SettingDeclaration.Store.APP_PREFERENCES, "status_widget_battery", false,
+        SettingRefresh.RESTYLE).described("Battery in the status bar",
+        "Shows the battery level in the status bar.")
+        .saidAs("show the battery", "I can't see my battery level", "show the battery percentage");
+
+    @NonNull
+    public static final SettingDeclaration STATUS_MEDIA = SettingDeclaration.bool(
+        "status.media", SettingDeclaration.Store.APP_PREFERENCES, "status_widget_media", true,
+        SettingRefresh.RESTYLE).described("Media in the status bar",
+        "Shows what is playing in the status bar.")
+        .saidAs("show what's playing", "I can't see the song", "hide the music from the status bar");
+
+    @NonNull
+    public static final SettingDeclaration STATUS_WEATHER = SettingDeclaration.bool(
+        "status.weather", SettingDeclaration.Store.APP_PREFERENCES, "status_widget_weather", true,
+        SettingRefresh.RESTYLE).described("Weather in the status bar",
+        "Shows the weather in the status bar.")
+        .saidAs("I want to see the weather up top", "show the weather", "hide the weather");
+
+    @NonNull
+    public static final SettingDeclaration STATUS_CLOCK_AM_PM = SettingDeclaration.bool(
+        "status.clock_am_pm", SettingDeclaration.Store.APP_PREFERENCES, "top_pane_clock_am_pm",
+        true, SettingRefresh.RESTYLE).described("AM and PM on the clock",
+        "Shows AM or PM beside the status bar clock.")
+        .saidAs("the clock should show am/pm", "I can't tell morning from evening",
+            "remove am/pm from the clock");
+
+    // ---- Dock, Home and notifications ----
+
+    /** Docked fills the screen's edge; Floating is a card with a gap around it. */
+    @NonNull
+    public static final SettingDeclaration DOCK_STYLE = SettingDeclaration.choice(
+        "dock.style", SettingDeclaration.Store.APP_PREFERENCES, "app_launcher_dock_style",
+        Arrays.asList("docked", "floating"), Arrays.asList("docked", "floating"), "docked", false,
+        SettingRefresh.RESTYLE).described("Dock style",
+        "Whether the dock and bars sit on the screen's edge or float as cards.")
+        .saidAs("the dock should float", "the dock touches the edge of the screen",
+            "I want rounded cards", "make the dock square");
+
+    @NonNull
+    public static final SettingDeclaration NOTIFICATION_DOTS = SettingDeclaration.bool(
+        "notifications.dots", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_notification_dots", false, SettingRefresh.RESTYLE).described(
+        "Notification dots", "Marks app icons that have notifications.")
+        .saidAs("I can't tell which apps have messages", "show a dot on apps with notifications");
+
+    @NonNull
+    public static final SettingDeclaration NOTIFICATION_BADGE_STYLE = SettingDeclaration.choice(
+        "notifications.badge_style", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_notification_badge_style", Arrays.asList("dot", "count"),
+        Arrays.asList("dot", "count"), "dot", false, SettingRefresh.LISTENER).described(
+        "Notification badge", "Whether an app icon shows a dot or the number of notifications.")
+        .saidAs("I want to see how many notifications", "the dot is not enough");
+
+    @NonNull
+    public static final SettingDeclaration QUICK_REPLY_SWIPE = SettingDeclaration.bool(
+        "home.quick_reply_swipe", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_quick_reply_swipe", true, SettingRefresh.RESTYLE).described(
+        "Quick reply swipe", "Swipe up on an app icon that has a notification to reply from the dock.")
+        .saidAs("I swipe up by accident", "icons open a reply when I swipe");
+
+    @NonNull
+    public static final SettingDeclaration DRAWER_SEARCH_ON_OPEN = SettingDeclaration.bool(
+        "drawer.search_on_open", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_drawer_search_on_open", false, SettingRefresh.LISTENER).described(
+        "Keyboard when the drawer opens", "Opens the keyboard as soon as the app drawer opens.")
+        .saidAs("the keyboard pops up by itself when I open the drawer",
+            "I want to search as soon as the drawer opens");
+
+    @NonNull
+    public static final SettingDeclaration MOST_USED_PAGE = SettingDeclaration.bool(
+        "drawer.most_used_page", SettingDeclaration.Store.APP_PREFERENCES,
+        "app_launcher_most_used_page", false, SettingRefresh.RESTYLE).described(
+        "Most-used apps page", "Adds a drawer page ranked by how often you open each app.")
+        .saidAs("I want my most used apps first", "add a page of my favourite apps");
 
     /** Every declaration, in the order {@code config list} shows them. */
     @NonNull
     public static final List<SettingDeclaration> ALL =
-        Collections.unmodifiableList(Arrays.asList(THEME_MODE, TERMINAL_CONTRAST, TEXT_SIZE));
+        Collections.unmodifiableList(Arrays.asList(THEME_MODE, TERMINAL_CONTRAST, TEXT_SIZE,
+            ANIMATION_SPEED, PAGE_TRANSITION, IDLE_ANIMATIONS, IDLE_TEAR_RATE, CURSOR_TRAIL,
+            WALLPAPER_PARALLAX, LIVE_WINDOWS, REDUCE_IDLE, GLASS_REFRACTION, LIVE_BLUR,
+            TERMINAL_EFFECT, TERMINAL_SCREEN_EVENTS, TERMINAL_EFFECT_COMPOSITE, STATUS_BATTERY,
+            STATUS_MEDIA, STATUS_WEATHER, STATUS_CLOCK_AM_PM, DOCK_STYLE, NOTIFICATION_DOTS,
+            NOTIFICATION_BADGE_STYLE, QUICK_REPLY_SWIPE, DRAWER_SEARCH_ON_OPEN, MOST_USED_PAGE));
 
     /**
      * The app-preferences keys the {@code group} reset removes: its declarations' keys, and the

@@ -149,7 +149,7 @@ public class SettingsRegistryTest {
     public void listGivesEveryDeclarationWithItsCurrentValueInOrder() {
         store.putString("terminal_contrast_level", "softer");
         java.util.List<SettingsRegistry.Entry> entries = registry.list();
-        assertEquals(3, entries.size());
+        assertEquals(SettingDeclarations.ALL.size(), entries.size());
         assertEquals("theme.mode", entries.get(0).declaration.id);
         assertEquals("system", entries.get(0).value);
         assertEquals("terminal.contrast", entries.get(1).declaration.id);

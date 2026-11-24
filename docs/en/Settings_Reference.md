@@ -16,6 +16,40 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Compact font size | `terminal.compact_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in Compact windows; until you set one it follows the terminal's. |
 | Scratchpad font size | `terminal.scratchpad_font_size` | From a third of the default size up to 256 px | About 12 dp of text, whatever the screen | How large text is in the scratchpad; until you set one it follows the terminal's. |
 
+## Motion and battery
+
+| Setting | Id | Values | Default | What it does |
+|---|---|---|---|---|
+| Animation speed | `motion.animation_speed` | slower, normal, faster, off | normal | How fast the launcher's own animations run, or whether they play at all. |
+| Page transition | `motion.page_transition` | slide, depth, fade, carousel, stack | slide | How a page turns when you swipe between Home pages, the Terminal and windows. |
+| Idle animations | `motion.idle_animations` | false, true | false | Lets the retro screen effect play small glitches while the terminal sits idle. |
+| Idle glitch rate | `motion.idle_tear_rate` | rare, sometimes, often | rare | How often the idle animations glitch the terminal. |
+| Cursor trail | `motion.cursor_trail` | false, true | true | Draws a trail behind the terminal's cursor as it moves. |
+| Wallpaper parallax | `motion.wallpaper_parallax` | false, true | true | Moves the wallpaper a little as pages and windows slide. |
+| Live windows | `motion.live_windows` | false, true | true | Keeps windows updating while you swipe between them. |
+| Reduce idle activity | `battery.reduce_idle` | false, true | false | Lets the launcher do less in the background while you are not using it. |
+| Glass refraction | `glass.refraction` | false, true | true | Makes glass surfaces bend and shine the way real glass does. |
+| Live blur | `glass.live_blur` | false, true | false | Blurs whatever moves behind glass surfaces, not just the wallpaper. |
+| Terminal effect | `terminal.effect` | none, crt, crt_green, crt_amber, crt_material, tft | none | Gives the terminal an old monitor look, or none. |
+| Screen events | `terminal.screen_events` | false, true | true | Lets the terminal's bell and other events flicker the screen effect. |
+| Effect blending | `terminal.effect_composite` | false, true | false | Blends the retro effect into the terminal's colours. |
+| Low memory preset | `battery.low_memory_preset` | false, true | false | Switches off the costliest effects and lightens the look so the launcher runs on less. |
+
+## Status bar, dock and Home
+
+| Setting | Id | Values | Default | What it does |
+|---|---|---|---|---|
+| Battery in the status bar | `status.battery` | false, true | false | Shows the battery level in the status bar. |
+| Media in the status bar | `status.media` | false, true | true | Shows what is playing in the status bar. |
+| Weather in the status bar | `status.weather` | false, true | true | Shows the weather in the status bar. |
+| AM and PM on the clock | `status.clock_am_pm` | false, true | true | Shows AM or PM beside the status bar clock. |
+| Dock style | `dock.style` | docked, floating | docked | Whether the dock and bars sit on the screen's edge or float as cards. |
+| Notification dots | `notifications.dots` | false, true | false | Marks app icons that have notifications. |
+| Notification badge | `notifications.badge_style` | dot, count | dot | Whether an app icon shows a dot or the number of notifications. |
+| Quick reply swipe | `home.quick_reply_swipe` | false, true | true | Swipe up on an app icon that has a notification to reply from the dock. |
+| Keyboard when the drawer opens | `drawer.search_on_open` | false, true | false | Opens the keyboard as soon as the app drawer opens. |
+| Most-used apps page | `drawer.most_used_page` | false, true | false | Adds a drawer page ranked by how often you open each app. |
+
 ## Look
 
 | Setting | Id | Values | Default | What it does |
