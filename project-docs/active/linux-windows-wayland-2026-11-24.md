@@ -231,6 +231,45 @@ ordinary view: clipped by the frame's outline, dressed by `PaneGlass.apply`, mov
 - **Then** the developer runs Wayland Display as the only display on pong for about a week and
   what they find is fixed; then the wall page; then zero copy.
 
+## State on 2026-11-24, end of day
+
+Built on `feat/wayland-display` and checked on pong unless marked otherwise.
+
+- **The Linux windows screen:** tabs (40dp, tinted selection, 200dp cap); the launcher keyboard as
+  plain keys, the window shrinking above it; text clipboard both ways; second tap brings the open
+  window forward (native apps by process; an X11 app only within 10 s of a single launch).
+- **Scale (the developer, 2026-11-24):** every window follows the screen by default: the largest
+  rail stop that is not above the density and leaves the window 520 points wide, never under
+  0.7 x density (2x on pong). Holding a corner brings out the same rail X11 Display has; a stop
+  is the app's per-app Scale, so the per-app page and the rail agree. X11 apps in the shared
+  Xwayland share one size and the user is told so; no workaround (the developer's ruling).
+  Bitmap-font apps (xterm) stay at 1x.
+- **Desktops:** a prefix desktop is one window in its own rootful Xwayland (`-hidpi`, real pixels,
+  size through GDK/Xft settings). Desktops inside a container stay on X11 Display.
+- **proot-distro apps:** on the copy path, no GPU variables or prefix library path passed in.
+  Measured: proot-distro 5.10.3 binds the whole prefix at its own path in a default login, and
+  binds tmp to `/tmp` (and the X11 socket folder) only with `--shared-tmp`/`--shared-x11`,
+  whatever its help text says. Seen from a shell; not yet from the drawer (no distro app is listed
+  in pong's drawer: open question).
+- **The display's address:** socket `$PREFIX/tmp/wayland-0`; `WAYLAND_DISPLAY` is `wayland-0` when
+  the client's runtime directory is that folder, else the full path. `XDG_RUNTIME_DIR` is never
+  set (setting it once gave Herdr a second, empty core). The shared Xwayland takes the lowest free
+  number (`:0` unless X11 Display holds it). While Wayland Display is chosen the launcher listens
+  on the socket from process start; the first connection starts the host, which adopts it; 30 s
+  with no window stops the host and its process. `DISPLAY` exists only while Xwayland runs.
+- **Set-up:** installs `xwayland` when Wayland Display is chosen; notices for missing Xwayland
+  and missing keyboard layout data (not yet seen on a device).
+- **Graphics add-on:** the launcher uses `$PREFIX/opt/tl-mesa-wayland` when its Mesa release
+  matches the installed one (dpkg or pacman). The tlstore item `mesa-wayland-egl` is on tlstore
+  branch `feat/mesa-wayland-egl`, unmerged; its real build has never run.
+- **Decided, to build:** set-up may write two launcher-owned files into each distro (display
+  variables, sound server); the sound server is made findable without variables (PulseAudio
+  stays; PipeWire waits for a screen-sharing and camera feature); a set-up row offers the add-on.
+
+Not checked on a device: sound from a Linux app; a launcher terminal's variables; the X11
+"share one size" line. Known: Firefox's own new-tab page overflows the window (ordinary pages
+fit); Herdr's glass mode is opaque (Herdr's side).
+
 ## Open
 
 - How a window under Wayland Display is named in the glossary and in copy (the backend is "Wayland
