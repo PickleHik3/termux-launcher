@@ -93,6 +93,12 @@ public final class LayoutEditorController {
         return mPlan == null ? null : mPlan.place();
     }
 
+    /** The kind of layout the session edits (what a held bar's landing is asked against). */
+    @Nullable
+    public com.termux.app.place.layout.LayoutKind layoutKind() {
+        return mPlan == null ? null : mPlan.layoutKind();
+    }
+
     /** The orientation every write is on (the phone's), or null while no session is open. */
     @Nullable
     public PlaceOrientation shownOrientation() {
