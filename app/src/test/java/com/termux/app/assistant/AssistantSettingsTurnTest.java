@@ -290,6 +290,78 @@ public class AssistantSettingsTurnTest {
         assertEquals("false", stored("motion.idle_animations"));
     }
 
+    private SettingsCard askWithText(String text, String message) {
+        transport.script = (body, sink) -> {
+            sink.onEvent(FeatureRequest.Event.text(text));
+            sink.onEvent(FeatureRequest.Event.done());
+        };
+        return ask(message);
+    }
+
+    @Test
+    public void aCallWrittenOnALineBecomesTheSameCard() {
+        String[] lines = {"set_setting text.size up", "set_setting text.size \"up\"", "set_setting text.size 105",
+            "  - set_setting `text.size` 'up'"};
+        for (String text : lines) {
+            SettingsCard card = askWithText(text, "make the text bigger");
+            assertNotNull(text, card);
+            assertEquals(text, "Text size: 100 → 105", card.summary());
+        }
+        SettingsCard off = askWithText("set_setting motion.animation_speed \"off\"", "turn off animations");
+        assertTrue(off.summary(), off.summary().startsWith("Animation speed: Normal → Off"));
+        SettingsCard smaller = askWithText("set_setting text.size 95", "make it a bit smaller");
+        assertTrue(smaller.summary(), smaller.summary().startsWith("Text size: 100 → 95"));
+    }
+
+    @Test
+    public void twoCallLinesMakeOneCardAndAThirdIsDropped() {
+        SettingsCard two = askWithText("set_setting text.size up\nset_setting theme.mode dark",
+            "bigger text and dark mode");
+        assertEquals(2, two.items.size());
+        assertEquals("Text size", two.items.get(0).title);
+        assertEquals("Dark", two.items.get(1).newLabel);
+        SettingsCard three = askWithText(
+            "set_setting text.size up\nset_setting theme.mode dark\nset_setting motion.animation_speed off",
+            "bigger text and dark mode and no animation");
+        assertEquals(2, three.items.size());
+    }
+
+    @Test
+    public void aCallLineOffTheShortlistOrOutOfRangeIsDropped() {
+        String[] bad = {"set_setting motion.animation_speed \"faster\"", "set_setting text.size 900",
+            "set_setting nonsense.id up"};
+        for (String text : bad) {
+            SettingsCard card = askWithText(text, "make the text bigger");
+            assertTrue(text, card == null || card.kind != SettingsCard.Kind.CHANGES);
+        }
+    }
+
+    @Test
+    public void anAskUserLineIsTheQuestion() {
+        long chat = store.createChat(1);
+        transport.script = (body, sink) -> sink.onEvent(FeatureRequest.Event.text(
+            "ask_user \"Bigger in the terminal or everywhere?\""));
+        engine.send(chat, "make the text bigger");
+        List<AssistantMessage> all = store.messages(chat);
+        assertEquals("Bigger in the terminal or everywhere?", all.get(1).text);
+    }
+
+    @Test
+    public void aSettingsIdInShownTextIsItsTitle() {
+        AssistantSettingsTurn.Shortlist list = AssistantSettingsTurn.lookup(registry, "show the weather");
+        assertNotNull(list.find("status.weather"));
+        String said = AssistantSettingsTurn.titled(list,
+            "Do you want to turn on or off `status.weather`? Or status.weather, or text.size.");
+        assertFalse(said, said.contains("status.weather"));
+        assertTrue(said, said.startsWith("Do you want to turn on or off Weather in the status bar? Or "));
+        long chat = store.createChat(1);
+        transport.script = (body, sink) -> sink.onEvent(FeatureRequest.Event.text(
+            "Do you want to turn on or off `status.weather`?"));
+        engine.send(chat, "show the weather");
+        assertEquals("Do you want to turn on or off Weather in the status bar?",
+            store.messages(chat).get(1).text);
+    }
+
     @Test
     public void thePlainChatTextIsKept() throws Exception {
         transport.script = (body, sink) -> sink.onEvent(FeatureRequest.Event.text("It is sunny."));
