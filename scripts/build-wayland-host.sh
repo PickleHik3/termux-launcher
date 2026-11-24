@@ -5,7 +5,9 @@
 #   - smithay 0.7.0 with wayland-host/patches/*.patch applied (its Xwayland support hardcodes
 #     /tmp, which Android does not have), in wayland-host/target/patched/,
 #   - libtlwayland.so, copied into <outdir>/<abi>/ (first argument; Gradle passes
-#     app/build/wayland/jniLibs; default wayland-host/target/jniLibs),
+#     app/build/wayland/jniLibs; default wayland-host/target/jniLibs) and stripped there; the
+#     unstripped copy (line tables, for ndk-stack) stays in <outdir>/../symbols/<abi>/, which no
+#     APK carries,
 #   - the test client, left in wayland-host/target/<triple>/release/tlwayland-testclient.
 # Run by Gradle with -Pwayland=true; by hand: scripts/build-wayland-host.sh [outdir].
 # Needs: rustup with the Android targets (aarch64-linux-android, x86_64-linux-android,
@@ -185,6 +187,18 @@ done
 
 cargo ndk "${NDK_ARGS[@]}" -P "$API" -o "$OUT_DIR" build --release -p tlwayland
 cargo ndk "${NDK_ARGS[@]}" -P "$API" build --release -p tlwayland-testclient
+
+# Keep the unstripped library for symbolizing tombstones; package a stripped one.
+SYMBOLS_DIR="$(dirname "$OUT_DIR")/symbols"
+STRIP="$ANDROID_NDK_HOME/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip"
+[[ -x "$STRIP" ]] || fail "llvm-strip is missing at $STRIP"
+for abi in "${ABIS[@]}"; do
+    so="$OUT_DIR/$abi/libtlwayland.so"
+    mkdir -p "$SYMBOLS_DIR/$abi"
+    cp "$so" "$SYMBOLS_DIR/$abi/libtlwayland.so"
+    "$STRIP" --strip-all "$so"
+    echo "$abi: symbols in $SYMBOLS_DIR/$abi/libtlwayland.so"
+done
 
 for abi in "${ABIS[@]}"; do
     so="$OUT_DIR/$abi/libtlwayland.so"

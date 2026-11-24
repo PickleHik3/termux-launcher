@@ -24,6 +24,9 @@ and a JDK compatible with AGP 8.13.2; the code targets Java 11.
   targets (`rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi`),
   `cargo-ndk`, `meson`, `ninja` and `bison`; the first build takes about ten minutes for
   libxkbcommon. CI's nightly passes it; the release workflow does not yet.
+- A `libtlwayland.so` tombstone: the build keeps an unstripped copy per ABI in
+  `app/build/wayland/symbols/<abi>/`; symbolize with
+  `$ANDROID_NDK_HOME/ndk-stack -sym app/build/wayland/symbols/<abi> -i tombstone.txt`.
 
 ## Installing
 
