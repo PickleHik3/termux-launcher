@@ -211,6 +211,22 @@ public final class MarksLineView extends View {
         return mAvailPx;
     }
 
+    /** The length {@link #holdLength} keeps the line built for; 0 when nothing is held. */
+    private float mHeldPx;
+
+    /**
+     * Keeps the line built for the length it has now, whatever more room it is offered later
+     * ({@code hold}), so each mark stays where it stands; false lets it follow its parent again.
+     * The thin row holds it while enlarged, so the tap that enlarged the row and the next one
+     * land on the same mark. Lays out only on a change.
+     */
+    public void holdLength(boolean hold) {
+        float held = hold && mAvailPx > 0f && mAvailPx < UNBOUNDED_PX ? mAvailPx : 0f;
+        if (held == mHeldPx) return;
+        mHeldPx = held;
+        requestLayout();
+    }
+
     /**
      * The line asks for the length its marks take and no more: it folds by the room the parent
      * offers along its axis ({@link MarksLine#maxSlots}), then sizes to the folded marks. A fixed
@@ -224,6 +240,8 @@ public final class MarksLineView extends View {
         int mode = MeasureSpec.getMode(alongSpec);
         int size = MeasureSpec.getSize(alongSpec);
         float avail = mode == MeasureSpec.UNSPECIFIED ? UNBOUNDED_PX : size;
+        // Held, the line keeps its length when offered more; offered less, it still fits it.
+        if (mHeldPx > 0f) avail = Math.min(avail, mHeldPx);
         if (avail != mAvailPx) {
             mAvailPx = avail;
             rebuild();

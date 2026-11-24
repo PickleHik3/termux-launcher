@@ -94,6 +94,65 @@ public final class StatusRowLayout extends LinearLayout {
         super(context, attrs);
     }
 
+    /**
+     * The least the marks' slot keeps while the enlarged thin row holds its marks
+     * ({@link #holdMarks}): the marks' extent from the slot's start. 0 holds nothing.
+     */
+    private int mMarksFloorPx;
+
+    /**
+     * Holds the Marks line where it stands now ({@code hold}), or lets it go. The thin row holds
+     * it while enlarged: the readings grow to their own size then, and would take the room the
+     * marks stood in and move them from under a finger that tapped once to enlarge the row and
+     * taps again to change page (#334). Held, the line keeps its length
+     * ({@link MarksLineView#holdLength}) and its slot keeps the marks' extent; the readings that
+     * no longer fit beside it are left out from the far end. Read from the layout at rest, so
+     * call it before the enlarged layout; it lays the row out again only on a change.
+     */
+    public void holdMarks(boolean hold) {
+        View found = findViewById(R.id.terminal_status_marks_row);
+        MarksLineView marks = found instanceof MarksLineView ? (MarksLineView) found : null;
+        View slot = rowChildOf(marks);
+        int floor = 0;
+        if (hold && marks != null && slot != null && marks.getVisibility() == VISIBLE
+            && getOrientation() == HORIZONTAL && marks.getWidth() > 0) {
+            int left = 0;
+            for (View v = marks; v != slot; v = (View) v.getParent()) left += v.getLeft();
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            floor = rtl ? slot.getWidth() - left + leftMargin(marks)
+                : left + marks.getWidth() + rightMargin(marks);
+        }
+        if (marks != null) marks.holdLength(floor > 0);
+        if (floor == mMarksFloorPx) return;
+        mMarksFloorPx = floor;
+        requestLayout();
+    }
+
+    /**
+     * Leaves readings out from the far end while the slot holding the held marks has less than
+     * their floor ({@link StatusRowFitPolicy#readingsKeptBesideFloor}), then measures again.
+     */
+    private void keepMarksFloor(int widthMeasureSpec, int heightMeasureSpec) {
+        if (mMarksFloorPx <= 0 || getOrientation() != HORIZONTAL
+            || MeasureSpec.getMode(widthMeasureSpec) == MeasureSpec.UNSPECIFIED) {
+            return;
+        }
+        View slot = rowChildOf(findViewById(R.id.terminal_status_marks_row));
+        StatusReadingsCluster cluster = readingsCluster();
+        View group = rowChildOf(cluster);
+        if (slot == null || cluster == null || group == null || group == slot
+            || cluster.getVisibility() == GONE || cluster.getOrientation() != HORIZONTAL) {
+            return;
+        }
+        int count = readingItems(cluster);
+        int kept = StatusRowFitPolicy.readingsKeptBesideFloor(slot.getMeasuredWidth(),
+            mMarksFloorPx, leftMargin(group) + group.getMeasuredWidth() + rightMargin(group),
+            mPartItemWidth, mPartItemMark, count, readingsChrome(group, cluster));
+        if (kept == StatusReadingsCluster.ALL) return;
+        cluster.setKept(kept, this);
+        super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+    }
+
     /** For tests and callers that care: whether the readings are standing tight. */
     public boolean isReadingsTight() {
         return mTight;
@@ -190,6 +249,7 @@ public final class StatusRowLayout extends LinearLayout {
         boolean keepOut = keepOutApplies(widthMeasureSpec);
         if (!keepOut) {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
+            keepMarksFloor(widthMeasureSpec, heightMeasureSpec);
             mStripMinPx = stripMinPx();
             // A plain row is laid out as a linear layout unless that would squeeze the strip
             // below what shows one whole chip: then the flow below takes over, once.
@@ -421,26 +481,8 @@ public final class StatusRowLayout extends LinearLayout {
             || children[rtl ? 1 : 0] != strip || children[rtl ? 0 : 1] != group) {
             return false;
         }
-        int count = 0;
-        for (int i = 0; i < cluster.getChildCount(); i++) {
-            if (cluster.getChildAt(i).getVisibility() != GONE) count++;
-        }
-        if (mPartItemWidth.length < count) {
-            mPartItemWidth = new int[count];
-            mPartItemMark = new boolean[count];
-        }
-        int item = 0;
-        for (int i = 0; i < cluster.getChildCount(); i++) {
-            View child = cluster.getChildAt(i);
-            if (child.getVisibility() == GONE) continue;
-            mPartItemWidth[item] = leftMargin(child) + child.getMeasuredWidth() + rightMargin(child);
-            mPartItemMark[item] = child instanceof MaterialDotSeparatorView;
-            item++;
-        }
-        // Everything the group takes besides the items: its margins and padding, whatever else
-        // it holds, the cluster's margins and padding. The cluster is measured whole here.
-        int chrome = leftMargin(group) + rightMargin(group) + group.getMeasuredWidth()
-            - cluster.getMeasuredWidth() + cluster.getPaddingLeft() + cluster.getPaddingRight();
+        int count = readingItems(cluster);
+        int chrome = readingsChrome(group, cluster);
         // The readings' far end already keeps its own air from the row's edge (the group's end
         // margin and padding, which clear the lens and the bar's corner); the screen's corner
         // takes only what reaches past that, not its whole inset on top of it.
@@ -474,6 +516,49 @@ public final class StatusRowLayout extends LinearLayout {
         mPartGroup = group;
         mParted = true;
         return true;
+    }
+
+    /**
+     * Fills {@link #mPartItemWidth} and {@link #mPartItemMark} with the cluster's shown items,
+     * each with its margins, in its own order; returns how many.
+     */
+    private int readingItems(@NonNull StatusReadingsCluster cluster) {
+        int count = 0;
+        for (int i = 0; i < cluster.getChildCount(); i++) {
+            if (cluster.getChildAt(i).getVisibility() != GONE) count++;
+        }
+        if (mPartItemWidth.length < count) {
+            mPartItemWidth = new int[count];
+            mPartItemMark = new boolean[count];
+        }
+        int item = 0;
+        for (int i = 0; i < cluster.getChildCount(); i++) {
+            View child = cluster.getChildAt(i);
+            if (child.getVisibility() == GONE) continue;
+            mPartItemWidth[item] = leftMargin(child) + child.getMeasuredWidth() + rightMargin(child);
+            mPartItemMark[item] = child instanceof MaterialDotSeparatorView;
+            item++;
+        }
+        return count;
+    }
+
+    /**
+     * Everything the readings' group takes besides the items: its margins and padding, whatever
+     * else it holds, the cluster's margins and padding. The cluster is measured whole here.
+     */
+    private static int readingsChrome(@NonNull View group, @NonNull StatusReadingsCluster cluster) {
+        return leftMargin(group) + rightMargin(group) + group.getMeasuredWidth()
+            - cluster.getMeasuredWidth() + cluster.getPaddingLeft() + cluster.getPaddingRight();
+    }
+
+    /** The row's child holding {@code view}, or null when it is not under this row. */
+    @Nullable
+    private View rowChildOf(@Nullable View view) {
+        while (view != null && view.getParent() != this) {
+            ViewParent parent = view.getParent();
+            view = parent instanceof View ? (View) parent : null;
+        }
+        return view;
     }
 
     /** Places the parted strip and readings where {@link #partAtGap} answered. */

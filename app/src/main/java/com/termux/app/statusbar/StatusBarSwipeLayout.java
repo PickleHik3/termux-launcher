@@ -204,6 +204,10 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (timeout > 0L) postDelayed(mEnlargeTimeout, timeout);
         if (enlarged == mRowEnlarged) return;
         mRowEnlarged = enlarged;
+        // The marks stay where the finger is while the readings grow: read from the rest layout,
+        // so before the enlarged one.
+        View row = findViewById(R.id.terminal_status_row);
+        if (row instanceof StatusRowLayout) ((StatusRowLayout) row).holdMarks(enlarged);
         requestLayout();
         if (mEnlargeListener != null) mEnlargeListener.onRowEnlargedChanged(enlarged);
         float to = enlarged ? 1f : 0f;

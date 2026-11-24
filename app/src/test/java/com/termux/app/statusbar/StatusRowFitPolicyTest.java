@@ -41,4 +41,20 @@ public class StatusRowFitPolicyTest {
         assertEquals(10, StatusRowFitPolicy.stripShareOf(20, 1f, 2f));
         assertEquals(0, StatusRowFitPolicy.stripShareOf(20, 0f, 1f));
     }
+    @Test public void theEnlargedRowLeavesFarReadingsOutSoTheMarksKeepTheirSlot() {
+        int[] width = {200, 10, 100};
+        boolean[] dot = {false, true, false};
+        // The slot has its floor: nothing is left out.
+        assertEquals(StatusReadingsCluster.ALL,
+            StatusRowFitPolicy.readingsKeptBesideFloor(90, 90, 310, width, dot, 3, 0));
+        // Nothing held.
+        assertEquals(StatusReadingsCluster.ALL,
+            StatusRowFitPolicy.readingsKeptBesideFloor(40, 0, 310, width, dot, 3, 0));
+        // 50px short: the readings have 260px, so the far one goes, and the dot before it.
+        assertEquals(1,
+            StatusRowFitPolicy.readingsKeptBesideFloor(40, 90, 310, width, dot, 3, 0));
+        // Not even the first fits: none stand.
+        assertEquals(0,
+            StatusRowFitPolicy.readingsKeptBesideFloor(0, 250, 310, width, dot, 3, 0));
+    }
 }
