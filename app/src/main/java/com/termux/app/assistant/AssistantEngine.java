@@ -9,6 +9,10 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.ai.FeatureRequest;
+import com.termux.app.settings.LauncherSettings;
+import com.termux.app.settings.LauncherSettingsAdapters;
+import com.termux.app.terminal.TerminalActionDispatcher;
+import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -22,6 +26,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.LongSupplier;
+import java.util.function.Supplier;
 
 /**
  * Runs the Assistant's answers. It is process-scoped (it holds only the application context), so an
@@ -61,6 +66,9 @@ public final class AssistantEngine {
     private final Executor controlExecutor;
     private final Executor notifier;
     private final LongSupplier clock;
+    /** The settings registry, asked for on the first answer; null when settings turns are off. */
+    @Nullable private final Supplier<SettingsRegistry> registrySupplier;
+    private final AssistantCards cards;
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Object lock = new Object();
     @Nullable private Generation current;
@@ -98,6 +106,10 @@ public final class AssistantEngine {
         volatile long firstTokenMs = -1L;
         volatile int outputTokens = -1;
         volatile boolean loading;
+        /** Settings turn: what the model was offered, and the tool calls it streamed, by index. */
+        @Nullable AssistantSettingsTurn.Shortlist shortlist;
+        @Nullable SettingsRegistry registry;
+        final java.util.TreeMap<Integer, JSONObject> toolCalls = new java.util.TreeMap<>();
 
         Generation(long chatId, @Nullable String userText, long retryMessageId) {
             this.chatId = chatId;
@@ -110,6 +122,17 @@ public final class AssistantEngine {
                     @NonNull WindowSource windowSource, @NonNull Executor streamExecutor,
                     @NonNull Executor controlExecutor, @NonNull Executor notifier,
                     @NonNull LongSupplier clock) {
+        this(store, transport, windowSource, streamExecutor, controlExecutor, notifier, clock, null,
+            new AssistantCards());
+    }
+
+    AssistantEngine(@NonNull AssistantChatStore store, @NonNull ChatTransport transport,
+                    @NonNull WindowSource windowSource, @NonNull Executor streamExecutor,
+                    @NonNull Executor controlExecutor, @NonNull Executor notifier,
+                    @NonNull LongSupplier clock, @Nullable Supplier<SettingsRegistry> registrySupplier,
+                    @NonNull AssistantCards cards) {
+        this.registrySupplier = registrySupplier;
+        this.cards = cards;
         this.store = store;
         this.transport = transport;
         this.windowSource = windowSource;
@@ -126,9 +149,17 @@ public final class AssistantEngine {
             ExecutorService control = Executors.newSingleThreadExecutor(r -> daemon(r, "assistant-control"));
             Handler main = new Handler(Looper.getMainLooper());
             sInstance = new AssistantEngine(AssistantChatStore.getInstance(app), new TaiChatTransport(app),
-                new AssistantContextWindow(app), stream, control, main::post, System::currentTimeMillis);
+                new AssistantContextWindow(app), stream, control, main::post, System::currentTimeMillis,
+                () -> deviceRegistry(app), AssistantCards.shared());
         }
         return sInstance;
+    }
+
+    /** The launcher's settings registry, the one every door uses. */
+    @NonNull
+    static SettingsRegistry deviceRegistry(@NonNull Context app) {
+        return LauncherSettings.registry(app, c -> LauncherSettingsAdapters.forDevice(c,
+            () -> TerminalActionDispatcher.getInstance().redressChrome()));
     }
 
     /** Drops the singleton. Intended for unit tests. */
@@ -325,10 +356,28 @@ public final class AssistantEngine {
         }
         int window = windowSource.servingWindowTokens();
         if (window <= 0) window = FALLBACK_WINDOW_TOKENS;
+        String system = null;
+        JSONArray tools = null;
+        String request = lastUserText(history);
+        if (registrySupplier != null && !request.isEmpty()) {
+            try {
+                g.registry = registrySupplier.get();
+                g.shortlist = AssistantSettingsTurn.lookup(g.registry, request);
+            } catch (RuntimeException e) {
+                Log.w(LOG_TAG, "Settings lookup failed: " + e);
+                g.registry = null;
+                g.shortlist = null;
+            }
+            if (g.shortlist != null && !g.shortlist.offered.isEmpty()) {
+                system = AssistantSettingsTurn.instructions(g.shortlist);
+                tools = AssistantSettingsTurn.tools(g.shortlist);
+                window = Math.max(window / 2, window - AssistantSettingsTurn.reserveTokens(system, tools));
+            }
+        }
         ContextFitter.Result fit = ContextFitter.fit(history, window);
         String body;
         try {
-            body = buildBody(fit);
+            body = buildBody(fit, system, tools);
         } catch (JSONException e) {
             finish(g, AssistantMessage.STATE_ERROR, AssistantMessage.ERROR_OTHER);
             return;
@@ -354,10 +403,93 @@ public final class AssistantEngine {
             finish(g, AssistantMessage.STATE_STOPPED, null);
         } else if (g.errorCode != null) {
             finish(g, AssistantMessage.STATE_ERROR, g.errorCode);
+        } else if (settleSettingsTurn(g)) {
+            finish(g, AssistantMessage.STATE_COMPLETE, null);
         } else if (textOf(g).isEmpty()) {
             finish(g, AssistantMessage.STATE_ERROR, AssistantMessage.ERROR_EMPTY_ANSWER);
         } else {
             finish(g, AssistantMessage.STATE_COMPLETE, null);
+        }
+    }
+
+    @NonNull
+    private static String lastUserText(@NonNull List<AssistantMessage> history) {
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if (history.get(i).isUser()) return history.get(i).text;
+        }
+        return "";
+    }
+
+    /**
+     * Reads the model's reply as a settings turn: a card for the changes it proposed, its question
+     * or words, or "No matching setting". Returns false when the turn was not a settings turn or the
+     * answer is just text, which then ends as any answer does.
+     */
+    private boolean settleSettingsTurn(Generation g) {
+        AssistantSettingsTurn.Shortlist shortlist = g.shortlist;
+        SettingsRegistry registry = g.registry;
+        if (shortlist == null || registry == null) return false;
+        JSONArray calls;
+        synchronized (g) {
+            calls = new JSONArray();
+            for (JSONObject each : g.toolCalls.values()) calls.put(each);
+        }
+        AssistantSettingsTurn.Answer answer = AssistantSettingsTurn.interpret(registry, shortlist,
+            textOf(g), calls);
+        SettingsCard card = AssistantSettingsTurn.card(shortlist, answer);
+        String text;
+        if (card != null) {
+            cards.put(g.messageId, card);
+            text = card.summary();
+        } else if (answer.question != null) {
+            text = answer.question;
+        } else if (!answer.text.isEmpty()) {
+            text = answer.text;
+        } else if (answer.dropped > 0 || calls.length() > 0 || shortlist.offered.isEmpty()) {
+            card = SettingsCard.noMatch(lastUserText(store.messages(g.chatId)));
+            cards.put(g.messageId, card);
+            text = card.summary();
+        } else {
+            return false;
+        }
+        synchronized (g) {
+            g.text.setLength(0);
+            g.text.append(text);
+        }
+        return true;
+    }
+
+    private void collectToolCalls(Generation g, @NonNull JSONObject chunk) {
+        JSONArray choices = chunk.optJSONArray("choices");
+        JSONObject choice = choices == null ? null : choices.optJSONObject(0);
+        JSONObject delta = choice == null ? null : choice.optJSONObject("delta");
+        JSONArray calls = delta == null ? null : delta.optJSONArray("tool_calls");
+        if (calls == null) return;
+        synchronized (g) {
+            for (int i = 0; i < calls.length(); i++) {
+                JSONObject call = calls.optJSONObject(i);
+                JSONObject function = call == null ? null : call.optJSONObject("function");
+                if (function == null) continue;
+                int index = call.optInt("index", i);
+                JSONObject held = g.toolCalls.get(index);
+                try {
+                    if (held == null) {
+                        g.toolCalls.put(index, new JSONObject(call.toString()));
+                    } else {
+                        JSONObject heldFunction = held.getJSONObject("function");
+                        String name = function.optString("name", "");
+                        if (!name.isEmpty()) heldFunction.put("name", name);
+                        Object arguments = function.opt("arguments");
+                        if (arguments instanceof String) {
+                            heldFunction.put("arguments", heldFunction.optString("arguments", "") + arguments);
+                        } else if (arguments != null) {
+                            heldFunction.put("arguments", arguments);
+                        }
+                    }
+                } catch (JSONException ignored) {
+                    // A malformed chunk is not a call.
+                }
+            }
         }
     }
 
@@ -396,6 +528,7 @@ public final class AssistantEngine {
             throw new IOException("stopped");
         }
         if (event.finishReason != null) g.finishSeen = true;
+        if (g.shortlist != null && event.openAi != null) collectToolCalls(g, event.openAi);
         if (!event.reasoning.isEmpty()) {
             if (g.firstTokenMs < 0L) g.firstTokenMs = clock.getAsLong();
             appendThinking(g, event.reasoning);
@@ -516,13 +649,23 @@ public final class AssistantEngine {
 
     @NonNull
     static String buildBody(@NonNull ContextFitter.Result fit) throws JSONException {
+        return buildBody(fit, null, null);
+    }
+
+    /** The request: {@code system} first when there is one, the fitted chat, and the {@code tools} offered. */
+    @NonNull
+    static String buildBody(@NonNull ContextFitter.Result fit, @Nullable String system,
+                            @Nullable JSONArray tools) throws JSONException {
         JSONArray messages = new JSONArray();
+        if (system != null) messages.put(new JSONObject().put("role", "system").put("content", system));
         for (ContextFitter.Sent sent : fit.sent) {
             messages.put(new JSONObject().put("role", sent.role).put("content", sent.text));
         }
         // No "model": Feature request picks the Assistant's model.
-        return new JSONObject().put("messages", messages).put("stream", true)
-            .put("stream_options", new JSONObject().put("include_usage", true)).toString();
+        JSONObject body = new JSONObject().put("messages", messages).put("stream", true)
+            .put("stream_options", new JSONObject().put("include_usage", true));
+        if (tools != null) body.put("tools", tools);
+        return body.toString();
     }
 
     private void notifyMessage(long chatId, long messageId) {
