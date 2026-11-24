@@ -241,11 +241,26 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         if (WaylandHost.nativeStart(socketDir, xkbConfigRoot, xwaylandBinary, outputWidth, outputHeight,
                 scale, framePeriodNanos)) {
             mRunning = true;
+            // The same test as wayland-host/src/xkbroot.rs: without it the host has no keyboard.
+            String keymap = keymapMissingAt(xkbConfigRoot);
             setState(ILinuxWindows.STATE_RUNNING, "WAYLAND_DISPLAY=wayland-0 in " + socketDir
-                + (xwaylandBinary != null ? "; X display in logcat" : ""));
+                + (xwaylandBinary != null ? "; X display in logcat" : "")
+                + (keymap != null ? "; no keyboard: keymap data missing at " + keymap : ""));
         } else {
             setState(ILinuxWindows.STATE_STOPPED, "The host did not start; see logcat TLWayland.");
         }
+    }
+
+    /** The directory looked in when it lacks xkb data (null when it is usable). */
+    @Nullable
+    private static String keymapMissingAt(@Nullable String root) {
+        if (root == null) return "(none given)";
+        File dir = new File(root);
+        boolean ok = new File(dir, "rules/evdev").isFile();
+        for (String d : new String[] {"symbols", "keycodes", "types", "compat"}) {
+            ok &= new File(dir, d).isDirectory();
+        }
+        return ok ? null : root;
     }
 
     private void doStop() {

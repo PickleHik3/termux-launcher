@@ -51,4 +51,6 @@ upstream is committed here.
   about ten minutes; later runs reuse it.
 - The compiled-in config root is a dummy: the app sets `XKB_CONFIG_ROOT` at run time because the
   prefix differs per edition.
+- The host needs the prefix's `xkeyboard-config` data (`share/X11/xkb`) for a keyboard and runs
+  without one when it is absent: libxkbcommon then has a NULL context that smithay dereferences.
 - Refresh: bump the version and sha256, delete `target/xkbcommon/`, run the script.

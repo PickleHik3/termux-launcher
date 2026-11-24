@@ -13,6 +13,7 @@ pub mod pixels;
 pub mod png;
 pub mod protocol;
 pub mod teardown;
+pub mod xkbroot;
 pub mod xlock;
 
 #[cfg(target_os = "android")]

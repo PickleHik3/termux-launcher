@@ -575,9 +575,15 @@ fn setup(
     seat.add_pointer();
     seat.add_touch();
     // XKB_CONFIG_ROOT was set by nativeStart before this thread existed.
-    match seat.add_keyboard(XkbConfig::default(), 400, 25) {
-        Ok(_) => linfo!("keyboard on the seat"),
-        Err(e) => lwarn!("no keyboard on the seat: {e:?}"),
+    // Without usable data libxkbcommon's context is NULL and add_keyboard crashes (see xkbroot),
+    // so the seat then runs with pointer and touch only; key events find no keyboard and drop.
+    let xkb_root = std::env::var_os("XKB_CONFIG_ROOT").map(std::path::PathBuf::from);
+    match xkb_root.as_deref().filter(|root| crate::xkbroot::usable(root)) {
+        Some(_) => match seat.add_keyboard(XkbConfig::default(), 400, 25) {
+            Ok(_) => linfo!("keyboard on the seat"),
+            Err(e) => lwarn!("no keyboard on the seat: {e:?}"),
+        },
+        None => lwarn!("no keyboard on the seat: keymap data missing at {}", xkb_root.as_deref().map_or("(XKB_CONFIG_ROOT unset)".into(), |r| r.display().to_string())),
     }
 
     let output = Output::new(
