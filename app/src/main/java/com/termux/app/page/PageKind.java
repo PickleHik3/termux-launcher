@@ -11,16 +11,21 @@ public enum PageKind {
     HOME,
     TERMINAL,
     DISPLAY,
-    ASSISTANT;
+    ASSISTANT,
+    /**
+     * A Linux window under Wayland Display (spec #384): one app window in the Terminal's row.
+     * Never stored: its pages are temporary and go with the launcher process.
+     */
+    LINUX;
 
     private static final PageKind[] ROOM_KINDS = computeRoomKinds();
 
     /**
-     * Whether this kind stands a page of its own room; a display window is the Terminal's, so it
-     * does not.
+     * Whether this kind stands a page of its own room; a display window and a Linux window are
+     * the Terminal's, so they do not.
      */
     public boolean hasOwnRoom() {
-        return this != DISPLAY;
+        return this != DISPLAY && this != LINUX;
     }
 
     /**

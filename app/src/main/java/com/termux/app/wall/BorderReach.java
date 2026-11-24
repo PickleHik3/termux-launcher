@@ -39,6 +39,8 @@ public final class BorderReach {
      * the page shares its edges and a plain swipe on it pages ({@link PaneWallPolicy#bodySwipePages}).
      */
     public static boolean ownsContent(@NonNull PageKind page, boolean displayRunning) {
+        // A Linux window's picture is the app's to the rim, always (spec #384, "Paging").
+        if (page == PageKind.LINUX) return true;
         return page == PageKind.DISPLAY && displayRunning;
     }
 

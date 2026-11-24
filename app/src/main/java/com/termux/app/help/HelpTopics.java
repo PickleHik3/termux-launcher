@@ -661,6 +661,8 @@ public final class HelpTopics {
         Builder target(String targetId, PageKind... on) {
             this.targetId = targetId;
             places.addAll(Arrays.asList(on));
+            // A Linux window is a Linux app: it takes the display window's help place.
+            if (places.contains(PageKind.DISPLAY) && !places.contains(PageKind.LINUX)) places.add(PageKind.LINUX);
             return this;
         }
         Builder gesture(HelpGesture value) { gesture = value; return this; }

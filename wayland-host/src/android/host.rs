@@ -1673,6 +1673,7 @@ impl State {
         let (title, app_id) = self.toplevels[i].shell.names();
         let pid = self.toplevels[i].shell.client_pid(&self.display_handle);
         let flags = if self.toplevels[i].shell.is_x11() { WINDOW_X11 } else { 0 };
+        let parent = self.parent_of(i);
         let t = &mut self.toplevels[i];
         t.id = id;
         t.announced = true;
@@ -1681,7 +1682,22 @@ impl State {
             self.output.enter(&surface);
         }
         self.apply_scale(i);
-        self.events.window_created(id, &title, &app_id, pid, flags);
+        self.events.window_created(id, &title, &app_id, pid, flags, parent);
+    }
+
+    /// The announced window toplevel `i` is a dialog of: its xdg parent, or the X window it is
+    /// transient for; 0 for a window of its own. Read once, when it is announced.
+    fn parent_of(&self, i: usize) -> i64 {
+        let announced = |t: &&Toplevel| t.announced;
+        let found = match &self.toplevels[i].shell {
+            Shell::Xdg(s) => s.parent().and_then(|p| {
+                self.toplevels.iter().filter(announced).find(|t| t.shell.wl_surface().as_ref() == Some(&p))
+            }),
+            Shell::X11(w) => w.is_transient_for().and_then(|parent| {
+                self.toplevels.iter().filter(announced).find(|t| matches!(&t.shell, Shell::X11(s) if s.window_id() == parent))
+            }),
+        };
+        found.map(|t| t.id).unwrap_or(0)
     }
 
     pub fn add_toplevel(&mut self, shell: Shell) {

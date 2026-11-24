@@ -677,6 +677,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final com.termux.app.statusbar.StatusCardHost mStatusCardHost =
         new com.termux.app.statusbar.StatusCardHost();
     @Nullable private com.termux.app.wall.PaneWallController mPaneWallController;
+    /** The Linux windows in the row under Wayland Display (spec #384); null in a build without them. */
+    @Nullable private com.termux.app.wayland.LinuxWindowsController mLinuxWindows;
     /** The saved state an activity recreation brings the wall's row position back from. */
     @Nullable private Bundle mPendingWallState;
     /** Whether a home press came while the launcher was in front, or brings it back from away. */
@@ -1044,6 +1046,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             case HOME: return com.termux.app.launcher.home.HomeRest.of(in);
             case TERMINAL: return com.termux.app.terminal.TerminalRest.of(in);
             case DISPLAY: return com.termux.app.x11.DisplayRest.of(in);
+            // A Linux window rests as a terminal window does (LinuxWindowPageView#rest).
+            case LINUX: return com.termux.app.terminal.TerminalRest.of(in);
             default: return com.termux.app.assistant.AssistantRest.of(in);
         }
     }
@@ -11691,6 +11695,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.wall.pageswitch.PageGlyphSource.uninstall(mPageGlyphProvider);
         mLayoutsRelayoutHandler.removeCallbacks(mLayoutsRelayout);
         mLandedFrameSettle.drop();
+        if (mLinuxWindows != null) {
+            com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(null);
+            mLinuxWindows.stop();
+            mLinuxWindows = null;
+        }
         unregisterRotationListener();
         if (mPageBar != null) mPageBar.close();
         // The package listeners live as long as the activity so an install made while another
@@ -27290,6 +27299,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         // The constructor's own pass ran before the Terminal seam was there: its restore is asked now.
         mPaneWallController.refreshPages();
+        attachLinuxWindows();
         mPaneWallController.setLanding(new com.termux.app.wall.WallLanding() {
             @Override public void landed(
                     @NonNull com.termux.app.page.PageKind page) {
@@ -29940,7 +29950,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mDisplayWindowIcons == null) {
             mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
                 (wmClass, icon, name) -> {
-                    if ((icon == null && name == null) || !isDisplayUp()
+                    // A Linux window's chip dresses as its icon or name resolves, not at the next refresh.
+                    boolean linuxChips = mLinuxWindows != null && !mLinuxWindows.chips().isEmpty();
+                    if ((icon == null && name == null) || !(isDisplayUp() || linuxChips)
                         || !isSplitPanesEnabled()) return;
                     com.termux.app.terminal.TerminalWindowBar bar =
                         findViewById(R.id.terminal_window_bar);
@@ -30789,6 +30801,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                               int index, boolean close) {
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isSplitPanesEnabled())
             return;
+        if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && onLinuxWindowChip(index, close))
+            return;
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && isDisplayWindowInFront()) {
             // #192: on a Display page the bar's chips are the display's apps.
             if (!mDisplayServer.hasWindowList()) return;
@@ -30829,6 +30843,89 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             default:
         }
+    }
+
+    // ---- Linux windows (spec #384): the seam is LinuxWindowsController; this only lends it the wall.
+
+    /** Builds the Linux windows' controller and hands its view to the wall: Wayland builds only. */
+    private void attachLinuxWindows() {
+        if (!com.termux.BuildConfig.WAYLAND_DISPLAY || mPaneWallController == null || mLinuxWindows != null) return;
+        mLinuxWindows = new com.termux.app.wayland.LinuxWindowsController(this,
+            new com.termux.app.wayland.LinuxWindowsController.Host() {
+                @Override public int addPage(int afterId) {
+                    com.termux.app.wall.WallPages.Result r = wallPagesStore().edit(
+                        pages -> pages.addLinuxWindow(afterId));
+                    return r.ok() && r.page != null ? r.page.id : -1;
+                }
+                @Override public void removePage(int pageId) {
+                    editWallPages(pages -> pages.remove(pageId));
+                    wallPagesStore().commitRemoval(pageId);
+                }
+                @Override public void removeAllPages() {
+                    wallPagesStore().transform(com.termux.app.wall.WallPages::withoutLinuxWindows);
+                }
+                @Override public int leftOf(int pageId) {
+                    com.termux.app.wall.WallPages.Page left = wallPages().leftOf(pageId);
+                    return left == null ? -1 : left.id;
+                }
+                @Override public boolean hasPage(int pageId) {
+                    return pageId >= 0 && wallPages().page(pageId) != null;
+                }
+                @Override public int currentPageId() {
+                    return mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
+                }
+                @Nullable @Override public com.termux.app.page.PageKind currentKind() {
+                    return mPaneWallController == null ? null : mPaneWallController.currentPage();
+                }
+                @Override public int terminalPageId() {
+                    com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
+                    return terminal == null ? -1 : terminal.id;
+                }
+                @Override public void goToPage(int pageId) {
+                    if (mPaneWallController != null) mPaneWallController.goToPageId(pageId, isVisible());
+                }
+                @Override public void keepPicture(int pageId, @Nullable android.graphics.Bitmap picture) {
+                    if (mPaneWallController != null) mPaneWallController.keepPicture(pageId, picture);
+                    else if (picture != null) picture.recycle();
+                }
+                @Override public void notice(@NonNull String text) { showToast(text, true); }
+                @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
+                @Nullable @Override public String appName(@NonNull String appId) {
+                    com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+                    return apps == null ? null : apps.nameFor(appId);
+                }
+            });
+        mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows.page(), mLinuxWindows);
+        com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
+        mLinuxWindows.start();
+    }
+
+    /**
+     * The bar's Linux window chips, after the terminal windows' (spec #384): the app's name and
+     * icon. The selection moves to the Linux window in front; the bar's own otherwise.
+     */
+    private int addLinuxWindowItems(
+            @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
+            int selected) {
+        if (mLinuxWindows == null) return selected;
+        com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
+        for (com.termux.app.wayland.LinuxWindowsController.Chip chip : mLinuxWindows.chips()) {
+            if (chip.front) selected = items.size();
+            items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(chip.label, chip.label)
+                .withIcon(apps == null || chip.appId.isEmpty() ? null : apps.iconFor(chip.appId)));
+        }
+        return selected;
+    }
+
+    /** A tap or × on a bar chip past the terminal windows' is a Linux window's; false otherwise. */
+    private boolean onLinuxWindowChip(int index, boolean close) {
+        if (mLinuxWindows == null || mPaneController == null || isDisplayWindowInFront()) return false;
+        int at = index - windowChips().count(com.termux.app.chrome.WindowChips.Surface.BAR);
+        java.util.List<com.termux.app.wayland.LinuxWindowsController.Chip> chips = mLinuxWindows.chips();
+        if (at < 0 || at >= chips.size()) return false;
+        long id = chips.get(at).id;
+        if (close) mLinuxWindows.closeChip(id); else mLinuxWindows.tapChip(id);
+        return true;
     }
 
     /** True when any pane of the current session's window at {@code index} is running something. */
@@ -31274,6 +31371,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (isDisplayWindowInFront()) {
             items = displayAppItems();
             selected = displayAppChips().selected();
+        } else {
+            selected = addLinuxWindowItems(items, selected);
         }
         // The row's own windows can be dragged to reorder, the display window's chip with them:
         // not the Home floats' after them. The same on both halves.

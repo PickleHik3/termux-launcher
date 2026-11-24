@@ -50,7 +50,9 @@ public final class PageGlyphSlots {
         switch (kind) {
             case HOME: return HOME_OUTLINE;
             case TERMINAL: return TERMINAL_OUTLINE;
-            case DISPLAY: return DISPLAY_OUTLINE;
+            case DISPLAY:
+            // A Linux window wears the display's glyph: both are Linux apps.
+            case LINUX: return DISPLAY_OUTLINE;
             default: return ASSISTANT_OUTLINE;
         }
     }
@@ -66,7 +68,8 @@ public final class PageGlyphSlots {
         switch (kind) {
             case HOME: return HOME_BOX;
             case TERMINAL: return TERMINAL_BOX;
-            case DISPLAY: return DISPLAY_BOX;
+            case DISPLAY:
+            case LINUX: return DISPLAY_BOX;
             default: return ASSISTANT_BOX;
         }
     }

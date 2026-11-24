@@ -40,6 +40,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         String appId;
         int clientPid;
         int flags;
+        /** The window this one is a dialog of; 0 for none. */
+        long parentId;
         int width;
         int height;
     }
@@ -335,7 +337,7 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
             for (int i = 0; i < mWindows.size(); i++) {
                 long id = mWindows.keyAt(i);
                 Window w = mWindows.valueAt(i);
-                callback.onWindowCreated(id, w.title, w.appId, w.clientPid, w.flags);
+                callback.onWindowCreated(id, w.title, w.appId, w.clientPid, w.flags, w.parentId);
                 callback.onWindowChanged(id, w.title, w.appId, w.width, w.height);
             }
         } catch (RemoteException e) {
@@ -363,14 +365,15 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     // WaylandHost.Listener: compositor events, on the main thread.
 
     @Override
-    public void onWindowCreated(long id, String title, String appId, int clientPid, int flags) {
+    public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
         Window w = new Window();
+        w.parentId = parentId;
         w.title = title;
         w.appId = appId;
         w.clientPid = clientPid;
         w.flags = flags;
         mWindows.put(id, w);
-        broadcast(cb -> cb.onWindowCreated(id, title, appId, clientPid, flags));
+        broadcast(cb -> cb.onWindowCreated(id, title, appId, clientPid, flags, parentId));
     }
 
     @Override

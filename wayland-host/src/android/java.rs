@@ -32,7 +32,8 @@ pub struct JavaCallbacks {
 
 /// The compositor thread's view of Java: what it reports about windows.
 pub trait HostEvents {
-    fn window_created(&mut self, id: i64, title: &str, app_id: &str, pid: i32, flags: i32);
+    /// `parent`: the id of the window this one is a dialog of (xdg parent, X11 transient-for), 0 for none.
+    fn window_created(&mut self, id: i64, title: &str, app_id: &str, pid: i32, flags: i32, parent: i64);
     fn window_changed(&mut self, id: i64, title: &str, app_id: &str, width: i32, height: i32);
     fn window_destroyed(&mut self, id: i64);
     /// The X display Xwayland got (":0"), or "" when it is gone.
@@ -46,7 +47,7 @@ impl JavaCallbacks {
         let local = env.find_class(HOST_CLASS)?;
         let strings = "(JLjava/lang/String;Ljava/lang/String;II)V";
         let methods = Methods {
-            created: env.get_static_method_id(&local, "onWindowCreated", strings)?,
+            created: env.get_static_method_id(&local, "onWindowCreated", "(JLjava/lang/String;Ljava/lang/String;IIJ)V")?,
             changed: env.get_static_method_id(&local, "onWindowChanged", strings)?,
             destroyed: env.get_static_method_id(&local, "onWindowDestroyed", "(J)V")?,
             ended: env.get_static_method_id(&local, "onHostEnded", "(Z)V")?,
@@ -113,9 +114,13 @@ fn strings_and_ints(env: &mut JNIEnv, id: i64, a: &str, b: &str, x: i32, y: i32)
 }
 
 impl HostEvents for AttachedCallbacks {
-    fn window_created(&mut self, id: i64, title: &str, app_id: &str, pid: i32, flags: i32) {
+    fn window_created(&mut self, id: i64, title: &str, app_id: &str, pid: i32, flags: i32, parent: i64) {
         let m = self.methods.created;
-        call(&mut self.env, &self.class, m, |env| strings_and_ints(env, id, title, app_id, pid, flags));
+        call(&mut self.env, &self.class, m, |env| {
+            let mut args = strings_and_ints(env, id, title, app_id, pid, flags)?;
+            args.push(jvalue { j: parent });
+            Ok(args)
+        });
     }
 
     fn window_changed(&mut self, id: i64, title: &str, app_id: &str, width: i32, height: i32) {
