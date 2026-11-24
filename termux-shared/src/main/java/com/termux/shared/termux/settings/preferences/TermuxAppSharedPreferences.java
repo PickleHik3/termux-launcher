@@ -1047,6 +1047,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_PAGE_BAR_LOOK, value, false);
     }
 
+    /** Where the status bar stands, as stored ({@link TERMUX_APP#KEY_STATUS_PLACE}). */
+    public String getStatusPlace() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_STATUS_PLACE, TERMUX_APP.DEFAULT_STATUS_PLACE, false);
+    }
+
+    public void setStatusPlace(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_STATUS_PLACE, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);

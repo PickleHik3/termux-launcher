@@ -762,6 +762,16 @@ public final class TermuxPreferenceConstants {
         public static final String PAGE_BAR_LOOK_MARKS = "marks";
         public static final String DEFAULT_PAGE_BAR_LOOK = PAGE_BAR_LOOK_GLYPHS;
 
+        /**
+         * Where the status bar stands: {@link #STATUS_PLACE_STRIP} (its own strip) or
+         * {@link #STATUS_PLACE_PANE} (a thin row inside the top pane). One global value; absent
+         * reads the strip, which every install, new or existing, keeps ({@code StatusPlace}).
+         */
+        public static final String KEY_STATUS_PLACE = "status_place";
+        public static final String STATUS_PLACE_STRIP = "strip";
+        public static final String STATUS_PLACE_PANE = "pane";
+        public static final String DEFAULT_STATUS_PLACE = STATUS_PLACE_STRIP;
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 
