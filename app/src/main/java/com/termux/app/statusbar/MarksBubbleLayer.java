@@ -35,6 +35,10 @@ final class MarksBubbleLayer extends Drawable {
     static final float MARGIN_DP = 16f;
     private static final float PADDING_DP = 14f;
     private static final float MAX_WIDTH_DP = 220f;
+    /** The name's text size, in sp. */
+    private static final float TEXT_SP = 14f;
+    /** The bubble's disc is never lifted: it is the page's mark at rest. */
+    private static final float AT_REST = 0f;
 
     private final float mHeight;
     private final float mPadding;
@@ -62,7 +66,7 @@ final class MarksBubbleLayer extends Drawable {
         mHeight = HEIGHT_DP * density;
         mPadding = PADDING_DP * density;
         mMaxWidth = MAX_WIDTH_DP * density;
-        mText.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14f,
+        mText.setTextSize(TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, TEXT_SP,
             context.getResources().getDisplayMetrics()));
         mText.setTypeface(Typeface.create("sans-serif-medium", Typeface.NORMAL));
         Paint.FontMetrics fm = mText.getFontMetrics();
@@ -128,7 +132,7 @@ final class MarksBubbleLayer extends Drawable {
         mRect.set(mLeft, mTop, mLeft + mWidth, mTop + mHeight);
         mFill.setAlpha(Math.round(255 * Math.min(1f, mAppear)));
         canvas.drawRoundRect(mRect, mHeight / 2f, mHeight / 2f, mFill);
-        mLook.draw(canvas, mKind, mNumber, true, 0f, mLeft + mHeight / 2f, cy, mHeight * 0.55f, mDisc);
+        mLook.draw(canvas, mKind, mNumber, true, AT_REST, mLeft + mHeight / 2f, cy, mHeight * 0.55f, mDisc);
         if (mShown.length() > 0) {
             canvas.drawText(mShown, 0, mShown.length(), mLeft + mHeight, cy + mBaseline, mText);
         }

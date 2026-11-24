@@ -91,6 +91,8 @@ public final class MarksLineView extends View {
     @Nullable private ViewGroup mBubbleHost;
     @Nullable private ValueAnimator mAppearAnimator;
     private static final long APPEAR_MS = 120L;
+    /** The lift a mark is drawn with on the line: none, the marks stand at rest. */
+    private static final float AT_REST = 0f;
     /** 0 at rest, 1 once the slide's lift has come in; the envelope's {@code enter}. */
     private float mAppear;
     private final int[] mLoc = new int[2];
@@ -333,10 +335,10 @@ public final class MarksLineView extends View {
             float cy = mVertical ? along : cross;
             int ink = slot.current ? mInk.current : mInk.other;
             if (slot.folded()) {
-                mLook.drawStack(canvas, slot.kind, slot.count, slot.current, 0f, cx, cy, markSize,
+                mLook.drawStack(canvas, slot.kind, slot.count, slot.current, AT_REST, cx, cy, markSize,
                     ink, mInk.other);
             } else {
-                mLook.draw(canvas, slot.kind, slot.number, slot.current, 0f, cx, cy, markSize, ink);
+                mLook.draw(canvas, slot.kind, slot.number, slot.current, AT_REST, cx, cy, markSize, ink);
             }
             if (line.attention(i)) mLook.drawBurst(canvas, cx, cy, markSize, mInk.attention);
         }
