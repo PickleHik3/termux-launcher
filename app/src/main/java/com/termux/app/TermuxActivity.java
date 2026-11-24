@@ -626,6 +626,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Built once; read live by the notice pill and the sessions drawer. */
     @Nullable private TerminalDress.Source mTerminalDressSource;
     private final Handler mWindowLabelHandler = new Handler(Looper.getMainLooper());
+    /** Carries a Settings refresh onto the main thread for {@code SettingsRefreshHost}. */
+    private final Handler mSettingsRefreshHandler = new Handler(Looper.getMainLooper());
     /** Lets the motion invariants close a crossing's window after its settle; posted only while the Motion log is on. */
     private final Handler mMotionInvariantHandler = new Handler(Looper.getMainLooper());
     private final Runnable mMotionInvariantTick = MotionLog::tick;
@@ -1138,7 +1140,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void post(@NonNull Runnable work) {
-            getWindow().getDecorView().post(work);
+            mSettingsRefreshHandler.post(work);
         }
 
         @Override public void restyle(boolean recreate) {

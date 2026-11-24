@@ -121,7 +121,7 @@ final class DeviceControlRoutes {
             case "/v1/layout":
                 return layout(context, arguments);
             case "/v1/config":
-                return ConfigCommand.handleInOneHop(LauncherSettings.registry(context),
+                return ConfigCommand.handleInOneHop(LauncherSettings.registry(context, LauncherCtlAdapters::forDevice),
                     LauncherSettings.applier(), arguments, LayoutSettingsAdapter.DEVICE);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
