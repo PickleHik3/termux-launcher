@@ -1124,6 +1124,34 @@ The pill's discard: it stops listening if need be, throws the text away and clos
 of the card is the same. It never means stop.
 _Avoid_: close (on its own), bin (retired)
 
+### Settings
+
+The words for the launcher's own settings and the one list of them (spec #311). Nothing here is
+built yet; these are the names the build uses.
+
+**Settings registry**:
+The one list of the launcher's settings. Settings rows, the Appearance editor, `launcherctl config`,
+backup restore, resets and the Assistant all read and save a setting through it. A save returns a
+Change (old and new value) or a Refusal (the reason and the allowed values). Storage does not move:
+it reads and writes the stores and keys the settings already use. Its index (lookup by id, titles,
+complaint phrases) builds only when something asks for it, never at start-up.
+_Avoid_: settings service, config (the file and the command are faces of it, not the source)
+
+**Setting declaration**:
+One setting written down once: its dotted id (`terminal.contrast`), kind and range or choices,
+default, store and key, refresh, reset group, the complaints it answers, whether the Assistant may
+offer it and whether it is exported. A declaration is a constant, so the store's getters take their
+range from it and each range is written once. The look grid, the layout documents and the font
+sizes (whose key follows the display and whose range follows the screen's density) are reached
+through adapters instead of one declaration per value.
+_Avoid_: entry, setting definition
+
+**Settings applier**:
+Carries out the refresh a setting declaration names after a save: at once while the launcher is on
+screen, otherwise when it next comes back. A declaration whose key a preference listener already
+refreshes says so, and the applier adds nothing.
+_Avoid_: styling request (one of the refreshes it can run), refresh manager
+
 ### Project and process
 
 The words for how the project is built, shipped and tested. AGENTS.md has the rules; these are the names.
