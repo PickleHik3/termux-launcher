@@ -254,4 +254,16 @@ public class SessionRowTest {
         row.terminalAdded(terms, "new");
         assertEquals("L12 new", order());
     }
+
+    @Test
+    public void addAtEndStandsAfterTheLastTerminalWindowAndLinuxWindows() {
+        row.add(terms, 2, FIREFOX);
+        row.addAtEnd(terms, GTK);
+        assertEquals("t1 t2 t3 L11 L12", order());
+        terms.clear();
+        SessionRow<String> empty = new SessionRow<>();
+        empty.addAtEnd(terms, XTERM);
+        assertEquals(1, empty.count(terms));
+        assertEquals(XTERM, empty.linuxAt(terms, 0));
+    }
 }

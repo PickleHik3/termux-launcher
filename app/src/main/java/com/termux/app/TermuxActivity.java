@@ -31134,33 +31134,58 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mLinuxWindows = new com.termux.app.wayland.LinuxWindowsController(this,
             new com.termux.app.wayland.LinuxWindowsController.Host() {
                 @Override public void addWindow(long id, boolean goTo) {
-                    WSession ws = mCurrentWSession;
-                    if (ws == null) return;
+                    // No current session: the one shown next takes it; with no session at all it
+                    // waits for the first (syncLinuxFront places it).
+                    int at = com.termux.app.terminal.LinuxWindowHoming.sessionForNew(
+                        mWSessions.indexOf(mCurrentWSession), mWSessions.size());
+                    if (at < 0) {
+                        mUnplacedLinuxWindows.add(id);
+                        return;
+                    }
+                    WSession ws = mWSessions.get(at);
                     ws.row.add(ws.windows, ws.current, id);
-                    if (goTo) goToLinuxWindow(id);
+                    if (goTo && ws == mCurrentWSession) goToLinuxWindow(id);
                     else onLinuxRowChanged();
                 }
                 @Override public void removeWindow(long id) {
                     removeLinuxWindow(id);
                 }
                 @Override public void removeAllWindows() {
+                    mUnplacedLinuxWindows.clear();
                     for (WSession ws : mWSessions) ws.row.clearLinux();
                     if (mCurrentWSession != null) mCurrentWSession.row.clearLinux();
                     onLinuxRowChanged();
                 }
                 @Nullable @Override public Object placeOf(long id) {
+                    // The place carries its session: the window goes back to that row.
                     WSession ws = sessionWithLinuxWindow(id);
-                    return ws == null ? null : ws.row.placeOf(ws.windows, id);
+                    if (ws == null) return null;
+                    return new com.termux.app.terminal.LinuxWindowHoming.Minimised<>(ws,
+                        ws.row.placeOf(ws.windows, id));
                 }
                 @SuppressWarnings("unchecked")
                 @Override public void restoreWindow(long id, @Nullable Object place) {
-                    WSession ws = mCurrentWSession;
-                    if (ws == null) return;
-                    ws.row.restore(ws.windows, ws.current, id, place instanceof
-                        com.termux.app.terminal.SessionRow.Place
-                        ? (com.termux.app.terminal.SessionRow.Place<
-                            com.termux.app.terminal.TerminalPaneController.Window>) place : null);
-                    goToLinuxWindow(id);
+                    com.termux.app.terminal.LinuxWindowHoming.Minimised<WSession,
+                        com.termux.app.terminal.TerminalPaneController.Window> from =
+                        place instanceof com.termux.app.terminal.LinuxWindowHoming.Minimised
+                            ? (com.termux.app.terminal.LinuxWindowHoming.Minimised<WSession,
+                                com.termux.app.terminal.TerminalPaneController.Window>) place
+                            : null;
+                    WSession origin = from == null ? null : from.session;
+                    WSession target = com.termux.app.terminal.LinuxWindowHoming.sessionForRestore(
+                        origin, mWSessions, mCurrentWSession);
+                    if (target == null) {
+                        mUnplacedLinuxWindows.add(id);
+                        return;
+                    }
+                    if (from != null && com.termux.app.terminal.LinuxWindowHoming.atOldPlace(
+                            origin, target)) {
+                        target.row.restore(target.windows, target.current, id, from.place);
+                    } else {
+                        target.row.addAtEnd(target.windows, id);
+                    }
+                    if (target == mCurrentWSession) goToLinuxWindow(id);
+                    else onLinuxRowChanged();
                 }
                 @Override public void goToWindow(long id) {
                     goToLinuxWindow(id);
@@ -31180,6 +31205,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The Linux window {@link #syncLinuxFront} last stood in front; 0 for none. */
     private long mLinuxFrontSynced;
 
+    /** Linux windows that opened while no session existed: they join the first session that appears. */
+    private final java.util.ArrayList<Long> mUnplacedLinuxWindows = new java.util.ArrayList<>();
+
     /**
      * Stands the Linux window in front of the current row, if any, in the Terminal page's place,
      * and tells the Linux windows which one the view shows and whether it holds its surface: the
@@ -31189,6 +31217,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncLinuxFront() {
         if (mLinuxWindows == null || mPaneWallController == null) return;
         WSession ws = mCurrentWSession;
+        if (ws != null && !mUnplacedLinuxWindows.isEmpty()) {
+            for (long id : mUnplacedLinuxWindows) ws.row.add(ws.windows, ws.current, id);
+            mUnplacedLinuxWindows.clear();
+        }
         long front = linuxWindowInFront();
         int frontPlace = rowCurrentIndex();
         long bound = front;
@@ -31229,6 +31261,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * terminal window closes ({@code SessionRow#remove}).
      */
     private void removeLinuxWindow(long id) {
+        mUnplacedLinuxWindows.remove(Long.valueOf(id));
         WSession ws = sessionWithLinuxWindow(id);
         if (ws == null) return;
         boolean wasFront = ws == mCurrentWSession && linuxWindowInFront() == id;

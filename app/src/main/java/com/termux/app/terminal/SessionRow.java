@@ -215,6 +215,14 @@ public final class SessionRow<T> {
         return Math.max(0, Math.min(terminalCurrent, terminals.size() - 1)) + 1;
     }
 
+    /** Adds Linux window {@code id} at the row's end, after the last terminal window and every Linux window. */
+    public void addAtEnd(@NonNull List<T> terminals, long id) {
+        if (id == NONE || find(id) >= 0) return;
+        heal(terminals);
+        T after = terminals.isEmpty() ? null : terminals.get(terminals.size() - 1);
+        mLinux.add(new Entry<>(id, after));
+    }
+
     /**
      * Terminal window {@code added} was put in the list at {@link #newTerminalIndex}: the Linux
      * windows that stood after the window in front now follow it, so it stands right after that
