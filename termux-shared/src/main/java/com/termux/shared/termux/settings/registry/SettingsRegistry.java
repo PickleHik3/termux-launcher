@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -18,6 +19,7 @@ public final class SettingsRegistry {
 
     @NonNull private final SettingStore.Stores mStores;
     @NonNull private final List<SettingDeclaration> mDeclarations;
+    @NonNull private final List<SettingAdapter> mAdapters;
     @Nullable private Map<String, SettingDeclaration> mIndex;
 
     /** The launcher's declarations ({@link SettingDeclarations#ALL}) over {@code stores}. */
@@ -27,8 +29,16 @@ public final class SettingsRegistry {
 
     public SettingsRegistry(@NonNull SettingStore.Stores stores,
                             @NonNull List<SettingDeclaration> declarations) {
+        this(stores, declarations, Collections.emptyList());
+    }
+
+    /** As above, and {@code adapters} answer for the ids the declarations do not name. */
+    public SettingsRegistry(@NonNull SettingStore.Stores stores,
+                            @NonNull List<SettingDeclaration> declarations,
+                            @NonNull List<SettingAdapter> adapters) {
         mStores = stores;
         mDeclarations = declarations;
+        mAdapters = adapters;
     }
 
     /** The declaration {@code id} names, or null for an unknown id. */
@@ -39,14 +49,33 @@ public final class SettingsRegistry {
             for (SettingDeclaration each : mDeclarations) index.put(each.id, each);
             mIndex = index;
         }
-        return id == null ? null : mIndex.get(id);
+        if (id == null) return null;
+        SettingDeclaration own = mIndex.get(id);
+        if (own != null) return own;
+        for (SettingAdapter adapter : mAdapters) {
+            SettingDeclaration adapted = adapter.declaration(id);
+            if (adapted != null) return adapted;
+        }
+        return null;
+    }
+
+    /** The adapter answering for {@code declaration}, or null when the registry's own does. */
+    @Nullable
+    private SettingAdapter adapterOf(@NonNull SettingDeclaration declaration) {
+        if (mIndex != null && mIndex.get(declaration.id) == declaration) return null;
+        for (SettingAdapter adapter : mAdapters) {
+            if (adapter.declaration(declaration.id) != null) return adapter;
+        }
+        return null;
     }
 
     /** The current value of {@code id} as text, or null for an unknown id. */
     @Nullable
     public String get(@Nullable String id) {
         SettingDeclaration declaration = declaration(id);
-        return declaration == null ? null : read(declaration);
+        if (declaration == null) return null;
+        SettingAdapter adapter = adapterOf(declaration);
+        return adapter == null ? read(declaration) : adapter.get(declaration);
     }
 
     /**
@@ -58,6 +87,8 @@ public final class SettingsRegistry {
     public Outcome set(@Nullable String id, @Nullable String value) {
         SettingDeclaration declaration = declaration(id);
         if (declaration == null) return unknown(id);
+        SettingAdapter adapter = adapterOf(declaration);
+        if (adapter != null) return adapter.set(declaration, value == null ? "" : value);
         String normal = normalized(declaration, value);
         return normal == null ? outside(declaration) : write(declaration, normal);
     }
@@ -70,6 +101,8 @@ public final class SettingsRegistry {
     public Refusal check(@Nullable String id, @Nullable String value) {
         SettingDeclaration declaration = declaration(id);
         if (declaration == null) return unknown(id);
+        SettingAdapter adapter = adapterOf(declaration);
+        if (adapter != null) return adapter.check(declaration, value == null ? "" : value);
         return normalized(declaration, value) == null ? outside(declaration) : null;
     }
 
@@ -97,6 +130,9 @@ public final class SettingsRegistry {
     public synchronized Outcome step(@Nullable String id, @NonNull Direction direction) {
         SettingDeclaration declaration = declaration(id);
         if (declaration == null) return unknown(id);
+        if (adapterOf(declaration) != null)
+            return new Refusal(declaration.id + " has no step; set it to a value",
+                declaration.allowed());
         if (declaration.kind == SettingDeclaration.Kind.CHOICE && !declaration.ordered)
             return new Refusal(declaration.id + " has no order; it is one of "
                 + declaration.allowed(), declaration.allowed());
@@ -135,6 +171,10 @@ public final class SettingsRegistry {
     public List<Entry> list() {
         List<Entry> entries = new ArrayList<>(mDeclarations.size());
         for (SettingDeclaration each : mDeclarations) entries.add(new Entry(each, read(each)));
+        for (SettingAdapter adapter : mAdapters) {
+            for (SettingDeclaration each : adapter.declarations())
+                entries.add(new Entry(each, adapter.get(each)));
+        }
         return entries;
     }
 
@@ -209,7 +249,7 @@ public final class SettingsRegistry {
         @NonNull public final String oldValue;
         @NonNull public final String newValue;
 
-        Change(@NonNull SettingDeclaration declaration, @NonNull String oldValue,
+        public Change(@NonNull SettingDeclaration declaration, @NonNull String oldValue,
                @NonNull String newValue) {
             this.declaration = declaration;
             this.id = declaration.id;
@@ -229,7 +269,7 @@ public final class SettingsRegistry {
         /** The allowed range or choices ({@code 80–150}); null when the id itself is unknown. */
         @Nullable public final String allowed;
 
-        Refusal(@NonNull String reason, @Nullable String allowed) {
+        public Refusal(@NonNull String reason, @Nullable String allowed) {
             this.reason = reason;
             this.allowed = allowed;
         }

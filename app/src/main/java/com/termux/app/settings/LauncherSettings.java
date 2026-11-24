@@ -9,6 +9,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingRefresh;
 import com.termux.shared.termux.settings.registry.SettingStore;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
@@ -39,7 +40,8 @@ public final class LauncherSettings {
         if (sRegistry == null) {
             Context app = context.getApplicationContext() != null
                 ? context.getApplicationContext() : context;
-            sRegistry = new SettingsRegistry(new DeviceStores(app));
+            sRegistry = new SettingsRegistry(new DeviceStores(app), SettingDeclarations.ALL,
+                com.termux.launcherctl.LauncherCtlAdapters.forDevice(app));
         }
         return sRegistry;
     }
