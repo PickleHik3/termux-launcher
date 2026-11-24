@@ -198,7 +198,9 @@ public class RestCardsTest {
         assertEquals(top, dock.box.bottom, 0f);
         assertEquals(top, card.box.top, 0f);
         assertEquals(foot.heightPx, card.box.bottom, 0f);
-        assertEquals(StackView.HOST, card.view);
+        // The Terminal's host wears the same foot at its rest: one shared card on its own view.
+        assertEquals(StackView.FOOT, card.view);
+        assertEquals(EdgeKind.JOIN, dock.edge(Edge.BOTTOM));
         assertEquals(EdgeKind.JOIN, card.edge(Edge.TOP));
         assertEquals(EdgeKind.SCREEN, card.edge(Edge.BOTTOM));
     }
@@ -376,18 +378,22 @@ public class RestCardsTest {
                     RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, false));
                     String want = cardsOn(alone.cards(), StackView.HOST);
                     // A Terminal with no card at its rest (#305) shows none.
-                    assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
+                    // A foot both hosts wear at one rect is the foot's own view's (#307), shared.
+                    assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST)
+                        + cardsOn(terminal.cards(), StackView.FOOT));
                     assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
                     // Parked with the Terminal while Home is in front, at the same rest.
                     RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, false));
                     assertEquals(label + " parked", want,
-                        cardsOn(home.parked(), StackView.TERMINAL_HOST));
+                        cardsOn(home.parked(), StackView.TERMINAL_HOST)
+                            + cardsOn(home.cards(), StackView.FOOT));
                     assertEquals(label + " laid out", terminal.laidOut(StackView.TERMINAL_HOST),
                         home.laidOut(StackView.TERMINAL_HOST));
                     // Home's card at Home's rest is the one host's there.
                     RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, false));
                     assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
-                        cardsOn(home.cards(), StackView.HOST));
+                        cardsOn(home.cards(), StackView.HOST) + cardsOn(home.cards(),
+                            StackView.FOOT));
                     if (want.contains("FOOT")) feet++;
                     cases++;
                 }
@@ -568,5 +574,67 @@ public class RestCardsTest {
             cases++;
         }
         assertTrue("some rests draw two keyboard cards", cases > 0);
+    }
+
+    /**
+     * The foot under the gesture pill that both sides' hosts wear at one rect while the cards
+     * stand apart is one shared card on a view of its own (#307, ADR 0032 2026-11-24): laid out
+     * the same at both rests, each host laid out to stop at its top and drawn meeting it there
+     * (no line, no gap), and never under Floating, where no host wears a foot.
+     */
+    @Test public void aFootBothHostsWearIsOneSharedCardOnItsOwnViewAndEachHostStopsAtItsTop() {
+        int shared = 0;
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : new boolean[] {false, true})
+                for (boolean homeUp : new boolean[] {false, true})
+                    for (boolean terminalUp : new boolean[] {false, true}) {
+            String label = f.name + " " + f.homeDesign + (floating ? " FLOATING" : " DOCKED")
+                + " home kb=" + homeUp + " terminal kb=" + terminalUp;
+            RestCards atHome = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, terminalUp,
+                floating));
+            RestCards atTerminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, terminalUp, homeUp,
+                floating));
+            if (floating) {
+                assertNull(label, atHome.laidOut(StackView.FOOT));
+                assertNull(label, atTerminal.laidOut(StackView.FOOT));
+                continue;
+            }
+            assertEquals(label + " one foot view at both rests",
+                String.valueOf(atHome.laidOut(StackView.FOOT)),
+                String.valueOf(atTerminal.laidOut(StackView.FOOT)));
+            if (atHome.laidOut(StackView.FOOT) == null) {
+                // Not shared: no foot on the foot's view, a host's foot stays on its host.
+                assertNull(label, atHome.cardOn(StackView.FOOT));
+                assertNull(label, atTerminal.cardOn(StackView.FOOT));
+                continue;
+            }
+            shared++;
+            for (RestCards cards : new RestCards[] {atHome, atTerminal}) {
+                RestCards.Card foot = cards.cardOn(StackView.FOOT);
+                assertNotNull(label, foot);
+                assertEquals(label, CardId.FOOT, foot.id);
+                for (StackView host : new StackView[] {StackView.HOST, StackView.TERMINAL_HOST}) {
+                    RestCards.Card card = cards.cardOn(host);
+                    ChromeShape.Box laid = cards.laidOut(host);
+                    assertNotNull(label + " " + host, card);
+                    assertNotNull(label + " " + host, laid);
+                    // Each host stops at the foot's top: drawn meeting it, laid out no taller.
+                    assertEquals(label + " " + host + " meets the foot", foot.box.top,
+                        card.box.bottom, 0f);
+                    assertEquals(label + " " + host + " stops at the foot", card.box.height(),
+                        laid.height(), 0f);
+                    assertEquals(label + " " + host, EdgeKind.JOIN, card.edge(Edge.BOTTOM));
+                }
+            }
+        }
+        assertTrue("some Docked rests share the foot", shared > 0);
+    }
+
+    /** The foot a host of {@code cards} draws on its own view, or null. */
+    private static RestCards.Card hostFoot(RestCards cards) {
+        for (RestCards.Card card : cards.cards())
+            if (card.id == CardId.FOOT && (card.view == StackView.HOST
+                || card.view == StackView.TERMINAL_HOST)) return card;
+        return null;
     }
 }

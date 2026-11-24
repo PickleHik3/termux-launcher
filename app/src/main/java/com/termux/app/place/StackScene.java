@@ -320,7 +320,16 @@ public final class StackScene {
         RestCards.StackView.KEYBOARD_COLUMN.ordinal(),
         RestCards.StackView.FLOATING_KEYBOARD.ordinal(), RestCards.StackView.AZ_EDGE.ordinal(),
         RestCards.StackView.TERMINAL_AZ_EDGE.ordinal(),
-        RestCards.StackView.TERMINAL_KEYBOARD.ordinal()};
+        RestCards.StackView.TERMINAL_KEYBOARD.ordinal(), RestCards.StackView.FOOT.ordinal()};
+    private static final int FOOT_VIEW = RestCards.StackView.FOOT.ordinal();
+
+    /**
+     * Whether view {@code v} rides the glass host's sheet layer: the host, and the foot's own view
+     * (#307), the bottom of what the host wore, posed as the host's sheet is with no side's slide.
+     */
+    private static boolean sheet(int v) {
+        return v == HOST_VIEW || v == FOOT_VIEW;
+    }
     /**
      * The card views no layer of the stack carries (#307): the keyboard's column, the floating
      * keyboard's frame and the A–Z bar's edge host. Their cards are the stack's own, so the scene
@@ -381,7 +390,7 @@ public final class StackScene {
         StackEnd near = p < 0.5f ? from : to;
         for (int v : CARD_VIEWS) {
             boolean host = v == HOST_VIEW;
-            float base = host ? out.ty[V_HOST] : ownPlace(v) ? 0f : out.ty[V_ROWS];
+            float base = sheet(v) ? out.ty[V_HOST] : ownPlace(v) ? 0f : out.ty[V_ROWS];
             int sideFrom = from.viewSide[v];
             int sideTo = to.viewSide[v];
             boolean shared = from.sameCard(to, v);
@@ -394,7 +403,7 @@ public final class StackScene {
                 // The stack's own, or a card both ends draw alike: it keeps its rest.
                 float rest = edgeHost(v) ? 0f : blend(from.sideRestTyPx(sideFrom),
                     to.sideRestTyPx(sideTo), materialShare(p));
-                float cover = host ? out.coverSharedPx : 0f;
+                float cover = sheet(v) ? out.coverSharedPx : 0f;
                 out.cardSide[v] = shared ? side : StackEnd.STACK_SIDE;
                 out.cardTy[v] = base + rest + cover;
                 out.cardCoverPx[v] = cover;

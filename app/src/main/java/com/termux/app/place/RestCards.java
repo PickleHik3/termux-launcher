@@ -139,7 +139,14 @@ public final class RestCards {
          * Home's, on {@link #KEYBOARD_COLUMN}, travels with Home. One keyboard's keys: the card
          * holds no second keyboard's pixels.
          */
-        TERMINAL_KEYBOARD(Side.TERMINAL);
+        TERMINAL_KEYBOARD(Side.TERMINAL),
+        /**
+         * The foot under the gesture pill as a view of its own ({@code dock_foot_host}, #307): while
+         * the cards stand apart and both sides' hosts wear the foot at one rect, it carries that one
+         * shared card, laid out once and never moved by a crossing, and each host stops at its top
+         * ({@link RestCards#shareFoot}). Anywhere else a foot stays on the card above it.
+         */
+        FOOT(null);
 
         /**
          * The side whose card this view carries while the cards stand apart; null for a view
@@ -399,6 +406,7 @@ public final class RestCards {
         // its host keeps its keyboard-down rect at both keyboard states.
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome, frontHome);
         RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome, !frontHome);
+        shareFoot(answer, otherCards);
         answer.adopt(otherCards, frontHome
             ? terminalCardView(half.floating, terminal.pass.dock.half(PageRef.TERMINAL).layout,
                 terminal.statusOnDockPlank)
@@ -416,6 +424,65 @@ public final class RestCards {
         // The Terminal's own rest's lift, whichever page is in front.
         answer.mTerminalLiftPx = (frontHome ? otherCards : answer).mTerminalLiftPx;
         return answer;
+    }
+
+    /**
+     * The foot under the gesture pill while the cards stand apart (#307, ADR 0032 2026-11-24):
+     * where both sides' hosts wear it across the same width (it always stands on the screen's
+     * bottom, the kept band tall), it is one shared card on {@link StackView#FOOT}, laid out once
+     * where the stack draws it at rest, and each host stops at its top. A foot one side's host
+     * wears alone, or that the keyboard wears, stays where it is.
+     */
+    private static void shareFoot(@NonNull RestCards a, @NonNull RestCards b) {
+        Card mine = a.hostFoot();
+        Card theirs = b.hostFoot();
+        if (mine == null || theirs == null || mine.box.left != theirs.box.left
+            || mine.box.right != theirs.box.right) return;
+        // One view laid out once: both rests must lay it out alike. The container is drawn lower
+        // by the keyboard's share at a rest whose keyboard is down, so a foot under a keyboard-up
+        // host (the unified Docked glass) is laid out elsewhere than one under a keyboard-down
+        // host, and a crossing between the two moves the container: each keeps its own there.
+        if (!a.footLaidOut(mine).equals(b.footLaidOut(theirs))) return;
+        a.standFootAlone(mine);
+        b.standFootAlone(theirs);
+    }
+
+    /** The foot a host (Home's, or the Terminal's own) wears at this rest; null for none. */
+    @Nullable
+    private Card hostFoot() {
+        for (Card card : mCards)
+            if (card.id == CardId.FOOT && (card.view == StackView.HOST
+                || card.view == StackView.TERMINAL_HOST)) return card;
+        return null;
+    }
+
+    /** Where the foot's own view is laid out to draw {@code foot} at this rest (screen px). */
+    @NonNull
+    private Box footLaidOut(@NonNull Card foot) {
+        return new Box(foot.box.left, foot.box.top - mHostShiftPx, foot.box.right,
+            foot.box.bottom - mHostShiftPx);
+    }
+
+    /**
+     * Moves {@code foot} off its host onto the foot's own view: the host is laid out to stop where
+     * the foot starts as the host is drawn (its draw offset is its card's), and the foot's view is
+     * laid out where the stack draws it at rest, the container's share and the cover's drop taken
+     * out ({@link #mHostShiftPx}), as a shared sheet card is posed.
+     */
+    private void standFootAlone(@NonNull Card foot) {
+        StackView host = foot.view;
+        Box laid = mLaidOut[host.ordinal()];
+        Card above = null;
+        for (Card card : mCards) if (card.view == host && card.id != CardId.FOOT) above = card;
+        if (laid == null || above == null) return;
+        float hostBottom = foot.box.top - (above.box.top - laid.top);
+        if (hostBottom <= laid.top) return;
+        mLaidOut[host.ordinal()] = new Box(laid.left, laid.top, laid.right, hostBottom);
+        mLaidOut[StackView.FOOT.ordinal()] = footLaidOut(foot);
+        Card moved = onView(foot, StackView.FOOT);
+        mCards.set(mCards.indexOf(foot), moved);
+        int covered = mCovered.indexOf(foot);
+        if (covered >= 0) mCovered.set(covered, moved);
     }
 
     /**

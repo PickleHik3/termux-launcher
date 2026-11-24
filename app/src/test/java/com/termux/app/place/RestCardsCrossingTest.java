@@ -165,21 +165,21 @@ public class RestCardsCrossingTest {
         "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->HOME",
         // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // Where the Terminal's keyboard is up on the Terminal's host (the unified Docked glass) the host wears the foot with the container undrawn, while Home's keyboard-down host wears it with the container drawn the keyboard's height lower: one foot view would be laid out at two rects (tl16 1667..1730 vs 2337..2400) and a crossing between them moves the container under it, so each host keeps its own foot there (#307). Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED GLASS_TRAY HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // As above: the Terminal's unified keyboard-up host and Home's keyboard-down host lay a foot out at two rects. Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED LENS_BEADS HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED WALL_STRIP HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS KEYBOARD_COLUMN/TERMINAL_HOST DOCKED PEEK_GLASS HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED GLASS_TRAY TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED LENS_BEADS TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED WALL_STRIP TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        // Home's Peek card wears no foot, so with Home's keyboard up the keyboard wears it, at the rect the Terminal's host's foot stands at: two owners. The foot's own view (#307) takes the hosts' feet only; the keyboard's foot is the keyboard's material and stays the keyboard's. Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        "(g) FOOT OWNERS KEYBOARD_COLUMN/TERMINAL_HOST DOCKED PEEK_GLASS HOME->TERMINAL",
+        // Home's Peek card wears no foot, so with Home's keyboard up the keyboard wears it, at the rect the Terminal's host's foot stands at: two owners. The foot's own view (#307) takes the hosts' feet only; the keyboard's foot is the keyboard's material and stays the keyboard's. Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS TERMINAL_HOST/KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME"));
 
     private static final PageRef[][] PAIRS = {
