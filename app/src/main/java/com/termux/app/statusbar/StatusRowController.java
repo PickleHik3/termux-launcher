@@ -155,7 +155,10 @@ public final class StatusRowController {
     /** Hooks the host's enlarged row to the sizes above, the ground, and reduced motion. */
     private void wireRowEnlargement(@NonNull StatusBarSwipeLayout host) {
         host.setRowReducedMotion(mHost::isReducedMotionEnabled);
-        host.setRowEnlargeListener(enlarged -> applyRowSizes(true, enlarged));
+        host.setRowEnlargeListener(enlarged -> {
+            applyRowSizes(true, enlarged);
+            syncRowCover(host, enlarged);
+        });
         syncRowGround(host);
     }
 
@@ -169,6 +172,33 @@ public final class StatusRowController {
         } else {
             host.setRowGround(mHost.surfaceBaseColor() | 0xFF000000);
         }
+    }
+
+    /** The pane the enlarged row last covered, so the cover is lifted from that one. */
+    @Nullable private PaneContentFrame mCoveredFrame;
+
+    /**
+     * The enlarged row is drawn by the host, which stands behind the panes: the top pane leaves
+     * the row's ground undrawn while it is enlarged (PaneContentFrame.setStatusRowCover), so the
+     * first row of text never shows over the row. Once per change, never per frame.
+     */
+    private void syncRowCover(@NonNull StatusBarSwipeLayout host, boolean enlarged) {
+        PaneContentFrame frame = mHost.wallPage() == PageKind.TERMINAL
+            ? mHost.statusRowFrame() : null;
+        if (mCoveredFrame != null && (mCoveredFrame != frame || !enlarged))
+            mCoveredFrame.setStatusRowCover(0, 0, 0, 0);
+        mCoveredFrame = null;
+        android.graphics.Rect rest = host.rowRect();
+        if (!enlarged || frame == null || rest.isEmpty()) return;
+        float density = mHost.context().getResources().getDisplayMetrics().density;
+        int pad = Math.round(PaneRowPolicy.ENLARGED_GROUND_PAD_DP * density);
+        // The row rect is in the host's coordinates; the pane's are its origin away.
+        int dx = mStatusRowHostOrigin[0] - mStatusRowOrigin[0];
+        int dy = mStatusRowHostOrigin[1] - mStatusRowOrigin[1];
+        int top = rest.top + dy;
+        frame.setStatusRowCover(rest.left - pad + dx, top, rest.right + pad + dx,
+            PaneRowPolicy.rowBottomPx(top, density, true));
+        mCoveredFrame = frame;
     }
 
     /** Settles the enlarged thin row at once (page change, wall moving, pause). */

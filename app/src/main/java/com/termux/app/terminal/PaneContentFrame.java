@@ -442,6 +442,24 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         requestLayout();
     }
 
+    /**
+     * Where the enlarged status row lies over this pane, in this frame's coordinates; empty when
+     * it does not. The row is drawn behind the pane, so the content gives way under it.
+     */
+    private final android.graphics.Rect mStatusRowCover = new android.graphics.Rect();
+
+    /**
+     * The enlarged thin row's ground over this pane ({@code left}..{@code bottom} in this frame's
+     * coordinates), or an empty rect once it settles: the content is not drawn under it, so the
+     * first row of text never shows through the row. Redraws only on a change.
+     */
+    public void setStatusRowCover(int left, int top, int right, int bottom) {
+        if (mStatusRowCover.left == left && mStatusRowCover.top == top
+            && mStatusRowCover.right == right && mStatusRowCover.bottom == bottom) return;
+        mStatusRowCover.set(left, top, right, bottom);
+        invalidate();
+    }
+
     /** The row this pane holds above its content; 0 for every pane but the top one. */
     public int statusRowPx() {
         return mStatusRowPx;
@@ -743,6 +761,19 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
      */
     @Override
     protected boolean drawChild(Canvas canvas, View child, long drawingTime) {
+        if (child != mContent || mStatusRowCover.isEmpty())
+            return drawChildUncovered(canvas, child, drawingTime);
+        // The enlarged status row lies here, drawn behind the pane: the content gives way.
+        int save = canvas.save();
+        canvas.clipOutRect(mStatusRowCover);
+        try {
+            return drawChildUncovered(canvas, child, drawingTime);
+        } finally {
+            canvas.restoreToCount(save);
+        }
+    }
+
+    private boolean drawChildUncovered(Canvas canvas, View child, long drawingTime) {
         // A backdrop recording never holds a SurfaceView (the display's): it would move the real surface.
         if (com.termux.app.chrome.BackdropRecording.skips(child)) return false;
         if (child == mContent) drawBezel(canvas);
