@@ -48,8 +48,8 @@ public final class Crossing {
         void translate(float dockPx, float keyboardPx);
         /** The rows' sink into the keyboard's top edge (0 puts every layer back). */
         void sink(float px);
-        /** The status content's and the side bars' travel alpha (1 puts them back). */
-        void alpha(float status, float side);
+        /** The status content's travel alpha (1 puts it back). */
+        void alpha(float status);
 
         /**
          * The crossing's two ends by side and the wall's progress between them (0 the side it
@@ -255,9 +255,9 @@ public final class Crossing {
         return rides;
     }
 
-    /** The status content's and the side bars' alpha for this frame. */
-    public void fade(float status, float side) {
-        mStack.alpha(status, side);
+    /** The status content's alpha for this frame. */
+    public void fade(float status) {
+        mStack.alpha(status);
     }
 
     /**
@@ -486,7 +486,7 @@ public final class Crossing {
         mBeadShare = Float.NaN;
         mBar.rideX(0f);
         mStack.sink(0f);
-        mStack.alpha(1f, 1f);
+        mStack.alpha(1f);
         mCommitted = null;
         mHere = null;
         mThere = null;

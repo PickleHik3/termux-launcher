@@ -119,7 +119,7 @@ public class CrossingControllerTest {
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
             Crossing.Keyboard {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
-        float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN, slide = Float.NaN;
+        float statusAlpha = Float.NaN, barX = Float.NaN, slide = Float.NaN;
         int coverPx = -1;
         int folds, covers;
         final List<PageKind> preRolls = new ArrayList<>();
@@ -132,9 +132,8 @@ public class CrossingControllerTest {
             writes++;
         }
         @Override public void sink(float px) { sinkPx = px; writes++; }
-        @Override public void alpha(float status, float side) {
+        @Override public void alpha(float status) {
             statusAlpha = status;
-            sideAlpha = side;
             writes++;
         }
         @Override public void rideX(float px) { barX = px; writes++; }
@@ -439,8 +438,6 @@ public class CrossingControllerTest {
             lastTranslation = moves.dockPx;
             assertTrue("status alpha " + moves.statusAlpha,
                 moves.statusAlpha >= 0f && moves.statusAlpha <= 1f);
-            assertTrue("side alpha " + moves.sideAlpha,
-                moves.sideAlpha >= 0f && moves.sideAlpha <= 1f);
         }
         drag(sign * WIDTH);
 
@@ -555,7 +552,7 @@ public class CrossingControllerTest {
         int geometry = host.count("geometryRequestNow");
         int writes = moves.writes;
         float dock = moves.dockPx, sink = moves.sinkPx, status = moves.statusAlpha,
-            side = moves.sideAlpha, slide = moves.slide;
+            slide = moves.slide;
 
         controller.syncChromeTravel(offset);
 
@@ -573,7 +570,6 @@ public class CrossingControllerTest {
         assertEquals(dock, moves.dockPx, 0f);
         assertEquals(sink, moves.sinkPx, 0f);
         assertEquals(status, moves.statusAlpha, 0f);
-        assertEquals(side, moves.sideAlpha, 0f);
         assertEquals(slide, moves.slide, 0f);
     }
 

@@ -190,7 +190,7 @@ public class StackSceneParityTest {
             keyboardPx = keyboard;
         }
         @Override public void sink(float px) { sinkPx = px; }
-        @Override public void alpha(float status, float side) {}
+        @Override public void alpha(float status) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
         @Override public void preRoll(@NonNull PageKind target) {}

@@ -125,7 +125,7 @@ public class CrossingTest {
     private static final class Moves implements Crossing.Stack, Crossing.Bar, Crossing.Cover,
             Crossing.Keyboard {
         float dockPx = Float.NaN, keyboardPx = Float.NaN, sinkPx = Float.NaN;
-        float statusAlpha = Float.NaN, sideAlpha = Float.NaN, barX = Float.NaN;
+        float statusAlpha = Float.NaN, barX = Float.NaN;
         int coverPx = -1;
         int covers;
         final List<PageKind> preRolls = new ArrayList<>();
@@ -135,9 +135,8 @@ public class CrossingTest {
             keyboardPx = keyboard;
         }
         @Override public void sink(float px) { sinkPx = px; }
-        @Override public void alpha(float status, float side) {
+        @Override public void alpha(float status) {
             statusAlpha = status;
-            sideAlpha = side;
         }
         @Override public void rideX(float px) { barX = px; }
         @Override public void cover(int px) {
@@ -320,7 +319,6 @@ public class CrossingTest {
             assertEquals(0f, moves.keyboardPx, 0f);
             assertEquals(0f, moves.sinkPx, 0f);
             assertEquals(1f, moves.statusAlpha, 0f);
-            assertEquals(1f, moves.sideAlpha, 0f);
             assertEquals(0f, moves.barX, 0f);
             assertNull(crossing.heldRest(PageRef.HOME));
             assertNull(crossing.heldRest(PageRef.TERMINAL));

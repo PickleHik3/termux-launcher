@@ -475,10 +475,9 @@ public final class CrossingController {
         float statusFade = seam.statusFade();
         float statusAlpha = barRides ? 1f : !Float.isNaN(statusFade) ? statusFade
             : frame.statusReveal;
-        // The status strip's content and the side and top bars fade as the places' rests say;
-        // the minimal layout's bars fade like the normal one's.
-        if (statusAlpha != 1f || frame.dockReveal != 1f) mHost.setChromeTravelMoved(true);
-        mCrossing.fade(statusAlpha, frame.dockReveal);
+        // The status strip's content fades as the places' rests say.
+        if (statusAlpha != 1f) mHost.setChromeTravelMoved(true);
+        mCrossing.fade(statusAlpha);
         Trace.endSection();
     }
 
@@ -707,8 +706,8 @@ public final class CrossingController {
             boolean barRides = mHost.syncStatusTravel(frame, seam);
             float fade = seam.statusFade();
             float statusAlpha = barRides ? 1f : !Float.isNaN(fade) ? fade : frame.statusReveal;
-            if (statusAlpha != 1f || frame.dockReveal != 1f) mHost.setChromeTravelMoved(true);
-            mCrossing.fade(statusAlpha, frame.dockReveal);
+            if (statusAlpha != 1f) mHost.setChromeTravelMoved(true);
+            mCrossing.fade(statusAlpha);
         } finally {
             Trace.endSection();
         }
