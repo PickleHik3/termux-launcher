@@ -54,6 +54,30 @@ public final class LinuxWindowsEnv {
         return env;
     }
 
+    /**
+     * {@code env} with the patched Mesa overlay's library directory first in the client's
+     * {@code LD_LIBRARY_PATH} when {@code answer} says USE: prepended to an existing line's value,
+     * else added as a line that keeps whatever the shell already has. Any other answer returns
+     * {@code env} as it is (the app renders in software).
+     */
+    @NonNull
+    public static List<String> withMesaOverlay(@NonNull List<String> env, @NonNull MesaWaylandOverlay.Answer answer) {
+        if (answer.state != MesaWaylandOverlay.State.USE || answer.libDir == null) return env;
+        List<String> out = new ArrayList<>(env.size() + 1);
+        boolean merged = false;
+        for (String line : env) {
+            if (!merged && line.startsWith("LD_LIBRARY_PATH=")) {
+                String old = line.substring("LD_LIBRARY_PATH=".length());
+                out.add("LD_LIBRARY_PATH=" + answer.libDir + (old.isEmpty() ? "" : ":" + old));
+                merged = true;
+            } else {
+                out.add(line);
+            }
+        }
+        if (!merged) out.add("LD_LIBRARY_PATH=" + answer.libDir + "${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}");
+        return out;
+    }
+
     /** The number in a display such as {@code ":1"}, or {@link #NO_X_DISPLAY} for null, empty or anything else. */
     public static int displayNumber(@Nullable String display) {
         if (display == null || display.length() < 2 || display.charAt(0) != ':') return NO_X_DISPLAY;

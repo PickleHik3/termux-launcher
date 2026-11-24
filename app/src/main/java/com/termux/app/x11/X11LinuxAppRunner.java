@@ -684,8 +684,12 @@ public final class X11LinuxAppRunner {
             boolean noSandbox = shouldStartWithNoSandbox(app);
             GpuChoice gpu = appGraphics(app);
             String display = xDisplay == null ? "" : xDisplay;
-            List<String> env = waylandEnv(waylandDisplay, xDisplay,
+            List<String> waylandLines = waylandEnv(waylandDisplay, xDisplay,
                 gpu.profile == null ? null : gpu.profile.id, appEnv(app, gpu));
+            com.termux.app.wayland.MesaWaylandOverlay.Answer mesa = gpu.profile == X11GpuProbe.Profile.TURNIP_ZINK
+                ? com.termux.app.wayland.MesaWaylandOverlay.check() : null;
+            List<String> env = mesa == null ? waylandLines : LinuxWindowsEnv.withMesaOverlay(waylandLines, mesa);
+            if (mesa != null) noticeMesaOnce(mesa);
             String script = gpuServerBlock(gpu.server) + script(app, display, env, noSandbox, null);
             handler.post(() -> {
                 Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display"
@@ -697,6 +701,28 @@ public final class X11LinuxAppRunner {
                 runAndWatch(app, script, noSandbox, display, env);
             });
         });
+    }
+
+    private static final java.util.Set<com.termux.app.wayland.MesaWaylandOverlay.State> MESA_NOTICED =
+        java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    /** One notice per launcher process per state when the graphics add-on is missing or out of date. */
+    private void noticeMesaOnce(@NonNull com.termux.app.wayland.MesaWaylandOverlay.Answer mesa) {
+        int title;
+        int sub;
+        if (mesa.state == com.termux.app.wayland.MesaWaylandOverlay.State.MISSING) {
+            title = com.termux.R.string.linux_mesa_missing_title;
+            sub = com.termux.R.string.linux_mesa_missing_sub;
+        } else if (mesa.state == com.termux.app.wayland.MesaWaylandOverlay.State.MISMATCH) {
+            title = com.termux.R.string.linux_mesa_stale_title;
+            sub = com.termux.R.string.linux_mesa_stale_sub;
+        } else {
+            return;
+        }
+        if (!MESA_NOTICED.add(mesa.state)) return;
+        handler.post(() -> com.termux.app.notice.AppNotice.show(context,
+            com.termux.app.notice.AppNoticeItem.Kind.INFO, context.getString(title),
+            context.getString(sub), true));
     }
 
     /**
