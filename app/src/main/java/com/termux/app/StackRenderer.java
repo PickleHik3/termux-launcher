@@ -86,13 +86,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         default boolean arrivalKeyboardUp() {
             return false;
         }
-        /**
-         * Home's share of the stack on this frame ({@link StackScene#homeShare}): 1 at Home's
-         * rest, 0 at the Terminal's, the material blend across a crossing. What only Home's rest
-         * draws on the shared slab (the Peek card) blends by it.
-         */
-        default void homeShare(float share) {
-        }
     }
 
     /** The sinking layers by {@link StackGeometry} index, in {@code CrossingViews}' order. */
@@ -678,7 +671,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         writeLanes();
         writeContent();
-        mViews.homeShare(homeShare);
         // DIAG(kb-cut): the keyboard's motion and cut on each crossing frame; revert before merge.
         if (mHasEnds && com.termux.app.chrome.MotionLog.enabled) {
             View kb = mViews.view(R.id.inapp_keyboard_container);

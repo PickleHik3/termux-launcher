@@ -16,8 +16,8 @@ import org.robolectric.RobolectricTestRunner;
 import org.robolectric.annotation.Config;
 
 /**
- * The reflection fades with Home's share across a crossing through its view's own alpha, so a
- * fade records nothing again, and a view stood up later wears the fade already set.
+ * The reflection is part of Home's card: kept as Home's rest drew it while Home's row does
+ * not stand, drawn otherwise; no crossing fades it (#305).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -25,31 +25,6 @@ public class PeekGlassReflectionFadeTest {
 
     private static FrameLayout host() {
         return new FrameLayout(ApplicationProvider.getApplicationContext());
-    }
-
-    @Test public void theFadeIsTheViewsAlpha() {
-        PeekGlassReflection reflection = new PeekGlassReflection(2.625f);
-        View view = reflection.attachHost(host(), null);
-        assertEquals(1f, view.getAlpha(), 0f);
-        reflection.setFade(0.4f);
-        assertEquals(0.4f, view.getAlpha(), 1e-6f);
-        assertEquals(0.4f, reflection.fade(), 1e-6f);
-    }
-
-    @Test public void theFadeClamps() {
-        PeekGlassReflection reflection = new PeekGlassReflection(2.625f);
-        View view = reflection.attachHost(host(), null);
-        reflection.setFade(-1f);
-        assertEquals(0f, view.getAlpha(), 0f);
-        reflection.setFade(3f);
-        assertEquals(1f, view.getAlpha(), 0f);
-    }
-
-    @Test public void aViewAttachedLaterWearsTheFade() {
-        PeekGlassReflection reflection = new PeekGlassReflection(2.625f);
-        reflection.setFade(0.25f);
-        View view = reflection.attachHost(host(), null);
-        assertEquals(0.25f, view.getAlpha(), 1e-6f);
     }
 
     @Test public void apartWithHomesRowDownTheReflectionIsKeptNeverCleared() {
@@ -112,8 +87,6 @@ public class PeekGlassReflectionFadeTest {
         // Home's rest: drawn for its card, all of it shown, the mirror on the card's cut.
         reflection.update(card, row, 0f, 0f,
             PeekGlassGeometry.reflectionAlpha(PeekGlassGeometry.REFLECTION_DEFAULT), false);
-        reflection.setFade(1f);
-        reflection.setDrawnOffsetY(0f);
         settle();
         int restVisibility = view.getVisibility();
         float restAlpha = view.getAlpha();
@@ -123,8 +96,6 @@ public class PeekGlassReflectionFadeTest {
         // The Terminal in front, the cards apart: what KEEP does, with the values the activity
         // reads apart (Home's share 1 under Floating, no drift).
         reflection.setHeld(true);
-        reflection.setFade(1f);
-        reflection.setDrawnOffsetY(0f);
         int reads = row.reads;
         reflection.onRowContentChanged();
         reflection.onIconsMoved();
@@ -140,14 +111,5 @@ public class PeekGlassReflectionFadeTest {
         settle();
         assertTrue(row.reads > reads);
         assertEquals(View.VISIBLE, view.getVisibility());
-    }
-
-    @Test public void theMirrorFollowsTheRowsThroughItsViewsTranslation() {
-        PeekGlassReflection reflection = new PeekGlassReflection(2.625f);
-        View view = reflection.attachHost(host(), null);
-        reflection.setDrawnOffsetY(-175f);
-        assertEquals(-175f, view.getTranslationY(), 0f);
-        reflection.setDrawnOffsetY(0f);
-        assertEquals(0f, view.getTranslationY(), 0f);
     }
 }

@@ -5710,9 +5710,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Nullable @Override public float[] peekGlassRect() {
                 return TermuxActivity.this.peekGlassRect();
             }
-            @Override public float peekShare() {
-                return drawnPeekShare();
-            }
             @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
                 return mFancierGlassLook;
             }
@@ -5812,38 +5809,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The card as last cut, in the host's coordinates; null while the dock is a slab. */
     @Nullable private com.termux.app.dock.PeekGlassGeometry.Card mPeekCard;
     /**
-     * Home's share of the stack on the last frame ({@code StackScene#homeShare}): 1 at Home's
-     * rest, 0 at the Terminal's, the material blend across a crossing. The card is drawn
-     * blended with the slab by it ({@link #drawnPeekCut}), so neither landing changes the dock's
-     * glass.
-     */
-    private float mPeekShare = 1f;
-    /**
-     * Whether the card blends with the slab across this crossing: both sides Docked, where the
-     * host spans the screen at either rest. Floating places its host apart at each rest.
-     */
-    private boolean mPeekBlends;
-    /**
-     * The card Home's rest last stood, and the host's width it was cut in: a crossing that
-     * arrives at Home draws it before the landing cuts Home's card again. Null where Home's rest
-     * keeps the slab. The host's top stays at the stack's top at every rest, so the card's
-     * coordinates hold while the width does.
-     */
-    @Nullable private com.termux.app.dock.PeekGlassGeometry.Card mHomeRestCard;
-    private int mHomeRestCardWidth;
-    /**
-     * How far the rows stood over the host ({@code StackRenderer#rowsOverHostPx}) when each card
-     * was cut: mid-crossing the host sinks with the keyboard while the rows ride it, so the card's
-     * top, the icons' centre line, is moved by as much as the rows have moved over the host since.
+     * How far the rows stood over the host when the card was cut, where the reflection is aimed
+     * from. While the cards stand apart the card and this are Home's rest's (#305).
      */
     private float mPeekCardRowsPx;
-    private float mHomeRestCardRowsPx;
-    /** The rows' offset over the host the cut was last drawn at; a change re-cuts it. */
-    private float mPeekDrawnRowsPx;
-    /** The slab's cut, the card's and the one drawn, reused: the blend runs every frame. */
-    private final float[] mPeekSlabCut = new float[com.termux.app.chrome.RoundCut.SIZE];
+    /** The card's cut, reused: the outline provider reads it on every outline pass. */
     private final float[] mPeekCardCut = new float[com.termux.app.chrome.RoundCut.SIZE];
-    private final float[] mPeekDrawnCut = new float[com.termux.app.chrome.RoundCut.SIZE];
     /** The icons' reflections on the card; made the first time a card shows them. */
     @Nullable private com.termux.app.dock.PeekGlassReflection mPeekReflection;
     /** The row's icon boxes, read into this. */
@@ -5870,12 +5841,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private final ViewOutlineProvider mPeekOutline = new ViewOutlineProvider() {
         @Override
         public void getOutline(View view, android.graphics.Outline outline) {
-            com.termux.app.dock.PeekGlassGeometry.Card card = shownPeekCard(view);
+            com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
             if (card == null) {
                 outline.setRect(0, 0, view.getWidth(), view.getHeight());
                 return;
             }
-            float[] cut = drawnPeekCut(view, card);
+            float[] cut = mPeekCardCut;
+            peekCardCut(card, cut);
             outline.setRoundRect(Math.round(cut[com.termux.app.chrome.RoundCut.LEFT]),
                 Math.round(cut[com.termux.app.chrome.RoundCut.TOP]),
                 Math.round(cut[com.termux.app.chrome.RoundCut.RIGHT]),
@@ -6010,12 +5982,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     @Nullable
     private float[] peekGlassRect() {
-        com.termux.app.dock.PeekGlassGeometry.Card card =
-            shownPeekCard(findViewById(R.id.accessory_surface_host));
-        // A card cut before the keyboard came up must not shape the glass program a moment longer;
-        // across a crossing the program blends it with the slab's instead (GlassEffects#programRect).
-        if (card == null || (!peekChromeTravelling() && drawnPeekShare() >= 1f
-            && !hostPeekCardWanted())) return null;
+        com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
+        // A card cut before the keyboard came up must not shape the glass program a moment longer.
+        if (card == null || (!peekChromeTravelling() && !hostPeekCardWanted())) return null;
         float[] cut = new float[com.termux.app.chrome.RoundCut.SIZE];
         peekCardCut(card, cut);
         float radius = cut[com.termux.app.chrome.RoundCut.RADIUS];
@@ -6057,7 +6026,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPeekListeners() {
         boolean peek = mPreferences != null && mDock.hostDressSpec().peek;
-        if (!peek && isHomeAtRest()) mHomeRestCard = null;
         View host = peek ? findViewById(R.id.accessory_surface_host) : null;
         View row = peek ? mSuggestionBarView : null;
         if (mPeekWatchedHost != host) {
@@ -6153,8 +6121,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * active, still bitmaps otherwise. Nothing is redrawn for the same values.
      */
     private void syncPeekReflection() {
-        com.termux.app.dock.PeekGlassGeometry.Card card =
-            shownPeekCard(findViewById(R.id.accessory_surface_host));
+        com.termux.app.dock.PeekGlassGeometry.Card card = mPeekCard;
         int strength = mPreferences == null ? 0 : com.termux.app.dock.PeekGlassPreferences
             .reflection(mPreferences.getSharedPreferences());
         SuggestionBarView row = mSuggestionBarView;
@@ -6172,11 +6139,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return;
         }
         if (sync == com.termux.app.dock.PeekGlassReflection.Sync.KEEP) {
-            if (mPeekReflection != null) {
-                mPeekReflection.setHeld(true);
-                mPeekReflection.setFade(drawnPeekShare());
-                mPeekReflection.setDrawnOffsetY(peekCardRowsDrift(card));
-            }
+            if (mPeekReflection != null) mPeekReflection.setHeld(true);
             return;
         }
         float[] rowAt = com.termux.app.dock.DockController.layoutOffsetIn(row, container);
@@ -6207,19 +6170,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reflection.attachStrip(null, 0f, 0f);
         boolean live = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
             && mFancierGlassLook != null;
-        // Aimed as the card was cut: the row where it stood over the host then, and the whole
-        // reflection moved by as much as the rows have moved over the host since, the same as
-        // the card's top (peekCardCut), so the mirror stays under the icons and on the card.
-        // Apart it is aimed by Home's rest whichever page is in front (PeekGlassReflection#aimCard):
-        // the same aim compares equal, so the Terminal's rest re-aims nothing.
-        boolean apart = mSideCards.hostLook() != null;
-        float cutAt = com.termux.app.dock.PeekGlassReflection.aimRowDy(apart, mHomeRestCard,
-            mHomeRestCardRowsPx, card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx);
-        card = com.termux.app.dock.PeekGlassReflection.aimCard(apart, mHomeRestCard, card);
-        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], cutAt,
+        // Aimed as the card was cut: the row where it stood over the host then. Apart the card is
+        // Home's rest's whichever page is in front (setPeekCard), so the same aim compares equal
+        // and the Terminal's rest re-aims nothing.
+        reflection.update(card, mPeekRow, rowAt[0] - hostAt[0], mPeekCardRowsPx,
             com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(strength), live);
-        reflection.setFade(drawnPeekShare());
-        reflection.setDrawnOffsetY(peekCardRowsDrift(card));
         reflection.setHeld(false);
     }
 
@@ -7347,83 +7302,38 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The card as cut ({@link #mPeekCard}), kept as Home's rest card while Home stands at rest,
-     * so a crossing back to Home can draw it before the landing cuts it again.
+     * The card as cut ({@link #mPeekCard}) and where the row stood over the host then. While the
+     * cards stand apart the host is Home's card at every rest (#305): away from Home's rest it
+     * keeps the card Home's rest cut, parked with Home and sliding back with it, so neither a
+     * crossing nor the Terminal's rest re-cuts it from the rows the Terminal stands. A rest that
+     * resolves no card lets it go.
      */
     private void setPeekCard(@Nullable com.termux.app.dock.PeekGlassGeometry.Card card) {
+        if (card != null && mPeekCard != null && mSideCards.hostLook() != null
+            && !isHomeAtRest()) return;
         mPeekCard = card;
-        // DIAG(peek-share): revert before merge.
-        if (MotionLog.enabled) MotionLog.log("peek-card", "card=" + (card != null)
-            + " homeRest=" + isHomeAtRest() + " share=" + mPeekShare + " travel="
-            + peekChromeTravelling() + " dress=" + stackDressPage());
-        // Apart with Home's row not standing, the reflection is kept as Home's rest aimed it, and
-        // so is where the row stood over the host then (syncPeekReflection reads it at the landing).
-        if (mSideCards.hostLook() == null || peekHomeRowStands())
-            mPeekCardRowsPx = peekLayoutRowsOverHost();
-        if (!isHomeAtRest()) return;
-        View host = findViewById(R.id.accessory_surface_host);
-        mHomeRestCard = card;
-        mHomeRestCardWidth = host != null ? host.getWidth() : 0;
-        mHomeRestCardRowsPx = mPeekCardRowsPx;
+        mPeekCardRowsPx = peekLayoutRowsOverHost();
     }
 
     /** Whether a Home page stands at rest with the stack dressed as it: no crossing, no travel. */
     private boolean isHomeAtRest() {
-        return mPeekShare >= 1f && !peekChromeTravelling()
+        return !peekChromeTravelling()
             && com.termux.app.wall.PaneWallPolicy.isHomePlace(stackDressPage());
     }
 
     /**
-     * The card the host is cut to on this frame: the one cut now, else, while a crossing blends
-     * toward or away from Home, Home's rest card (if the host is still as wide as it was cut in);
-     * null where the dock is a slab.
-     */
-    @Nullable
-    private com.termux.app.dock.PeekGlassGeometry.Card shownPeekCard(@Nullable View host) {
-        if (mPeekCard != null) return mPeekCard;
-        if (!mPeekBlends || mPeekShare <= 0f || mHomeRestCard == null || host == null
-            || host.getWidth() != mHomeRestCardWidth) return null;
-        return mHomeRestCard;
-    }
-
-    /**
-     * {@code card}'s own cut where the rows stand over the host now: its top, the icons' centre
-     * line, moved by as much as the rows have moved over the host since it was cut; its sides,
-     * its radius and its bottom past the screen's edge as cut.
+     * {@code card}'s own cut: its top through the icons' centre line, its sides, its radius and
+     * its bottom past the screen's edge, as cut.
      */
     private void peekCardCut(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card,
                              @NonNull float[] out) {
-        com.termux.app.dock.PeekGlassGeometry.cut(card, peekCardRowsDrift(card), out);
+        com.termux.app.dock.PeekGlassGeometry.cut(card, 0f, out);
     }
 
     /**
-     * How far the rows have moved over the host since {@code card} was cut. Zero while the cards
-     * stand apart: Home's card is cut from Home's rest and the host carries it as one piece
-     * (the renderer shifts it by nothing), whichever rows the stack stands.
-     */
-    private float peekCardRowsDrift(@NonNull com.termux.app.dock.PeekGlassGeometry.Card card) {
-        if (mSideCards.hostLook() != null) return 0f;
-        return peekRowsOverHost() - (card == mPeekCard ? mPeekCardRowsPx : mHomeRestCardRowsPx);
-    }
-
-    /**
-     * How far the apps row stands below the dock's glass host, in the stack, as drawn now: each
-     * one's layout and every translation up to the stack's container. Whatever moves one and not
-     * the other (the host's layout at another rest, its shift across a crossing, the rows riding
-     * the keyboard) moves the card's top, the icons' centre line, by as much.
-     */
-    private float peekRowsOverHost() {
-        View row = mSuggestionBarView;
-        View host = findViewById(R.id.accessory_surface_host);
-        View container = findViewById(R.id.accessory_stack_container);
-        if (row == null || host == null || container == null) return 0f;
-        return drawnTopIn(row, container) - drawnTopIn(host, container);
-    }
-
-    /**
-     * {@link #peekRowsOverHost} as laid out, no translation counted: what a card is cut from
-     * ({@link #resolvePeekCard} reads the row and the host as laid out), so it is the offset a
-     * card's cut is measured from.
+     * How far the apps row stands below the dock's glass host as laid out, no translation counted:
+     * what a card is cut from ({@link #resolvePeekCard} reads the row and the host as laid out),
+     * so it is the offset the reflection is aimed from.
      */
     private float peekLayoutRowsOverHost() {
         View row = mSuggestionBarView;
@@ -7435,96 +7345,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return rowAt == null || hostAt == null ? 0f : rowAt[1] - hostAt[1];
     }
 
-    /** {@code view}'s top in {@code ancestor}: layouts, scrolls and translations on the way up. */
-    private static float drawnTopIn(@NonNull View view, @NonNull View ancestor) {
-        float y = 0f;
-        View current = view;
-        while (current != null && current != ancestor) {
-            y += current.getTop() + current.getTranslationY();
-            android.view.ViewParent parent = current.getParent();
-            if (!(parent instanceof View)) return y;
-            current = (View) parent;
-            if (current != ancestor) y -= current.getScrollY();
-        }
-        return y;
-    }
-
-    /** How much of the card is drawn: Home's share while the card blends, else all of it. */
-    private float drawnPeekShare() {
-        return mPeekBlends ? mPeekShare : 1f;
-    }
-
-    /**
-     * {@code card}'s cut over {@code host} as drawn on this frame: the card itself at Home's
-     * rest, the slab's cut at the Terminal's, the straight blend between by Home's share.
-     */
-    @NonNull
-    private float[] drawnPeekCut(@NonNull View host,
-                                 @NonNull com.termux.app.dock.PeekGlassGeometry.Card card) {
-        peekCardCut(card, mPeekCardCut);
-        float share = drawnPeekShare();
-        if (share >= 1f) return mPeekCardCut;
-        mDock.slabCut(host, mPeekSlabCut);
-        com.termux.app.chrome.RoundCut.blend(mPeekSlabCut, mPeekCardCut, share, mPeekDrawnCut);
-        return mPeekDrawnCut;
-    }
-
-    /**
-     * Home's share of the stack moved ({@code StackRenderer.Views#homeShare}), or the rows moved
-     * over the host: the host's card is drawn at the new share, its top on the icons' centre line. The first frame of a blend dresses the card through the dock's
-     * shape; the frames after re-cut the outline, the rim, the reflection's fade and the glass
-     * program's rect, which lays nothing out. A blend that let the card go puts the slab back.
-     */
-    private void onPeekShare(float share) {
-        float was = mPeekShare;
-        float rows = peekRowsOverHost();
-        if (share == was && rows == mPeekDrawnRowsPx) return;
-        mPeekDrawnRowsPx = rows;
-        View host = findViewById(R.id.accessory_surface_host);
-        com.termux.app.dock.PeekGlassGeometry.Card wasShown = shownPeekCard(host);
-        if (share > 0f && share < 1f && (was <= 0f || was >= 1f)) {
-            mPeekBlends = !arrangementOf(com.termux.app.wall.PageRef.HOME).floating()
-                && !arrangementOf(com.termux.app.wall.PageRef.TERMINAL).floating();
-        }
-        mPeekShare = share;
-        com.termux.app.dock.PeekGlassGeometry.Card shown = shownPeekCard(host);
-        // DIAG(peek-share): the host's box and the drawn cut, at the edges and the middle.
-        if (MotionLog.enabled && host != null && shown != null
-            && (was <= 0f || share >= 1f || (was < 0.5f) != (share < 0.5f) || share == was)) {
-            int[] at = new int[2];
-            host.getLocationOnScreen(at);
-            float[] cut = drawnPeekCut(host, shown);
-            MotionLog.log("peek-host", "share=" + share + " top=" + at[1] + " h=" + host.getHeight()
-                + " ty=" + host.getTranslationY() + " rows=" + rows + " cutTop=" + cut[1]
-                + " cutL=" + cut[0] + " clip=" + host.getClipToOutline() + " provider="
-                + (host.getOutlineProvider() == mPeekOutline ? "peek" : "other")
-                + " vis=" + host.getVisibility() + " alpha=" + host.getAlpha() + " refl="
-                + (mPeekReflection == null ? "none" : mPeekReflection.diagState()));
-        }
-        // DIAG(peek-share): the blend's state as it leaves or reaches a rest; revert before merge.
-        if (MotionLog.enabled && (was <= 0f || was >= 1f || share <= 0f || share >= 1f))
-            MotionLog.log("peek-share", "was=" + was + " share=" + share + " blends=" + mPeekBlends
-                + " card=" + (mPeekCard != null) + " rest=" + (mHomeRestCard != null)
-                + " restW=" + mHomeRestCardWidth + " hostW=" + (host == null ? -1 : host.getWidth())
-                + " cut=" + mDock.dockShapeCut() + " shown=" + (shown != null)
-                + " wasShown=" + (wasShown != null));
-        if (host == null || !mDock.dockShapeCut() || (wasShown == null && shown == null)) return;
-        if (shown == null || wasShown == null) {
-            mDock.applyDockSurfaceShape(host, mDock.hostFloats(), mDock.dockShapeHeightPx(), true,
-                true);
-            return;
-        }
-        host.invalidateOutline();
-        if (!mDock.dockGlassDrawsEdge())
-            host.setBackground(peekRimDrawable(drawnPeekCut(host, shown), host.getWidth(),
-                host.getHeight()));
-        if (mPeekReflection != null) {
-            mPeekReflection.setFade(drawnPeekShare());
-            mPeekReflection.setDrawnOffsetY(peekCardRowsDrift(shown));
-        }
-        rebuildBackdropGlassEffectForLens();
-    }
-
     /**
      * Peek glass on the dock's host, for the dock's shape (DockController.Host#dressPeekCard):
      * the card is worked out from the row and the host as laid out now; a layout that moves
@@ -7532,20 +7352,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean dressPeekCard(@NonNull View surface) {
         syncPeekListeners();
-        com.termux.app.dock.PeekGlassGeometry.Card wasPeek = shownPeekCard(surface);
+        com.termux.app.dock.PeekGlassGeometry.Card wasPeek = mPeekCard;
         setPeekCard(resolvePeekCard());
-        com.termux.app.dock.PeekGlassGeometry.Card shown = shownPeekCard(surface);
+        com.termux.app.dock.PeekGlassGeometry.Card shown = mPeekCard;
         // The glass program's rect is the card's (or the slab's again): re-aimed once here,
         // since the pass's backdrop may find nothing else changed and keep its effect.
         if (!java.util.Objects.equals(wasPeek, shown)) rebuildBackdropGlassEffectForLens();
         if (shown != null) {
             // Its top edge through the icons' centres, its lower corners past the screen's
             // edge: the host is clipped to it, and where the program does not draw the
-            // glass's edge the rim follows the card's outline. Across a crossing the card is
-            // drawn blended with the slab (drawnPeekCut).
+            // glass's edge the rim follows the card's outline.
+            if (!mDock.dockGlassDrawsEdge()) peekCardCut(shown, mPeekCardCut);
             surface.setBackground(mDock.dockGlassDrawsEdge() ? null
-                : peekRimDrawable(drawnPeekCut(surface, shown), surface.getWidth(),
-                    surface.getHeight()));
+                : peekRimDrawable(mPeekCardCut, surface.getWidth(), surface.getHeight()));
             if (surface.getOutlineProvider() != mPeekOutline)
                 surface.setOutlineProvider(mPeekOutline);
             else
@@ -11364,9 +11183,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         @Override public boolean arrivalKeyboardUp() {
             return chromeRestOf(com.termux.app.page.PageKind.TERMINAL).keyboardReveal() > 0f;
-        }
-        @Override public void homeShare(float share) {
-            onPeekShare(share);
         }
     });
 

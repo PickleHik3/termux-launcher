@@ -108,22 +108,6 @@ final class DockSurface {
      *                 the dock does, the same line the window bar keeps along its bottom; the
      *                 strip under the pill has no inner edge and draws none
      */
-    /**
-     * The slab's cut over {@code host} as {@link #applyDockSurfaceShape} last cut it, as a
-     * {@link com.termux.app.chrome.RoundCut}: the capsule under Floating, the dock's slice of the
-     * frame under Docked. What a crossing blends the Peek card from or to.
-     */
-    void slabCut(@NonNull View host, @NonNull float[] out) {
-        int width = host.getWidth();
-        int height = host.getHeight();
-        if (mDockShapeCapsule) {
-            com.termux.app.chrome.RoundCut.set(out, 0f, 0f, width, height,
-                resolveDockCapsuleCornerRadiusPx(mDockShapeHeightPx > 0 ? mDockShapeHeightPx : height));
-            return;
-        }
-        mDockOutline.cut(width, height, out);
-    }
-
     void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                boolean ownsInnerEdge, boolean innerRim) {
         if (surface.getId() == R.id.accessory_surface_host) {

@@ -116,17 +116,6 @@ public final class ChromeShapeOutlineProvider extends ViewOutlineProvider {
     }
 
     /**
-     * The round rect {@link #getOutline} gives a view {@code width} by {@code height}, as a
-     * {@link RoundCut}: where a blend from this outline starts or ends. A clip with corners of
-     * their own answers at its largest radius.
-     */
-    public void cut(int width, int height, @NonNull float[] out) {
-        int[] rect = mRect;
-        float r = roundRect(mClip, width, height, mHorizontalGrowPx, rect);
-        RoundCut.set(out, rect[0], rect[1], rect[2], rect[3], r);
-    }
-
-    /**
      * The card's round rect over a view {@code width} by {@code height} into {@code rect}, and its
      * radius (0 with no clip). A round rect has one radius, so a card square on a side (an edge
      * card's screen side) is grown by that radius past the square side: the view's bounds cut the
