@@ -2704,6 +2704,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a Back press. {@link com.termux.app.chrome.HomeExitPolicy} picks the step.
      */
     private void handleHomePress() {
+        // A press during the exit finishes it at once.
+        if (mHomeExit.isRunning()) {
+            mHomeExit.finishNow();
+            return;
+        }
         com.termux.app.chrome.HomeExitPolicy.Step step = com.termux.app.chrome.HomeExitPolicy.decide(
             mOverlays.anyOpen(), mOverlays.anyHoldsUnsavedChanges(), mHomePress.goesHome());
         if (step == com.termux.app.chrome.HomeExitPolicy.Step.ASK) {
@@ -2717,11 +2722,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         carryOutHomeExit(step);
     }
 
+    /** The one animator of the Home exit, and the views it runs over (reused). */
+    private final com.termux.app.chrome.HomeExit mHomeExit =
+        new com.termux.app.chrome.HomeExit(com.termux.app.chrome.HomeExit.systemFrames());
+    private final java.util.ArrayList<View> mHomeExitViews = new java.util.ArrayList<>();
+
     private void carryOutHomeExit(@NonNull com.termux.app.chrome.HomeExitPolicy.Step step) {
         if (step == com.termux.app.chrome.HomeExitPolicy.Step.NONE) return;
         // Before resetTransientVisualState(): that call stomps every dock child's alpha, scale and
         // translation, so a drawer left open across HOME would strand faded pinned icons.
+        if (step == com.termux.app.chrome.HomeExitPolicy.Step.CLOSE_STAY
+            && !ReducedMotion.isEnabled(this)) {
+            // The members fade out as one group; every other overlay closes now. The page
+            // underneath settles at the end, when each member has closed.
+            mHomeExitViews.clear();
+            if (mOverlays.beginExit(mHomeExitViews) > 0) {
+                mHomeExit.start(mHomeExitViews, false, () -> {
+                    mOverlays.endExit();
+                    settleHomePress(step);
+                });
+                mHomeExitViews.clear();
+                return;
+            }
+            mHomeExitViews.clear();
+            settleHomePress(step);
+            return;
+        }
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
+        settleHomePress(step);
+    }
+
+    private void settleHomePress(@NonNull com.termux.app.chrome.HomeExitPolicy.Step step) {
         restoreInAppKeyboardTypingClaim();
         // A home press while the launcher is in front and nothing was open lands on the page Start
         // in names as Home, from a window or from another Home page; with something open it stays
@@ -11525,6 +11556,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
+        mHomeExit.finishNow();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mDisplayServer.controller() != null) mDisplayServer.controller().detachView();
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
@@ -11850,6 +11882,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Every open surface measured the old orientation's geometry. The palette alone needs a
         // refresh pass afterwards; a sheet's glass is built per show(), so the next one already
         // picks up the new configuration.
+        mHomeExit.finishNow();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION);
         // The surfaces that closed may have held the keyboard's keys; they go back to whoever
         // is under them — the display window, when that is where the wall rests.
@@ -21186,6 +21219,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 mSheets.closeAppDrawerImmediate(reason == com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
             }
+            @Override public void exitViews(@NonNull java.util.List<View> out) {
+                View plane = mSheets.appDrawerExitView();
+                if (plane != null) out.add(plane);
+            }
         });
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -21198,6 +21235,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             @Override public boolean holdsUnsavedChanges() {
                 return mAppearance.holdsUnsavedChanges();
+            }
+            @Override public void exitViews(@NonNull java.util.List<View> out) {
+                View host = mAppearance.exitView();
+                if (host != null) out.add(host);
             }
             @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
                 mAppearance.askBeforeLeaving(leave, stay);

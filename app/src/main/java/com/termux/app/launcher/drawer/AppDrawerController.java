@@ -491,6 +491,12 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return mOpen;
     }
 
+    /** The plane the Home exit fades while the drawer is open; null otherwise. */
+    @Nullable
+    public View exitView() {
+        return mOpen ? mPlane : null;
+    }
+
     /**
      * True while the plane owns the accessory stack's transforms: open, dragging, or still
      * settling. Every geometry seam in {@code TermuxActivity} gates on this.

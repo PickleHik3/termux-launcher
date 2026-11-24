@@ -289,4 +289,43 @@ public class OverlayRegistryTest {
         registry.askBeforeLeaving(() -> { }, () -> { });
         assertEquals(3, pending.asked);
     }
+
+    /** A member: gives a view to the exit. */
+    private static final class Member extends Pane {
+        final android.view.View view = new android.view.View(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext());
+
+        Member(String name, List<String> log) {
+            super(name, true, log);
+        }
+
+        @Override public void exitViews(@NonNull List<android.view.View> out) {
+            if (open) out.add(view);
+        }
+    }
+
+    @Test
+    public void anExitClosesNonMembersAtOnceAndMembersAtTheEnd() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("sheet", true, log));
+        registry.register(new Member("drawer", log));
+        List<android.view.View> views = new ArrayList<>();
+        assertEquals(1, registry.beginExit(views));
+        assertEquals(1, views.size());
+        assertEquals(List.of("sheet:HOME"), log);
+        registry.endExit();
+        assertEquals(List.of("sheet:HOME", "drawer:HOME"), log);
+        registry.endExit();
+        assertEquals(2, log.size());
+    }
+
+    @Test
+    public void anExitWithNoMembersClosesEverythingAndReportsZero() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("a", true, log));
+        assertEquals(0, registry.beginExit(new ArrayList<>()));
+        assertEquals(List.of("a:HOME"), log);
+    }
 }

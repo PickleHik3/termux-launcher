@@ -894,6 +894,12 @@ public final class AppearanceSurfaceController {
         leave(this::closeNow);
     }
 
+    /** The surface's host view for the Home exit; null when it is not up. */
+    @Nullable
+    public View exitView() {
+        return mOpen ? mView : null;
+    }
+
     /** Whether leaving now would lose the editor's draft or the picker's pending wallpaper. */
     public boolean holdsUnsavedChanges() {
         return mOpen && (hasPendingWallpaper() || mEditor.isDirty());

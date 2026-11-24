@@ -1,6 +1,7 @@
 package com.termux.app.chrome;
 
 import android.view.KeyEvent;
+import android.view.View;
 
 import androidx.annotation.NonNull;
 
@@ -54,6 +55,13 @@ public final class OverlayRegistry {
         default boolean isOpen() { return false; }
 
         /**
+         * Adds the views this overlay gives to the Home exit, while it is open: they fade and
+         * shrink with the other members, and {@code closeImmediately(HOME)} runs at the end. Adds
+         * nothing by default: such an overlay closes at once when the exit starts.
+         */
+        default void exitViews(@NonNull List<View> out) { }
+
+        /**
          * Whether leaving now would lose something the person has not saved: a draft. Default
          * false, so a surface that has not said is closed without a question, as it always was.
          */
@@ -96,6 +104,8 @@ public final class OverlayRegistry {
     private boolean mClaimedBackDown;
     /** An unsaved-changes question is up and has not been answered. */
     private boolean mAsking;
+    /** The overlays leaving in the Home exit now. */
+    @NonNull private final List<Overlay> mExiting = new ArrayList<>();
 
     /** Registers the next overlay outward; the first registered is the innermost. */
     public void register(@NonNull Overlay overlay) {
@@ -165,6 +175,30 @@ public final class OverlayRegistry {
         for (Overlay overlay : mOverlays)
             if (overlay.isOpen()) return true;
         return false;
+    }
+
+    /**
+     * Starts a Home exit: every overlay that gives views to {@code out} becomes a member and is
+     * left open; every other overlay closes now, as a home press always closed them.
+     *
+     * @return the number of members; 0 means everything is already closed
+     */
+    public int beginExit(@NonNull List<View> out) {
+        mAsking = false;
+        mExiting.clear();
+        for (Overlay overlay : mOverlays) {
+            int before = out.size();
+            overlay.exitViews(out);
+            if (out.size() > before) mExiting.add(overlay);
+            else overlay.closeImmediately(CloseReason.HOME);
+        }
+        return mExiting.size();
+    }
+
+    /** The exit's end: each member resets its own views and closes. */
+    public void endExit() {
+        for (int i = 0; i < mExiting.size(); i++) mExiting.get(i).closeImmediately(CloseReason.HOME);
+        mExiting.clear();
     }
 
     /** Whether an open overlay holds unsaved changes. */
