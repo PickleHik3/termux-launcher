@@ -56,6 +56,36 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
         return new Range((int) (4f * density), MAX, defaultSize);
     }
 
+    /**
+     * The reset group of each id: the terminal and scratchpad sizes go with the appearance reset,
+     * Compact's (a separate, never-reset key) stays.
+     */
+    @NonNull
+    private static SettingDeclaration.ResetGroup resetGroup(@NonNull String id) {
+        return COMPACT_FONT_SIZE.equals(id) ? SettingDeclaration.ResetGroup.NONE
+            : SettingDeclaration.ResetGroup.APPEARANCE;
+    }
+
+    /**
+     * Whether {@code key} (any display's) is one of the {@code group} reset's font size keys: the
+     * terminal's and the scratchpad's start with {@code fontsize}, Compact's does not.
+     */
+    public static boolean resets(@NonNull SettingDeclaration.ResetGroup group, @NonNull String key) {
+        for (String id : new String[] {FONT_SIZE, COMPACT_FONT_SIZE, SCRATCHPAD_FONT_SIZE}) {
+            if (resetGroup(id) == group && key.startsWith(baseKey(id))) return true;
+        }
+        return false;
+    }
+
+    @NonNull
+    private static String baseKey(@NonNull String id) {
+        switch (id) {
+            case FONT_SIZE: return TERMUX_APP.KEY_FONTSIZE;
+            case COMPACT_FONT_SIZE: return TERMUX_APP.KEY_COMPACT_FONTSIZE;
+            default: return TERMUX_APP.KEY_FONTSIZE + "_scratchpad";
+        }
+    }
+
     @NonNull private final SettingStore mStore;
     @NonNull private final Range mRange;
     @NonNull private final String mDisplay;
@@ -72,11 +102,7 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
 
     @NonNull
     private String key(@NonNull String id) {
-        switch (id) {
-            case FONT_SIZE: return TERMUX_APP.KEY_FONTSIZE + mDisplay;
-            case COMPACT_FONT_SIZE: return TERMUX_APP.KEY_COMPACT_FONTSIZE + mDisplay;
-            default: return TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + mDisplay;
-        }
+        return baseKey(id) + mDisplay;
     }
 
     private static boolean owns(@NonNull String id) {
@@ -87,7 +113,8 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
     @NonNull
     private SettingDeclaration declare(@NonNull String id) {
         return SettingDeclaration.integer(id, SettingDeclaration.Store.APP_PREFERENCES, key(id),
-            mRange.min, mRange.max, STEP, mRange.defaultSize, SettingRefresh.FONT_SIZE);
+            mRange.min, mRange.max, STEP, mRange.defaultSize, SettingRefresh.FONT_SIZE)
+            .resetBy(resetGroup(id));
     }
 
     @Nullable

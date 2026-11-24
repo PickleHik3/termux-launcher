@@ -17,6 +17,8 @@ import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceProperty;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences.SurfaceSlot;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -59,7 +61,9 @@ public final class AppearanceReset {
     public static final int CARD_SETTLED = 2;
 
     /**
-     * The flat keys the reset removes by name (prefix families are in {@link #inScope}). Each
+     * The flat keys the reset removes by name (prefix families are in {@link #inScope}; the
+     * declared settings, terminal contrast, Text size and the font sizes, are the declarations in
+     * the {@link SettingDeclaration.ResetGroup#APPEARANCE} group). Each
      * group's neighbours under the same prefix that stay are named beside it.
      */
     private static final Set<String> NAMED = names(
@@ -98,10 +102,10 @@ public final class AppearanceReset {
         TERMUX_APP.KEY_TERMINAL_PANE_BORDER_CUSTOM, TERMUX_APP.KEY_TERMINAL_PANE_FOCUS_COLOUR,
         TERMUX_APP.KEY_TERMINAL_PANE_FOCUS_CUSTOM, TERMUX_APP.KEY_TERMINAL_PANE_GLOW,
         TERMUX_APP.KEY_TERMINAL_PANE_GLOW_COLOUR, TERMUX_APP.KEY_TERMINAL_PANE_GLOW_CUSTOM,
-        TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL, TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY,
+        TERMUX_APP.KEY_ADAPTIVE_LEGIBILITY,
         TERMUX_APP.KEY_TERMINAL_DYNAMIC_COLORS_ENABLED,
         TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL, TERMUX_APP.KEY_TERMINAL_CURSOR_TRAIL_STYLE,
-        TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT, TERMUX_APP.KEY_TEXT_SIZE_PERCENT,
+        TERMUX_APP.KEY_TERMINAL_RETRO_EFFECT,
         // The rows #286 moved onto the Terminal and Keyboard cards.
         TERMUX_APP.KEY_TERMINAL_SCREEN_EVENTS, TERMUX_APP.KEY_TERMINAL_RETRO_COMPOSITE,
         TERMUX_APP.KEY_IN_APP_KEYBOARD_FLOATING_WIDTH_SCALE,
@@ -161,7 +165,7 @@ public final class AppearanceReset {
             || LookGrid.parse(key) != null
             || key.startsWith(LookGridMigration.INHERIT_PREFIX)
             || AppearanceSnapshot.isPageKey(key, PAGE_ABLE)
-            || key.startsWith(TERMUX_APP.KEY_FONTSIZE)
+            || SettingDeclarations.resets(SettingDeclaration.ResetGroup.APPEARANCE, key)
             || LayoutReset.isFlatLayoutKey(key);
     }
 
