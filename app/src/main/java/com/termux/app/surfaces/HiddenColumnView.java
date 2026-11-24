@@ -36,6 +36,9 @@ final class HiddenColumnView extends FrameLayout {
     interface Listener {
         /** {@code item}'s chip was tapped or dropped on the frame: show the bar again. */
         void onRestore(@NonNull TrayItem item);
+
+        /** {@code item}'s chip was tapped: its bar is selected, and offers the way back (#341). */
+        void onSelect(@NonNull TrayItem item);
     }
 
     static final int WIDTH_DP = 88;
@@ -173,7 +176,7 @@ final class HiddenColumnView extends FrameLayout {
         }
     }
 
-    /** A chip: a tap brings the bar back; dragged onto the frame it does, anywhere else it springs home. */
+    /** A chip: a tap selects its bar; dragged onto the frame it brings the bar back, anywhere else it springs home. */
     private final class ChipTouch implements OnTouchListener {
         @NonNull private final TrayItem mItem;
         private float mDownX;
@@ -207,11 +210,14 @@ final class HiddenColumnView extends FrameLayout {
                 }
                 case MotionEvent.ACTION_UP: {
                     chip.getParent().requestDisallowInterceptTouchEvent(false);
-                    boolean restore = !mDragging || overFrame(event.getRawX(), event.getRawY());
+                    boolean tap = !mDragging;
+                    boolean restore = !tap && overFrame(event.getRawX(), event.getRawY());
                     chip.setTranslationX(0f);
                     chip.setTranslationY(0f);
                     mDragging = false;
-                    if (restore)
+                    if (tap)
+                        mListener.onSelect(mItem);
+                    else if (restore)
                         mListener.onRestore(mItem);
                     return true;
                 }

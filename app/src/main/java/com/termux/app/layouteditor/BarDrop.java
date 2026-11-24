@@ -9,6 +9,7 @@ import com.termux.app.layouteditor.BarLandingPolicy.Zone;
 import com.termux.app.place.EdgeStackPolicy;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
+import com.termux.app.statusbar.StatusPlace;
 
 /**
  * What letting go of a bar writes into the layout. Pure: it answers with the arrangement the
@@ -36,5 +37,20 @@ public final class BarDrop {
             return null;
         return EdgeStackPolicy.withDrop(arranged, element, landing.edge, landing.index,
             landing.underKeyboard);
+    }
+
+    /**
+     * The status bar's place after {@code landing}, when it is not what it was: over the pane the
+     * thin row inside it (#342), on any edge its own strip. Null for every other bar, for hiding,
+     * for a refused landing and when the place would not change. One value for every page, so a
+     * caller writes it through the editor's preferences, which Discard restores.
+     */
+    @Nullable
+    public static StatusPlace statusPlaceAfter(@NonNull Bar bar, @NonNull Landing landing,
+                                               @NonNull StatusPlace current) {
+        if (bar != Bar.STATUS_BAR || !landing.allowed || landing.statusPlace == null
+            || landing.statusPlace == current)
+            return null;
+        return landing.statusPlace;
     }
 }

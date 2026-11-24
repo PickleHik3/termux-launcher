@@ -89,6 +89,11 @@
     <string name="editor_bar_az">A–Z</string>
     <string name="editor_bar_extra_keys">Extra keys</string>
     <string name="editor_bar_keyboard">Keyboard</string>
+    <string name="editor_place_move_here">Move %1$s here</string>
+    <string name="editor_place_pane">Put it inside the pane</string>
+    <string name="editor_place_hide">Hide</string>
+    <string name="editor_place_hide_bar">Hide %1$s</string>
+    <string name="editor_place_bring_back">Bring %1$s back</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
     <string name="settings_destination_terminal">Terminal</string>
