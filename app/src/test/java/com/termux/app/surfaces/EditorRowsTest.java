@@ -157,13 +157,13 @@ public class EditorRowsTest {
 
     @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
+        // The condensed kinds (#345): no headings; the groups in order (the grid, the short
+        // choices, the switches, the Layout list), the links sharing one row at the end.
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-            Row.ICON_PACK), EditorRows.tier(EditorCard.HOME, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
-            Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
-            Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.SECTION_LINKS, Row.LINK_GESTURES,
-            Row.LINK_PAGES),
+            Row.FOLDERS, Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
+            Row.GLASS_WIDGETS, Row.ELEMENTS),
+            EditorRows.tier(EditorCard.HOME, ALL, 1));
+        assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
