@@ -136,12 +136,22 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
     with one owner. Home's host and the Terminal's host (`terminal_dock_host`) both stop at the
     foot's top, and each joins the foot seamlessly (no line, no 1 px gap, the same glass sample).
     This revises #304's "the foot under the gesture pill included" for the Terminal's host.
-  - One shared keyboard card: with the keyboard up at both ends it is one card at one rect that
-    stays put, built once in the Terminal's look as the crossing begins; up at one end only it
-    rides in with its side. Where the two rests place the keyboard differently, one rest changes
-    to match.
+  - 2026-11-24, revised: the keyboard is two cards, one per side. Sharing one card would raise
+    Home's keyboard about 151 px on pong (Docked, keyboard up: Home's column 1742–2412, the
+    Terminal's 1591–2412 over its bands under the keyboard), so each side keeps its own keyboard
+    rest. Each side's keyboard card is laid out once at its rest and travels with its side; it
+    never re-sizes at the landing. With the keyboard up at both ends, Home's keyboard card slides
+    out with Home while the Terminal's slides in. The arriving keyboard's card is dressed in its
+    look as the crossing begins, not at landing (the Accepted note above). A second keyboard card
+    holds no second keyboard's pixels at rest.
   - A Docked A–Z column meets the status bar and the dock on a join over its own width only: a
     card's edge keeps the shape model's runs (`RestCards.Card#kindOver`). Built in #307 round 2.
+- **2026-11-24, #307 round 3.** The per-rest answer stands each side's A–Z card on an edge host
+  of its own (`StackView.AZ_EDGE` Home's, `TERMINAL_AZ_EDGE` the Terminal's), one shared card
+  where both rests draw it at one rect. A Home to Home crossing with Home's keyboard up at one
+  end only still re-sizes Home's bar: both ends are Home's side, so one card per side cannot part
+  them. The views (the second edge host, the foot's own view, the second keyboard card) are not
+  built yet.
 
 ## Consequences
 
