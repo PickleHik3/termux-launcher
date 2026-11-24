@@ -48,6 +48,10 @@ import java.util.TreeSet;
  *       A pair where the keyboard's card draws over the other ({@link RestCards#covered}: on
  *       Home, with its keyboard raised on demand, the keyboard covers the dock) is skipped:
  *       the cards overlap by design and meet on no edge.</li>
+ *   <li>(e) Run through the scene ({@link StackScene#at}) with each end's card table
+ *       ({@link StackEnd#readCards}): the cards' poses at p = 0 and p = 1 are each end's rest's,
+ *       so the landing writes nothing; every card a rest draws stands on screen there (no slide)
+ *       and every card it parks a wall off; no view is handed a different card by the two ends.</li>
  * </ul>
  *
  * <p>Both ends wear one Style and one Dock design (a global setting). The pairs are Home to
@@ -248,6 +252,10 @@ public class RestCardsCrossingTest {
                                   boolean floating, RestCards cards) {
         StackEnd end = new StackEnd(page);
         end.floating = floating;
+        end.readCards(cards);
+        end.homeDropPx = cards.homeSideDropPx();
+        end.terminalLiftPx = cards.terminalSideLiftPx();
+        end.rest.containerWidthPx = f.widthPx;
         Card host = hostCard(cards);
         StackGeometry g = end.rest;
         if (host != null) {
@@ -270,6 +278,7 @@ public class RestCardsCrossingTest {
     }
 
     @Test public void everyCardIsItsRestsAtTheEndsOfACrossing() {
+        Found found = new Found();
         for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
             for (boolean floating : BOOLS)
                 for (PageRef[] pair : PAIRS)
@@ -299,7 +308,31 @@ public class RestCardsCrossingTest {
             // A Peek card is Home's: on the Terminal only as Home's own, on the one host (#305).
             if (a.card(CardId.PEEK) != null) assertTrue(at, pair[0].isHome() || !a.apart());
             if (b.card(CardId.PEEK) != null) assertTrue(at, pair[1].isHome() || !b.apart());
+            String tail = " " + style(floating) + " " + f.homeDesign + " " + name(pair[0]) + "->"
+                + name(pair[1]);
+            StackScene.Frame rest = new StackScene.Frame();
+            for (float p : new float[] {0f, 0.5f, 1f}) {
+                StackScene.at(from, to, p, motion, from.rest, frame);
+                StackEnd end = p == 0f ? from : p == 1f ? to : null;
+                if (end != null) StackScene.at(end, end, 0f, motion, end.rest, rest);
+                for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                    String view = " " + StackView.values()[v];
+                    if (frame.cardMorphs[v]) found.add("(e) MORPH" + view + tail, at);
+                    if (end == null) continue;
+                    if (frame.cardTx[v] != rest.cardTx[v] || frame.cardTy[v] != rest.cardTy[v])
+                        found.add("(e) LANDING" + view + tail, at + " p=" + p);
+                    if (end.cardOn[v] != StackEnd.NO_CARD && frame.cardTx[v] != 0f)
+                        found.add("(e) OFF SCREEN" + view + tail, at + " p=" + p);
+                    if (end.cardOn[v] == StackEnd.NO_CARD && end.viewSide[v] >= 0
+                        && end.viewSide[v] < Side.COUNT
+                        && Math.abs(frame.cardTx[v]) != f.widthPx)
+                        found.add("(e) PARKED ON SCREEN" + view + tail, at + " p=" + p);
+                }
+                if (end != null && frame.slabView != rest.slabView)
+                    found.add("(e) SLAB" + tail, at + " p=" + p);
+            }
         }
+        assertKnown("(e)", found);
     }
 
     // ---- (b) ---------------------------------------------------------------------------
