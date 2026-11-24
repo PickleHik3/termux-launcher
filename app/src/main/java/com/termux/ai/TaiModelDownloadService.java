@@ -328,7 +328,7 @@ public final class TaiModelDownloadService extends Service implements TaiDownloa
     }
 
     private PendingIntent openModelCentre() {
-        Intent intent = new Intent(this, SettingsActivity.class);
+        Intent intent = com.termux.app.activities.SettingsDoor.plain(this);
         intent.putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, MODEL_CENTRE_FRAGMENT);
         intent.putExtra(SettingsActivity.EXTRA_INITIAL_TITLE_RES, R.string.tai_model_centre_title);
         return PendingIntent.getActivity(this, 0, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);

@@ -115,7 +115,7 @@ public final class LauncherCategoryPasteNotification {
 
     @NonNull
     private static NotificationCompat.Builder base(@NonNull Context context) {
-        Intent settingsIntent = new Intent(context, SettingsActivity.class);
+        Intent settingsIntent = com.termux.app.activities.SettingsDoor.plain(context);
         PendingIntent contentIntent = PendingIntent.getActivity(context, 0, settingsIntent,
             PendingIntent.FLAG_UPDATE_CURRENT | immutableFlag());
         return new NotificationCompat.Builder(context, CHANNEL_ID)

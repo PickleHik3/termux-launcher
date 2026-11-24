@@ -115,7 +115,7 @@ public class SettingsActivity extends AppCompatActivity implements
     }
 
     public static Intent createFragmentIntent(@NonNull Context context, @NonNull Class<? extends Fragment> fragmentClass, int titleResId) {
-        Intent intent = new Intent(context, SettingsActivity.class);
+        Intent intent = SettingsDoor.plain(context);
         intent.putExtra(EXTRA_INITIAL_FRAGMENT, fragmentClass.getName());
         if (titleResId != 0) {
             intent.putExtra(EXTRA_INITIAL_TITLE_RES, titleResId);
