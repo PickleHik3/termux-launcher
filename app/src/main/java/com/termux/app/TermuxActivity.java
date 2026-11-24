@@ -27446,7 +27446,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rather than trusting a role colour authored against an opaque card.
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
-            bar.setVisibility(windowsShown && !mStatusBar.isStatusBarVertical() ? View.VISIBLE : View.GONE);
+            bar.setVisibility(windowsShown && !marksLookShown() && !mStatusBar.isStatusBarVertical()
+                ? View.VISIBLE : View.GONE);
             // The font toggle's pill follows the page the bar is dressed for.
             syncFontToggle();
             // The plus opens a terminal window right after the window in front, whichever it is;
@@ -27461,8 +27462,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (windowColumn != null) {
             windowColumn.setChromeInk(mChrome.ink());
             windowColumn.setPlaceAccent(placeAccent);
-            windowColumn.setVisibility(windowsShown && mStatusBar.isStatusBarVertical()
-                ? View.VISIBLE : View.GONE);
+            windowColumn.setVisibility(windowsShown && !marksLookShown()
+                && mStatusBar.isStatusBarVertical() ? View.VISIBLE : View.GONE);
         }
         // Under the Marks look the line stands where the chips were, so the chips are put away.
         syncMarksLine();
@@ -30110,15 +30111,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncMarksLine();
     }
 
+    /**
+     * Whether the status bar marks the pages with the Marks line (Status bar card › Page bar). The
+     * chips' visibility decisions AND its negation, so under Marks the chips are never shown.
+     */
+    private boolean marksLookShown() {
+        return mPreferences != null && com.termux.app.wall.pageswitch.PageBarLook
+            .fromValue(mPreferences.getPageBarLook()).marksShown();
+    }
+
     /** Which of the Terminal's windows want the user, by window index, as the chips last said. */
     @Nullable private boolean[] mMarksWindowAttention;
     @Nullable private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator mMarksNavigator;
 
     /**
      * The status bar's Marks line (Status bar card › Page bar): under Marks the line of page marks
-     * stands where the window chips do, along the row or down the column on a side edge, and the
-     * chips and their plus are put away; under Glyphs the line is put away and the chips are left
-     * to their own passes. Called wherever the pages, the windows or the bar's form change; the
+     * stands where the window chips do, along the row or down the column on a side edge (the chips
+     * and their plus are kept away by {@link #marksLookShown}'s share in their own decisions);
+     * under Glyphs the line is put away and the chips are left to those decisions. Called wherever the pages, the windows or the bar's form change; the
      * line compares before it rebuilds, so a call with nothing new costs the model and a compare.
      */
     private void syncMarksLine() {
@@ -30126,19 +30136,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.MarksLineView column =
             findViewById(R.id.terminal_status_marks_column);
         if (row == null || column == null) return;
-        boolean marks = mPreferences != null && com.termux.app.wall.pageswitch.PageBarLook
-            .fromValue(mPreferences.getPageBarLook()).marksShown();
+        boolean marks = marksLookShown();
         boolean vertical = mStatusBar.isStatusBarVertical();
         int rowShown = marks && !vertical ? View.VISIBLE : View.GONE;
         int columnShown = marks && vertical ? View.VISIBLE : View.GONE;
         if (row.getVisibility() != rowShown) row.setVisibility(rowShown);
         if (column.getVisibility() != columnShown) column.setVisibility(columnShown);
         if (!marks) return;
-        View chips = findViewById(R.id.terminal_window_bar);
-        if (chips != null && chips.getVisibility() != View.GONE) chips.setVisibility(View.GONE);
-        View chipColumn = findViewById(R.id.terminal_status_window_column);
-        if (chipColumn != null && chipColumn.getVisibility() != View.GONE)
-            chipColumn.setVisibility(View.GONE);
         com.termux.app.statusbar.MarksLineView line = vertical ? column : row;
         if (mMarksNavigator == null) mMarksNavigator = pageSwitchNavigator();
         line.setNavigator(mMarksNavigator);
@@ -30932,7 +30936,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !arrangement().layout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
-            ? View.VISIBLE : View.GONE;
+            && !marksLookShown() ? View.VISIBLE : View.GONE;
         if (bar.getVisibility() != chips) bar.setVisibility(chips);
         mStatusBar.syncBorderStatusSwipe(visible);
         if (!visible) {
