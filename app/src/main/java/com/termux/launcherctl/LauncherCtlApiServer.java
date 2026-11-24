@@ -3048,7 +3048,7 @@ public class LauncherCtlApiServer {
             "  launcherctl battery\n" +
             "  launcherctl motion-log dump|clear\n" +
             "  launcherctl look get|set|reset ...\n" +
-            "  launcherctl config get ID | set ID VALUE | list [--json]\n" +
+            "  launcherctl config get ID | set ID VALUE | list [--json] | export | apply FILE\n" +
             "  launcherctl volume [STREAM VALUE]\n" +
             "  launcherctl toast [--short] <text>\n" +
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
@@ -3331,11 +3331,17 @@ public class LauncherCtlApiServer {
             "  launcherctl config get ID\n" +
             "  launcherctl config set ID VALUE\n" +
             "  launcherctl config list [--json]\n" +
+            "  launcherctl config export\n" +
+            "  launcherctl config apply FILE\n" +
             "\n" +
             "list prints every setting as ID = VALUE; with --json, each one's kind, range or\n" +
             "choices, default and current value. set changes the screen the way the Settings\n" +
             "row does, at once while the launcher is open, else when it next opens. A value\n" +
             "outside a setting's range is refused with the range, and nothing changes.\n" +
+            "\n" +
+            "export prints the setup as a file of ID = VALUE lines (# starts a comment). apply\n" +
+            "checks every line of FILE first and changes nothing when any is wrong, naming each\n" +
+            "bad line (line 12: look.dock.opacity is 0-100); FILE - reads standard input.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl config set terminal.contrast harder\n" +
@@ -3844,7 +3850,7 @@ public class LauncherCtlApiServer {
             "  esac\n" +
             "}\n" +
             "config_cmd() {\n" +
-            "  usage='usage: launcherctl config get ID | set ID VALUE | list [--json]'\n" +
+            "  usage='usage: launcherctl config get ID | set ID VALUE | list [--json] | export | apply FILE'\n" +
             "  case \"${1:-}\" in\n" +
             "    get)\n" +
             "      [ \"$#\" -eq 2 ] && [ -n \"$2\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
@@ -3860,6 +3866,18 @@ public class LauncherCtlApiServer {
             "        2:--json) api POST /v1/config '{\"op\":\"list\"}' ;;\n" +
             "        *) echo \"$usage\" >&2; exit 2 ;;\n" +
             "      esac\n" +
+            "      ;;\n" +
+            "    export)\n" +
+            "      [ \"$#\" -eq 1 ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      api POST /v1/config '{\"op\":\"export\"}'\n" +
+            "      ;;\n" +
+            "    apply)\n" +
+            "      [ \"$#\" -eq 2 ] && [ -n \"$2\" ] || { echo \"$usage\" >&2; exit 2; }\n" +
+            "      if [ \"$2\" = - ]; then body=$(json_str); else\n" +
+            "        [ -r \"$2\" ] || { echo \"launcherctl config: cannot read $2\" >&2; exit 2; }\n" +
+            "        body=$(json_str < \"$2\")\n" +
+            "      fi\n" +
+            "      api POST /v1/config \"{\\\"op\\\":\\\"apply\\\",\\\"text\\\":$body}\"\n" +
             "      ;;\n" +
             "    *) echo \"$usage\" >&2; exit 2 ;;\n" +
             "  esac\n" +
