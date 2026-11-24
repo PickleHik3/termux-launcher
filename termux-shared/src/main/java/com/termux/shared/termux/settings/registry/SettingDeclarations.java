@@ -218,7 +218,9 @@ public final class SettingDeclarations {
     public static final SettingDeclaration DOCK_STYLE = SettingDeclaration.choice(
         "dock.style", SettingDeclaration.Store.APP_PREFERENCES, "app_launcher_dock_style",
         Arrays.asList("docked", "floating"), Arrays.asList("docked", "floating"), "docked", false,
-        SettingRefresh.RESTYLE).described("Dock style",
+        SettingRefresh.RESTYLE).readingStoredAs(
+        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+            ::normalizeAppLauncherDockStyle).described("Dock style",
         "Whether the dock and bars sit on the screen's edge or float as cards.")
         .saidAs("the dock should float", "the dock touches the edge of the screen",
             "I want rounded cards", "make the dock square");

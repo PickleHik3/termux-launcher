@@ -6,6 +6,7 @@ import androidx.annotation.Nullable;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.UnaryOperator;
 
 /**
  * One setting written down once: its dotted id, its kind and range or choices, its default, the
@@ -84,6 +85,11 @@ public final class SettingDeclaration {
     @NonNull public final String defaultNote;
     /** How people say they want it changed; empty until {@link #saidAs}. */
     @NonNull public final List<String> phrases;
+    /**
+     * How the launcher reads a stored choice before matching it, for a store that still holds old
+     * spellings; null reads the stored text as it is.
+     */
+    @Nullable private final UnaryOperator<String> storedReader;
     /** Whether the Assistant may offer to change it; false after {@link #notOffered}. */
     public final boolean mayOffer;
 
@@ -95,7 +101,7 @@ public final class SettingDeclaration {
                                @NonNull ResetGroup resetGroup) {
         this(id, kind, store, key, refresh, min, max, step, defaultInt, choices, storedChoices,
             defaultChoice, ordered, exported, resetGroup, "", "", "", "",
-            Collections.emptyList(), true);
+            Collections.emptyList(), true, null);
     }
 
     private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
@@ -106,7 +112,9 @@ public final class SettingDeclaration {
                                @NonNull ResetGroup resetGroup, @NonNull String title,
                                @NonNull String summary, @NonNull String rangeNote,
                                @NonNull String defaultNote, @NonNull List<String> phrases,
-                               boolean mayOffer) {
+                               boolean mayOffer,
+                               @Nullable UnaryOperator<String> storedReader) {
+        this.storedReader = storedReader;
         this.title = title;
         this.summary = summary;
         this.rangeNote = rangeNote;
@@ -135,7 +143,7 @@ public final class SettingDeclaration {
     public SettingDeclaration resetBy(@NonNull ResetGroup group) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, group, title, summary,
-            rangeNote, defaultNote, phrases, mayOffer);
+            rangeNote, defaultNote, phrases, mayOffer, storedReader);
     }
 
     /** This declaration with the name and sentence the settings reference page shows. */
@@ -143,7 +151,7 @@ public final class SettingDeclaration {
     public SettingDeclaration described(@NonNull String title, @NonNull String summary) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            rangeNote, defaultNote, phrases, mayOffer);
+            rangeNote, defaultNote, phrases, mayOffer, storedReader);
     }
 
     /** This declaration with the range and default the reference page words in place of numbers. */
@@ -151,7 +159,7 @@ public final class SettingDeclaration {
     public SettingDeclaration shownAs(@NonNull String range, @NonNull String defaultText) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            range, defaultText, phrases, mayOffer);
+            range, defaultText, phrases, mayOffer, storedReader);
     }
 
     /** This declaration kept out of a settings file's export and apply. */
@@ -159,7 +167,15 @@ public final class SettingDeclaration {
     public SettingDeclaration notExported() {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, false, resetGroup, title, summary,
-            rangeNote, defaultNote, phrases, mayOffer);
+            rangeNote, defaultNote, phrases, mayOffer, storedReader);
+    }
+
+    /** This choice reading what its store holds through {@code reader} (the launcher's own mapping). */
+    @NonNull
+    public SettingDeclaration readingStoredAs(@NonNull UnaryOperator<String> reader) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            rangeNote, defaultNote, phrases, mayOffer, reader);
     }
 
     /**
@@ -170,7 +186,8 @@ public final class SettingDeclaration {
     public SettingDeclaration saidAs(@NonNull String... complaints) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            rangeNote, defaultNote, Collections.unmodifiableList(java.util.Arrays.asList(complaints.clone())), mayOffer);
+            rangeNote, defaultNote, Collections.unmodifiableList(java.util.Arrays.asList(complaints.clone())), mayOffer,
+            storedReader);
     }
 
     /**
@@ -182,7 +199,7 @@ public final class SettingDeclaration {
     public SettingDeclaration notOffered() {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            rangeNote, defaultNote, phrases, false);
+            rangeNote, defaultNote, phrases, false, storedReader);
     }
 
     /** A whole number from {@code min} to {@code max}, stepped by {@code step}. */
@@ -255,6 +272,7 @@ public final class SettingDeclaration {
     @NonNull
     public String storedChoiceOrDefault(@Nullable String stored) {
         if (stored == null) return defaultStoredChoice();
+        if (storedReader != null) stored = storedReader.apply(stored);
         String value = stored.trim().toLowerCase(Locale.ROOT);
         return storedChoices.contains(value) ? value : defaultStoredChoice();
     }

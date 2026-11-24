@@ -131,6 +131,19 @@ public class ConfigCommandTest {
     }
 
     @Test
+    public void configGetReadsALegacyDockStyleAsTheLauncherDoes() throws Exception {
+        store.putString("app_launcher_dock_style", "rounded");
+        assertEquals("floating",
+            handle("{\"op\":\"get\",\"id\":\"dock.style\"}").getString("value"));
+        store.putString("app_launcher_dock_style", "valarie_capsule");
+        assertEquals("floating",
+            handle("{\"op\":\"get\",\"id\":\"dock.style\"}").getString("value"));
+        store.putString("app_launcher_dock_style", "default");
+        assertEquals("docked",
+            handle("{\"op\":\"get\",\"id\":\"dock.style\"}").getString("value"));
+    }
+
+    @Test
     public void aBooleanSettingIsSetThroughConfigSet() throws Exception {
         JSONObject answer = handle("{\"op\":\"set\",\"id\":\"motion.cursor_trail\",\"value\":\"false\"}");
         assertTrue(answer.getBoolean("ok"));

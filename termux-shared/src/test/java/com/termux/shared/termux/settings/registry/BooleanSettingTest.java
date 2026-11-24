@@ -89,4 +89,18 @@ public class BooleanSettingTest {
             assertFalse(each.id + " has no complaint phrases", each.phrases.isEmpty());
         }
     }
+
+    @Test
+    public void dockStyleReadsLegacyValuesTheWayTheLauncherDoes() {
+        SettingsRegistry dock = new SettingsRegistry(which -> store);
+        String[][] legacy = {{"rounded", "floating"}, {"valarie_capsule", "floating"},
+            {"default", "docked"}, {"floating", "floating"}, {"docked", "docked"},
+            {"nonsense", "docked"}};
+        for (String[] each : legacy) {
+            store.putString("app_launcher_dock_style", each[0]);
+            assertEquals(each[0], each[1], dock.get("dock.style"));
+        }
+        assertEquals("docked", new SettingsRegistry(which -> new InMemorySettingStore())
+            .get("dock.style"));
+    }
 }
