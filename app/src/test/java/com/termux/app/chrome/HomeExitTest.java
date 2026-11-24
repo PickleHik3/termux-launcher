@@ -153,4 +153,19 @@ public class HomeExitTest {
         exit.finishNow();
         assertEquals(11, ended);
     }
+
+    @Test public void aMemberUnderItsOwnAnimatorIsNotFoughtOverOrReadAsRest() {
+        view.setAlpha(0.4f);
+        view.animate().alpha(1f).setDuration(1000L).start();
+        exit.start(views(), false, () -> ended++);
+        frames.frameAt(0);
+        // Its own animator would have moved it by now; the exit is the only writer.
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(500, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(0.4f, view.getAlpha(), 0.001f);
+        frames.frameAt(HomeExit.DURATION_MS + 1);
+        assertEquals(1, ended);
+        assertEquals(0.4f, view.getAlpha(), 0.001f);
+        org.robolectric.shadows.ShadowLooper.idleMainLooper(1500, java.util.concurrent.TimeUnit.MILLISECONDS);
+        assertEquals(0.4f, view.getAlpha(), 0.001f);
+    }
 }

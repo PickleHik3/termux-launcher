@@ -334,4 +334,51 @@ public class OverlayRegistryTest {
         assertEquals(0, registry.beginExit(new ArrayList<>()));
         assertEquals(List.of("a:HOME"), log);
     }
+
+    /** Back while the Home exit runs ends it at once, and nothing else handles that press. */
+    @Test
+    public void backDuringTheHomeExitFinishesItAndIsSpentThere() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Pane sheet = new Pane("sheet", true, log);
+        registry.register(sheet);
+        registry.setExitFinisher(() -> {
+            log.add("finish");
+            registry.endExit();
+        });
+        List<android.view.View> views = new ArrayList<>();
+        Pane leaving = new Pane("leaving", true, log) {
+            @Override public void exitViews(@NonNull List<android.view.View> out) {
+                out.add(null);
+            }
+        };
+        registry.register(leaving);
+        assertEquals(1, registry.beginExit(views));
+
+        assertTrue(registry.consumeKeyDown(KeyEvent.KEYCODE_BACK, down(KeyEvent.KEYCODE_BACK)));
+        assertTrue("the release is swallowed too", registry.consumeKeyUp(KeyEvent.KEYCODE_BACK));
+        assertEquals(List.of("sheet:HOME", "finish", "leaving:HOME"), log);
+
+        // Not exiting any more: Back goes to the overlays as it always did.
+        assertFalse(registry.onBackPressed());
+    }
+
+    @Test
+    public void backDuringTheHomeExitOnTheButtonRouteFinishesItToo() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Pane leaving = new Pane("leaving", true, log) {
+            @Override public void exitViews(@NonNull List<android.view.View> out) {
+                out.add(null);
+            }
+        };
+        registry.register(leaving);
+        registry.setExitFinisher(() -> {
+            log.add("finish");
+            registry.endExit();
+        });
+        registry.beginExit(new ArrayList<>());
+        assertTrue(registry.onBackPressed());
+        assertEquals(List.of("finish", "leaving:HOME"), log);
+    }
 }

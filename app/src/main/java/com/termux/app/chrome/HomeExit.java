@@ -36,6 +36,12 @@ public final class HomeExit {
     /** How much of its size the group gives up by the end. */
     static final float SCALE_DROP = 0.04f;
 
+    /** One member's rest values sit side by side in {@code mRest}: alpha, scale X, scale Y. */
+    private static final int REST_STRIDE = 3;
+    private static final int REST_ALPHA = 0;
+    private static final int REST_SCALE_X = 1;
+    private static final int REST_SCALE_Y = 2;
+
     /** The clock and frame source; the test drives its own. */
     public interface Frames {
         long nowMs();
@@ -59,13 +65,14 @@ public final class HomeExit {
                 if (target != null) target.run();
             };
 
+            { pipeline.bind(FrameStep.HOME_EXIT, mStep); }
+
             @Override public long nowMs() {
                 return android.os.SystemClock.uptimeMillis();
             }
 
             @Override public void requestFrame(@NonNull Runnable callback) {
                 mTarget = callback;
-                pipeline.bind(FrameStep.HOME_EXIT, mStep);
                 pipeline.requestFrame(FrameStep.HOME_EXIT);
             }
 
@@ -121,12 +128,16 @@ public final class HomeExit {
             return;
         }
         int n = mViews.size();
-        if (mRest.length < n * 3) mRest = new float[n * 3];
+        if (mRest.length < n * REST_STRIDE) mRest = new float[n * REST_STRIDE];
         for (int i = 0; i < n; i++) {
             View v = mViews.get(i);
-            mRest[i * 3] = v.getAlpha();
-            mRest[i * 3 + 1] = v.getScaleX();
-            mRest[i * 3 + 2] = v.getScaleY();
+            // The exit is the only writer from here: a view's own entry or exit animation must
+            // not keep writing beside it, nor have its transient value read as the rest.
+            v.animate().cancel();
+            int at = i * REST_STRIDE;
+            mRest[at + REST_ALPHA] = v.getAlpha();
+            mRest[at + REST_SCALE_X] = v.getScaleX();
+            mRest[at + REST_SCALE_Y] = v.getScaleY();
         }
         mStartMs = mFrames.nowMs();
         mFrameCount = 0;
@@ -150,9 +161,10 @@ public final class HomeExit {
             int n = mViews.size();
             for (int i = 0; i < n; i++) {
                 View v = mViews.get(i);
-                v.setAlpha(mRest[i * 3]);
-                v.setScaleX(mRest[i * 3 + 1]);
-                v.setScaleY(mRest[i * 3 + 2]);
+                int at = i * REST_STRIDE;
+                v.setAlpha(mRest[at + REST_ALPHA]);
+                v.setScaleX(mRest[at + REST_SCALE_X]);
+                v.setScaleY(mRest[at + REST_SCALE_Y]);
             }
             mViews.clear();
         }
@@ -183,9 +195,10 @@ public final class HomeExit {
         int n = mViews.size();
         for (int i = 0; i < n; i++) {
             View v = mViews.get(i);
-            v.setAlpha(mRest[i * 3] * alpha);
-            v.setScaleX(mRest[i * 3 + 1] * scale);
-            v.setScaleY(mRest[i * 3 + 2] * scale);
+            int at = i * REST_STRIDE;
+            v.setAlpha(mRest[at + REST_ALPHA] * alpha);
+            v.setScaleX(mRest[at + REST_SCALE_X] * scale);
+            v.setScaleY(mRest[at + REST_SCALE_Y] * scale);
         }
         mFrames.requestFrame(mOnFrame);
     }

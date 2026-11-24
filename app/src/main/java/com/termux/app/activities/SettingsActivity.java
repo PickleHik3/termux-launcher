@@ -665,7 +665,7 @@ public class SettingsActivity extends AppCompatActivity implements
 
     /**
      * Pushes a settings sub-screen onto the back stack in place, instead of relaunching this
-     * singleTask Activity through {@link #onNewIntent} -- which pops back to the root, so Back
+     * Activity through {@link #onNewIntent} -- which pops back to the root, so Back
      * closed Settings instead of returning to the screen the user came from. Call sites inside
      * Settings that used to do {@code startActivity(createFragmentIntent(...))} call this instead;
      * {@link #createFragmentIntent} is unchanged for launches that arrive from outside Settings, for
@@ -850,7 +850,7 @@ public class SettingsActivity extends AppCompatActivity implements
     /**
      * Back with nothing to pop finishes Settings itself. From Android 12 a Back at the root of a
      * task is handed to the system, which finishes only after it calls back; this activity is the
-     * root of its own task (singleTask, own affinity), and on some systems that call never comes,
+     * root of its own task (own affinity), and on some systems that call never comes,
      * so Back and Up did nothing on the first screen. A screen pushed on top, or a fragment's own
      * Back handler (the extra-keys editor's unsaved edits), still goes through the dispatcher.
      */
