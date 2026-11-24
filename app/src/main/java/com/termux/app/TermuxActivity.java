@@ -18885,7 +18885,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.place.StackLanes.slackPx(frontRows, otherRows);
     }
 
-
     /**
      * The Terminal's flush padding at its own rest: the one it last rested with, or, before it has
      * rested with its keyboard down (a start on Home), worked out the way its own pass would.

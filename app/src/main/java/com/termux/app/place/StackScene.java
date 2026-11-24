@@ -392,7 +392,6 @@ public final class StackScene {
         return side >= 0 && side < Side.COUNT;
     }
 
-
     /**
      * The slab's and the keyboard's shown numbers at blend {@code w} ({@link #materialShare}) from
      * {@code from}'s rest to {@code to}'s, into {@code out}: exactly the leaving rest's at 0 and

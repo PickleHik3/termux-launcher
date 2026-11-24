@@ -134,10 +134,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     /** The cards stand apart, and Home's drop while they do ({@link #setSidesApart}). */
     private boolean mApart;
     private float mHomeDropPx;
-    /** The cover's drops on this frame, the scene's ({@link StackScene.Frame#coverHomePx}). */
     /**
      * Home's rows are covered by the keyboard ({@link #setHomeCover}) and what the system keyboard
-     * takes from the root's room; the drops, below, are this frame's numbers from them.
+     * takes from the root's room; the drops, below, are this frame's, the scene's
+     * ({@link StackScene.Frame#coverHomePx}).
      */
     private boolean mHomeCovered;
     private int mSystemImeTakePx;
@@ -355,7 +355,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
-    /** {@code home}'s end, for a test to fill its card table ({@link StackEnd#setCard}). */
+    /** {@code home}'s side's end of the scene; a test fills its card table ({@link StackEnd#setCard}). */
     @NonNull
     StackEnd end(boolean home) {
         return home ? mEndHome : mEndTerminal;
@@ -366,7 +366,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     /** This frame's Terminal share of the scene (1 at its rest) and the column's lift from it. */
     private float mTerminalShare;
     private float mColumnLiftPx;
-
 
     /**
      * Each side's room, the window's bottom up to where its page's cells end
@@ -409,7 +408,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     public View plankTargetView() {
         return plankView(plankTarget());
     }
-
 
     /**
      * Whether Home's rows are covered by the keyboard instead of lifted by it (#309), and what the
@@ -689,7 +687,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mWriteCount++;
         mViews.laneMoved(host);
     }
-
 
     private int plankTarget() {
         return mViews.keyboardShown() ? PLANK_HOST : PLANK_CONTAINER;
