@@ -1,7 +1,7 @@
 # Settings reference
 
 <!-- Generated from the launcher's settings; do not edit by hand. To update it, run
-REGENERATE_SETTINGS_REFERENCE=1 ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest --tests 'com.termux.launcherctl.SettingsReferenceTest' -->
+REGENERATE_SETTINGS_REFERENCE=1 ./gradlew :app:testDebugUnitTest --tests 'com.termux.launcherctl.SettingsReferenceTest' -->
 
 Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change, with the values it accepts and what a fresh install uses. A value outside the range is refused and nothing changes.
 
@@ -26,9 +26,7 @@ Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change,
 | Global tint | `look.tint` | 0 to 100 | 0 | How strongly the theme colour tints the glass, in percent. |
 | Global tint colour | `look.colour` | primary, secondary, tertiary | primary | Which theme colour tints the glass. |
 | Global depth | `look.depth` | 0 to 45 | 9 | How strongly the glass bends the wallpaper at its edge, in dp. |
-| Global edge | `look.edge` | 0 to 100 | 0 | No longer used; Shine replaced it. |
 | Global corners | `look.corners` | -1 to 40 | 24 | How round the corners are, in dp; the lowest value follows each surface's style. |
-| Global rim | `look.rim` | off, hairline, bright | hairline | No longer used; Shine replaced it. |
 | Global shine | `look.shine` | 0 to 100 | 50 | How much light catches the glass's rim and lens. |
 | Global vibrancy | `look.vibrancy` | 70 to 150 | 100 | How much the glass lifts the colours behind it. |
 | Global edge gap | `look.margin` | 0 to 48 | 12 | The gap between the glass and the screen edge, in dp. |
