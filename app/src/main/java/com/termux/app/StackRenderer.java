@@ -869,8 +869,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     }
 
     /**
-     * Whether the Terminal's Docked host is the dock's slab now (#304): the cards stand apart, the
-     * Terminal is in front and the host is laid out (it is only under Docked). The plank's tilt,
+     * Whether the Terminal's own host is the dock's slab now (#304, #305): the cards stand apart,
+     * the Terminal is in front and the host is laid out (under Docked, and under Floating with
+     * rows beside the keys). The plank's tilt,
      * its specular and its rim glow follow it.
      */
     public boolean terminalHostStands() {

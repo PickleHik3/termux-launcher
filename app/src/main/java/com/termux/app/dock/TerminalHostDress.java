@@ -28,8 +28,8 @@ import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.RestCards;
 
 /**
- * The Terminal's Docked card wearing the dock slab's glass while the cards stand apart (ADR 0032,
- * #304): a second back host ({@code terminal_dock_host}) beside the glass host, dressed the way
+ * The Terminal's card wearing the dock slab's glass while the cards stand apart (ADR 0032,
+ * #304 under Docked; #305 under Floating with the apps row or A-Z beside the keys): a second back host ({@code terminal_dock_host}) beside the glass host, dressed the way
  * the activity dresses the host under Docked, on its own views. Its shape is the card the rest's
  * answer cuts ({@link SideCardsController#terminalHostCard}): the outline from its corners, the
  * rim under the glass on its rim edges only ({@code rimUnderGlass(0, rimEdges)}), every other
@@ -58,6 +58,8 @@ public final class TerminalHostDress {
     @NonNull private final CardOutline mOutline = new CardOutline();
 
     private float mCover = -1f;
+    /** The card's glass radius ({@link #capsuleRadiusPx}): 0 under Docked. */
+    private float mRadiusPx;
     private boolean mProgramEdge;
     private boolean mShown;
     private int mRimEdges = ChromeEdgeRule.NONE;
@@ -163,6 +165,7 @@ public final class TerminalHostDress {
         watch(host);
         mShown = true;
         mRimEdges = rimEdges(card);
+        mRadiusPx = capsuleRadiusPx(card);
         float barAlpha = state.barAlpha;
         View plate = mHost.findViewById(R.id.terminal_dock_background);
         if (plate != null) {
@@ -172,7 +175,8 @@ public final class TerminalHostDress {
         }
         View specular = mHost.findViewById(R.id.terminal_dock_specular_fx);
         View glow = mHost.findViewById(R.id.terminal_dock_edge_glow_fx);
-        mDock.dressPlankLayers(specular, glow, 0f, mHost.resolveDockAccentColor(), barAlpha);
+        mDock.dressPlankLayers(specular, glow, mRadiusPx, mHost.resolveDockAccentColor(),
+            barAlpha);
         if (glow != null && glow.getVisibility() != View.VISIBLE) glow.setVisibility(View.VISIBLE);
         View edgeFx = mHost.findViewById(R.id.terminal_dock_top_edge_fx);
         if (edgeFx != null) {
@@ -181,6 +185,18 @@ public final class TerminalHostDress {
         }
         dressShape(host, card);
         updateBackdrop(state, host, backdrop, atRest);
+    }
+
+    /**
+     * The glass radius of the card: a Floating card (a rim on every edge, its four corners one
+     * radius, #305) is a capsule and its glass and rim are rounded with it; a Docked slice keeps
+     * radius 0 and rounds only its outline.
+     */
+    static float capsuleRadiusPx(@NonNull RestCards.Card card) {
+        for (Edge edge : Edge.values()) if (card.edge(edge) != EdgeKind.RIM) return 0f;
+        float r = card.corners.topLeft;
+        return r == card.corners.topRight && r == card.corners.bottomRight
+            && r == card.corners.bottomLeft ? Math.max(0f, r) : 0f;
     }
 
     /** The rim edges of the card: those facing the opening; joins and the screen's are seams. */
@@ -197,7 +213,7 @@ public final class TerminalHostDress {
         // The program's gathered light is the edge wherever it runs; a rim under it would be a
         // second one.
         int stroke = mProgramEdge ? ChromeEdgeRule.NONE : mRimEdges;
-        host.setBackground(mHost.chrome().glass().rimUnderGlass(0f, stroke));
+        host.setBackground(mHost.chrome().glass().rimUnderGlass(mRadiusPx, stroke));
         boolean changed = mOutline.set(card.corners.topLeft, card.corners.topRight,
             card.corners.bottomRight, card.corners.bottomLeft);
         if (host.getOutlineProvider() != mOutline) host.setOutlineProvider(mOutline);
@@ -274,12 +290,13 @@ public final class TerminalHostDress {
         mCover = cover;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             // Docked: radius 0, and every edge but the rim's a seam the rim rect is pushed past.
+            // Floating (#305, rows beside the keys): the capsule's radius, a rim all round.
             int seams = ChromeEdgeRule.ALL & ~mRimEdges;
             CapsuleGlass.capRect(mCap, hOver, width, height, seamOver,
                 GlassRefraction.seamReachPx(GlassStack.lookFor(mSource.fancierLook()),
-                    mHost.density(), 0f), seams);
+                    mHost.density(), mRadiusPx), seams);
             RenderEffect glass = mEffects.buildDockAndRemember(0f, mCap[0], mCap[1], mCap[2],
-                mCap[3], 0f);
+                mCap[3], mRadiusPx);
             backdrop.setRenderEffect(glass);
         }
         backdrop.setColorFilter(mSource.frostFilter(measured));
