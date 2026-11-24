@@ -1037,6 +1037,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_STATUS_ROW_ORDER, value, false);
     }
 
+    /** How the status bar marks the pages, as stored ({@link TERMUX_APP#KEY_PAGE_BAR_LOOK}). */
+    public String getPageBarLook() {
+        return SharedPreferenceUtils.getString(mSharedPreferences,
+            TERMUX_APP.KEY_PAGE_BAR_LOOK, TERMUX_APP.DEFAULT_PAGE_BAR_LOOK, false);
+    }
+
+    public void setPageBarLook(String value) {
+        SharedPreferenceUtils.setString(mSharedPreferences, TERMUX_APP.KEY_PAGE_BAR_LOOK, value, false);
+    }
+
     public boolean isStatusWidgetRamEnabled() {
         return SharedPreferenceUtils.getBoolean(mSharedPreferences,
             TERMUX_APP.KEY_STATUS_WIDGET_RAM, TERMUX_APP.DEFAULT_STATUS_WIDGET_RAM);
@@ -3345,6 +3355,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
             // The terminal's copy is its own Background's shipped Opacity, never Global's.
             setWallpaperEnabledTerminalBackgroundOpacity(TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY);
             setWallpaperEnabledExtraKeysBlurRadius(FRESH_INSTALL_BASE_BLUR);
+            // The status bar marks the pages with the Marks line. Written, not a changed default:
+            // an existing install reads the absent key as Glyphs and keeps its window chips.
+            setPageBarLook(TERMUX_APP.PAGE_BAR_LOOK_MARKS);
             // Nothing to fold either, and folding would do harm: the fold seeds Global from the
             // dock's numbers, which here means the dock's own denser opacity rather than the
             // shared one the other surfaces are meant to open at.
