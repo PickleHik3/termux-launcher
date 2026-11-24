@@ -131,6 +131,7 @@ public class StackRendererHomeCoverTest {
         mViews.put(homeRow.getId(), homeRow);
         final float drop = 16f;
         mFrontHome = true;
+        StackRendererCards.apart(mRenderer, com.termux.app.place.RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, drop);
         mRenderer.setHomeCover(true, 0);
         for (float reveal : new float[] {0f, 0.5f, 1f}) {

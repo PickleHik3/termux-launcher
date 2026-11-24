@@ -149,6 +149,20 @@ public final class PeekGlassReflection {
         default float laneTx() {
             return 0f;
         }
+
+        /**
+         * How far across from its layout the glass host is drawn now: the stack's scene's pose of
+         * the card it carries (Home's slide while the cards stand apart), read at draw time.
+         */
+        default float hostTx() {
+            return 0f;
+        }
+    }
+
+    /** {@link Row#hostTx} of the row read now; 0 without one. */
+    float hostTx() {
+        Row row = mRow;
+        return row == null ? 0f : row.hostTx();
     }
 
     private final float mDensity;

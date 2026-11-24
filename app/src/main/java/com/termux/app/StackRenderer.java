@@ -13,6 +13,7 @@ import com.termux.app.page.Side;
 import com.termux.app.place.EdgeStackView;
 import com.termux.app.place.HomeKeyboardCover;
 import com.termux.app.place.Element;
+import com.termux.app.place.RestCards;
 import com.termux.app.place.StackEnd;
 import com.termux.app.place.StackGeometry;
 import com.termux.app.place.StackLanes;
@@ -73,17 +74,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             return false;
         }
         /**
-         * A lane host was just moved across: whatever draws the row from outside the host (the
-         * Peek glass reflection) draws it again where the host now stands.
+         * A lane host or a card was just moved across: whatever draws the row from outside the
+         * host (the Peek glass reflection) draws it again where the host now stands.
          */
         default void laneMoved(@NonNull View host) {
         }
         /** Whether the app drawer or an editor owns the stack's transforms for now. */
         default boolean othersOwnStack() {
-            return false;
-        }
-        /** Whether the Terminal's rest a crossing arrives at has its keyboard up. */
-        default boolean arrivalKeyboardUp() {
             return false;
         }
     }
@@ -134,30 +131,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private final StackEnd mEndHome = new StackEnd(PageRef.HOME);
     private final StackEnd mEndTerminal = new StackEnd(PageRef.TERMINAL);
     private boolean mHasEnds;
-    /**
-     * The glass host's laid-out top in the stack at each side's rest (Home, the Terminal), NaN
-     * until that side has been seen at rest. The host is laid out for the front side's rest, so a
-     * crossing moves it from where the leaving rest has it toward where the arriving rest does by
-     * the material share ({@link #hostShiftPx}): the slab never slides, its top blends, and the
-     * landing's layout finds it already standing there.
-     */
-    private final float[] mRestHostTop = {Float.NaN, Float.NaN};
-    /**
-     * Each side's host top at its own rest as the pass works it out at rest (Home, the Terminal),
-     * NaN before it has; the arriving end of a crossing is aimed at this, so a side never rested
-     * on since the start, or last rested on with the keyboard the other way, lands where it rests.
-     */
-    private final float[] mPredictedHostTop = {Float.NaN, Float.NaN};
-    /** The Terminal's rest top with its keyboard down and up; which it lands at is the crossing's. */
-    private float mTerminalTopKeyboardDown = Float.NaN;
-    private float mTerminalTopKeyboardUp = Float.NaN;
-    /** The arriving rest's top the last crossing aimed at, held after its landing. */
-    private float mHeldTop = Float.NaN;
-    /** How far the host is moved off its layout on this frame; 0 at rest. */
-    private float mHostShiftPx;
     /** The cards stand apart, and Home's drop while they do ({@link #setSidesApart}). */
     private boolean mApart;
     private float mHomeDropPx;
+    /** The cover's drops on this frame, the scene's ({@link StackScene.Frame#coverHomePx}). */
     /**
      * Home's rows are covered by the keyboard ({@link #setHomeCover}) and what the system keyboard
      * takes from the root's room; the drops, below, are this frame's numbers from them.
@@ -171,31 +148,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     /** The cut last written to each lane host's clip, and to which view; 0 for none. */
     private final int[] mWrittenLaneCut = new int[LANE_HOST_IDS.length];
     private final View[] mWrittenLaneCutView = new View[LANE_HOST_IDS.length];
-    /** The motion last published to the host's glass anchor, and whether one is. */
-    private boolean mHostMotionSet;
-    private float mHostMotionX = Float.NaN;
-    private float mHostMotionY = Float.NaN;
     /** What was last written to each lane host's translationY, and to which view. */
     private final float[] mWrittenLaneTy = new float[LANE_HOST_IDS.length];
-    /**
-     * The side a crossing just arrived at while the host is still laid out for the side it left:
-     * its rest top is held until the arrival's layout comes, never past {@link #mHeldUntilMs}.
-     */
-    private int mHeldSide = -1;
-    private long mHeldUntilMs;
-    /** The host's layout top the crossing ran on; the hold ends once the host lays out anew. */
-    private int mHeldLayoutTop;
-    /** The longest the arrival's rest top is held waiting for its layout. */
-    private static final long HOLD_REST_TOP_MS = 600L;
-    @Nullable private View mWatchedHost;
-    private final View.OnLayoutChangeListener mHostLayout =
-        (v, l, t, r, b, ol, ot, or, ob) -> {
-            if (t == ot && b == ob) return;
-            // A landing's layout: the shift that held the arrival's top goes in this same
-            // traversal, before the frame draws, or that frame shows the host moved twice.
-            if (mHeldSide >= 0 && !mHasEnds) apply();
-            else requestApply();
-        };
     private boolean mFromHome;
     private boolean mToHome;
     private float mEndsProgress;
@@ -204,6 +158,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private final float[] mWrittenLaneTx = new float[LANE_HOST_IDS.length];
     private final DockPlankController.Slab mSlab = new DockPlankController.Slab();
     private int mPlankTarget = PLANK_NONE;
+
+    /** The extra-keys card's pose as last drawn: a move of it alone re-aims its glass. */
+    private float mDrawnKeysCardTx = Float.NaN;
+    private float mDrawnKeysCardTy = Float.NaN;
+    private static final int HOST_VIEW = RestCards.StackView.HOST.ordinal();
+    private static final int TERMINAL_HOST_VIEW = RestCards.StackView.TERMINAL_HOST.ordinal();
+    private static final int KEYS_CARD_VIEW = RestCards.StackView.KEYS_CARD.ordinal();
 
     /** The Terminal's extra-keys card's slot, after the scene's ({@link StackScene#V_COUNT}). */
     private static final int SLOT_KEYS_CARD = StackScene.V_COUNT;
@@ -343,16 +304,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     public void setEnds(boolean fromHome, boolean toHome, float progress) {
         if (mHasEnds && mFromHome == fromHome && mToHome == toHome && mEndsProgress == progress
             && mApplied) return;
-        if (!mHasEnds || mToHome != toHome) {
-            // Which of the Terminal's rests the crossing lands at, asked once as it begins:
-            // whether its keyboard is up there is the page's answer, known only now.
-            boolean up = !toHome && mViews.arrivalKeyboardUp();
-            mPredictedHostTop[1] = up ? mTerminalTopKeyboardUp : mTerminalTopKeyboardDown;
-            if (com.termux.app.chrome.MotionLog.enabled)
-                com.termux.app.chrome.MotionLog.log("host-aim", "toHome=" + toHome + " kbUp=" + up
-                    + " down=" + mTerminalTopKeyboardDown + " up=" + mTerminalTopKeyboardUp
-                    + " home=" + mPredictedHostTop[0]); // DIAG(host-shift)
-        }
         mHasEnds = true;
         mFromHome = fromHome;
         mToHome = toHome;
@@ -387,7 +338,27 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mApart = apart;
         mHomeDropPx = drop;
         mTerminalLiftPx = lift;
+        // Each side's card stands its rest's own offset (StackScene's cards): the same numbers.
+        mEndHome.homeDropPx = mEndTerminal.homeDropPx = drop;
+        mEndHome.terminalLiftPx = mEndTerminal.terminalLiftPx = lift;
         requestApply();
+    }
+
+    /**
+     * Each side's rest's glass cards ({@link StackEnd#readCards}), written by the rest pass at rest
+     * only: the scene pairs them by id across a crossing and poses each card view. Null for a side
+     * with no answer.
+     */
+    public void setCards(@Nullable RestCards home, @Nullable RestCards terminal) {
+        mEndHome.readCards(home);
+        mEndTerminal.readCards(terminal);
+        requestApply();
+    }
+
+    /** {@code home}'s end, for a test to fill its card table ({@link StackEnd#setCard}). */
+    @NonNull
+    StackEnd end(boolean home) {
+        return home ? mEndHome : mEndTerminal;
     }
 
     /** The Terminal side's lift while apart ({@link #setSidesApart(boolean, float, int)}). */
@@ -396,14 +367,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private float mTerminalShare;
     private float mColumnLiftPx;
 
-    /** Each side's host top at its own rest, written by the pass at rest ({@link #mPredictedHostTop}). */
-    public void setRestHostTops(int homePx, int terminalKeyboardDownPx,
-                                int terminalKeyboardUpPx) {
-        mPredictedHostTop[0] = homePx;
-        mTerminalTopKeyboardDown = terminalKeyboardDownPx;
-        mTerminalTopKeyboardUp = terminalKeyboardUpPx;
-        if (!mHasEnds) mPredictedHostTop[1] = terminalKeyboardDownPx;
-    }
 
     /**
      * Each side's room, the window's bottom up to where its page's cells end
@@ -447,65 +410,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         return plankView(plankTarget());
     }
 
-    /** The frame last written: the Peek reflection reads its rows' offset from the host here. */
-    public float rowsOverHostPx() {
-        return mFrame.ty[StackScene.V_ROWS] - mFrame.ty[StackScene.V_HOST] - mHostShiftPx;
-    }
-
-    /** How far the glass host stands off its layout on this frame ({@link #mRestHostTop}). */
-    public float hostShiftPx() {
-        return mHostShiftPx;
-    }
-
-    /**
-     * The host's shift for this frame: across a crossing between the sides, from the leaving
-     * rest's top to the arriving rest's by the material share; on the frames after a landing,
-     * the arriving rest's until its layout comes; 0 at rest, where the rest's top is recorded.
-     */
-    private void shiftHost(int hostTop) {
-        if (mApart) {
-            // Home's card keeps Home's rest: it only slides, with Home's lane.
-            mHostShiftPx = 0f;
-            mHeldSide = -1;
-            return;
-        }
-        long now = android.os.SystemClock.uptimeMillis();
-        if (mHasEnds) {
-            if (mFromHome == mToHome) {
-                mHostShiftPx = 0f;
-                return;
-            }
-            float from = mRestHostTop[mFromHome ? 0 : 1];
-            float to = mPredictedHostTop[mToHome ? 0 : 1];
-            if (Float.isNaN(to)) to = mRestHostTop[mToHome ? 0 : 1];
-            float layoutFrom = Float.isNaN(from) ? hostTop : from;
-            float target = Float.isNaN(to) ? layoutFrom
-                : layoutFrom + (to - layoutFrom) * StackScene.materialShare(mEndsProgress);
-            mHostShiftPx = target - hostTop;
-            mHeldSide = mToHome ? 0 : 1;
-            mHeldTop = to;
-            mHeldUntilMs = now + HOLD_REST_TOP_MS;
-            mHeldLayoutTop = hostTop;
-            return;
-        }
-        int front = mViews.frontIsHome() ? 0 : 1;
-        float rest = mHeldTop;
-        if (mHeldSide == front && !Float.isNaN(rest) && hostTop == mHeldLayoutTop
-            && hostTop != rest && now < mHeldUntilMs) {
-            mHostShiftPx = rest - hostTop;
-            if (com.termux.app.chrome.MotionLog.enabled)
-                com.termux.app.chrome.MotionLog.log("host-hold", "front=" + front + " rest=" + rest
-                    + " layout=" + hostTop); // DIAG(host-shift)
-            return;
-        }
-        mHeldSide = -1;
-        mHostShiftPx = 0f;
-        if (mRestHostTop[front] != hostTop && com.termux.app.chrome.MotionLog.enabled)
-            com.termux.app.chrome.MotionLog.log("host-rest", "front=" + front + " top=" + hostTop
-                + " was=" + mRestHostTop[front] + " predicted=" + mPredictedHostTop[0] + ","
-                + mPredictedHostTop[1]); // DIAG(host-shift)
-        mRestHostTop[front] = hostTop;
-    }
 
     /**
      * Whether Home's rows are covered by the keyboard instead of lifted by it (#309), and what the
@@ -538,8 +442,19 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         boolean landing = mLandingPending;
         mLandingPending = false;
         if (guard != null) guard.check();
-        final float homeShare = mHasEnds ? StackScene.homeShare(mFromHome, mToHome, mEndsProgress)
-            : mViews.frontIsHome() ? 1f : 0f;
+        // The scene's two ends: the crossing's, or the side in front at rest.
+        final StackEnd from;
+        final StackEnd to;
+        final float p;
+        if (mHasEnds) {
+            from = end(mFromHome);
+            to = end(mToHome);
+            p = mEndsProgress;
+        } else {
+            from = to = end(mViews.frontIsHome());
+            p = 0f;
+        }
+        final float homeShare = StackScene.homeShare(from, to, p);
         mTerminalShare = 1f - homeShare;
         mColumnLiftPx = com.termux.app.place.SideCards.columnLiftPx(mApart, mTerminalLiftPx,
             mTerminalShare);
@@ -548,32 +463,18 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         // (PlaceChromeTravel#keyboardLaidOutPx), so the rest's share joins only at rest.
         StackScene.withKeyboardRest(mMotion, mHasEnds ? 0f
             : StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
-        if (mHasEnds) {
-            StackScene.at(mFromHome ? mEndHome : mEndTerminal, mToHome ? mEndHome : mEndTerminal,
-                mEndsProgress, mEffective, mGeometry, mFrame);
-        } else {
-            StackEnd front = mViews.frontIsHome() ? mEndHome : mEndTerminal;
-            StackScene.at(front, front, 0f, mEffective, mGeometry, mFrame);
-        }
-        mPlankTarget = plankTarget();
-        View hostView = mViews.view(LAYER_IDS[StackGeometry.HOST]);
-        if (hostView != null && hostView != mWatchedHost) {
-            if (mWatchedHost != null) mWatchedHost.removeOnLayoutChangeListener(mHostLayout);
-            mWatchedHost = hostView;
-            hostView.addOnLayoutChangeListener(mHostLayout);
-        }
-        if (mGeometry.layerPresent[StackGeometry.HOST])
-            shiftHost(mGeometry.layerTopPx[StackGeometry.HOST]);
-
         // Home's cover (#309): the rows stand at their keyboard-down rect whatever the keyboard
         // does, and the system keyboard does not raise Home's stack.
         final boolean covered = mHomeCovered;
         final int keyboardPx = mGeometry.keyboardPresent && mGeometry.keyboardInColumn
             ? mGeometry.keyboardHeightPx : 0;
         final float coverShare = mEffective.keyboardSharePx;
-        mCoverHomeDropPx = covered ? HomeKeyboardCover.rowsDropPx(false, keyboardPx, coverShare)
-            : 0f;
-        mCoverSharedDropPx = HomeKeyboardCover.sharedDropPx(homeShare, mCoverHomeDropPx);
+        mEffective.homeCoverPx = covered
+            ? HomeKeyboardCover.rowsDropPx(false, keyboardPx, coverShare) : 0f;
+        StackScene.at(from, to, p, mEffective, mGeometry, mFrame);
+        mPlankTarget = plankTarget();
+        mCoverHomeDropPx = mFrame.coverHomePx;
+        mCoverSharedDropPx = mFrame.coverSharedPx;
         mCoverKeyboardTopPx = covered && keyboardPx > 0 && coverShare < keyboardPx
             ? mGeometry.keyboardTopPx : Float.NaN;
         final float imeStand = homeShare * HomeKeyboardCover.imeStandPx(!covered,
@@ -592,10 +493,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             invalidateIfDressed(R.id.accessory_under_keyboard_stack);
         }
         boolean layersMoved = false;
-        // Apart: the host is Home's card, so it slides with Home's lane and stands where Home's
-        // side stands; the plank tilts the Terminal's card while the Terminal is in front.
-        final boolean keysTilt = keysCardTilts();
-        final float hostTx = mApart ? mFrame.sideTx[Side.HOME.ordinal()] : 0f;
+        // The host carries the card the scene poses on it: Home's, sliding with Home and standing
+        // where Home's side stands, or one both ends draw alike, which keeps its rest. The plank
+        // tilts the card the scene names (the Terminal's own while it stands).
+        final boolean keysTilt = terminalCardStands();
+        final float hostTx = mFrame.cardTx[HOST_VIEW];
         for (int i = 0; i < StackGeometry.LAYER_COUNT; i++) {
             int v = StackScene.V_LAYER0 + i;
             View layer = mViews.view(LAYER_IDS[i]);
@@ -607,8 +509,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             // carry it) none; else every layer Home's share of it.
             float cover = mApart ? (i == StackGeometry.ROWS ? 0f : mCoverHomeDropPx)
                 : mCoverSharedDropPx;
-            float layerTy = mFrame.ty[v] + drop + cover
-                + (host ? (keysTilt ? 0f : plankTy(PLANK_HOST)) + mHostShiftPx : 0f);
+            if (host) cover = mFrame.cardCoverPx[HOST_VIEW];
+            float layerTy = host ? mFrame.cardTy[HOST_VIEW] + (keysTilt ? 0f : plankTy(PLANK_HOST))
+                : mFrame.ty[v] + drop + cover;
             layersMoved |= writeTy(v, layer, layerTy);
             if (cover > 0f && !Float.isNaN(mCoverKeyboardTopPx)) {
                 int h = mGeometry.layerHeightPx[i];
@@ -619,7 +522,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (host) {
                 float txWas = layer.getTranslationX();
                 writePlank(v, layer, keysTilt ? PLANK_NONE : PLANK_HOST, hostTx);
-                layersMoved |= writeHostMotion(layer, hostTx, drop);
                 if (layer.getTranslationX() != txWas) {
                     layersMoved = true;
                     mViews.laneMoved(layer);
@@ -629,11 +531,18 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         View keysCard = mViews.view(R.id.extra_keys_card);
         if (keysCard != null) {
-            // The card's glass samples where the card is drawn: a move of the card alone redraws it.
+            // The card rides its lane; its glass samples where the scene draws it, so a move of
+            // the card alone re-aims it.
             boolean keysStands = keysCardStands();
-            if (writeTy(SLOT_KEYS_CARD, keysCard, keysStands ? plankTy(PLANK_HOST) : 0f))
-                invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
+            boolean moved = writeTy(SLOT_KEYS_CARD, keysCard, keysStands ? plankTy(PLANK_HOST) : 0f);
             writePlank(SLOT_KEYS_CARD, keysCard, keysStands ? PLANK_HOST : PLANK_NONE, 0f);
+            float tx = mFrame.cardTx[KEYS_CARD_VIEW];
+            float ty = mFrame.cardTy[KEYS_CARD_VIEW];
+            if (moved || tx != mDrawnKeysCardTx || ty != mDrawnKeysCardTy) {
+                mDrawnKeysCardTx = tx;
+                mDrawnKeysCardTy = ty;
+                invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
+            }
         }
         writeTerminalHost(keysTilt);
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
@@ -701,7 +610,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         View rowStack = mViews.view(R.id.accessory_row_stack);
         if (!(rowStack instanceof EdgeStackView)) return;
         EdgeStackView stack = (EdgeStackView) rowStack;
-        boolean cardLaneMoved = false;
         for (int i = 0; i < LANE_HOST_IDS.length; i++) {
             View host = mViews.view(LANE_HOST_IDS[i]);
             if (host == null) continue;
@@ -717,10 +625,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                         .ordinal()];
                 }
             }
-            // The Terminal's card sits in the extra-keys row host: its glass samples where the lane
-            // draws it, so the lane's offset is published to the anchor (and withdrawn with it).
-            if (LANE_HOST_IDS[i] == R.id.terminal_toolbar_host)
-                cardLaneMoved |= writeCardLaneMotion(host, want, wantTy);
             if (host != mWrittenLaneView[i]) {
                 mWrittenLaneView[i] = host;
                 mWrittenLaneTx[i] = Float.NaN;
@@ -742,7 +646,6 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mWriteCount++;
             mViews.laneMoved(host);
         }
-        if (cardLaneMoved) invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
     }
 
     private static int lane(@NonNull EdgeStackView stack, @NonNull View host) {
@@ -787,98 +690,66 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mViews.laneMoved(host);
     }
 
-    /**
-     * Publishes the card's row host's lane offset to its glass anchor while the cards stand
-     * apart, and withdraws it after.
-     *
-     * @return whether the published offset moved
-     */
-    private boolean writeCardLaneMotion(@NonNull View host, float tx, float ty) {
-        if (!mApart) {
-            if (!mCardLaneMotionSet) return false;
-            mCardLaneMotionSet = false;
-            com.termux.app.chrome.GlassAnchor.clearMotion(host);
-            return true;
-        }
-        if (mCardLaneMotionSet && com.termux.app.chrome.GlassAnchor.motionX(host) == tx
-            && com.termux.app.chrome.GlassAnchor.motionY(host) == ty) return false;
-        mCardLaneMotionSet = true;
-        com.termux.app.chrome.GlassAnchor.setMotion(host, tx, ty);
-        return true;
-    }
-    private boolean mCardLaneMotionSet;
 
     private int plankTarget() {
         return mViews.keyboardShown() ? PLANK_HOST : PLANK_CONTAINER;
     }
 
-    /** Whether the plank's host tilt goes to the Terminal's card: apart, the Terminal in front. */
-    private boolean keysCardTilts() {
-        return keysCardStands() || terminalHostStands();
-    }
-
     /**
-     * The Terminal's Docked host (#304) on the Terminal's lane: the rows' layer's translation, the
-     * Terminal side's slide and the Terminal lane's lift, as the extra-keys row host draws them,
+     * The Terminal's Docked host (#304) as the scene poses the Terminal's card: the rows' layer's
+     * translation, the Terminal side's slide and its lift, as the extra-keys row host draws them,
      * so the host travels with the Terminal's rows; the plank tilts it while it stands. Its glass
-     * samples where it is drawn, so the offset beyond its layout goes to its anchor.
+     * samples where the scene draws it ({@link #cardDrawnX}).
      */
     private void writeTerminalHost(boolean tilts) {
         View host = mViews.view(R.id.terminal_dock_host);
         if (host == null) return;
-        boolean on = mApart && host.getVisibility() == View.VISIBLE;
-        float tx = on ? mFrame.sideTx[Side.TERMINAL.ordinal()] : 0f;
-        float ty = on ? mFrame.ty[StackScene.V_LAYER0 + StackGeometry.ROWS]
-            + com.termux.app.place.SideCards.laneTyPx(StackLanes.TERMINAL, true, mHomeDropPx,
-                mTerminalLiftPx, mTerminalShare) : 0f;
+        float tx = mFrame.cardTx[TERMINAL_HOST_VIEW];
+        float ty = mFrame.cardTy[TERMINAL_HOST_VIEW];
         boolean stands = tilts && terminalHostStands();
         boolean moved = writeTy(SLOT_TERMINAL_HOST, host, ty + (stands ? plankTy(PLANK_HOST) : 0f));
         float txWas = host.getTranslationX();
         writePlank(SLOT_TERMINAL_HOST, host, stands ? PLANK_HOST : PLANK_NONE, tx);
         moved |= host.getTranslationX() != txWas;
-        moved |= writeTerminalHostMotion(host, on, tx, ty);
         if (moved) invalidateIfShown(R.id.terminal_dock_blur_backdrop);
     }
 
-    private boolean writeTerminalHostMotion(@NonNull View host, boolean on, float tx, float ty) {
-        if (!on) {
-            if (!mTerminalHostMotionSet) return false;
-            mTerminalHostMotionSet = false;
-            com.termux.app.chrome.GlassAnchor.clearMotion(host);
-            return true;
-        }
-        if (mTerminalHostMotionSet && com.termux.app.chrome.GlassAnchor.motionX(host) == tx
-            && com.termux.app.chrome.GlassAnchor.motionY(host) == ty) return false;
-        mTerminalHostMotionSet = true;
-        com.termux.app.chrome.GlassAnchor.setMotion(host, tx, ty);
-        return true;
+    /**
+     * Where the scene draws {@code view}'s card on the frame last written, across and down from
+     * its layout, the plank's tilt not counted: the card's glass samples the wallpaper there
+     * ({@code GlassAnchor#layout}). 0 for a view with no card.
+     */
+    public float cardDrawnX(@NonNull RestCards.StackView view) {
+        return mFrame.cardTx[view.ordinal()];
     }
-    private boolean mTerminalHostMotionSet;
 
-    /** Whether the Terminal's own card (the extra-keys card or, Docked, its host) is the slab now. */
+    /** {@link #cardDrawnX} down. */
+    public float cardDrawnY(@NonNull RestCards.StackView view) {
+        return mFrame.cardTy[view.ordinal()];
+    }
+
+    /** Whether the Terminal's own card (the extra-keys card or its host) is the dock's slab now. */
     public boolean terminalCardStands() {
         return keysCardStands() || terminalHostStands();
     }
 
     /**
-     * Whether the Terminal's own host is the dock's slab now (#304, #305): the cards stand apart,
-     * the Terminal is in front and the host is laid out (under Docked, and under Floating with
-     * rows beside the keys). The plank's tilt,
-     * its specular and its rim glow follow it.
+     * Whether the Terminal's own host is the dock's slab now (#304, #305): the scene names it
+     * ({@link StackScene.Frame#slabView}) and it is shown. The plank's tilt, its specular and its
+     * rim glow follow it.
      */
     public boolean terminalHostStands() {
-        if (!mApart || mViews.frontIsHome()) return false;
+        if (mFrame.slabView != TERMINAL_HOST_VIEW) return false;
         View host = mViews.view(R.id.terminal_dock_host);
         return host != null && host.getVisibility() == View.VISIBLE;
     }
 
     /**
-     * Whether the Terminal's extra-keys card is the dock's slab now: the cards stand apart and
-     * the Terminal is in front. The plank's tilt, its specular and its rim glow follow it.
+     * Whether the Terminal's extra-keys card is the dock's slab now: the scene names it and it is
+     * not gone. The plank's tilt, its specular and its rim glow follow it.
      */
     public boolean keysCardStands() {
-        if (!mApart || mViews.frontIsHome()) return false;
-        // Under Docked the card is gone and the Terminal's own host stands instead (#304).
+        if (mFrame.slabView != KEYS_CARD_VIEW) return false;
         View card = mViews.view(R.id.extra_keys_card);
         return card != null && card.getVisibility() != View.GONE;
     }
@@ -887,32 +758,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private View plankView(int target) {
         if (target == PLANK_HOST && terminalHostStands())
             return mViews.view(R.id.terminal_dock_host);
-        if (target == PLANK_HOST && keysCardTilts()) return mViews.view(R.id.extra_keys_card);
+        if (target == PLANK_HOST && keysCardStands()) return mViews.view(R.id.extra_keys_card);
         return target == PLANK_HOST ? mViews.view(R.id.accessory_surface_host)
             : target == PLANK_CONTAINER ? mViews.view(R.id.accessory_stack_container) : null;
-    }
-
-    /**
-     * Publishes the host's drawn offset beyond its layout to its glass anchor while the cards
-     * stand apart (the anchor then samples where the card is drawn), and withdraws it after.
-     *
-     * @return whether the published offset moved
-     */
-    private boolean writeHostMotion(@NonNull View host, float tx, float ty) {
-        if (!mApart) {
-            if (!mHostMotionSet) return false;
-            mHostMotionSet = false;
-            mHostMotionX = Float.NaN;
-            mHostMotionY = Float.NaN;
-            com.termux.app.chrome.GlassAnchor.clearMotion(host);
-            return true;
-        }
-        if (mHostMotionSet && mHostMotionX == tx && mHostMotionY == ty) return false;
-        mHostMotionSet = true;
-        mHostMotionX = tx;
-        mHostMotionY = ty;
-        com.termux.app.chrome.GlassAnchor.setMotion(host, tx, ty);
-        return true;
     }
 
     private float plankTy(int target) {

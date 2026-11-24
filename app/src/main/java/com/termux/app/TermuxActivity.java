@@ -5879,6 +5879,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
 
             @Override
+            public float hostTx() {
+                return mStackRenderer.cardDrawnX(com.termux.app.place.RestCards.StackView.HOST);
+            }
+
+            @Override
             public float laneTx() {
                 SuggestionBarView row = mSuggestionBarView;
                 View stack = findViewById(R.id.accessory_row_stack);
@@ -9816,8 +9821,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Where a capsule's glass samples the wallpaper: where the stack's scene draws the card it
+     * dresses (ADR 0032 section 5), its laid-out place moved by the stack's travel and the card's
+     * pose ({@link StackRenderer#cardDrawnX}), never a layout the crossing will change. The
+     * plank's press stays out, as it always has.
+     */
+    @NonNull
+    private com.termux.app.chrome.GlassAnchor.Origin stackCardAnchor(@NonNull View backdrop) {
+        int id = backdrop.getId();
+        final com.termux.app.place.RestCards.StackView card =
+            id == R.id.extra_keys_card_blur_backdrop
+                ? com.termux.app.place.RestCards.StackView.KEYS_CARD
+                : id == R.id.terminal_dock_blur_backdrop
+                    ? com.termux.app.place.RestCards.StackView.TERMINAL_HOST
+                    : com.termux.app.place.RestCards.StackView.HOST;
+        return com.termux.app.chrome.GlassAnchor.layout(backdrop,
+            () -> mAccessoryStackLift.px() + mStackRenderer.cardDrawnY(card),
+            () -> mStackRenderer.cardDrawnX(card));
+    }
+
+    /**
      * Points a capsule's {@code backdrop} at its live picture, or at the stored frame when it has
-     * none; the dock's and the extra-keys card's backdrops both are installed here.
+     * none; the dock's, the extra-keys card's and the Terminal's host's backdrops are installed
+     * here.
      */
     private void installBackdropPicture(@NonNull ImageView backdrop,
                                         @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
@@ -9834,8 +9860,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             installed.setFrame(frame, frameRect, crossfade);
         } else {
             backdrop.setImageDrawable(new com.termux.app.chrome.StoredPicture(frame, frameRect,
-                mWallpaperParallax, com.termux.app.chrome.GlassAnchor.layout(backdrop, mAccessoryStackLift))
-                .drawable());
+                mWallpaperParallax, stackCardAnchor(backdrop)).drawable());
         }
         // The surface moved or the geometry changed, or this would not have run: re-aim now, since
         // a view whose ancestor moved is not redrawn on its own.
@@ -11010,6 +11035,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
                 mStackRenderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
             }
+            @Override public void restCards(@Nullable com.termux.app.place.RestCards home,
+                                            @Nullable com.termux.app.place.RestCards terminal) {
+                mStackRenderer.setCards(home, terminal);
+            }
         });
 
     /** The glass element of the Terminal's extra-keys card, one more Live entry while it is on screen. */
@@ -11180,9 +11209,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         @Override public boolean othersOwnStack() {
             return mSheets.isAppDrawerEngaged() || mSurfaceEditor.isActive();
-        }
-        @Override public boolean arrivalKeyboardUp() {
-            return chromeRestOf(com.termux.app.page.PageKind.TERMINAL).keyboardReveal() > 0f;
         }
     });
 
@@ -18443,8 +18469,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean laneSlackChanged = laneSlackPx != mLaneSlackPx;
         mLaneSlackPx = laneSlackPx;
         if (laneSlackChanged) applyAccessorySurfaceBounds(state);
-        // Both sides' glass tops at their own rests, for the next crossing to aim at.
-        if (!mCrossing.crossing()) noteRestHostTops(stackIn.dock, measuredToolbarHeightPx);
         int combinedHeight = com.termux.app.place.StackScene.containerHeightPx(
             stack.stackHeightPx + bottomInsets.containerExtraPx(), keyboardDownPx, laneSlackPx);
         // Split the absorbed remainder around the dock rows so they stay visually centered in the
@@ -18861,76 +18885,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : com.termux.app.place.StackLanes.slackPx(frontRows, otherRows);
     }
 
-    /**
-     * Each side's glass host top at its own rest ({@link #dockGlassTopInsetPx} as that rest lays
-     * it out), handed to the stack's renderer at rest: a crossing moves the host toward the
-     * arriving rest's top, which it knows before it has ever rested there, and with the keyboard
-     * that rest will have. The front's is the one laid out; the other's is built from the same
-     * parts: the status band, its Style's slab inset, the lane slack with it in front and the
-     * Terminal's flush padding it does not stand.
-     */
-    private void noteRestHostTops(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot,
-                                  int measuredToolbarPx) {
-        boolean frontHome = mLastWallPage == com.termux.app.page.PageKind.HOME;
-        int front = dockGlassTopInsetPx();
-        // DIAG(host-shift): the parts of the other side's top, on change; revert before merge.
-        if (MotionLog.enabled) {
-            String d = "front=" + mLastWallPage + " top=" + front + " flushRest="
-                + mTerminalRestFlushPaddingPx + " slack=" + mLaneSlackPx;
-            if (!d.equals(mDiagRestTops)) {
-                mDiagRestTops = d;
-                MotionLog.log("rest-tops", d);
-            }
-        }
-        if (frontHome) {
-            mStackRenderer.setRestHostTops(front,
-                otherRestHostTopPx(snapshot, measuredToolbarPx, true, true),
-                otherRestHostTopPx(snapshot, measuredToolbarPx, true, false));
-        } else {
-            int home = otherRestHostTopPx(snapshot, measuredToolbarPx, false, false);
-            mStackRenderer.setRestHostTops(home, front, front);
-        }
-    }
-
-    /**
-     * @param otherStandsFlush whether the other side's rest stands the Terminal's flush padding:
-     *     the Terminal's with its keyboard down
-     */
-    private int otherRestHostTopPx(@NonNull com.termux.app.dock.DockGeometry.Snapshot snapshot,
-                                   int measuredToolbarPx, boolean frontHome,
-                                   boolean otherStandsFlush) {
-        com.termux.app.wall.PageRef frontPage = frontHome
-            ? com.termux.app.wall.PageRef.HOME : com.termux.app.wall.PageRef.TERMINAL;
-        com.termux.app.wall.PageRef otherPage = frontHome
-            ? com.termux.app.wall.PageRef.TERMINAL : com.termux.app.wall.PageRef.HOME;
-        PlaceLayout other = frontHome ? terminalPlaceLayout() : homePlaceLayout();
-        PlaceLayout front = committedArrangement().layout();
-        int slack = 0;
-        if (other != null && com.termux.app.place.StackLanes.hasLanes(front, other,
-                com.termux.app.page.Side.of(frontHome))) {
-            int frontRows = com.termux.app.place.StackLayout.restRowsPx(
-                new com.termux.app.place.StackLayout.RestInput(snapshot, frontPage)
-                    .ownRows(measuredToolbarPx));
-            int otherRows = com.termux.app.place.StackLayout.restRowsPx(
-                new com.termux.app.place.StackLayout.RestInput(snapshot, otherPage)
-                    .ownRows(measuredToolbarPx));
-            slack = com.termux.app.place.StackLanes.slackPx(otherRows, frontRows);
-        }
-        // The Terminal stands its flush padding only at a rest with the keyboard down. Until it
-        // has rested with it down (as after a restart on Home) it is worked out the way its own
-        // pass would, from its rest's room and the laid-out terminal.
-        int flush = terminalRestFlushPx(frontHome);
-        slack += com.termux.app.place.StackLanes.flushSlackPx(flush,
-            otherStandsFlush ? flush : 0);
-        // DIAG(host-shift): the flush worked out before the Terminal rested; revert before merge.
-        if (MotionLog.enabled && !mTerminalRestFlushKnown && frontHome && flush != mDiagFlushGuess) {
-            mDiagFlushGuess = flush;
-            MotionLog.log("flush-guess", "flush=" + flush);
-        }
-        int slabInset = com.termux.app.dock.DockGeometry.compute(snapshot.restOf(otherPage))
-            .slabTopInsetPx;
-        return (mStatusBarOnDockPlank ? 0 : mStatusBar.bottomStatusBandPx()) + slabInset + slack;
-    }
 
     /**
      * The Terminal's flush padding at its own rest: the one it last rested with, or, before it has
@@ -28207,9 +28161,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     @Nullable private String mDiagDisplayKb; // DIAG(display-kb)
-    @Nullable private String mDiagRestTops; // DIAG(host-shift)
     @Nullable private String mDiagDockFilter; // DIAG(dock-filter)
-    private int mDiagFlushGuess = -1; // DIAG(host-shift)
 
     /** Whether a layer — the drawer, the palette, a sheet, help — is open over the page. */
     private boolean isLayerOpen() {

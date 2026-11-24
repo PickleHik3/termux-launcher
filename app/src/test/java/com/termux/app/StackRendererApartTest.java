@@ -14,11 +14,11 @@ import android.widget.FrameLayout;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.chrome.GlassAnchor;
 import com.termux.app.dock.SideRowViews;
 import com.termux.app.place.EdgeStackView;
 import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout.Edge;
+import com.termux.app.place.RestCards;
 import com.termux.app.place.StackLanes;
 
 import org.junit.Before;
@@ -102,6 +102,7 @@ public class StackRendererApartTest {
         View rows = mViews.get(R.id.accessory_row_stack);
         for (boolean frontHome : new boolean[] {true, false}) {
             mFrontHome = frontHome;
+            StackRendererCards.apart(mRenderer, RestCards.StackView.TERMINAL_HOST);
             mRenderer.setSidesApart(true, DROP, 21);
             mRenderer.apply();
             String at = frontHome ? "Home's rest" : "the Terminal's rest";
@@ -122,6 +123,7 @@ public class StackRendererApartTest {
 
     @Test public void apartAtHomesRestTheHostStandsAtHomesDropAndSlideZero() {
         mFrontHome = true;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
         assertEquals(0f, mHost.getTranslationX(), 0f);
@@ -131,26 +133,25 @@ public class StackRendererApartTest {
         assertEquals(0f, mKeysRow.getTranslationY(), 0f);
         // #305: a row both sides show stands with Home's rows at Home's rest.
         assertEquals("the shared row stands with Home's", DROP, mSharedRow.getTranslationY(), 0f);
-        assertEquals(0f, mRenderer.hostShiftPx(), 0f);
     }
 
     @Test public void apartAtTheTerminalsRestTheHostIsParkedAWallToTheLeft() {
         mFrontHome = false;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
         assertEquals(-WIDTH, mHost.getTranslationX(), 0f);
         assertEquals(DROP, mHost.getTranslationY(), 0f);
-        assertEquals(0f, mRenderer.hostShiftPx(), 0f);
     }
 
     @Test public void apartMidCrossingTheHostFollowsHomesSlideAndTheDropStays() {
         mFrontHome = true;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
         mRenderer.setEnds(true, false, 0.25f);
         assertEquals(-0.25f * WIDTH, mHost.getTranslationX(), 0.01f);
         assertEquals(DROP, mHost.getTranslationY(), 0f);
-        assertEquals("no shift while apart", 0f, mRenderer.hostShiftPx(), 0f);
         assertEquals(-0.25f * WIDTH, mHomeRow.getTranslationX(), 0.01f);
         mRenderer.setEnds(true, false, 0.75f);
         assertEquals(-0.75f * WIDTH, mHost.getTranslationX(), 0.01f);
@@ -166,6 +167,7 @@ public class StackRendererApartTest {
 
     @Test public void aHomeToHomeCrossingMovesNothingNew() {
         mFrontHome = true;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
         int writes = mRenderer.mWriteCount;
@@ -176,10 +178,12 @@ public class StackRendererApartTest {
 
     @Test public void aFrameEqualToTheLastWritesNothing() {
         mFrontHome = true;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
         int writes = mRenderer.mWriteCount;
         mRenderer.apply();
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
         assertEquals(writes, mRenderer.mWriteCount);
@@ -187,6 +191,7 @@ public class StackRendererApartTest {
 
     @Test public void notApartTheHostAndTheLanesAreAsTheyWere() {
         mFrontHome = true;
+        StackRendererCards.together(mRenderer);
         mRenderer.setSidesApart(false, DROP);
         mRenderer.apply();
         mRenderer.setEnds(true, false, 0.5f);
@@ -195,19 +200,26 @@ public class StackRendererApartTest {
         assertEquals(0f, mUnderlay.getTranslationY(), 0f);
         assertEquals(0f, mHomeRow.getTranslationY(), 0f);
         assertNull("no offset is published to the glass anchor", motionTag(mHost));
-        assertEquals(0f, GlassAnchor.motionX(mHost), 0f);
+        assertEquals(0f, mRenderer.cardDrawnX(RestCards.StackView.HOST), 0f);
     }
 
-    @Test public void apartPublishesTheHostsOffsetToItsAnchorAndEndingItWithdrawsIt() {
+    /**
+     * The host's glass samples where the scene draws its card ({@link StackRenderer#cardDrawnX}),
+     * not from an offset published on the view: no anchor lift is set on it.
+     */
+    @Test public void theHostsGlassReadsTheScenesPoseOfItsCard() {
         mFrontHome = false;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.apply();
-        assertEquals(-WIDTH, GlassAnchor.motionX(mHost), 0f);
-        assertEquals(DROP, GlassAnchor.motionY(mHost), 0f);
+        assertEquals(-WIDTH, mRenderer.cardDrawnX(RestCards.StackView.HOST), 0f);
+        assertEquals(DROP, mRenderer.cardDrawnY(RestCards.StackView.HOST), 0f);
+        assertNull(motionTag(mHost));
+        StackRendererCards.together(mRenderer);
         mRenderer.setSidesApart(false, 0f);
         mRenderer.apply();
-        assertEquals(0f, GlassAnchor.motionX(mHost), 0f);
-        assertEquals(0f, GlassAnchor.motionY(mHost), 0f);
+        assertEquals(0f, mRenderer.cardDrawnX(RestCards.StackView.HOST), 0f);
+        assertEquals(0f, mRenderer.cardDrawnY(RestCards.StackView.HOST), 0f);
         assertEquals(0f, mHost.getTranslationX(), 0f);
         assertEquals(0f, mHost.getTranslationY(), 0f);
     }
@@ -217,6 +229,7 @@ public class StackRendererApartTest {
         DockPlankController.Slab slab = new DockPlankController.Slab();
         slab.translationY = 5f;
         mFrontHome = false;
+        StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
         mRenderer.setSidesApart(true, DROP);
         mRenderer.onSlab(slab);
         mRenderer.apply();
@@ -235,6 +248,7 @@ public class StackRendererApartTest {
         DockPlankController.Slab slab = new DockPlankController.Slab();
         slab.translationY = 5f;
         mFrontHome = false;
+        StackRendererCards.together(mRenderer);
         mRenderer.setSidesApart(false, 0f);
         mRenderer.onSlab(slab);
         mRenderer.apply();

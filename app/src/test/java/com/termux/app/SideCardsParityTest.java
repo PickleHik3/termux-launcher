@@ -158,6 +158,9 @@ public class SideCardsParityTest {
             @Override public int terminalRestFlushPaddingPx() { return flush; }
             @Override public boolean terminalFlushAllowed() { return f.paneCount <= 1; }
             @Override public boolean keyboardGlassShared() { return true; }
+            @Override public void restCards(@Nullable RestCards home, @Nullable RestCards terminal) {
+                renderer.setCards(home, terminal);
+            }
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
                 renderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
             }
@@ -242,7 +245,6 @@ public class SideCardsParityTest {
                         // Home's slide: 0 at Home's rest, a container's width to the left otherwise.
                         float tx = apart && !page.isHome() ? -WIDTH : 0f;
                         assertEquals(label, tx, mHost.getTranslationX(), 0f);
-                        assertEquals(label, 0f, renderer.hostShiftPx(), 0f);
                         if (apart) apartCases++;
                         else assertFalse(label, controller.hostPinned());
                     }

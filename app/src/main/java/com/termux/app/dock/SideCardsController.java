@@ -72,6 +72,12 @@ public final class SideCardsController {
         boolean keyboardGlassShared();
         /** The renderer's side numbers: whether the cards stand apart, Home's drop, the Terminal's lift. */
         void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx);
+        /**
+         * Each side's rest's cards for the stack's scene (Home's, the Terminal's), worked out at
+         * this rest; null for a side with no answer.
+         */
+        default void restCards(@Nullable RestCards home, @Nullable RestCards terminal) {
+        }
     }
 
     @NonNull private final Host mHost;
@@ -269,6 +275,8 @@ public final class SideCardsController {
         mTerminalLiftPx = apart ? answer.terminalSideLiftPx() : 0;
         applyKeysCard(answer);
         moved |= applyTerminalHost(answer, margin);
+        boolean frontHome = answer != null && answer.page().isHome();
+        mHost.restCards(frontHome ? answer : mOtherAnswer, frontHome ? mOtherAnswer : answer);
         mHost.sidesApart(apart, drop, mTerminalLiftPx);
         return moved;
     }
@@ -428,8 +436,12 @@ public final class SideCardsController {
 
     // ---- The rests ---------------------------------------------------------------------------
 
+    /** The other side's own rest's answer, worked out beside the front's ({@link #answerOf}). */
+    @Nullable private RestCards mOtherAnswer;
+
     @Nullable
     private RestCards answerOf(@NonNull StackLayout.Input frontPass) {
+        mOtherAnswer = null;
         PageRef front = mHost.frontPage();
         if (front == null) return null;
         boolean frontHome = front.isHome();
@@ -440,6 +452,9 @@ public final class SideCardsController {
         RestCards.Rest otherRest = restOf(otherPassOf(frontPass, otherLayout, otherPage),
             otherPage);
         frontRest.other = otherRest;
+        otherRest.other = frontRest;
+        // The side parked off screen at its own rest, for the next crossing's arriving end.
+        mOtherAnswer = RestCards.of(otherRest);
         return RestCards.of(frontRest);
     }
 

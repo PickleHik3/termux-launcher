@@ -479,6 +479,11 @@ public final class StackScene {
      * {@code toHome}'s: 1 at Home's rest, 0 at the Terminal's, the material curve between. What
      * only Home's rest draws on the shared slab (the Peek card) blends by it.
      */
+    public static float homeShare(@NonNull StackEnd from, @NonNull StackEnd to, float p) {
+        return homeShare(from.page.isHome(), to.page.isHome(), p);
+    }
+
+    /** {@link #homeShare(StackEnd, StackEnd, float)} by the ends' sides. */
     public static float homeShare(boolean fromHome, boolean toHome, float p) {
         if (fromHome == toHome) return fromHome ? 1f : 0f;
         float w = materialShare(p);
