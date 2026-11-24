@@ -67,12 +67,42 @@ public final class SettingDeclaration {
     public final boolean exported;
     @NonNull public final ResetGroup resetGroup;
 
+    /**
+     * What the settings reference page says: a short name and one plain sentence for the user.
+     * Empty until {@link #described}.
+     */
+    @NonNull public final String title;
+    @NonNull public final String summary;
+    /**
+     * The range and default as the reference page words them, for a setting whose range is
+     * not a number pair here (a value only its adapter judges, or one that depends on the
+     * display). Empty to say what {@link #allowed} and {@link #defaultValue} say.
+     */
+    @NonNull public final String rangeNote;
+    @NonNull public final String defaultNote;
+
     private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
                                @NonNull String key, @NonNull SettingRefresh refresh, int min,
                                int max, int step, int defaultInt, @NonNull List<String> choices,
                                @NonNull List<String> storedChoices, int defaultChoice,
                                boolean ordered, boolean exported,
                                @NonNull ResetGroup resetGroup) {
+        this(id, kind, store, key, refresh, min, max, step, defaultInt, choices, storedChoices,
+            defaultChoice, ordered, exported, resetGroup, "", "", "", "");
+    }
+
+    private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
+                               @NonNull String key, @NonNull SettingRefresh refresh, int min,
+                               int max, int step, int defaultInt, @NonNull List<String> choices,
+                               @NonNull List<String> storedChoices, int defaultChoice,
+                               boolean ordered, boolean exported,
+                               @NonNull ResetGroup resetGroup, @NonNull String title,
+                               @NonNull String summary, @NonNull String rangeNote,
+                               @NonNull String defaultNote) {
+        this.title = title;
+        this.summary = summary;
+        this.rangeNote = rangeNote;
+        this.defaultNote = defaultNote;
         this.id = id;
         this.kind = kind;
         this.store = store;
@@ -94,14 +124,32 @@ public final class SettingDeclaration {
     @NonNull
     public SettingDeclaration resetBy(@NonNull ResetGroup group) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
-            choices, storedChoices, mDefaultChoice, ordered, exported, group);
+            choices, storedChoices, mDefaultChoice, ordered, exported, group, title, summary,
+            rangeNote, defaultNote);
+    }
+
+    /** This declaration with the name and sentence the settings reference page shows. */
+    @NonNull
+    public SettingDeclaration described(@NonNull String title, @NonNull String summary) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            rangeNote, defaultNote);
+    }
+
+    /** This declaration with the range and default the reference page words in place of numbers. */
+    @NonNull
+    public SettingDeclaration shownAs(@NonNull String range, @NonNull String defaultText) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            range, defaultText);
     }
 
     /** This declaration kept out of a settings file's export and apply. */
     @NonNull
     public SettingDeclaration notExported() {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
-            choices, storedChoices, mDefaultChoice, ordered, false, resetGroup);
+            choices, storedChoices, mDefaultChoice, ordered, false, resetGroup, title, summary,
+            rangeNote, defaultNote);
     }
 
     /** A whole number from {@code min} to {@code max}, stepped by {@code step}. */

@@ -53,6 +53,7 @@ The first updates the Termux package environment. The second asks Android for sh
 - [Graphics, protocols and compatibility](Terminal_Kitty_Protocols.md): kitty and Sixel graphics, text sizing, OSC escapes, cursor trail styles.
 - [Programs and agents inside the terminal](Programs_Inside_The_Terminal.md) and [Agent status](Agent_Status.md): what scripts and AI agents can rely on.
 - [Config files](Config_Files.md): every file the launcher reads under `~/.termux` and `~/.config`.
+- [Settings reference](Settings_Reference.md): every setting `launcherctl config` can change, with its values and default.
 
 ## Extras
 

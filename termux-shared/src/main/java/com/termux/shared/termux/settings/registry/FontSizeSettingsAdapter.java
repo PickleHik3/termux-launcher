@@ -114,7 +114,32 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
     private SettingDeclaration declare(@NonNull String id) {
         return SettingDeclaration.integer(id, SettingDeclaration.Store.APP_PREFERENCES, key(id),
             mRange.min, mRange.max, STEP, mRange.defaultSize, SettingRefresh.FONT_SIZE)
-            .resetBy(resetGroup(id));
+            .resetBy(resetGroup(id)).described(title(id), summary(id))
+            .shownAs(RANGE_NOTE, DEFAULT_NOTE);
+    }
+
+    /** The range and default in words: the numbers depend on the screen's density. */
+    public static final String RANGE_NOTE = "From a third of the default size up to 256 px";
+    public static final String DEFAULT_NOTE = "About 12 dp of text, whatever the screen";
+
+    @NonNull
+    private static String title(@NonNull String id) {
+        switch (id) {
+            case FONT_SIZE: return "Terminal font size";
+            case COMPACT_FONT_SIZE: return "Compact font size";
+            default: return "Scratchpad font size";
+        }
+    }
+
+    @NonNull
+    private static String summary(@NonNull String id) {
+        switch (id) {
+            case FONT_SIZE: return "How large the terminal's text is, in pixels.";
+            case COMPACT_FONT_SIZE:
+                return "How large text is in Compact windows; until you set one it follows the terminal's.";
+            default:
+                return "How large text is in the scratchpad; until you set one it follows the terminal's.";
+        }
     }
 
     @Nullable
