@@ -34,6 +34,7 @@ import com.termux.app.settings.LayoutCommand;
 import com.termux.app.settings.LayoutSettingsAdapter;
 import com.termux.app.settings.LookCommand;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.registry.SettingAdapter;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -309,10 +310,9 @@ final class DeviceControlRoutes {
 
     /** The registry's adapters, redressing the live chrome after a save. */
     @NonNull
-    private static java.util.List<com.termux.shared.termux.settings.registry.SettingAdapter> adapters(
+    private static List<SettingAdapter> adapters(
             @NonNull Context context) {
-        return LauncherSettingsAdapters.forDevice(context,
-            () -> TerminalActionDispatcher.getInstance().redressChrome());
+        return LauncherSettingsAdapters.forDeviceRedressing(context);
     }
 
     /**
