@@ -39,7 +39,7 @@ public final class LowMemoryPresetAdapter implements SettingAdapter {
         "Switches off the costliest effects and lightens the look so the launcher runs on less.")
         .saidAs("my phone feels slow", "my battery drains too fast", "the launcher uses too much memory",
             "swiping between pages is laggy", "make it run on my old phone")
-        .notExported();
+        .notExported().notOffered();
 
     @NonNull private final Preset mPreset;
 
