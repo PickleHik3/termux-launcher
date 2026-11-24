@@ -100,6 +100,15 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
 - **The keyboard's card is built once, in the Terminal's look, as the crossing begins.** Dressed
   at landing instead, its glass arrives about a second late.
 
+- **2026-11-24, Docked (#304), option A.** Under Docked the Terminal's card is a second back
+  host beside the glass host (`terminal_surface_host`, `RestCards.StackView.TERMINAL_HOST`),
+  laid out once per Terminal rest with the Docked dock formula: the one host's rect at that
+  rest, the flush air above the keys and the foot under the gesture pill included. The renderer
+  carries it on the Terminal's lane; Home's host stays Home's card and travels with Home, wearing
+  Home's cut. Neither host changes size in a crossing. A keys card in the row host was tried
+  first and refused: it dropped the flush air and left a bare strip under the pill. Layouts the
+  two-card rule refuses (the apps row or A–Z beside the keys) keep the one host.
+
 ## Consequences
 
 - The Floating crossing machinery goes once the extra-keys bar has its own card:
