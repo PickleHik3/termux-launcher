@@ -18,6 +18,9 @@ final class AssistantOffersView extends LinearLayout {
 
     static final int MAX_ROWS = 2;
 
+    /** Space between the two rows. */
+    private static final int ROW_GAP_DP = 4;
+
     private final AssistantNoticeView[] rows = new AssistantNoticeView[MAX_ROWS];
 
     AssistantOffersView(@NonNull Context context, @NonNull AssistantUi.Palette palette) {
@@ -26,7 +29,7 @@ final class AssistantOffersView extends LinearLayout {
         for (int i = 0; i < MAX_ROWS; i++) {
             rows[i] = new AssistantNoticeView(context, palette);
             LayoutParams lp = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-            if (i > 0) lp.topMargin = AssistantUi.dp(context, 4);
+            if (i > 0) lp.topMargin = AssistantUi.dp(context, ROW_GAP_DP);
             addView(rows[i], lp);
         }
         setVisibility(GONE);

@@ -169,13 +169,9 @@ final class AssistantChatView extends LinearLayout {
 
         int inset = AssistantUi.dp(context, 8);
         offers = new AssistantOffersView(context, palette);
-        LayoutParams op = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        op.setMargins(inset, 0, inset, inset);
-        addView(offers, op);
+        addView(offers, stripParams(inset));
         notice = new AssistantNoticeView(context, palette);
-        LayoutParams np = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
-        np.setMargins(inset, 0, inset, inset);
-        addView(notice, np);
+        addView(notice, stripParams(inset));
         answerStatus = new LinearLayout(context);
         answerStatus.setOrientation(LinearLayout.HORIZONTAL);
         answerStatus.setGravity(Gravity.CENTER_VERTICAL);
@@ -229,6 +225,14 @@ final class AssistantChatView extends LinearLayout {
     @NonNull RecyclerView thread() { return thread; }
 
     @NonNull AssistantComposer composer() { return composer; }
+
+    /** The place of a strip above the composer (the offers, the notice): full width, an inset each side and below. */
+    @NonNull
+    private static LayoutParams stripParams(int inset) {
+        LayoutParams lp = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(inset, 0, inset, inset);
+        return lp;
+    }
 
     @NonNull AssistantNoticeView notice() { return notice; }
 
