@@ -1,8 +1,8 @@
 # Linux windows: the launcher as a Wayland compositor (2026-11-24)
 
-Status: **draft for the developer's review.** The direction and the choices under "Decided" are the
-developer's (2026-11-23). Everything under "Design" is proposed and rests on the spike's
-measurements. Nothing here is built outside the throwaway branch `spike/wayland-windows`.
+Status: Wayland Display is built and merged into `v2-redesign` behind `-Pwayland=true` (kept out of
+CI builds, 2026-11-24). The choices under "Decided" and "The window contract" are the developer's;
+the rest of "Design" is the plan they rest on. Next: the window contract's slices.
 
 ## Why
 
@@ -187,6 +187,8 @@ Two independent choices, both made by the launcher.
 
 ## Step 1 in slices (from the window-contract map, 2026-11-24)
 
+Superseded by "The window contract" below where they differ; slices 1 and 4 are built.
+
 What the code offers today: `page/Page` (kind, side, view, `rest`, `onFront`/`offFront`, `onBack`,
 `declareGlass`) is built and registered through `Pages`; `AssistantPageView` (268 lines,
 `PaneContentFrame` + `Page` + `TypingPage`) is the working model of a non-terminal window that is an
@@ -230,6 +232,98 @@ ordinary view: clipped by the frame's outline, dressed by `PaneGlass.apply`, mov
 - Composed text (the system keyboard, swipe, emoji, other scripts) waits until after the wall page.
 - **Then** the developer runs Wayland Display as the only display on pong for about a week and
   what they find is fixed; then the wall page; then zero copy.
+
+## The window contract (the developer, 2026-11-24, evening)
+
+Grilled after Wayland Display merged into `v2-redesign` (behind `-Pwayland=true`, out of CI). It
+replaces the Linux windows screen with Linux windows in the wall, and it comes **before** the
+developer's week of daily use, not after it. It supersedes "Step 1 in slices" above and the
+"Windows" bullets where they differ. Everything here applies under Wayland Display only; X11
+Display does not change.
+
+### What a Linux window is
+
+- **A Linux window** is one window in the Terminal's row for one app window (one xdg toplevel, or
+  one X11 top-level window under Xwayland). It wears the window dress every window wears (rim,
+  glass, corners, the active colour) and has a window chip with the **app's name and icon** from
+  its desktop entry, not the window's changing title.
+- **Full screen first.** Opening an app, from the drawer or a shell, opens a new Linux window right
+  after the current window, and the wall pages to it, as a new terminal window does. Nothing is
+  split or floated automatically: an X11 app split by itself is too small to use. The user moves it
+  into a split or a Float on purpose.
+- **Dialogs** that name a parent (xdg parent, X11 transient-for) are drawn centred over their
+  parent's window and move with it; a parentless top-level gets its own Linux window.
+- **The Linux windows screen retires**: `LinuxWindowsActivity` and `LinuxWindowTabs` go; the row and
+  the window chips replace the tabs. Opening an app that is already open goes to its window.
+- Persistence across a launcher restart is not part of this contract.
+
+### The rim tab
+
+- A small glass tab on the window's rim at the top-right corner, outside the app's pixels, so the
+  app keeps every tap on its own content (apps keep menus and close buttons in their corners).
+- A tap on it shows **Close, Minimise, Move and Scale**. Long presses are not used here.
+  - **Close** asks the app to close (xdg close; `WM_DELETE_WINDOW` for X11). If the window is
+    still there 5 s later and the app is not showing a dialog of its own, a notice offers **Force
+    close**, which kills the app.
+  - **Minimise** sends the window to its chip in the status bar; a tap on the chip brings it back
+    to its place in the row.
+  - **Move** is a handle: holding it picks the window up (see Carry).
+  - **Scale** brings out the scale rail built for Wayland Display; a stop is still the app's own
+    Scale (`X11AppSettingsStore`).
+- A Linux window has no corner tab of its own (Appearance, Layout, Wallpaper and the rest stay on
+  terminal windows and Home); the corner hold that brought out the scale rail goes.
+- As a split pane it keeps the rim tab. As a Float it wears the Float titlebar every Float wears
+  (drag, Minimise, Maximise, Close; Dock in the menu) and no rim tab.
+
+### Carry
+
+- Holding Move lifts the window and it follows the finger, as a widget does when it is moved across
+  Home pages. The wall pages under it by a **border hold** at the side, or by a swipe with a second
+  finger.
+- Where it is dropped decides what happens, with a preview while it is over a target:
+  - over a terminal window's pane or another Linux window: a **split**, on the half the finger is
+    over (left, right, top or bottom);
+  - over a Home page: a **Float** on that page;
+  - between two windows in the row: its **own window** in that spot (reordering the row).
+- The way back out of a split is the same carry from the pane's rim tab, dropped between windows.
+- Overview (in flight) will be another way to arrange windows; noted, not designed here.
+
+### Paging
+
+- On a Linux window the **border drag** stops at the window's edge, as on the display window: the
+  picture is the app's to the rim, so only the air and the frame line page. A body swipe never
+  pages from a Linux window.
+- **Border hold**, on every window (terminal, Linux, display) and during a carry: a finger held
+  still on the left or right border for about 1.5 s pages the row once, with a vibration and a
+  small `<` or `>` glyph at that border as it fills. A hold that moves before then is a border drag
+  as today. On a terminal the hold yields to text selection that started in the text.
+
+### Focus, keyboard, attention, memory
+
+- A tap in a Linux pane of a split focuses it and still reaches the app. The launcher keyboard
+  types into the focused pane, whatever its kind (Linux panes take keys through
+  `LinuxWindowKeys`).
+- When an app asks for attention (an xdg-activation request it is not allowed to act on, or X11's
+  urgency hint), its rim and chip glow in the attention colour (`PaneAttention`) until the user goes
+  to it. The window is never brought forward by itself.
+- Only windows on screen or next to it hold surfaces (`LiveNeighbourPolicy`); a window further away
+  gives its `TextureView` buffers back and keeps running, and the compositor's last frame repaints
+  it when it returns.
+
+### Slices
+
+Each slice is a short branch off `v2-redesign`, merged back when its tests pass.
+
+1. **The Linux window in the row**: page kind, frame and `TextureView` (as `AssistantPageView`),
+   window chip, rim tab with Close, Minimise and Scale, dialogs over their parent, surfaces only
+   near the screen, border drag to the window's edge, launching into the row, the screen retired.
+2. **Carry and the border hold**: Move on the rim tab, the lifted window, paging under it, drop
+   between windows; the border hold on every window.
+3. **Into a split**: a split tree leaf that holds a Linux window (`TerminalPaneController.Leaf` holds
+   only a `TerminalSession` today), drop halves, focus and keys, carry back out.
+4. **Onto Home as a Float**: a Float holding a Linux window (Floats are leaves too, so this builds
+   on slice 3's leaf), the titlebar, its chip, Dock into the row.
+5. **Attention and Force close**.
 
 ## State on 2026-11-24, end of day
 

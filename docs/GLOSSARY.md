@@ -58,6 +58,19 @@ by a plain swipe anywhere on it, as any launcher does. Reach, hold, glow and til
 specified in `project-docs/reference/launcher/gestures-and-style.md`.
 _Avoid_: edge swipe, status bar swipe, page swipe
 
+**Border hold**:
+A finger held still on a **window**'s left or right border for about 1.5 s pages the row once,
+with a vibration and a small `<` or `>` at that border as the hold fills. On every window kind and
+during a **carry**; a hold that moves first is a **border drag**. Decided 2026-11-24, not built.
+_Avoid_: edge hold, long-press paging
+
+**Carry**:
+Moving a **Linux window** by holding Move on its **rim tab**: the window lifts and follows the
+finger across pages (a **border hold** or a second finger's swipe pages under it), and the drop
+decides the result: over a pane or another Linux window, a split on that half; over a **Home page**,
+a **Float**; between two windows, its own window in that spot. Decided 2026-11-24, not built.
+_Avoid_: drag and drop, move mode
+
 **Chrome**:
 Everything the launcher draws around a page: the status bar, dock, keyboard, borders and corner
 tabs. The **Terminal** wears all of it; a **Home page** wears the same status bar, starting below
@@ -92,6 +105,14 @@ resolution, start-up and fixes.
 See `docs/en/X11_Display.md`.
 _Avoid_: Display place, Display page, the third place, X11 page, Termux:X11 (the server is our fork
 of it, but the window is the display)
+
+**X11 Display**, **Wayland Display**:
+The two ways Linux apps reach the screen, chosen under Settings › Linux apps › Display. **X11
+Display** is the embedded X server and its one **display window**; **Wayland Display** is the
+launcher's own compositor (`wayland-host/`, its own process), which shows each app window as a
+**Linux window**. X11 Display is the default and stays until the developer says otherwise; Wayland
+Display exists only in builds made with `-Pwayland=true` (no CI build yet).
+_Avoid_: backend (in copy), Termux:X11, compositor (in copy)
 
 **Dock**:
 The band of chrome that carries the pinned-apps row, the A–Z index and the extra keys, along the
@@ -256,11 +277,20 @@ _ADR 0028 (accepted, not yet built): open layers live in the sheets **window lay
 
 **Linux app**:
 An app installed in the prefix or in a `proot-distro` container, read from its desktop file and
-listed in the drawer under Linux Apps beside the Android apps. A tap runs it on the **display**,
-opening a display window if none is up, or opens a new terminal **window** for one marked
-`Terminal=true`. A whole desktop session is a Linux app that takes the display for as long as it
+listed in the drawer under Linux Apps beside the Android apps. Under **X11 Display** a tap runs it on the
+**display**, opening a display window if none is up; under **Wayland Display** it opens a **Linux
+window**. One marked `Terminal=true` opens a new terminal **window** under either. A whole desktop session is a Linux app that takes the display for as long as it
 runs. The **Terminal** entry and the Display entry are listed with them.
 _Avoid_: X11 app (some run in a terminal), desktop entry (the file, not the app)
+
+**Linux window**:
+One app window shown as its own **window** in the **Terminal**'s row under **Wayland Display**,
+beside terminal windows: the window dress, a window chip with the app's name and icon, and a **rim
+tab**. An app opens full screen in a new Linux window after the current one; the user **carries** it
+into a split or a **Float** on purpose. A dialog with a parent is drawn over its parent's window. The
+**border drag** stops at its edge, as on the display window. Decided 2026-11-24; until it is built,
+Wayland Display shows Linux windows as tabs on their own screen.
+_Avoid_: app window (confusable with Android apps), Wayland window, X11 window
 
 **Managed wallpaper**:
 A wallpaper set through the launcher's own picker, of which the launcher keeps its own copy.
@@ -336,6 +366,13 @@ A fleeting **notice** naming what a key just did or something still under way, s
 size in cells during a resize drag. A new label swaps its words in place, and any real notice
 displaces it.
 _Avoid_: size banner, resize overlay, hint
+
+**Rim tab**:
+The small glass tab on a **Linux window**'s rim at its top-right corner, outside the app's pixels. A
+tap shows Close (asks the app; Force close is offered if it is still there after 5 s), Minimise (into
+its window chip), Move (a handle: hold it to **carry** the window) and Scale (the app's scale rail).
+A Linux window has no **corner tab**; as a **Float** it wears the **titlebar** instead.
+_Avoid_: corner tab (that is the terminal window's), handle, pill
 
 **Rest**:
 What a **page** asks of the chrome while it is in front and still: whether the keyboard is up, whose extra keys show, whether its text fields type with the phone's keyboard, what the bars show and the look it wears.
