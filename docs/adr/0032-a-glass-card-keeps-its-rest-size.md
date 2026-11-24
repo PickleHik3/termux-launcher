@@ -117,6 +117,16 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   with no card at its rest shows none. The one layout left on the one host is a Terminal whose
   rest wears the Peek card (no keys row, its apps row alone, keyboard down): it is Home's card at
   Home's rect, a shared card that stays put (§3). The Peek card's blend toward the slab is gone.
+- **2026-11-24, the pieces (#307).** The A–Z bar off the dock is its own card on its edge host
+  (`RestCards.CardId.AZ` on `StackView.AZ_EDGE`), the shape model's piece; the edge stacks stand
+  in the content column, which no crossing moves, so the scene keeps it, the keyboard's column
+  and the floating keyboard at their rest as the stack's own cards. The side bars' travel fade is
+  deleted: no place is ever minimal, so it never ran. The status content's fade stays: it hides
+  the bar's content on the way to a Home that wears none, where the bar cannot ride. Two cases
+  the property test names stay open for a decision: an A–Z bar on a side edge runs down to the
+  stack's top and so changes length between rests; and under Docked the foot is worn by Home's
+  host and by the Terminal's own host (#304 option A), two cards at one rect where §3 wants one
+  shared card. One owner for the foot needs a view of its own for the band.
 
 ## Consequences
 
