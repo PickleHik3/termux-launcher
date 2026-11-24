@@ -36,6 +36,8 @@ public final class SettingsCard {
         @NonNull public final String newLabel;
         /** What Apply wrote, as the registry holds it; null while this change was not written. */
         @Nullable public volatile String written;
+        /** What the setting held just before Apply wrote it; what Undo puts back. Null until applied. */
+        @Nullable public volatile String before;
 
         Item(@NonNull String id, @NonNull String title, @NonNull String oldValue, @NonNull String newValue,
              @NonNull String oldLabel, @NonNull String newLabel) {
@@ -113,6 +115,8 @@ public final class SettingsCard {
                     .put("oldLabel", item.oldLabel).put("newLabel", item.newLabel);
                 String w = item.written;
                 if (w != null) o.put("written", w);
+                String b = item.before;
+                if (b != null) o.put("before", b);
                 itemArray.put(o);
             }
             JSONArray linkArray = new JSONArray();
@@ -141,6 +145,7 @@ public final class SettingsCard {
                 Item item = new Item(e.getString("id"), e.getString("title"), e.getString("old"),
                     e.getString("new"), e.getString("oldLabel"), e.getString("newLabel"));
                 item.written = e.has("written") ? e.getString("written") : null;
+                item.before = e.has("before") ? e.getString("before") : null;
                 items.add(item);
             }
             List<Link> links = new ArrayList<>();

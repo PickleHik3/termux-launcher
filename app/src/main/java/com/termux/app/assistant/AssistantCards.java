@@ -101,6 +101,7 @@ public final class AssistantCards {
             SettingsRegistry.Change change = outcome.change();
             if (change == null) continue;
             wrote = true;
+            item.before = change.oldValue;
             item.written = change.newValue;
             applier.apply(change);
         }
@@ -112,7 +113,7 @@ public final class AssistantCards {
     }
 
     /**
-     * Puts back the old values of an applied card, but only if every setting it wrote still holds
+     * Puts back the values each setting held just before Apply, but only if every setting it wrote still holds
      * what Apply wrote. Otherwise nothing is written and the card reads "changed since". Returns
      * whether the old values are back.
      */
@@ -123,7 +124,8 @@ public final class AssistantCards {
         if (card.state() != SettingsCard.State.APPLIED) return false;
         for (SettingsCard.Item item : card.items) {
             if (item.written == null) continue;
-            SettingsRegistry.Change change = registry.set(item.id, item.oldValue).change();
+            String back = item.before != null ? item.before : item.oldValue;
+            SettingsRegistry.Change change = registry.set(item.id, back).change();
             if (change != null) applier.apply(change);
         }
         card.setState(SettingsCard.State.UNDONE);

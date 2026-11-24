@@ -138,6 +138,16 @@ public class AssistantCardStateTest {
     }
 
     @Test
+    public void undoRestoresTheValueFromJustBeforeApplyNotFromTheProposal() {
+        long answer = askBigger(store.createChat(1));
+        registry.set("text.size", "110");
+        assertTrue(cards.apply(answer, registry, applier));
+        assertEquals("105", registry.get("text.size"));
+        assertTrue(cards.undo(answer, registry, applier));
+        assertEquals("110", registry.get("text.size"));
+    }
+
+    @Test
     public void anOutsideChangeDisablesUndoAndTheCardSaysSo() {
         long answer = askBigger(store.createChat(1));
         cards.apply(answer, registry, applier);
