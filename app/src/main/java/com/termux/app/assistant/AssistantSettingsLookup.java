@@ -39,6 +39,8 @@ final class AssistantSettingsLookup {
     @Nullable private String vectorsModel;
     /** How many times the corpus was embedded, for tests. */
     private int rebuilds;
+    /** Bumped by {@link #release}; an embed that began under an older one is not kept. */
+    private int generation;
 
     AssistantSettingsLookup(@Nullable Embedder embedder, @NonNull Supplier<String> corpusSource,
                             @NonNull File cacheFile) {
@@ -49,7 +51,7 @@ final class AssistantSettingsLookup {
 
     /** The shortlist for {@code message}: by embeddings when they answer, else by keywords. */
     @NonNull
-    synchronized AssistantSettingsTurn.Shortlist lookup(@NonNull SettingsRegistry registry,
+    AssistantSettingsTurn.Shortlist lookup(@NonNull SettingsRegistry registry,
                                                        @NonNull String message) {
         if (embedder != null) {
             String modelId = embedder.modelId();
@@ -67,24 +69,36 @@ final class AssistantSettingsLookup {
         return AssistantSettingsTurn.lookup(registry, message);
     }
 
-    /** Drops the vectors from memory; the file stays. Called when the page is left. */
-    synchronized void release() {
-        vectors = null;
-        vectorsModel = null;
-        corpus = null;
+    /**
+     * Drops the vectors from memory; the file stays. Called when the page is left, so it never waits
+     * for an embed: the lock covers only the fields, and a turn still embedding finds the
+     * generation moved on and does not put its vectors back.
+     */
+    void release() {
+        synchronized (this) {
+            generation++;
+            vectors = null;
+            vectorsModel = null;
+            corpus = null;
+        }
     }
 
     synchronized int rebuilds() {
         return rebuilds;
     }
 
+    synchronized boolean holdsVectors() {
+        return vectors != null;
+    }
+
     @Nullable
     private AssistantSettingsTurn.Shortlist byMeaning(@NonNull SettingsRegistry registry,
                                                       @NonNull String message,
                                                       @NonNull String modelId) throws Exception {
-        float[][] docs = vectorsFor(modelId);
-        SettingsCorpus c = corpus;
-        if (docs == null || c == null) return null;
+        Loaded loaded = vectorsFor(modelId);
+        if (loaded == null) return null;
+        float[][] docs = loaded.vectors;
+        SettingsCorpus c = loaded.corpus;
         float[][] asked = embedder.embed(Collections.singletonList(message), true);
         if (asked.length != 1 || asked[0].length != docs[0].length) return null;
         float[] query = normalized(asked[0]);
@@ -114,26 +128,51 @@ final class AssistantSettingsLookup {
         return new AssistantSettingsTurn.Shortlist(offered, linked);
     }
 
-    /** The corpus vectors for {@code modelId}: in memory, else from the file, else embedded now. */
+    private static final class Loaded {
+        final SettingsCorpus corpus;
+        final float[][] vectors;
+
+        Loaded(SettingsCorpus corpus, float[][] vectors) {
+            this.corpus = corpus;
+            this.vectors = vectors;
+        }
+    }
+
+    /**
+     * The corpus vectors for {@code modelId}: in memory, else from the file, else embedded now. The
+     * lock is held only to read and write the fields, never across the file or the embedder.
+     */
     @Nullable
-    private float[][] vectorsFor(@NonNull String modelId) throws Exception {
-        if (corpus == null) corpus = SettingsCorpus.parse(corpusSource.get());
-        SettingsCorpus c = corpus;
+    private Loaded vectorsFor(@NonNull String modelId) throws Exception {
+        int started;
+        SettingsCorpus c;
+        synchronized (this) {
+            started = generation;
+            c = corpus;
+            if (c != null && vectors != null && modelId.equals(vectorsModel)) return new Loaded(c, vectors);
+        }
+        if (c == null) c = SettingsCorpus.parse(corpusSource.get());
         if (c.ids.isEmpty()) return null;
-        if (vectors != null && modelId.equals(vectorsModel)) return vectors;
         float[][] saved = SettingsVectorCache.read(cacheFile, modelId, c.hash, c.ids.size());
+        boolean embedded = false;
         if (saved == null) {
             saved = embedCorpus(c);
-            rebuilds++;
+            embedded = true;
             try {
                 SettingsVectorCache.write(cacheFile, modelId, c.hash, saved);
             } catch (IOException e) {
                 Log.w(LOG_TAG, "Vector cache not saved: " + e);
             }
         }
-        vectors = saved;
-        vectorsModel = modelId;
-        return saved;
+        synchronized (this) {
+            if (embedded) rebuilds++;
+            if (generation == started) {
+                corpus = c;
+                vectors = saved;
+                vectorsModel = modelId;
+            }
+        }
+        return new Loaded(c, saved);
     }
 
     @NonNull

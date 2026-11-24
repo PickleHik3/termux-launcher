@@ -45,6 +45,8 @@ public class AssistantSettingsLookupTest {
         int documentCalls;
         int queryCalls;
         int unloads;
+        @Nullable java.util.concurrent.CountDownLatch entered;
+        @Nullable java.util.concurrent.CountDownLatch gate;
 
         @Nullable @Override public String modelId() {
             return model;
@@ -52,6 +54,14 @@ public class AssistantSettingsLookupTest {
 
         @NonNull @Override public float[][] embed(@NonNull List<String> texts, boolean query) {
             if (fail) throw new IllegalStateException("no model");
+            if (gate != null) {
+                entered.countDown();
+                try {
+                    gate.await();
+                } catch (InterruptedException e) {
+                    throw new IllegalStateException(e);
+                }
+            }
             if (query) queryCalls++; else documentCalls++;
             float[][] out = new float[texts.size()][VOCAB.length];
             for (int i = 0; i < out.length; i++) {
@@ -182,5 +192,24 @@ public class AssistantSettingsLookupTest {
         List<String> ids = ids(lookup(), "make the text bigger");
         assertEquals("text.size", ids.get(0));
         assertEquals(0, fake.documentCalls);
+    }
+
+    @Test
+    public void releaseDuringAnEmbedDoesNotWaitAndTheEmbedDoesNotRefillTheCache() throws Exception {
+        AssistantSettingsLookup lookup = lookup();
+        fake.entered = new java.util.concurrent.CountDownLatch(1);
+        fake.gate = new java.util.concurrent.CountDownLatch(1);
+        Thread turn = new Thread(() -> ids(lookup, "night"));
+        turn.start();
+        assertTrue(fake.entered.await(5, java.util.concurrent.TimeUnit.SECONDS));
+
+        Thread leave = new Thread(lookup::release);
+        leave.start();
+        leave.join(2000);
+        boolean blocked = leave.isAlive();
+        fake.gate.countDown();
+        turn.join(5000);
+        assertFalse("release waited for the embed", blocked);
+        assertFalse("a finished embed refilled a released cache", lookup.holdsVectors());
     }
 }
