@@ -92,6 +92,37 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
             });
         }
         setUpStartWith();
+        setUpDisplayBackend();
+    }
+
+    private static final String KEY_DISPLAY_BACKEND =
+        TermuxPreferenceConstants.TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND;
+
+    /**
+     * Display: X11 Display or Wayland Display, offered only in a build with the Wayland host.
+     * Going back to X11 Display stops the Wayland host at once, and its apps with it.
+     */
+    private void setUpDisplayBackend() {
+        Preference backend = findPreference(KEY_DISPLAY_BACKEND);
+        Preference hint = findPreference(KEY_DISPLAY_BACKEND + "_hint");
+        if (backend == null) return;
+        if (!com.termux.BuildConfig.WAYLAND_DISPLAY) {
+            backend.setVisible(false);
+            if (hint != null) hint.setVisible(false);
+            return;
+        }
+        backend.setOnPreferenceChangeListener((preference, value) -> {
+            Context context = getContext();
+            if (context == null) return true;
+            boolean wayland = com.termux.app.wayland.LinuxDisplayBackend.resolve(
+                String.valueOf(value), true) == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND;
+            com.termux.app.wayland.WaylandAppRunner runner =
+                com.termux.app.wayland.WaylandAppRunner.shared(context);
+            if (!wayland) runner.stopHost();
+            // Wayland Display listens on its socket while chosen; X11 Display has none.
+            runner.setWaylandChosen(wayland);
+            return true;
+        });
     }
 
     private static final String KEY_START_WITH =
@@ -250,6 +281,8 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
                 launcher.setX11StartWith(value);
             } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND.equals(key)) {
                 launcher.setX11StartWithCommand(value);
+            } else if (TermuxPreferenceConstants.TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND.equals(key)) {
+                launcher.setLinuxDisplayBackend(value);
             }
         }
 
@@ -272,6 +305,9 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
             }
             if (TermuxPreferenceConstants.TERMUX_APP.KEY_X11_START_WITH_COMMAND.equals(key)) {
                 return launcher.getX11StartWithCommand();
+            }
+            if (TermuxPreferenceConstants.TERMUX_APP.KEY_LINUX_DISPLAY_BACKEND.equals(key)) {
+                return launcher.getLinuxDisplayBackend();
             }
             return defValue;
         }

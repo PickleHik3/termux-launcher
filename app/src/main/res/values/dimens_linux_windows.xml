@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- The Linux windows screen's tab row. The text is in sp, so it follows the font scale. -->
+    <dimen name="linux_windows_tab_text">14sp</dimen>
+    <dimen name="linux_windows_tab_height">40dp</dimen>
+    <!-- Vertical padding of the row: tab height plus both sides is the 48dp touch row. -->
+    <dimen name="linux_windows_tab_row_padding">4dp</dimen>
+    <dimen name="linux_windows_tab_stroke">1dp</dimen>
+    <dimen name="linux_windows_tab_max_width">200dp</dimen>
+    <!-- Room for a dozen characters of a title (about 0.5 em each at the tab text size: 12 x 14 x 0.5
+         = 84dp at the default font scale), the tab's inner start padding (8dp) and the close
+         target (48dp): 140dp. -->
+    <dimen name="linux_windows_tab_min_width">140dp</dimen>
+    <dimen name="linux_windows_close_target">40dp</dimen>
+    <!-- The row's side padding, also the start edge of the status line and the developer row. -->
+    <dimen name="linux_windows_start_padding">12dp</dimen>
+    <dimen name="linux_windows_tab_inner_padding">8dp</dimen>
+    <dimen name="linux_windows_tab_gap">6dp</dimen>
+    <dimen name="linux_windows_tab_radius">16dp</dimen>
+</resources>

@@ -49,6 +49,8 @@ public final class GuiAppsSetup {
     public static final String RECORD_FILE_NAME = "launcher-user";
     /** The X keyboard data the display server needs before it can start. */
     public static final String KEYBOARD_DATA_PACKAGE = "xkeyboard-config";
+    /** The X server Wayland Display runs X11 apps and whole desktops on ({@code $PREFIX/bin/Xwayland}). */
+    public static final String XWAYLAND_PACKAGE = "xwayland";
     /** The session bus: a whole desktop needs one and XFCE starts none of its own on X11. */
     public static final String BUS_PACKAGE = "dbus";
     /**
@@ -409,12 +411,36 @@ public final class GuiAppsSetup {
                                  @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
                                  @Nullable String user, @Nullable String password,
                                  boolean distroInstalled) {
+        return command(route, distro, starters, edition, user, password, distroInstalled,
+            com.termux.app.wayland.LinuxDisplayBackend.X11);
+    }
+
+    /**
+     * As above, for the display the user chose: Wayland Display adds {@link #XWAYLAND_PACKAGE}
+     * ({@link #displayPackages}); X11 Display changes nothing.
+     */
+    @NonNull
+    public static String command(@NonNull Route route, @NonNull Distro distro,
+                                 @NonNull Set<StarterApp> starters, @NonNull AppEdition edition,
+                                 @Nullable String user, @Nullable String password,
+                                 boolean distroInstalled,
+                                 @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
         if (user != null && password == null) {
             throw new IllegalArgumentException("a user needs a password");
         }
         return route == Route.X11_REPO
-            ? x11Command(starters, edition) + " && " + markerStep(route, distro)
-            : distroCommand(distro, starters, user, password, distroInstalled);
+            ? x11Command(starters, edition, display) + " && " + markerStep(route, distro)
+            : distroCommand(distro, starters, user, password, distroInstalled, display);
+    }
+
+    /**
+     * The Termux packages the chosen display needs on top of the apps: {@link #XWAYLAND_PACKAGE}
+     * under Wayland Display, none under X11 Display. Pure.
+     */
+    @NonNull
+    static List<String> displayPackages(@NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
+        return display == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND
+            ? Collections.singletonList(XWAYLAND_PACKAGE) : Collections.<String>emptyList();
     }
 
     /** Where the command's last step records that it finished (Termux side, outside the container). */
@@ -446,7 +472,8 @@ public final class GuiAppsSetup {
      */
     @NonNull
     private static String x11Command(@NonNull Set<StarterApp> starters,
-                                     @NonNull AppEdition edition) {
+                                     @NonNull AppEdition edition,
+                                     @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
         boolean vaj = edition == AppEdition.VAJ;
         List<String> packages = new ArrayList<>();
         // The display itself needs the keyboard data before it can start; it rides along with
@@ -455,6 +482,9 @@ public final class GuiAppsSetup {
         // A whole desktop needs a session bus and XFCE starts none of its own on X11 (D6); it
         // rides along the same way, not as a tickable starter app.
         packages.add(BUS_PACKAGE);
+        // VAJ's repository has not been checked for the display's packages: asked for on their own.
+        List<String> displayPackages = displayPackages(display);
+        if (!vaj) packages.addAll(displayPackages);
         // The window manager the display starts. VAJ's repository was last checked before it
         // mattered, so there it is asked for on its own after the rest, and a repository without
         // it stops nothing.
@@ -480,7 +510,9 @@ public final class GuiAppsSetup {
             if (starters.contains(app)) packages.add(termuxPackageFor(app));
         }
         String install = "pkg install -y " + join(packages);
-        return vaj ? install + " && { pkg install -y " + WINDOW_MANAGER_PACKAGE + " || true; }"
+        String vajExtras = "pkg install -y " + WINDOW_MANAGER_PACKAGE
+            + (displayPackages.isEmpty() ? "" : " " + join(displayPackages));
+        return vaj ? install + " && { " + vajExtras + " || true; }"
             : "pkg install -y x11-repo && " + install;
     }
 
@@ -516,7 +548,8 @@ public final class GuiAppsSetup {
     private static String distroCommand(@NonNull Distro distro,
                                         @NonNull Set<StarterApp> starters,
                                         @Nullable String user, @Nullable String password,
-                                        boolean distroInstalled) {
+                                        boolean distroInstalled,
+                                        @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
         boolean unattended = user != null;
         StringBuilder out = new StringBuilder();
         out.append("( set -e\n");
@@ -529,6 +562,11 @@ public final class GuiAppsSetup {
         out.append("command -v ").append(WINDOW_MANAGER_PACKAGE)
             .append(" >/dev/null 2>&1 || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
                 + "pkg install -y ").append(WINDOW_MANAGER_PACKAGE).append("; }\n");
+        // Wayland Display runs X11 apps and desktops on Xwayland, on the Termux side too.
+        for (String name : displayPackages(display)) {
+            out.append("[ -x \"$PREFIX/bin/Xwayland\" ] || { pkg install -y x11-repo >/dev/null 2>&1 || true; "
+                + "pkg install -y ").append(name).append("; }\n");
+        }
         // The sound server runs on the Termux side too (LauncherSound); a repository without it
         // costs the distro its sound and stops nothing.
         out.append("command -v ").append(AUDIO_PACKAGE).append(" >/dev/null 2>&1 || pkg install -y ")

@@ -28,7 +28,7 @@ import juloo.keyboard2.Theme;
  * colour scheme, font and shape on the layout they type on. The Keyboard theme page and the
  * Layouts page both build it here, so the two always look the same.
  */
-final class KeyboardPreviewFactory {
+public final class KeyboardPreviewFactory {
 
     private KeyboardPreviewFactory() {
     }
@@ -43,15 +43,38 @@ final class KeyboardPreviewFactory {
                                 @NonNull TermuxAppSharedPreferences preferences,
                                 @NonNull InAppKeyboardColorScheme scheme,
                                 @Nullable String layoutId) {
-        Config.Builder config = new Config.Builder(context.getResources(),
-            new Config.IKeyEventHandler() {
-                @Override public void key_down(KeyValue value, boolean isSwipe) {}
-                @Override public void key_up(KeyValue value, Pointers.Modifiers modifiers) {}
-                @Override public void mods_changed(Pointers.Modifiers modifiers) {}
-                @Override public void suggestion_entered(String text) {}
-            });
-        config.hapticEnabled = false;
-        config.keySoundEnabled = false;
+        return build(context, preferences, scheme, layoutId, new Config.IKeyEventHandler() {
+            @Override public void key_down(KeyValue value, boolean isSwipe) {}
+            @Override public void key_up(KeyValue value, Pointers.Modifiers modifiers) {}
+            @Override public void mods_changed(Pointers.Modifiers modifiers) {}
+            @Override public void suggestion_entered(String text) {}
+        }, false);
+    }
+
+    /**
+     * The same keyboard for a screen of its own to type with (the Linux windows screen): its keys
+     * go to {@code handler}, with the user's haptics and key sound.
+     */
+    @NonNull
+    public static Keyboard2View createTyping(@NonNull Context context,
+                                             @NonNull TermuxAppSharedPreferences preferences,
+                                             @NonNull InAppKeyboardColorScheme scheme,
+                                             @Nullable String layoutId,
+                                             @NonNull Config.IKeyEventHandler handler) {
+        return build(context, preferences, scheme, layoutId, handler, true);
+    }
+
+    @NonNull
+    private static Keyboard2View build(@NonNull Context context,
+                                       @NonNull TermuxAppSharedPreferences preferences,
+                                       @NonNull InAppKeyboardColorScheme scheme,
+                                       @Nullable String layoutId,
+                                       @NonNull Config.IKeyEventHandler handler,
+                                       boolean feedback) {
+        Config.Builder config = new Config.Builder(context.getResources(), handler);
+        config.hapticEnabled = feedback && preferences.isInAppKeyboardHapticsEnabled()
+            && preferences.isAppHapticsEnabled();
+        config.keySoundEnabled = feedback && preferences.isInAppKeyboardKeySoundEnabled();
         config.labelFont = labelFont(context, preferences.getInAppKeyboardFontPath());
         config.symbolFont = com.termux.shared.termux.font.NerdFontSpans.typeface(context);
         Keyboard2View keyboard = new Keyboard2View(context, config.build(),

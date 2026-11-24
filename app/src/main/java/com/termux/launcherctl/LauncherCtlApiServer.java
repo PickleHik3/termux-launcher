@@ -659,6 +659,11 @@ public class LauncherCtlApiServer {
                 return jsonResponse(runSignalRequest(request));
             } else if (DeviceControlRoutes.handles(request.method, request.path)) {
                 return jsonResponse(DeviceControlRoutes.handle(context, request.method, request.path, request.body));
+            } else if (LinuxAppsRoutes.handles(request.method, request.path)) {
+                LinuxAppsRoutes.Result linux = LinuxAppsRoutes.handle(context, request.path,
+                    queryParameters(request.query).get("format"), request.body);
+                return new HttpResponse(linux.status, linux.contentType,
+                    linux.body.getBytes(StandardCharsets.UTF_8), null);
             } else if ("GET".equals(request.method) && "/v1/x11/gpu".equals(request.path)) {
                 // Off the request thread's main-thread worries already: this is the server's own
                 // worker, and the probe builds a throwaway GL context the first time.
@@ -2124,6 +2129,8 @@ public class LauncherCtlApiServer {
         rateLimiters.put("POST:/v1/torch", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/battery", new SimpleRateLimiter(120, 60_000));
         rateLimiters.put("POST:/v1/look", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("GET:/v1/linux-apps", new SimpleRateLimiter(60, 60_000));
+        rateLimiters.put("POST:/v1/linux-apps/open", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/motion-log", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("POST:/v1/motion-log/clear", new SimpleRateLimiter(30, 60_000));
         rateLimiters.put("GET:/v1/volume", new SimpleRateLimiter(120, 60_000));
@@ -3045,11 +3052,13 @@ public class LauncherCtlApiServer {
             "  launcherctl wallpaper set FILE [--home|--lock|--both]\n" +
             "  launcherctl wallpaper get\n" +
             "  launcherctl x11 gpu [--env|--table]\n" +
+            "  launcherctl linux-apps [--json]\n" +
+            "  launcherctl linux-app open ID\n" +
             "  launcherctl media player|gone|seeked|streams ...   (the launcher's media helper)\n" +
             "\n" +
             "Each group explains its commands and flags: launcherctl <group> --help, for launch, pane,\n" +
             "window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch,\n" +
-            "battery, motion-log, look, volume, toast, wallpaper, x11 and media.\n" +
+            "battery, motion-log, look, volume, toast, wallpaper, x11, linux-apps, linux-app and media.\n" +
             "\n" +
             "Examples:\n" +
             "  launcherctl launch whatsapp\n" +
@@ -3354,6 +3363,29 @@ public class LauncherCtlApiServer {
             "gpu says which graphics profile fits this phone and whether its packages are\n" +
             "installed, and which one you picked; --env prints the exports instead, ready to\n" +
             "eval; --table prints the profile list the graphics benchmark tries.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    linux-apps) cat <<'EOF'\n" +
+            "launcherctl linux-apps - the Linux apps the app drawer lists\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl linux-apps [--json]\n" +
+            "\n" +
+            "Prints one line per app, tab separated: id, name and source (termux, or the\n" +
+            "container's name), with a fourth column desktop for a whole desktop. --json prints\n" +
+            "the same as JSON. The id is what launcherctl linux-app open takes.\n" +
+            "EOF\n" +
+            "      ;;\n" +
+            "    linux-app) cat <<'EOF'\n" +
+            "launcherctl linux-app - open a Linux app as a tap in the app drawer would\n" +
+            "\n" +
+            "Usage:\n" +
+            "  launcherctl linux-app open ID\n" +
+            "\n" +
+            "open starts the app with that id (see launcherctl linux-apps) on the display the user\n" +
+            "chose; an app that is already open comes forward. It prints opened ID once the launch\n" +
+            "is handed over and does not wait for a window; it exits 1 with a reason when the id is\n" +
+            "unknown or Linux apps are unavailable.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    media) cat <<'EOF'\n" +
@@ -3888,7 +3920,7 @@ public class LauncherCtlApiServer {
             "esac\n" +
             "if [ \"$#\" -eq 1 ]; then\n" +
             "  case \"$cmd\" in\n" +
-            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11|media)\n" +
+            "    launch|pane|window|agent|progress|clipboard|keyboard|torch|wallpaper|x11|linux-app|media)\n" +
             "      group_help \"$cmd\" >&2\n" +
             "      exit 2\n" +
             "      ;;\n" +
@@ -4026,6 +4058,20 @@ public class LauncherCtlApiServer {
             "      *) echo \"usage: launcherctl x11 gpu [--env|--table]\" >&2; exit 2 ;;\n" +
             "    esac\n" +
             "    ;;\n" +
+            "  linux-apps)\n" +
+            "    case \"${2:-}\" in\n" +
+            "      '') api GET /v1/linux-apps ;;\n" +
+            "      --json) api GET \"/v1/linux-apps?format=json\" ;;\n" +
+            "      *) echo 'usage: launcherctl linux-apps [--json]' >&2; exit 2 ;;\n" +
+            "    esac\n" +
+            "    ;;\n" +
+            "  linux-app)\n" +
+            "    if [ \"${2:-}\" = open ] && [ \"$#\" -eq 3 ] && [ -n \"$3\" ]; then\n" +
+            "      api POST /v1/linux-apps/open \"{\\\"id\\\":$(printf '%s' \"$3\" | json_str)}\"\n" +
+            "    else\n" +
+            "      echo 'usage: launcherctl linux-app open ID' >&2; exit 2\n" +
+            "    fi\n" +
+            "    ;;\n" +
             "  media)\n" +
             "    shift || true\n" +
             "    sub=\"${1:-}\" name=\"${2:-}\"\n" +
@@ -4067,7 +4113,7 @@ public class LauncherCtlApiServer {
             "    ;;\n" +
             "  *)\n" +
             "    echo \"launcherctl: unknown command: $cmd\" >&2\n" +
-            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, volume, toast, wallpaper, x11, media. For local AI use tai.\" >&2\n" +
+            "    echo \"launcherctl supports: launch, pane, window, agent, notify, progress, clipboard, notifications, keyboard, vibrate, torch, battery, motion-log, look, volume, toast, wallpaper, x11, linux-apps, linux-app, media. For local AI use tai.\" >&2\n" +
             "    exit 2\n" +
             "    ;;\n" +
             "esac\n";

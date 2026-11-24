@@ -123,7 +123,8 @@ public final class SettingsSearchIndex {
                 || "terminal_retro_composite".equals(key))
                 && !com.termux.app.terminal.PaneRetroEffect.available())
             || (("terminal_engine".equals(key) || "terminal_clipboard_read_reset".equals(key))
-                && !com.termux.terminal.TerminalEngine.isAvailable());
+                && !com.termux.terminal.TerminalEngine.isAvailable())
+            || ("linux_display_backend".equals(key) && !com.termux.BuildConfig.WAYLAND_DISPLAY);
     }
 
     /** Reads give the default; writes go nowhere. */

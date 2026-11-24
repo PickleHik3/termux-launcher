@@ -50,6 +50,7 @@ public final class SettingsRowIcons {
         // Notes: a row that only explains.
         key(R.drawable.ic_ms_info, "gui_apps_hint", "tai_lan_note", "tai_remote_free_plan",
             "tai_remote_consent", "terminal_dynamic_colors_hint", "x11_window_manager_hint",
+            "linux_display_backend_hint",
             "speech_model_empty", "speech_output_missing", "about", "about_support");
 
         // About & help
@@ -126,6 +127,7 @@ public final class SettingsRowIcons {
         key(R.drawable.ic_ms_play_circle, "launcher_media_controls");
         key(R.drawable.ic_ms_install_desktop, "x11_gui_apps_setup");
         key(R.drawable.ic_ms_tune, "x11_apps");
+        key(R.drawable.ic_ms_desktop_windows, "linux_display_backend");
         key(R.drawable.ic_ms_desktop_windows, "x11_window_manager");
         key(R.drawable.ic_ms_play_circle, "x11_start_with");
         key(R.drawable.ic_ms_terminal, "x11_start_with_command");

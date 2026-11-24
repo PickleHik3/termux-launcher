@@ -121,6 +121,22 @@ Several rows above predate the 10-26 editor redesign; where they disagree, these
 - Chrome first run: "Use without an account" about 540,2005, then More, Got it. Tapping Calendar
   starts a Google sign-in: force-stop `com.google.android.calendar` and `com.google.android.gms`.
 
+## The app drawer's search (pong, 2026-11-24)
+
+Three check runs opened unrelated apps on the developer's phone from here. The results list
+collapses to the category grid the moment the search text is empty, and a tap already queued
+then lands on whatever icon is under it.
+
+- Leave the search with Home. Change the text by going Home and typing again.
+- Send one tap at a time and re-read the screen before each tap on a result.
+- Tap only a row whose subtitle says "Linux apps": the first row with the same name is usually
+  the Android app.
+- `ad type` does not reach the field; tap the launcher keyboard's keys (q row y≈1783, a row
+  y≈1928, z row y≈2081 at 1080x2412).
+- To open a Linux app for a check that is not about the drawer, do not search for it:
+  `ssh termux launcherctl linux-apps` lists ids and names (tab separated), then
+  `ssh termux launcherctl linux-app open <id>` opens it as a drawer tap would.
+
 ## Device quirks
 
 - The X server needs `xkeyboard-config`, which lives in x11-repo: `apt install -y x11-repo && apt

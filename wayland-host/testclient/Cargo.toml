@@ -1,0 +1,14 @@
+[package]
+name = "tlwayland-testclient"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[[bin]]
+name = "tlwayland-testclient"
+path = "src/main.rs"
+
+[dependencies]
+wayland-client = "0.31"
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
+rustix = { version = "1", features = ["fs", "mm"] }

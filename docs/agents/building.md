@@ -18,6 +18,18 @@ and a JDK compatible with AGP 8.13.2; the code targets Java 11.
   arm64-v8a and x86_64 only) and its tests' host library; it needs Zig 0.17 and the NDK. Without it
   the APK has no library and Settings hides **Terminal engine**. CI's nightly `assembleStaging` and
   the release workflow's `assembleRelease` pass it (`mlugg/setup-zig`), so drops carry the engine.
+- `-Pwayland=true` builds the Wayland compositor host (`wayland-host/`, Rust, smithay) as
+  `libtlwayland.so` for arm64-v8a, x86_64 and armeabi-v7a, and sets `BuildConfig.WAYLAND_DISPLAY`.
+  Without it no Rust runs and the APK carries no library. It needs rustup with the three Android
+  targets (`rustup target add aarch64-linux-android x86_64-linux-android armv7-linux-androideabi`),
+  `cargo-ndk`, `meson`, `ninja` and `bison`; the first build takes about ten minutes for
+  libxkbcommon. No CI workflow passes it yet (decided 2026-11-24: pre-release drops leave Wayland
+  Display out until the developer says testers should see it); pong's APK is built locally with it.
+  Turning it on in CI is the Rust set-up steps and the flag from `feat/wayland-display`'s
+  `debug_build.yml`: commit a229ceb5d, left out when it merged into v2-redesign.
+- A `libtlwayland.so` tombstone: the build keeps an unstripped copy per ABI in
+  `app/build/wayland/symbols/<abi>/`; symbolize with
+  `$ANDROID_NDK_HOME/ndk-stack -sym app/build/wayland/symbols/<abi> -i tombstone.txt`.
 
 ## Installing
 
@@ -26,6 +38,10 @@ Target the device with `DEVICE=<serial>`; `BUILD_TYPE=debug` installs the debug 
 keeps only arm64-v8a, signs with the test key every build shares, installs with
 `--no-incremental` and checks the launcher came back up. For pong, where the network link is slow,
 the host's `ad -s pong install <apk>` sends the APK through the device-drops route instead of adb.
+`scripts/pong-install.sh [commit ...]` is the whole pong round in one command: it refuses unless the
+named commits are in HEAD, builds, fails on a build error, installs through `ad`,
+confirms the phone's update time changed and restarts the phone's sshd. Use it instead of a
+hand-written chain.
 
 `adb -s <serial> shell run-as <pkg> …` reads and edits the app's files on a debug or staging build.
 

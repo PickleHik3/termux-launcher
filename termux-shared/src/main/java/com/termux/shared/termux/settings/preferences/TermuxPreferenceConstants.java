@@ -288,6 +288,15 @@ public final class TermuxPreferenceConstants {
 
         public static final String DEFAULT_X11_START_WITH_COMMAND = "";
 
+        /**
+         * Which display Linux apps tapped in the drawer open under: {@code x11} (X11 Display) or
+         * {@code wayland} (Wayland Display). A build without the Wayland host always uses
+         * {@code x11}, whatever is stored.
+         */
+        public static final String KEY_LINUX_DISPLAY_BACKEND = "linux_display_backend";
+
+        public static final String DEFAULT_LINUX_DISPLAY_BACKEND = "x11";
+
         /** Set once the phone-sized defaults (text size, touch mode) have been written on first turn-on. */
         public static final String KEY_X11_DEFAULTS_APPLIED = "x11_defaults_applied";
 

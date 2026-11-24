@@ -1,0 +1,12 @@
+--- a/src/wayland/shm/handlers.rs
++++ b/src/wayland/shm/handlers.rs
+@@ -190,6 +190,9 @@
+             Request::Resize { size } => {
+                 if size <= 0 {
+                     pool.post_error(wl_shm::Error::InvalidFd, "invalid wl_shm_pool size");
++                    // Upstream falls through to `NonZeroUsize::try_from(0).unwrap()` and panics
++                    // the compositor thread; the client is already being disconnected.
++                    return;
+                 }
+ 
+                 if let Err(err) = arc_pool.resize(NonZeroUsize::try_from(size as usize).unwrap()) {

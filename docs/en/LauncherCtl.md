@@ -400,6 +400,25 @@ instead, ready to `eval`; `--table` prints the list of profiles the graphics ben
 eval "$(launcherctl x11 gpu --env)"
 ```
 
+## linux-apps and linux-app
+
+```text
+launcherctl linux-apps [--json]
+launcherctl linux-app open ID
+```
+
+`linux-apps` lists the Linux apps the app drawer shows, one per line and separated by tabs: the id,
+the name and the source (`termux`, or the container's name), with a fourth column `desktop` for a
+whole desktop. `linux-app open` opens the app with that id exactly as a tap in the drawer would,
+on the display you chose, and prints `opened ID` once the launch is handed over; it does not wait
+for a window. It exits 1 with a one-line reason when the id is unknown or Linux apps are
+unavailable (the launcher's home screen has to have been shown since it started).
+
+```sh
+launcherctl linux-apps | cut -f1,2
+launcherctl linux-app open distro:arch:firefox
+```
+
 ## Termux:API commands on top of launcherctl
 
 The tlstore item `termux-api-shims` puts the familiar Termux:API commands in `~/.local/bin`, built

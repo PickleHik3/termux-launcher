@@ -6,6 +6,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.x11.DistroDisplayProfile;
 import com.termux.app.x11.ProotDistro;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -185,10 +186,13 @@ public final class LauncherSound {
     /**
      * A distro may have appeared since the server started (a {@code proot-distro install} in a
      * shell): give every installed one its drop-in and the cookie's copy. Cheap when nothing is
-     * missing — the writes are idempotent — so a resume can ask every time. Any thread.
+     * missing — the writes are idempotent — so a resume can ask every time. Every installed one
+     * also gets the launcher's display login script ({@link DistroDisplayProfile}), whatever the
+     * Sound switch says: it is the one door the launcher has into each distro's files. Any thread.
      */
     public void onContainersMaybeChanged() {
         worker.execute(() -> {
+            DistroDisplayProfile.refreshInstalled();
             try {
                 if (!soundEnabled() || status != Status.RUNNING) return;
                 if (Boolean.TRUE.equals(userSetup)) return;

@@ -1,6 +1,9 @@
 package com.termux.app.x11;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import java.math.BigDecimal;
 
 /**
  * The stops of the display window's scale rail, and how they map onto the display's resolution
@@ -55,6 +58,24 @@ public final class DisplayScaleSteps {
         float clamped = Math.max(0f, Math.min(1f, fraction));
         int index = Math.round(clamped * (STEPS.length - 1));
         return STEPS[index];
+    }
+
+    /**
+     * A stop as a per-app scale value ({@link X11AppSettings#SCALES}): its percent as a factor,
+     * "1", "1.25" … "2.5". The rail and the per-app Scale row offer the same stops.
+     */
+    @NonNull
+    public static String scaleValue(int step) {
+        return BigDecimal.valueOf(step).movePointLeft(2).stripTrailingZeros().toPlainString();
+    }
+
+    /** The stop a per-app scale value names, or 0 when it names none. */
+    public static int stepOf(@Nullable String scaleValue) {
+        if (scaleValue == null) return 0;
+        for (int step : STEPS) {
+            if (scaleValue(step).equals(scaleValue)) return step;
+        }
+        return 0;
     }
 
     /** The rail's read-out for a stop. */

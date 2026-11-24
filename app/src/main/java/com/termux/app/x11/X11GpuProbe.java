@@ -268,6 +268,8 @@ public final class X11GpuProbe {
     static final int VULKAN_1_3 = 0x403000;
 
     private static final String ICD_DIR = TermuxConstants.TERMUX_PREFIX_DIR_PATH + "/share/vulkan/icd.d/";
+    /** The Turnip (Adreno) Vulkan ICD; the turnip-zink profile pins it with VK_ICD_FILENAMES. */
+    public static final String FREEDRENO_ICD = ICD_DIR + "freedreno_icd.aarch64.json";
 
     private X11GpuProbe() {}
 
@@ -377,7 +379,7 @@ public final class X11GpuProbe {
             || in.glRenderer.toLowerCase(Locale.ROOT).matches(".*adreno.*8\\d\\d.*")) {
             env.set(1, "TU_DEBUG=noconform,flushall,syncdraw");
         }
-        if (in.icdFiles.size() > 1) env.add("VK_ICD_FILENAMES=" + ICD_DIR + "freedreno_icd.aarch64.json");
+        if (in.icdFiles.size() > 1) env.add("VK_ICD_FILENAMES=" + FREEDRENO_ICD);
         boolean installed = in.mesaDri && in.hasIcd("freedreno");
         return new Recommendation(Profile.TURNIP_ZINK,
             "a Qualcomm Adreno GPU: Turnip drives it directly and Zink puts OpenGL on top (the Vulkan loader comes with mesa)",

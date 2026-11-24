@@ -82,9 +82,19 @@ final class DisplayCardLogic {
     static String command(@NonNull GuiAppsSetup.Route route, @NonNull GuiAppsSetup.Distro distro,
                           @NonNull AppEdition edition, @Nullable String user,
                           @Nullable String password) {
+        return command(route, distro, edition, user, password,
+            com.termux.app.wayland.LinuxDisplayBackend.X11);
+    }
+
+    /** As above, for the display the user chose (Wayland Display adds Xwayland). */
+    @NonNull
+    static String command(@NonNull GuiAppsSetup.Route route, @NonNull GuiAppsSetup.Distro distro,
+                          @NonNull AppEdition edition, @Nullable String user,
+                          @Nullable String password,
+                          @NonNull com.termux.app.wayland.LinuxDisplayBackend display) {
         return GuiAppsSetup.command(route, distro, GuiAppsSetup.defaultStarters(), edition,
             route == GuiAppsSetup.Route.DISTRO ? user : null,
-            route == GuiAppsSetup.Route.DISTRO ? password : null);
+            route == GuiAppsSetup.Route.DISTRO ? password : null, false, display);
     }
 
     /**

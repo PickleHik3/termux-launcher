@@ -446,6 +446,35 @@ public final class ProotDistro {
      */
     @NonNull
     public static String loginCommand(@NonNull Container container, @NonNull String command) {
+        return loginCommand(container, command, null);
+    }
+
+    /**
+     * What a login carries on top of the X11 Display one, for an app that opens under Wayland
+     * Display ({@link com.termux.app.wayland.LinuxWindowsProot}). With it the login takes exactly
+     * these variables and not {@link #FORWARDED_ENV}'s {@code DISPLAY}, whose fallback to
+     * {@code :0} would name a display that is not there.
+     */
+    public static final class LoginExtras {
+        /** {@code host:container} paths for {@code --bind}. */
+        @NonNull public final List<String> binds;
+        /** {@code NAME=value} lines for {@code -e}, as the container sees them. */
+        @NonNull public final List<String> env;
+
+        public LoginExtras(@NonNull List<String> binds, @NonNull List<String> env) {
+            this.binds = Collections.unmodifiableList(new java.util.ArrayList<>(binds));
+            this.env = Collections.unmodifiableList(new java.util.ArrayList<>(env));
+        }
+    }
+
+    /**
+     * {@link #loginCommand(Container, String)} with {@code extras} for an app under Wayland
+     * Display, or null for the X11 Display login. {@code --shared-x11} stays either way: it also
+     * carries Xwayland's socket and the launcher's session bus.
+     */
+    @NonNull
+    public static String loginCommand(@NonNull Container container, @NonNull String command,
+                                      @Nullable LoginExtras extras) {
         if (container.isPrefix()) return command;
         // Nix has no proot-distro and no second filesystem: $PREFIX/bin/login is the one way into
         // the environment where a store path and the profile's PATH mean anything, and it passes
@@ -458,7 +487,13 @@ public final class ProotDistro {
         line.append(container.name);
         line.append(" -u ").append(container.user.isEmpty() ? "root" : container.user);
         line.append(" --shared-x11");
-        for (String variable : FORWARDED_ENV) line.append(" -e ").append(variable);
+        if (extras == null) {
+            for (String variable : FORWARDED_ENV) line.append(" -e ").append(variable);
+        } else {
+            for (String bind : extras.binds) line.append(" --bind ").append(singleQuote(bind));
+            line.append(" -e MOZ_USE_XINPUT2=1");
+            for (String variable : extras.env) line.append(" -e ").append(singleQuote(variable));
+        }
         line.append(' ').append(FORWARDED_BUS);
         for (String forwarded : FORWARDED_SCALE_ENV) line.append(' ').append(forwarded);
         line.append(" -- /bin/sh -c ").append(singleQuote(command));

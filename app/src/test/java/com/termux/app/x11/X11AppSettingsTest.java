@@ -64,4 +64,21 @@ public class X11AppSettingsTest {
         assertFalse(X11AppSettings.isScale("1.0"));
         assertFalse(X11AppSettings.isScale(null));
     }
+
+    @Test public void theScalesAreTheRailsStops() {
+        assertEquals(DisplayScaleSteps.STEPS.length, X11AppSettings.SCALES.size());
+        for (int i = 0; i < DisplayScaleSteps.STEPS.length; i++) {
+            assertEquals(DisplayScaleSteps.STEPS[i], DisplayScaleSteps.stepOf(X11AppSettings.SCALES.get(i)));
+        }
+    }
+
+    @Test public void aStoredThreeReadsAsTheTopStopAndOtherOddValuesAreDropped() {
+        Map<String, X11AppSettings.Overrides> out = X11AppSettings.parse(
+            "{\"old\": {\"scale\": \"3\"}, \"tilde\": {\"scale\": \"1.7\"},"
+                + " \"zero\": {\"scale\": \"0\"}, \"words\": {\"scale\": \"big\"}}");
+        assertEquals("2.5", out.get("old").scale);
+        assertNull(out.get("tilde"));
+        assertNull(out.get("zero"));
+        assertNull(out.get("words"));
+    }
 }

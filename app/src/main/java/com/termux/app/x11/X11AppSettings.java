@@ -6,7 +6,7 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Arrays;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -29,9 +29,8 @@ public final class X11AppSettings {
     public static final String TOUCH_TOUCH = "2";
     public static final String TOUCH_DIRECT = "3";
 
-    /** Every scale an app can ask for. */
-    public static final List<String> SCALES = Collections.unmodifiableList(
-        Arrays.asList("1", "1.25", "1.5", "2", "2.5", "3"));
+    /** Every scale an app can ask for: the scale rail's stops ({@link DisplayScaleSteps#STEPS}). */
+    public static final List<String> SCALES = scales();
 
     private static final String KEY_TOUCH_MODE = "touch_mode";
     private static final String KEY_SCALE = "scale";
@@ -55,6 +54,23 @@ public final class X11AppSettings {
 
     public static boolean isScale(@Nullable String value) {
         return value != null && SCALES.contains(value);
+    }
+
+    @NonNull
+    private static List<String> scales() {
+        List<String> out = new ArrayList<>();
+        for (int step : DisplayScaleSteps.STEPS) out.add(DisplayScaleSteps.scaleValue(step));
+        return Collections.unmodifiableList(out);
+    }
+
+    /** The one scale the stops no longer have, read as the nearest stop so its choice is kept. */
+    private static final String LEGACY_SCALE_3 = "3";
+
+    /** {@code value} as one of {@link #SCALES}: itself, a stored "3" (before the stops were the rail's) as "2.5", else null. */
+    @Nullable
+    static String normalScale(@Nullable String value) {
+        if (isScale(value)) return value;
+        return LEGACY_SCALE_3.equals(value) ? DisplayScaleSteps.scaleValue(DisplayScaleSteps.nearest(300)) : null;
     }
 
     /**
@@ -88,7 +104,7 @@ public final class X11AppSettings {
                          @Nullable String pasteShortcut) {
             this.pasteShortcut = isPasteShortcut(pasteShortcut) ? pasteShortcut : null;
             this.touchMode = isTouchMode(touchMode) ? touchMode : null;
-            this.scale = isScale(scale) ? scale : null;
+            this.scale = normalScale(scale);
             this.gpu = isGpuProfile(gpu) ? gpu : null;
         }
 

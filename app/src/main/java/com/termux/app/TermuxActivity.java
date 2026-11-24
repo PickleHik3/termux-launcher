@@ -28543,6 +28543,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncDisplayEnvironment() {
         com.termux.app.x11.X11DisplayServerState.setDisplayEnvWanted(
             mPreferences != null && mPreferences.isX11SetDisplayEnvEnabled());
+        // Wayland Display listens on its socket while it is the chosen display.
+        com.termux.app.wayland.WaylandAppRunner.shared(this).setWaylandChosen(
+            com.termux.app.wayland.LinuxDisplayBackend.current(this)
+                == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND);
     }
 
     /**
@@ -29575,6 +29579,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void startDisplay() { mDisplayServer.start(); }
                 @Override public boolean runScript(@NonNull String script,
                         @NonNull com.termux.app.x11.X11LinuxAppRunner.ScriptExitListener onExit) {
+                    return runScript(script, onExit, null);
+                }
+                @Override public boolean runScript(@NonNull String script,
+                        @NonNull com.termux.app.x11.X11LinuxAppRunner.ScriptExitListener onExit,
+                        @Nullable java.util.function.IntConsumer onPid) {
                     if (mTermuxService == null) return false;
                     // bash everywhere but the nix edition, which has none and whose own sh is a
                     // store link Android cannot exec; there this is Android's shell, and the line
@@ -29583,6 +29592,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mTermuxService.createTermuxTask(com.termux.app.x11.NixProfile.hostShellPath(),
                             new String[]{"-c", script}, null, TermuxConstants.TERMUX_HOME_DIR_PATH);
                     if (shell == null) return false;
+                    if (onPid != null) {
+                        int pid = com.termux.shared.shell.ShellUtils.getPid(shell.getProcess());
+                        if (pid > 0) onPid.accept(pid);
+                    }
                     // TermuxService already reads the exit code safely inside the onAppShellExited
                     // callback it posts to its own main-thread handler once AppShell's worker thread
                     // is done with it; this rides that same happens-before edge instead of polling
@@ -29631,6 +29644,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 showToast(getString(R.string.termux_x11_app_gone), true);
                 refreshLinuxApps(true);
                 return false;
+            }
+            // Wayland Display, when Settings chooses it: the app opens in its own window on the
+            // Linux windows screen, so no Display page is routed or added.
+            if (mLinuxApps.runUnderWayland(app)) {
+                closeAppDrawerForLinuxLaunch();
+                return true;
             }
             // A3c: the app opens on its Display page: the one bound to it, else the first unbound
             // one, else a new temporary page after the current one, which goes with its display.

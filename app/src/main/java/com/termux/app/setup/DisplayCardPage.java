@@ -559,7 +559,8 @@ final class DisplayCardPage implements SetupCardPage {
         Context app = mContext.getApplicationContext();
         String password = distro ? mPassword : null;
         String command = DisplayCardLogic.command(route, mDistro, edition(),
-            distro ? mUser : null, password);
+            distro ? mUser : null, password,
+            com.termux.app.wayland.LinuxDisplayBackend.current(app));
         mStarting = true;
         mPrepareFailed = false;
         SetupShellRun.get().dismiss();

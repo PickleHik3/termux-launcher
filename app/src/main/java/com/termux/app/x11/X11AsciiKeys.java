@@ -8,7 +8,7 @@ import android.view.KeyEvent;
  * keymap change per character, which a slow client sees as a stale map and answers with wrong
  * characters. Characters with no US key are not here and go as text.
  */
-final class X11AsciiKeys {
+public final class X11AsciiKeys {
 
     private static final int[] CODES = new int[128];
     private static final boolean[] SHIFTED = new boolean[128];
@@ -50,12 +50,12 @@ final class X11AsciiKeys {
     }
 
     /** The Android keycode that types {@code c}, or {@link KeyEvent#KEYCODE_UNKNOWN}. */
-    static int keyCode(char c) {
+    public static int keyCode(char c) {
         return c < CODES.length ? CODES[c] : KeyEvent.KEYCODE_UNKNOWN;
     }
 
     /** Whether {@code c} needs Shift held on its key. */
-    static boolean needsShift(char c) {
+    public static boolean needsShift(char c) {
         return c < SHIFTED.length && SHIFTED[c];
     }
 }
