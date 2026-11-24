@@ -255,6 +255,27 @@ public final class WindowForegroundResolver {
         });
     }
 
+    /**
+     * The program running in the foreground of shell {@code pid} right now, as argv, or an empty
+     * list when the pane is idle or its foreground cannot be read. Read from the system at the
+     * call, never from a resolver's cache: a saved session keeps what runs when it is saved, not
+     * what the pills last showed.
+     */
+    @NonNull
+    public static List<String> captureCommand(int pid) {
+        return captureCommand(pid, ProcSource.SYSTEM);
+    }
+
+    @NonNull
+    @VisibleForTesting
+    public static List<String> captureCommand(int pid, @NonNull ProcSource fs) {
+        List<Integer> asked = Collections.singletonList(pid);
+        WindowForegroundResolver once = new WindowForegroundResolver(null);
+        once.applyOutput(readDirect(asked, fs).output, asked, System.currentTimeMillis());
+        ForegroundInfo info = once.get(pid);
+        return info == null || info.idle ? Collections.<String>emptyList() : info.command;
+    }
+
     /** Where one poll gets its reading. */
     enum Route { DIRECT, PRIVILEGED, WAIT }
 
@@ -271,7 +292,7 @@ public final class WindowForegroundResolver {
     }
 
     /** procfs as the app sees it; a seam for tests. */
-    interface ProcSource {
+    public interface ProcSource {
         /** The file's contents, or null when it is missing or refused. */
         @Nullable String read(@NonNull String path);
 
