@@ -36,6 +36,13 @@ public class SettingsRegistryScreensTest {
     /** Migrated screens: the XML's name, and the fragment source (relative to com/termux) that hosts it. */
     static final Map<String, String> MIGRATED = new LinkedHashMap<>();
 
+    static {
+        MIGRATED.put("performance_preferences.xml",
+            "app/fragments/settings/termux/PerformancePreferencesFragment.java");
+        MIGRATED.put("notifications_preferences.xml",
+            "app/fragments/settings/termux/NotificationsPreferencesFragment.java");
+    }
+
     /** Screens still on their old data store. It only shrinks. */
     static final List<String> NOT_MIGRATED = Arrays.asList(
         "about_support_preferences.xml",
@@ -47,8 +54,6 @@ public class SettingsRegistryScreensTest {
         "launcher_lock_preferences.xml",
         "launcher_preferences.xml",
         "launcher_search_preferences.xml",
-        "notifications_preferences.xml",
-        "performance_preferences.xml",
         "read_aloud_preferences.xml",
         "root_preferences.xml",
         "services_permissions_preferences.xml",
@@ -119,10 +124,36 @@ public class SettingsRegistryScreensTest {
     public void everyMigratedRowNamesADeclaration() {
         List<String> problems = new ArrayList<>();
         for (Map.Entry<String, String> row : RegistryPreferenceDataStore.ROWS.entrySet()) {
-            boolean found = false;
-            for (SettingDeclaration declaration : SettingDeclarations.ALL)
-                if (declaration.id.equals(row.getValue())) found = true;
+            boolean found = declarationOf(row.getValue()) != null;
             if (!found) problems.add(row.getKey() + " names the unknown setting " + row.getValue());
+        }
+        assertNone(problems);
+    }
+
+    @Test
+    public void aMigratedRowStoresUnderItsOwnKeyAndShipsTheDeclaredDefault() throws IOException {
+        List<String> problems = new ArrayList<>();
+        for (String screen : MIGRATED.keySet()) {
+            String xml = withoutComments(read(xmlDir().resolve(screen)));
+            Matcher m = ELEMENT.matcher(xml);
+            while (m.find()) {
+                String key = attribute(m.group(2), "key");
+                String id = key == null ? null : RegistryPreferenceDataStore.ROWS.get(key);
+                if (id == null) continue;
+                SettingDeclaration declaration = declarationOf(id);
+                if (declaration == null) continue;
+                if (!declaration.key.equals(key))
+                    problems.add(screen + ": row " + key + " would store under " + declaration.key);
+                String shipped = attribute(m.group(2), "defaultValue");
+                if (shipped != null && !shipped.equals(declaration.defaultValue()))
+                    problems.add(screen + ": row " + key + " ships " + shipped + " but " + id
+                        + " defaults to " + declaration.defaultValue());
+                String values = attribute(m.group(2), "entryValues");
+                if (values != null && declaration.kind == SettingDeclaration.Kind.CHOICE
+                        && !arrayItems(values).equals(declaration.storedChoices))
+                    problems.add(screen + ": row " + key + " offers " + arrayItems(values)
+                        + " but " + id + " stores " + declaration.storedChoices);
+            }
         }
         assertNone(problems);
     }
@@ -161,6 +192,26 @@ public class SettingsRegistryScreensTest {
     }
 
     // ------------------------------------------------------------------------------ helpers
+
+    /** The declaration {@code id} names: the registry's own, or the Low memory preset's adapter. */
+    static SettingDeclaration declarationOf(String id) {
+        for (SettingDeclaration declaration : SettingDeclarations.ALL)
+            if (declaration.id.equals(id)) return declaration;
+        return new com.termux.app.settings.LowMemoryPresetAdapter(null).declaration(id);
+    }
+
+    /** The items of the string array {@code @array/name} in res/values/arrays.xml. */
+    private static List<String> arrayItems(String reference) throws IOException {
+        String name = reference.substring(reference.indexOf('/') + 1);
+        String arrays = read(xmlDir().resolveSibling("values").resolve("arrays.xml"));
+        Matcher body = Pattern.compile("<string-array name=\"" + Pattern.quote(name)
+            + "\">(.*?)</string-array>", Pattern.DOTALL).matcher(arrays);
+        List<String> items = new ArrayList<>();
+        if (!body.find()) return items;
+        Matcher item = Pattern.compile("<item>(.*?)</item>").matcher(body.group(1));
+        while (item.find()) items.add(item.group(1));
+        return items;
+    }
 
     private static String slider(String key, int min, int max) {
         return "<PreferenceScreen xmlns:app=\"a\" xmlns:android=\"b\"><SliderPreference app:key=\""

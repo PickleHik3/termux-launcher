@@ -99,12 +99,6 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
             case "status_widget_weather_fahrenheit":
                 mPreferences.setStatusWidgetWeatherFahrenheit(value);
                 break;
-            case "lazy_mode":
-                mPreferences.setLazyModeEnabled(value);
-                break;
-            case "fancier_glass":
-                mPreferences.setFancierGlassEnabled(value);
-                break;
             default:
                 break;
         }
@@ -153,10 +147,6 @@ class TerminalIOPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isStatusWidgetWeatherEnabled();
             case "status_widget_weather_fahrenheit":
                 return mPreferences.isStatusWidgetWeatherFahrenheit();
-            case "lazy_mode":
-                return mPreferences.isLazyModeEnabled();
-            case "fancier_glass":
-                return mPreferences.isFancierGlassEnabled();
             default:
                 return defValue;
         }

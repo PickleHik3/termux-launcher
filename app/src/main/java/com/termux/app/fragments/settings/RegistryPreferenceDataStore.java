@@ -12,11 +12,14 @@ import androidx.preference.PreferenceScreen;
 import com.termux.app.settings.LauncherSettings;
 import com.termux.app.settings.LauncherSettingsAdapters;
 import com.termux.app.terminal.TerminalActionDispatcher;
+import com.termux.app.settings.LowMemoryPresetAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 
@@ -37,7 +40,30 @@ public final class RegistryPreferenceDataStore extends PreferenceDataStore {
 
     /** Settings row key to registry id, for every migrated row. Only ever grows with a screen. */
     @NonNull
-    public static final Map<String, String> ROWS = Collections.emptyMap();
+    public static final Map<String, String> ROWS = rows();
+
+    @NonNull
+    private static Map<String, String> rows() {
+        Map<String, String> rows = new LinkedHashMap<>();
+        // Battery & performance
+        rows.put("lazy_mode", SettingDeclarations.REDUCE_IDLE.id);
+        rows.put("low_memory_preset", LowMemoryPresetAdapter.ID);
+        rows.put("fancier_glass", SettingDeclarations.GLASS_REFRACTION.id);
+        rows.put("live_blur", SettingDeclarations.LIVE_BLUR.id);
+        rows.put("live_windows_while_swiping", SettingDeclarations.LIVE_WINDOWS.id);
+        rows.put("wallpaper_parallax", SettingDeclarations.WALLPAPER_PARALLAX.id);
+        rows.put("terminal_cursor_trail", SettingDeclarations.CURSOR_TRAIL.id);
+        rows.put("terminal_retro_effect", SettingDeclarations.TERMINAL_EFFECT.id);
+        rows.put("terminal_screen_events", SettingDeclarations.TERMINAL_SCREEN_EVENTS.id);
+        rows.put("terminal_retro_composite", SettingDeclarations.TERMINAL_EFFECT_COMPOSITE.id);
+        rows.put("idle_animations", SettingDeclarations.IDLE_ANIMATIONS.id);
+        rows.put("idle_tear_rate", SettingDeclarations.IDLE_TEAR_RATE.id);
+        // Notifications
+        rows.put("app_launcher_notification_dots", SettingDeclarations.NOTIFICATION_DOTS.id);
+        rows.put("app_launcher_notification_badge_style",
+            SettingDeclarations.NOTIFICATION_BADGE_STYLE.id);
+        return Collections.unmodifiableMap(rows);
+    }
 
     @NonNull private final PreferenceDataStore mFallback;
     @NonNull private final SettingsRegistry mRegistry;
@@ -144,12 +170,17 @@ public final class RegistryPreferenceDataStore extends PreferenceDataStore {
 
     @Override
     public void putBoolean(String key, boolean value) {
-        mFallback.putBoolean(key, value);
+        String id = key == null ? null : mRows.get(key);
+        if (id == null) mFallback.putBoolean(key, value);
+        else save(id, String.valueOf(value));
     }
 
     @Override
     public boolean getBoolean(String key, boolean defValue) {
-        return mFallback.getBoolean(key, defValue);
+        String id = key == null ? null : mRows.get(key);
+        if (id == null) return mFallback.getBoolean(key, defValue);
+        String value = mRegistry.get(id);
+        return value == null ? defValue : Boolean.parseBoolean(value);
     }
 
     @Override

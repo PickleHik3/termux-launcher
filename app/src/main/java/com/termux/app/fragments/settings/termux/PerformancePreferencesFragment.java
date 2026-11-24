@@ -16,13 +16,12 @@ import androidx.preference.PreferenceDataStore;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
-import com.termux.app.TermuxActivity;
 import com.termux.app.chrome.LiveBlurPolicy;
 import com.termux.app.chrome.WallpaperPictureReader;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.RegistryPreferenceDataStore;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.termux.PerformanceRowPolicy.Reason;
-import com.termux.app.settings.LowMemoryPreset;
 import com.termux.app.terminal.PaneRetroEffect;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
@@ -59,7 +58,11 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
     public void onCreatePreferences(Bundle savedInstanceState, String rootKey) {
         Context context = getContext();
         if (context == null) return;
-        getPreferenceManager().setPreferenceDataStore(new PerformanceDataStore(context));
+        // Every row on this page saves through the registry: the declaration clamps the value and
+        // runs the refresh, so the old store has nothing left to answer for.
+        RegistryPreferenceDataStore store = RegistryPreferenceDataStore.forDevice(context,
+            new PreferenceDataStore() { });
+        getPreferenceManager().setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.performance_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
         Preference effect = findPreference(KEY_TERMINAL_EFFECT);
@@ -76,15 +79,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         if (tearRate != null) tearRate.setVisible(PaneRetroEffect.available());
         SwitchPreferenceCompat preset = findPreference(KEY_LOW_MEMORY_PRESET);
         if (preset != null) {
+            // The registry runs the preset as the row saves; the rows then show what it wrote.
             preset.setOnPreferenceChangeListener((row, newValue) -> {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                if (prefs == null) return false;
-                if (Boolean.TRUE.equals(newValue)) LowMemoryPreset.turnOn(prefs);
-                else LowMemoryPreset.turnOff(prefs);
-                SwitchPreferenceCompat lazy = findPreference(KEY_LAZY_MODE);
-                if (lazy != null) lazy.setChecked(prefs.isLazyModeEnabled());
-                // The launcher restyles itself when the user returns to it.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
                 scheduleRefresh();
                 return true;
             });
@@ -97,6 +93,8 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
                 return true;
             });
         }
+        // After the rows' own listeners, so a refused value is vetoed before any of them runs.
+        store.bind(getPreferenceScreen());
         refreshRows();
     }
 
@@ -179,89 +177,6 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
             case NEEDS_GLASS_REFRACTION: return getString(R.string.settings_performance_needs_refraction);
             case NEEDS_WALLPAPER: return getString(R.string.settings_performance_needs_wallpaper);
             default: return getString(normalSummary);
-        }
-    }
-
-    /**
-     * Idle activity and Glass refraction belong to the terminal I/O store, the effect to the
-     * terminal view's, the preset's switch to the preferences themselves (its change listener has
-     * already applied or undone it), the trail's switch to the preferences too (no store owns it:
-     * the Appearance editor writes it in the launcher), and the rest to the launcher's.
-     */
-    private static final class PerformanceDataStore extends PreferenceDataStore {
-        @NonNull private final Context context;
-        @NonNull private final TerminalIOPreferencesDataStore io;
-        @NonNull private final TerminalViewPreferencesDataStore view;
-        @NonNull private final TermuxStylePreferencesDataStore style;
-
-        PerformanceDataStore(@NonNull Context context) {
-            this.context = context;
-            io = TerminalIOPreferencesDataStore.getInstance(context);
-            view = TerminalViewPreferencesDataStore.getInstance(context);
-            style = TermuxStylePreferencesDataStore.getInstance(context);
-        }
-
-        private static boolean isIoKey(@Nullable String key) {
-            return KEY_LAZY_MODE.equals(key) || KEY_GLASS_REFRACTION.equals(key);
-        }
-
-        @Override
-        public void putBoolean(@Nullable String key, boolean value) {
-            if (isIoKey(key)) io.putBoolean(key, value);
-            else if (KEY_SCREEN_EVENTS.equals(key) || KEY_COMPOSITE.equals(key)
-                || KEY_IDLE_ANIMATIONS.equals(key))
-                view.putBoolean(key, value);
-            else if (KEY_LOW_MEMORY_PRESET.equals(key)) {
-                // turnOn and turnOff, run by the switch's change listener, have set it already.
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                if (prefs != null) prefs.setLowMemoryPresetEnabled(value);
-            } else if (KEY_LIVE_BLUR.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                if (prefs == null) return;
-                prefs.setLiveBlurEnabled(value);
-                // The launcher re-reads the glass on its next apply when it resumes.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
-            } else if (KEY_CURSOR_TRAIL.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                if (prefs == null) return;
-                prefs.setTerminalCursorTrailEnabled(value);
-                // The launcher re-reads the trail into its focused pane when it resumes.
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(context, false);
-            } else style.putBoolean(key, value);
-        }
-
-        @Override
-        public boolean getBoolean(@Nullable String key, boolean defValue) {
-            if (isIoKey(key)) return io.getBoolean(key, defValue);
-            if (KEY_SCREEN_EVENTS.equals(key) || KEY_COMPOSITE.equals(key)
-                || KEY_IDLE_ANIMATIONS.equals(key))
-                return view.getBoolean(key, defValue);
-            if (KEY_LOW_MEMORY_PRESET.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                return prefs == null ? defValue : prefs.isLowMemoryPresetEnabled();
-            }
-            if (KEY_LIVE_BLUR.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                return prefs == null ? defValue : prefs.isLiveBlurEnabled();
-            }
-            if (KEY_CURSOR_TRAIL.equals(key)) {
-                TermuxAppSharedPreferences prefs = TermuxAppSharedPreferences.build(context, false);
-                return prefs == null ? defValue : prefs.isTerminalCursorTrailEnabled();
-            }
-            return style.getBoolean(key, defValue);
-        }
-
-        @Override
-        public void putString(@Nullable String key, @Nullable String value) {
-            if (KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)) {
-                view.putString(key, value);
-            }
-        }
-
-        @Override
-        public String getString(@Nullable String key, @Nullable String defValue) {
-            return KEY_TERMINAL_EFFECT.equals(key) || KEY_IDLE_TEAR_RATE.equals(key)
-                ? view.getString(key, defValue) : defValue;
         }
     }
 }
