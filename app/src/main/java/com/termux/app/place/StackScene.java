@@ -318,7 +318,8 @@ public final class StackScene {
     private static final int[] CARD_VIEWS = {RestCards.StackView.HOST.ordinal(),
         RestCards.StackView.TERMINAL_HOST.ordinal(), RestCards.StackView.KEYS_CARD.ordinal(),
         RestCards.StackView.KEYBOARD_COLUMN.ordinal(),
-        RestCards.StackView.FLOATING_KEYBOARD.ordinal(), RestCards.StackView.AZ_EDGE.ordinal()};
+        RestCards.StackView.FLOATING_KEYBOARD.ordinal(), RestCards.StackView.AZ_EDGE.ordinal(),
+        RestCards.StackView.TERMINAL_AZ_EDGE.ordinal()};
     /**
      * The card views no layer of the stack carries (#307): the keyboard's column, the floating
      * keyboard's frame and the A–Z bar's edge host. Their cards are the stack's own, so the scene
@@ -327,7 +328,16 @@ public final class StackScene {
     private static boolean ownPlace(int v) {
         return v == RestCards.StackView.KEYBOARD_COLUMN.ordinal()
             || v == RestCards.StackView.FLOATING_KEYBOARD.ordinal()
-            || v == RestCards.StackView.AZ_EDGE.ordinal();
+            || edgeHost(v);
+    }
+
+    /**
+     * The A–Z bar's edge hosts (#307 round 3): in the content column, beside the container, so a
+     * side's card there slides with its side but wears neither Home's drop nor the keyboard's cover.
+     */
+    private static boolean edgeHost(int v) {
+        return v == RestCards.StackView.AZ_EDGE.ordinal()
+            || v == RestCards.StackView.TERMINAL_AZ_EDGE.ordinal();
     }
     private static final int HOST_VIEW = RestCards.StackView.HOST.ordinal();
     private static final int DOCK_CARD = RestCards.CardId.DOCK.ordinal();
@@ -380,18 +390,19 @@ public final class StackScene {
             if (shared || out.cardMorphs[v] || !isSide(side)) {
                 if (sideFrom == StackEnd.NO_SIDE && sideTo == StackEnd.NO_SIDE && !host) continue;
                 // The stack's own, or a card both ends draw alike: it keeps its rest.
-                float rest = blend(from.sideRestTyPx(sideFrom), to.sideRestTyPx(sideTo),
-                    materialShare(p));
+                float rest = edgeHost(v) ? 0f : blend(from.sideRestTyPx(sideFrom),
+                    to.sideRestTyPx(sideTo), materialShare(p));
                 float cover = host ? out.coverSharedPx : 0f;
                 out.cardSide[v] = shared ? side : StackEnd.STACK_SIDE;
                 out.cardTy[v] = base + rest + cover;
                 out.cardCoverPx[v] = cover;
             } else {
                 StackEnd owner = isSide(sideFrom) ? from : to;
-                float cover = side == Side.HOME.ordinal() ? out.coverHomePx : 0f;
+                boolean edge = edgeHost(v);
+                float cover = side == Side.HOME.ordinal() && !edge ? out.coverHomePx : 0f;
                 out.cardSide[v] = side;
                 out.cardTx[v] = sideSlide(SIDES[side], a, b, p, width);
-                out.cardTy[v] = base + owner.sideRestTyPx(side) + cover;
+                out.cardTy[v] = base + (edge ? 0f : owner.sideRestTyPx(side)) + cover;
                 out.cardCoverPx[v] = cover;
             }
             int nearCard = near.cardOn[v];

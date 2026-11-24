@@ -457,18 +457,25 @@ public class RestCardsParityTest {
                 } else {
                     assertSameCard(at + " terminal", want, got);
                 }
-                assertEquals(at, want.view == StackView.HOST ? termView : want.view, got.view);
+                // An A-Z bar off the dock is the Terminal's own card on its own edge host unless
+                // Home draws it at the same rect (#307 round 3).
+                StackView wantView = want.view == StackView.HOST ? termView
+                    : want.view == StackView.AZ_EDGE && !sameAz(homeRest, got)
+                    ? StackView.TERMINAL_AZ_EDGE : want.view;
+                assertEquals(at, wantView, got.view);
             }
             // Each side parks the other's glass, on screen it draws none of it; a Terminal with
             // no card at its rest (#305) has none to park.
             boolean termHostCard = false;
             for (RestCards.Card c : termSolo.cards()) termHostCard |= c.view == StackView.HOST;
-            assertEquals(at, !termHostCard, homeRest.parked().isEmpty());
+            boolean termAzApart = termRest.card(CardId.AZ) != null
+                && termRest.card(CardId.AZ).view == StackView.TERMINAL_AZ_EDGE;
+            assertEquals(at, !termHostCard && !termAzApart, homeRest.parked().isEmpty());
             assertFalse(at, termRest.parked().isEmpty());
             for (RestCards.Card c : homeRest.parked())
-                assertEquals(at, termView, c.view);
+                assertEquals(at, c.id == CardId.AZ ? StackView.TERMINAL_AZ_EDGE : termView, c.view);
             for (RestCards.Card c : termRest.parked())
-                assertEquals(at, StackView.HOST, c.view);
+                assertEquals(at, c.id == CardId.AZ ? StackView.AZ_EDGE : StackView.HOST, c.view);
             for (RestCards.Card c : homeRest.cards())
                 assertTrue(at + " Home draws no Terminal card", c.view != termView);
             StackLayout.Input termPass = f.pass(PageRef.TERMINAL, up, true);
@@ -928,4 +935,12 @@ public class RestCardsParityTest {
         if (carrier != null && carrier.id != CardId.PEEK && carrier.id != CardId.AZ)
             assertTrue(at + " a-z band laid out", bandOf(Element.AZ, v.dock, pass) > 0);
     }
+
+    /** Whether Home's rest draws the A-Z card at {@code card}'s rect: one shared card (#307). */
+    private static boolean sameAz(@androidx.annotation.NonNull RestCards home,
+                                  @androidx.annotation.NonNull RestCards.Card card) {
+        RestCards.Card az = home.card(CardId.AZ);
+        return az != null && az.box.equals(card.box);
+    }
+
 }

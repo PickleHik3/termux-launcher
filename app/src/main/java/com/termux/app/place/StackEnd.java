@@ -150,8 +150,9 @@ public final class StackEnd {
     /** Whose card {@code view} carries ({@link #viewSide}) while the cards stand {@code apart} or not. */
     public static int sideOf(@NonNull StackView view, boolean apart) {
         if (!apart) return STACK_SIDE;
-        if (view == StackView.HOST) return Side.HOME.ordinal();
-        if (view == StackView.TERMINAL_HOST || view == StackView.KEYS_CARD)
+        if (view == StackView.HOST || view == StackView.AZ_EDGE) return Side.HOME.ordinal();
+        if (view == StackView.TERMINAL_HOST || view == StackView.KEYS_CARD
+            || view == StackView.TERMINAL_AZ_EDGE)
             return Side.TERMINAL.ordinal();
         return STACK_SIDE;
     }

@@ -109,9 +109,16 @@ public final class RestCards {
         TERMINAL_HOST,
         /**
          * The A–Z bar's own host off the dock ({@code place_az_bar_host}), in the content
-         * column's edge stack on the top or a side: a view no crossing moves (#307).
+         * column's edge stack on the top or a side, carrying Home's A–Z card while the cards
+         * stand apart and the stack's own otherwise (#307).
          */
-        AZ_EDGE
+        AZ_EDGE,
+        /**
+         * The Terminal's own A–Z edge host while the cards stand apart and the two rests draw the
+         * bar at different rects ({@code place_terminal_az_bar_host}, #307 round 3): laid out
+         * once at the Terminal's rest, it slides in with the Terminal as Home's slides out.
+         */
+        TERMINAL_AZ_EDGE
     }
 
     /** Where the layout stands the A–Z bar (ResolvedArrangement's azRowOnDock, azBarEdge, azTab). */
@@ -367,6 +374,7 @@ public final class RestCards {
             answer.mHostLook = otherCards.mHostLook;
             answer.mHomeRowsDropPx = otherCards.mRowsDropPx;
         }
+        splitAz(answer, otherCards, frontHome);
         answer.mApart = true;
         answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
             frontHome);
@@ -374,6 +382,37 @@ public final class RestCards {
         // The Terminal's own rest's lift, whichever page is in front.
         answer.mTerminalLiftPx = (frontHome ? otherCards : answer).mTerminalLiftPx;
         return answer;
+    }
+
+    /**
+     * The A–Z bar off the dock while the cards stand apart (#307 round 3): one card per side, each
+     * its own length. Where both rests draw it at one rect it stays one shared card on the one
+     * edge host; otherwise Home's stands on {@link StackView#AZ_EDGE} and the Terminal's on
+     * {@link StackView#TERMINAL_AZ_EDGE}, and the front's answer parks the other side's.
+     */
+    private static void splitAz(@NonNull RestCards answer, @NonNull RestCards other,
+                                boolean frontHome) {
+        Card mine = answer.card(CardId.AZ);
+        Card theirs = other.card(CardId.AZ);
+        if (mine != null && theirs != null && mine.box.equals(theirs.box)) return;
+        if (!frontHome && mine != null) {
+            answer.mCards.set(answer.mCards.indexOf(mine), onView(mine, StackView.TERMINAL_AZ_EDGE));
+            answer.mLaidOut[StackView.TERMINAL_AZ_EDGE.ordinal()] =
+                answer.mLaidOut[StackView.AZ_EDGE.ordinal()];
+            answer.mLaidOut[StackView.AZ_EDGE.ordinal()] = null;
+        }
+        if (theirs == null) return;
+        StackView view = frontHome ? StackView.TERMINAL_AZ_EDGE : StackView.AZ_EDGE;
+        answer.mLaidOut[view.ordinal()] = theirs.box;
+        answer.mParked.add(onView(theirs, view));
+    }
+
+    /** {@code card} carried by {@code view}. */
+    @NonNull
+    private static Card onView(@NonNull Card card, @NonNull StackView view) {
+        return new Card(card.id, view, card.box, card.corners, card.edge(Edge.TOP),
+            card.edge(Edge.BOTTOM), card.edge(Edge.LEFT), card.edge(Edge.RIGHT), card.pieces)
+            .withRuns(card.runs());
     }
 
     /** Whether {@code side}'s own rest, standing alone, wears the Peek card. */
