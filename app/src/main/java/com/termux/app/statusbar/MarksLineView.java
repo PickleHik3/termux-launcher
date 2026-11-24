@@ -346,6 +346,15 @@ public final class MarksLineView extends View {
 
     // ---- touch ------------------------------------------------------------------------------
 
+    /**
+     * Whether a press at ({@code x}, {@code y}) in this view lands on a mark: the line then owns
+     * the gesture, so the status bar's long-press popup never arms over it (SurfaceLongPress).
+     */
+    public boolean holdsMarkAt(float x, float y) {
+        MarksLine line = mLine;
+        return line != null && line.slotAt(along(x, y)) >= 0;
+    }
+
     private float along(float x, float y) {
         if (mVertical) return y;
         return getLayoutDirection() == LAYOUT_DIRECTION_RTL ? getWidth() - x : x;
@@ -364,6 +373,9 @@ public final class MarksLineView extends View {
                 if (mDown) {
                     mSlide = new MarksSlide(line, mTouchSlop);
                     mSlide.down(pos);
+                    // The gesture that starts on a mark is the line's: no parent takes it at the
+                    // slop, so a slow slide is never read as the bar's own drag.
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(true);
                 }
                 return mDown;
             }
@@ -372,8 +384,10 @@ public final class MarksLineView extends View {
                 if (!mDown || slide == null) return false;
                 float across = Math.abs(mVertical ? event.getX() - mDownX : event.getY() - mDownY);
                 if (!mSliding && across > mTouchSlop) {
-                    // Off the line across its axis before sliding: not a tap, not a slide.
+                    // Off the line across its axis before sliding: not a tap, not a slide. The
+                    // parents may have it again, as they had the old chips' cross swipe.
                     endTouch();
+                    if (getParent() != null) getParent().requestDisallowInterceptTouchEvent(false);
                     return false;
                 }
                 slide.move(along(event.getX(), event.getY()));

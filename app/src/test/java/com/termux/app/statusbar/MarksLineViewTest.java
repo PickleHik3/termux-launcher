@@ -263,4 +263,37 @@ public class MarksLineViewTest {
         }
         assertTrue(any);
     }
+
+    /** Records whether its child asked it to keep its hands off the stream. */
+    private static final class Parent extends android.widget.FrameLayout {
+        boolean disallowed;
+        Parent() { super(RuntimeEnvironment.getApplication()); }
+        @Override public void requestDisallowInterceptTouchEvent(boolean disallow) {
+            disallowed = disallow;
+            super.requestDisallowInterceptTouchEvent(disallow);
+        }
+    }
+
+    @Test public void aPressOnAMarkIsTheLinesWholeGesture() {
+        // A slow slide must not be the bar's: the line keeps its parents off from the down, and
+        // the bar's long-press popup never arms over a mark (holdsMarkAt).
+        Parent parent = new Parent();
+        parent.addView(view);
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        MarksLine line = view.line();
+        assertNotNull(line);
+        assertTrue(view.holdsMarkAt(line.centreAt(1), 20f));
+        assertFalse(view.holdsMarkAt(399f, 20f));
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN, line.centreAt(1), 20f, 0);
+        assertTrue(view.dispatchTouchEvent(down));
+        down.recycle();
+        assertTrue(parent.disallowed);
+        // Off the line across its axis before sliding: the parents may have it again.
+        MotionEvent across = MotionEvent.obtain(t, t + 50, MotionEvent.ACTION_MOVE, line.centreAt(1), 200f, 0);
+        view.dispatchTouchEvent(across);
+        across.recycle();
+        assertFalse(parent.disallowed);
+    }
 }
