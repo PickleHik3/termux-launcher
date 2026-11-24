@@ -41,7 +41,7 @@
     <string name="editor_st_unit_c">°C</string>
     <string name="editor_st_unit_f">°F</string>
     <string name="editor_st_page_bar">Page bar</string>
-    <string name="editor_st_page_bar_summary">Show your pages as window chips or as a line of marks.</string>
+    <string name="editor_st_page_bar_summary">Show your pages as glyphs, or as a line of marks in the status bar.</string>
     <string name="editor_st_page_bar_glyphs">Glyphs</string>
     <string name="editor_st_page_bar_marks">Marks</string>
     <string name="editor_st_place">Place</string>
