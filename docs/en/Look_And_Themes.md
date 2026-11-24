@@ -40,7 +40,7 @@ menus and widgets on glass all follow.
   a new install starts on **Frosted**), **Opacity**, **Frost** (clear to frosted, in eight steps)
   and **Tint**, with the accent it takes.
 - **Fine-tune** (closed until you open it): **Depth** and **Shine**, the two glass sliders that
-  apply to every surface (see [Glass](#glass)).
+  apply to every surface (see [Glass](#glass)); with **Glass refraction** off they have no effect.
 - **Shape**: **Style** (Docked or Floating), **Corner radius**, **Margin** and **Icon size**, one
   size for Home's icons and the dock's.
 - **Colours**: **Theme** (**System**, **Light** or **Dark**), **Contrast**, **Accent**,
@@ -138,8 +138,14 @@ Depth and Shine, and the old Clear, Mist, Tint and Solid become Clear, Frosted, 
 
 Every glass surface bends the wallpaper at its edge, as deeply as Global's Depth says, where the
 phone can. That needs Android 13 and a wallpaper set through Appearance or
-`launcherctl wallpaper set`; with any other wallpaper the glass stays flat. **Reduce idle activity**,
-battery saver and reduced motion switch the extra motion off. There is no switch for it.
+`launcherctl wallpaper set`; with any other wallpaper the glass stays flat. The glass has no
+animation of its own: its motion follows **Animation speed**, and reduced motion, battery saver and
+**Reduce idle activity** keep it still.
+
+On a weaker phone, turn **Glass refraction** off under **Settings → Battery & performance**. The
+glass becomes flat frosted glass, with no bending and no light from the wallpaper, and swipes get
+smoother. Frost and Opacity still apply. Why glass works this way:
+[ADR 0033](../adr/0033-glass-is-a-physical-material.md).
 
 The bars blur the system wallpaper only after you allow **Wallpaper access** under **Settings →
 General → Permissions & services**; until then they render flat.
