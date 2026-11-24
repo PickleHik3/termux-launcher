@@ -28,10 +28,11 @@ final class HintStrings {
         int line = lineRes(hint.line);
         if (hint.bar == null)
             return context.getString(line);
+        // The line, then one full sentence for how far the change reaches.
         String reach = context.getString(reachOf(hint.scope));
         if (titled(hint.line))
-            return context.getString(line, reach);
-        return context.getString(line, context.getString(nameOf(hint.bar)), reach);
+            return context.getString(line) + " " + reach;
+        return context.getString(line, context.getString(nameOf(hint.bar))) + " " + reach;
     }
 
     private static boolean titled(@NonNull HintText.Line line) {
@@ -57,12 +58,12 @@ final class HintStrings {
     @StringRes
     static int reachOf(@Nullable Scope scope) {
         if (scope == null)
-            return R.string.editor_reach_every_page;
+            return R.string.editor_hint_reach_every_page;
         switch (scope) {
-            case HOME_PAGES: return R.string.editor_reach_home_pages;
-            case WORKSPACE_PAGES: return R.string.editor_reach_workspace_pages;
-            case MINIMAL_LAYOUT: return R.string.editor_reach_minimal_layout;
-            default: return R.string.editor_reach_every_page;
+            case HOME_PAGES: return R.string.editor_hint_reach_home_pages;
+            case WORKSPACE_PAGES: return R.string.editor_hint_reach_workspace_pages;
+            case MINIMAL_LAYOUT: return R.string.editor_hint_reach_minimal_layout;
+            default: return R.string.editor_hint_reach_every_page;
         }
     }
 
