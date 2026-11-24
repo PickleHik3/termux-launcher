@@ -58,6 +58,21 @@ public class MesaWaylandOverlayTest {
         assertNull(MesaWaylandOverlay.mesaVersion("Package: mesa\nStatus: x\n"));
     }
 
+    @Test public void packageRevisionAndEpochAreIgnoredButReleaseMustMatch() {
+        assertEquals(MesaWaylandOverlay.State.USE, resolve(true, "26.3.1-0", DPKG).state);
+        assertEquals(MesaWaylandOverlay.State.USE,
+            MesaWaylandOverlay.resolveVersion(true, "26.3.1-0", "1:26.3.1-2", LIB).state);
+        assertEquals(MesaWaylandOverlay.State.MISMATCH,
+            MesaWaylandOverlay.resolveVersion(true, "26.3.1", "26.3.2", LIB).state);
+    }
+
+    @Test public void pacmanDescYieldsTheVersionOnlyForPackageMesa() {
+        assertEquals("26.3.1-0", MesaWaylandOverlay.pacmanMesaVersion("%NAME%\nmesa\n\n%VERSION%\n26.3.1-0\n\n%DESC%\nx\n"));
+        assertNull(MesaWaylandOverlay.pacmanMesaVersion("%NAME%\nmesa-vulkan-icd-swrast\n\n%VERSION%\n26.3.1-0\n"));
+        assertNull(MesaWaylandOverlay.pacmanMesaVersion("%NAME%\nmesa\n"));
+        assertNull(MesaWaylandOverlay.pacmanMesaVersion(null));
+    }
+
     @Test public void useAddsTheLibraryDirectoryFirstWithoutDroppingTheShellsValue() {
         MesaWaylandOverlay.Answer use = resolve(true, "26.3.1-1", DPKG);
         List<String> out = LinuxWindowsEnv.withMesaOverlay(Collections.singletonList("A=1"), use);
