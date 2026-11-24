@@ -65,6 +65,18 @@ public final class AssistantMessage {
                             @NonNull String state, @Nullable String errorCode, long createdMs,
                             @Nullable Long durationMs, @Nullable Long ttftMs, @Nullable Integer outputTokens,
                             @Nullable String thinking, @Nullable Long thinkingMs) {
+        this(id, chatId, role, text, state, errorCode, createdMs, durationMs, ttftMs, outputTokens, thinking,
+            thinkingMs, null);
+    }
+
+    /** The settings card of this answer as stored JSON ({@link SettingsCard#fromJson}); null for none. */
+    @Nullable public final String card;
+
+    public AssistantMessage(long id, long chatId, @NonNull String role, @NonNull String text,
+                            @NonNull String state, @Nullable String errorCode, long createdMs,
+                            @Nullable Long durationMs, @Nullable Long ttftMs, @Nullable Integer outputTokens,
+                            @Nullable String thinking, @Nullable Long thinkingMs, @Nullable String card) {
+        this.card = card;
         this.thinking = thinking;
         this.thinkingMs = thinkingMs;
         this.durationMs = durationMs;

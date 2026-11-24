@@ -77,6 +77,7 @@ public class AssistantPageView extends PaneContentFrame implements Page, TypingP
             @Override public void errorAction(@NonNull AssistantRows.Row row) { holder[0].errorAction(row); }
             @Override public void useE2b(@NonNull AssistantRows.Row row) { holder[0].useE2b(row); }
             @Override public void applyCard(long messageId) { holder[0].applyCard(messageId); }
+            @Override public void undoCard(long messageId) { holder[0].undoCard(messageId); }
             @Override public void openSettingsSearch(@NonNull String query) { holder[0].openSettingsSearch(query); }
         });
         chats = new AssistantChatsView(context, palette);

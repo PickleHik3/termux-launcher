@@ -134,6 +134,7 @@ public final class AssistantEngine {
         this.registrySupplier = registrySupplier;
         this.cards = cards;
         this.store = store;
+        cards.attach(store);
         this.transport = transport;
         this.windowSource = windowSource;
         this.streamExecutor = streamExecutor;
@@ -340,6 +341,7 @@ public final class AssistantEngine {
             g.messageId = g.retryMessageId;
             store.updateMessage(g.messageId, "", AssistantMessage.STATE_STREAMING, null, now);
             store.setThinking(g.messageId, null, null);
+            cards.remove(g.messageId);
         }
         notifyChats();
         notifyMessage(g.chatId, g.messageId);
@@ -354,6 +356,7 @@ public final class AssistantEngine {
                 break;
             }
         }
+        history = withoutCards(history);
         int window = windowSource.servingWindowTokens();
         if (window <= 0) window = FALLBACK_WINDOW_TOKENS;
         String system = null;
@@ -410,6 +413,29 @@ public final class AssistantEngine {
         } else {
             finish(g, AssistantMessage.STATE_COMPLETE, null);
         }
+    }
+
+    /**
+     * A settings card is not sent back to the model: an applied one becomes the one line saying what
+     * was applied, any other card leaves its answer out.
+     */
+    @NonNull
+    private static List<AssistantMessage> withoutCards(@NonNull List<AssistantMessage> history) {
+        List<AssistantMessage> out = null;
+        for (int i = 0; i < history.size(); i++) {
+            AssistantMessage m = history.get(i);
+            SettingsCard card = m.isUser() ? null : SettingsCard.fromJson(m.card);
+            if (card == null) {
+                if (out != null) out.add(m);
+                continue;
+            }
+            if (out == null) out = new java.util.ArrayList<>(history.subList(0, i));
+            String note = card.note();
+            if (note != null) {
+                out.add(new AssistantMessage(m.id, m.chatId, m.role, note, m.state, m.errorCode, m.createdMs));
+            }
+        }
+        return out == null ? history : out;
     }
 
     @NonNull

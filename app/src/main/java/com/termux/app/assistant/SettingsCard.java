@@ -1,6 +1,11 @@
 package com.termux.app.assistant;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -15,7 +20,11 @@ public final class SettingsCard {
 
     public enum Kind { CHANGES, LINKS, NO_MATCH }
 
-    public enum State { PROPOSED, APPLIED }
+    /**
+     * Where the card is: offered, applied (Undo works), undone, or applied and then changed from
+     * outside, which is when Undo no longer can.
+     */
+    public enum State { PROPOSED, APPLIED, UNDONE, CHANGED_SINCE }
 
     /** One change: the setting's title and what it goes from and to, as the person reads them. */
     public static final class Item {
@@ -25,6 +34,8 @@ public final class SettingsCard {
         @NonNull public final String newValue;
         @NonNull public final String oldLabel;
         @NonNull public final String newLabel;
+        /** What Apply wrote, as the registry holds it; null while this change was not written. */
+        @Nullable public volatile String written;
 
         Item(@NonNull String id, @NonNull String title, @NonNull String oldValue, @NonNull String newValue,
              @NonNull String oldLabel, @NonNull String newLabel) {
@@ -80,6 +91,86 @@ public final class SettingsCard {
         List<Link> one = new ArrayList<>();
         one.add(new Link("", message));
         return new SettingsCard(Kind.NO_MATCH, new ArrayList<>(), one);
+    }
+
+    /** A card read back from its stored form. */
+    @NonNull
+    static SettingsCard restore(@NonNull Kind kind, @NonNull State state, @NonNull List<Item> items,
+                                @NonNull List<Link> links) {
+        SettingsCard card = new SettingsCard(kind, new ArrayList<>(items), new ArrayList<>(links));
+        card.state = state;
+        return card;
+    }
+
+    /** The card as stored with its message. */
+    @NonNull
+    public String toJson() {
+        try {
+            JSONArray itemArray = new JSONArray();
+            for (Item item : items) {
+                JSONObject o = new JSONObject().put("id", item.id).put("title", item.title)
+                    .put("old", item.oldValue).put("new", item.newValue)
+                    .put("oldLabel", item.oldLabel).put("newLabel", item.newLabel);
+                String w = item.written;
+                if (w != null) o.put("written", w);
+                itemArray.put(o);
+            }
+            JSONArray linkArray = new JSONArray();
+            for (Link link : links) {
+                linkArray.put(new JSONObject().put("title", link.title).put("query", link.query));
+            }
+            return new JSONObject().put("v", 1).put("kind", kind.name()).put("state", state.name())
+                .put("items", itemArray).put("links", linkArray).toString();
+        } catch (JSONException e) {
+            return "";
+        }
+    }
+
+    /** Reads a stored card; null for anything that is not one, so an old or damaged chat still loads. */
+    @Nullable
+    public static SettingsCard fromJson(@Nullable String json) {
+        if (json == null || json.isEmpty()) return null;
+        try {
+            JSONObject o = new JSONObject(json);
+            Kind kind = Kind.valueOf(o.getString("kind"));
+            State state = State.valueOf(o.getString("state"));
+            List<Item> items = new ArrayList<>();
+            JSONArray itemArray = o.optJSONArray("items");
+            for (int i = 0; itemArray != null && i < itemArray.length(); i++) {
+                JSONObject e = itemArray.getJSONObject(i);
+                Item item = new Item(e.getString("id"), e.getString("title"), e.getString("old"),
+                    e.getString("new"), e.getString("oldLabel"), e.getString("newLabel"));
+                item.written = e.has("written") ? e.getString("written") : null;
+                items.add(item);
+            }
+            List<Link> links = new ArrayList<>();
+            JSONArray linkArray = o.optJSONArray("links");
+            for (int i = 0; linkArray != null && i < linkArray.length(); i++) {
+                JSONObject e = linkArray.getJSONObject(i);
+                links.add(new Link(e.getString("title"), e.getString("query")));
+            }
+            return restore(kind, state, items, links);
+        } catch (JSONException | IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /**
+     * The one line the model sees of this card in a later request: what was applied. Null for a card
+     * that changed nothing (offered, undone, links), whose content is not sent back.
+     */
+    @Nullable
+    public String note() {
+        if (kind != Kind.CHANGES || (state != State.APPLIED && state != State.CHANGED_SINCE)) return null;
+        StringBuilder out = new StringBuilder("Applied: ");
+        boolean any = false;
+        for (Item item : items) {
+            if (item.written == null) continue;
+            if (any) out.append("; ");
+            out.append(item.line());
+            any = true;
+        }
+        return any ? out.toString() : null;
     }
 
     @NonNull
