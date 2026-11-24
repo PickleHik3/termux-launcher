@@ -39,6 +39,8 @@ final class InProcessTaiRuntimeLink implements TaiRuntimeLink {
 
         @NonNull JSONObject unloadChatHere(@NonNull String modelId) throws JSONException;
 
+        @NonNull JSONObject unloadEmbedderHere() throws JSONException;
+
         @NonNull JSONObject keepWarmHere(@NonNull String body) throws JSONException;
 
         @NonNull JSONObject statusHere() throws JSONException;
@@ -117,6 +119,12 @@ final class InProcessTaiRuntimeLink implements TaiRuntimeLink {
     @Override
     public JSONObject unloadChat(@NonNull String modelId) throws JSONException {
         return host.unloadChatHere(modelId);
+    }
+
+    @NonNull
+    @Override
+    public JSONObject unloadEmbedder() throws JSONException {
+        return host.unloadEmbedderHere();
     }
 
     @NonNull

@@ -136,6 +136,10 @@ interface TaiRuntimeLink {
     @NonNull
     JSONObject unloadChat(@NonNull String modelId) throws JSONException;
 
+    /** Closes the idle embedding models; whatever else is resident stays. */
+    @NonNull
+    JSONObject unloadEmbedder() throws JSONException;
+
     @NonNull
     JSONObject keepWarm(@NonNull String body) throws JSONException;
 

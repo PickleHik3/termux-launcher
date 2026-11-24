@@ -103,6 +103,12 @@ final class MessengerTaiRuntimeLink implements TaiRuntimeLink {
 
     @NonNull
     @Override
+    public JSONObject unloadEmbedder() throws JSONException {
+        return client.request(TaiRuntimeIpc.OP_UNLOAD_EMBEDDER, "{}");
+    }
+
+    @NonNull
+    @Override
     public JSONObject keepWarm(@NonNull String body) throws JSONException {
         return client.request(TaiRuntimeIpc.OP_KEEP_WARM, preparer.prepare(body));
     }

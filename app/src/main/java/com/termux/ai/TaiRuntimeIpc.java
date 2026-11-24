@@ -43,6 +43,8 @@ final class TaiRuntimeIpc {
      * see {@link TaiManager#unloadChatModel}.
      */
     static final String OP_UNLOAD_CHAT_MODEL = "unloadChatModel";
+    /** Closes the embedding models that are idle; chat, speech and image stay. Control lane. */
+    static final String OP_UNLOAD_EMBEDDER = "unloadEmbedder";
     static final String OP_KEEP_WARM = "keepWarmRuntime";
     static final String OP_CANCEL = "cancelRuntime";
     static final String OP_OPENAI_CHAT = "openAiChatCompletions";
