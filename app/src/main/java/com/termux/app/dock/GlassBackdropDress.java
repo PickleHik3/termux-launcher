@@ -41,6 +41,14 @@ final class GlassBackdropDress {
         void dressShape(@NonNull View surface);
         /** Follows the shelf for {@code state}; null drops it. */
         void syncShelf(@Nullable ChromeSpec state);
+        /**
+         * The program's rim rect in the backdrop's pixels, when the card is cut inside its
+         * surface (the Peek card's cut on the Terminal's host, #307): fills {@code out} (left,
+         * top, right, bottom) and answers true. False keeps the surface's own rect.
+         */
+        default boolean cutRect(@NonNull float[] out, int horizontalOverscanPx, float reachPx) {
+            return false;
+        }
     }
 
     @NonNull private final DockController mDock;
@@ -185,9 +193,10 @@ final class GlassBackdropDress {
         mCover = cover;
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             float radius = mOwner.glassRadiusPx(height);
-            CapsuleGlass.capRect(mCap, hOver, width, height, seamOver,
-                GlassRefraction.seamReachPx(GlassStack.lookFor(mSource.fancierLook()),
-                    mHost.density(), radius), mOwner.seams());
+            float reach = GlassRefraction.seamReachPx(GlassStack.lookFor(mSource.fancierLook()),
+                mHost.density(), radius);
+            if (!mOwner.cutRect(mCap, hOver, reach))
+                CapsuleGlass.capRect(mCap, hOver, width, height, seamOver, reach, mOwner.seams());
             RenderEffect glass = mEffects.buildDockAndRemember(0f, mCap[0], mCap[1], mCap[2],
                 mCap[3], radius);
             backdrop.setRenderEffect(glass);

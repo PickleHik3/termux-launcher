@@ -1,7 +1,9 @@
 package com.termux.app.dock;
 
 import android.graphics.Outline;
+import android.os.Build;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 import android.widget.ImageView;
 
@@ -11,6 +13,8 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.chrome.ChromeEdgeRule;
 import com.termux.app.chrome.ChromeSpec;
+import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.chrome.RoundCut;
 import com.termux.app.chrome.SurfaceDirtyLedger;
 import com.termux.app.place.ChromeShape.EdgeKind;
 import com.termux.app.place.PlaceLayout.Edge;
@@ -38,6 +42,15 @@ public final class TerminalHostDress {
         boolean standsDownOnFrame();
         /** The Terminal's Docked card at its rest; null while it does not stand. */
         @Nullable RestCards.Card card();
+        /**
+         * The Terminal's own Peek cut while its card is a Peek card apart from Home's (#307),
+         * in the host's coordinates; null otherwise.
+         */
+        @Nullable PeekGlassGeometry.Card peekCut();
+        /** The apps row as the Terminal's reflection reads it, its host's pose its own; null for none. */
+        @Nullable PeekGlassReflection.Row peekRow();
+        /** The Reflection knob's strength ({@link PeekGlassGeometry#reflectionAlpha}); 0 for none. */
+        float peekReflectionAlpha();
     }
 
     @NonNull private final DockController mDock;
@@ -70,7 +83,102 @@ public final class TerminalHostDress {
             @Override public void syncShelf(@Nullable ChromeSpec state) {
                 // Docked: the slab does not float, so no shelf under it.
             }
+            @Override public boolean cutRect(@NonNull float[] out, int hOver, float reach) {
+                PeekGlassGeometry.Card peek = peekCut();
+                if (peek == null) return false;
+                // The Peek card's rim follows its cut; its bottom runs on off the screen.
+                PeekCardAim.cut(peek, mCut);
+                GlassRefraction.rimRect(out, hOver + mCut[RoundCut.LEFT], mCut[RoundCut.TOP],
+                    hOver + mCut[RoundCut.RIGHT], mCut[RoundCut.BOTTOM], reach,
+                    ChromeEdgeRule.BOTTOM);
+                return true;
+            }
         }, SurfaceDirtyLedger.Backdrop.TERMINAL_HOST, R.id.terminal_dock_blur_backdrop, false);
+    }
+
+    /** The Peek card's cut, reused: the outline provider reads it on every outline pass. */
+    @NonNull private final float[] mCut = new float[RoundCut.SIZE];
+    @NonNull private final float[] mRowAt = new float[2];
+    /**
+     * The icons' reflection on the Terminal's own Peek card: one more {@link PeekGlassReflection},
+     * drawn on the Live path only (the row's render nodes, recorded, never a bitmap), so a second
+     * Peek card holds no second picture of the icons; with no Live path it shows none. Kept as
+     * the Terminal's rest drew it while its card is parked (the reflection stays on the parked
+     * card), let go once the card is no Peek card.
+     */
+    @Nullable private PeekGlassReflection mReflection;
+
+    /** The Terminal's Peek cut while its card is the Peek card; null otherwise. */
+    @Nullable
+    private PeekGlassGeometry.Card peekCut() {
+        RestCards.Card card = mSource.card();
+        return card != null && card.id == RestCards.CardId.PEEK ? mSource.peekCut() : null;
+    }
+
+    /** The host clipped to the Peek cut: its top corners rounded, its lower ones off screen. */
+    private final ViewOutlineProvider mPeekOutline = new ViewOutlineProvider() {
+        @Override public void getOutline(@NonNull View view, @NonNull Outline outline) {
+            PeekGlassGeometry.Card peek = peekCut();
+            if (peek == null) {
+                outline.setRect(0, 0, view.getWidth(), view.getHeight());
+                return;
+            }
+            PeekCardAim.cut(peek, mCut);
+            outline.setRoundRect(Math.round(mCut[RoundCut.LEFT]), Math.round(mCut[RoundCut.TOP]),
+                Math.round(mCut[RoundCut.RIGHT]), Math.round(mCut[RoundCut.BOTTOM]),
+                mCut[RoundCut.RADIUS]);
+        }
+    };
+
+    /** The row's content changed (an icon, a dot, a press): the reflection shows it as the icon does. */
+    public void onRowContentChanged() {
+        if (mReflection != null) mReflection.onRowContentChanged();
+    }
+
+    /** A page swipe moved the icons: the Live reflection rides with them. */
+    public void onIconsMoved() {
+        if (mReflection != null) mReflection.onIconsMoved();
+    }
+
+    /** The host moved across with the Terminal's side: the reflection is drawn where it now stands. */
+    public void onLaneMoved() {
+        if (mReflection != null) mReflection.onLaneMoved();
+    }
+
+    /**
+     * The reflection at a rest: drawn for the Terminal's Peek card while it stands in front on
+     * the Live path, kept as drawn while the card is parked, let go when there is no Peek card or
+     * no Live path (the bound: no second bitmap of the icons, ever).
+     */
+    private void syncReflection(@Nullable View host, boolean standing) {
+        PeekGlassGeometry.Card peek = peekCut();
+        float alpha = mSource.peekReflectionAlpha();
+        boolean live = Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+            && mSource.fancierLook() != null;
+        if (peek == null || alpha <= 0f || !live || !(host instanceof ViewGroup)) {
+            if (mReflection != null) mReflection.clear();
+            return;
+        }
+        if (!standing) {
+            if (mReflection != null) mReflection.setHeld(true);
+            return;
+        }
+        PeekGlassReflection.Row row = mSource.peekRow();
+        View container = mHost.findViewById(R.id.accessory_stack_container);
+        float[] rowAt = row == null || container == null ? null
+            : DockController.layoutOffsetIn(row.view(), container);
+        float[] hostAt = container == null ? null : DockController.layoutOffsetIn(host, container);
+        if (row == null || rowAt == null || hostAt == null) {
+            if (mReflection != null) mReflection.clear();
+            return;
+        }
+        mRowAt[0] = rowAt[0] - hostAt[0];
+        mRowAt[1] = rowAt[1] - hostAt[1];
+        if (mReflection == null) mReflection = new PeekGlassReflection(mHost.density());
+        mReflection.attachHost((ViewGroup) host, mHost.findViewById(R.id.terminal_dock_background));
+        mReflection.attachStrip(null, 0f, 0f);
+        mReflection.update(peek, row, mRowAt[0], mRowAt[1], alpha, true);
+        mReflection.setHeld(false);
     }
 
     /** The stack's view of the host whose backdrop is {@code backdropId}; null for any other. */
@@ -97,9 +205,11 @@ public final class TerminalHostDress {
             && mHost.stackRenderer().terminalHostStands();
         if (!standing) {
             release();
+            syncReflection(host, false);
             return;
         }
         dress(state, true);
+        syncReflection(host, true);
     }
 
     /**
@@ -138,6 +248,12 @@ public final class TerminalHostDress {
         mBackdrop.setShown(true);
         mRimEdges = rimEdges(card);
         mRadiusPx = capsuleRadiusPx(card);
+        PeekGlassGeometry.Card peek = peekCut();
+        if (peek != null) {
+            // The Peek dress (#307): the glass and its rim rounded with the cut.
+            PeekCardAim.cut(peek, mCut);
+            mRadiusPx = mCut[RoundCut.RADIUS];
+        }
         float barAlpha = state.barAlpha;
         View plate = mHost.findViewById(R.id.terminal_dock_background);
         if (plate != null) {
@@ -152,8 +268,9 @@ public final class TerminalHostDress {
         if (glow != null && glow.getVisibility() != View.VISIBLE) glow.setVisibility(View.VISIBLE);
         View edgeFx = mHost.findViewById(R.id.terminal_dock_top_edge_fx);
         if (edgeFx != null) {
-            CapsuleGlass.dressTopEdge(edgeFx, (mRimEdges & ChromeEdgeRule.TOP) != 0, barAlpha,
-                mSource.outlineColor());
+            // The Peek card's top is its cut through the icons, not the host's top: no seam band.
+            CapsuleGlass.dressTopEdge(edgeFx, peek == null
+                && (mRimEdges & ChromeEdgeRule.TOP) != 0, barAlpha, mSource.outlineColor());
         }
         dressShape(host, card);
         mBackdrop.updateBackdrop(state, host, backdrop, atRest);
@@ -185,11 +302,27 @@ public final class TerminalHostDress {
         // The program's gathered light is the edge wherever it runs; a rim under it would be a
         // second one.
         int stroke = mBackdrop.programEdge() ? ChromeEdgeRule.NONE : mRimEdges;
+        PeekGlassGeometry.Card peek = peekCut();
+        if (peek != null) {
+            // The Peek dress: the rim moved onto the cut, its bottom left open, the host clipped
+            // to the cut (as Home's host wears it).
+            PeekCardAim.cut(peek, mCut);
+            android.graphics.drawable.Drawable rim = stroke == ChromeEdgeRule.NONE ? null
+                : mHost.chrome().glass().rimUnderGlass(mCut[RoundCut.RADIUS], stroke);
+            host.setBackground(rim == null || host.getWidth() <= 0 ? null
+                : PeekRimDrawable.forCut(rim, mCut, host.getWidth()));
+            if (host.getOutlineProvider() != mPeekOutline) host.setOutlineProvider(mPeekOutline);
+            else host.invalidateOutline();
+            host.setClipToOutline(true);
+            return;
+        }
         host.setBackground(mHost.chrome().glass().rimUnderGlass(mRadiusPx, stroke));
         boolean changed = mOutline.set(card.corners.topLeft, card.corners.topRight,
             card.corners.bottomRight, card.corners.bottomLeft);
-        if (host.getOutlineProvider() != mOutline) host.setOutlineProvider(mOutline);
-        else if (changed) host.invalidateOutline();
+        if (host.getOutlineProvider() != mOutline) {
+            host.setOutlineProvider(mOutline);
+            host.invalidateOutline();
+        } else if (changed) host.invalidateOutline();
         host.setClipToOutline(true);
     }
 

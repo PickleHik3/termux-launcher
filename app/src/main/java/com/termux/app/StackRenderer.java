@@ -721,8 +721,10 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         boolean moved = writeTy(SLOT_TERMINAL_HOST, host, ty + (stands ? plankTy(PLANK_HOST) : 0f));
         float txWas = host.getTranslationX();
         writePlank(SLOT_TERMINAL_HOST, host, stands ? PLANK_HOST : PLANK_NONE, tx);
-        moved |= host.getTranslationX() != txWas;
-        if (moved) invalidateIfShown(R.id.terminal_dock_blur_backdrop);
+        boolean across = host.getTranslationX() != txWas;
+        // The Terminal's own Peek card's reflection is drawn where the host now stands (#307).
+        if (across) mViews.laneMoved(host);
+        if (moved || across) invalidateIfShown(R.id.terminal_dock_blur_backdrop);
     }
 
     /**

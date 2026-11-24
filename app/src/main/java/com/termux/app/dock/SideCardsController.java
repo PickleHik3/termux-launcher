@@ -372,6 +372,7 @@ public final class SideCardsController {
         mTerminalHostCard = on ? dock : null;
         mTerminalHostRestRect = on ? dock.box : null;
         mTerminalHostFootPx = on ? foot : 0;
+        mTerminalPeekCut = on && dock.id == RestCards.CardId.PEEK ? answer.terminalPeekCut() : null;
         View view = mHost.view(R.id.terminal_dock_host);
         if (view == null) return moved;
         if (!on) {
@@ -452,6 +453,16 @@ public final class SideCardsController {
     }
 
     @Nullable private RestCards.Card mFootCard;
+    @Nullable private PeekGlassGeometry.Card mTerminalPeekCut;
+
+    /**
+     * The Terminal's own Peek cut while its host carries a Peek card apart from Home's (host
+     * coordinates, as the Terminal's rest cuts it); null otherwise. Its host wears the Peek dress.
+     */
+    @Nullable
+    public PeekGlassGeometry.Card terminalPeekCut() {
+        return mTerminalPeekCut;
+    }
 
     /** The foot shared on its own view at the last rest (screen px); null while none stands. */
     @Nullable

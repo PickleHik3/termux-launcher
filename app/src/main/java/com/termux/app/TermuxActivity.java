@@ -5772,6 +5772,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void onDockIconsMoved() {
         // The Peek glass reflection rides with the icons (live) or steps away (still).
         if (mPeekReflection != null) mPeekReflection.onIconsMoved();
+        mTerminalHostDress.onIconsMoved();
         mDock.onDockIconsMoved();
     }
 
@@ -6077,6 +6078,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** One of the row's icons asked to be drawn again: the reflection shows it as the icon does. */
     private void onDockRowContentChanged() {
         if (mPeekReflection != null) mPeekReflection.onRowContentChanged();
+        mTerminalHostDress.onRowContentChanged();
     }
 
     /**
@@ -11098,7 +11100,31 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Nullable @Override public com.termux.app.place.RestCards.Card card() {
             return mSideCards.terminalHostCard();
         }
+        @Nullable @Override public com.termux.app.dock.PeekGlassGeometry.Card peekCut() {
+            return mSideCards.terminalPeekCut();
+        }
+        @Nullable @Override public com.termux.app.dock.PeekGlassReflection.Row peekRow() {
+            return mSuggestionBarView == null ? null : mTerminalPeekRow;
+        }
+        @Override public float peekReflectionAlpha() {
+            return mPreferences == null ? 0f : com.termux.app.dock.PeekGlassGeometry.reflectionAlpha(
+                com.termux.app.dock.PeekGlassPreferences.reflection(
+                    mPreferences.getSharedPreferences()));
+        }
     }
+
+    /** The row as the Terminal's own Peek card reflects it: Home's row reader, its host's pose its own. */
+    private final com.termux.app.dock.PeekGlassReflection.Row mTerminalPeekRow =
+        new com.termux.app.dock.PeekGlassReflection.Row() {
+            @NonNull @Override public View view() { return mPeekRow.view(); }
+            @Override public int iconBoxes(@NonNull float[] out) { return mPeekRow.iconBoxes(out); }
+            @Override public boolean iconsMoving() { return mPeekRow.iconsMoving(); }
+            @Override public float laneTx() { return mPeekRow.laneTx(); }
+            @Override public float hostTx() {
+                return mStackRenderer.cardDrawnX(
+                    com.termux.app.place.RestCards.StackView.TERMINAL_HOST);
+            }
+        };
 
     /** The glass element of the foot's own card, one more Live entry while it stands (#307). */
     private static final String FOOT_GLASS = "dock_foot";
@@ -11132,7 +11158,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
         @Override public void laneMoved(@NonNull View host) {
-            if (mPeekReflection != null) mPeekReflection.onLaneMoved();
+            if (host.getId() == R.id.terminal_dock_host) mTerminalHostDress.onLaneMoved();
+            else if (mPeekReflection != null) mPeekReflection.onLaneMoved();
         }
         @Nullable @Override public View view(int id) {
             return hotView(id);
