@@ -79,9 +79,9 @@ final class DockSurface {
 
     // ------------------------------------------------------------------ Shape
 
-    /** The dock's clip: its slice of the Docked frame, or its own card under Floating. */
     /** Home's card's outline while the host is pinned as Home's under Docked (#304). */
     private final TerminalHostDress.CardOutline mHomeOutline = new TerminalHostDress.CardOutline();
+    /** The dock's clip: its slice of the Docked frame, or its own card under Floating. */
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mDockOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
 
