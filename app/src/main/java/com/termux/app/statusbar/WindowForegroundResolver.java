@@ -255,6 +255,27 @@ public final class WindowForegroundResolver {
         });
     }
 
+    /**
+     * The program running in the foreground of shell {@code pid} right now, as argv, or an empty
+     * list when the pane is idle or its foreground cannot be read. Read from the system at the
+     * call, never from a resolver's cache: a saved session keeps what runs when it is saved, not
+     * what the pills last showed.
+     */
+    @NonNull
+    public static List<String> captureCommand(int pid) {
+        return captureCommand(pid, ProcSource.SYSTEM);
+    }
+
+    @NonNull
+    @VisibleForTesting
+    public static List<String> captureCommand(int pid, @NonNull ProcSource fs) {
+        List<Integer> asked = Collections.singletonList(pid);
+        WindowForegroundResolver once = new WindowForegroundResolver(null);
+        once.applyOutput(readDirect(asked, fs).output, asked, System.currentTimeMillis());
+        ForegroundInfo info = once.get(pid);
+        return info == null || info.idle ? Collections.<String>emptyList() : info.command;
+    }
+
     /** Where one poll gets its reading. */
     enum Route { DIRECT, PRIVILEGED, WAIT }
 
@@ -271,7 +292,7 @@ public final class WindowForegroundResolver {
     }
 
     /** procfs as the app sees it; a seam for tests. */
-    interface ProcSource {
+    public interface ProcSource {
         /** The file's contents, or null when it is missing or refused. */
         @Nullable String read(@NonNull String path);
 
@@ -499,12 +520,8 @@ public final class WindowForegroundResolver {
                                                   @NonNull CpuDelta cpu, long atMs) {
         if (payload.isEmpty()) return null;
         String[] argv = payload.split("\t");
-        String process = basename(argv[0]);
-        if (process.isEmpty()) return null;
-        process = process.toLowerCase(Locale.ROOT);
-        String wrapped = unwrapInterpreter(process, argv);
-        if (wrapped == null) wrapped = unwrapLane(process, argv);
-        if (wrapped != null) process = wrapped;
+        String process = processName(argv);
+        if (process == null) return null;
         String openFile = null;
         if (TerminalWindowBar.isEditor(process)) {
             for (int i = argv.length - 1; i >= 1; i--) {
@@ -518,6 +535,21 @@ public final class WindowForegroundResolver {
         Collections.addAll(command, argv);
         return new ForegroundInfo(false, foregroundPid, process, openFile, command, cpu.fraction,
             cpu.sinceMs, atMs);
+    }
+
+    /**
+     * The program an argv runs, as the window chips name it: argv[0]'s lowercase basename, or the
+     * script behind an interpreter or the privileged-lane relay. Null for an empty argv.
+     */
+    @Nullable
+    public static String processName(@NonNull String[] argv) {
+        if (argv.length == 0) return null;
+        String process = basename(argv[0]);
+        if (process.isEmpty()) return null;
+        process = process.toLowerCase(Locale.ROOT);
+        String wrapped = unwrapInterpreter(process, argv);
+        if (wrapped == null) wrapped = unwrapLane(process, argv);
+        return wrapped != null ? wrapped : process;
     }
 
     /** A foreground process's CPU use since the previous poll, and when that poll was. */

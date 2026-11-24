@@ -1099,14 +1099,28 @@ public class TerminalActionDispatcherTest {
         assertEquals(400, dispatcher.execute("workspace.save", new JSONObject()).getInt("_statusCode"));
 
         JSONObject result = dispatcher.execute("workspace.save", new JSONObject()
-            .put("name", "morning").put("overwrite", true).put("captureCommands", true));
+            .put("name", "morning").put("overwrite", true));
         assertEquals("morning", result.getString("name"));
         assertEquals(0, result.getInt("sessions"));
         assertEquals(0, result.getInt("panes"));
         assertEquals(0, result.getInt("commandsCaptured"));
         assertEquals("morning", host.lastSavedWorkspaceName);
         assertTrue(host.lastSaveOverwrite);
-        assertTrue(host.lastSaveCaptureCommands);
+    }
+
+    @Test
+    public void workspaceToolsAcceptTheArgumentsTheyRetiredAndIgnoreThem() throws Exception {
+        FakeTerminalHost host = attach();
+
+        JSONObject saved = dispatcher.execute("workspace.save", new JSONObject()
+            .put("name", "old").put("captureCommands", false));
+        assertEquals("old", saved.getString("name"));
+        assertEquals("old", host.lastSavedWorkspaceName);
+
+        JSONObject loaded = dispatcher.execute("workspace.load", new JSONObject()
+            .put("name", "old").put("runCommands", false));
+        assertEquals("old", loaded.getString("name"));
+        assertEquals(3, loaded.getInt("panes"));
     }
 
     @Test
@@ -1125,15 +1139,12 @@ public class TerminalActionDispatcherTest {
         assertEquals(2, appended.getInt("windows"));
         assertEquals(3, appended.getInt("panes"));
         assertEquals(4, appended.getInt("commandsRun"));
-        assertEquals(5, appended.getInt("commandsSkipped"));
         assertFalse(host.lastLoadReplace);
-        assertFalse(host.lastLoadRunCommands);
 
         JSONObject replaced = dispatcher.execute("workspace.load", new JSONObject()
-            .put("name", "morning").put("mode", "replace").put("runCommands", true));
+            .put("name", "morning").put("mode", "replace"));
         assertEquals("replace", replaced.getString("mode"));
         assertTrue(host.lastLoadReplace);
-        assertTrue(host.lastLoadRunCommands);
     }
 
     @Test

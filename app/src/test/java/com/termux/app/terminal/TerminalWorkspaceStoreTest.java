@@ -157,7 +157,7 @@ public class TerminalWorkspaceStoreTest {
             new TerminalWorkspace.FloatShape(.3f, .05f, .6f, .9f));
         TerminalWorkspace decoded = TerminalWorkspace.fromJson(withHomeFloat(saved).toJson());
 
-        assertEquals(5, decoded.version);
+        assertEquals(6, decoded.version);
         assertEquals(2, decoded.sessions.get(0).windows.size());
         assertNull("the row's window stays a window of the row",
             decoded.sessions.get(0).windows.get(0).homeFloat);
@@ -243,9 +243,9 @@ public class TerminalWorkspaceStoreTest {
     }
 
     @Test
-    public void versionsPastFiveAreStillUnsupported() throws Exception {
+    public void versionsPastSixAreStillUnsupported() throws Exception {
         expectCode("unsupported_version",
-            () -> TerminalWorkspace.fromJson(sample("dev").toJson().put("version", 6)));
+            () -> TerminalWorkspace.fromJson(sample("dev").toJson().put("version", 7)));
     }
 
     @Test

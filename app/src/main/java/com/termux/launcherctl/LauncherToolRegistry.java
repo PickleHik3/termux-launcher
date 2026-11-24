@@ -564,21 +564,19 @@ public final class LauncherToolRegistry {
         // Workspace tools stay agent/CLI-only: they have no title or description resource, which
         // is what marks a tool user-facing. The palette can prompt for a single string argument
         // now, so promoting them is only a matter of adding those strings. Loading is HIGH because
-        // runCommands may execute user-owned JSON and replace mode terminates the live workspace.
+        // it starts the saved programs and replace mode terminates the live workspace.
         add(map, TOOL_WORKSPACE_SAVE,
-            "Save the live session, window, and pane topology to ~/.termux/workspaces/<name>.json.",
+            "Save the live session, window, and pane topology, and the program running in each pane, to ~/.termux/workspaces/<name>.json.",
             schemaObject()
                 .withString("name", "Workspace file name without .json", true)
                 .withBoolean("overwrite", "Replace an existing workspace file", false, false)
-                .withBoolean("captureCommands", "Best-effort capture of foreground process argv", false, false)
                 .build(),
             ToolRisk.MEDIUM, true, ToolExecutor.TERMINAL);
         add(map, TOOL_WORKSPACE_LOAD,
-            "Recreate a saved workspace; commands run only with an explicit opt-in.",
+            "Recreate a saved workspace, starting the program saved in each pane.",
             schemaObject()
                 .withString("name", "Workspace file name without .json", true)
                 .withEnum("mode", new String[]{"append", "replace"}, false, "append")
-                .withBoolean("runCommands", "Execute captured argv instead of starting login shells", false, false)
                 .build(),
             ToolRisk.HIGH, true, ToolExecutor.TERMINAL);
         add(map, TOOL_WORKSPACE_LIST,
@@ -1569,6 +1567,17 @@ public final class LauncherToolRegistry {
         context.hasCurrentSession()
             ? Availability.available()
             : Availability.unavailable(R.string.palette_unavailable_no_session);
+
+    /**
+     * An argument a tool used to take and no longer does: older keybind files and callers still
+     * pass it, and it is accepted and ignored rather than rejected. {@code workspace.save} had
+     * {@code captureCommands}, {@code workspace.load} had {@code runCommands}; both now always
+     * happen.
+     */
+    public static boolean isRetiredArgument(@NonNull String tool, @NonNull String argument) {
+        return (TOOL_WORKSPACE_SAVE.equals(tool) && "captureCommands".equals(argument))
+            || (TOOL_WORKSPACE_LOAD.equals(tool) && "runCommands".equals(argument));
+    }
 
     private static JSONObject schemaEmpty() {
         JSONObject schema = new JSONObject();

@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The drawer's two halves and the state a row can be in.
@@ -178,7 +179,7 @@ public class SessionsDrawerViewTest {
         SessionsDrawerView drawer = drawer(listener);
         drawer.setTab(SessionsDrawerView.Tab.SAVED);
         drawer.bindSaved(Collections.singletonList(
-            new SessionsDrawerView.SavedWorkspace("work", 4, 0L, false)));
+            new SessionsDrawerView.SavedWorkspace("work", 4, 0L)));
 
         assertEquals(1, rowCount(drawer));
         drawer.rowsForTest().getChildAt(0).performClick();
@@ -197,7 +198,7 @@ public class SessionsDrawerViewTest {
         SessionsDrawerView drawer = drawer(listener);
         drawer.setTab(SessionsDrawerView.Tab.SAVED);
         drawer.bindSaved(Collections.singletonList(
-            new SessionsDrawerView.SavedWorkspace("work", 4, 0L, false)));
+            new SessionsDrawerView.SavedWorkspace("work", 4, 0L)));
 
         findText(drawer, "⋯").performClick();
         assertEquals(SessionsDrawerView.SavedState.CONFIRM_DELETE, drawer.savedState("work"));
@@ -206,23 +207,6 @@ public class SessionsDrawerViewTest {
 
         findText(drawer, string(R.string.workspace_delete_confirm)).performClick();
         assertEquals(Collections.singletonList("delete:work"), listener.events);
-    }
-
-    /** Running commands again is only offered by a workspace that actually captured some. */
-    @Test
-    public void theRunCommandsBoxAppearsOnlyForAWorkspaceThatCapturedThem() {
-        SessionsDrawerView drawer = drawer(new RecordingListener());
-        drawer.setTab(SessionsDrawerView.Tab.SAVED);
-        drawer.bindSaved(Arrays.asList(
-            new SessionsDrawerView.SavedWorkspace("bare", 2, 0L, false),
-            new SessionsDrawerView.SavedWorkspace("busy", 2, 0L, true)));
-
-        drawer.rowsForTest().getChildAt(0).performClick();
-        assertNull(findText(drawer, string(R.string.sessions_drawer_run_commands)));
-
-        // The bare row is unfolded, so the busy row has moved down past its action strip.
-        drawer.rowsForTest().getChildAt(2).performClick();
-        assertNotNull(findText(drawer, string(R.string.sessions_drawer_run_commands)));
     }
 
     @Test
@@ -242,6 +226,53 @@ public class SessionsDrawerViewTest {
 
         assertEquals(Arrays.asList("typing", "save:wk"), listener.events);
         assertFalse(drawer.isSaveFieldOpen());
+    }
+
+    /**
+     * An agent without resume hooks gets the line and the button under the Save field; a setup
+     * that worked takes both away, one that failed keeps them and says so.
+     */
+    @Test
+    public void theSaveFieldOffersResumeSetupUntilItWorks() {
+        ResumeListener listener = new ResumeListener();
+        SessionsDrawerView drawer = drawer(listener);
+        drawer.bindLive(Collections.singletonList(session(7, 0, true, "build", 70)));
+        String line = RuntimeEnvironment.getApplication().getString(
+            R.string.session_browser_resume_setup_line, "Claude");
+        String button = string(R.string.session_browser_resume_setup_action);
+        String failed = string(R.string.session_browser_resume_setup_failed);
+
+        drawer.openSaveField();
+        assertNotNull(findText(drawer, line));
+        assertNull(findText(drawer, failed));
+
+        listener.setupWorks = false;
+        findText(drawer, button).performClick();
+        assertNotNull(findText(drawer, line));
+        assertNotNull(findText(drawer, button));
+        assertNotNull(findText(drawer, failed));
+
+        listener.setupWorks = true;
+        findText(drawer, button).performClick();
+        assertNull(findText(drawer, line));
+        assertNull(findText(drawer, button));
+        assertNull(findText(drawer, failed));
+    }
+
+    /** Claude lacks hooks until its setup has worked once. */
+    private static final class ResumeListener extends RecordingListener {
+        boolean setupWorks = true;
+        boolean installed;
+
+        @Override public void requestResumeAgents(@NonNull Consumer<List<String>> onResult) {
+            onResult.accept(installed ? new ArrayList<>() : Collections.singletonList("claude"));
+        }
+
+        @Override public void onSetUpResume(@NonNull List<String> agents,
+                                            @NonNull Consumer<Boolean> onDone) {
+            if (setupWorks) installed = true;
+            onDone.accept(setupWorks);
+        }
     }
 
     /** Back folds one level at a time, and says so, so the drawer's own Back can take over. */
@@ -354,7 +385,7 @@ public class SessionsDrawerViewTest {
         return null;
     }
 
-    private static final class RecordingListener implements SessionsDrawerView.Listener {
+    private static class RecordingListener implements SessionsDrawerView.Listener {
         final List<String> events = new ArrayList<>();
 
         @Override public void onNewSession() { events.add("new"); }
@@ -366,11 +397,11 @@ public class SessionsDrawerViewTest {
             events.add("rename:" + id + "=" + name);
         }
         @Override public void onCloseSession(long id) { events.add("close:" + id); }
-        @Override public void onSaveWorkspace(@NonNull String name, boolean capture) {
+        @Override public void onSaveWorkspace(@NonNull String name) {
             events.add("save:" + name);
         }
-        @Override public void onLoadWorkspace(@NonNull String name, boolean replace, boolean run) {
-            events.add("load:" + name + (replace ? " replace" : " append") + (run ? " run" : ""));
+        @Override public void onLoadWorkspace(@NonNull String name, boolean replace) {
+            events.add("load:" + name + (replace ? " replace" : " append"));
         }
         @Override public void onDeleteWorkspace(@NonNull String name) {
             events.add("delete:" + name);

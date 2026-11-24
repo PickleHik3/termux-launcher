@@ -125,12 +125,15 @@ id=$(launcherctl window open --print-id --title tlstore --no-focus -- tlstore)
 
 ```text
 launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]
+launcherctl agent session --agent NAME [--id ID]
 launcherctl agent install-hooks
 ```
 
 Tells the window chips and **Sessions** what the AI coding agent in this pane is doing, so a pane
-waiting on an answer is visible from anywhere. `install-hooks` adds the four Claude Code hooks that
-send these states to `~/.claude/settings.json`, leaving any hook already there alone. Details are in
+waiting on an answer is visible from anywhere. `session` says which conversation the agent is in, so a
+saved session resumes it. `install-hooks` adds the Claude Code hooks to `~/.claude/settings.json`,
+Codex's to `~/.codex/hooks.json` and an OpenCode plugin file, leaving any hook already there alone;
+Codex asks you to trust its hook once (`/hooks` in Codex). Details are in
 [Agent status](Agent_Status.md).
 
 ```sh

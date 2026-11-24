@@ -27,6 +27,7 @@ import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The one sessions surface: what is running, what was saved, and every action either of them has.
@@ -60,15 +61,11 @@ public final class SessionsDrawerView extends LinearLayout
         @NonNull public final String name;
         public final int paneCount;
         public final long savedAtEpochMs;
-        /** Whether it captured what was running, which is the only reason to offer to run it. */
-        public final boolean hasCommands;
 
-        public SavedWorkspace(@NonNull String name, int paneCount, long savedAtEpochMs,
-                              boolean hasCommands) {
+        public SavedWorkspace(@NonNull String name, int paneCount, long savedAtEpochMs) {
             this.name = name;
             this.paneCount = paneCount;
             this.savedAtEpochMs = savedAtEpochMs;
-            this.hasCommands = hasCommands;
         }
     }
 
@@ -89,9 +86,9 @@ public final class SessionsDrawerView extends LinearLayout
 
         void onCloseSession(long sessionId);
 
-        void onSaveWorkspace(@NonNull String name, boolean captureCommands);
+        void onSaveWorkspace(@NonNull String name);
 
-        void onLoadWorkspace(@NonNull String name, boolean replace, boolean runCommands);
+        void onLoadWorkspace(@NonNull String name, boolean replace);
 
         void onDeleteWorkspace(@NonNull String name);
 
@@ -107,6 +104,23 @@ public final class SessionsDrawerView extends LinearLayout
          * empty list it was simply never given.
          */
         default void onSavedTabShown() {}
+
+        /**
+         * The agents running in the live panes whose resume hook is not set up, by name
+         * ({@code claude}), handed to {@code onResult} on the main thread, possibly after a
+         * background read; empty when there is nothing to offer. Asked when the save field opens.
+         */
+        default void requestResumeAgents(@NonNull Consumer<List<String>> onResult) {
+            onResult.accept(new ArrayList<>());
+        }
+
+        /**
+         * The Set up resume button: install the hooks and plugin for {@code agents}, then say on
+         * the main thread whether it worked.
+         */
+        default void onSetUpResume(@NonNull List<String> agents, @NonNull Consumer<Boolean> onDone) {
+            onDone.accept(true);
+        }
     }
 
     private static final float TITLE_SP = 14f;
@@ -143,13 +157,16 @@ public final class SessionsDrawerView extends LinearLayout
     @Nullable private String mActiveSavedName;
     @NonNull private SavedState mSavedState = SavedState.IDLE;
     private boolean mSaveFieldOpen;
+    /** Agents the Save field offers to set up resume for; read once per opening, not per rebuild. */
+    @NonNull private List<String> mResumeAgents = new ArrayList<>();
+    private int mResumeAsk;
+    /** The Set up resume button was pressed and the files could not be written. */
+    private boolean mResumeSetupFailed;
 
     /** Where keystrokes aimed at the drawer land, or null while nothing is being typed into. */
     @Nullable private TerminalSheetController.TextField mActiveField;
     /** The draft a field is holding, so a rebind while typing does not throw it away. */
     @NonNull private String mDraft = "";
-    private boolean mCaptureCommands;
-    private boolean mRunCommands;
 
     private final TextView mTitle;
     private final TextView mLiveTab;
@@ -276,8 +293,27 @@ public final class SessionsDrawerView extends LinearLayout
         setTab(Tab.LIVE);
         collapseAll();
         mSaveFieldOpen = true;
+        refreshResumeAgents();
         beginTyping("");
         rebuild();
+    }
+
+    /**
+     * Asks the listener which agents lack resume; the answer may land later, and only the latest
+     * ask counts. The save field rebuilds when it is still open.
+     */
+    private void refreshResumeAgents() {
+        mResumeSetupFailed = false;
+        final int ask = ++mResumeAsk;
+        if (mListener == null) {
+            mResumeAgents = new ArrayList<>();
+            return;
+        }
+        mListener.requestResumeAgents(agents -> {
+            if (ask != mResumeAsk) return;
+            mResumeAgents = agents;
+            if (mSaveFieldOpen) rebuild();
+        });
     }
 
     /**
@@ -372,7 +408,6 @@ public final class SessionsDrawerView extends LinearLayout
     private void collapseSaved() {
         mActiveSavedName = null;
         mSavedState = SavedState.IDLE;
-        mRunCommands = false;
     }
 
     private void collapseAll() {
@@ -688,26 +723,18 @@ public final class SessionsDrawerView extends LinearLayout
         }
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
-        // Only offered when the workspace actually carries commands, so the question is never about
-        // something the file cannot do.
-        if (workspace.hasCommands) {
-            column.addView(checkBox(R.string.sessions_drawer_run_commands, mRunCommands,
-                checked -> mRunCommands = checked));
-        }
         LinearLayout actions = actionStrip();
         addAction(actions, getContext().getString(R.string.sessions_drawer_add_to_current), () -> {
             String name = workspace.name;
-            boolean run = mRunCommands;
             collapseAll();
             rebuild();
-            if (mListener != null) mListener.onLoadWorkspace(name, false, run);
+            if (mListener != null) mListener.onLoadWorkspace(name, false);
         });
         addAction(actions, getContext().getString(R.string.workspace_picker_replace), () -> {
             String name = workspace.name;
-            boolean run = mRunCommands;
             collapseAll();
             rebuild();
-            if (mListener != null) mListener.onLoadWorkspace(name, true, run);
+            if (mListener != null) mListener.onLoadWorkspace(name, true);
         });
         column.addView(actions, new LayoutParams(
             LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
@@ -726,6 +753,7 @@ public final class SessionsDrawerView extends LinearLayout
             mFooter.addView(footerEntry(R.string.sessions_drawer_save_workspace, () -> {
                 collapseAll();
                 mSaveFieldOpen = true;
+                refreshResumeAgents();
                 beginTyping("");
                 rebuild();
             }), footerParams());
@@ -738,14 +766,65 @@ public final class SessionsDrawerView extends LinearLayout
             getContext().getString(R.string.session_browser_workspace_name),
             getContext().getString(R.string.session_browser_save_workspace),
             value -> {
-                boolean capture = mCaptureCommands;
                 collapseAll();
                 rebuild();
-                if (mListener != null) mListener.onSaveWorkspace(value, capture);
+                if (mListener != null) mListener.onSaveWorkspace(value);
             }), new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-        column.addView(checkBox(R.string.workspace_save_capture_commands, mCaptureCommands,
-            checked -> mCaptureCommands = checked));
+        if (!mResumeAgents.isEmpty()) column.addView(buildResumeSetupRow(),
+            new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         mFooter.addView(column, footerParams());
+    }
+
+    /**
+     * Under the Save field, when a pane runs an agent that cannot resume yet: one line saying what
+     * restore will do, and the button that sets it up. It goes once the hooks are in.
+     */
+    @NonNull
+    private View buildResumeSetupRow() {
+        LinearLayout column = new LinearLayout(getContext());
+        column.setOrientation(VERTICAL);
+        TextView line = label(SUBTITLE_SP, mDress.subTextColor);
+        line.setSingleLine(false);
+        line.setText(getContext().getString(R.string.session_browser_resume_setup_line,
+            agentNames(mResumeAgents)));
+        LayoutParams lineParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        lineParams.topMargin = dp(6);
+        column.addView(line, lineParams);
+        if (mResumeSetupFailed) {
+            TextView failed = label(SUBTITLE_SP, mDress.subTextColor);
+            failed.setSingleLine(false);
+            failed.setText(R.string.session_browser_resume_setup_failed);
+            column.addView(failed, new LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        }
+        LinearLayout actions = actionStrip();
+        addAction(actions, getContext().getString(R.string.session_browser_resume_setup_action), () -> {
+            if (mListener == null) return;
+            mListener.onSetUpResume(new ArrayList<>(mResumeAgents), ok -> {
+                if (ok) {
+                    refreshResumeAgents();
+                } else {
+                    mResumeSetupFailed = true;
+                    rebuild();
+                }
+            });
+        });
+        column.addView(actions, new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        return column;
+    }
+
+    /** "Claude", "Claude and Codex", "Claude, Codex and OpenCode". */
+    @NonNull
+    private static String agentNames(@NonNull List<String> agents) {
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < agents.size(); i++) {
+            AgentResume.Row row = AgentResume.forAgent(agents.get(i));
+            if (i > 0) names.append(i == agents.size() - 1 ? " and " : ", ");
+            names.append(row == null ? agents.get(i) : row.displayName);
+        }
+        return names.toString();
     }
 
     /** One footer line: a label on a row surface, which wraps before it clips. */

@@ -67,6 +67,21 @@ public class TerminalBindingConfigTest {
     }
 
     @Test
+    public void argumentsTheWorkspaceToolsRetiredAreAcceptedAndIgnored() {
+        TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
+            "map ctrl+alt+shift+s workspace.save name=project captureCommands=false\n"
+                + "map ctrl+alt+shift+l workspace.load name=project runCommands=false\n",
+            registry, true);
+
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        assertEquals(2, result.mappings.size());
+        org.json.JSONObject save = result.mappings.get(0).actions.get(0).arguments;
+        assertEquals("project", save.optString("name"));
+        assertFalse(save.has("captureCommands"));
+        assertFalse(result.mappings.get(1).actions.get(0).arguments.has("runCommands"));
+    }
+
+    @Test
     public void aContactIsBoundByItsLookupKeyWithItsIdAsAHint() {
         TerminalBindingConfig.Result result = TerminalBindingConfig.parse(
             "map --label \"Ana Silva\" ctrl+alt+shift+a contact.open 0r12-3A4B5C contact_id=42\n"

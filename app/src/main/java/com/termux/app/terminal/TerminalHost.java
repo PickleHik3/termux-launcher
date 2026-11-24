@@ -392,6 +392,13 @@ public interface TerminalHost extends SoftKeyboardPolicy {
     default void reportAgentStatus(@NonNull TerminalSession pane, @Nullable String agent,
                                    @Nullable AgentStatus.State state) {}
 
+    /**
+     * The conversation id an agent's session hook reported for its pane. Kept on the pane and
+     * saved with the arrangement, so a restored pane resumes the same conversation.
+     */
+    default void reportAgentSession(@NonNull TerminalSession pane, @NonNull String agent,
+                                    @NonNull String sessionId) {}
+
     // --- Shells ---
 
     /** The service holding every live shell, or null while it is not bound. */
@@ -571,12 +578,10 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     // --- Workspaces ---
 
-    @NonNull TerminalWorkspace saveWorkspace(@NonNull String requestedName, boolean overwrite,
-                                             boolean captureCommands)
+    @NonNull TerminalWorkspace saveWorkspace(@NonNull String requestedName, boolean overwrite)
         throws TerminalWorkspace.WorkspaceException;
 
-    @NonNull TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace,
-                                                        boolean runCommands)
+    @NonNull TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace)
         throws TerminalWorkspace.WorkspaceException;
 
     @NonNull List<TerminalWorkspaceStore.Entry> listWorkspaces()

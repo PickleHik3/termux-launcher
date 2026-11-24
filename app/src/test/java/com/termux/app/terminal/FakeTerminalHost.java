@@ -143,10 +143,8 @@ class FakeTerminalHost implements TerminalHost {
     @Nullable TerminalWorkspace.WorkspaceException workspaceFailure;
     @Nullable String lastSavedWorkspaceName;
     boolean lastSaveOverwrite;
-    boolean lastSaveCaptureCommands;
     @Nullable String lastLoadedWorkspaceName;
     boolean lastLoadReplace;
-    boolean lastLoadRunCommands;
     @Nullable String lastDeletedWorkspaceName;
 
     // Appearance and app surfaces
@@ -794,29 +792,25 @@ class FakeTerminalHost implements TerminalHost {
     // --- Workspaces ---
 
     @Override @NonNull public TerminalWorkspace saveWorkspace(@NonNull String requestedName,
-                                                             boolean overwrite,
-                                                             boolean captureCommands)
+                                                             boolean overwrite)
             throws TerminalWorkspace.WorkspaceException {
         record("saveWorkspace");
         lastSavedWorkspaceName = requestedName;
         lastSaveOverwrite = overwrite;
-        lastSaveCaptureCommands = captureCommands;
         if (workspaceFailure != null) throw workspaceFailure;
         return saveWorkspaceResult != null ? saveWorkspaceResult
             : new TerminalWorkspace(requestedName, 0L, 0, Collections.emptyList());
     }
 
     @Override @NonNull public TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name,
-                                                                        boolean replace,
-                                                                        boolean runCommands)
+                                                                        boolean replace)
             throws TerminalWorkspace.WorkspaceException {
         record("loadWorkspace");
         lastLoadedWorkspaceName = name;
         lastLoadReplace = replace;
-        lastLoadRunCommands = runCommands;
         if (workspaceFailure != null) throw workspaceFailure;
         return loadWorkspaceResult != null ? loadWorkspaceResult
-            : new TerminalWorkspace.LoadResult(1, 2, 3, 4, 5, replace);
+            : new TerminalWorkspace.LoadResult(1, 2, 3, 4, replace);
     }
 
     @Override @NonNull public List<TerminalWorkspaceStore.Entry> listWorkspaces()

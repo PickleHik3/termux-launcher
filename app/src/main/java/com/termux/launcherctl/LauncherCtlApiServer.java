@@ -1375,32 +1375,18 @@ public class LauncherCtlApiServer {
     }
 
     /**
-     * Merge the Claude Code hooks that report a pane's agent status into {@code ~/.claude/settings.json}.
+     * Set up the hooks and plugin that report a pane's agent status and conversation id: Claude
+     * Code's settings, Codex's hooks file and an OpenCode plugin.
      * Only ever reached from {@code launcherctl agent install-hooks} — nothing installs hooks on its
-     * own, since the file is the user's.
+     * own, since the files are the user's.
      */
     private JSONObject installAgentHooks() throws JSONException {
-        String launcherctl = TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
-        java.io.File settings = new java.io.File(
-            TermuxConstants.TERMUX_HOME_DIR_PATH + "/.claude/settings.json");
-        try {
-            boolean changed = ClaudeHooksInstaller.install(settings, launcherctl);
-            return new JSONObject()
-                .put("ok", true)
-                .put("settings", settings.getAbsolutePath())
-                .put("changed", changed)
-                .put("events", new JSONArray(ClaudeHooksInstaller.events().keySet()));
-        } catch (JSONException e) {
-            JSONObject error = jsonError("settings_not_json",
-                "That settings file is not valid JSON, so it was left alone: " + settings.getAbsolutePath());
-            error.put("_statusCode", 409);
-            return error;
-        } catch (java.io.IOException e) {
-            JSONObject error = jsonError("settings_not_writable",
-                "Could not write " + settings.getAbsolutePath() + ": " + e.getMessage());
-            error.put("_statusCode", 500);
-            return error;
-        }
+        JSONObject result = ClaudeHooksInstaller.installAll(
+            new java.io.File(TermuxConstants.TERMUX_HOME_DIR_PATH),
+            TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl", null);
+        // A file that could not be changed is reported with the others, so the rest still land.
+        if (!result.optBoolean("ok")) result.put("_statusCode", 409);
+        return result;
     }
 
     /**
@@ -1546,6 +1532,8 @@ public class LauncherCtlApiServer {
                 return "GET".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_READ : null;
             case "agent":
                 return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_AGENT_STATUS : null;
+            case "agent-session":
+                return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_AGENT_SESSION : null;
             case "resize":
                 return "POST".equals(method) ? com.termux.app.terminal.TerminalActionDispatcher.TOOL_PANE_SET_SIZE : null;
             default:
@@ -3179,8 +3167,11 @@ public class LauncherCtlApiServer {
             "The state shows on the window chips and in the sessions browser, so a pane that needs\n" +
             "an answer is visible from anywhere. It is reported for $TERMUX_LAUNCHER_PANE unless\n" +
             "--pane says otherwise; --agent names the agent; clear hands the pane back to the\n" +
-            "screen's own reading. install-hooks wires the four Claude Code hooks that send it into\n" +
-            "~/.claude/settings.json, leaving every hook already there alone.\n" +
+            "screen's own reading. session --agent NAME [--id ID] says which conversation the agent\n" +
+            "is in (read from a hook's JSON on stdin when --id is missing), so a saved session can\n" +
+            "resume it. install-hooks wires Claude Code (~/.claude/settings.json), Codex\n" +
+            "(~/.codex/hooks.json) and OpenCode (a plugin file), leaving every hook already there\n" +
+            "alone. Codex asks you to trust its new hook once: open Codex and run /hooks.\n" +
             "EOF\n" +
             "      ;;\n" +
             "    notify) cat <<'EOF'\n" +
@@ -3473,10 +3464,32 @@ public class LauncherCtlApiServer {
             "}\n" +
             "agent_cmd() {\n" +
             "  sub=\"${1:-}\"\n" +
-            "  [ -n \"$sub\" ] && shift || { echo \"usage: launcherctl agent <working|blocked|idle|clear|install-hooks> [--agent NAME] [--pane ID]\" >&2; exit 2; }\n" +
+            "  [ -n \"$sub\" ] && shift || { echo \"usage: launcherctl agent <working|blocked|idle|clear|session|install-hooks> [--agent NAME] [--pane ID]\" >&2; exit 2; }\n" +
             "  if [ \"$sub\" = install-hooks ]; then\n" +
-            "    api POST /v1/agents/hooks '{}'\n" +
-            "    return\n" +
+            "    out=$(api POST /v1/agents/hooks '{}'); rc=$?\n" +
+            "    printf '%s\\n' \"$out\"\n" +
+            "    case \"$out\" in *'run /hooks'*) echo \"Codex asks you to trust the new hook once: open Codex and run /hooks.\" ;; esac\n" +
+            "    return $rc\n" +
+            "  fi\n" +
+            "  if [ \"$sub\" = session ]; then\n" +
+            "    # A hook: silent on stdout (Claude adds a SessionStart hook's output to the\n" +
+            "    # conversation) and never an error, so an agent outside the launcher is not nagged.\n" +
+            "    name= id= pane=\"${TERMUX_LAUNCHER_PANE:-}\"\n" +
+            "    while [ \"$#\" -gt 0 ]; do\n" +
+            "      case \"$1\" in\n" +
+            "        --agent) name=\"${2:-}\"; shift 2 ;;\n" +
+            "        --id) id=\"${2:-}\"; shift 2 ;;\n" +
+            "        --pane) pane=\"${2:-}\"; shift 2 ;;\n" +
+            "        *) shift ;;\n" +
+            "      esac\n" +
+            "    done\n" +
+            "    [ -n \"$pane\" ] || return 0\n" +
+            "    if [ -z \"$id\" ] && [ ! -t 0 ]; then\n" +
+            "      id=$(cat | tr -d '\\n' | sed -n 's/.*\"session_id\"[[:space:]]*:[[:space:]]*\"\\([^\"]*\\)\".*/\\1/p')\n" +
+            "    fi\n" +
+            "    [ -n \"$name\" ] && [ -n \"$id\" ] || return 0\n" +
+            "    api POST \"/v1/panes/$pane/agent-session\" \"{\\\"agent\\\":$(printf '%s' \"$name\" | json_str),\\\"session_id\\\":$(printf '%s' \"$id\" | json_str)}\" >/dev/null 2>&1\n" +
+            "    return 0\n" +
             "  fi\n" +
             "  case \"$sub\" in\n" +
             "    working|blocked|idle|clear) ;;\n" +

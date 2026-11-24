@@ -67,12 +67,12 @@ public class HomeFloatPageIdTest {
         assertEquals(3, floatPage(load(workspace(4, "page", 2), null)));
     }
 
-    @Test public void aV5FileKeepsItsPageIdAndIsWrittenAsV5() throws Exception {
+    @Test public void aV5FileKeepsItsPageIdAndIsWrittenAsTheCurrentVersion() throws Exception {
         TerminalWorkspace.HomePages pages = new TerminalWorkspace.HomePages(Arrays.asList(1, 2), 1);
         TerminalWorkspace loaded = load(workspace(5, "pageId", 42), pages);
         assertEquals("an id is not looked up", 42, floatPage(loaded));
         JSONObject written = loaded.toJson();
-        assertEquals(5, written.getInt("version"));
+        assertEquals(TerminalWorkspace.VERSION, written.getInt("version"));
         JSONObject homeFloat = written.getJSONArray("sessions").getJSONObject(0)
             .getJSONArray("windows").getJSONObject(0).getJSONObject("homeFloat");
         assertEquals(42, homeFloat.getInt("pageId"));
@@ -80,11 +80,11 @@ public class HomeFloatPageIdTest {
         assertEquals(42, floatPage(TerminalWorkspace.fromJson(written, pages)));
     }
 
-    @Test public void aV4FileIsWrittenBackAsV5ByPageId() throws Exception {
+    @Test public void aV4FileIsWrittenBackAtTheCurrentVersionByPageId() throws Exception {
         TerminalWorkspace loaded = load(workspace(4, "page", 1),
             new TerminalWorkspace.HomePages(Arrays.asList(7, 9), 7));
         JSONObject written = loaded.toJson();
-        assertEquals(5, written.getInt("version"));
+        assertEquals(TerminalWorkspace.VERSION, written.getInt("version"));
         assertEquals(9, floatPage(TerminalWorkspace.fromJson(written, null)));
     }
 
