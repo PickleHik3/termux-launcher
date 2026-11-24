@@ -959,6 +959,7 @@ public final class LinuxWindowsActivity extends Activity {
 
     private void hostState(int state, String message) {
         if (isDestroyed()) return;
+        boolean wasRunning = mHostRunning;
         mHostRunning = state == ILinuxWindows.STATE_RUNNING;
         mHostStarting = state == ILinuxWindows.STATE_STARTING;
         mStateKnown = true;
@@ -987,6 +988,10 @@ public final class LinuxWindowsActivity extends Activity {
             default:
                 // Stopped or unavailable: the developer bar says so; the windows go by their own callbacks.
                 mStatus.setText(TextUtils.isEmpty(message) ? "Stopped." : message);
+                // A host that ran and stopped: let go of the service, or its process stays for
+                // this screen alone. Start binds it again.
+                if (state == ILinuxWindows.STATE_STOPPED && wasRunning) onHostDied(
+                    TextUtils.isEmpty(message) ? "Stopped." : message);
                 break;
         }
         settle();
@@ -1004,6 +1009,10 @@ public final class LinuxWindowsActivity extends Activity {
 
     /** The host process died: drop its views and say so once. */
     private void onHostDied() {
+        onHostDied("The host process died.");
+    }
+
+    private void onHostDied(String why) {
         if (mService == null && !mBound) return;
         if (mServiceBinder != null) {
             try {
@@ -1031,7 +1040,7 @@ public final class LinuxWindowsActivity extends Activity {
         }
         clearPanes();
         if (isDestroyed()) return;
-        showStopped("The host process died.");
+        showStopped(why);
     }
 
     private void windowCreated(long id, String title, String appId, int clientPid, int flags) {

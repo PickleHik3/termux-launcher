@@ -23,7 +23,8 @@ import java.io.IOException;
  * the activity that shows them. {@link ILinuxWindows} has the contract.
  *
  * The compositor stops only on {@link ILinuxWindows#stop()} or when it dies; the service then
- * stops itself once nothing is bound. Binding with {@link #ACTION_DEBUG} gives
+ * stops itself once nothing is bound, and the process ends with it ({@link #onDestroy}), so an
+ * idle host leaves no resident process; the next bind starts a new one. Binding with {@link #ACTION_DEBUG} gives
  * {@link ILinuxWindowsDebug} instead, for the test screen.
  */
 public final class LinuxWindowsService extends Service implements WaylandHost.Listener {
@@ -231,6 +232,11 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         WaylandHost.setListener(null);
         mCallbacks.kill();
         super.onDestroy();
+        // Destroyed means stopped (or never started) and nobody bound. Native teardown is done:
+        // WaylandHost.stop() joined the compositor thread, which reaped Xwayland and removed its
+        // sockets. The process holds only this service, so it goes rather than idling cached.
+        Log.i(LOG_TAG, "service destroyed; ending pid " + Process.myPid());
+        Process.killProcess(Process.myPid());
     }
 
     private void doStart(String socketDir, String xkbConfigRoot, String xwaylandBinary, int outputWidth,

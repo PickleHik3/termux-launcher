@@ -149,6 +149,25 @@ public final class TermuxService extends Service implements AppShell.AppShellCli
         runStartForeground();
         SystemEventReceiver.registerPackageUpdateEvents(this);
         autostartEmbeddedDisplay();
+        openWaylandSocket();
+    }
+
+    /**
+     * Wayland Display listens on its socket from the moment the launcher's process is up, not
+     * only once the home screen was shown. Posted, so it never delays this service coming up;
+     * the runner fails soft, and this service lives in the main process only.
+     */
+    private void openWaylandSocket() {
+        if (!com.termux.BuildConfig.WAYLAND_DISPLAY) return;
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+            try {
+                com.termux.app.wayland.WaylandAppRunner.shared(this).setWaylandChosen(
+                    com.termux.app.wayland.LinuxDisplayBackend.current(this)
+                        == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND);
+            } catch (RuntimeException e) {
+                Logger.logWarn(LOG_TAG, "cannot open the Wayland socket: " + e);
+            }
+        });
     }
 
     /** The "Start the display with the launcher" opt-in: a background task, as if typed. */
