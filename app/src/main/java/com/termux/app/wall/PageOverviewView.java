@@ -322,7 +322,7 @@ public final class PageOverviewView extends FrameLayout {
     private float zoom;
     private boolean closing;
     private boolean closed;
-    private float savedRootAlpha = 1f;
+    private final RootUnderOverview rootUnder = new RootUnderOverview();
 
     @Nullable private Pending pending;
     /**
@@ -490,9 +490,8 @@ public final class PageOverviewView extends FrameLayout {
         if (focused != null && focused.kind == PageOverviewPolicy.Kind.DISPLAY) {
             host.preview(positionOf(focused));
         }
-        savedRootAlpha = root.getAlpha();
         // Hidden, not gone: it keeps drawing its children, which the live card shows.
-        root.setAlpha(0f);
+        rootUnder.hide(root);
         // Neighbours have their text from the first frame; the live page its picture.
         refreshNearbyText();
         captureLive(true);
@@ -516,6 +515,18 @@ public final class PageOverviewView extends FrameLayout {
         commitPending();
         Card card = focusedCard();
         finish(card == null ? null : positionOf(card), false);
+    }
+
+    /**
+     * The Home exit starts: the wall is put on the page the press lands on and shown under the
+     * overview, so the fade reveals that page and not the ground. Alpha only; the landing itself
+     * is {@link #closeImmediately()} at the end.
+     */
+    public void exitStarted() {
+        if (closed) return;
+        Card card = focusedCard();
+        if (card != null) host.preview(positionOf(card));
+        rootUnder.reveal(root);
     }
 
     /** The row or the pages changed under the overview: its cards follow. */
@@ -562,7 +573,7 @@ public final class PageOverviewView extends FrameLayout {
             bar.dismiss();
         }
         if (position != null) host.land(position);
-        root.setAlpha(savedRootAlpha);
+        rootUnder.restore(root);
         root.invalidate();
         ViewGroup parent = (ViewGroup) getParent();
         if (parent != null) parent.removeView(this);

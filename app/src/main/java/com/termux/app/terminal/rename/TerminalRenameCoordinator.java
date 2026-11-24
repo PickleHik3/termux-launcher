@@ -85,6 +85,8 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
     @NonNull private final Host host;
     @NonNull private final InlineRenameController controller;
     @Nullable private TerminalRenameChipView chip;
+    /** A Home exit is closing the chip: it goes at once rather than playing its own shrink. */
+    private boolean instantHide;
     @Nullable private TerminalRenameTarget target;
 
     public TerminalRenameCoordinator(@NonNull Host host, @NonNull ClipboardText clipboardSource) {
@@ -155,6 +157,22 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
 
     public void cancel() {
         controller.cancel();
+    }
+
+    /** The chip's view for the Home exit while a rename is up, else null. */
+    @Nullable
+    public View exitView() {
+        return controller.isActive() ? chip : null;
+    }
+
+    /** Discards the draft with no shrink: the Home exit has already faded the chip. */
+    public void cancelImmediately() {
+        instantHide = true;
+        try {
+            controller.cancel();
+        } finally {
+            instantHide = false;
+        }
     }
 
     /** Commits whatever is typed. Used by an outside tap, which reads as "done", not "discard". */
@@ -258,7 +276,8 @@ public final class TerminalRenameCoordinator implements InlineRenameController.H
         ViewGroup container = host.chipHost();
         TerminalRenameChipView view = chip;
         if (view == null) return;
-        if (host.isReducedMotionEnabled()) {
+        if (instantHide || host.isReducedMotionEnabled()) {
+            view.animate().cancel();
             view.setVisibility(View.GONE);
             if (container != null) container.setVisibility(View.GONE);
             return;

@@ -106,6 +106,34 @@ public final class PageBarController implements PageBarView.Entry {
         if (mPopup.shown()) putAway();
     }
 
+    /** The popup's view for the Home exit while it is up, else null. */
+    @Nullable
+    public View exitView() {
+        return mPopup.shown() ? mPopupView : null;
+    }
+
+    /**
+     * The Home exit starts: the popup's own rise or sink stops, so the exit is the only writer of
+     * its alpha and scale.
+     */
+    public void exitStarted() {
+        PageBarView view = mPopupView;
+        if (view != null) view.animate().cancel();
+    }
+
+    /** Put away with no sink: the Home exit has already faded it, and a sink would replay it. */
+    public void closeNow() {
+        if (!mPopup.shown()) return;
+        mPopup.putAway();
+        PageBarView view = mPopupView;
+        if (view != null) {
+            view.release();
+            view.animate().cancel();
+            hidePopupView();
+        }
+        if (mLayer != null) mLayer.setClickable(false);
+    }
+
     public void setSlidingListener(@Nullable SlidingListener listener) {
         mSlidingListener = listener;
     }

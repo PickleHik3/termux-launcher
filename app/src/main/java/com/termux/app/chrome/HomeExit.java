@@ -2,10 +2,12 @@ package com.termux.app.chrome;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.view.Choreographer;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+
+import com.termux.app.window.FramePipeline;
+import com.termux.app.window.FrameStep;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,13 +45,19 @@ public final class HomeExit {
         void removeDelayed(@NonNull Runnable runnable);
     }
 
-    /** Choreographer frames and the main looper's timers. */
-    public static Frames systemFrames() {
-        final Choreographer choreographer = Choreographer.getInstance();
+    /**
+     * The window's frame pipeline for the ticks (its {@link FrameStep#HOME_EXIT} step, so no
+     * frame hook of its own) and the main looper's timers for the backstops.
+     */
+    public static Frames pipelineFrames(@NonNull FramePipeline pipeline) {
         final Handler handler = new Handler(Looper.getMainLooper());
         return new Frames() {
-            private Choreographer.FrameCallback mCallback;
             private Runnable mTarget;
+            private final Runnable mStep = () -> {
+                Runnable target = mTarget;
+                mTarget = null;
+                if (target != null) target.run();
+            };
 
             @Override public long nowMs() {
                 return android.os.SystemClock.uptimeMillis();
@@ -57,17 +65,12 @@ public final class HomeExit {
 
             @Override public void requestFrame(@NonNull Runnable callback) {
                 mTarget = callback;
-                if (mCallback == null) mCallback = nanos -> {
-                    Runnable target = mTarget;
-                    mTarget = null;
-                    if (target != null) target.run();
-                };
-                choreographer.postFrameCallback(mCallback);
+                pipeline.bind(FrameStep.HOME_EXIT, mStep);
+                pipeline.requestFrame(FrameStep.HOME_EXIT);
             }
 
             @Override public void removeFrame(@NonNull Runnable callback) {
                 mTarget = null;
-                if (mCallback != null) choreographer.removeFrameCallback(mCallback);
             }
 
             @Override public void postDelayed(@NonNull Runnable runnable, long delayMs) {

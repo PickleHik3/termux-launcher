@@ -1,6 +1,7 @@
 package com.termux.app.help;
 
 import android.content.Context;
+import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import androidx.annotation.Nullable;
@@ -64,6 +65,9 @@ public final class HelpController {
         void demonstrate(PageKind place, String topicId);
         boolean isShowing();
         void dismiss();
+        /** The one view the explorer draws everything in, for the Home exit; null when it has none. */
+        @Nullable
+        default View exitView() { return null; }
         /** True when the explorer consumed Back; false hands it back to the controller. */
         boolean onBackPressed();
     }
@@ -137,6 +141,12 @@ public final class HelpController {
 
     public boolean isShowing() {
         return explorer != null && explorer.isShowing();
+    }
+
+    /** The explorer's view while help is up, for the Home exit. */
+    @Nullable
+    public View exitView() {
+        return isShowing() ? explorer.exitView() : null;
     }
 
     /** @return true when help was up and is now down, so a Back registry can stop looking. */
@@ -341,6 +351,10 @@ public final class HelpController {
 
             @Override public boolean isShowing() {
                 return view != null && view.isShowing();
+            }
+
+            @Override @Nullable public View exitView() {
+                return view != null && view.isShowing() ? view : null;
             }
 
             @Override public void dismiss() {
