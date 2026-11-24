@@ -28,19 +28,26 @@ final class LinuxWindowTabs {
         return t.isEmpty() ? fallback : t;
     }
 
-    /** The width of each tab: the row's width shared, never under {@code min} (the row then scrolls). */
-    static int tabWidth(int viewport, int count, int min) {
+    /**
+     * The width of each tab: the row's width, less its side padding and the gaps between tabs,
+     * shared; never under {@code min} (the row then scrolls).
+     */
+    static int tabWidth(int viewport, int count, int min, int gap, int sidePadding) {
         if (count <= 0) return min;
-        return Math.max(min, viewport / count);
+        int room = viewport - 2 * sidePadding - (count - 1) * gap;
+        return Math.max(min, room / count);
     }
 
     /**
-     * The row's scroll offset that shows the whole tab {@code left..right} (its end included),
-     * moving as little as it can; the tab's start when it is wider than the viewport.
+     * The row's scroll offset that shows the whole tab {@code left..right} (its end included) with
+     * the row's {@code sidePadding} beyond it, moving as little as it can; the tab's start when it
+     * is wider than the viewport. Never negative.
      */
-    static int scrollTarget(int scrollX, int viewport, int left, int right) {
-        if (right - left >= viewport || left < scrollX) return left;
-        if (right > scrollX + viewport) return right - viewport;
+    static int scrollTarget(int scrollX, int viewport, int left, int right, int sidePadding) {
+        int from = Math.max(0, left - sidePadding);
+        int to = right + sidePadding;
+        if (to - from >= viewport || from < scrollX) return from;
+        if (to > scrollX + viewport) return to - viewport;
         return scrollX;
     }
 

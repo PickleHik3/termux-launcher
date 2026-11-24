@@ -6,6 +6,7 @@ import android.content.Intent;
 import android.content.ServiceConnection;
 import android.graphics.Color;
 import android.graphics.SurfaceTexture;
+import android.graphics.drawable.GradientDrawable;
 import android.graphics.Typeface;
 import android.os.Bundle;
 import android.os.Handler;
@@ -70,6 +71,8 @@ public final class LinuxWindowsActivity extends Activity {
     static final String EXTRA_OPENING = "opening";
     /** How long "no Linux apps" shows before the screen closes itself. */
     private static final long NO_APPS_CLOSE_MS = 2500;
+    /** The developer status wraps to this many lines. */
+    private static final int STATUS_MAX_LINES = 3;
     /** Used only when the theme gives no colour for a role. */
     private static final int FALLBACK_SURFACE = 0xFF202020;
     private static final int FALLBACK_ON_SURFACE = 0xFFFFFFFF;
@@ -83,6 +86,7 @@ public final class LinuxWindowsActivity extends Activity {
     private int mOnSurface = FALLBACK_ON_SURFACE;
     private int mOnSurfaceVariant = FALLBACK_ON_SURFACE;
     private int mShownTab = Color.TRANSPARENT;
+    private int mUnshownTab = Color.TRANSPARENT;
     private int mOnShownTab = FALLBACK_ON_SURFACE;
 
     private final Handler mMain = new Handler(Looper.getMainLooper());
@@ -221,6 +225,8 @@ public final class LinuxWindowsActivity extends Activity {
         final LinearLayout tab;
         final TextView label;
         final TextView close;
+        /** The tab's rounded fill; recoloured, never replaced. */
+        final GradientDrawable shape = new GradientDrawable();
         final TextureView view;
         Surface surface;
         String title = "";
@@ -243,16 +249,18 @@ public final class LinuxWindowsActivity extends Activity {
             tab.setOnClickListener(v -> showWindow(id));
             tab.setOnLongClickListener(v -> toggleDevBar());
             tab.setMinimumWidth(res(R.dimen.linux_windows_tab_min_width));
+            shape.setCornerRadius(res(R.dimen.linux_windows_tab_radius));
+            tab.setBackground(shape);
             label = chromeText();
             label.setTextSize(TypedValue.COMPLEX_UNIT_PX, getResources().getDimension(R.dimen.linux_windows_tab_text));
             label.setSingleLine(true);
             label.setEllipsize(TextUtils.TruncateAt.END);
             label.setGravity(Gravity.CENTER_VERTICAL);
-            // The title starts at the row's start edge, and ends where the close target begins.
-            label.setPaddingRelative(res(R.dimen.linux_windows_start_padding), 0, 0, 0);
+            // The title ends where the close target begins.
+            label.setPaddingRelative(res(R.dimen.linux_windows_tab_inner_padding), 0, 0, 0);
             close = chromeText();
             close.setText("✕");
-            close.setGravity(Gravity.END | Gravity.CENTER_VERTICAL);
+            close.setGravity(Gravity.CENTER);
             close.setContentDescription(getString(R.string.linux_windows_close));
             close.setOnClickListener(v -> {
                 if (mService != null) {
@@ -284,7 +292,7 @@ public final class LinuxWindowsActivity extends Activity {
             int text = shown() ? mOnShownTab : mOnSurfaceVariant;
             label.setTextColor(text);
             close.setTextColor(text);
-            tab.setBackgroundColor(shown() ? mShownTab : Color.TRANSPARENT);
+            shape.setColor(shown() ? mShownTab : mUnshownTab);
         }
 
         /** Hands the Surface to the host. */
@@ -486,6 +494,7 @@ public final class LinuxWindowsActivity extends Activity {
         mSurface = themeColor(com.termux.shared.R.attr.termuxColorSurfacePanel, FALLBACK_SURFACE);
         mOnSurface = themeColor(com.termux.shared.R.attr.termuxColorOnSurface, FALLBACK_ON_SURFACE);
         mOnSurfaceVariant = themeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant, FALLBACK_ON_SURFACE);
+        mUnshownTab = themeColor(com.termux.shared.R.attr.termuxColorSurfacePanelHigh, FALLBACK_SURFACE);
         mShownTab = themeColor(com.termux.shared.R.attr.termuxColorPrimaryContainer, FALLBACK_SURFACE);
         mOnShownTab = themeColor(com.termux.shared.R.attr.termuxColorOnPrimaryContainer, FALLBACK_ON_SURFACE);
 
@@ -502,7 +511,15 @@ public final class LinuxWindowsActivity extends Activity {
         mTabRow = new LinearLayout(this);
         mTabRow.setOrientation(LinearLayout.HORIZONTAL);
         mTabRow.setGravity(Gravity.CENTER_VERTICAL);
-        mTabRow.setMinimumHeight(res(R.dimen.linux_windows_tab_height));
+        int sidePad = res(R.dimen.linux_windows_start_padding);
+        int gap = res(R.dimen.linux_windows_tab_gap);
+        mTabRow.setPaddingRelative(sidePad, gap, sidePad, gap);
+        // A transparent divider is the gap between tabs.
+        GradientDrawable gapDrawable = new GradientDrawable();
+        gapDrawable.setSize(gap, 0);
+        mTabRow.setDividerDrawable(gapDrawable);
+        mTabRow.setShowDividers(LinearLayout.SHOW_DIVIDER_MIDDLE);
+        mTabRow.setMinimumHeight(res(R.dimen.linux_windows_tab_height) + 2 * gap);
         mTabRow.setOnLongClickListener(v -> toggleDevBar());
         tabScroll.addView(mTabRow, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -582,7 +599,7 @@ public final class LinuxWindowsActivity extends Activity {
         int pad = res(R.dimen.linux_windows_start_padding);
         box.setPaddingRelative(pad, 0, pad, 0);
         mStatus = chromeText();
-        mStatus.setSingleLine(true);
+        mStatus.setMaxLines(STATUS_MAX_LINES);
         mStatus.setEllipsize(TextUtils.TruncateAt.END);
         box.addView(mStatus, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
@@ -867,7 +884,9 @@ public final class LinuxWindowsActivity extends Activity {
     /** Gives every tab its share of the row ({@link LinuxWindowTabs#tabWidth}); only a changed width is set. */
     private void sizeTabs() {
         int count = mTabRow.getChildCount();
-        int width = LinuxWindowTabs.tabWidth(mTabViewportWidth, count, res(R.dimen.linux_windows_tab_min_width));
+        int width = LinuxWindowTabs.tabWidth(mTabViewportWidth, count,
+            res(R.dimen.linux_windows_tab_min_width), res(R.dimen.linux_windows_tab_gap),
+            res(R.dimen.linux_windows_start_padding));
         for (int i = 0; i < count; i++) {
             View tab = mTabRow.getChildAt(i);
             ViewGroup.LayoutParams lp = tab.getLayoutParams();
@@ -887,7 +906,8 @@ public final class LinuxWindowsActivity extends Activity {
             int left = tab.getLeft();
             int right = left + tab.getWidth();
             int scroll = mTabScroll.getScrollX();
-            int target = LinuxWindowTabs.scrollTarget(scroll, viewport, left, right);
+            int target = LinuxWindowTabs.scrollTarget(scroll, viewport, left, right,
+                res(R.dimen.linux_windows_start_padding));
             if (target != scroll) mTabScroll.smoothScrollTo(target, 0);
         });
     }

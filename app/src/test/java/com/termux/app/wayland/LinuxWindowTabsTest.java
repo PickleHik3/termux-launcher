@@ -64,19 +64,23 @@ public class LinuxWindowTabsTest {
 
     @Test
     public void tabsShareTheRowButNeverGoUnderTheMinimum() {
-        assertEquals(400, LinuxWindowTabs.tabWidth(400, 1, 100));
-        assertEquals(200, LinuxWindowTabs.tabWidth(400, 2, 100));
-        assertEquals(100, LinuxWindowTabs.tabWidth(400, 4, 100));
-        assertEquals(100, LinuxWindowTabs.tabWidth(400, 9, 100));
-        assertEquals(100, LinuxWindowTabs.tabWidth(400, 0, 100));
+        assertEquals(400, LinuxWindowTabs.tabWidth(400, 1, 100, 10, 0));
+        assertEquals(195, LinuxWindowTabs.tabWidth(400, 2, 100, 10, 0));
+        assertEquals(175, LinuxWindowTabs.tabWidth(400, 2, 100, 10, 20));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 4, 100, 10, 20));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 0, 100, 10, 20));
     }
 
     @Test
-    public void scrollShowsTheWholeTabWithItsEnd() {
-        assertEquals(0, LinuxWindowTabs.scrollTarget(0, 400, 100, 300));
-        assertEquals(150, LinuxWindowTabs.scrollTarget(0, 400, 350, 550));
-        assertEquals(60, LinuxWindowTabs.scrollTarget(200, 400, 60, 260));
-        assertEquals(200, LinuxWindowTabs.scrollTarget(500, 400, 200, 700));
+    public void scrollShowsTheWholeTabWithItsEndAndPadding() {
+        assertEquals(0, LinuxWindowTabs.scrollTarget(0, 400, 100, 300, 0));
+        assertEquals(150, LinuxWindowTabs.scrollTarget(0, 400, 350, 550, 0));
+        assertEquals(60, LinuxWindowTabs.scrollTarget(200, 400, 60, 260, 0));
+        assertEquals(200, LinuxWindowTabs.scrollTarget(500, 400, 200, 700, 0));
+        // The last tab ends at 550 and the row pads 20 beyond it.
+        assertEquals(170, LinuxWindowTabs.scrollTarget(0, 400, 350, 550, 20));
+        // The first tab starts at its row's padding: scrolled back to 0, not negative.
+        assertEquals(0, LinuxWindowTabs.scrollTarget(30, 400, 20, 220, 20));
     }
 
     @Test
