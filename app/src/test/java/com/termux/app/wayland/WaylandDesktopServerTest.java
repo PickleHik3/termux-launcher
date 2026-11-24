@@ -74,19 +74,38 @@ public class WaylandDesktopServerTest {
         assertArrayEquals(new int[] {1, 1}, WaylandDesktopServer.logicalSize(0, 0, 2f));
     }
 
-    @Test public void theServerIsRootfulAtTheStartSizeAndNeverResets() {
-        assertEquals(Arrays.asList(":3", "-geometry", "432x965", "-noreset"),
+    @Test public void theServerIsRootfulAtTheWindowsPixelsAndNeverResets() {
+        // -hidpi: Xwayland takes the window's fractional scale, so its root is the window's
+        // pixels drawn 1:1 rather than the logical size magnified.
+        assertEquals(Arrays.asList(":3", "-geometry", "432x965", "-hidpi", "-noreset"),
             WaylandDesktopServer.serverArgs(3, 432, 965));
-        assertEquals(Arrays.asList(":3", "-noreset"), WaylandDesktopServer.serverArgs(3, 0, 965));
-        // Never rootless, and not -hidpi: the window's view scales the logical root up.
+        assertEquals(Arrays.asList(":3", "-hidpi", "-noreset"), WaylandDesktopServer.serverArgs(3, 0, 965));
         assertFalse(WaylandDesktopServer.serverArgs(3, 432, 965).contains("-rootless"));
-        assertFalse(WaylandDesktopServer.serverArgs(3, 432, 965).contains("-hidpi"));
+    }
+
+    @Test public void theDesktopIsToldItsScaleTheWayTheSharedServerTellsApps() {
+        // As xscale.rs: widgets at the whole part, text at the full scale, Xft.dpi 96 x scale.
+        assertEquals(Arrays.asList("GDK_SCALE=2", "GDK_DPI_SCALE=1.25", "XCURSOR_SIZE=60"),
+            WaylandDesktopServer.scaleEnv(2.5f));
+        assertEquals(Arrays.asList("GDK_SCALE=2", "GDK_DPI_SCALE=1", "XCURSOR_SIZE=48"),
+            WaylandDesktopServer.scaleEnv(2f));
+        assertEquals(Arrays.asList("GDK_SCALE=1", "GDK_DPI_SCALE=1.75", "XCURSOR_SIZE=42"),
+            WaylandDesktopServer.scaleEnv(1.75f));
+        assertEquals(Arrays.asList("GDK_SCALE=1", "GDK_DPI_SCALE=1", "XCURSOR_SIZE=24"),
+            WaylandDesktopServer.scaleEnv(Float.NaN));
+        assertEquals(240, WaylandDesktopServer.xftDpi(2.5f));
+        assertEquals(144, WaylandDesktopServer.xftDpi(1.5f));
+        assertEquals(96, WaylandDesktopServer.xftDpi(0f));
     }
 
     @Test public void theStartBlockStartsWaitsWatchesAndKeepsWaylandOutOfTheDesktop() {
-        String block = WaylandDesktopServer.startBlock("/p/bin/Xwayland", "/p/tmp/tl-wayland/wayland-0", 3, 432, 965);
+        String block = WaylandDesktopServer.startBlock("/p/bin/Xwayland", "/p/tmp/tl-wayland/wayland-0", 3, 432, 965, 2.5f);
         assertTrue(block, block.contains("WAYLAND_DISPLAY='/p/tmp/tl-wayland/wayland-0' '/p/bin/Xwayland'"
-            + " :3 -geometry 432x965 -noreset -displayfd 3 3>\"$tl_desktop_ready\" &\n"));
+            + " :3 -geometry 432x965 -hidpi -noreset -displayfd 3 3>\"$tl_desktop_ready\" &\n"));
+        // Xft.dpi on the desktop's own server, once it answered, only where xrdb is installed.
+        assertTrue(block, block.contains("if command -v xrdb >/dev/null 2>&1; then\n"
+            + "echo 'Xft.dpi: 240' | DISPLAY=:3 xrdb -nocpp -merge\nfi\n"));
+        assertTrue(block.indexOf("exit " + WaylandDesktopServer.EXIT_NO_SCREEN) < block.indexOf("xrdb"));
         assertTrue(block.contains("tl_desktop_ready='" + WaylandDesktopServer.readyPath(3) + "'\n"));
         // The wait is bounded and ends early when the server exits.
         assertTrue(block.contains("kill -0 \"$tl_desktop_x\" 2>/dev/null && [ \"$tl_desktop_n\" -lt "
@@ -117,7 +136,11 @@ public class WaylandDesktopServerTest {
     @Test public void aForgottenDesktopNoLongerNamesTheWindow() {
         WaylandDesktopServer.named(7, "LXQt Desktop");
         assertEquals("LXQt Desktop", WaylandDesktopServer.tabTitle("Xwayland on :7"));
+        assertTrue(WaylandDesktopServer.isDesktopWindow("Xwayland on :7"));
+        assertFalse(WaylandDesktopServer.isDesktopWindow("Xwayland on :8"));
+        assertFalse(WaylandDesktopServer.isDesktopWindow(null));
         WaylandDesktopServer.forget(7);
         assertEquals("Xwayland on :7", WaylandDesktopServer.tabTitle("Xwayland on :7"));
+        assertFalse(WaylandDesktopServer.isDesktopWindow("Xwayland on :7"));
     }
 }

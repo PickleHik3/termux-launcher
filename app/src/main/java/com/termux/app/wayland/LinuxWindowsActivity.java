@@ -572,6 +572,13 @@ public final class LinuxWindowsActivity extends Activity {
         }
 
         @Override
+        public String shownWindowScaleNote() {
+            Pane pane = mPanes.get(mTabs.shown());
+            return pane != null && WaylandDesktopServer.isDesktopWindow(pane.title)
+                ? getString(R.string.linux_windows_scale_desktop) : null;
+        }
+
+        @Override
         public void onScaleStepChosen(int step) {
             Pane pane = mPanes.get(mTabs.shown());
             if (pane != null && pane.scales()) applyScaleStep(pane, step);
