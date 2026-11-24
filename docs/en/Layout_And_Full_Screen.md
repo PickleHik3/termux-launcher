@@ -41,11 +41,11 @@ its cards turn with it.
 
 ## Hide and bring back
 
-Turn a bar off with the eye on its card (on the Dock card, the eye on its row in the Bars list).
-Hidden bars wait as small cards beside the frame: tap one to open its card, or drag it onto the
-frame and let go to bring it back where it was.
+Turn a bar off with **Hide** on the bar in the frame, or by dragging it onto the Hidden column
+beside the frame. Hidden bars wait there as small cards: tap one and choose **Bring back**, or drag
+it onto the frame and let go to bring it back where it was.
 
-**Keyboard on/off.** The keyboard's **Visible** is the keyboard's on/off switch. Off, nothing raises
+**Keyboard on/off.** Hiding the keyboard on the frame is its on/off switch. Off, nothing raises
 it, not a tap on the terminal and not a text field, until you turn it on again. It is the same
 switch as **Keyboard on/off** in the command palette, and one switch for every place and both
 orientations. A swipe up from the bottom border also turns it back on. On Home it decides whether
@@ -60,7 +60,7 @@ Each size is set per orientation.
   terminals). **Search field**, under More, adds the command-palette field under the apps row (with
   Beads it sits in its own capsule under the beads).
 - **Dock height**: **Height** on the Dock card. The icons grow and shrink with it.
-- **Keyboard height**: **Height** on the Keyboard card.
+- **Keyboard height**: pull the grip on the keyboard in the frame.
 - **Strip height**: under **Dock type** on the Dock card while the Strip is the type.
 - **Bottom padding**: on the Keyboard card, the air under the last row of keys.
 - **Widget grid**: **Columns** and **Rows** on the Home card. See [Widgets](Widgets.md#grid-size).

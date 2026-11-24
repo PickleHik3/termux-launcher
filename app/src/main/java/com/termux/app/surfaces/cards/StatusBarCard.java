@@ -12,7 +12,6 @@ import androidx.annotation.StringRes;
 import androidx.annotation.VisibleForTesting;
 
 import com.termux.R;
-import com.termux.app.place.PlaceLayout;
 import com.termux.app.statusbar.StatusRowItem;
 import com.termux.app.statusbar.StatusRowOrder;
 import com.termux.app.statusbar.TopPaneClockForm;
@@ -36,10 +35,10 @@ import java.util.Calendar;
 import java.util.List;
 
 /**
- * The Status bar card (editor-redesign §2, Status bar): Position (Top, Bottom), the glass and
- * shape strip under its Glass header, the Clock as live face previews with Clock position under
- * it, then Options and Elements: the clock and media tiles, and the row's items in the bar's
- * order, dragged to move. The Visible switch is the header's eye.
+ * The Status bar card (editor-redesign §2, Status bar): the glass and shape strip under its
+ * Glass header, the Clock as live face previews with Clock position under it, then Options and
+ * Elements: the clock and media tiles, and the row's items in the bar's order, dragged to move.
+ * Where the bar stands, and whether it shows, is set on the editor's frame (drag, Hide).
  *
  * <p>{@link #rows} is the card's table and the pure policy below it maps stored values to the
  * choices the rows show, so JVM tests hold both; {@link #view} builds the card's own rows from the
@@ -53,7 +52,7 @@ public final class StatusBarCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
+            .tier(1, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
             .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
@@ -62,19 +61,6 @@ public final class StatusBarCard {
     }
 
     // ------------------------------------------------------------------------------ policy
-
-    /** Position's segments, in order: the edges the bar stands on along the screen. */
-    public static final PlaceLayout.Edge[] POSITIONS = {PlaceLayout.Edge.TOP,
-        PlaceLayout.Edge.BOTTOM};
-
-    /** The Position segment for the bar's {@code edge}; -1 for a bar standing in a column. */
-    public static int positionIndex(@Nullable PlaceLayout.Edge edge) {
-        if (edge == null)
-            return 0;
-        for (int i = 0; i < POSITIONS.length; i++)
-            if (POSITIONS[i] == edge) return i;
-        return -1;
-    }
 
     /** The clock faces, one tile each, in the review's order; Slab is the default. */
     public static final String[] FACES = {TERMUX_APP.TOP_PANE_CLOCK_STYLE_FLIP,
@@ -243,7 +229,7 @@ public final class StatusBarCard {
     /** What the card's own rows read and write: the editor's side. */
     public interface Host {
         /**
-         * The choice row {@code row} stands on: Position ({@link #positionIndex}), Clock face
+         * The choice row {@code row} stands on: Clock face
          * ({@link #faceIndex}), Clock position ({@link #alignmentIndex}), Page bar (0 Glyphs,
          * 1 Marks, {@link #PAGE_BAR_MARKS}) or Place (0 Strip, 1 In the pane, {@link #PLACE_PANE}).
          */
@@ -270,7 +256,6 @@ public final class StatusBarCard {
     public static CardRowView view(@NonNull Context context, @NonNull Row row, int widthPx,
                                    @NonNull Host host) {
         switch (row) {
-            case STATUS_POSITION: return position(context, widthPx, host);
             case GLASS_SECTION: return glassHeader(context, true);
             case CLOCK_FACE: return clockHeld(context, clockFaces(context, host), host);
             case CLOCK_POSITION:
@@ -342,20 +327,6 @@ public final class StatusBarCard {
             context.getString(R.string.editor_st_section_glass),
             context.getString(R.string.editor_st_section_glass_note), divider);
         return new CardRowView(header.root, () -> {});
-    }
-
-    @NonNull
-    private static CardRowView position(@NonNull Context context, int widthPx,
-                                        @NonNull Host host) {
-        SegmentRow row = SegmentRow.build(context, R.drawable.ic_editor_position,
-            context.getString(R.string.editor_st_position),
-            Arrays.asList(
-                SegmentRow.Segment.both(EditorGlyphs.POS_TOP,
-                    context.getString(R.string.editor_st_position_top)),
-                SegmentRow.Segment.both(EditorGlyphs.POS_BOTTOM,
-                    context.getString(R.string.editor_st_position_bottom))),
-            host.choice(Row.STATUS_POSITION), widthPx, index -> host.setChoice(Row.STATUS_POSITION, index));
-        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_POSITION)));
     }
 
     @NonNull

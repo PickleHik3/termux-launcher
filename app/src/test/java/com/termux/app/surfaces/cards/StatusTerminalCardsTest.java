@@ -65,14 +65,13 @@ public class StatusTerminalCardsTest {
     // ------------------------------------------------------------------------------ tables
 
     @Test
-    public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
+    public void theStatusBarCardReadsPlaceClockOptionsIndicators() {
+        assertEquals(Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
             Row.STATUS_INDICATORS, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
             Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
             Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
             rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
-        assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
         assertFalse("12 h · 24 h is the card's own pair", rows.contains(Row.CLOCK_12H));
     }
 
@@ -94,15 +93,6 @@ public class StatusTerminalCardsTest {
     }
 
     // ------------------------------------------------------------------------------ policy
-
-    @Test
-    public void positionIsTopOrBottomAndAColumnChoosesNeither() {
-        assertEquals(0, StatusBarCard.positionIndex(PlaceLayout.Edge.TOP));
-        assertEquals(1, StatusBarCard.positionIndex(PlaceLayout.Edge.BOTTOM));
-        assertEquals(-1, StatusBarCard.positionIndex(PlaceLayout.Edge.LEFT));
-        assertEquals(-1, StatusBarCard.positionIndex(PlaceLayout.Edge.RIGHT));
-        assertEquals("no session yet reads Top", 0, StatusBarCard.positionIndex(null));
-    }
 
     @Test
     public void theFaceTilesFollowTheStoredStyleAndMinimalKeepsItsWeight() {
@@ -194,7 +184,7 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeStatus host = new FakeStatus();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.STATUS_POSITION, Row.GLASS_SECTION, Row.CLOCK_FACE,
+            for (Row row : new Row[] {Row.GLASS_SECTION, Row.CLOCK_FACE,
                 Row.CLOCK_POSITION, Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT,
                 Row.STATUS_INDICATORS, Row.CAMERA_CUTOUT}) {
                 CardRowView built = StatusBarCard.view(f.themed, row, f.width, host);
@@ -217,18 +207,6 @@ public class StatusTerminalCardsTest {
     public void theStatusRowsWriteThroughTheHostAndRestateFromIt() {
         Fixture f = new Fixture(1f);
         FakeStatus host = new FakeStatus();
-        CardRowView position = StatusBarCard.view(f.themed, Row.STATUS_POSITION, f.width, host);
-        f.layOut(position.view);
-        List<MaterialButton> segments = buttons(position.view);
-        assertEquals("Top and Bottom", 2, segments.size());
-        // Position reads in words (overhaul §4/§7), the glyph before them.
-        assertEquals("Top", String.valueOf(segments.get(0).getText()));
-        segments.get(1).performClick();
-        assertEquals(1, host.position);
-        host.position = 0;
-        position.restate();
-        assertTrue("restated to Top", segments.get(0).isChecked());
-
         CardRowView pageBar = StatusBarCard.view(f.themed, Row.STATUS_PAGE_BAR, f.width, host);
         f.layOut(pageBar.view);
         List<MaterialButton> looks = buttons(pageBar.view);
@@ -462,7 +440,6 @@ public class StatusTerminalCardsTest {
     // ------------------------------------------------------------------------------ fakes
 
     private static final class FakeStatus implements StatusBarCard.Host {
-        int position;
         int face = 5;
         int align;
         int pageBar;
@@ -473,7 +450,6 @@ public class StatusTerminalCardsTest {
 
         @Override public int choice(@NonNull Row row) {
             switch (row) {
-                case STATUS_POSITION: return position;
                 case CLOCK_FACE: return face;
                 case CLOCK_POSITION: return align;
                 case STATUS_PAGE_BAR: return pageBar;
@@ -483,7 +459,6 @@ public class StatusTerminalCardsTest {
         }
         @Override public void setChoice(@NonNull Row row, int index) {
             switch (row) {
-                case STATUS_POSITION: position = index; break;
                 case CLOCK_FACE: face = index; break;
                 case CLOCK_POSITION: align = index; break;
                 case STATUS_PAGE_BAR: pageBar = index; break;

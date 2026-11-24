@@ -75,8 +75,6 @@ public final class EditorRows {
     public enum Row {
         OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
         TINT(Kind.SLIDER, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
-        HEIGHT(Kind.SLIDER, R.string.appearance_row_height, R.drawable.ic_editor_height),
-        VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
         DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_rl_dock_tray),
         /**
@@ -180,8 +178,6 @@ public final class EditorRows {
         // The Status bar and Terminal cards' own rows (editor-redesign §2): each is drawn by its
         // card from the row kinds (EditorCardSheet.Model#rowView); the Kind is the sheet's
         // stand-in where no card draws it.
-        /** The status bar's edge, Top or Bottom, as glyph segments. */
-        STATUS_POSITION(Kind.MENU, R.string.editor_st_position, R.drawable.ic_editor_position),
         /** The header over a card's glass and shape strip: "Glass", noted "Shape". */
         GLASS_SECTION(Kind.MENU, R.string.editor_st_section_glass, R.drawable.ic_editor_blur),
         /** The status clock's place in the bar, Left, Center or Right, as glyph segments. */
@@ -523,7 +519,6 @@ public final class EditorRows {
             case DOCK_TYPE:
             case DOCK_STYLE:
             case DESIGN:
-            case STATUS_POSITION:
             case CLOCK_FACE:
             case CLOCK_POSITION:
             case FORM:

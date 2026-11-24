@@ -122,7 +122,7 @@ public class EditorCardSectionsTest {
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
+            CARD, Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
                 Row.STATUS_INDICATORS),
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
@@ -163,7 +163,7 @@ public class EditorCardSectionsTest {
     @Test
     public void keyboard() {
         check(EditorCard.KEYBOARD, expect(
-            CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
+            CARD, Arrays.asList(Row.FORM, Row.KEY_SPACING,
                 Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH,
                 Row.KEYBOARD_FLOAT_HEIGHT, Row.KEYBOARD_SPLIT_GAP),
             "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.OPACITY_LINK,

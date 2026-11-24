@@ -45,7 +45,7 @@ import java.util.Map;
 /**
  * One card of the Appearance editor (appearance-and-settings-rework §3, §7, §8; wireframes 02–04):
  * a persistent bottom sheet with a 72dp header (a 24dp grab zone with the handle, then a 48dp row:
- * the object's icon and name, its eye where the object can be hidden, and reset; editor-redesign
+ * the object's icon and name, and reset; editor-redesign
  * §1 and the developer changes of 10-26 evening) over its rows, tier by tier, every row always
  * shown; the rows scroll. Views only: every value is read from {@link Model} and every touch
  * reported to it, so the same sheet is every card.
@@ -242,7 +242,6 @@ final class EditorCardSheet {
     @NonNull private final ImageView mHeaderIcon;
     @NonNull private final TextView mTitle;
     /** Shows or hides the card's object; gone on a card whose object cannot be hidden. */
-    @NonNull private final MaterialSwitch mEye;
     /** The header's reset arrow: shown while the card (Global: any surface) owns a value. */
     @NonNull private final MaterialButton mOwnReset;
     /** The ⋮ button: a menu holding the card's Reset. */
@@ -429,21 +428,6 @@ final class EditorCardSheet {
         pillParams.setMarginStart(dp(EDGE_DP - 4));
         pillParams.setMarginEnd(dp(8));
         line.addView(mMainPill, pillParams);
-
-        mEye = new MaterialSwitch(context);
-        mEye.setText(R.string.appearance_header_show);
-        mEye.setSwitchPadding(dp(8));
-        mEye.setOnCheckedChangeListener((button, checked) -> {
-            if (mRestating)
-                return;
-            mModel.onValue(Row.VISIBLE, checked ? 1 : 0, false);
-            restateEye();
-        });
-        mEye.setVisibility(View.GONE);
-        LinearLayout.LayoutParams eyeParams = new LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.WRAP_CONTENT, dp(HEADER_BUTTON_DP));
-        eyeParams.setMarginEnd(dp(4));
-        line.addView(mEye, eyeParams);
 
         mPhone = new ImageView(context);
         mPhone.setImageResource(R.drawable.ic_symbol_phone_portrait);
@@ -701,7 +685,6 @@ final class EditorCardSheet {
                 EditorViews.setVisible(mMainButtons.get(i), mModel.offersCard(MAIN_CARDS[i]));
         }
         EditorViews.setVisible(mPhone, main);
-        EditorViews.setVisible(mEye, !main && subcardTitle == 0 && card.hasEye());
         // A subcard's back names the card it returns to: "Back to Home", "Back to Terminal".
         mHeaderIcon.setContentDescription(back != null
             ? mContext.getString(R.string.appearance_subcard_back,
@@ -716,7 +699,7 @@ final class EditorCardSheet {
             build(card, rows, mContext.getString(titleRes));
             mScroll.scrollTo(0, sameCard ? scrollY : 0);
         }
-        restateEye();
+        restateOwnReset(mCard);
         EditorViews.setText(mTitle, mContext.getString(titleRes));
         mSheet.setContentDescription(mContext.getString(titleRes));
         boolean wasShown = mShown;
@@ -2222,11 +2205,11 @@ final class EditorCardSheet {
 
     // ------------------------------------------------------------------------------ restating
 
-    /** Every row read again from the model, the header's eye with them. */
+    /** Every row read again from the model, the header's reset with them. */
     void restate() {
         for (RowViews views : mRowViews.values())
             restate(views);
-        restateEye();
+        restateOwnReset(mCard);
     }
 
 
@@ -2271,11 +2254,6 @@ final class EditorCardSheet {
         return mMainButtons;
     }
 
-
-    /**
-     * The eye read again: open while the object shows, struck through while it is hidden. Its
-     * long-press names it, or says why it reads as it does (the other orientation's note).
-     */
     /** The header's reset arrow read again: shown while the model says the card owns a value. */
     private void restateOwnReset(@Nullable EditorCard card) {
         boolean shown = card != null && mModel.cardOwnsAny();
@@ -2298,35 +2276,6 @@ final class EditorCardSheet {
         mModel.resetRow(row);
         restate();
         endReset(motion, 0L);
-    }
-
-    private void restateEye() {
-        EditorCard card = mCard;
-        restateOwnReset(card);
-        if (card == null || !card.hasEye())
-            return;
-        boolean shown = mModel.value(Row.VISIBLE) != 0;
-        boolean enabled = mModel.enabled(Row.VISIBLE);
-        mRestating = true;
-        try {
-            if (mEye.isChecked() != shown)
-                mEye.setChecked(shown);
-            if (mEye.isEnabled() != enabled)
-                mEye.setEnabled(enabled);
-            CharSequence note = mModel.summary(Row.VISIBLE);
-            androidx.appcompat.widget.TooltipCompat.setTooltipText(mEye,
-                note != null && note.length() > 0 ? note
-                    : mContext.getString(R.string.appearance_row_visible));
-        } finally {
-            mRestating = false;
-        }
-    }
-
-    /** The eye, for a test. */
-    @VisibleForTesting
-    @NonNull
-    MaterialSwitch eyeButton() {
-        return mEye;
     }
 
     /** The reset button, for a test. */

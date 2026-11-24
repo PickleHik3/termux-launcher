@@ -2927,14 +2927,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         TermuxPropertyConstants.IVALUE_NIGHT_MODE_FALSE,
         TermuxPropertyConstants.IVALUE_NIGHT_MODE_TRUE};
 
-    /** The element a surface's Visible and Position move; null for the keyboard and the rest. */
-    @Nullable
-    private static Element elementOf(@Nullable EditorCard card) {
-        if (card == EditorCard.STATUS) return Element.STATUS;
-        if (card == EditorCard.DOCK) return Element.APPS;
-        return null;
-    }
-
     /** Index of {@code value} in {@code values}, or {@code fallback}. */
     private static int indexOf(@NonNull String[] values, @Nullable String value, int fallback) {
         for (int i = 0; i < values.length; i++) {
@@ -3060,20 +3052,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return row == Row.OPACITY ? AppearanceLooks.opacityPercent(stored)
                         : AppearanceLooks.tintPercent(stored);
                 }
-                case HEIGHT:
-                    if (card == EditorCard.KEYBOARD)
-                        return layout == null ? 100 : Math.round(layout.keyboardHeightScale() * 100f);
-                    return AppearanceLooks.iconSizeValueFor(mHost.isFloatingDock(),
-                        mHost.isAppsRowAlone(), dockHeightScale(prefs), density());
-                case VISIBLE: {
-                    if (layout == null) return 1;
-                    Element element = elementOf(card);
-                    // The keyboard reads what the frame draws: the one answer the switch and the
-                    // preview can share.
-                    if (element == null)
-                        return keyboardSwitchOn(layout, mHost.isInAppKeyboardShown()) ? 1 : 0;
-                    return layout.isShown(element) ? 1 : 0;
-                }
                 case STYLE:
                     return prefs.getLayoutStyle() == TermuxAppSharedPreferences.LayoutStyle.FLOATING
                         ? 1 : 0;
@@ -3149,12 +3127,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
         @Override public int from(@NonNull Row row) {
             switch (row) {
-                case HEIGHT:
-                    if (mCard == EditorCard.KEYBOARD)
-                        return Math.round(TermuxPreferenceConstants.TERMUX_APP
-                            .MIN_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
-                    return AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
-                        mHost.isAppsRowAlone(), density())[0];
                 case DEPTH: return GlassEdgeControls.MIN;
                 case REFLECTION: return PeekGlassGeometry.REFLECTION_MIN;
                 case TEXT_SIZE: return Control.TEXT_SIZE.min;
@@ -3172,12 +3144,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case TERMINAL_OPACITY: return 100;
                 case TERMINAL_BLUR: return TermuxPreferenceConstants.TERMUX_APP.MAX_TERMINAL_BG_BLUR;
                 case TINT: return AppearanceLooks.TINT_MAX;
-                case HEIGHT:
-                    if (mCard == EditorCard.KEYBOARD)
-                        return Math.round(TermuxPreferenceConstants.TERMUX_APP
-                            .MAX_IN_APP_KEYBOARD_HEIGHT_SCALE * 100f);
-                    return AppearanceLooks.iconSizeRangeDp(mHost.isFloatingDock(),
-                        mHost.isAppsRowAlone(), density())[1];
                 case CORNERS: return AppearanceLooks.CORNERS_MAX_DP;
                 case MARGIN: return AppearanceLooks.MARGIN_MAX_DP;
                 case DEPTH: return GlassEdgeControls.MAX;
@@ -3218,10 +3184,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return getString(R.string.appearance_readout_percent, value);
                 case TERMINAL_BLUR:
                     return getString(R.string.appearance_readout_dp, value);
-                case HEIGHT:
-                    return mCard == EditorCard.KEYBOARD
-                        ? getString(R.string.appearance_readout_percent, value)
-                        : getString(R.string.appearance_readout_dp, value);
                 case CORNERS:
                 case MARGIN:
                 case SPLIT_GAP:
@@ -3341,8 +3303,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return getString(R.string.appearance_glass_widgets_note);
                 case ADAPTIVE_LEGIBILITY:
                     return getString(R.string.appearance_row_adaptive_legibility_note);
-                case VISIBLE:
-                    return null;
                 default:
                     return cardRowSummary(row);
             }
@@ -3418,7 +3378,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onReleased(@NonNull Row row) {
             mLinkAnchor = null;
             endDrag();
-            if ((row == Row.HEIGHT || row == Row.BOTTOM_PADDING) && mCard == EditorCard.KEYBOARD) {
+            if (row == Row.BOTTOM_PADDING && mCard == EditorCard.KEYBOARD) {
                 LayoutEditorController layout = mHost.layoutEditor();
                 if (layout != null) layout.relayHeldWrites();
             }
@@ -3770,17 +3730,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     writeShared(row, value);
                 else if (!writeLinkedOpacity(row, value, dragging))
                     writeSurface(card, row, value);
-                break;
-            case HEIGHT:
-                if (card == EditorCard.KEYBOARD) {
-                    if (layout != null) layout.setKeyboardHeightScale(value / 100f, dragging);
-                } else {
-                    writeIconSize(value);
-                }
-                syncDirty();
-                break;
-            case VISIBLE:
-                writeShown(elementOf(card), value != 0);
                 break;
             case STYLE:
                 writeStyle(value == 1);
@@ -4508,39 +4457,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (keyboard != null)
             keyboard.previewSurfaceEditorKeyMarginScale(scale);
         requestPreview(SurfaceEditorProperties.PREVIEW_KEYBOARD);
-    }
-
-    /** The dock height scale in force: the layout session's, or the stored one without it. */
-    private float dockHeightScale(@NonNull TermuxAppSharedPreferences prefs) {
-        LayoutEditorController layout = mHost.layoutEditor();
-        float scale = layout == null ? -1f : layout.dockHeightScale();
-        return scale > 0f ? scale : prefs.getAppLauncherBarHeightScale();
-    }
-
-    /**
-     * The dock's Height: the icon in dp, stored as the dock height scale that draws it, through
-     * the layout session so its Undo and dirty state cover it. Mid-drag the dock follows on the
-     * geometry preview and the place is re-laid once, on the release.
-     */
-    private void writeIconSize(int iconDp) {
-        TermuxAppSharedPreferences prefs = prefs();
-        boolean floating = mHost.isFloatingDock();
-        boolean alone = mHost.isAppsRowAlone();
-        if (prefs != null && AppearanceLooks.iconSizeValueFor(floating, alone,
-                dockHeightScale(prefs), density()) == iconDp)
-            return;
-        float scale = AppearanceLooks.dockScaleForIconSize(floating, alone, iconDp, density());
-        LayoutEditorController layout = mHost.layoutEditor();
-        if (layout != null && mSliderDragActive) {
-            layout.holdDockHeightScale(scale);
-            mDockSizeHeld = true;
-            requestGeometryPreview();
-        } else if (layout != null) {
-            layout.setDockHeightScale(scale);
-        } else if (prefs != null) {
-            prefs.setAppLauncherBarHeightScale(scale);
-            requestGeometryPreview();
-        }
     }
 
     /** How many app buttons the dock shows, rebuilt live. */
@@ -6386,11 +6302,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             @Override public int choice(@NonNull Row row) {
                 TermuxAppSharedPreferences prefs = prefs();
                 switch (row) {
-                    case STATUS_POSITION: {
-                        LayoutEditorController layout = mHost.layoutEditor();
-                        return com.termux.app.surfaces.cards.StatusBarCard.positionIndex(
-                            layout == null ? null : layout.edgeOf(Element.STATUS));
-                    }
                     case CLOCK_FACE:
                         return com.termux.app.surfaces.cards.StatusBarCard.faceIndex(
                             prefs == null ? null : prefs.getTopPaneClockStyle());
@@ -6411,17 +6322,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             @Override public void setChoice(@NonNull Row row, int index) {
                 TermuxAppSharedPreferences prefs = prefs();
                 switch (row) {
-                    case STATUS_POSITION: {
-                        LayoutEditorController layout = mHost.layoutEditor();
-                        PlaceLayout.Edge[] edges =
-                            com.termux.app.surfaces.cards.StatusBarCard.POSITIONS;
-                        if (layout == null || index < 0 || index >= edges.length)
-                            return;
-                        layout.moveTo(Element.STATUS, edges[index]);
-                        positionTargets();
-                        syncDirty();
-                        return;
-                    }
                     case CLOCK_FACE:
                         if (prefs == null)
                             return;

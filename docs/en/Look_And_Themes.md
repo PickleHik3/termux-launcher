@@ -93,13 +93,13 @@ reset arrow.
   borders**, **Split gap**, **Multiplexer**, **Automatic tiling** and **Focus grows**; **Cursor
   trail** and **Screen effect**, with **Screen events** and **Composite signal** while an effect is
   on; the rows the Terminal shows and **Minimal layout**.
-- **Status bar**: **Position** and its indicators (CPU, memory, battery, media and weather);
+- **Status bar**: its place and its indicators (CPU, memory, battery, media and weather);
   **Clock face**, **Clock position**, **Show seconds**, **12 h / 24 h** and **°C / °F** (see
   [Status bar](Status_Bar.md#clock)); **Opacity** and **Blur**; links to the camera cutout and
   pinned notifications.
 - **Dock**: **Type** and **Apps in the dock**; under More, **Dock icon pack**,
   what the dock shows and **Monochrome icons**; its bars; **Opacity** and **Blur**.
-- **Keyboard**: **Type** (Docked, Floating or Split), **Height**, **Key spacing**, **Key corners**
+- **Keyboard**: **Type** (Docked, Floating or Split), **Key spacing**, **Key corners**
   and **Bottom padding**; while it is Floating or Split, **Width**, **Floating height** and **Split
   gap**; **Opacity**, **Key opacity** and **Blur**; links to its theme and layouts (see
   [Keyboard](Keyboard.md)).

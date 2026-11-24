@@ -88,7 +88,7 @@ public class EditorRowsTest {
 
     @Test
     public void theStatusBarCardOpensOnItsPlaceAndStrip() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
+        assertEquals(Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
             Row.STATUS_INDICATORS),
             EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
@@ -100,22 +100,12 @@ public class EditorRowsTest {
 
     @Test
     public void theKeyboardCardOpensOnItsTypeThenItsGlassWithTheOpacityLink() {
-        assertEquals(Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
+        assertEquals(Arrays.asList(Row.FORM, Row.KEY_SPACING,
             Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH, Row.KEYBOARD_FLOAT_HEIGHT,
             Row.KEYBOARD_SPLIT_GAP), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
         assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.OPACITY, Row.OPACITY_LINK,
             Row.KEY_OPACITY, Row.FROST, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
-    }
-
-    @Test
-    public void theEyeStandsInTheHeaderOfTheCardsWhoseObjectCanBeHidden() {
-        for (EditorCard card : EditorCard.values()) {
-            boolean eye = card == EditorCard.STATUS || card == EditorCard.DOCK
-                || card == EditorCard.KEYBOARD;
-            assertEquals(card + " has an eye", eye, card.hasEye());
-            assertFalse(card + ": the eye is not a row", rowsOf(card, ALL).contains(Row.VISIBLE));
-        }
     }
 
     @Test
@@ -129,8 +119,6 @@ public class EditorRowsTest {
             Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.ELEMENTS,
             Row.LINK_FONT, Row.PANE_BORDERS),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
-        List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
-        assertFalse(all.contains(Row.VISIBLE));
     }
 
     @Test
@@ -188,7 +176,7 @@ public class EditorRowsTest {
         // Status position and Dock type are on their own cards; the Layout lists on the page
         // cards (spec §3, Global).
         for (Row gone : new Row[] {Row.CHANGE_WALLPAPER, Row.MINIMAL, Row.ICON_PACK,
-            Row.FONT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
+            Row.FONT_SIZE, Row.HINT_GLASS_MATERIAL, Row.DOCK_TYPE,
             Row.ELEMENTS})
             assertFalse(gone + " is not Global's", rows.contains(gone));
     }
@@ -224,7 +212,7 @@ public class EditorRowsTest {
 
     @Test
     public void everyValueSliderIsAStripColumnAndTheLookIsTheOneHorizontalSlider() {
-        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
+        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS,
             Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP,
             Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
             Row.SHINE})
@@ -307,8 +295,8 @@ public class EditorRowsTest {
         for (PageKind half : PageKind.values()) {
             assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.TERMINAL, Row.OPACITY));
             for (EditorCard card : EditorCard.values()) {
-                for (Row row : new Row[] {Row.CORNERS, Row.MARGIN, Row.HEIGHT,
-                    Row.VISIBLE, Row.STYLE, Row.DESIGN, Row.TEXT_SIZE})
+                for (Row row : new Row[] {Row.CORNERS, Row.MARGIN,
+                    Row.STYLE, Row.DESIGN, Row.TEXT_SIZE})
                     assertEquals(card + " " + row, TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(card, row));
             }
         }

@@ -119,9 +119,8 @@ public class SurfaceEditorLeaveTest {
         com.termux.app.place.layout.Layouts atOpen = places.layouts().current();
         assertTrue(layout.isShown(Element.APPS));
 
-        model(editor).onValue(Row.VISIBLE, 0, false);
+        layout.setShown(Element.APPS, false);
         assertFalse("the dock is put away, live", layout.isShown(Element.APPS));
-        assertEquals("the card reads what the frame draws", 0, model(editor).value(Row.VISIBLE));
 
         editor.requestLeave(() -> { });
         ShadowLooper.runUiThreadTasksIncludingDelayedTasks();

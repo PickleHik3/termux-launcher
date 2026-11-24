@@ -83,26 +83,10 @@ public class SurfaceEditorHalvesTest {
     }
 
     @Test
-    public void theKeyboardsVisibleSwitchReadsWhatTheFrameDraws() {
-        keyboardShown = true;
-        SurfaceEditorController editor = open(PageKind.TERMINAL);
-        editor.present(EditorCard.KEYBOARD, null, null);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals("the frame draws the keyboard: Visible is on", 1,
-            model(editor).value(Row.VISIBLE));
-
-        keyboardShown = false;
-        model(editor).onValue(Row.VISIBLE, 0, false);
-        assertEquals(0, model(editor).value(Row.VISIBLE));
-    }
-
-    @Test
-    public void aDockHiddenOnItsCardComesBackFromTheElementsList() {
+    public void aDockHiddenOnTheFrameComesBackFromTheElementsList() {
         LayoutEditorController layout = layoutEditor();
         SurfaceEditorController editor = open(PageKind.TERMINAL, layout);
-        editor.present(EditorCard.DOCK, null, null);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        model(editor).onValue(Row.VISIBLE, 0, false);
+        layout.setShown(Element.APPS, false);
         assertFalse(layout.isShown(Element.APPS));
 
         editor.present(EditorCard.TERMINAL, null, null);
@@ -111,14 +95,10 @@ public class SurfaceEditorHalvesTest {
         assertFalse("the Elements list reads the dock hidden", elements.shown(Item.APPS_ROW));
         elements.setShown(Item.APPS_ROW, true);
         assertTrue("its eye brings the dock back", layout.isShown(Element.APPS));
-
-        editor.present(EditorCard.DOCK, null, null);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals("the Dock card's eye agrees", 1, model(editor).value(Row.VISIBLE));
     }
 
     @Test
-    public void theElementsListAndTheStatusCardsEyeWriteOneValue() {
+    public void theElementsListAndTheLayoutWriteOneValue() {
         LayoutEditorController layout = layoutEditor();
         SurfaceEditorController editor = open(PageKind.TERMINAL, layout);
         assertEquals("the screen's card stands at peek", EditorCard.TERMINAL, editor.shownCard());
@@ -127,12 +107,7 @@ public class SurfaceEditorHalvesTest {
         elements.setShown(Item.STATUS_BAR, false);
         assertFalse(layout.isShown(Element.STATUS));
 
-        editor.present(EditorCard.STATUS, null, null);
-        ShadowLooper.runUiThreadTasksIncludingDelayedTasks();
-        assertEquals("the Status bar card's eye reads it hidden", 0,
-            model(editor).value(Row.VISIBLE));
-        model(editor).onValue(Row.VISIBLE, 1, false);
-        assertTrue(layout.isShown(Element.STATUS));
+        layout.setShown(Element.STATUS, true);
         assertTrue("and the list reads it back", elements.shown(Item.STATUS_BAR));
     }
 
