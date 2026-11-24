@@ -5911,6 +5911,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     pickClockAlignment(alignments[index]);
             }
 
+            @Override public int pageBar() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.pageBarIndex(
+                    prefs == null ? null : prefs.getPageBarLook());
+            }
+
+            @Override public void setPageBar(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || pageBar() == index)
+                    return;
+                prefs.setPageBarLook(
+                    com.termux.app.surfaces.cards.StatusBarCard.pageBarValue(index));
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
             @Override public boolean option(int index) {
                 TermuxAppSharedPreferences prefs = prefs();
                 if (prefs == null)

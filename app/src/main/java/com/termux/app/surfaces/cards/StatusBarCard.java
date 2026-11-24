@@ -53,7 +53,7 @@ public final class StatusBarCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.STATUS_POSITION, Row.STATUS_INDICATORS)
+            .tier(1, Row.STATUS_POSITION, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
             .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
@@ -248,6 +248,9 @@ public final class StatusBarCard {
         /** The face tile ({@link #faceIndex}). */
         int clockFace();
         void setClockFace(int index);
+        /** Page bar's segment: 0 Glyphs, 1 Marks ({@link #PAGE_BAR_MARKS}). */
+        int pageBar();
+        void setPageBar(int index);
         /** Clock position's segment ({@link #alignmentIndex}). */
         int clockPosition();
         void setClockPosition(int index);
@@ -280,6 +283,7 @@ public final class StatusBarCard {
             case STATUS_SECONDS: return clockHeld(context, seconds(context, host), host);
             case STATUS_HOURS: return clockHeld(context, hours(context, widthPx, host), host);
             case STATUS_UNIT: return unit(context, widthPx, host);
+            case STATUS_PAGE_BAR: return pageBar(context, widthPx, host);
             case CAMERA_CUTOUT: return cameraCutout(context, host);
             case STATUS_INDICATORS: return indicators(context, widthPx, host);
             default: return null;
@@ -447,6 +451,36 @@ public final class StatusBarCard {
     /** The segment an on/off option reads in a pair whose first word is on where {@code firstIsOn}. */
     static int pairIndex(boolean on, boolean firstIsOn) {
         return on == firstIsOn ? 0 : 1;
+    }
+
+    /** Page bar's segments, in order: the window chips, then the line of marks. */
+    public static final int PAGE_BAR_GLYPHS = 0;
+    public static final int PAGE_BAR_MARKS = 1;
+
+    /** The Page bar segment of the stored value; Glyphs for none or an unknown one. */
+    public static int pageBarIndex(@Nullable String stored) {
+        return com.termux.app.wall.pageswitch.PageBarLook.fromValue(stored).marksShown()
+            ? PAGE_BAR_MARKS : PAGE_BAR_GLYPHS;
+    }
+
+    /** The value Page bar's segment {@code index} stores. */
+    @NonNull
+    public static String pageBarValue(int index) {
+        return (index == PAGE_BAR_MARKS ? com.termux.app.wall.pageswitch.PageBarLook.MARKS
+            : com.termux.app.wall.pageswitch.PageBarLook.GLYPHS).value;
+    }
+
+    /** Glyphs · Marks, a connected group bound to the global Page bar look. */
+    @NonNull
+    private static CardRowView pageBar(@NonNull Context context, int widthPx, @NonNull Host host) {
+        SegmentRow row = SegmentRow.words(context, R.drawable.ic_ms_more_horiz,
+            context.getString(R.string.editor_st_page_bar),
+            new CharSequence[] {context.getString(R.string.editor_st_page_bar_glyphs),
+                context.getString(R.string.editor_st_page_bar_marks)},
+            host.pageBar(), widthPx, host::setPageBar);
+        row.root.setContentDescription(context.getString(R.string.editor_st_page_bar) + ". "
+            + context.getString(R.string.editor_st_page_bar_summary));
+        return new CardRowView(row.root, () -> row.select(host.pageBar()));
     }
 
     /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */
