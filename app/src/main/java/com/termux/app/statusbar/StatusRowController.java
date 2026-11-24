@@ -42,6 +42,8 @@ public final class StatusRowController {
         boolean isReducedMotionEnabled();
         int surfaceBaseColor();
         void refreshTerminalWindowBar();
+        /** Whether the bar marks the pages with the Marks line (Status bar card › Page bar). */
+        boolean marksLookShown();
     }
 
     @NonNull private final Host mHost;
@@ -111,7 +113,7 @@ public final class StatusRowController {
         // The sessions indicator stands in the strip only, as syncPlaceBar decides it too.
         View sessions = find(R.id.terminal_sessions_indicator);
         if (sessions != null) {
-            int shown = sessionsIndicatorVisibility(true);
+            int shown = sessionsIndicatorVisibility(true, mHost.marksLookShown());
             if (sessions.getVisibility() != shown) sessions.setVisibility(shown);
         }
         syncStatusRowPlace();
@@ -243,11 +245,18 @@ public final class StatusRowController {
     }
 
     /**
-     * The sessions indicator's visibility: shown on a bar dressed for the Terminal, and never in
-     * the thin row, which holds only the Marks line or the readings and the text size button.
+     * The sessions indicator's visibility: shown on a bar dressed for the Terminal, and never where
+     * the bar holds only the Marks line (under the Marks look, and in the thin row, which holds
+     * only the Marks line or the readings and the text size button).
      */
-    public int sessionsIndicatorVisibility(boolean terminal) {
-        return terminal && !mStatusPresentation.isRow() ? View.VISIBLE : View.GONE;
+    public int sessionsIndicatorVisibility(boolean terminal, boolean marksShown) {
+        return sessionsIndicatorShown(terminal, mStatusPresentation.isRow(), marksShown)
+            ? View.VISIBLE : View.GONE;
+    }
+
+    /** The one rule for the sessions indicator: a Terminal bar that is neither the row nor Marks. */
+    public static boolean sessionsIndicatorShown(boolean terminal, boolean row, boolean marksShown) {
+        return terminal && !row && !marksShown;
     }
 
     /**

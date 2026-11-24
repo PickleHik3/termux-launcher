@@ -17919,6 +17919,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void refreshTerminalWindowBar() {
                     TermuxActivity.this.refreshTerminalWindowBar();
                 }
+
+                @Override public boolean marksLookShown() {
+                    return mMarksLine.marksLookShown();
+                }
             });
 
     /** The status bar's Marks line (MarksLineController). */
@@ -27542,7 +27546,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
             sessions.setAccent(placeAccent);
-            sessions.setVisibility(mStatusRow.sessionsIndicatorVisibility(terminal));
+            sessions.setVisibility(mStatusRow.sessionsIndicatorVisibility(terminal,
+                mMarksLine.marksLookShown()));
         }
         boolean windowsShown = terminal
             && com.termux.app.wall.PaneWallPolicy.showsWindowChips(currentWallPage());
