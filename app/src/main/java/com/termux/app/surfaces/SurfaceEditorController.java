@@ -46,6 +46,7 @@ import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TuiAppThemesPreferencesFragment;
 import com.termux.app.launcher.home.HomeSettings;
+import com.termux.app.layouteditor.BarLandingPolicy;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
 import com.termux.app.layouteditor.LayoutEditorPlan;
@@ -4754,6 +4755,113 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return card;
     }
 
+    @Nullable private BarDragController mBarDrag;
+
+    /** The drag of a bar on the frame (#338); it joins the tap overlay and writes the draft. */
+    @NonNull
+    private BarDragController barDrag() {
+        if (mBarDrag == null)
+            mBarDrag = new BarDragController(new BarDragHost());
+        return mBarDrag;
+    }
+
+    private final class BarDragHost implements BarDragController.Host {
+        @NonNull @Override public Context context() {
+            return mHost.context();
+        }
+
+        @Nullable @Override public ViewGroup overlay() {
+            View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+            return overlay instanceof ViewGroup ? (ViewGroup) overlay : null;
+        }
+
+        @Override public float scale() {
+            return mTargetScale > 0f ? mTargetScale : 1f;
+        }
+
+        @Override public boolean open() {
+            return mOpen;
+        }
+
+        @Override public boolean rectOf(@NonNull BarLandingPolicy.Bar bar, @NonNull float[] out) {
+            View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+            View root = mHost.findView(R.id.terminal_root_container);
+            if (overlay == null || root == null)
+                return false;
+            int[] ids;
+            switch (bar) {
+                case STATUS_BAR:
+                    ids = new int[] {R.id.terminal_window_bar_host};
+                    break;
+                case KEYBOARD:
+                    ids = mHost.isInAppKeyboardShown()
+                        ? new int[] {R.id.inapp_keyboard_view_host} : new int[0];
+                    break;
+                default: {
+                    Element element = bar.element();
+                    if (element == null)
+                        return false;
+                    ids = new int[] {
+                        com.termux.app.dock.SideRowViews.id(element,
+                            com.termux.app.dock.SideRowViews.Part.BOTTOM_HOST),
+                        com.termux.app.dock.SideRowViews.id(element,
+                            com.termux.app.dock.SideRowViews.Part.EDGE_HOST)};
+                    break;
+                }
+            }
+            int[] overlayOffset = mTmpOffset;
+            if (!AppearanceEditorFrame.offsetIn(overlay, root, overlayOffset))
+                return false;
+            float left0 = overlayOffset[0];
+            float top0 = overlayOffset[1];
+            for (int id : ids) {
+                if (id == 0)
+                    continue;
+                View view = mHost.findView(id);
+                if (view == null || !view.isShown() || view.getWidth() <= 0
+                    || view.getHeight() <= 0)
+                    continue;
+                if (!AppearanceEditorFrame.offsetIn(view, root, mTmpOffset))
+                    continue;
+                out[0] = mTmpOffset[0] - left0;
+                out[1] = mTmpOffset[1] - top0;
+                out[2] = out[0] + view.getWidth();
+                out[3] = out[1] + view.getHeight();
+                return true;
+            }
+            return false;
+        }
+
+        @Nullable @Override public LayoutEditorController layout() {
+            return mHost.layoutEditor();
+        }
+
+        @NonNull @Override public com.termux.app.statusbar.StatusPlace statusPlace() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return com.termux.app.statusbar.StatusPlace.fromValue(
+                prefs == null ? null : prefs.getStatusPlace());
+        }
+
+        @Override public int primaryColor() {
+            return mHost.themeColor(androidx.appcompat.R.attr.colorPrimary,
+                R.color.termux_primary);
+        }
+
+        @Override public int surfaceColor() {
+            return mHost.themeColor(com.google.android.material.R.attr.colorSurface,
+                R.color.termux_primary);
+        }
+
+        @Override public int onSurfaceColor() {
+            return mHost.themeColor(com.google.android.material.R.attr.colorOnSurface,
+                R.color.termux_primary);
+        }
+
+        @Override public void onWritten() {
+            positionTargets();
+        }
+    }
+
     /** Where a finger on a group went down: the dock's card opens on the bar under it. */
     private float mDownRawX;
     private float mDownRawY;
@@ -4784,6 +4892,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             group.setOnTouchListener((view, event) -> {
                 if (!mOpen)
                     return false;
+                // A held bar is the drag's until it lets go; a tap falls through to the click.
+                if (barDrag().onTouch(view, event))
+                    return true;
                 switch (event.getActionMasked()) {
                     case MotionEvent.ACTION_DOWN:
                         view.getParent().requestDisallowInterceptTouchEvent(true);
@@ -4910,6 +5021,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             EditorViews.setVisible(group, true);
         }
         restyleOutlines();
+        barDrag().placeChips();
     }
 
     @NonNull
@@ -5638,6 +5750,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     /** The targets' outlines taken off, so the launcher wears none after the editor. */
     private void clearOutlines() {
+        if (mBarDrag != null)
+            mBarDrag.release();
         for (int id : GROUP_IDS) {
             View group = mHost.findView(id);
             if (group != null && group.getBackground() != null)

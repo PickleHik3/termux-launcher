@@ -84,6 +84,11 @@
     <string name="settings_layout_miniature_apps">Pinned apps</string>
     <string name="settings_layout_miniature_alphabets">A–Z index</string>
     <string name="settings_layout_miniature_keys">Extra keys</string>
+    <string name="editor_bar_status">Status bar</string>
+    <string name="editor_bar_apps">Apps</string>
+    <string name="editor_bar_az">A–Z</string>
+    <string name="editor_bar_extra_keys">Extra keys</string>
+    <string name="editor_bar_keyboard">Keyboard</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
     <string name="settings_destination_terminal">Terminal</string>
