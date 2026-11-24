@@ -2917,11 +2917,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mHomePillStream = false;
             // The page bar (Home's, the key's and its open popup) takes its stream whole, ahead of
             // the seam's swipe and the surface long-press.
-            if (mPageBar != null && mPageBar.claimsTouch(ev)) return super.dispatchTouchEvent(ev);
+            if (mPageBar != null && mPageBar.claimsTouch(ev)) {
+                if (ev.getActionMasked() != MotionEvent.ACTION_MOVE)
+                    com.termux.app.statusbar.MarkTapDiag.log("activity "
+                        + com.termux.app.statusbar.MarkTapDiag.action(ev.getActionMasked())
+                        + " raw=" + ev.getRawX() + "," + ev.getRawY() + " claimedBy=pageBar");
+                return super.dispatchTouchEvent(ev);
+            }
             // The thin status row lies over the top pane, where the views would give its presses
             // to the pane: it takes a stream that starts on it whole, its hold included.
             com.termux.app.statusbar.StatusBarSwipeLayout statusHost = statusRowHost();
-            if (statusHost != null && statusHost.dispatchWindowRowTouch(ev)) return true;
+            boolean diagRow = statusHost != null && statusHost.dispatchWindowRowTouch(ev);
+            if (ev.getActionMasked() != MotionEvent.ACTION_MOVE)
+                com.termux.app.statusbar.MarkTapDiag.log("activity "
+                    + com.termux.app.statusbar.MarkTapDiag.action(ev.getActionMasked())
+                    + " xy=" + ev.getX() + "," + ev.getY() + " raw=" + ev.getRawX() + ","
+                    + ev.getRawY() + " host=" + (statusHost == null ? "null"
+                    : Integer.toHexString(System.identityHashCode(statusHost))
+                    + " attached=" + statusHost.isAttachedToWindow()
+                    + " presented=" + statusHost.isRowPresented())
+                    + " pill=" + pillStream + " rowTook=" + diagRow);
+            if (diagRow) return true;
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
