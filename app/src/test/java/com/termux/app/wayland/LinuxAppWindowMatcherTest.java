@@ -24,6 +24,19 @@ public class LinuxAppWindowMatcherTest {
         assertEquals(-1, m.windowFor("b"));
     }
 
+    /** The window names its app (for its per-app scale); an unmatched or closed one names none. */
+    @Test
+    public void aMatchedWindowNamesItsAppUntilItCloses() {
+        m.launched("firefox.desktop", 0);
+        m.started("firefox.desktop", 500);
+        m.windowCreated(7, 500, false, 100);
+        m.windowCreated(8, 901, false, 100);
+        assertEquals("firefox.desktop", m.keyFor(7));
+        assertEquals(null, m.keyFor(8));
+        m.windowDestroyed(7);
+        assertEquals(null, m.keyFor(7));
+    }
+
     @Test
     public void aDescendantOfTheStartedPidMatches() {
         parent.put(900, 800);

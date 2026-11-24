@@ -98,7 +98,7 @@ pub fn start(state: &mut State, config: XwaylandConfig) {
                     if let Some(x) = state.xwayland.as_mut() {
                         x.wm = Some(wm);
                     }
-                    let scale = state.output_scale();
+                    let scale = state.toolkit_scale();
                     set_toolkit_scale(state, scale);
                     set_resources(socket_dir.join(format!("X{display_number}")), scale);
                     linfo!("Xwayland ready: DISPLAY=:{display_number}");

@@ -132,9 +132,9 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private final PaneRim mRim = new PaneRim();
     @Nullable private PaneControlsView mControls;
     @Nullable private DisplayScaleRailView mRail;
+    /** The rail's behaviour; its stops are the display's resolution ({@link #mScaleHost}). */
+    @Nullable private DisplayScaleRail mScaleRail;
     private int mPressedAction = PaneControlsView.ACTION_NONE;
-    /** A finger on the rail's thumb, from its landing to its lift. */
-    private boolean mRailPressed;
     /** The corner the finger landed in, from its landing to its lift, held or not. */
     private int mPressedCorner = CornerZones.NONE;
     /** Who owns a finger down in a corner square: the display under it, or this corner. */
@@ -342,6 +342,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         });
         // The scale rail comes out with the tab, along the leading edge, while a display runs.
         mRail = new DisplayScaleRailView(getContext());
+        mScaleRail = new DisplayScaleRail(mRail, mScaleHost);
         addView(mRail, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         addView(mControls, new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT));
         applyRunning(false);
@@ -368,7 +369,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         // touch, so an event arriving after it is the first X must not see.
         boolean claimed = mHold.isClaimed();
         onHoldEvent(event);
-        return mPressedAction != PaneControlsView.ACTION_NONE || claimed || mRailPressed;
+        return mPressedAction != PaneControlsView.ACTION_NONE || claimed || railPressed();
     }
 
     /**
@@ -380,7 +381,6 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     private boolean onFrameDown(@NonNull android.view.MotionEvent event) {
         cancelHold();
         mPressedAction = PaneControlsView.ACTION_NONE;
-        mRailPressed = false;
         mTouchMoved = false;
         mDownX = event.getX();
         mDownY = event.getY();
@@ -390,11 +390,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
             || (mRail != null && mRail.isRailShown());
         mShownCornerAtDown = mControls != null && mControls.isControlsShown()
             ? mControls.corner() : CornerZones.NONE;
-        if (mRail != null && mRail.hits(mDownX, mDownY)) {
-            mRailPressed = true;
-            mRail.beginDrag(mDownY);
-            return true;
-        }
+        if (mScaleRail != null && mScaleRail.down(mDownX, mDownY)) return true;
         if (mShownAtDown) {
             int action = mControls.actionAt(mDownX, mDownY);
             if (action != PaneControlsView.ACTION_NONE) {
@@ -501,7 +497,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     @Override
     public boolean onTouchEvent(@NonNull android.view.MotionEvent event) {
         if (mCancellingDisplay) return false;
-        if (mRailPressed) return onRailTouch(event);
+        if (railPressed()) return mScaleRail.onTouch(event);
         if (mPressedAction == PaneControlsView.ACTION_NONE && !mHold.isTracking()) {
             return super.onTouchEvent(event);
         }
@@ -535,33 +531,29 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         }
     }
 
-    /** The thumb follows the finger stop by stop, with a tick at each; the lift applies the stop. */
-    private boolean onRailTouch(@NonNull android.view.MotionEvent event) {
-        if (mRail == null) {
-            mRailPressed = false;
-            return true;
-        }
-        switch (event.getActionMasked()) {
-            case android.view.MotionEvent.ACTION_MOVE:
-                if (mRail.dragTo(event.getY())) {
-                    Haptics.tick(this, android.view.HapticFeedbackConstants.CLOCK_TICK);
-                }
-                return true;
-            case android.view.MotionEvent.ACTION_UP:
-                mRailPressed = false;
-                mRail.dragTo(event.getY());
-                applyScaleStep(mRail.endDrag());
-                // Used, the rail goes away with the tab, as a tapped button does.
-                dismissControls();
-                return true;
-            case android.view.MotionEvent.ACTION_CANCEL:
-                mRailPressed = false;
-                mRail.cancelDrag();
-                return true;
-            default:
-                return true;
-        }
+    private boolean railPressed() {
+        return mScaleRail != null && mScaleRail.isPressed();
     }
+
+    /** The rail's stops are the display's resolution, kept in the display's own store. */
+    private final DisplayScaleRail.Host mScaleHost = new DisplayScaleRail.Host() {
+        @Override
+        public int currentScaleStep() {
+            com.termux.x11.Prefs prefs = prefsOrNull();
+            return prefs == null ? 0 : DisplayScaleSteps.fromPreferences(
+                prefs.displayResolutionMode.get(), prefs.displayScale.get());
+        }
+
+        @Override
+        public void onScaleStepChosen(int step) {
+            applyScaleStep(step);
+        }
+
+        @Override
+        public void onScaleRailUsed() {
+            dismissControls();
+        }
+    };
 
     /**
      * Write the stop into the display's own store — the one its settings page and
@@ -584,13 +576,8 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
     /** The tab out of one corner, and the rail with it while a display runs. */
     private void showControls(int corner) {
         if (mControls != null) mControls.show(corner);
-        if (mRail == null || !mRunning) return;
-        com.termux.x11.Prefs prefs = prefsOrNull();
-        if (prefs != null) {
-            mRail.setStep(DisplayScaleSteps.fromPreferences(
-                prefs.displayResolutionMode.get(), prefs.displayScale.get()));
-        }
-        mRail.show();
+        if (mScaleRail == null || !mRunning) return;
+        mScaleRail.show();
     }
 
     /** The display's store, or null on a page no host has attached to yet. */
@@ -653,7 +640,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
 
     public void dismissControls() {
         if (mControls != null) mControls.dismiss();
-        if (mRail != null) mRail.dismiss();
+        if (mScaleRail != null) mScaleRail.dismiss();
     }
 
     /** The window's frame pipeline, which steps the still's waits; set once the frame is built. */
@@ -766,7 +753,7 @@ public final class X11PaneFrame extends PaneContentFrame implements SurfacePage 
         if (mStill.drop()) recycleStill();
         followFrameAfterStill();
         // Nothing to scale once the display is gone.
-        if (mRail != null) mRail.dismiss();
+        if (mScaleRail != null) mScaleRail.dismiss();
         applyEmptyState();
     }
 

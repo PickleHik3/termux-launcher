@@ -53,4 +53,19 @@ public class DisplayScaleStepsTest {
     public void labelIsThePercent() {
         assertEquals("150%", DisplayScaleSteps.label(150));
     }
+
+    @Test
+    public void aStopIsAScaleValueAndBack() {
+        assertEquals("1", DisplayScaleSteps.scaleValue(100));
+        assertEquals("1.25", DisplayScaleSteps.scaleValue(125));
+        assertEquals("1.75", DisplayScaleSteps.scaleValue(175));
+        assertEquals("2", DisplayScaleSteps.scaleValue(200));
+        assertEquals("2.5", DisplayScaleSteps.scaleValue(250));
+        for (int step : DisplayScaleSteps.STEPS) {
+            assertEquals(step, DisplayScaleSteps.stepOf(DisplayScaleSteps.scaleValue(step)));
+        }
+        assertEquals(0, DisplayScaleSteps.stepOf("3"));
+        assertEquals(0, DisplayScaleSteps.stepOf("1.0"));
+        assertEquals(0, DisplayScaleSteps.stepOf(null));
+    }
 }

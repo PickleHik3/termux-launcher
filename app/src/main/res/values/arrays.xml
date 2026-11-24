@@ -510,18 +510,18 @@
         <item>1×</item>
         <item>1.25×</item>
         <item>1.5×</item>
+        <item>1.75×</item>
         <item>2×</item>
         <item>2.5×</item>
-        <item>3×</item>
     </string-array>
     <string-array name="settings_x11_app_scale_values">
         <item>follow</item>
         <item>1</item>
         <item>1.25</item>
         <item>1.5</item>
+        <item>1.75</item>
         <item>2</item>
         <item>2.5</item>
-        <item>3</item>
     </string-array>
     <string-array name="settings_x11_app_drawer_entries">
         <item>@string/settings_x11_app_follow</item>

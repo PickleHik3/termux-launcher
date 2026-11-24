@@ -326,8 +326,10 @@ pub struct Toplevel {
     /// The launcher's setVisible; drawn only while visible and with a window.
     visible: bool,
     view_size: Option<(i32, i32)>,
-    /// The display density the launcher shows this toplevel at.
+    /// The scale the launcher shows this toplevel at: its app's own, else the screen's density.
     scale: f64,
+    /// The output's integer scale, which a client that reads only `wl_output` draws at.
+    output_integer: i32,
     /// The last root commit's surface state, for mapping logical to buffer pixels.
     buffer_scale: i32,
     viewport_src: Option<RectF>,
@@ -462,6 +464,9 @@ pub struct State {
     pub output: Output,
     output_size: (i32, i32),
     output_scale: f64,
+    /// The scale X apps are told (XSETTINGS, `Xft.dpi`): the start scale, the screen's density.
+    /// One X server serves every X app, so no window's own scale moves it.
+    toolkit_scale: f64,
     pub toplevels: Vec<Toplevel>,
     /// The toplevel with keyboard focus, as the launcher set it.
     pub focused: Option<i64>,
@@ -669,6 +674,7 @@ fn setup(
         output,
         output_size,
         output_scale: config.scale,
+        toolkit_scale: config.scale,
         toplevels: Vec::new(),
         focused: None,
         popups: Vec::new(),
@@ -715,9 +721,23 @@ pub fn now_ms() -> u32 {
 }
 
 impl State {
-    /// The output's current scale: the newest one a toplevel was configured with.
-    pub fn output_scale(&self) -> f64 {
-        self.output_scale
+    /// The scale X apps under Xwayland are told; it never follows a window.
+    pub fn toolkit_scale(&self) -> f64 {
+        self.toolkit_scale
+    }
+
+    /// The one output's scale, which clients that know only `wl_output` draw at. Each toplevel
+    /// learns its integer, so its post limit leaves room for such a client's buffer.
+    fn set_output_scale(&mut self, scale: f64) {
+        if scale == self.output_scale {
+            return;
+        }
+        self.output_scale = scale;
+        self.output.change_current_state(None, None, Some(output_scale(scale)), None);
+        let integer = integer_scale(scale);
+        for t in &mut self.toplevels {
+            t.output_integer = integer;
+        }
     }
 
     pub fn insert_client(&mut self, stream: UnixStream) {
@@ -851,6 +871,9 @@ impl State {
         self.toplevels[i].visible = visible;
         if !visible {
             self.dismiss_popups(i);
+        } else if !self.toplevels[i].shell.is_x11() {
+            // The shown window's scale is the output's, for its clients that read only that.
+            self.set_output_scale(self.toplevels[i].scale);
         }
         // Shown again: what was committed while hidden is still dirty and is copied now.
         self.schedule();
@@ -880,18 +903,15 @@ impl State {
         self.schedule();
     }
 
-    /// Tells the toplevel's surfaces their preferred scale (fractional and integer), and the
-    /// output its scale: one display, so the newest density wins.
+    /// Tells a Wayland toplevel's surfaces their preferred scale (fractional, and integer through
+    /// `wl_surface.preferred_buffer_scale`), and the output its scale: one output, so the window
+    /// configured last wins it. X windows keep the X server's scale (`toolkit_scale`).
     fn apply_scale(&mut self, i: usize) {
-        let scale = self.toplevels[i].scale;
-        if scale != self.output_scale {
-            self.output_scale = scale;
-            self.output.change_current_state(None, None, Some(output_scale(scale)), None);
-            super::xwayland::set_toolkit_scale(self, scale);
-        }
         if self.toplevels[i].shell.is_x11() {
             return;
         }
+        let scale = self.toplevels[i].scale;
+        self.set_output_scale(scale);
         let Some(root) = self.toplevels[i].shell.wl_surface() else { return };
         with_surface_tree_downward(
             &root,
@@ -1632,6 +1652,7 @@ impl State {
             visible: true,
             view_size: None,
             scale: self.output_scale,
+            output_integer: integer_scale(self.output_scale),
             buffer_scale: 1,
             viewport_src: None,
             viewport_dst: None,
@@ -1819,12 +1840,12 @@ fn compose_into(
 }
 
 /// The view a toplevel's post limit is taken from: an X window is drawn in the view's pixels;
-/// a Wayland client may draw it at its integer scale (`integer_scale_view`).
+/// a Wayland client may draw it at its integer scale or the output's (`integer_scale_view`).
 fn post_view(t: &Toplevel) -> Option<(i32, i32)> {
     if t.shell.is_x11() {
         t.view_size
     } else {
-        integer_scale_view(t.view_size, t.scale)
+        integer_scale_view(t.view_size, t.scale, t.output_integer)
     }
 }
 

@@ -163,13 +163,15 @@ pub fn logical_size(px: (i32, i32), scale: f64) -> (i32, i32) {
 
 /// The size a client that knows only integer scales draws a `view` at: it gets the rounded-up
 /// `integer_scale` and a logical size of view / `scale`, so its buffer is the view times
-/// integer / fractional (1.2 at scale 2.5, 1.6 at 1.25). That is the view the post limit is taken
-/// from, so such a window is shown whole (the view scales it down) rather than cut. A client on
-/// fractional scale draws the view itself and posts within it either way.
-pub fn integer_scale_view(view: Option<(i32, i32)>, scale: f64) -> Option<(i32, i32)> {
+/// integer / fractional (1.2 at scale 2.5, 1.6 at 1.25). A client that reads only the output's
+/// integer (`output_integer`, which may be another window's) draws at that instead, so the larger
+/// of the two is allowed. That is the view the post limit is taken from, so such a window is shown
+/// whole (the view scales it down) rather than cut. A client on fractional scale draws the view
+/// itself and posts within it either way.
+pub fn integer_scale_view(view: Option<(i32, i32)>, scale: f64, output_integer: i32) -> Option<(i32, i32)> {
     let (w, h) = view?;
     let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
-    let k = (integer_scale(s) as f64 / s).max(1.0);
+    let k = (integer_scale(s).max(output_integer) as f64 / s).max(1.0);
     let grow = |v: i32| ((v as f64) * k).ceil().min(i32::MAX as f64) as i32;
     Some((grow(w), grow(h)))
 }
@@ -340,19 +342,28 @@ mod tests {
         // The plain view's limit would cut its right and bottom edges.
         let plain = post_limit(view, (1080, 2412));
         assert!(plain.0 < buffer.0 && plain.1 < buffer.1);
-        let limit = post_limit(integer_scale_view(view, 2.5), (1080, 2412));
+        let limit = post_limit(integer_scale_view(view, 2.5, 3), (1080, 2412));
         assert_eq!(clamp_to_limit((0, 0, buffer.0, buffer.1), limit), (0, 0, 1296, 2640));
     }
 
     #[test]
     fn whole_scales_and_bad_scales_keep_the_view() {
-        assert_eq!(integer_scale_view(Some((1080, 2200)), 1.0), Some((1080, 2200)));
-        assert_eq!(integer_scale_view(Some((1080, 2200)), 3.0), Some((1080, 2200)));
-        assert_eq!(integer_scale_view(Some((1080, 2200)), f64::NAN), Some((1080, 2200)));
-        assert_eq!(integer_scale_view(None, 2.5), None);
+        assert_eq!(integer_scale_view(Some((1080, 2200)), 1.0, 1), Some((1080, 2200)));
+        assert_eq!(integer_scale_view(Some((1080, 2200)), 3.0, 3), Some((1080, 2200)));
+        assert_eq!(integer_scale_view(Some((1080, 2200)), f64::NAN, 1), Some((1080, 2200)));
+        assert_eq!(integer_scale_view(None, 2.5, 3), None);
         // Below one the client still draws at one: never a smaller limit.
-        assert_eq!(integer_scale_view(Some((100, 100)), 0.5), Some((200, 200)));
-        assert_eq!(integer_scale_view(Some((100, 100)), 1.25), Some((160, 160)));
+        assert_eq!(integer_scale_view(Some((100, 100)), 0.5, 1), Some((200, 200)));
+        assert_eq!(integer_scale_view(Some((100, 100)), 1.25, 2), Some((160, 160)));
+    }
+
+    #[test]
+    fn a_window_below_the_outputs_scale_leaves_room_for_the_outputs_integer() {
+        // An app at 1.25 on an output at 2.5: a client that reads only wl_output draws at 3, a
+        // buffer 2.4 times the view, which is shown whole rather than cut.
+        assert_eq!(integer_scale_view(Some((100, 100)), 1.25, 3), Some((240, 240)));
+        // An output below the window's own integer changes nothing.
+        assert_eq!(integer_scale_view(Some((100, 100)), 2.5, 1), Some((120, 120)));
     }
 
     #[test]

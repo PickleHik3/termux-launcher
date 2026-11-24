@@ -100,6 +100,12 @@ final class LinuxAppWindowMatcher {
         return list == null || list.isEmpty() ? -1L : list.get(0);
     }
 
+    /** The key window {@code id} belongs to, or null when it is not matched to a launch. */
+    @Nullable
+    String keyFor(long id) {
+        return owner.get(id);
+    }
+
     /** The host's windows are being replayed: forget them, keep what was launched. */
     void clearWindows() {
         owner.clear();

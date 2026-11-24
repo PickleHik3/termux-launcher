@@ -135,6 +135,17 @@ public class X11AppPreferencesFragmentTest {
         assertNull(store.touchMode(ID));
     }
 
+    /** The Scale row offers the scale rail's stops, so the row and the rail always agree. */
+    @Test
+    public void theScaleRowOffersTheRailsStops() {
+        java.util.List<String> values = new java.util.ArrayList<>(java.util.Arrays.asList(
+            context.getResources().getStringArray(R.array.settings_x11_app_scale_values)));
+        assertEquals(X11AppPreferencesFragment.FOLLOW, values.remove(0));
+        assertEquals(com.termux.app.x11.X11AppSettings.SCALES, values);
+        assertEquals(values.size() + 1,
+            context.getResources().getStringArray(R.array.settings_x11_app_scale_entries).length);
+    }
+
     @Test
     public void scaleWritesAndFollowClears() {
         X11AppPreferencesFragment page = launch(forApp());
