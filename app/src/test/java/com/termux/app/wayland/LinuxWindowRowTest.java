@@ -57,6 +57,23 @@ public class LinuxWindowRowTest {
     }
 
     @Test
+    public void theBandAndTabStandBelowTheStatusRowsRoom() {
+        float d = 2.625f;
+        int room = 42;
+        Rect flat = new Rect();
+        Rect held = new Rect();
+        LinuxWindowRow.tabRect(1080, 60f, d, flat);
+        LinuxWindowRow.tabRect(1080, 60f, d, room, held);
+        assertEquals(flat.top + room, held.top);
+        assertEquals(flat.left, held.left);
+        assertEquals(flat.height(), held.height());
+        assertTrue(held.bottom <= LinuxWindowRow.slotTopPx(d, room));
+        assertEquals(LinuxWindowRow.bandPx(d), LinuxWindowRow.slotTopPx(d, 0));
+        assertEquals(LinuxWindowRow.bandPx(d) + room, LinuxWindowRow.slotTopPx(d, room));
+        assertEquals(LinuxWindowRow.slotTopPx(d, 0), LinuxWindowRow.slotTopPx(d, -5));
+    }
+
+    @Test
     public void aDialogIsCentredOverItsParentAndNeverLarger() {
         int[] out = new int[4];
         LinuxWindowRow.dialogFrame(1000, 2000, 600, 400, out);

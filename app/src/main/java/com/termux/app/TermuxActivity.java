@@ -18018,7 +18018,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
 
                 @Override public void setPaneStatusRowPx(int px) {
+                    mStatusRowRoomPx = px;
                     if (mPaneController != null) mPaneController.setStatusRowPx(px);
+                    if (mLinuxWindows != null) mLinuxWindows.page().setTopInsetPx(px);
                 }
 
                 @Override public boolean isReducedMotionEnabled() {
@@ -31202,10 +31204,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return apps == null ? null : apps.nameFor(appId);
                 }
             });
+        mLinuxWindows.page().setTopInsetPx(mStatusRowRoomPx);
         mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows, this::syncLinuxFront);
         com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
         mLinuxWindows.start();
     }
+
+    /** The room the Terminal's top pane holds for the status row; a Linux window's page holds the same. */
+    private int mStatusRowRoomPx;
 
     /** The Linux window {@link #syncLinuxFront} last stood in front; 0 for none. */
     private long mLinuxFrontSynced;

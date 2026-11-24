@@ -65,6 +65,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @NonNull private final Host host;
     @Nullable private PaneSurfaceStyle style;
     private float radiusPx;
+    /** The status row's room at the top, as the Terminal's top pane holds it. */
+    private int topInsetPx;
 
     public LinuxWindowPageView(@NonNull Context context, @NonNull Host host) {
         super(context);
@@ -79,7 +81,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         slot = new FrameLayout(context);
         LayoutParams slotParams = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT);
-        slotParams.topMargin = LinuxWindowRow.bandPx(getResources().getDisplayMetrics().density);
+        slotParams.topMargin = LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
+            topInsetPx);
         addView(slot, slotParams);
         tab = new ImageView(context);
         tab.setScaleType(ImageView.ScaleType.CENTER_INSIDE);
@@ -93,6 +96,24 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         addView(railView, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
             ViewGroup.LayoutParams.MATCH_PARENT));
         applyStyle(null);
+    }
+
+    /**
+     * Holds the band, the tab and the app's slot {@code px} below the top, where the status bar
+     * stands as the row in the pane (the room the Terminal's top pane holds: PaneRowPolicy
+     * .paneTopInsetPx); 0 gives it back. Compares first; lays out only on a change.
+     */
+    public void setTopInsetPx(int px) {
+        int inset = Math.max(0, px);
+        if (inset == topInsetPx) return;
+        topInsetPx = inset;
+        LayoutParams lp = (LayoutParams) slot.getLayoutParams();
+        int top = LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density, inset);
+        if (lp.topMargin != top) {
+            lp.topMargin = top;
+            slot.setLayoutParams(lp);
+        }
+        placeTab();
     }
 
     /** Where the controller puts the bound window's views. */
@@ -137,7 +158,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     /** Sizes the tab from {@link LinuxWindowRow#tabRect}; compares first, so no layout loop. */
     private void placeTab() {
         if (getWidth() <= 0) return;
-        LinuxWindowRow.tabRect(getWidth(), radiusPx, getResources().getDisplayMetrics().density, tabRect);
+        LinuxWindowRow.tabRect(getWidth(), radiusPx, getResources().getDisplayMetrics().density,
+            topInsetPx, tabRect);
         LayoutParams lp = (LayoutParams) tab.getLayoutParams();
         if (lp.width == tabRect.width() && lp.height == tabRect.height()
             && lp.leftMargin == tabRect.left && lp.topMargin == tabRect.top) return;
