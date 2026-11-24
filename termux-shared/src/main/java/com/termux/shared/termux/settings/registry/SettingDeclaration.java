@@ -109,10 +109,15 @@ public final class SettingDeclaration {
         return storedChoices.get(mDefaultChoice);
     }
 
-    /** {@code stored} when it is one this choice holds, else the default's: a choice's clamp. */
+    /**
+     * {@code stored}, trimmed and in lower case, when it is one this choice holds, else the
+     * default's: a choice's clamp. A hand-edited termux.properties may say {@code True}.
+     */
     @NonNull
     public String storedChoiceOrDefault(@Nullable String stored) {
-        return stored != null && storedChoices.contains(stored) ? stored : defaultStoredChoice();
+        if (stored == null) return defaultStoredChoice();
+        String value = stored.trim().toLowerCase(Locale.ROOT);
+        return storedChoices.contains(value) ? value : defaultStoredChoice();
     }
 
     /** The default, as text. */

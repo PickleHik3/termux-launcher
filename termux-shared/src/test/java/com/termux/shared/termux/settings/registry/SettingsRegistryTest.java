@@ -25,6 +25,8 @@ public class SettingsRegistryTest {
         assertEquals("system", registry.get("theme.mode"));
         store.putString("night-mode", "true");
         assertEquals("dark", registry.get("theme.mode"));
+        store.putString("night-mode", " False");
+        assertEquals("light", registry.get("theme.mode"));
         assertEquals("default", registry.get("terminal.contrast"));
     }
 
