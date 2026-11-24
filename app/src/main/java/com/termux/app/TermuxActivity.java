@@ -3373,6 +3373,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
+        endStatusRowEnlargement();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();
@@ -17904,6 +17905,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController == null ? null : mPaneWallController.wall();
         boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
             mLastWallPage, wall.isMoving(), wall.offsetPx(), wall.currentPage());
+        // A wall that leaves its rest takes the enlarged row with it: it settles before the page
+        // starts to move.
+        if (!atRest && mStatusPresentation.isRow()) endStatusRowEnlargement();
         com.termux.app.wall.PageRef other = mCrossing == null ? null : mCrossing.seam().otherEnd();
         boolean homeInView = mLastWallPage == com.termux.app.page.PageKind.HOME
             || (wall != null && wall.currentPage() == com.termux.app.page.PageKind.HOME)
@@ -17922,24 +17926,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             host.setExpansionAllowed(!row && com.termux.app.statusbar.StatusBarGesturePolicy
                 .expansionAllowed(host.edge()));
             host.setRowPresented(row);
+            if (row) wireRowEnlargement(host);
         }
-        float density = getResources().getDisplayMetrics().density;
-        com.termux.app.statusbar.MarksLineView marks = findViewById(R.id.terminal_status_marks_row);
-        if (marks != null)
-            marks.setMarkCapPx(row ? com.termux.app.statusbar.PaneRowPolicy.MARK_DP * density : 0f);
-        // The readings at the row's size, scaled about their end so they keep their place.
-        View readings = findViewById(R.id.terminal_status_widgets);
-        if (readings != null) {
-            float scale = row ? com.termux.app.statusbar.PaneRowPolicy.READING_SP
-                / com.termux.app.statusbar.StatusBarInk.SIZE_TERTIARY_SP : 1f;
-            readings.setPivotX(readings.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
-                ? 0f : readings.getWidth());
-            readings.setPivotY(readings.getHeight() / 2f);
-            if (readings.getScaleX() != scale) {
-                readings.setScaleX(scale);
-                readings.setScaleY(scale);
-            }
-        }
+        applyRowSizes(row, false);
         // The sessions indicator stands in the strip only, as syncPlaceBar decides it too.
         View sessions = findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
@@ -17949,6 +17938,61 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         syncStatusRowPlace();
         // The chips stand in the strip only (chipsKeptAway).
         refreshTerminalWindowBar();
+    }
+
+    /**
+     * The row's marks and readings at the size the row has: thin at rest (12dp marks, readings at
+     * 9sp scaled about their end so they keep their place), and while enlarged the full 18dp marks
+     * with the readings at their own size. The strip takes neither cap nor scale.
+     */
+    private void applyRowSizes(boolean row, boolean enlarged) {
+        float density = getResources().getDisplayMetrics().density;
+        com.termux.app.statusbar.MarksLineView marks = findViewById(R.id.terminal_status_marks_row);
+        if (marks != null) {
+            marks.setMarkCapPx(!row ? 0f : (enlarged
+                ? com.termux.app.statusbar.PaneRowPolicy.ENLARGED_MARK_DP
+                : com.termux.app.statusbar.PaneRowPolicy.MARK_DP) * density);
+        }
+        View readings = findViewById(R.id.terminal_status_widgets);
+        if (readings != null) {
+            float scale = row && !enlarged ? com.termux.app.statusbar.PaneRowPolicy.READING_SP
+                / com.termux.app.statusbar.StatusBarInk.SIZE_TERTIARY_SP : 1f;
+            readings.setPivotX(readings.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
+                ? 0f : readings.getWidth());
+            readings.setPivotY(readings.getHeight() / 2f);
+            if (readings.getScaleX() != scale) {
+                readings.setScaleX(scale);
+                readings.setScaleY(scale);
+            }
+        }
+    }
+
+    /** Hooks the host's enlarged row to the sizes above, the ground, and reduced motion. */
+    private void wireRowEnlargement(@NonNull com.termux.app.statusbar.StatusBarSwipeLayout host) {
+        host.setRowReducedMotion(this::isReducedMotionEnabled);
+        host.setRowEnlargeListener(enlarged -> applyRowSizes(true, enlarged));
+        syncRowGround(host);
+    }
+
+    /**
+     * The enlarged row's solid ground: the surface colour on a terminal page, and the Display
+     * page's dark band made opaque, whose ink the row already reads on.
+     */
+    private void syncRowGround(@NonNull com.termux.app.statusbar.StatusBarSwipeLayout host) {
+        if (mLastWallPage == com.termux.app.page.PageKind.DISPLAY) {
+            host.setRowGround(com.termux.app.statusbar.PaneRowPolicy.DISPLAY_BAND_ARGB | 0xFF000000);
+        } else {
+            host.setRowGround(getTermuxThemeColor(
+                com.termux.shared.R.attr.termuxColorSurfaceBase, R.color.termux_surface_base)
+                | 0xFF000000);
+        }
+    }
+
+    /** Settles the enlarged thin row at once (page change, wall moving, pause). */
+    private void endStatusRowEnlargement() {
+        View hostView = findViewById(R.id.terminal_window_bar_host);
+        if (hostView instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
+            ((com.termux.app.statusbar.StatusBarSwipeLayout) hostView).endEnlargement(false);
     }
 
     private final int[] mStatusRowOrigin = new int[2];
@@ -17991,7 +18035,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 frame.requestedRadiusPx(), frame.getWidth(), frame.getHeight());
         }
         if (pane == null || pane.getWidth() <= 0) {
-            host.setRowRect(0, 0, 0, 0, 0, 0);
+            host.setRowRect(0, 0, 0, 0, 0);
             return;
         }
         float density = getResources().getDisplayMetrics().density;
@@ -18008,14 +18052,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int right = left + pane.getWidth();
         int band = display ? com.termux.app.statusbar.PaneRowPolicy.DISPLAY_BAND_ARGB : 0;
         // The display's band spans its whole top edge; the row's content keeps its insets.
-        int touchAbove = Math.round(com.termux.app.statusbar.PaneRowPolicy.TOUCH_ABOVE_DP
-            * density);
         if (display) {
-            host.setRowRect(left, top, right, top + rowPx, band, touchAbove);
+            host.setRowRect(left, top, right, top + rowPx, band);
         } else {
             host.setRowRect(left + (rtl ? end : start), top, right - (rtl ? start : end),
-                top + rowPx, band, touchAbove);
+                top + rowPx, band);
         }
+        syncRowGround(host);
     }
 
     /**
@@ -25195,6 +25238,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         flushLandingRestyle();
         com.termux.app.page.PageKind left = mLastWallPage;
         mLastWallPage = page;
+        // The enlarged thin row always ends with the page it was pressed on.
+        endStatusRowEnlargement();
         // The dock is dressed once in the commit: a dress the place pass makes is noted, and the
         // Dock design step below finds it worn (CommitDockDress).
         mDock.commitDockDress().begin();

@@ -121,4 +121,48 @@ public class PaneRowPolicyTest {
         assertEquals(arc, PaneRowPolicy.arcInsetPx(radius, row / 2f));
         assertEquals(0, PaneRowPolicy.arcInsetPx(radius, radius + 1f));
     }
+
+    // ---- the enlarged row (#334) -----------------------------------------------------------
+
+    @Test
+    public void theEnlargedRowIs32dpWithFullSizeMarks() {
+        assertEquals(32f, PaneRowPolicy.ENLARGED_HEIGHT_DP, 0f);
+        assertEquals(18f, PaneRowPolicy.ENLARGED_MARK_DP, 0f);
+        assertEquals(88, PaneRowPolicy.enlargedHeightPx(DENSITY));
+    }
+
+    @Test
+    public void enlargingNeverChangesWhatTheTerminalGivesUp() {
+        int rest = PaneRowPolicy.rowHeightPx(DENSITY);
+        int before = PaneRowPolicy.room(true, true, STRIP_PX, rest).totalPx();
+        assertEquals(100 + rest, PaneRowPolicy.rowBottomPx(100, DENSITY, false));
+        assertEquals(100 + PaneRowPolicy.enlargedHeightPx(DENSITY),
+            PaneRowPolicy.rowBottomPx(100, DENSITY, true));
+        assertEquals(before, PaneRowPolicy.room(true, true, STRIP_PX, rest).totalPx());
+        assertEquals(rest, PaneRowPolicy.paneTopInsetPx(true, true, rest));
+    }
+
+    @Test
+    public void atRestTheRowReachesAboveItAndNeverIntoTheFirstTextRow() {
+        int top = 100;
+        int bottom = PaneRowPolicy.rowBottomPx(top, DENSITY, false);
+        int above = Math.round(PaneRowPolicy.TOUCH_ABOVE_DP * DENSITY);
+        assertTrue(PaneRowPolicy.hitsRow(50f, top - above, 0, top, 400, DENSITY, false));
+        assertFalse(PaneRowPolicy.hitsRow(50f, top - above - 1, 0, top, 400, DENSITY, false));
+        assertTrue(PaneRowPolicy.hitsRow(50f, bottom - 1, 0, top, 400, DENSITY, false));
+        // The terminal's first row starts where the pane's inset ends: the row's bottom.
+        assertFalse(PaneRowPolicy.hitsRow(50f, bottom, 0, top, 400, DENSITY, false));
+        assertFalse(PaneRowPolicy.hitsRow(-1f, top, 0, top, 400, DENSITY, false));
+        assertFalse(PaneRowPolicy.hitsRow(400f, top, 0, top, 400, DENSITY, false));
+    }
+
+    @Test
+    public void enlargedTheRowAlsoReachesALittleBelowItself() {
+        int top = 100;
+        int bottom = PaneRowPolicy.rowBottomPx(top, DENSITY, true);
+        int below = Math.round(PaneRowPolicy.TOUCH_BELOW_ENLARGED_DP * DENSITY);
+        assertEquals(6f, PaneRowPolicy.TOUCH_BELOW_ENLARGED_DP, 0f);
+        assertTrue(PaneRowPolicy.hitsRow(50f, bottom + below - 1, 0, top, 400, DENSITY, true));
+        assertFalse(PaneRowPolicy.hitsRow(50f, bottom + below, 0, top, 400, DENSITY, true));
+    }
 }
