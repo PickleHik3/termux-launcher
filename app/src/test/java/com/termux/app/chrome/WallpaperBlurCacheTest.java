@@ -464,6 +464,44 @@ public class WallpaperBlurCacheTest {
     }
 
     @Test
+    public void whileTheProgramOwnsTheColourTheFramesBakeNone() {
+        source.colourOnDraw = true;
+        source.vibrancyPercent = 140;
+        source.frameTint = GlassFrameTint.of(60, 10, 0xFF4F378B, 0xFFD0BCFF);
+        cache.obtain(8, wallpaperFrame);
+        assertEquals("the raw blur", 100, cache.bakedVibrancy());
+        assertEquals(GlassFrameTint.NONE, cache.bakedFrameTint());
+        assertEquals("what the program applies", 140, cache.glassVibrancyPercent());
+        assertEquals(source.frameTint, cache.glassFrameTint());
+        assertTrue(cache.glassColourOnDraw());
+
+        // A colour change re-blurs nothing: the frames never carried it (#321).
+        int blurs = cache.blursRun();
+        source.vibrancyPercent = 80;
+        cache.obtain(8, wallpaperFrame);
+        assertEquals(blurs, cache.blursRun());
+        assertEquals(80, cache.glassVibrancyPercent());
+
+        // The plain draw has no program: the frames carry the colour again.
+        source.colourOnDraw = false;
+        cache.obtain(8, wallpaperFrame);
+        assertEquals(80, cache.bakedVibrancy());
+        assertEquals(source.frameTint, cache.bakedFrameTint());
+    }
+
+    @Test
+    public void aHeldColourStaysUntilTheRelease() {
+        source.colourOnDraw = true;
+        source.vibrancyPercent = 120;
+        assertEquals(120, cache.glassVibrancyPercent());
+        cache.holdFrameBakes(true);
+        source.vibrancyPercent = 90;
+        assertEquals("a drag re-dresses nothing", 120, cache.glassVibrancyPercent());
+        cache.holdFrameBakes(false);
+        assertEquals(90, cache.glassVibrancyPercent());
+    }
+
+    @Test
     public void withoutRetentionACaptureLivesOnlyAsLongAsItsJob() {
         cache.obtain(8, wallpaperFrame);
 

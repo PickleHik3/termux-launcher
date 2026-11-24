@@ -118,6 +118,14 @@ final class FakeWallpaperBlurSource implements WallpaperBlurCache.Source {
         return vibrancyPercent;
     }
 
+    /** True to play Fancier Glass on: the program owns the colour and the frames bake none. */
+    boolean colourOnDraw;
+
+    @Override
+    public boolean glassColourOnDraw() {
+        return colourOnDraw;
+    }
+
     /** Whether frames are published as HARDWARE twins; off unless a test sets it. */
     boolean hardwareFrames;
 

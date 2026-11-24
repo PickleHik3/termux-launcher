@@ -106,7 +106,7 @@ final class SetupState {
         void refresh();
     }
 
-    /** SurfacePresets ids: Clear, Mist, Tint, Solid. */
+    /** SurfacePresets ids: Clear (minimal), Frosted (frost), Tinted (stock), Solid. */
     static final String LOOK_CLEAR = "minimal";
     static final String LOOK_MIST = "frost";
     static final String LOOK_TINT = "stock";

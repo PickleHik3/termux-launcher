@@ -22,6 +22,7 @@ import com.termux.app.chrome.GlassFilters;
 import com.termux.app.chrome.GlassMotionGate;
 import com.termux.app.chrome.GlassPose;
 import com.termux.app.chrome.GlassRefraction;
+import com.termux.app.chrome.GlassSource;
 import com.termux.app.chrome.LiveGlassEffect;
 import com.termux.app.chrome.LivePicture;
 import com.termux.app.chrome.SlabAim;
@@ -65,9 +66,11 @@ import com.termux.app.chrome.scene.LiveSceneFrame;
  */
 public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdge, LiveSceneFrame.Surface {
 
-    private static final int NOT_LIVE = -1;
-    /** The live scene frame the paint was last pointed at, or {@link #NOT_LIVE}: the still frame is bound. */
-    private int mLiveGen = NOT_LIVE;
+    /**
+     * What this draw reads ({@link GlassSource}): the live picture, the scene's live frame or the
+     * stored frame, and which frame the paint holds.
+     */
+    @NonNull private final GlassSource mSource = new GlassSource();
 
     /** Frame-source counter for the idle audit: paneGlass.pose. */
     private static final com.termux.terminal.FrameProbe.Source PANEGLASS_POSE = com.termux.terminal.FrameProbe.source("paneGlass.pose");
@@ -706,7 +709,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         mClearFrame = live;
         mClearShader = live == null
             ? null : new BitmapShader(live, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        mLiveGen = NOT_LIVE;
+        mSource.storedBound();
         syncClarity();
         invalidate();
     }
@@ -792,7 +795,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
 
     private void syncProgram() {
         mLastAimShader = null;
-        mLiveGen = NOT_LIVE;
+        mSource.storedBound();
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mFrameShader;
         if (look == null || shader == null || mCornerMaskRadiusPx > 0f || !GlassRefraction.available()) {
@@ -1154,8 +1157,16 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // A software canvas refuses a RuntimeShader (a RealtimeBlurView capturing the window is
         // one), so the refracted frame sits that pass out; it only feeds another view's blur.
         LiveSceneFrame.Frame liveFrame = LiveSceneFrame.current();
+        // One source for this draw: the live picture where its node can be drawn, else the scene's
+        // live frame, else the stored frame.
+        GlassSource source = mSource;
+        float storedParallax = mParallax == null ? 0f : mParallax.offsetPx();
+        boolean liveShown = mCornerMaskRadiusPx <= 0f && showsLive()
+            && canvas instanceof android.graphics.RecordingCanvas;
+        int kind = source.select(liveShown, liveFrame, mFrame, mFrameShader, mFrameRect,
+            storedParallax);
         // The live frame is a hardware bitmap, which a software canvas refuses outright.
-        if (skipsFrame(liveFrame != null, canvas.isHardwareAccelerated())) {
+        if (kind == GlassSource.SCENE && skipsFrame(true, canvas.isHardwareAccelerated())) {
             // Only the frame sits out: the tint, veil, grain and rim still go over the ground the
             // departure card painted, so the card is as dark as the pane it replaces. The frame
             // goes under them plain, through the slab's own filter, aimed as the live frame is.
@@ -1169,9 +1180,14 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
             return;
         }
         // The scene went off: the still frame goes back on the paint.
-        if (liveFrame == null && mLiveGen != NOT_LIVE) syncRefraction();
+        if (kind != GlassSource.SCENE && source.takeRebind()) syncRefraction();
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
-        boolean live = mCornerMaskRadiusPx <= 0f && drawLive(canvas, width, height);
+        boolean live = kind == GlassSource.LIVE && drawLive(canvas, width, height);
+        if (kind == GlassSource.LIVE && !live) {
+            // The phone refused the live effect: the frame this slab holds instead. A second
+            // select, with liveShown false, overwrites the first one's kind and fields.
+            kind = source.select(false, liveFrame, mFrame, mFrameShader, mFrameRect, storedParallax);
+        }
         if (com.termux.app.chrome.MotionLog.enabled) diagRoute(live, canvas); // DIAG(slab-route)
         if (!live) retireLiveNode(canvas);
         // Any frame the paint may sample held in GPU memory keeps a software canvas off the paint.
@@ -1185,20 +1201,17 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         }
         if (!live && mFrame != null && !mFrame.isRecycled() && mFrameShader != null
                 && drawsOnPaint(mProgram != null, canvas.isHardwareAccelerated(), hardwareFrame)) {
-            BitmapShader aimShader = mFrameShader;
-            Bitmap aimFrame = mFrame;
-            Rect aimRect = mFrameRect;
-            if (liveFrame != null) {
-                // The wallpaper scene's live frame instead of the still one: one shader shared by
-                // every surface, so its matrix is re-aimed on every draw. No crossfade, no parallax.
-                if (mLiveGen != liveFrame.generation) {
-                    mLiveGen = liveFrame.generation;
-                    if (mProgram != null) mProgram.setInput(liveFrame.shader);
-                    else mFramePaint.setShader(liveFrame.shader);
+            // The selected frame: the stored one, or the wallpaper scene's live frame, one shader
+            // shared by every surface, so its matrix is re-aimed on every draw. Only the stored
+            // frame pans and crossfades.
+            BitmapShader aimShader = source.shader();
+            Bitmap aimFrame = source.bitmap();
+            Rect aimRect = source.rect();
+            if (kind == GlassSource.SCENE) {
+                if (source.takeRebind()) {
+                    if (mProgram != null) mProgram.setInput(aimShader);
+                    else mFramePaint.setShader(aimShader);
                 }
-                aimShader = liveFrame.shader;
-                aimFrame = liveFrame.bitmap;
-                aimRect = LiveSceneFrame.rect();
                 mAimStale = true;
                 LiveSceneFrame.noteDrawn(this);
             }
@@ -1213,7 +1226,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 mFilterKeptBrightness = kept;
                 applyFrameFilter(kept);
             }
-            float parallax = mParallax == null || liveFrame != null ? 0f : mParallax.offsetPx();
+            float parallax = source.parallaxPx();
             GlassRefraction.Program program = mProgram;
             if (program != null && movesWithPose()) {
                 // The page's pose, never its speed: a turn or a scale changes the glass as it
@@ -1265,7 +1278,7 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
                 }
             }
             float progress = mCrossfade.progress();
-            boolean fading = liveFrame == null && progress < 1f && mPreviousFrame != null
+            boolean fading = source.crossfades() && progress < 1f && mPreviousFrame != null
                 && !mPreviousFrame.isRecycled()
                 && mPreviousFrameShader != null
                 && mPreviousFrame.getWidth() == mFrame.getWidth()

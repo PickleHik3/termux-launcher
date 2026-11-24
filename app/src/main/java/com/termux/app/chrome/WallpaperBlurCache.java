@@ -111,6 +111,17 @@ public final class WallpaperBlurCache {
         }
 
         /**
+         * True while the glass program draws the backdrop (Fancier Glass on) and applies
+         * Vibrancy and the frame tint itself ({@link GlassRefraction.Look#withColour}): the frames
+         * then stay the raw blur, so a stored frame and a live picture hand the program the same
+         * picture. False, the default, bakes both into the frames for the plain draw, which has
+         * no program to apply them.
+         */
+        default boolean glassColourOnDraw() {
+            return false;
+        }
+
+        /**
          * True to publish each frame as a {@code HARDWARE} twin with a small sampling copy
          * ({@link HardwareFrame}) instead of the full-size software bitmap: the glass draws it as a
          * texture uploaded once rather than on every frame. Off by default, so a source that never
@@ -219,7 +230,12 @@ public final class WallpaperBlurCache {
     private long mManagedLastModified = -1L;
     private long mManagedLength = -1L;
     /** The Vibrancy the resident frames were baked at. */
-    private int mVibrancy = 100;
+    private int mVibrancy = GlassVibrancy.NO_VIBRANCY;
+    /**
+     * The glass's colour now ({@link #glassVibrancyPercent}, {@link #glassFrameTint}): the
+     * source's, kept as it was while the bakes are held.
+     */
+    @NonNull private GlassColour mColour = GlassColour.NONE;
     /** The frame tint the resident frames were baked with. */
     private int mFrameTint = GlassFrameTint.NONE;
     /** While true, a new frame tint waits: frames keep, and new radii take, {@link #mFrameTint}. */
@@ -441,14 +457,42 @@ public final class WallpaperBlurCache {
         return frame != null && mByRadius.containsValue(frame);
     }
 
-    /** The Vibrancy the resident frames were baked at; what a live picture matches. */
+    /** The Vibrancy the resident frames were baked at: 100 while the program owns the colour. */
     public int bakedVibrancy() {
         return mVibrancy;
     }
 
-    /** The frame tint the resident frames were baked with; what a live picture matches. */
+    /** The frame tint the resident frames were baked with: none while the program owns the colour. */
     public int bakedFrameTint() {
         return mFrameTint;
+    }
+
+    /**
+     * The Vibrancy the glass wears now, percent, baked into the frames or applied by the program
+     * ({@link Source#glassColourOnDraw}); held while the bakes are held, so a slider drag
+     * re-dresses nothing until its release.
+     */
+    public int glassVibrancyPercent() {
+        refreshColour();
+        return mColour.vibrancyPercent;
+    }
+
+    /** The frame tint the glass wears now; see {@link #glassVibrancyPercent}. */
+    public int glassFrameTint() {
+        refreshColour();
+        return mColour.frameTint;
+    }
+
+    /** True while the program applies the glass's colour and the frames stay the raw blur. */
+    public boolean glassColourOnDraw() {
+        return mSource.glassColourOnDraw();
+    }
+
+    private void refreshColour() {
+        if (mFrameBakesHeld) return;
+        int vibrancy = mSource.glassVibrancyPercent();
+        int tint = mSource.glassFrameTint();
+        if (!mColour.is(vibrancy, tint)) mColour = GlassColour.of(vibrancy, tint);
     }
 
     /**
@@ -508,10 +552,14 @@ public final class WallpaperBlurCache {
         long managedLastModified = managedSource ? mSource.managedWallpaperLastModified() : -1L;
         long managedLength = managedSource ? mSource.managedWallpaperLength() : -1L;
         // A new Vibrancy or frame tint makes every resident frame wrong, as a new wallpaper does;
-        // held, both wait for the release and the frames keep what they were baked at.
+        // held, both wait for the release and the frames keep what they were baked at. While the
+        // program applies them the frames bake neither.
+        refreshColour();
+        final boolean onDraw = !mFrameBakesHeld && mSource.glassColourOnDraw();
         final int vibrancy = mFrameBakesHeld ? mVibrancy
-            : GlassVibrancy.clampPercent(mSource.glassVibrancyPercent());
-        final int frameTint = mFrameBakesHeld ? mFrameTint : mSource.glassFrameTint();
+            : onDraw ? GlassVibrancy.NO_VIBRANCY : mColour.vibrancyPercent;
+        final int frameTint = mFrameBakesHeld ? mFrameTint
+            : onDraw ? GlassFrameTint.NONE : mColour.frameTint;
         boolean sameSource = sourceStillMatches(frameRect, managedSource, systemWallpaperId,
             managedLastModified, managedLength);
         boolean sourceValid = sameSource && vibrancy == mVibrancy && frameTint == mFrameTint;

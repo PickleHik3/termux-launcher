@@ -163,6 +163,8 @@ public final class GlassEffects {
             if (program == null) {
                 program = GlassRefraction.Program.create(mHost.density());
                 mDockRefraction = program;
+                // The backdrop view draws the stored frame alone: it takes the glass's colour.
+                if (program != null) program.setBackdropContent(true);
             }
             if (program == null) {
                 return null;

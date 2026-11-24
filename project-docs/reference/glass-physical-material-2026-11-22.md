@@ -1,6 +1,7 @@
 # Glass as a physical material: spec
 
-Status: agreed with the developer 2026-11-22 (grilling session). Decision record:
+Status: delivered. Agreed with the developer 2026-11-22 (grilling session); both halves shipped
+(tickets #313-#323, 2026-11-24), with tuning on pong still owed. Decision record:
 [ADR 0033](../../docs/adr/0033-glass-is-a-physical-material.md). Research and code citations:
 [`docs/research/glass-realism-2026-11-22.md`](../../docs/research/glass-realism-2026-11-22.md)
 (§2 today's glass, §4 proposals, §5 what to remove, §6 target architecture). Branch work

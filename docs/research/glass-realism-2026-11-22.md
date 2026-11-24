@@ -355,6 +355,50 @@ Each row says what the piece compensates for, whether the physical model of §4(
 
 The concave page-bar lens (`chrome/GlassRefraction.java:1099-1112`), the dock's soft rim and shelf, lens beads, A–Z letter beads and the key lens (`chrome/GlassRefraction.java:755-793, 1040-1076, 1143-1164, 1223-1239`) are features. Under (b) each becomes a different height field over the same lighting. The beads move to a smooth union (§4(d) item 2). `EvenOut`, `LowOpacityGlass`, `GlassInk` and the face dim are legibility, not optics, and stay.
 
+### 5.4 Status 2026-11-24 (#322)
+
+Each row of §5.1 and §5.2 checked against the code at `cde51585c` (#320 and #321 merged) and after #322. "Gone" names the commit that removed it; "kept" gives the reason. Line numbers in the tables above are from 2026-11-22 and no longer match.
+
+| Row | Status | Commit or reason |
+|---|---|---|
+| §5.1 Colour gain on the backdrop | Gone | `6d14fdc96` (thin rim in linear light) |
+| §5.1 `uEdgeGain` / `REFERENCE_COVER` / `MAX_EDGE_GAIN` / `withCover` | Gone | `6d14fdc96` |
+| §5.1 `heldK` | Gone | `6d14fdc96` |
+| §5.1 `kPaleCut` | Gone | `6d14fdc96` |
+| §5.1 `kLift` grey | Gone | `6d14fdc96` |
+| §5.1 `kEdgeShade` / `kLiveEdgeShade` | Gone | `6d14fdc96`; the rim's dark line (`GlassRim` `dark`) is the thickness cue now |
+| §5.1 Bold fringe (`kBold*`) | Gone | `6d14fdc96`; dispersion follows the bend at high Shine (`GlassSlab` `disp`) |
+| §5.1 Split on the gathered light | Gone | `6d14fdc96` |
+| §5.1 `cornerWeight` | Gone | `60b2010a3` |
+| §5.1 Light normal on `1.5 × cr` | Gone | `60b2010a3` (light on the drawn radius). The concave page-bar lens keeps its wide arc (`GlassRefraction.concaveOffset`), a §5.3 feature |
+| §5.1 Clarity, face clarity, `uLiveClarity`, `kLiveReach` | Partly gone | Live clarity and `kLiveReach` gone at `4dea353ef`; the edge's clarity is the slab's steepness share (`GlassRefraction.sharpShare`), as the spec asks. **Kept:** Clear's face share (`Look.faceClarity`, `uFaceClarity`), because removing it changes Clear's look; rebuilding Clear on a low Frost stop is a look change for the developer to call |
+| §5.1 Lag lean, `liveK`, `glintW`, live lobes | Gone | `0120cf4b8` (#318, pose, not speed). `glintW` in `GlassPoseOptics` is the turn's glint, part of the pose model |
+| §5.1 Tilt lean and `kTiltLight` | Gone | `0120cf4b8` |
+| §5.1 `tiltOffset` | Gone | `0120cf4b8`; the turn's shift is Snell's (`GlassPoseOptics`) |
+| §5.1 Seam push-out | Kept | The keyboard host and the under-pill strip are still separate surfaces (brief for #322) |
+| §5.1 Unclamped additive glows | Kept | Deliberately unmultiplied (`59bde99b8`): over a transparent key cell the alpha is near 0 and the key's glow must still show |
+| §5.2 Second rim on widget slabs | Gone | `1d6859254`; `PaneGlassBackdropView` draws its rim only when `!drawsEdge()` |
+| §5.2 `GradientRimDrawable` / `OpenEdgeDrawable` over glass | Kept as the fallback | Every site already yields to the program's edge (`GlassStack.wearsRim`, `DockSurface` `dockGlassDrawsEdge`, `PaneRim.SlabEdge`; `216f49b17`, `1d6859254`). They draw only where no program draws the edge: below API 33, Fancier Glass off, a driver refusal, a bare stack with no frame |
+| §5.2 `LiveStoredParity` | Partly gone | The bake half went at `f108a662a` (#321). **Kept:** the dim removal (`matrix(dim)`), because the launcher-drawn wallpaper still draws the wall's dim into every live recording and the stored frame never carries it |
+| §5.2 Vibrancy and frame tint baked into frames | Partly gone | Program uniforms since `f30ede17e`/`cfef2191d` (#321); frames stay the raw blur while the program owns the colour. **Kept:** the bake for the plain draw (Fancier Glass off, API < 33, lazy, unmanaged wallpaper), which has no program |
+| §5.2 Stored frame as a route of its own | Kept | Research: the cheap route at rest |
+| §5.2 Still against live scene frame forks | Removed now | `GlassSource` (#322): `SharedFrameDrawable` and `PaneGlassBackdropView` pick the live picture, the scene frame or the stored frame in one place and bind it once per change; `SharedFrameDrawable.drawLive` is gone. The live picture keeps its own node under the program as an effect (a `RenderEffect` cannot take a bound shader) |
+| §5.2 Quarter-scale layer, page captures, `GlassPagePool`, `BackdropLayers` | Kept | Swipe cost (performance.md) |
+| §5.2 Software-canvas skips | Kept | A software canvas refuses `RuntimeShader` and hardware bitmaps |
+| §5.2 `HardwareFrame` | Kept | RenderThread uploads mid-swipe |
+| §5.2 Android version branches | Kept | `minSdk` stays below 33 |
+| §5.2 Corner mask | Kept | The display page's rounded corners |
+| §5.2 X11 stand-ins | Kept | No recording sees the X surface |
+| §5.2 `BackdropRecording` SurfaceView rule | Kept | A recorded SurfaceView moves the real surface |
+| §5.2 `FrameCrossfade` | Kept | A transition, not optics |
+| §5.2 `GlassMotionLight`, its gate, the tilt still-draw counter | Partly gone | The lag spring went at `0120cf4b8` and Living glass at `951aff6ca`. **Kept:** `GlassMotionGate`, now the pose gate (asked once as a pose leaves rest), and the still-draw counter, now the pose's (`POSE_STILL_DRAWS`): it is what stops frames at rest |
+| §5.2 `GlassTouchLight` | Kept | A feature. Its rim term is white light in linear light (`kTouchRim`, `6d14fdc96`); the faint scatter stays additive grey (`59bde99b8`), because redrawing it as a linear specular changes the look |
+| §5.2 Experiment switches `debug.tl.glass_edge`, `debug.tl.glass_motion` | Gone | Never reached this line; their models were folded in at `6d14fdc96` and `0120cf4b8`. **Kept:** the tuning properties `debug.tl.glass_rim`, `debug.tl.glass_slab`, `debug.tl.glass_pose`: read once per process and compiled in as constants, so they cost nothing per frame, and the pong tuning they serve is still owed (device-checks.md) |
+| §5.2 Diagnostic hooks | Kept | Pong rounds rule (AGENTS.md). The probes for removed pieces (`paneGlass.motion`, `paneGlass.tilt`) went at `0120cf4b8`. `Glass.layers.degenerate` stays as a zero-length marker of the degenerate route in a trace |
+| §5.2 `GroundUnderGlass` / `GlassGround` | Untouched | #283's |
+
+Counts: of 35 rows, 19 gone before #322 (4 of them partly: a named part kept), 1 removed by #322, 15 kept with the reason above (GroundUnderGlass counted as kept). Kept although this research proposed removing or changing them: Clear's face clarity, the unclamped key glow and touch scatter, the touch light's grey scatter, the dim half of `LiveStoredParity`, the colour bake for the plain draw, and the three tuning properties.
+
 ## 6. Target architecture and deletion order
 
 **Target.**

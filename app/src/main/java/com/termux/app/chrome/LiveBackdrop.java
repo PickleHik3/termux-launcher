@@ -350,7 +350,7 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
                 evicted.mSurface.invalidate();
             }
             picture = new LivePicture(surface, blurRadiusPx);
-            picture.setStoredParity(recordedDim(surface), mBakeVibrancy, mBakeFrameTint);
+            picture.setRecordedDim(recordedDim(surface));
             mPictures.add(picture);
             mPlanStamp++;
             listen(true);
@@ -359,25 +359,6 @@ public final class LiveBackdrop implements com.termux.app.glass.GlassService.Liv
         }
         picture.mRank = rank;
         return picture;
-    }
-
-    /** The Vibrancy and frame tint the stored frames are baked at ({@link #setStoredBake}). */
-    private int mBakeVibrancy = 100;
-    private int mBakeFrameTint = GlassFrameTint.NONE;
-
-    /**
-     * The Vibrancy and frame tint the stored frames are baked at now
-     * ({@code WallpaperBlurCache}), which every picture then takes after its blur,
-     * so the glass looks the same on either route ({@link LiveStoredParity}).
-     */
-    public void setStoredBake(int vibrancyPercent, int frameTint) {
-        if (vibrancyPercent == mBakeVibrancy && frameTint == mBakeFrameTint) return;
-        mBakeVibrancy = vibrancyPercent;
-        mBakeFrameTint = frameTint;
-        for (int i = 0; i < mPictures.size(); i++) {
-            LivePicture picture = mPictures.get(i);
-            picture.setStoredParity(recordedDim(picture.mSurface), vibrancyPercent, frameTint);
-        }
     }
 
     /**

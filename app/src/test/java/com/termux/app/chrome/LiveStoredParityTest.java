@@ -5,6 +5,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 import android.graphics.ColorMatrix;
@@ -20,8 +21,8 @@ import android.app.Application;
 
 /**
  * A live picture's colours equal the stored frame's for the same wallpaper and the same inputs:
- * the stored frame is the wallpaper blurred with Vibrancy and the frame tint baked in, the live
- * recording is the wallpaper under the wall's dim, and the parity takes the one to the other.
+ * the stored frame is the wallpaper blurred, the live recording is the wallpaper under the wall's
+ * dim, and the parity takes the dim back out. The glass's colour is the program's, on both (#321).
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.TIRAMISU, application = Application.class)
@@ -62,7 +63,7 @@ public class LiveStoredParityTest {
     }
 
     @Test
-    public void theSharedBakeIsTheMatrixTheStoredFrameWasBakedThrough() {
+    public void theColourIsTheMatrixTheStoredFrameUsedToBeBakedThrough() {
         for (int vibrancy : VIBRANCY) {
             for (int tint : new int[] {GlassFrameTint.NONE, TINT}) {
                 assertArrayEquals("vibrancy " + vibrancy + " tint " + Integer.toHexString(tint),
@@ -73,58 +74,50 @@ public class LiveStoredParityTest {
     }
 
     @Test
-    public void nothingToDoIsNoFilter() {
-        assertNull(LiveStoredParity.matrix(0, 100, GlassFrameTint.NONE, true));
-        assertNull("radius 0 is the wallpaper itself: nothing baked",
-            LiveStoredParity.matrix(0, 140, TINT, false));
+    public void withoutADimThereIsNoFilter() {
+        // The glass's colour is the program's now (#321): the live picture adds none.
+        assertNull(LiveStoredParity.matrix(0));
     }
 
     @Test
-    public void withoutADimTheLivePictureTakesTheStoredBakeExactly() {
-        for (int vibrancy : VIBRANCY) {
-            float[] live = LiveStoredParity.matrix(0, vibrancy, TINT, true);
-            assertNotNull(live);
-            assertArrayEquals(GlassVibrancy.bakeMatrix(vibrancy, TINT), live, 1e-5f);
-        }
-    }
-
-    @Test
-    public void theLivePixelEqualsTheStoredPixelForEveryDimVibrancyAndTint() {
+    public void theLivePixelIsTheStoredPixelForEveryDim() {
+        // Both routes hand the program the raw blur; the program then colours both through one
+        // matrix, so the stored and the live glass match for every Vibrancy and tint.
+        float[] stored = new float[3];
+        float[] live = new float[3];
         for (int dim : DIMS) {
+            float[] undim = LiveStoredParity.matrix(dim);
             for (int vibrancy : VIBRANCY) {
-                for (int tint : new int[] {GlassFrameTint.NONE, TINT}) {
-                    float[] live = LiveStoredParity.matrix(dim, vibrancy, tint, true);
-                    float[] stored = GlassVibrancy.bakeMatrix(vibrancy, tint);
-                    for (int[] rgb : WALLPAPER) {
-                        float[] want = LiveStoredParity.apply(stored, rgb[0], rgb[1], rgb[2]);
-                        float[] seen = dimmed(rgb, dim);
-                        float[] got = live == null ? seen
-                            : LiveStoredParity.apply(live, seen[0], seen[1], seen[2]);
-                        String at = "dim " + Integer.toHexString(dim) + " vibrancy " + vibrancy
-                            + " tint " + Integer.toHexString(tint);
-                        if ((dim >>> 24) / 255f > LiveStoredParity.MAX_UNDIM_ALPHA) {
-                            // Past the cap the picture keeps the rest of the dim: never lighter.
-                            assertTrue(at, luma(got) <= luma(want) + 0.5f);
-                            continue;
-                        }
-                        assertArrayEquals(at, want, got, 0.05f);
+                float[] colour = GlassVibrancy.bakeMatrix(vibrancy, TINT);
+                for (int[] rgb : WALLPAPER) {
+                    float[] seen = dimmed(rgb, dim);
+                    float[] got = undim == null ? seen
+                        : LiveStoredParity.apply(undim, seen[0], seen[1], seen[2]);
+                    String at = "dim " + Integer.toHexString(dim) + " vibrancy " + vibrancy;
+                    if ((dim >>> 24) / 255f > LiveStoredParity.MAX_UNDIM_ALPHA) {
+                        // Past the cap the picture keeps the rest of the dim: never lighter.
+                        assertTrue(at, luma(got) <= luma(new float[] {rgb[0], rgb[1], rgb[2]}) + 0.5f);
+                        continue;
                     }
+                    GlassRefraction.colourOf(colour, rgb[0] / 255f, rgb[1] / 255f, rgb[2] / 255f,
+                        1f, stored);
+                    GlassRefraction.colourOf(colour, got[0] / 255f, got[1] / 255f, got[2] / 255f,
+                        1f, live);
+                    assertArrayEquals(at, stored, live, 0.05f / 255f * 4f);
                 }
             }
         }
     }
 
     @Test
-    public void aPictureTakesTheParity() {
+    public void aPictureTakesOnlyTheDimBackOut() {
         View surface = new View(RuntimeEnvironment.getApplication());
         LivePicture widget = new LivePicture(surface, 20f);
         assertNull("nothing to match yet", widget.parityFilter());
-        widget.setStoredParity(0x66000000, 100, GlassFrameTint.NONE);
+        widget.setRecordedDim(0x66000000);
         assertNotNull("the wall's dim comes back out", widget.parityFilter());
         widget.setRecordedDim(0);
         assertNull(widget.parityFilter());
-        widget.setStoredParity(0, 130, TINT);
-        assertNotNull("Vibrancy and the frame tint go in", widget.parityFilter());
     }
 
     @Test
@@ -139,19 +132,19 @@ public class LiveStoredParityTest {
     }
 
     @Test
-    public void theSceneCardWearsTheSlabsParityThenTheFrost() {
-        // The departing card's ground: what a live picture builds with no dim (a scene leaves it
-        // out), then the frost, so the card and the slab agree at the first frame of the slide.
+    public void theSceneCardWearsTheColourThenTheFrost() {
+        // The departing card's ground has no program: over the raw scene it takes the glass's
+        // colour, then the frost, as the slab's program and paint do, so the card and the slab
+        // agree at the first frame of the slide.
         for (int opacity : new int[] {100, 40, 2}) {
             for (int vibrancy : VIBRANCY) {
-                float[] card = LiveStoredParity.sceneGroundMatrix(opacity, vibrancy, TINT, true);
-                float[] parity = LiveStoredParity.matrix(0, vibrancy, TINT, true);
+                float[] card = GlassVibrancy.groundMatrix(opacity, vibrancy, TINT);
+                float[] colour = GlassVibrancy.bakeMatrix(vibrancy, TINT);
                 float[] frost = GlassFilters.frostMatrix(opacity).getArray();
-                assertNotNull(card);
-                assertArrayEquals(LiveStoredParity.concat(frost, parity), card, 1e-5f);
+                assertArrayEquals(GlassVibrancy.concat(frost, colour), card, 1e-5f);
                 for (int[] px : WALLPAPER) {
                     float[] viaCard = LiveStoredParity.apply(card, px[0], px[1], px[2]);
-                    float[] mid = LiveStoredParity.apply(parity, px[0], px[1], px[2]);
+                    float[] mid = LiveStoredParity.apply(colour, px[0], px[1], px[2]);
                     float[] viaSlab = LiveStoredParity.apply(frost, mid[0], mid[1], mid[2]);
                     assertArrayEquals(viaSlab, viaCard, 1e-2f);
                 }
@@ -160,10 +153,13 @@ public class LiveStoredParityTest {
     }
 
     @Test
-    public void theSceneCardWithNothingBakedIsTheFrostAlone() {
-        assertNull(LiveStoredParity.sceneGroundMatrix(100, 100, GlassFrameTint.NONE, true));
-        assertNull(LiveStoredParity.sceneGroundMatrix(100, 150, TINT, false));
+    public void aGroundWithNothingToColourIsTheFrostAlone() {
         assertEquals(GlassFilters.frost(100),
-            LiveStoredParity.sceneGroundFilter(100, 100, GlassFrameTint.NONE, true));
+            GlassVibrancy.groundFilter(100, true, 100, GlassFrameTint.NONE));
+        assertEquals("a picture that already carries the colour",
+            GlassFilters.frost(100), GlassVibrancy.groundFilter(100, false, 150, TINT));
+        assertSame("one filter per colour, not per call",
+            GlassVibrancy.groundFilter(100, true, 130, TINT),
+            GlassVibrancy.groundFilter(100, true, 130, TINT));
     }
 }

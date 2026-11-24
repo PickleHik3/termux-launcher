@@ -7,7 +7,7 @@ amends: 0031 (the one look: its glass values become physical parameters; Grain, 
 # Glass is a physical material; its controls scale physical parameters
 
 Research: [`docs/research/glass-realism-2026-11-22.md`](../research/glass-realism-2026-11-22.md).
-Spec: [`project-docs/active/glass-physical-material-2026-11-22.md`](../../project-docs/active/glass-physical-material-2026-11-22.md).
+Spec: [`project-docs/reference/glass-physical-material-2026-11-22.md`](../../project-docs/reference/glass-physical-material-2026-11-22.md).
 
 Our glass reads as a graphics effect, not as glass. On pong the developer pointed at three
 things: widget rims that look stitched together (corners that do not match the straight edges),

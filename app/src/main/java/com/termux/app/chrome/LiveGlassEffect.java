@@ -68,6 +68,8 @@ public final class LiveGlassEffect {
             mProgram = program;
             // Nothing is bound as the clearer picture under an effect: the term stays at zero.
             program.setClarityInput(null, 1f, 1f);
+            // The content is the live picture: it takes the glass's colour as a stored frame does.
+            program.setBackdropContent(true);
         }
         program.setAim(1f, 1f, 0f, 0f);
         program.setLocal(null);

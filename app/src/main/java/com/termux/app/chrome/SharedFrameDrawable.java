@@ -52,8 +52,6 @@ import java.util.Objects;
  */
 public final class SharedFrameDrawable extends Drawable implements LiveSceneFrame.Surface {
 
-    private static final int NOT_LIVE = -1;
-
     @NonNull private final Paint mPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     @NonNull private final Paint mPreviousPaint = new Paint(Paint.FILTER_BITMAP_FLAG);
     @NonNull private final Matrix mMatrix = new Matrix();
@@ -71,8 +69,8 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
     @Nullable private Bitmap mPreviousFrame;
     @Nullable private BitmapShader mPreviousShader;
     private int mAlpha = 255;
-    /** The live scene frame the paints were last pointed at, or {@link #NOT_LIVE}: the still frame is bound. */
-    private int mLiveGen = NOT_LIVE;
+    /** What this draw reads, the stored frame or the scene's live frame, and which the paints hold. */
+    @NonNull private final GlassSource mSource = new GlassSource();
     /** A clearer frame of the same rect for the bent edge to show, or null; see {@link #setClearFrame}. */
     @Nullable private Bitmap mClearFrame;
     @Nullable private BitmapShader mClearShader;
@@ -201,7 +199,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         mClearFrame = clearFrame;
         mClearShader = clearFrame == null ? null
             : new BitmapShader(clearFrame, Shader.TileMode.CLAMP, Shader.TileMode.CLAMP);
-        mLiveGen = NOT_LIVE;
+        mSource.storedBound();
         syncClarity();
         invalidateSelf();
     }
@@ -290,7 +288,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
      * captures its input when it is set.
      */
     private void syncRefraction() {
-        mLiveGen = NOT_LIVE;
+        mSource.storedBound();
         GlassRefraction.Look look = mLook;
         BitmapShader shader = mShader;
         if (look == null || shader == null || !GlassRefraction.available()) {
@@ -390,52 +388,69 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         return null;
     }
 
+    /**
+     * Draws the frame {@link GlassSource} picks: the scene's live frame while one is out, else the
+     * stored frame. Either is one shared shader re-aimed by this surface's anchor and drawn through
+     * the program or plain; only the stored frame pans with the wallpaper and crossfades. With the
+     * scene on, the program's clearer picture is the live frame itself ({@code setInput} binds it
+     * as both), so the bent edge keeps the frost.
+     */
     @Override
     public void draw(@NonNull Canvas canvas) {
         Rect bounds = getBounds();
         Bitmap frame = mFrame;
         BitmapShader shader = mShader;
         if (bounds.isEmpty() || frame == null || frame.isRecycled() || shader == null) return;
-        LiveSceneFrame.Frame live = LiveSceneFrame.current();
-        if (live != null) {
-            // The live frame is a hardware bitmap: a software pass (a RealtimeBlurView capturing
-            // the window) sits it out rather than throwing.
-            if (canvas.isHardwareAccelerated()) drawLive(canvas, bounds, live);
-            return;
-        }
-        // The scene went off: the still frame goes back on the paints.
-        if (mLiveGen != NOT_LIVE) syncRefraction();
-        mAnchor.originOnScreen(mOrigin);
-        float offsetPx = mParallax == null ? 0f : mParallax.offsetPx();
+        GlassSource source = mSource;
+        int kind = source.select(false, LiveSceneFrame.current(), frame, shader, mFrameRect,
+            mParallax == null ? 0f : mParallax.offsetPx());
+        boolean hardwareCanvas = canvas.isHardwareAccelerated();
+        // The live frame is a hardware bitmap: a software pass (a RealtimeBlurView capturing the
+        // window) sits it out rather than throwing.
+        if (kind == GlassSource.SCENE && !hardwareCanvas) return;
+        // The scene went off: the still frame goes back on the paints. Re-syncing is safe on a
+        // software pass too, so it is taken here; the scene's one-shot rebind is taken only once
+        // this draw is past every early return, or a pass that sits out would consume it.
+        if (kind != GlassSource.SCENE && source.takeRebind()) syncRefraction();
         GlassRefraction.Program program = mProgram;
         // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
         // window into its bitmap is one. That pass only feeds another view's blur, so the frame
         // is left out of it rather than drawn and thrown. A frame held in GPU memory
         // (HardwareFrame) is refused the same way, and sits the pass out the same way.
-        if (!canvas.isHardwareAccelerated() && (program != null
+        if (!hardwareCanvas && (program != null
                 || frame.getConfig() == Bitmap.Config.HARDWARE
                 || (mPreviousFrame != null
                     && mPreviousFrame.getConfig() == Bitmap.Config.HARDWARE))) return;
-        aim(mAim, mFrameRect, frame.getWidth(), frame.getHeight(), mOrigin[0], mOrigin[1], offsetPx);
+        BitmapShader aimShader = source.shader();
+        Bitmap aimFrame = source.bitmap();
+        if (aimShader == null || aimFrame == null) return;
+        if (kind == GlassSource.SCENE && source.takeRebind()) {
+            if (program != null) program.setInput(aimShader);
+            else mPaint.setShader(aimShader);
+        }
+        mAnchor.originOnScreen(mOrigin);
+        source.aim(mAim, mOrigin[0], mOrigin[1]);
+        boolean crossfades = source.crossfades();
         if (program != null) {
             // The same aim, as uniforms: the program samples the frame by its own pixels.
             program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
-            program.setFrameSize(frame.getWidth(), frame.getHeight());
+            program.setFrameSize(aimFrame.getWidth(), aimFrame.getHeight());
             program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
-            syncPose(program, mPreviousProgram);
+            syncPose(program, crossfades ? mPreviousProgram : null);
         } else {
             matrixOf(mMatrix, mAim);
-            shader.setLocalMatrix(mMatrix);
+            aimShader.setLocalMatrix(mMatrix);
         }
+        if (kind == GlassSource.SCENE) LiveSceneFrame.noteDrawn(this);
         float progress = mCrossfade.progress();
         Bitmap previous = mPreviousFrame;
         BitmapShader previousShader = mPreviousShader;
-        boolean fading = progress < 1f && previous != null && !previous.isRecycled()
+        boolean fading = crossfades && progress < 1f && previous != null && !previous.isRecycled()
             && previousShader != null;
         if (fading) {
             // The retired frame shares this rect; only its own pixel size may differ.
             aim(mAim, mFrameRect, previous.getWidth(), previous.getHeight(), mOrigin[0],
-                mOrigin[1], offsetPx);
+                mOrigin[1], source.parallaxPx());
             GlassRefraction.Program previousProgram = program == null ? null : mPreviousProgram;
             if (previousProgram != null) {
                 previousProgram.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
@@ -451,45 +466,14 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
             mPaint.setAlpha(Math.round(mAlpha * progress));
             canvas.drawRect(bounds, mPaint);
             invalidateSelf();
-        } else {
+            return;
+        }
+        if (crossfades) {
             mPreviousFrame = null;
             mPreviousShader = null;
             if (mPreviousProgram != null) mSpareProgram = mPreviousProgram;
             mPreviousProgram = null;
-            mPaint.setAlpha(mAlpha);
-            canvas.drawRect(bounds, mPaint);
         }
-    }
-
-    /**
-     * The same surface through the wallpaper scene's live frame: one shared shader, re-aimed by
-     * this surface's anchor exactly as the still frame is, with no crossfade and no parallax (the
-     * scene does not pan). The program's clearer picture is the live frame itself ({@code setInput}
-     * binds it as both), so the bent edge keeps the frost.
-     */
-    private void drawLive(@NonNull Canvas canvas, @NonNull Rect bounds,
-                          @NonNull LiveSceneFrame.Frame live) {
-        GlassRefraction.Program program = mProgram;
-        // See draw(): a software canvas refuses the program.
-        if (program != null && !canvas.isHardwareAccelerated()) return;
-        if (mLiveGen != live.generation) {
-            mLiveGen = live.generation;
-            if (program != null) program.setInput(live.shader);
-            else mPaint.setShader(live.shader);
-        }
-        mAnchor.originOnScreen(mOrigin);
-        aim(mAim, LiveSceneFrame.rect(), live.bitmap.getWidth(), live.bitmap.getHeight(),
-            mOrigin[0], mOrigin[1], 0f);
-        if (program != null) {
-            program.setAim(mAim[0], mAim[1], mAim[2], mAim[3]);
-            program.setFrameSize(live.bitmap.getWidth(), live.bitmap.getHeight());
-            program.setRect(mRim[0], mRim[1], mRim[2], mRim[3], mRimRadiusPx);
-            syncPose(program, null);
-        } else {
-            matrixOf(mMatrix, mAim);
-            live.shader.setLocalMatrix(mMatrix);
-        }
-        LiveSceneFrame.noteDrawn(this);
         mPaint.setAlpha(mAlpha);
         canvas.drawRect(bounds, mPaint);
     }

@@ -731,7 +731,8 @@ public class GlassRefractionTest {
         int lens = agsl.indexOf("        if (slope > 0.0) {\n");
         int face = agsl.indexOf("        } else if (turned) {\n", lens);
         assertTrue(lens > 0 && face > lens);
-        String tap = "half4 envS = content.eval(framePx(envAt));";
+        // The tap is a backdrop sample: it takes the glass's colour as the bent picture does (#321).
+        String tap = "half4 envS = glassColour(content.eval(framePx(envAt)));";
         assertTrue(agsl.contains(tap));
         assertEquals("one tap", agsl.indexOf(tap), agsl.lastIndexOf(tap));
         assertTrue("only in the lens zone", agsl.indexOf(tap) > lens && agsl.indexOf(tap) < face);

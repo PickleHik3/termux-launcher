@@ -104,7 +104,8 @@ the **Backup & restore**, **Permissions & services**, **Diagnostics** and **Abou
 and **Set as default launcher**, **Restart launcher** and **Show in Recents when not the default
 launcher**.
 
-**Battery & performance** holds **Reduce idle activity** (lazy mode) and **Low-memory preset**,
+**Battery & performance** holds **Reduce idle activity** (lazy mode), **Glass refraction** (off
+gives flat frosted glass, see [Glass](Look_And_Themes.md#glass)) and **Low-memory preset**,
 with shortcuts to the motion it trims. See
 [Look and themes](Look_And_Themes.md#reduce-idle-activity). **Low-memory preset** is a switch: on,
 it sets the Solid look, an opaque terminal, no cursor trail or screen effect, no wallpaper

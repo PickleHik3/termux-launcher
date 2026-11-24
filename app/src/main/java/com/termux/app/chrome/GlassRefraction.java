@@ -228,6 +228,15 @@ public final class GlassRefraction {
         public final boolean concave;
         /** Shine, 0..100 ({@link GlassMaterial}); the default is the glass as it ships. */
         public final int shine;
+        /**
+         * The glass's colour, Vibrancy (percent) and the frame tint ({@link GlassFrameTint}): not
+         * stored with the look, set by {@link #withColour} where Fancier Glass draws the backdrop,
+         * and applied by the program, not baked into the frames.
+         */
+        public final int vibrancyPercent;
+        public final int frameTint;
+        /** The same colour as one value, with its matrix built once; see {@link GlassColour}. */
+        @NonNull private final GlassColour colour;
 
         public Look(int bendDp, int edgeWidthDp, int edgeLightPercent) {
             this(bendDp, edgeWidthDp, edgeLightPercent, 0, 0, 0);
@@ -263,6 +272,18 @@ public final class GlassRefraction {
                      int dispersionPercent, int clarityPercent,
                      int faceClarityPercent, int dimPercent, int sizeLensPercent, boolean concave,
                      int shine) {
+            this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
+                clarityPercent, faceClarityPercent, dimPercent, sizeLensPercent, concave, shine,
+                GlassVibrancy.NO_VIBRANCY, GlassFrameTint.NONE);
+        }
+
+        private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
+                     int dispersionPercent, int clarityPercent,
+                     int faceClarityPercent, int dimPercent, int sizeLensPercent, boolean concave,
+                     int shine, int vibrancyPercent, int frameTint) {
+            this.colour = GlassColour.of(vibrancyPercent, frameTint);
+            this.vibrancyPercent = colour.vibrancyPercent;
+            this.frameTint = colour.frameTint;
             this.shine = Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, shine));
             this.concave = concave;
             this.faceClarityPercent = Math.max(0, Math.min(100, faceClarityPercent));
@@ -282,14 +303,15 @@ public final class GlassRefraction {
             if (concave == this.concave) return this;
             return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
                 dispersionPercent, clarityPercent, faceClarityPercent, dimPercent,
-                sizeLensPercent, concave, shine);
+                sizeLensPercent, concave, shine, vibrancyPercent, frameTint);
         }
 
         /** This look with Clear's face terms set (percentages, 0 for none). */
         @NonNull
         public Look withFaceTerms(int faceClarity, int dim, int sizeLens) {
             Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
-                dispersionPercent, clarityPercent, faceClarity, dim, sizeLens, concave, shine);
+                dispersionPercent, clarityPercent, faceClarity, dim, sizeLens, concave, shine,
+                vibrancyPercent, frameTint);
             return next.equals(this) ? this : next;
         }
 
@@ -302,8 +324,37 @@ public final class GlassRefraction {
             int s = Math.max(GlassMaterial.MIN, Math.min(GlassMaterial.MAX, shine));
             Look next = new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
                 GlassMaterial.dispersionPercent(s), clarityPercent, faceClarityPercent,
-                dimPercent, sizeLensPercent, concave, s);
+                dimPercent, sizeLensPercent, concave, s, vibrancyPercent, frameTint);
             return next.equals(this) ? this : next;
+        }
+
+        /**
+         * This look wearing the glass's colour: {@code vibrancyPercent} ({@link GlassVibrancy})
+         * and {@code frameTint}'s hue shift ({@link GlassFrameTint}), which the program applies to
+         * the backdrop it samples ({@link #colourMatrix}) instead of a bake in the stored frames,
+         * so a stored frame and a live picture take the same colour by construction.
+         */
+        @NonNull
+        public Look withColour(int vibrancyPercent, int frameTint) {
+            if (colour.is(vibrancyPercent, frameTint)) return this;
+            return new Look(bendDp, edgeWidthDp, edgeLightPercent, specularPercent,
+                dispersionPercent, clarityPercent, faceClarityPercent, dimPercent,
+                sizeLensPercent, concave, shine, vibrancyPercent, frameTint);
+        }
+
+        /** True when the look changes the backdrop's colour at all. */
+        public boolean coloursBackdrop() {
+            return colour.changesBackdrop();
+        }
+
+        /**
+         * The 4x5 colour matrix the program applies to every backdrop sample
+         * ({@link GlassVibrancy#bakeMatrix}), or null when the look leaves the colour alone. Built
+         * once per colour and shared: read only.
+         */
+        @Nullable
+        public float[] colourMatrix() {
+            return colour.changesBackdrop() ? colour.matrix() : null;
         }
 
         /** {@code uShine}: the light's multiple of the room light, 0..2.5. */
@@ -395,15 +446,16 @@ public final class GlassRefraction {
                 && faceClarityPercent == that.faceClarityPercent
                 && dimPercent == that.dimPercent
                 && sizeLensPercent == that.sizeLensPercent
-                && concave == that.concave && shine == that.shine;
+                && concave == that.concave && shine == that.shine
+                && vibrancyPercent == that.vibrancyPercent && frameTint == that.frameTint;
         }
 
         @Override
         public int hashCode() {
-            return (((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
+            return (((((((((((bendDp * 31 + edgeWidthDp) * 31 + edgeLightPercent) * 31 + specularPercent) * 31
                 + dispersionPercent) * 31 + clarityPercent) * 31
                 + faceClarityPercent) * 31 + dimPercent) * 31 + sizeLensPercent) * 31
-                + (concave ? 1 : 0)) * 31 + shine;
+                + (concave ? 1 : 0)) * 31 + shine) * 31 + vibrancyPercent) * 31 + frameTint;
         }
 
         @NonNull
@@ -412,7 +464,38 @@ public final class GlassRefraction {
             return "Look{bend=" + bendDp + "dp, edge=" + edgeWidthDp + "dp, light=" + edgeLightPercent + "%, specular="
                 + specularPercent + "%, dispersion=" + dispersionPercent + "%, clarity=" + clarityPercent
                 + "%, face=" + faceClarityPercent + "%, dim=" + dimPercent
-                + "%, sizeLens=" + sizeLensPercent + "%, shine=" + shine + (concave ? ", concave" : "") + "}";
+                + "%, sizeLens=" + sizeLensPercent + "%, shine=" + shine
+                + (coloursBackdrop() ? ", vibrancy=" + vibrancyPercent + "%, tint=#"
+                    + Integer.toHexString(frameTint) : "")
+                + (concave ? ", concave" : "") + "}";
+        }
+    }
+
+    /**
+     * Whether the program colours its content under {@code look}: a look that carries a colour
+     * ({@link Look#coloursBackdrop}), over a backdrop picture ({@code backdropContent}: a bound
+     * frame or a live picture), never over a view's own icons and text. Pure.
+     */
+    static boolean colourApplies(@Nullable Look look, boolean backdropContent) {
+        return look != null && backdropContent && look.coloursBackdrop();
+    }
+
+    /**
+     * The program's {@code glassColour} on one premultiplied sample, channels 0..1: the rows of
+     * {@code matrix} (a 4x5 {@code ColorMatrix} array, offsets unused) dotted with it, held to
+     * 0..alpha. Null {@code matrix} hands the sample back. Writes {@code out}; for tests.
+     */
+    static void colourOf(@Nullable float[] matrix, float r, float g, float b, float a,
+                         @NonNull float[] out) {
+        if (matrix == null) {
+            out[0] = r;
+            out[1] = g;
+            out[2] = b;
+            return;
+        }
+        for (int row = 0; row < 3; row++) {
+            float c = matrix[row * 5] * r + matrix[row * 5 + 1] * g + matrix[row * 5 + 2] * b;
+            out[row] = Math.max(0f, Math.min(a, c));
         }
     }
 
@@ -596,6 +679,14 @@ public final class GlassRefraction {
         // The concave lens (Look.concave): x 1 to draw it, 0 for every other surface, which then
         // draws exactly as before; y the deepest its band reaches, px. setLook in Java.
         "uniform float2 uConcave;\n" +
+        // The glass's colour (Vibrancy, then the Tint's hue shift; GlassVibrancy#bakeMatrix):
+        // the rows of the 3x3 matrix every backdrop sample takes, on only where the content is a
+        // backdrop picture (a frame or a live picture), never a view's own icons and text.
+        // colourOf in Java.
+        "uniform float uColourOn;\n" +
+        "uniform float3 uColourR;\n" +
+        "uniform float3 uColourG;\n" +
+        "uniform float3 uColourB;\n" +
         // Its band as the most of the short side, its pull as a share of the band, and the
         // steepest the pull may rise across the lip. CONCAVE_BAND_MAX_SHARE, CONCAVE_PULL_SHARE
         // and CONCAVE_LIP_MAX_SLOPE in Java.
@@ -736,6 +827,12 @@ public final class GlassRefraction {
         "float rimLobe(float c) {\n" +
         "    return c > 0.0 ? pow(c, kKeyExp) : 0.0;\n" +
         "}\n" +
+        "half4 glassColour(half4 c) {\n" +
+        "    if (uColourOn <= 0.0) { return c; }\n" +
+        "    float3 v = float3(c.rgb);\n" +
+        "    float3 o = float3(dot(uColourR, v), dot(uColourG, v), dot(uColourB, v));\n" +
+        "    return half4(half3(clamp(o, 0.0, float(c.a))), c.a);\n" +
+        "}\n" +
         "half4 main(float2 fragCoord) {\n" +
         "    float2 center = (uRectMin + uRectMax) * 0.5;\n" +
         "    float2 b = (uRectMax - uRectMin) * 0.5;\n" +
@@ -809,7 +906,7 @@ public final class GlassRefraction {
         "        float cP = kConcavePullShare * cB;\n" +
         "        float cL = 1.5 * cP / kConcaveLipSlope;\n" +
         "        float2 cn = rectNormal(p, b, min(max(cr * 1.5, cB), hs));\n" +
-        "        return content.eval(framePx(fragCoord + cn * concavePull(inside, cB, cP, cL)));\n" +
+        "        return glassColour(content.eval(framePx(fragCoord + cn * concavePull(inside, cB, cP, cL))));\n" +
         "    }\n" +
         // Size lens (Clear): the lens zone, the thickness and the dock's soft band scale with the
         // surface's short side, a thicker slab bending more and reaching deeper; exactly 1 at 0,
@@ -967,6 +1064,8 @@ public final class GlassRefraction {
         "            col = mix(col, sharp.eval(f), half(clarityK));\n" +
         "        }\n" +
         "    }\n" +
+        // The backdrop's colour, once for the bent and the sharp picture alike (both linear).
+        "    col = glassColour(col);\n" +
         // Clear's face tone, before the light so the light is not toned: a bright backdrop is
         // darkened toward black by up to kDimMax, easing in across kDimFrom..kDimTo of
         // luminance, and the rest lifted toward white by kFaceLift of its darkness. All of it
@@ -1052,7 +1151,7 @@ public final class GlassRefraction {
         "                if (uEnvHold > 0.0) {\n" +
         "                    envAt = clamp(envAt, rMin + 0.5, rMax - 0.5);\n" +
         "                }\n" +
-        "                half4 envS = content.eval(framePx(envAt));\n" +
+        "                half4 envS = glassColour(content.eval(framePx(envAt)));\n" +
         "                float envA = float(envS.a);\n" +
         "                if (envA > 0.0) {\n" +
         "                    sky = sky + float3(toLinearSrgb(half3(float3(envS.rgb) / envA))) * (envA * envK);\n" +
@@ -1656,6 +1755,14 @@ public final class GlassRefraction {
          * face tone must not touch them.
          */
         private boolean mInputBound;
+        /**
+         * The content is a backdrop picture though no frame is bound: a {@code RenderEffect} over
+         * a live picture or a frame-only backdrop view ({@link #setBackdropContent}).
+         */
+        private boolean mBackdropContent;
+        /** The colour as last written ({@code uColourOn} and its rows); see {@link #syncColour}. */
+        private boolean mColourOnWritten;
+        @Nullable private GlassColour mColourWritten;
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;
         /** The pose as last written, and the pose uniforms as written and next, with scratch. */
@@ -1692,6 +1799,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uLensStrength", LENS_STRENGTH);
             mShader.setFloatUniform("uLensFeather", density * LENS_FEATHER_DP);
             mShader.setFloatUniform("uTouchLens", TOUCH_LENS);
+            mShader.setFloatUniform("uColourOn", 0f);
             setAim(1f, 1f, 0f, 0f);
             mShader.setFloatUniform("uFrameBox", -1e6f, -1e6f, 1e6f, 1e6f);
             setLocal(null);
@@ -1895,6 +2003,43 @@ public final class GlassRefraction {
             mSharpBound = true;
             mSharpDistinct = false;
             syncClarity();
+            syncColour();
+        }
+
+        /**
+         * Whether the content under a {@code RenderEffect} is a backdrop picture (a live picture,
+         * a view that draws only the stored frame), which takes the look's colour as a bound frame
+         * does; false, the default, for a view's own icons and text, which never do.
+         */
+        public void setBackdropContent(boolean backdrop) {
+            if (backdrop == mBackdropContent) return;
+            mBackdropContent = backdrop;
+            syncColour();
+        }
+
+        /**
+         * {@code uColourOn} and the colour rows: the look's colour ({@link Look#colourMatrix})
+         * where the content is a backdrop ({@link #colourApplies}), off elsewhere. Written only
+         * when it moved, so a draw at rest writes and allocates nothing.
+         */
+        private void syncColour() {
+            Look look = mLook;
+            if (!colourApplies(look, mInputBound || mBackdropContent)) {
+                if (mColourOnWritten) {
+                    mColourOnWritten = false;
+                    mShader.setFloatUniform("uColourOn", 0f);
+                }
+                return;
+            }
+            if (mColourOnWritten && look.colour.equals(mColourWritten)) return;
+            float[] m = look.colourMatrix();
+            if (m == null) return;
+            mShader.setFloatUniform("uColourR", m[0], m[1], m[2]);
+            mShader.setFloatUniform("uColourG", m[5], m[6], m[7]);
+            mShader.setFloatUniform("uColourB", m[10], m[11], m[12]);
+            if (!mColourOnWritten) mShader.setFloatUniform("uColourOn", 1f);
+            mColourOnWritten = true;
+            mColourWritten = look.colour;
         }
 
         /**
@@ -2031,6 +2176,7 @@ public final class GlassRefraction {
             mShader.setFloatUniform("uConcave", look.concave ? 1f : 0f,
                 CONCAVE_BAND_DP * mDensity);
             syncClarity();
+            syncColour();
         }
 
         /**
