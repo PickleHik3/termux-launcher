@@ -564,6 +564,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             new java.util.concurrent.atomic.AtomicLong(1L);
         final long id = NEXT_ID.getAndIncrement();
         final java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = new java.util.ArrayList<>();
+        /**
+         * The row the Terminal pages through: {@link #windows} with the session's Linux windows
+         * standing among them (#392). Save and restore read {@link #windows} alone.
+         */
+        final com.termux.app.terminal.SessionRow<com.termux.app.terminal.TerminalPaneController.Window> row =
+            new com.termux.app.terminal.SessionRow<>();
         int current;
         @Nullable String name;
         /**
@@ -15193,7 +15199,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         });
         mPaneController.setWindowFloatGlass(mTerminalGlass);
         mAppliedPaneStyleKey = null;
-        mPaneController.setOnActiveWindowChanged(mPages::innerChanged);
+        mPaneController.setOnActiveWindowChanged(() -> {
+            mPages.innerChanged();
+            syncLinuxFront();
+        });
         mPaneController.setSurfaceStyle(paneSurfaceStyle());
         applyTrailStyleAndRetroEffect();
         createPaneWallController(paneHost);
@@ -20021,6 +20030,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.dock.WallStripModel.of(chips,
                 com.termux.app.chrome.WindowChips.Surface.WALL_STRIP, items,
                 getString(R.string.launcher_entry_new_window));
+        // The row's Linux windows stand among its terminal windows, in row order (#392); their
+        // tiles show one whole pane and are keyed by their window.
+        WSession ws = mCurrentWSession;
+        if (ws != null && mLinuxWindows != null && ws.row.hasLinux()) {
+            int places = ws.row.count(ws.windows);
+            int[] terminalAt = new int[places];
+            java.util.List<String> linuxLabels = new java.util.ArrayList<>();
+            java.util.List<Long> linuxIds = new java.util.ArrayList<>();
+            for (int i = 0; i < places; i++) {
+                terminalAt[i] = ws.row.terminalAt(ws.windows, i);
+                if (terminalAt[i] < 0) {
+                    long id = ws.row.linuxAt(ws.windows, i);
+                    linuxLabels.add(linuxWindowName(id));
+                    linuxIds.add(id);
+                }
+            }
+            entries = com.termux.app.dock.WallStripModel.withLinux(entries, terminalAt,
+                linuxLabels, rowCurrentIndex());
+            java.util.List<float[]> mixedShapes = new java.util.ArrayList<>(entries.size());
+            java.util.List<Long> mixedKeys = new java.util.ArrayList<>(entries.size());
+            int linuxSeen = 0;
+            for (com.termux.app.dock.WallStripModel.Entry entry : entries) {
+                if (entry.kind == com.termux.app.dock.WallStripModel.Kind.LINUX_WINDOW) {
+                    mixedShapes.add(null);
+                    mixedKeys.add((1L << 40) + linuxIds.get(linuxSeen++));
+                } else if (entry.chipIndex >= 0 && entry.chipIndex < shapes.size()) {
+                    mixedShapes.add(shapes.get(entry.chipIndex));
+                    mixedKeys.add(keys.get(entry.chipIndex));
+                } else {
+                    mixedShapes.add(null);
+                    mixedKeys.add(null);
+                }
+            }
+            shapes = mixedShapes;
+            keys = mixedKeys;
+        }
         // Every entry but + is a tile (tilesOf leaves + out): the row's windows, then the floats,
         // in the chips' order, as the shapes and keys were laid down above.
         row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
@@ -20088,8 +20133,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View contentView = com.termux.app.window.WindowLayers.host(this,
             com.termux.app.window.WindowLayer.NOTICES);
         if (row == null || !(contentView instanceof FrameLayout) || mPaneController == null) return;
+        // The row's tiles, Linux windows' among them, are row places (#392); the Home floats'
+        // tiles after them have no menu.
+        boolean linuxTile = com.termux.app.dock.WallStripModel.isLinuxChip(chipIndex);
         int count = rowWindowCount();
-        if (chipIndex < 0 || chipIndex >= count) return;
+        int tilePlace = linuxTile ? com.termux.app.dock.WallStripModel.placeOfLinuxChip(chipIndex)
+            : (chipIndex < 0 || chipIndex >= terminalWindowCount() ? -1 : placeOfTerminal(chipIndex));
+        if (tilePlace < 0 || tilePlace >= count) return;
         FrameLayout content = (FrameLayout) contentView;
         int[] rowAt = new int[2];
         int[] contentAt = new int[2];
@@ -20109,8 +20159,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new androidx.appcompat.widget.PopupMenu(this, pin);
             Menu items = menu.getMenu();
             items.add(Menu.NONE, 0, 0, R.string.tool_window_select);
-            if (chipIndex > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
-            if (chipIndex < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
+            if (tilePlace > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
+            if (tilePlace < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
             items.add(Menu.NONE, 3, 3, R.string.tool_window_close);
             // The row's chips are terminal windows only (ADR 0015): no display apps to list.
             java.util.List<com.termux.app.x11.X11WindowList.Window> others = new java.util.ArrayList<>();
@@ -20125,8 +20175,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
                             chipIndex, false);
                         return true;
-                    case 1: moveWindow(chipIndex, chipIndex - 1); return true;
-                    case 2: moveWindow(chipIndex, chipIndex + 1); return true;
+                    case 1: moveWindow(tilePlace, tilePlace - 1); return true;
+                    case 2: moveWindow(tilePlace, tilePlace + 1); return true;
                     case 3:
                         onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
                             chipIndex, true);
@@ -22859,6 +22909,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Nullable
     private com.termux.app.terminal.inappkeyboard.TypingPage typingFrontPage() {
         com.termux.app.page.Page front = mPages.front();
+        // A Linux window in front of the Terminal's row takes the keys (#392).
+        if (front != null && front.kind() == com.termux.app.page.PageKind.TERMINAL
+                && mLinuxWindows != null && linuxWindowInFront() != 0L) {
+            return mLinuxWindows.page();
+        }
         return front instanceof com.termux.app.terminal.inappkeyboard.TypingPage
             ? (com.termux.app.terminal.inappkeyboard.TypingPage) front : null;
     }
@@ -23754,13 +23809,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * False when either place is outside the row.
      */
     boolean moveWindow(int from, int to) {
-        int count = rowWindows().size();
+        int count = rowWindowCount();
         if (from < 0 || from >= count || to < 0 || to >= count) return false;
         if (from == to) return true;
-        if (mCurrentWSession != null) {
-            mCurrentWSession.current = com.termux.app.terminal.WindowReorderPolicy.move(
-                mCurrentWSession.windows, from, to, mCurrentWSession.current);
+        WSession ws = mCurrentWSession;
+        if (ws != null) {
+            // Either kind moves among the other (#392); the terminal window in front keeps its place.
+            com.termux.app.terminal.TerminalPaneController.Window front = ws.currentWindow();
+            ws.row.move(ws.windows, from, to);
+            if (front != null) ws.current = Math.max(0, ws.windows.indexOf(front));
         }
+        syncLinuxFront();
         rebuildDrawerSessions();
         refreshTerminalWindowBar();
         return true;
@@ -23778,7 +23837,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean consumeWindow(boolean fromLeft) {
         if (mPaneController == null || mCurrentWSession == null) return false;
         // The display window has no panes to give or take: it neither consumes nor is consumed.
-        if (isDisplayWindowInFront()) return false;
+        // Nor has a Linux window.
+        if (isDisplayWindowInFront() || linuxWindowInFront() != 0L) return false;
         WSession ws = mCurrentWSession;
         int current = ws.current;
         int source = com.termux.app.terminal.ColumnPolicy.consumeSource(current, ws.windows.size(),
@@ -23811,8 +23871,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     boolean expelPane(boolean toLeft) {
         if (mPaneController == null || mCurrentWSession == null) return false;
         if (mPaneController.focusedHomeFloat() != null) return false;
-        // The display window has no pane to expel.
-        if (isDisplayWindowInFront()) return false;
+        // The display window has no pane to expel, nor has a Linux window.
+        if (isDisplayWindowInFront() || linuxWindowInFront() != 0L) return false;
         WSession ws = mCurrentWSession;
         com.termux.app.terminal.TerminalPaneController.Window from = ws.currentWindow();
         int target = com.termux.app.terminal.ColumnPolicy.expelTarget(ws.current,
@@ -23828,7 +23888,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Right after the window in front in the row (right before it when toLeft), so a display
         // window beside it stays on its far side.
-        int at = insertRowWindowAt(expelled, rowCurrentIndex() + (toLeft ? 0 : 1));
+        int at = insertRowWindowAt(expelled, ws.current + (toLeft ? 0 : 1));
         ws.current = com.termux.app.terminal.ColumnPolicy.currentAfterExpel(at);
         mPaneController.showWindow(expelled);
         animateTerminalWindowLifecycleArrival(toLeft ? -1 : 1);
@@ -28006,9 +28066,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             : mCurrentWSession.windows;
     }
 
-    /** How many windows the current row has: its terminal windows (ADR 0015). */
+    /** How many windows the current row has: its terminal windows and its Linux windows (#392). */
     private int rowWindowCount() {
+        return mCurrentWSession == null ? 0 : mCurrentWSession.row.count(mCurrentWSession.windows);
+    }
+
+    /** How many terminal windows the current row has (ADR 0015). */
+    private int terminalWindowCount() {
         return rowWindows().size();
+    }
+
+    /** The row place of the current row's terminal window {@code terminal}; -1 when out of range. */
+    private int placeOfTerminal(int terminal) {
+        return mCurrentWSession == null ? -1
+            : mCurrentWSession.row.indexOfTerminal(mCurrentWSession.windows, terminal);
+    }
+
+    /** The terminal window index at row place {@code place}; -1 for a Linux window or out of range. */
+    private int terminalAtPlace(int place) {
+        return mCurrentWSession == null ? -1
+            : mCurrentWSession.row.terminalAt(mCurrentWSession.windows, place);
+    }
+
+    /** The Linux window in front of the current row (#392); 0 while a terminal window is. */
+    private long linuxWindowInFront() {
+        WSession ws = mCurrentWSession;
+        if (ws == null || mLinuxWindows == null || !ws.row.hasLinux()) return 0L;
+        // Reading the place in front drops a front that left the row.
+        ws.row.frontIndex(ws.windows, ws.current);
+        return ws.row.front();
     }
 
     /**
@@ -28020,8 +28106,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && mPaneWallController.currentPage() == com.termux.app.page.PageKind.DISPLAY;
     }
 
-    /** The row place of the window in front, the display window's included. */
+    /** The row place of the window in front, a Linux window's included (#392). */
     private int rowCurrentIndex() {
+        WSession ws = mCurrentWSession;
+        if (ws == null) return 0;
+        return Math.max(0, ws.row.frontIndex(ws.windows, ws.current));
+    }
+
+    /** The terminal window in front, or behind the Linux window in front (ADR 0015). */
+    private int terminalCurrentIndex() {
         return Math.max(0, Math.min(mCurrentWSession == null ? 0 : mCurrentWSession.current, Math.max(0, rowWindows().size() - 1)));
     }
 
@@ -28080,18 +28173,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void showRowWindow(int row) {
         if (mPaneController == null) return;
-        int count = rowWindows().size();
+        int count = rowWindowCount();
         if (row < 0 || row >= count) return;
         int previous = rowCurrentIndex();
         if (row == previous) return;
         int direction = row > previous ? 1 : -1;
-        int window = row;
+        int window = terminalAtPlace(row);
+        if (isDisplayWindowInFront() && window < 0) {
+            // A Linux window: it comes in front of the row, and the wall goes back to the Terminal.
+            showRowPlaceAcrossLinux(row, 0, 0f, previous);
+            setDisplayInFront(false, direction, 0f, previous);
+            return;
+        }
+        if (!isDisplayWindowInFront() && showRowPlaceAcrossLinux(row, direction, 0f, previous)) return;
         if (isDisplayWindowInFront()) {
             // The display goes off as the window comes in: no picture of a terminal is leaving.
+            if (mCurrentWSession != null) mCurrentWSession.row.clearFront();
             if (mCurrentWSession != null && window != mCurrentWSession.current) {
                 mCurrentWSession.current = window;
                 mPaneController.showWindow(mCurrentWSession.currentWindow());
             }
+            syncLinuxFront();
             setDisplayInFront(false, direction, 0f, previous);
             rebuildDrawerSessions();
             return;
@@ -28115,7 +28217,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * closes, the display window's included ({@link #closeDisplayWindowFromRow}).
      */
     private void closeRowWindow(int row) {
-        int window = row;
+        long linux = mCurrentWSession == null ? 0L
+            : mCurrentWSession.row.linuxAt(mCurrentWSession.windows, row);
+        if (linux != 0L) {
+            // A Linux window's close asks its app to close, as its rim tab's Close does.
+            if (mLinuxWindows != null) mLinuxWindows.closeChip(linux);
+            return;
+        }
+        int window = terminalAtPlace(row);
         if (window < 0 || window >= rowWindows().size()) return;
         if (windowHasForegroundJob(window)) confirmCloseWindow(window);
         else closeWindow(window);
@@ -29424,7 +29533,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return effectiveStartIn();
                 }
                 @Override public int rowCount() {
-                    return rowWindowCount();
+                    // Overview lists the terminal windows (#392 leaves Linux windows out of it).
+                    return terminalWindowCount();
                 }
                 @Override public boolean displaySupported() {
                     return isX11DisplayEnabled();
@@ -29464,7 +29574,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return mWidgetPaneController == null ? 0 : mWidgetPaneController.homePageIndex();
                 }
                 @Override public int rowCurrent() {
-                    return rowCurrentIndex();
+                    return terminalCurrentIndex();
                 }
                 @Override public void preview(@NonNull com.termux.app.wall.WallRow.Position position) {
                     showWallPositionAtOnce(position, false);
@@ -29549,20 +29659,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController.goToAssistantPage(false);
             return;
         }
-        if (position.kind == com.termux.app.page.PageKind.TERMINAL && rowWindowCount() == 0) {
+        if (position.kind == com.termux.app.page.PageKind.TERMINAL && terminalWindowCount() == 0) {
             // The Terminal page with no window: closing into its card starts the first shell, as
             // a swipe onto the page does; a preview leaves the wall where it stands.
             if (landing) mPaneWallController.goToTerminal(false);
             return;
         }
         int row = position.index;
-        if (row < 0 || row >= rowWindowCount()) return;
+        if (row < 0 || row >= terminalWindowCount()) return;
         int previous = rowCurrentIndex();
         int window = row;
         if (mPaneController != null && mCurrentWSession != null && window >= 0
                 && window < mCurrentWSession.windows.size() && window != mCurrentWSession.current) {
             mCurrentWSession.current = window;
             mPaneController.showWindow(mCurrentWSession.currentWindow());
+        }
+        // Overview's card is a terminal window: one in front of the row hides a Linux window.
+        if (mCurrentWSession != null && linuxWindowInFront() != 0L) {
+            mCurrentWSession.row.clearFront();
+            syncLinuxFront();
         }
         if (isDisplayWindowInFront()) setDisplayInFront(false, 0, 0f, previous);
         mPaneWallController.goTo(com.termux.app.page.PageKind.TERMINAL, false);
@@ -30516,9 +30631,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController != null) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                 rowWindows();
-            for (int i = 0; i < windows.size(); i++) {
-                windowNames.add(mPaneController.windowName(windows.get(i)));
+            // In row order, a Linux window's name among the terminal windows' (#392).
+            int places = rowWindowCount();
+            boolean[] linux = new boolean[places];
+            for (int i = 0; i < places; i++) {
+                int terminal = terminalAtPlace(i);
+                linux[i] = terminal < 0;
+                windowNames.add(terminal >= 0 ? mPaneController.windowName(windows.get(terminal))
+                    : linuxWindowName(mCurrentWSession.row.linuxAt(windows, i)));
             }
+            in.linuxWindows = linux;
         }
         in.windowNames = windowNames;
         in.currentWindow = windowNames.isEmpty() ? -1 : rowCurrentIndex();
@@ -30946,8 +31068,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                               int index, boolean close) {
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isSplitPanesEnabled())
             return;
-        if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && onLinuxWindowChip(index, close))
+        // A Wall strip tile of a Linux window carries its row place (#392).
+        if (surface == com.termux.app.chrome.WindowChips.Surface.WALL_STRIP
+                && com.termux.app.dock.WallStripModel.isLinuxChip(index)) {
+            onLinuxWindowChip(com.termux.app.dock.WallStripModel.placeOfLinuxChip(index), close);
             return;
+        }
+        if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isDisplayWindowInFront()) {
+            // The bar's chips are row places, Linux windows' among them, then minimised Linux
+            // windows (#392); the terminal windows' meaning is read by their own index.
+            if (onLinuxWindowChip(index, close)) return;
+            int terminal = terminalAtPlace(index);
+            if (terminal < 0) return;
+            index = terminal;
+        }
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && isDisplayWindowInFront()) {
             // #192: on a Display page the bar's chips are the display's apps.
             if (!mDisplayServer.hasWindowList()) return;
@@ -30970,14 +31104,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     mPaneWallController.goTo(com.termux.app.page.PageKind.TERMINAL,
                         isVisible());
                 }
-                showRowWindow(meaning.row);
+                showRowWindow(placeOfTerminal(meaning.row));
                 return;
             case RESTORE_FLOAT:
                 // showHomeFloat travels Home itself when the wall is elsewhere (meaning.travel).
                 if (meaning.window != null) showHomeFloat(meaning.window);
                 return;
             case CLOSE_WINDOW:
-                closeRowWindow(meaning.row);
+                closeRowWindow(placeOfTerminal(meaning.row));
                 return;
             case CLOSE_FLOAT: {
                 // A float's × closes it as its titlebar's Close does: its shell ends.
@@ -30995,43 +31129,71 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Builds the Linux windows' controller and hands its view to the wall: Wayland builds only. */
     private void attachLinuxWindows() {
         if (!com.termux.BuildConfig.WAYLAND_DISPLAY || mPaneWallController == null || mLinuxWindows != null) return;
+        // Linux windows stand in the session's row since #392: a page a launcher before it left goes.
+        wallPagesStore().transform(com.termux.app.wall.WallPages::withoutLinuxWindows);
         mLinuxWindows = new com.termux.app.wayland.LinuxWindowsController(this,
             new com.termux.app.wayland.LinuxWindowsController.Host() {
-                @Override public int addPage(int afterId) {
-                    com.termux.app.wall.WallPages.Result r = wallPagesStore().edit(
-                        pages -> pages.addLinuxWindow(afterId));
-                    return r.ok() && r.page != null ? r.page.id : -1;
+                @Override public void addWindow(long id, boolean goTo) {
+                    // No current session: the one shown next takes it; with no session at all it
+                    // waits for the first (syncLinuxFront places it).
+                    int at = com.termux.app.terminal.LinuxWindowHoming.sessionForNew(
+                        mWSessions.indexOf(mCurrentWSession), mWSessions.size());
+                    if (at < 0) {
+                        mUnplacedLinuxWindows.add(id);
+                        return;
+                    }
+                    WSession ws = mWSessions.get(at);
+                    ws.row.add(ws.windows, ws.current, id);
+                    if (goTo && ws == mCurrentWSession) goToLinuxWindow(id);
+                    else onLinuxRowChanged();
                 }
-                @Override public void removePage(int pageId) {
-                    editWallPages(pages -> pages.remove(pageId));
-                    wallPagesStore().commitRemoval(pageId);
+                @Override public void removeWindow(long id) {
+                    removeLinuxWindow(id);
                 }
-                @Override public void removeAllPages() {
-                    wallPagesStore().transform(com.termux.app.wall.WallPages::withoutLinuxWindows);
+                @Override public void removeAllWindows() {
+                    mUnplacedLinuxWindows.clear();
+                    for (WSession ws : mWSessions) ws.row.clearLinux();
+                    if (mCurrentWSession != null) mCurrentWSession.row.clearLinux();
+                    onLinuxRowChanged();
                 }
-                @Override public int leftOf(int pageId) {
-                    com.termux.app.wall.WallPages.Page left = wallPages().leftOf(pageId);
-                    return left == null ? -1 : left.id;
+                @Nullable @Override public Object placeOf(long id) {
+                    // The place carries its session: the window goes back to that row.
+                    WSession ws = sessionWithLinuxWindow(id);
+                    if (ws == null) return null;
+                    return new com.termux.app.terminal.LinuxWindowHoming.Minimised<>(ws,
+                        ws.row.placeOf(ws.windows, id));
                 }
-                @Override public boolean hasPage(int pageId) {
-                    return pageId >= 0 && wallPages().page(pageId) != null;
+                @SuppressWarnings("unchecked")
+                @Override public void restoreWindow(long id, @Nullable Object place) {
+                    com.termux.app.terminal.LinuxWindowHoming.Minimised<WSession,
+                        com.termux.app.terminal.TerminalPaneController.Window> from =
+                        place instanceof com.termux.app.terminal.LinuxWindowHoming.Minimised
+                            ? (com.termux.app.terminal.LinuxWindowHoming.Minimised<WSession,
+                                com.termux.app.terminal.TerminalPaneController.Window>) place
+                            : null;
+                    WSession origin = from == null ? null : from.session;
+                    WSession target = com.termux.app.terminal.LinuxWindowHoming.sessionForRestore(
+                        origin, mWSessions, mCurrentWSession);
+                    if (target == null) {
+                        mUnplacedLinuxWindows.add(id);
+                        return;
+                    }
+                    if (from != null && com.termux.app.terminal.LinuxWindowHoming.atOldPlace(
+                            origin, target)) {
+                        target.row.restore(target.windows, target.current, id, from.place);
+                    } else {
+                        target.row.addAtEnd(target.windows, id);
+                    }
+                    // A restore is asked for by a tap, so the window is shown: its session comes
+                    // in front first when another one is.
+                    if (target != mCurrentWSession) {
+                        activateBrowserSession(mWSessions.indexOf(target));
+                    }
+                    if (target == mCurrentWSession) goToLinuxWindow(id);
+                    else onLinuxRowChanged();
                 }
-                @Override public int currentPageId() {
-                    return mPaneWallController == null ? -1 : mPaneWallController.currentPageId();
-                }
-                @Nullable @Override public com.termux.app.page.PageKind currentKind() {
-                    return mPaneWallController == null ? null : mPaneWallController.currentPage();
-                }
-                @Override public int terminalPageId() {
-                    com.termux.app.wall.WallPages.Page terminal = wallPages().terminal();
-                    return terminal == null ? -1 : terminal.id;
-                }
-                @Override public void goToPage(int pageId) {
-                    if (mPaneWallController != null) mPaneWallController.goToPageId(pageId, isVisible());
-                }
-                @Override public void keepPicture(int pageId, @Nullable android.graphics.Bitmap picture) {
-                    if (mPaneWallController != null) mPaneWallController.keepPicture(pageId, picture);
-                    else if (picture != null) picture.recycle();
+                @Override public void goToWindow(long id) {
+                    goToLinuxWindow(id);
                 }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
                 @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
@@ -31040,35 +31202,228 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return apps == null ? null : apps.nameFor(appId);
                 }
             });
-        mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows.page(), mLinuxWindows);
+        mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows, this::syncLinuxFront);
         com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
         mLinuxWindows.start();
     }
 
+    /** The Linux window {@link #syncLinuxFront} last stood in front; 0 for none. */
+    private long mLinuxFrontSynced;
+
+    /** Linux windows that opened while no session existed: they join the first session that appears. */
+    private final java.util.ArrayList<Long> mUnplacedLinuxWindows = new java.util.ArrayList<>();
+
     /**
-     * The bar's Linux window chips, after the terminal windows' (spec #384): the app's name and
-     * icon. The selection moves to the Linux window in front; the bar's own otherwise.
+     * Stands the Linux window in front of the current row, if any, in the Terminal page's place,
+     * and tells the Linux windows which one the view shows and whether it holds its surface: the
+     * one in front, else one beside it, within a row place of the front ({@code
+     * LinuxWindowRow.holdsSurface} over row places, #392). Run on every landing and row change.
+     */
+    private void syncLinuxFront() {
+        if (mLinuxWindows == null || mPaneWallController == null) return;
+        WSession ws = mCurrentWSession;
+        if (ws != null && !mUnplacedLinuxWindows.isEmpty()) {
+            for (long id : mUnplacedLinuxWindows) ws.row.add(ws.windows, ws.current, id);
+            mUnplacedLinuxWindows.clear();
+        }
+        long front = linuxWindowInFront();
+        int frontPlace = rowCurrentIndex();
+        long bound = front;
+        if (bound == 0L && ws != null && ws.row.hasLinux()) {
+            long after = ws.row.linuxAt(ws.windows, frontPlace + 1);
+            bound = after != 0L ? after : ws.row.linuxAt(ws.windows, frontPlace - 1);
+        }
+        int boundPlace = bound == 0L || ws == null ? -1 : ws.row.indexOfLinux(ws.windows, bound);
+        boolean terminalPage = mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL;
+        mPaneWallController.setLinuxInFront(front != 0L);
+        mLinuxWindows.bind(bound);
+        mLinuxWindows.setNearFront(terminalPage
+            && com.termux.app.wayland.LinuxWindowRow.holdsSurface(bound != 0L, boundPlace, frontPlace));
+        mLinuxWindows.setInFront(terminalPage && front != 0L);
+        if (front == mLinuxFrontSynced) return;
+        mLinuxFrontSynced = front;
+        // The keys go to the Linux window in front, or back to the terminal.
+        restoreInAppKeyboardTypingClaim();
+    }
+
+    /** A Linux window joined or left the row without paging: the wall, chips and drawer follow. */
+    private void onLinuxRowChanged() {
+        syncLinuxFront();
+        refreshTerminalWindowBar();
+        rebuildDrawerSessions();
+    }
+
+    /** The session whose row holds Linux window {@code id}; null for none. */
+    @Nullable
+    private WSession sessionWithLinuxWindow(long id) {
+        if (mCurrentWSession != null && mCurrentWSession.row.contains(id)) return mCurrentWSession;
+        for (WSession ws : mWSessions) if (ws.row.contains(id)) return ws;
+        return null;
+    }
+
+    /**
+     * Linux window {@code id} leaves its row: in front, its neighbour comes in front as when a
+     * terminal window closes ({@code SessionRow#remove}).
+     */
+    private void removeLinuxWindow(long id) {
+        mUnplacedLinuxWindows.remove(Long.valueOf(id));
+        WSession ws = sessionWithLinuxWindow(id);
+        if (ws == null) return;
+        boolean wasFront = ws == mCurrentWSession && linuxWindowInFront() == id;
+        int next = ws.row.remove(ws.windows, ws.current, id);
+        if (wasFront && next >= 0 && mPaneController != null) {
+            int terminal = ws.row.terminalAt(ws.windows, next);
+            if (terminal >= 0 && terminal != ws.current) {
+                ws.current = terminal;
+                mPaneController.showWindow(ws.currentWindow());
+            }
+        }
+        onLinuxRowChanged();
+    }
+
+    /** The wall pages to Linux window {@code id} in the current row: on the Terminal by a window switch, else there. */
+    private void goToLinuxWindow(long id) {
+        WSession ws = mCurrentWSession;
+        if (ws == null || mPaneWallController == null) return;
+        int place = ws.row.indexOfLinux(ws.windows, id);
+        if (place < 0) return;
+        if (mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL) {
+            showRowWindow(place);
+            return;
+        }
+        showRowPlaceAcrossLinux(place, 0, 0f, com.termux.app.wall.WallParallax.ADJACENT);
+        mPaneWallController.goTo(com.termux.app.page.PageKind.TERMINAL, isVisible());
+    }
+
+    /**
+     * Brings row place {@code row} in front when a Linux window stands there or is in front now
+     * (#392): the cover comes or goes in the Terminal page's place, the terminal window at
+     * {@code row} shown behind it, travelling as a window switch from {@code direction}'s side
+     * over {@code fromPx} (0: a whole page), at once for direction 0. A Linux window leaving is
+     * pictured from its own pixels. False when neither end is a Linux window: the caller's
+     * terminal path runs.
+     */
+    private boolean showRowPlaceAcrossLinux(int row, int direction, float fromPx, int fromWindow) {
+        WSession ws = mCurrentWSession;
+        if (ws == null || mPaneController == null || mLinuxWindows == null || !ws.row.hasLinux()) return false;
+        if (row < 0 || row >= ws.row.count(ws.windows)) return false;
+        long leaving = linuxWindowInFront();
+        long arriving = ws.row.linuxAt(ws.windows, row);
+        if (leaving == 0L && arriving == 0L) return false;
+        boolean travels = direction != 0 && isVisible() && !isReducedMotionEnabled()
+            && mPaneWallController != null
+            && mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL;
+        if (!travels) {
+            dropTerminalDepartureSnapshot();
+        } else if (leaving != 0L) {
+            // A software draw of the wall cannot read the Linux window's TextureView.
+            dropTerminalDepartureSnapshot();
+            mTerminalDepartureSnapshot = mLinuxWindows.departurePicture();
+            mTerminalDepartureTranslucent = true;
+            mTerminalDepartureSlidePx = 0f;
+            mTerminalDepartureShiftPx = 0f;
+        } else if (mTerminalDepartureSnapshot == null) {
+            captureTerminalDeparture();
+        }
+        mStatusCardHost.dismiss();
+        int terminal = ws.row.select(ws.windows, row);
+        if (terminal >= 0) {
+            ws.current = terminal;
+            if (mPaneController.activeWindow() != ws.currentWindow()) {
+                mPaneController.showWindow(ws.currentWindow());
+            }
+        }
+        syncLinuxFront();
+        refreshTerminalWindowBar();
+        if (!travels) {
+            rebuildDrawerSessions();
+            return true;
+        }
+        View host = findViewById(R.id.terminal_surface_host);
+        int width = host == null ? 0 : host.getWidth();
+        float remaining = Math.abs(fromPx);
+        long duration = com.termux.app.terminal.TerminalWindowBar.WINDOW_SWITCH_ANIMATION_DURATION_MS;
+        if (width > 0 && remaining > 0f) {
+            duration = Math.max(160L, Math.round(duration * Math.min(1f, remaining / width)));
+        }
+        duration = windowSwitchMs(duration);
+        // A Linux window arriving draws from its own surface: no pane host draw to wait for.
+        animateTerminalArrival(direction, true, duration, remaining, fromWindow, arriving == 0L,
+            this::rebuildDrawerSessions);
+        return true;
+    }
+
+    /** A Linux window's name on the bar and the page bar: its app's name, else a plain word. */
+    @NonNull
+    private String linuxWindowName(long id) {
+        com.termux.app.wayland.LinuxWindowsController.Chip chip =
+            mLinuxWindows == null ? null : mLinuxWindows.chip(id);
+        return chip != null ? chip.label : getString(R.string.linux_window_app);
+    }
+
+    /**
+     * The bar's chips in row order, Linux windows' among the terminal windows' (#392), then the
+     * minimised Linux windows: the app's name and icon. Answers the chip selected: the row place
+     * in front ({@code selected} is the terminal window's index).
      */
     private int addLinuxWindowItems(
             @NonNull java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> items,
             int selected) {
-        if (mLinuxWindows == null) return selected;
+        WSession ws = mCurrentWSession;
+        if (mLinuxWindows == null || ws == null) return selected;
+        if (!ws.row.hasLinux() && mLinuxWindows.chips().isEmpty()) return selected;
+        java.util.List<com.termux.app.terminal.TerminalWindowBar.WindowItem> terminals =
+            new java.util.ArrayList<>(items);
+        items.clear();
         com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
-        for (com.termux.app.wayland.LinuxWindowsController.Chip chip : mLinuxWindows.chips()) {
-            if (chip.front) selected = items.size();
-            items.add(new com.termux.app.terminal.TerminalWindowBar.WindowItem(chip.label, chip.label)
-                .withIcon(apps == null || chip.appId.isEmpty() ? null : apps.iconFor(chip.appId)));
+        int places = ws.row.count(ws.windows);
+        for (int i = 0; i < places; i++) {
+            int terminal = ws.row.terminalAt(ws.windows, i);
+            if (terminal >= 0) {
+                if (terminal < terminals.size()) items.add(terminals.get(terminal));
+                continue;
+            }
+            items.add(linuxWindowItem(ws.row.linuxAt(ws.windows, i), apps));
         }
-        return selected;
+        for (com.termux.app.wayland.LinuxWindowsController.Chip chip : mLinuxWindows.chips()) {
+            if (chip.minimised) items.add(linuxWindowItem(chip.id, apps));
+        }
+        return selected < 0 ? selected : rowCurrentIndex();
     }
 
-    /** A tap or × on a bar chip past the terminal windows' is a Linux window's; false otherwise. */
+    @NonNull
+    private com.termux.app.terminal.TerminalWindowBar.WindowItem linuxWindowItem(long id,
+            @Nullable com.termux.app.x11.X11WindowIconResolver apps) {
+        com.termux.app.wayland.LinuxWindowsController.Chip chip =
+            mLinuxWindows == null ? null : mLinuxWindows.chip(id);
+        String label = chip != null ? chip.label : getString(R.string.linux_window_app);
+        String appId = chip != null ? chip.appId : "";
+        return new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label)
+            .withIcon(apps == null || appId.isEmpty() ? null : apps.iconFor(appId));
+    }
+
+    /**
+     * A tap or × on a bar chip that is a Linux window's: at its row place, or past the row a
+     * minimised one's. False for a terminal window's chip.
+     */
     private boolean onLinuxWindowChip(int index, boolean close) {
-        if (mLinuxWindows == null || mPaneController == null || isDisplayWindowInFront()) return false;
-        int at = index - windowChips().count(com.termux.app.chrome.WindowChips.Surface.BAR);
-        java.util.List<com.termux.app.wayland.LinuxWindowsController.Chip> chips = mLinuxWindows.chips();
-        if (at < 0 || at >= chips.size()) return false;
-        long id = chips.get(at).id;
+        WSession ws = mCurrentWSession;
+        if (mLinuxWindows == null || mPaneController == null || ws == null) return false;
+        int places = ws.row.count(ws.windows);
+        long id = 0L;
+        if (index >= 0 && index < places) {
+            id = ws.row.linuxAt(ws.windows, index);
+        } else if (index >= places) {
+            int at = index - places;
+            for (com.termux.app.wayland.LinuxWindowsController.Chip chip : mLinuxWindows.chips()) {
+                if (!chip.minimised) continue;
+                if (at-- == 0) {
+                    id = chip.id;
+                    break;
+                }
+            }
+        }
+        if (id == 0L) return false;
         if (close) mLinuxWindows.closeChip(id); else mLinuxWindows.tapChip(id);
         return true;
     }
@@ -31526,9 +31881,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         } else {
             selected = addLinuxWindowItems(items, selected);
         }
-        // The row's own windows can be dragged to reorder, the display window's chip with them:
-        // not the Home floats' after them. The same on both halves.
-        bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0 : chips.rowCount());
+        // The row's own windows can be dragged to reorder, Linux windows' chips among them: not
+        // the Home floats' or minimised Linux windows' after them. The same on both halves.
+        bar.setMovableChipCount(items.isEmpty() || isDisplayWindowInFront() ? 0
+            : Math.min(items.size(), rowWindowCount()));
         bar.setWindows(items, selected);
         syncFontToggle();
         refreshPageGlyphsIfWindowsMoved();
@@ -32397,11 +32753,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         int from = rowCurrentIndex();
         int row = from + steps;
-        if (row < 0 || row >= rowWindows().size()) {
+        if (row < 0 || row >= rowWindowCount()) {
             dropTerminalDepartureSnapshot();
             return;
         }
-        int target = row;
+        if (!isDisplayWindowInFront() && showRowPlaceAcrossLinux(row, steps > 0 ? 1 : -1, fromPx,
+                com.termux.app.wall.WallParallax.ADJACENT)) {
+            return;
+        }
+        int target = terminalAtPlace(row);
         if (mCurrentWSession == null || target < 0 || target >= mCurrentWSession.windows.size()) {
             dropTerminalDepartureSnapshot();
             return;
@@ -32454,8 +32814,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * (Live windows while swiping), so a step to it is a promotion rather than a swap.
      */
     private boolean isLiveWindowStep(int steps) {
-        if (mPaneController == null || isDisplayWindowInFront()) return false;
-        int target = rowCurrentIndex() + steps;
+        // A step to or from a Linux window is never live: its neighbours are pictured (#392).
+        if (mPaneController == null || isDisplayWindowInFront() || linuxWindowInFront() != 0L) return false;
+        int target = terminalAtPlace(rowCurrentIndex() + steps);
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> row = rowWindows();
         return target >= 0 && target < row.size() && mPaneController.isLiveNeighbour(row.get(target));
     }
@@ -32467,7 +32828,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean isTerminalOnRow() {
         // Before the service is bound nothing is known, and the terminal is assumed, as before.
-        return com.termux.app.wall.WallRow.hasTerminal(mTermuxService != null, rowWindowCount());
+        // Linux windows do not keep the Terminal on the row: closing its last terminal window
+        // closes it as before (#392).
+        return com.termux.app.wall.WallRow.hasTerminal(mTermuxService != null, terminalWindowCount());
     }
 
     /** How many windows the wall's view of that kind holds; Home's pages come from {@link #mHomeSeam}. */
@@ -32486,7 +32849,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void showWallInnerPage(@NonNull com.termux.app.page.PageKind page, int index) {
         if (mPaneController == null || index == rowCurrentIndex()) return;
-        int window = index;
+        if (!isDisplayWindowInFront() && showRowPlaceAcrossLinux(index, 0, 0f,
+                com.termux.app.wall.WallParallax.ADJACENT)) {
+            return;
+        }
+        int window = terminalAtPlace(index);
         if (mCurrentWSession == null || window < 0 || window >= mCurrentWSession.windows.size()) {
             return;
         }
@@ -32547,7 +32914,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPaneController == null || mCurrentWSession == null
             || index < 0 || index >= mCurrentWSession.windows.size()) return;
         if (isDisplayWindowInFront()) {
-            showRowWindow(index);
+            showRowWindow(placeOfTerminal(index));
             return;
         }
         int previous = mCurrentWSession.current;
@@ -33489,6 +33856,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!focus && at <= mCurrentWSession.current) mCurrentWSession.current++;
         if (focus) {
             mCurrentWSession.current = at;
+            mCurrentWSession.row.clearFront();
             if (isDisplayWindowInFront()) {
                 // Off the display window: its frame goes off as the new window comes in.
                 mPaneController.showWindow(w);
@@ -33577,7 +33945,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * display window keeps its place among the windows around it.
      */
     private int insertRowWindow(@NonNull com.termux.app.terminal.TerminalPaneController.Window w) {
-        return insertRowWindowAt(w, com.termux.app.wall.WallRow.insertionIndex(rowCurrentIndex(), rowWindowCount()));
+        WSession ws = mCurrentWSession;
+        // Right after the window in front, a Linux window's included: the Linux windows after it
+        // then follow the new window (#392).
+        int at = insertRowWindowAt(w, ws.row.newTerminalIndex(ws.windows, ws.current));
+        ws.row.terminalAdded(ws.windows, w);
+        return at;
     }
 
     /**
@@ -33623,6 +33996,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int fromRow = rowCurrentIndex();
             int at = insertRowWindow(w);
             mCurrentWSession.current = at;
+            mCurrentWSession.row.clearFront();
             if (isDisplayWindowInFront()) {
                 // Off the display window: its frame goes off as the new window comes in.
                 mPaneController.showWindow(w);
@@ -34241,12 +34615,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // reduced motion, where the wall never shows them, or with the display in front.
         @Nullable @Override
         public com.termux.app.terminal.TerminalPaneController.Window liveNeighbourWindow(int side) {
+            // Nor beside a Linux window in front, and a Linux window beside is pictured (#392).
             boolean enabled = mPreferences != null && mPreferences.isLiveWindowsWhileSwipingEnabled()
-                && !isReducedMotionEnabled() && !isDisplayWindowInFront();
+                && !isReducedMotionEnabled() && !isDisplayWindowInFront()
+                && linuxWindowInFront() == 0L;
             int index = com.termux.app.wall.LiveNeighbourPolicy.neighbourIndex(enabled,
                 rowCurrentIndex(), rowWindowCount(), side);
-            return index == com.termux.app.wall.LiveNeighbourPolicy.NONE ? null
-                : rowWindows().get(index);
+            int terminal = index == com.termux.app.wall.LiveNeighbourPolicy.NONE ? -1
+                : terminalAtPlace(index);
+            return terminal < 0 ? null : rowWindows().get(terminal);
         }
 
         @Override @Nullable public TerminalSession createShell(@Nullable String cwd) {

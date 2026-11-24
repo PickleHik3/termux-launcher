@@ -103,6 +103,19 @@ public class PageBarModelTest {
         assertEquals("Home 1|Work|htop|Terminal 2", labels(in));
     }
 
+    @Test public void linuxWindowAmongTerminalWindowsWearsTheLinuxGlyphKind() {
+        Input in = wall("T", 1);
+        in.windowNames = Arrays.asList("htop", "xeyes", null);
+        in.linuxWindows = new boolean[] {false, true, true};
+        PageBarModel m = PageBarModel.build(in);
+        assertEquals(PageKind.TERMINAL, m.entries().get(0).kind);
+        assertEquals(PageKind.LINUX, m.entries().get(1).kind);
+        assertEquals(PageKind.LINUX, m.entries().get(2).kind);
+        assertEquals("htop|xeyes|Display", labels(in));
+        assertEquals(Action.GO_TERMINAL, m.entries().get(1).target.action);
+        assertEquals(1, m.entries().get(1).target.index);
+    }
+
     @Test public void windowLabelsLoseIconCodePoints() {
         Input in = wall("T", 1);
         in.windowNames = Arrays.asList(" vim");
