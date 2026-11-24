@@ -30,9 +30,43 @@ public class LinuxDisplayScaleTest {
     }
 
     @Test
-    public void aFreshInstallsDefaultsAreOne() {
-        // X11Defaults sets "scaled" and the store's displayScale default is 100.
-        assertEquals(1.0f, LinuxDisplayScale.outputScale("scaled", 100), 0f);
-        assertEquals(1.0f, LinuxDisplayScale.outputScale("native", 100), 0f);
+    public void aFreshInstallFollowsTheScreensDensity() {
+        // Nothing stored, or only the "scaled" mode X11Defaults and the settings page write.
+        assertEquals(2.5f, LinuxDisplayScale.outputScale(null, null, 2.625f), 0f);
+        assertEquals(2.5f, LinuxDisplayScale.outputScale("scaled", null, 2.625f), 0f);
+        assertEquals(3.0f, LinuxDisplayScale.outputScale(null, null, 3.0f), 0f);
+    }
+
+    @Test
+    public void aStopTheUserChoseWinsOverTheDensity() {
+        // The rail at 100 writes "native"; at any other stop it stores the percent.
+        assertEquals(1.0f, LinuxDisplayScale.outputScale("native", null, 2.625f), 0f);
+        assertEquals(1.0f, LinuxDisplayScale.outputScale("native", 150, 2.625f), 0f);
+        assertEquals(1.5f, LinuxDisplayScale.outputScale("scaled", 150, 2.625f), 0f);
+        // The settings slider can store 100 in the scaled mode: still the user's 100.
+        assertEquals(1.0f, LinuxDisplayScale.outputScale("scaled", 100, 2.625f), 0f);
+        assertEquals(1.0f, LinuxDisplayScale.outputScale("exact", null, 2.625f), 0f);
+        // A percent with no mode reads as X11 Display reads it: the store's default, native.
+        assertEquals(1.0f, LinuxDisplayScale.outputScale(null, 200, 2.625f), 0f);
+    }
+
+    @Test
+    public void theDensityScaleIsTheNearestQuarterTiesDown() {
+        assertEquals(1.0f, LinuxDisplayScale.densityScale(1.0f), 0f);
+        assertEquals(1.5f, LinuxDisplayScale.densityScale(1.5f), 0f);
+        assertEquals(2.0f, LinuxDisplayScale.densityScale(2.0f), 0f);
+        assertEquals(2.5f, LinuxDisplayScale.densityScale(2.625f), 0f); // 420 dpi
+        assertEquals(2.75f, LinuxDisplayScale.densityScale(2.75f), 0f); // 440 dpi
+        assertEquals(2.75f, LinuxDisplayScale.densityScale(2.8f), 0f);
+        assertEquals(3.5f, LinuxDisplayScale.densityScale(3.5f), 0f); // 560 dpi
+    }
+
+    @Test
+    public void theDensityScaleStaysInItsBounds() {
+        assertEquals(1.0f, LinuxDisplayScale.densityScale(0.75f), 0f);
+        assertEquals(4.0f, LinuxDisplayScale.densityScale(5.0f), 0f);
+        assertEquals(1.0f, LinuxDisplayScale.densityScale(0f), 0f);
+        assertEquals(1.0f, LinuxDisplayScale.densityScale(Float.NaN), 0f);
+        assertEquals(1.0f, LinuxDisplayScale.densityScale(Float.POSITIVE_INFINITY), 0f);
     }
 }
