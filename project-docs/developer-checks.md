@@ -10,6 +10,11 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Sound and display without variables (2026-11-24, feat/wayland-sound)
+- 2026-11-24 · feat/wayland-sound · Sound from an ssh shell with no variables. `ssh termux 'env -u PULSE_SERVER -u PULSE_COOKIE paplay <any .wav>'`, Sound on and the launcher's server running. Passes when it plays and `cat $PREFIX/etc/pulse/client.conf.d/termux-launcher.conf` shows the launcher's header · pong.
+- 2026-11-24 · feat/wayland-sound · Sound from a hand-opened distro login. After a resume of the launcher, `proot-distro login debian -- sh -c 'cat /etc/pulse/client.conf.d/termux-launcher.conf; paplay <any .wav>'` plays; again with `--isolated`, which should still play (TCP on loopback and the cookie's copy live in the rootfs) · pong.
+- 2026-11-24 · feat/wayland-sound · The display login script. With Wayland Display chosen, after a resume: `proot-distro login debian -- bash -lc 'echo "$WAYLAND_DISPLAY $DISPLAY"'` prints the prefix's `tmp/wayland-0` path; with `--shared-x11` and an X11 app open in the shared Xwayland it also prints `:n`; with X11 Display chosen and nothing running it prints nothing; `--isolated` prints nothing. Also `DISPLAY=:0 xdpyinfo` in a default login while X11 Display runs: if it connects (abstract socket), the script's socket-file test is stricter than needed · pong.
+
 ## Page bar and keyboard settings (2026-11-21, #298)
 - 2026-11-21 · 09ef9a875 · How the page bar looks and feels: filled glyphs, the pill hugged and centred above the dock (at the dock's bottom line when every dock row is hidden), full width from the page switcher key, the stack of windows, the bubble while sliding. Passes when it reads as one piece with the dock and the widgets on pong's wallpapers · pong.
 - 2026-11-21 · 09ef9a875 · Decide: a press on the page switcher key with no slide leaves the bar up for one use and the next touch anywhere, the key included, puts it away. On the emulator that read as every second hold "doing nothing". Keep, or have a second press on the key keep the bar · pong.
