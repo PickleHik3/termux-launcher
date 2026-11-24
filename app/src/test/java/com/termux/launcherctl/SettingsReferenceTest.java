@@ -40,7 +40,7 @@ public class SettingsReferenceTest {
         String actual = page.isFile()
             ? new String(Files.readAllBytes(page.toPath()), StandardCharsets.UTF_8) : "";
         assertEquals("docs/en/" + SettingsReference.PAGE + " is out of date. Regenerate it with: "
-            + REGENERATE + "=1 ./gradlew :app:cleanTestDebugUnitTest :app:testDebugUnitTest"
+            + REGENERATE + "=1 ./gradlew :app:testDebugUnitTest"
             + " --tests 'com.termux.launcherctl.SettingsReferenceTest' and commit the page.",
             expected, actual);
     }
@@ -61,8 +61,14 @@ public class SettingsReferenceTest {
 
     @Test public void thePageNamesEverySettingConfigListShows() {
         String text = SettingsReference.render();
-        for (SettingsRegistry.Entry entry : SettingsReference.registry().list())
+        for (SettingsRegistry.Entry entry : SettingsReference.registry().list()) {
+            boolean listed = text.contains("`" + entry.declaration.id + "`");
+            if (!SettingsReference.shown(entry.declaration)) {
+                assertFalse(entry.declaration.id + " is retired and left off the page", listed);
+                continue;
+            }
             assertTrue(entry.declaration.id + " is on the page",
-                text.contains("`" + entry.declaration.id + "`"));
+                listed);
+        }
     }
 }

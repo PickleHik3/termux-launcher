@@ -648,6 +648,8 @@ tasks.named("preBuild").configure {
 // from the Gradle invocation to the test JVM so `./gradlew testDebugUnitTest -Dvoice.replay.in=…`
 // reaches it. An ordinary test run passes none of them, so nothing here changes that run.
 tasks.withType(Test).configureEach {
+    // SettingsReferenceTest compares this page with its generator: a hand edit must re-run it.
+    inputs.file(rootProject.file('docs/en/Settings_Reference.md')).withPropertyName('settingsReference')
     // Picture-only tests (ReportRenders) stay skipped unless -Preports.renders (or -Dreports.renders=true).
     def renders = System.getProperty('reports.renders') ?: project.findProperty('reports.renders')
     if (renders != null) systemProperty 'reports.renders', (renders == '' ? 'true' : renders)

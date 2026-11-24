@@ -29,6 +29,9 @@ import java.util.Locale;
  * stop ({@code 3}, not {@code 3 (8dp)}), a Background blur its dp, a colour its name.</p>
  */
 public final class LookSettingsAdapter implements SettingAdapter {
+    /** The summary of a property Shine replaced; `config list` keeps it, the settings reference leaves it out. */
+    static final String RETIRED = "No longer used; Shine replaced it.";
+
 
     private static final String PREFIX = "look.";
     private static final String BACKGROUND = "background";
@@ -122,9 +125,9 @@ public final class LookSettingsAdapter implements SettingAdapter {
             case "tint": what = "tint"; how = "How strongly the theme colour tints the glass, in percent."; break;
             case "colour": what = "tint colour"; how = "Which theme colour tints the glass."; break;
             case "depth": what = "depth"; how = "How strongly the glass bends the wallpaper at its edge, in dp."; break;
-            case "edge": what = "edge"; how = "No longer used; Shine replaced it."; break;
+            case "edge": what = "edge"; how = RETIRED; break;
             case "corners": what = "corners"; how = "How round the corners are, in dp; the lowest value follows each surface's style."; break;
-            case "rim": what = "rim"; how = "No longer used; Shine replaced it."; break;
+            case "rim": what = "rim"; how = RETIRED; break;
             case "shine": what = "shine"; how = "How much light catches the glass's rim and lens."; break;
             case "vibrancy": what = "vibrancy"; how = "How much the glass lifts the colours behind it."; break;
             case "margin": what = "edge gap"; how = "The gap between the glass and the screen edge, in dp."; break;

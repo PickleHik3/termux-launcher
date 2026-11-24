@@ -63,7 +63,7 @@ final class SettingsReference {
         StringBuilder page = new StringBuilder();
         page.append("# Settings reference\n\n")
             .append("<!-- Generated from the launcher's settings; do not edit by hand. To update it, run\n")
-            .append("REGENERATE_SETTINGS_REFERENCE=1 ./gradlew :app:cleanTestDebugUnitTest")
+            .append("REGENERATE_SETTINGS_REFERENCE=1 ./gradlew")
             .append(" :app:testDebugUnitTest --tests 'com.termux.launcherctl.SettingsReferenceTest' -->\n\n")
             .append("Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change, ")
             .append("with the values it accepts and what a fresh install uses. A value outside the ")
@@ -74,7 +74,7 @@ final class SettingsReference {
                 .append("|---|---|---|---|---|\n");
             for (SettingsRegistry.Entry entry : registry().list()) {
                 SettingDeclaration declaration = entry.declaration;
-                if (!sectionOf(declaration.id).equals(heading)) continue;
+                if (!shown(declaration) || !sectionOf(declaration.id).equals(heading)) continue;
                 page.append("| ").append(declaration.title)
                     .append(" | `").append(declaration.id).append('`')
                     .append(" | ").append(values(declaration))
@@ -86,6 +86,11 @@ final class SettingsReference {
             .append("`launcherctl config list` and described under ")
             .append("[layout](LauncherCtl.md#layout).\n");
         return page.toString();
+    }
+
+    /** Whether the page lists the setting: retired look properties stay in `config list` only. */
+    static boolean shown(@NonNull SettingDeclaration declaration) {
+        return !LookSettingsAdapter.RETIRED.equals(declaration.summary);
     }
 
     @NonNull
