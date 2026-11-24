@@ -145,4 +145,13 @@ public final class PaneShape {
     public static int topInsetPx(int bottomInsetPx, int headroomPx, int rowPx) {
         return topInsetPx(bottomInsetPx, headroomPx) + Math.max(0, rowPx);
     }
+
+    /**
+     * Where the pane's edge-colour bands start below its top: under the thin status row when it
+     * stands in this pane ({@code rowPx}), else at the top. The row is drawn behind the pane, so a
+     * band reaching above this would paint over it.
+     */
+    public static float fillBandTopPx(int rowPx) {
+        return Math.max(0, rowPx);
+    }
 }

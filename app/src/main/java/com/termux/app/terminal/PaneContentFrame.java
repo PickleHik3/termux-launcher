@@ -647,6 +647,9 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         if (contentLeft <= 0 && contentTop <= 0 && contentRight >= getWidth() && contentBottom >= getHeight())
             return false;
 
+        // The thin status row stands in the top of this pane's margin, drawn behind the pane: the
+        // bands start below it, so no edge colour paints over the row.
+        float bandTop = PaneShape.fillBandTopPx(mStatusRowPx);
         int save = canvas.save();
         canvas.clipPath(getBandClipPath());
         // Top and bottom bands: one rect per run of equal-coloured columns, directly above/below
@@ -668,7 +671,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             float left = c == 0 ? 0f : contentLeft + terminal.getPaddingColumnLeft(c);
             float right = runEnd == columns
                 ? getWidth() : contentLeft + terminal.getPaddingColumnLeft(runEnd);
-            fillRect(canvas, left, 0f, right, contentTop, topColor);
+            fillRect(canvas, left, bandTop, right, contentTop, topColor);
             fillRect(canvas, left, contentBottom, right, getHeight(), bottomColor);
             c = runEnd;
         }
@@ -686,7 +689,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
             int runEnd = r + 1;
             while (runEnd < rows && terminal.getEdgeRowColorLeft(runEnd) == leftColor
                 && terminal.getEdgeRowColorRight(runEnd) == rightColor) runEnd++;
-            float top = r == 0 ? 0f : contentTop + terminal.getPaddingRowTop(r);
+            float top = r == 0 ? bandTop : contentTop + terminal.getPaddingRowTop(r);
             float bottom = runEnd == rows
                 ? getHeight() : contentTop + terminal.getPaddingRowTop(runEnd);
             fillRect(canvas, 0f, top, contentLeft, bottom, leftColor);
