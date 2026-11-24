@@ -162,6 +162,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     /** The extra-keys card's pose as last drawn: a move of it alone re-aims its glass. */
     private float mDrawnKeysCardTx = Float.NaN;
     private float mDrawnKeysCardTy = Float.NaN;
+    /**
+     * The Terminal's own host and whether it is the slab, looked up once per {@link #apply}
+     * ({@link #terminalHostStands}) for every write of that frame.
+     */
+    @Nullable private View mFrameTerminalHost;
+    private boolean mFrameTerminalHostStands;
     private static final int HOST_VIEW = RestCards.StackView.HOST.ordinal();
     private static final int TERMINAL_HOST_VIEW = RestCards.StackView.TERMINAL_HOST.ordinal();
     private static final int KEYS_CARD_VIEW = RestCards.StackView.KEYS_CARD.ordinal();
@@ -471,6 +477,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             ? HomeKeyboardCover.rowsDropPx(false, keyboardPx, coverShare) : 0f;
         StackScene.at(from, to, p, mEffective, mGeometry, mFrame);
         mPlankTarget = plankTarget();
+        mFrameTerminalHost = mViews.view(R.id.terminal_dock_host);
+        mFrameTerminalHostStands = hostStands(mFrameTerminalHost);
         mCoverHomeDropPx = mFrame.coverHomePx;
         mCoverSharedDropPx = mFrame.coverSharedPx;
         mCoverKeyboardTopPx = covered && keyboardPx > 0 && coverShare < keyboardPx
@@ -494,7 +502,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         // The host carries the card the scene poses on it: Home's, sliding with Home and standing
         // where Home's side stands, or one both ends draw alike, which keeps its rest. The plank
         // tilts the card the scene names (the Terminal's own while it stands).
-        final boolean keysTilt = terminalCardStands();
+        final boolean keysTilt = mFrameTerminalHostStands || keysCardStands();
         final float hostTx = mFrame.cardTx[HOST_VIEW];
         for (int i = 0; i < StackGeometry.LAYER_COUNT; i++) {
             int v = StackScene.V_LAYER0 + i;
@@ -699,11 +707,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * samples where the scene draws it ({@link #cardDrawnX}).
      */
     private void writeTerminalHost(boolean tilts) {
-        View host = mViews.view(R.id.terminal_dock_host);
+        View host = mFrameTerminalHost;
         if (host == null) return;
         float tx = mFrame.cardTx[TERMINAL_HOST_VIEW];
         float ty = mFrame.cardTy[TERMINAL_HOST_VIEW];
-        boolean stands = tilts && terminalHostStands();
+        boolean stands = tilts && mFrameTerminalHostStands;
         boolean moved = writeTy(SLOT_TERMINAL_HOST, host, ty + (stands ? plankTy(PLANK_HOST) : 0f));
         float txWas = host.getTranslationX();
         writePlank(SLOT_TERMINAL_HOST, host, stands ? PLANK_HOST : PLANK_NONE, tx);
@@ -745,9 +753,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * rim glow follow it.
      */
     public boolean terminalHostStands() {
-        if (mFrame.slabView != TERMINAL_HOST_VIEW) return false;
-        View host = mViews.view(R.id.terminal_dock_host);
-        return host != null && host.getVisibility() == View.VISIBLE;
+        return hostStands(mViews.view(R.id.terminal_dock_host));
+    }
+
+    /** {@link #terminalHostStands} for the Terminal's host {@code host}, already looked up. */
+    private boolean hostStands(@Nullable View host) {
+        return mFrame.slabView == TERMINAL_HOST_VIEW && host != null
+            && host.getVisibility() == View.VISIBLE;
     }
 
     /**
