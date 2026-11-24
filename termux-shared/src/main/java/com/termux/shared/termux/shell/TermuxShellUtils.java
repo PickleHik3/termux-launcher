@@ -6,6 +6,7 @@ import com.termux.shared.errors.Error;
 import com.termux.shared.file.filesystem.FileTypes;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.file.FileUtils;
+import com.termux.shared.file.OlderThanSweeper;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.properties.TermuxAppSharedProperties;
 import org.apache.commons.io.filefilter.TrueFileFilter;
@@ -110,5 +111,18 @@ public class TermuxShellUtils {
                 Logger.logErrorExtended(LOG_TAG, "Failed to delete files from termux $TMPDIR older than " + days + " days\n" + error);
             }
         }
+    }
+
+    /**
+     * Delete the entries under this edition's {@link TermuxConstants#TERMUX_TMP_PREFIX_DIR_PATH}
+     * that were not modified within {@code ageMillis}. Newer entries and the directories holding
+     * them stay. Symlinks are judged and removed as links. Does not touch any view state, so it is
+     * safe off the main thread; it does not create the directory if it is missing.
+     *
+     * @return what was freed, to show the user; empty when the directory does not exist.
+     */
+    @NonNull
+    public static OlderThanSweeper.Result clearTermuxTMPDIROlderThan(long ageMillis) {
+        return OlderThanSweeper.sweep(new File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH), ageMillis, System.currentTimeMillis());
     }
 }
