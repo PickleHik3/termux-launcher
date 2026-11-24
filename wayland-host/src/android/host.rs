@@ -141,6 +141,39 @@ pub struct StartConfig {
     pub scale: f64,
     pub frame_period: Duration,
     pub xwayland: Option<super::xwayland::XwaylandConfig>,
+    /// A socket the launcher already listens on at `socket_path`, handed over to be accepted on;
+    /// None binds `socket_path` here. An adopted socket is left in place on stop: the launcher
+    /// keeps listening on it.
+    pub listen_fd: Option<OwnedFd>,
+}
+
+/// Where clients connect: a socket bound here (its drop removes it and its lock), or the
+/// launcher's, adopted.
+enum Listener {
+    Bound(ListeningSocket),
+    Adopted(std::os::unix::net::UnixListener),
+}
+
+impl Listener {
+    fn accept(&self) -> std::io::Result<Option<UnixStream>> {
+        match self {
+            Listener::Bound(l) => l.accept(),
+            Listener::Adopted(l) => match l.accept() {
+                Ok((stream, _)) => Ok(Some(stream)),
+                Err(e) if e.kind() == std::io::ErrorKind::WouldBlock => Ok(None),
+                Err(e) => Err(e),
+            },
+        }
+    }
+}
+
+impl std::os::fd::AsFd for Listener {
+    fn as_fd(&self) -> std::os::fd::BorrowedFd<'_> {
+        match self {
+            Listener::Bound(l) => l.as_fd(),
+            Listener::Adopted(l) => l.as_fd(),
+        }
+    }
 }
 
 /// The running compositor as Java's thread sees it.
@@ -555,7 +588,7 @@ pub fn spawn(
 }
 
 fn setup(
-    config: StartConfig,
+    mut config: StartConfig,
     channel: Channel<Command>,
     events: Box<dyn HostEvents>,
 ) -> Result<(EventLoop<'static, State>, State), Box<dyn std::error::Error>> {
@@ -614,7 +647,15 @@ fn setup(
 
     // bind_absolute takes `<path>.lock` and removes a stale socket left by a dead host; a live
     // host keeps its lock and the bind fails instead of stealing its socket.
-    let listener = ListeningSocket::bind_absolute(config.socket_path.clone())?;
+    let listener = match config.listen_fd.take() {
+        Some(fd) => {
+            let l = std::os::unix::net::UnixListener::from(fd);
+            l.set_nonblocking(true)?;
+            linfo!("adopted the launcher's socket at {}", config.socket_path.display());
+            Listener::Adopted(l)
+        }
+        None => Listener::Bound(ListeningSocket::bind_absolute(config.socket_path.clone())?),
+    };
     linfo!("listening on {} (scale {}, frame {:?})", config.socket_path.display(), config.scale, config.frame_period);
     let listener_token = loop_handle.insert_source(Generic::new(listener, Interest::READ, Mode::Level), |_, listener, state| {
         loop {

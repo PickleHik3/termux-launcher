@@ -10,6 +10,7 @@ import android.hardware.display.DisplayManager;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
+import android.os.ParcelFileDescriptor;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.system.ErrnoException;
@@ -130,6 +131,17 @@ public final class WaylandAppRunner {
     /** Which window is which launched app; see {@link LinuxAppWindowMatcher}. Main thread. */
     @NonNull private final LinuxAppWindowMatcher matcher =
         new LinuxAppWindowMatcher(WaylandAppRunner::parentPid);
+    /** Wayland Display is the chosen display: the launcher listens on the socket. */
+    private boolean waylandChosen;
+    /** The socket the launcher listens on while Wayland Display is chosen; null until then. */
+    @Nullable private WaylandSocketOwner socketOwner;
+    /** A client is waiting on the launcher's socket for the host to start. */
+    private boolean connectionWaiting;
+    /**
+     * This runner started the running host, so a window that appears in it is new and brings the
+     * Linux windows screen up; a host found running on attach replays windows that are not.
+     */
+    private boolean surfaceNewWindows;
     /** Scales chosen on the rail for windows with no app to keep them (started from a shell); by window id. Main thread. */
     @NonNull private final java.util.Map<Long, Float> windowScales = new java.util.HashMap<>();
 
@@ -147,6 +159,13 @@ public final class WaylandAppRunner {
     };
 
     private final Runnable idleStop = this::stopIfIdle;
+
+    private final Runnable connectionTimeout = () -> {
+        if (!connectionWaiting) return;
+        Log.w(LOG_TAG, "the host did not run within " + START_TIMEOUT_MS + " ms for a waiting client");
+        connectionWaiting = false;
+        rearmSocket();
+    };
 
     private final IBinder.DeathRecipient death = () -> main.post(this::onHostGone);
 
@@ -204,6 +223,8 @@ public final class WaylandAppRunner {
                 main.removeCallbacks(idleStop);
                 matcher.windowCreated(id, clientPid, (flags & ILinuxWindows.WINDOW_X11) != 0,
                     SystemClock.uptimeMillis());
+                // A window from a client started in a terminal comes up like a launched app's.
+                if (surfaceNewWindows && !LinuxWindowsActivity.isInFront()) openWindowsScreen(id);
             });
         }
 
@@ -328,9 +349,69 @@ public final class WaylandAppRunner {
         windowScales.clear();
         xDisplay = null;
         xWaitExpired = false;
+        surfaceNewWindows = false;
+        connectionWaiting = false;
+        main.removeCallbacks(connectionTimeout);
         publishToSessions();
         main.removeCallbacks(idleStop);
         main.removeCallbacks(xWaitTimeout);
+        rearmSocket();
+    }
+
+    /**
+     * Wayland Display is chosen or not (Settings, or the launcher coming up). Chosen: the launcher
+     * listens on the socket, so a client started anywhere finds a display and the host starts on
+     * its first connection. Not chosen: the socket goes. Main thread; never throws.
+     */
+    public void setWaylandChosen(boolean chosen) {
+        waylandChosen = chosen;
+        if (chosen) {
+            if (socketOwner == null) socketOwner = new WaylandSocketOwner(socketPath(), main, this::onConnectionWaiting);
+            if (prepareSocketDir() && socketOwner.open() && !running && !startAsked) socketOwner.arm();
+        } else {
+            connectionWaiting = false;
+            main.removeCallbacks(connectionTimeout);
+            if (socketOwner != null) socketOwner.close();
+        }
+        publishToSessions();
+    }
+
+    /** The socket for the host to take over, or null for it to bind the path itself. */
+    @Nullable
+    ParcelFileDescriptor listenSocketForHost() {
+        if (!waylandChosen || socketOwner == null) return null;
+        socketOwner.disarm();
+        return socketOwner.dupForHost();
+    }
+
+    /** A client connected to the launcher's socket while the host is not running: start it. */
+    private void onConnectionWaiting() {
+        if (!waylandChosen) return;
+        if (running || startAsked) return;
+        connectionWaiting = true;
+        main.removeCallbacks(idleStop);
+        main.removeCallbacks(connectionTimeout);
+        main.postDelayed(connectionTimeout, START_TIMEOUT_MS);
+        if (service != null && stateKnown) {
+            startHost();
+            return;
+        }
+        if (!bound) connect();
+    }
+
+    /**
+     * The host is not running (stopped, died, did not start): clients left waiting on the socket
+     * get an error rather than waiting forever, and the next one starts the host again.
+     */
+    private void rearmSocket() {
+        if (!waylandChosen || socketOwner == null || running || startAsked || connectionWaiting) return;
+        if (!socketOwner.isListening() && !(prepareSocketDir() && socketOwner.open())) {
+            publishToSessions();
+            return;
+        }
+        socketOwner.dropWaiting();
+        socketOwner.arm();
+        publishToSessions();
     }
 
     /**
@@ -341,7 +422,8 @@ public final class WaylandAppRunner {
      */
     private void publishToSessions() {
         X11DisplayServerState.setWaylandDisplays(
-            running ? LinuxWindowsEnv.waylandDisplay(SOCKET_DIR, SOCKET_NAME, null) : null,
+            running || (waylandChosen && socketOwner != null && socketOwner.isListening())
+                ? LinuxWindowsEnv.waylandDisplay(SOCKET_DIR, SOCKET_NAME, null) : null,
             running ? xDisplay : null);
     }
 
@@ -366,12 +448,21 @@ public final class WaylandAppRunner {
         if (service == null) return;
         stateKnown = true;
         switch (state) {
-            case ILinuxWindows.STATE_RUNNING:
+            case ILinuxWindows.STATE_RUNNING: {
+                // A host this runner started: windows from here on are new.
+                if (startAsked) surfaceNewWindows = true;
                 running = true;
                 startAsked = false;
+                boolean forConnection = pending.isEmpty();
+                connectionWaiting = false;
+                main.removeCallbacks(connectionTimeout);
+                if (socketOwner != null) socketOwner.disarm();
                 publishToSessions();
                 dispatchPending();
+                // Started for a client of the socket: stop again if it never opens a window.
+                if (forConnection && windows == 0) armIdleStop();
                 break;
+            }
             case ILinuxWindows.STATE_STARTING:
                 startingSeen = true;
                 break;
@@ -390,7 +481,7 @@ public final class WaylandAppRunner {
                     // A state from before this runner's start; the start's own answer follows.
                     break;
                 }
-                if (pending.isEmpty()) {
+                if (pending.isEmpty() && !connectionWaiting) {
                     // Nothing to open: let go, so the host's process can end.
                     disconnect();
                 } else if (!startAsked) {
@@ -398,6 +489,7 @@ public final class WaylandAppRunner {
                 } else {
                     Log.w(LOG_TAG, "the host did not start: " + message);
                     failPending();
+                    connectionWaiting = false;
                     disconnect();
                 }
                 break;
@@ -422,16 +514,12 @@ public final class WaylandAppRunner {
 
     private void startHost() {
         if (service == null) return;
-        File dir = new File(SOCKET_DIR);
-        if (!dir.isDirectory() && !dir.mkdirs()) {
-            Log.w(LOG_TAG, "cannot create " + SOCKET_DIR);
+        if (!prepareSocketDir()) {
             failPending();
+            connectionWaiting = false;
+            main.removeCallbacks(connectionTimeout);
+            if (socketOwner != null) socketOwner.dropWaiting();
             return;
-        }
-        try {
-            Os.chmod(SOCKET_DIR, 0700);
-        } catch (ErrnoException e) {
-            Log.w(LOG_TAG, "chmod " + SOCKET_DIR + ": " + e.getMessage());
         }
         startAsked = true;
         startingSeen = false;
@@ -444,10 +532,25 @@ public final class WaylandAppRunner {
         }
         try {
             service.start(SOCKET_DIR, start.xkbConfigRoot, start.xwaylandBinary, start.width,
-                start.height, start.scale, start.framePeriodNanos);
+                start.height, start.scale, start.framePeriodNanos, listenSocketForHost());
         } catch (RemoteException e) {
             onHostGone();
         }
+    }
+
+    /** Makes the socket's directory (the prefix's tmp) with the runtime directory's 0700; false when it cannot be made. */
+    private static boolean prepareSocketDir() {
+        File dir = new File(SOCKET_DIR);
+        if (!dir.isDirectory() && !dir.mkdirs()) {
+            Log.w(LOG_TAG, "cannot create " + SOCKET_DIR);
+            return false;
+        }
+        try {
+            Os.chmod(SOCKET_DIR, 0700);
+        } catch (ErrnoException e) {
+            Log.w(LOG_TAG, "chmod " + SOCKET_DIR + ": " + e.getMessage());
+        }
+        return true;
     }
 
     private void dispatchPending() {
