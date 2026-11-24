@@ -133,7 +133,8 @@ public final class SettingsRegistry {
         if (adapterOf(declaration) != null)
             return new Refusal(declaration.id + " has no step; set it to a value",
                 declaration.allowed());
-        if (declaration.kind == SettingDeclaration.Kind.CHOICE && !declaration.ordered)
+        if ((declaration.kind == SettingDeclaration.Kind.CHOICE
+            || declaration.kind == SettingDeclaration.Kind.BOOLEAN) && !declaration.ordered)
             return new Refusal(declaration.id + " has no order; it is one of "
                 + declaration.allowed(), declaration.allowed());
         String current = read(declaration);
@@ -206,6 +207,8 @@ public final class SettingsRegistry {
             SettingStore store = mStores.store(declaration.store);
             if (declaration.kind == SettingDeclaration.Kind.INTEGER) {
                 store.putInt(declaration.key, Integer.parseInt(value));
+            } else if (declaration.kind == SettingDeclaration.Kind.BOOLEAN) {
+                store.putBoolean(declaration.key, Boolean.parseBoolean(value));
             } else {
                 store.putString(declaration.key,
                     declaration.storedChoices.get(declaration.choices.indexOf(value)));
@@ -243,6 +246,9 @@ public final class SettingsRegistry {
         if (declaration.kind == SettingDeclaration.Kind.INTEGER)
             return String.valueOf(declaration.clamp(
                 store.getInt(declaration.key, declaration.defaultInt)));
+        if (declaration.kind == SettingDeclaration.Kind.BOOLEAN)
+            return String.valueOf(store.getBoolean(declaration.key,
+                Boolean.parseBoolean(declaration.defaultValue())));
         return declaration.choiceForStored(store.getString(declaration.key));
     }
 

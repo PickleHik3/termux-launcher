@@ -149,6 +149,15 @@ public final class LauncherSettings {
             try { return mPrefs.getInt(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
         }
 
+        @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
+            if (mPrefs == null) return defaultValue;
+            try { return mPrefs.getBoolean(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
+        }
+
+        @Override public void putBoolean(@NonNull String key, boolean value) {
+            if (mPrefs != null) mPrefs.edit().putBoolean(key, value).apply();
+        }
+
         @Override public void putString(@NonNull String key, @NonNull String value) {
             if (mPrefs != null) mPrefs.edit().putString(key, value).apply();
         }
@@ -178,6 +187,17 @@ public final class LauncherSettings {
             } catch (NumberFormatException e) {
                 return defaultValue;
             }
+        }
+
+        @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
+            String text = getString(key);
+            if (text == null) return defaultValue;
+            String value = text.trim().toLowerCase(java.util.Locale.ROOT);
+            return value.equals("true") || (!value.equals("false") && defaultValue);
+        }
+
+        @Override public void putBoolean(@NonNull String key, boolean value) {
+            TermuxPropertiesFile.write(key, String.valueOf(value));
         }
 
         @Override public void putString(@NonNull String key, @NonNull String value) {

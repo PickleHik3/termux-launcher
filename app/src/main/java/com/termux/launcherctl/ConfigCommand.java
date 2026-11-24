@@ -95,6 +95,8 @@ public final class ConfigCommand {
                     .put("max", declaration.max).put("step", declaration.step);
             } else if (declaration.kind == SettingDeclaration.Kind.TEXT) {
                 setting.put("kind", "text");
+            } else if (declaration.kind == SettingDeclaration.Kind.BOOLEAN) {
+                setting.put("kind", "boolean").put("choices", new JSONArray(declaration.choices));
             } else {
                 setting.put("kind", "choice").put("choices", new JSONArray(declaration.choices))
                     .put("ordered", declaration.ordered);

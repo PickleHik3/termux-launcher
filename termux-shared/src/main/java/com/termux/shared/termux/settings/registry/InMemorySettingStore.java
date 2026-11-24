@@ -33,4 +33,15 @@ public final class InMemorySettingStore implements SettingStore {
     public synchronized void putInt(@NonNull String key, int value) {
         mValues.put(key, value);
     }
+
+    @Override
+    public synchronized boolean getBoolean(@NonNull String key, boolean defaultValue) {
+        Object value = mValues.get(key);
+        return value instanceof Boolean ? (Boolean) value : defaultValue;
+    }
+
+    @Override
+    public synchronized void putBoolean(@NonNull String key, boolean value) {
+        mValues.put(key, value);
+    }
 }
