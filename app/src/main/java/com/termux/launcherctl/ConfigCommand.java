@@ -67,6 +67,8 @@ final class ConfigCommand {
             if (declaration.kind == SettingDeclaration.Kind.INTEGER) {
                 setting.put("kind", "integer").put("min", declaration.min)
                     .put("max", declaration.max).put("step", declaration.step);
+            } else if (declaration.kind == SettingDeclaration.Kind.TEXT) {
+                setting.put("kind", "text");
             } else {
                 setting.put("kind", "choice").put("choices", new JSONArray(declaration.choices))
                     .put("ordered", declaration.ordered);

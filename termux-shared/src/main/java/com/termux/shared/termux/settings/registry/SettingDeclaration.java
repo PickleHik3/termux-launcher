@@ -20,7 +20,11 @@ import java.util.Locale;
 public final class SettingDeclaration {
 
     /** What kind of value a setting holds. */
-    public enum Kind { INTEGER, CHOICE }
+    public enum Kind {
+        INTEGER, CHOICE,
+        /** A value only its {@link SettingAdapter} can judge (a layout field); no range here. */
+        TEXT
+    }
 
     /** The store a setting already lives in. */
     public enum Store {
@@ -98,6 +102,18 @@ public final class SettingDeclaration {
             defaultIndex, ordered);
     }
 
+    /**
+     * A setting an adapter validates itself: it lists as text, and the adapter's own refusal says
+     * what it may be. {@code defaultValue} is what {@code config list} shows as its default.
+     */
+    @NonNull
+    public static SettingDeclaration text(@NonNull String id, @NonNull String defaultValue,
+                                          @NonNull SettingRefresh refresh) {
+        return new SettingDeclaration(id, Kind.TEXT, Store.APP_PREFERENCES, id, refresh, 0, 0, 0,
+            0, Collections.singletonList(defaultValue), Collections.singletonList(defaultValue),
+            0, false);
+    }
+
     /** {@code value} held inside this integer's range. */
     public int clamp(int value) {
         return Math.max(min, Math.min(max, value));
@@ -129,6 +145,7 @@ public final class SettingDeclaration {
     /** What a value may be, in a refusal's words: {@code 80–150}, or {@code softer, default, harder}. */
     @NonNull
     public String allowed() {
+        if (kind == Kind.TEXT) return "";
         return kind == Kind.INTEGER ? min + "–" + max : String.join(", ", choices);
     }
 
