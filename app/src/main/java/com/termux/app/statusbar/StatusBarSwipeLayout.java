@@ -146,6 +146,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     private final android.graphics.Paint mRowGroundPaint =
         new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
     private final android.graphics.RectF mGroundRect = new android.graphics.RectF();
+    private float mDensity;
     /** Whether the row is laid out and hit as the enlarged one (the state, not the tween). */
     private boolean mRowEnlarged;
     /** How much of the enlarged row shows, 0..1: the tween, and 0 or 1 at once under reduced motion. */
@@ -290,9 +291,19 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         row.layout(mRowRect.left, mRowRect.top, mRowRect.right, rowBottom);
     }
 
+    /** The screen density, read once: draw and touch never ask the resources for it. */
+    private float density() {
+        if (mDensity == 0f) mDensity = getResources().getDisplayMetrics().density;
+        return mDensity;
+    }
+
     private int enlargedBottom() {
-        return PaneRowPolicy.rowBottomPx(mRowRect.top, getResources().getDisplayMetrics().density,
-            true);
+        return PaneRowPolicy.rowBottomPx(mRowRect.top, density(), true);
+    }
+
+    /** The bottom of the row's reveal: the thin row grown by the enlarge fraction. */
+    private float revealBottom() {
+        return mRowRect.top + (enlargedBottom() - mRowRect.top) * mEnlargeFraction;
     }
 
     @Override
@@ -300,11 +311,10 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mRowPresented && !mRowRect.isEmpty()) {
             if (mRowBandArgb != 0) canvas.drawRect(mRowRect, mRowBandPaint);
             if (mEnlargeFraction > 0f) {
-                float density = getResources().getDisplayMetrics().density;
-                float pad = 6f * density;
+                float pad = PaneRowPolicy.ENLARGED_GROUND_PAD_DP * density();
                 mGroundRect.set(mRowRect.left - pad, mRowRect.top, mRowRect.right + pad,
-                    mRowRect.top + (enlargedBottom() - mRowRect.top) * mEnlargeFraction);
-                float radius = 8f * density;
+                    revealBottom());
+                float radius = PaneRowPolicy.ENLARGED_GROUND_RADIUS_DP * density();
                 canvas.drawRoundRect(mGroundRect, radius, radius, mRowGroundPaint);
             }
         }
@@ -322,8 +332,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mRowPresented && mRowEnlarged && mEnlargeFraction < 1f) {
             // The row reveals with its ground rather than relaying out per frame.
             int save = canvas.save();
-            canvas.clipRect(mRowRect.left, mRowRect.top, mRowRect.right,
-                mRowRect.top + (enlargedBottom() - mRowRect.top) * mEnlargeFraction);
+            canvas.clipRect(mRowRect.left, mRowRect.top, mRowRect.right, revealBottom());
             boolean drawn = super.drawChild(canvas, child, drawingTime);
             canvas.restoreToCount(save);
             return drawn;
@@ -362,7 +371,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (action == MotionEvent.ACTION_DOWN) {
             mRowPassThrough = mRowRect.isEmpty() || !PaneRowPolicy.hitsRow(event.getX(),
                 event.getY(), mRowRect.left, mRowRect.top, mRowRect.right,
-                getResources().getDisplayMetrics().density, mRowEnlarged);
+                density(), mRowEnlarged);
             if (!mRowPassThrough) {
                 state.down(event.getX(), event.getY());
                 applyEnlargement(false);

@@ -55,6 +55,10 @@ public final class PaneRowPolicy {
      * row is the row's: that is the terminal's first row of text.
      */
     public static final float TOUCH_BELOW_ENLARGED_DP = 6f;
+    /** How far the enlarged row's ground reaches past the row on each side, in dp. */
+    public static final float ENLARGED_GROUND_PAD_DP = 6f;
+    /** The enlarged row's ground corner radius, in dp. */
+    public static final float ENLARGED_GROUND_RADIUS_DP = 8f;
     /** The size change when it is not instant (reduced motion), in ms. */
     public static final int ENLARGE_TWEEN_MS = 120;
 
