@@ -188,6 +188,51 @@ public class SettingsBackupTest {
     }
 
     @Test
+    public void restore_skipsAndReportsAnOutOfRangeValueOfADeclaredKey_andRestoresTheRest() throws IOException {
+        Install source = new Install("range_source", 2f);
+        source.main().edit()
+            .putInt("text_size_percent", 99_999)
+            .putString("terminal_contrast_level", "blinding")
+            .putBoolean("status_bar_twelve_hour", true)
+            .putInt("surface_base_blur", 7)
+            .commit();
+        byte[] bundle = export(source);
+
+        Install target = new Install("range_target", 2f);
+        target.main().edit().putInt("text_size_percent", 120).commit();
+        SettingsBackupIo.ApplyResult result = restore(target, bundle);
+
+        assertEquals(0, result.failures);
+        assertEquals(new HashSet<>(Arrays.asList("text_size_percent", "terminal_contrast_level")),
+            new HashSet<>(result.skipped));
+        assertFalse("the invalid value is not written", target.main().contains("text_size_percent"));
+        assertFalse(target.main().contains("terminal_contrast_level"));
+        assertTrue(target.main().getBoolean("status_bar_twelve_hour", false));
+        assertEquals(7, target.main().getInt("surface_base_blur", 0));
+    }
+
+    @Test
+    public void restore_keepsAValidDeclaredValue_andLeavesUndeclaredKeysToTheirOldHandling() throws IOException {
+        Install source = new Install("old_source", 2f);
+        source.main().edit()
+            .putInt("text_size_percent", 150)
+            .putString("terminal_contrast_level", "harder")
+            .putInt("terminal_corner_radius", 99_999)
+            .commit();
+        byte[] bundle = export(source);
+
+        Install target = new Install("old_target", 2f);
+        SettingsBackupIo.ApplyResult result = restore(target, bundle);
+
+        assertEquals(0, result.failures);
+        assertTrue(result.skipped.isEmpty());
+        assertEquals(150, target.main().getInt("text_size_percent", 0));
+        assertEquals("harder", target.main().getString("terminal_contrast_level", null));
+        assertEquals("an undeclared key is restored as it was", 99_999,
+            target.main().getInt("terminal_corner_radius", 0));
+    }
+
+    @Test
     public void pageListAndPageLookKeysTravelTogether() throws Exception {
         Install source = new Install("pages_source", 2f);
         String state = "{\"v\":1,\"pages\":[3,7]}";

@@ -461,8 +461,13 @@ public final class SettingsBackupIo {
     public static final class ApplyResult {
         /** Files, links or stores that could not be written. */
         public final int failures;
+        /** Keys a setting declaration refused the backup's value for; they were not written. */
+        @NonNull public final List<String> skipped;
 
-        ApplyResult(int failures) { this.failures = failures; }
+        ApplyResult(int failures, @NonNull List<String> skipped) {
+            this.failures = failures;
+            this.skipped = skipped;
+        }
     }
 
     /**
@@ -475,6 +480,7 @@ public final class SettingsBackupIo {
     @NonNull
     public static ApplyResult apply(@NonNull Environment env, @NonNull Staged staged) {
         int failures = 0;
+        List<String> skipped = new ArrayList<>();
         boolean keyboardFontPlaced = false;
         try {
             for (Map.Entry<String, File> file : staged.files.entrySet()) {
@@ -514,6 +520,15 @@ public final class SettingsBackupIo {
                 if (store.getKey() == Store.MAIN) {
                     values = SettingsBackupFormat.withScaledFontSizes(values, staged.manifest.density,
                         env.density, env.fontSizeMin, env.fontSizeMax);
+                    // A declared setting's invalid value is left out (so the key falls back to its
+                    // default below) and reported.
+                    List<String> invalid = SettingsBackupFormat.invalidDeclaredKeys(values);
+                    if (!invalid.isEmpty()) {
+                        values = new LinkedHashMap<>(values);
+                        for (String key : invalid) values.remove(key);
+                        skipped.addAll(invalid);
+                        Logger.logWarn(LOG_TAG, "Skipped values the settings refuse: " + invalid);
+                    }
                 }
                 SharedPreferences.Editor editor = preferences.edit();
                 for (String key : preferences.getAll().keySet()) {
@@ -526,7 +541,7 @@ public final class SettingsBackupIo {
         } finally {
             deleteRecursively(staged.dir);
         }
-        return new ApplyResult(failures);
+        return new ApplyResult(failures, skipped);
     }
 
     /**

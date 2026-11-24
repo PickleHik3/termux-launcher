@@ -8,11 +8,14 @@ import com.termux.ai.TaiSettings;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
+import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
@@ -384,6 +387,25 @@ public final class SettingsBackupFormat {
             out.put(entry.getKey(), value instanceof Integer ? (Object) scaled : Integer.toString(scaled));
         }
         return out;
+    }
+
+    // ------------------------------------------------------------------ declared settings
+
+    /**
+     * The main store's keys whose setting declaration ({@link SettingDeclarations}) refuses the
+     * value the backup holds, in key order. A key without a declaration (or whose adapter judges
+     * it, as the font sizes are rescaled and clamped above) is never listed: it keeps its old
+     * handling.
+     */
+    @NonNull
+    static List<String> invalidDeclaredKeys(@NonNull Map<String, Object> values) {
+        List<String> invalid = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : new java.util.TreeMap<>(values).entrySet()) {
+            SettingDeclaration declaration = SettingDeclarations.forPreferenceKey(entry.getKey());
+            if (declaration != null && !declaration.acceptsStored(entry.getValue()))
+                invalid.add(entry.getKey());
+        }
+        return invalid;
     }
 
     // ------------------------------------------------------------------ files
