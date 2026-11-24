@@ -525,6 +525,20 @@ public class RestCardsTest {
             RestCards front = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, false, floating));
             assertEquals(label, !shared, terminal.apart());
             assertEquals(label + " Home in front", !shared, front.apart());
+            // Apart, the Terminal's own host wears the Peek dress: its cut, whichever page is in
+            // front, the same cut its own rest makes, and its card's box is that cut's.
+            if (!shared) {
+                PeekGlassGeometry.Card cut = terminal.terminalPeekCut();
+                assertNotNull(label, cut);
+                assertEquals(label + " parked", cut, front.terminalPeekCut());
+                RestCards.Card card = terminal.cardOn(StackView.TERMINAL_HOST);
+                assertNotNull(label, card);
+                assertEquals(label, CardId.PEEK, card.id);
+                assertEquals(label, cut.left, card.box.left, 0f);
+                assertEquals(label, cut.right, card.box.right, 0f);
+            } else {
+                assertNull(label, terminal.terminalPeekCut());
+            }
             if (shared) together++;
             else apart++;
         }

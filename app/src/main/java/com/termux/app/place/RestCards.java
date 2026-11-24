@@ -415,6 +415,7 @@ public final class RestCards {
             answer.mHostLook = otherCards.mHostLook;
             answer.mHomeRowsDropPx = otherCards.mRowsDropPx;
         }
+        if (frontHome) answer.mTerminalPeekCut = otherCards.mTerminalPeekCut;
         splitAz(answer, otherCards, frontHome);
         splitKeyboard(answer, otherCards, frontHome);
         answer.mApart = true;
@@ -600,6 +601,19 @@ public final class RestCards {
     public HostLook homeHostLook() {
         return mApart ? mHostLook : null;
     }
+
+    /**
+     * The Terminal's own Peek card while it stands apart from Home's (the two rests draw it at
+     * different rects, {@link #sharesHomesPeek}): its cut in the Terminal's host's coordinates, as
+     * the Terminal's rest cuts it, whichever page is in front. Null unless the Terminal's own host
+     * carries a Peek card.
+     */
+    @Nullable
+    public PeekGlassGeometry.Card terminalPeekCut() {
+        return mApart ? mTerminalPeekCut : null;
+    }
+
+    @Nullable private PeekGlassGeometry.Card mTerminalPeekCut;
 
     /** Where the host is drawn at Home's rest ({@link #homeHostLook}); null when it is not laid out. */
     @Nullable
@@ -935,6 +949,7 @@ public final class RestCards {
             }
             if (hostFoot) addFoot(hostView, sideMargin, footTop, w - sideMargin, h);
         }
+        if (hostView != StackView.HOST) mTerminalPeekCut = peekCut;
         if (hostView == StackView.HOST && held == null)
             mHostLook = new HostLook(half.design, peekStands, floats, dockFoot, up, peekCut,
                 hostDrawn);
