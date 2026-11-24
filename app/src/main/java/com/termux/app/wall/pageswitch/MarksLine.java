@@ -78,6 +78,43 @@ public final class MarksLine {
         return Math.min(mFold.slots.size() - 1, (int) (pos / mPitch));
     }
 
+    /** The slot nearest {@code pos}: {@link #slotAt} with the ends held, for a finger that slides past them. */
+    public int clampedSlotAt(float pos) {
+        int n = mFold.slots.size();
+        if (n == 0 || mPitch <= 0f) return -1;
+        return Math.max(0, Math.min(n - 1, (int) Math.floor(pos / mPitch)));
+    }
+
+    /** The finger as a fractional slot, 0..slotCount-1, as {@link PageBarLayout#focusAt} reads it. */
+    public float focusAt(float pos) {
+        int n = mFold.slots.size();
+        if (n == 0 || mPitch <= 0f) return 0f;
+        return Math.max(0f, Math.min(n - 1, pos / mPitch - 0.5f));
+    }
+
+    /** Which of a folded slot's members is under {@code pos}: its cell split equally, as the page bar does. */
+    public int memberAt(float pos, int slot) {
+        PageBarFold.Slot s = mFold.slots.get(slot);
+        if (!s.folded() || mPitch <= 0f) return 0;
+        float within = (pos - mPitch * slot) / mPitch;
+        return Math.max(0, Math.min(s.count - 1, (int) Math.floor(within * s.count)));
+    }
+
+    /** The entry that member {@code member} of slot {@code slot} stands for. */
+    @NonNull
+    public PageBarModel.Entry entry(int slot, int member) {
+        return mEntries.get(mFold.slots.get(slot).first + member);
+    }
+
+    public int entryIndex(int slot, int member) {
+        return mFold.slots.get(slot).first + member;
+    }
+
+    /** The entry a tap on slot {@code slot} goes to (a folded slot: current member, else return, else first). */
+    public int tapEntryIndex(int slot) {
+        return tapEntry(slot);
+    }
+
     /** Whether any entry of slot {@code slot} wants the user. */
     public boolean attention(int slot) {
         if (mAttention == null) return false;

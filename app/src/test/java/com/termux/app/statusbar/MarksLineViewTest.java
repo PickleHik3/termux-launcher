@@ -165,4 +165,83 @@ public class MarksLineViewTest {
         assertEquals("and a dot has no rim", 0,
             android.graphics.Color.alpha(bitmap.getPixel(Math.round(line.centreAt(1)) + rim, 20)));
     }
+
+    private void drag(float y, float... xs) {
+        long t = SystemClock.uptimeMillis();
+        for (int i = 0; i < xs.length; i++) {
+            int action = i == 0 ? MotionEvent.ACTION_DOWN
+                : i == xs.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
+            MotionEvent e = MotionEvent.obtain(t, t + 10L * i, action, xs[i], y, 0);
+            view.dispatchTouchEvent(e);
+            e.recycle();
+        }
+    }
+
+    @Test public void slidingToAnotherMarkAndReleasingGoesToItsPage() {
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        MarksLine line = view.line();
+        drag(20f, line.centreAt(0), line.centreAt(1), line.centreAt(2), line.centreAt(3));
+        assertEquals(1, calls.size());
+        assertEquals("page 3", calls.get(0));
+    }
+
+    @Test public void slidingBackToTheStartCancelsTheSlide() {
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        MarksLine line = view.line();
+        drag(20f, line.centreAt(1), line.centreAt(3), line.centreAt(1) + 2f);
+        assertTrue(calls.isEmpty());
+    }
+
+    @Test public void slidingOntoTheCurrentPageDoesNothing() {
+        view.setPages(model("HTA", 2, 3, -1), null);
+        layOut(400, 40);
+        MarksLine line = view.line();
+        drag(20f, line.centreAt(0), line.centreAt(2), line.centreAt(3));
+        assertTrue(calls.isEmpty());
+    }
+
+    @Test public void aColumnSlidesAlongY() {
+        view.setVertical(true);
+        view.setPages(model("HTA", 1, 1, -1), null);
+        layOut(40, 400);
+        MarksLine line = view.line();
+        long t = SystemClock.uptimeMillis();
+        float[] ys = {line.centreAt(0), line.centreAt(1), line.centreAt(2)};
+        for (int i = 0; i < ys.length; i++) {
+            int action = i == 0 ? MotionEvent.ACTION_DOWN
+                : i == ys.length - 1 ? MotionEvent.ACTION_UP : MotionEvent.ACTION_MOVE;
+            MotionEvent e = MotionEvent.obtain(t, t + 10L * i, action, 20f, ys[i], 0);
+            view.dispatchTouchEvent(e);
+            e.recycle();
+        }
+        assertEquals("page 3", calls.get(0));
+    }
+
+    @Test public void everyMarkIsALabelledButtonThatNavigates() {
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        String[] labels = view.slotLabels();
+        assertEquals(view.line().slotCount(), labels.length);
+        for (String label : labels) assertTrue(label, label != null && !label.isEmpty());
+        assertEquals(view.line().entry(0, 0).label, labels[0]);
+        assertTrue(view.clickSlot(3));
+        assertEquals("page 3", calls.get(0));
+        assertFalse("the current page has nothing to go to", view.clickSlot(0));
+    }
+
+    @Test public void aFoldedMarkIsLabelledWithItsCount() {
+        view.setPages(model("HHHHHHHHHH", 0, 1, -1), null);
+        layOut(120, 40);
+        boolean any = false;
+        for (int i = 0; i < view.line().slotCount(); i++) {
+            if (view.line().slots().get(i).folded()) {
+                any = true;
+                assertTrue(view.slotLabels()[i].contains(
+                    String.valueOf(view.line().slots().get(i).count)));
+            }
+        }
+        assertTrue(any);
+    }
 }
