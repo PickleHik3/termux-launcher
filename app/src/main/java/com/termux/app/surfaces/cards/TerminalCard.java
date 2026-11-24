@@ -60,8 +60,7 @@ public final class TerminalCard {
         // Screen events and Composite signal stand only while a Screen effect is on (shown).
         if (offers.terminalEffect)
             rows.chips(3, Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL);
-        rows.chips(3, Row.MINIMAL)
-            .tier(3, Row.ELEMENTS);
+        rows.chips(3, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON);
         // Under Terminal only the Home card, Edit pages' usual door, is gone: Pages is here.
         if (!offers.homeShown && !offers.overviewUp)
             rows.links(3, Row.LINK_FONT, Row.PANE_BORDERS, Row.LINK_PAGES);

@@ -334,8 +334,8 @@ public class EditorCardSheetFitTest {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
             fixture.layOut();
             List<com.google.android.material.chip.Chip> chips = dockChips(fixture.sheet.rows());
-            assertEquals("scale " + scale + ": the four show/hide options and Monochrome icons",
-                5, chips.size());
+            assertEquals("scale " + scale + ": the four show/hide options, Monochrome icons and Most used",
+                6, chips.size());
             for (com.google.android.material.chip.Chip chip : chips) {
                 assertTrue(chip.getText() + ": single line, ellipsized", chip.getMaxLines() == 1
                     || chip.isSingleLine());

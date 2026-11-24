@@ -28,7 +28,6 @@
     <string name="editor_section_panes">Panes</string>
     <string name="editor_section_effects">Effects</string>
     <string name="editor_section_background">Background</string>
-    <string name="editor_section_bars">Bars</string>
     <string name="editor_row_not_on_this_phone">Not on this phone.</string>
     <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>
     <string name="editor_row_refraction_off_lazy">Off while Reduce idle activity is on.</string>
@@ -60,7 +59,6 @@
     <string name="editor_link_opens_card">Opens a card</string>
     <string name="editor_link_opens_settings">Opens Settings</string>
     <!-- Layout rows: the card a row opens, where it is not the element's own. -->
-    <string name="editor_elements_opens_card">%1$s card</string>
     <string name="editor_note_home_only">Home only</string>
     <string name="editor_note_terminal_only">Terminal only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>

@@ -2,7 +2,6 @@
 <!-- The Dock card of the Appearance editor (editor-redesign §2 Dock). -->
 <resources>
     <string name="editor_dock_row_style">Style</string>
-    <string name="editor_dock_row_bars">Bars</string>
     <string name="editor_dock_row_type">Dock type</string>
     <string name="editor_dock_row_options">Show/hide</string>
     <string name="editor_dock_appearance">Appearance</string>

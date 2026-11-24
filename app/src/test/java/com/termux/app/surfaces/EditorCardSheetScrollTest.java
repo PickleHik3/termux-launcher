@@ -191,7 +191,7 @@ public class EditorCardSheetScrollTest {
         layOut();
         mSheet.scroll().scrollTo(0, 400);
         int before = mSheet.scroll().getScrollY();
-        assertTrue(before > 0);
+        assertTrue("scrolled " + before, before > 0);
         // A glass column's slider is vertical and owns a vertical drag, so flick on a text row.
         View scroll = mSheet.scroll();
         float y = -1f;
@@ -200,7 +200,8 @@ public class EditorCardSheetScrollTest {
             if (deepest(scroll, mWidth / 2f, at).endsWith("TextView")) y = at;
         }
         assertTrue("a text row is under the finger somewhere", y >= 0);
-        flick(y, 150f);
+        // The card is short now: flick less than the content has to give back.
+        flick(y, Math.min(150f, before - 1f));
         assertEquals(EditorCardSheet.DETENT_FULL, mSheet.detent());
         assertTrue("the content scrolled back", mSheet.scroll().getScrollY() < before);
     }

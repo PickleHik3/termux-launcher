@@ -139,7 +139,6 @@ final class CardBody {
             case SECTION_TEXT:
             case SECTION_PANES:
             case SECTION_EFFECTS:
-            case SECTION_BARS:
                 return Shape.SECTION;
             case HINT_GLASS_MATERIAL:
                 return Shape.HINT;

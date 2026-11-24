@@ -147,7 +147,7 @@ public class GlobalTerminalCondensedTest {
                 Row.LINK_FONT, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
                 Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
                 Row.FOCUS_GROWS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
-                Row.COMPOSITE_SIGNAL, Row.ELEMENTS, Row.MINIMAL, Row.LINK_PAGES})
+                Row.COMPOSITE_SIGNAL, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.MINIMAL, Row.LINK_PAGES})
             assertTrue(row + " is still on Terminal", have.contains(row));
     }
 
@@ -167,7 +167,8 @@ public class GlobalTerminalCondensedTest {
         assertEquals(Form.CHOICE, formOf(rows, Row.CONTRAST));
         assertEquals(Form.CHIPS, formOf(rows, Row.MULTIPLEXER));
         assertEquals(Form.LINKS, formOf(rows, Row.PANE_BORDERS));
-        assertEquals("the Layout list stays until #344", Form.PLAIN, formOf(rows, Row.ELEMENTS));
+        assertEquals(Form.CHIPS, formOf(rows, Row.SEARCH_FIELD));
+        assertEquals(Form.CHIPS, formOf(rows, Row.DRAWER_ICON));
     }
 
     @Test

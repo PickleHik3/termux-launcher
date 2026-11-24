@@ -27,8 +27,8 @@ public final class HomeCard {
         EditorRows.CardRows rows = new EditorRows.CardRows()
             .steppers(1, Row.HOME_COLUMNS, Row.HOME_ROWS)
             .choice(1, Row.LABEL_SIZE, Row.FOLDERS, Row.NUMERALS)
-            .chips(1, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS)
-            .tier(1, Row.ELEMENTS);
+            .chips(1, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS,
+                Row.SEARCH_FIELD, Row.DRAWER_ICON);
         // Pages is not offered while the overview it opens is already up.
         if (offers.overviewUp) rows.links(3, Row.ICON_PACK, Row.LINK_GESTURES);
         else rows.links(3, Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES);

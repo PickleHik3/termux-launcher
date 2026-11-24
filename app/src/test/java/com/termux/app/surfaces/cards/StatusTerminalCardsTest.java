@@ -81,7 +81,7 @@ public class StatusTerminalCardsTest {
             Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
             Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT,
             Row.ADAPTIVE_LEGIBILITY, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.ELEMENTS,
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON,
             Row.LINK_FONT, Row.PANE_BORDERS),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",

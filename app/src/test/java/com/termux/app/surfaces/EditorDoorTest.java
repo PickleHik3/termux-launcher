@@ -120,7 +120,7 @@ public class EditorDoorTest {
     @Test
     public void theNamingDoorsOpenWhatTheyName() {
         for (EditorDoor door : new EditorDoor[] {EditorDoor.EDITOR_OUTLINE,
-                EditorDoor.ELEMENTS_LIST, EditorDoor.SETTINGS_SEARCH,
+                EditorDoor.SETTINGS_SEARCH,
                 EditorDoor.SECTION_INTENT}) {
             for (EditorCard card : EditorCard.values())
                 assertEquals(door.doorName, card, door.cardFor(PageKind.HOME, card));

@@ -203,8 +203,6 @@ public final class EditorRows {
         // EditorCardSheet.Model#rowView like the rows above; the Kind is again the stand-in.
         /** The dock's Style, Docked or Floating, as glyph segments. */
         DOCK_STYLE(Kind.MENU, R.string.editor_dock_row_style, R.drawable.ic_style_floating),
-        /** The Bars list: the dock's bars in order, each shown or not, each opening its settings. */
-        DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_rl_drag_grip),
         /** The Dock type tiles, one chosen at a time. */
         DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_rl_dock_tray),
         /** The dock's Show/hide tiles. */
@@ -212,6 +210,18 @@ public final class EditorRows {
         /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
         DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
             R.drawable.ic_ed_monochrome),
+        /** The dock's Most used apps, a switch chip beside the other dock options. */
+        DOCK_MOST_USED(Kind.SWITCH, R.string.editor_dock_most_used, R.drawable.ic_ms_star),
+        /** Search field and Drawer icon: the dock's, one value for every page, on Home and Terminal. */
+        SEARCH_FIELD(Kind.SWITCH, R.string.editor_dock_option_search_field,
+            R.drawable.ic_symbol_search),
+        DRAWER_ICON(Kind.SWITCH, R.string.editor_dock_option_drawer_icon, R.drawable.ic_rl_apps),
+        /** The small A-Z card's Glass background, and how the strip shows. */
+        AZ_GLASS(Kind.SWITCH, R.string.editor_dock_az_glass, R.drawable.ic_ms_blur_on),
+        AZ_SHOW(Kind.SEGMENTS, R.string.editor_dock_az_show, R.drawable.ic_ms_visibility),
+        /** The small Extra keys card's way to the extra keys editor. */
+        EXTRA_KEYS_EDITOR(Kind.LINK, R.string.editor_dock_extra_keys_editor,
+            R.drawable.ic_symbol_edit),
         // The Keyboard, Home, Global and Terminal cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
@@ -271,15 +281,8 @@ public final class EditorRows {
         SECTION_PANES(Kind.MENU, R.string.editor_section_panes, 0),
         SECTION_EFFECTS(Kind.MENU, R.string.editor_section_effects, 0),
         SECTION_BACKGROUND(Kind.MENU, R.string.editor_section_background, 0),
-        SECTION_BARS(Kind.MENU, R.string.editor_section_bars, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
-        /**
-         * The Elements list at the end of a screen's card (cards/ElementsList): every element of
-         * the screen, its eye and the sliders glyph that opens its card. Drawn by the editor
-         * through EditorCardSheet.Model#rowView; the Kind is the stand-in.
-         */
-        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune),
         /** The Terminal card's way to its Pane borders card (#206). */
         PANE_BORDERS(Kind.LINK, R.string.appearance_row_pane_borders, R.drawable.ic_editor_corners),
         /**

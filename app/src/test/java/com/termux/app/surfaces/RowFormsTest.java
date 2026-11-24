@@ -97,7 +97,7 @@ public class RowFormsTest {
     /** The rows the Home card listed before the condensed kinds: none may be lost. */
     private static final Set<Row> HOME_KNOBS = EnumSet.of(Row.HOME_COLUMNS, Row.HOME_ROWS,
         Row.LABEL_SIZE, Row.ICON_PACK, Row.TWO_LINE, Row.LABEL_SHADOW, Row.FOLDERS,
-        Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS, Row.NUMERALS, Row.ELEMENTS, Row.LINK_GESTURES,
+        Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS, Row.NUMERALS, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.LINK_GESTURES,
         Row.LINK_PAGES);
 
     @Test
@@ -129,9 +129,9 @@ public class RowFormsTest {
             widgets.add(specs.get(i).form);
             i = Math.max(i + 1, RowForms.groupEnd(specs, i));
         }
-        // Grid, three short choices, the switches, Layout (plain), the links.
+        // Grid, three short choices, the switches, the links.
         assertEquals(Arrays.asList(Form.STEPPERS, Form.CHOICE, Form.CHOICE, Form.CHOICE,
-            Form.CHIPS, Form.PLAIN, Form.LINKS), widgets);
+            Form.CHIPS, Form.LINKS), widgets);
         assertEquals(Form.LINKS, specs.get(specs.size() - 1).form);
         assertEquals("the grid shares one row", 2, RowForms.groupEnd(specs, 0));
     }
@@ -148,7 +148,7 @@ public class RowFormsTest {
             if (spec.form == Form.STEPPERS) steppers.add(spec.row);
         }
         assertEquals(Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
-            Row.GLASS_WIDGETS), chips);
+            Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON), chips);
         assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES), links);
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS), steppers);
     }

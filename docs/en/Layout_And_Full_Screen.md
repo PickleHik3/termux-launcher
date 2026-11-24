@@ -23,10 +23,12 @@ have their own layout.
 
 ## Move a bar
 
-Every bar has a **Position** on its card. The status bar's is on the Status bar card. The apps
-row, the A–Z index and the extra keys are the **Bars** list on the Dock card: tap a bar's sliders
-glyph for its settings, Position among them. Where two bars share an edge, the order of the Bars
-list is the order they stack in; hold a row's handle to reorder.
+Drag a bar on the editor's frame to move it: dashed places show where it can go, and Hide puts it
+away until you bring it back from the Hidden column. Where two bars share an edge, the order they
+stand in is the order they stack in. Tap the A–Z index or the extra keys to open a small card for
+that bar: its Opacity and Frost, the A–Z index's Glass background and Show, and the extra keys'
+link to their editor. **Most used** is a chip on the Dock card; **Search field** and **Drawer
+icon** are chips on the Home and Terminal cards.
 
 The terminal stays where it is and the bars arrange around it. The A–Z index can ride the apps
 row.

@@ -29,10 +29,10 @@ public class EditorScreenCardsTest {
     @Test
     public void theTerminalCardHoldsTheTerminalsRowsOnce() {
         List<Row> rows = rowsOf(EditorCard.TERMINAL);
-        for (Row row : new Row[] {Row.CONTRAST, Row.ELEMENTS, Row.MINIMAL})
+        for (Row row : new Row[] {Row.CONTRAST, Row.SEARCH_FIELD, Row.DRAWER_ICON, Row.MINIMAL})
             assertEquals(row + " once", 1, java.util.Collections.frequency(rows, row));
-        // #346: Minimal layout is a switch chip with the others; the list follows them.
-        assertTrue("the list follows the switches", rows.indexOf(Row.MINIMAL) < rows.indexOf(Row.ELEMENTS));
+        // #344: Search field and Drawer icon are switch chips beside Minimal layout.
+        assertTrue("the chips follow Minimal", rows.indexOf(Row.MINIMAL) < rows.indexOf(Row.SEARCH_FIELD));
     }
 
     @Test

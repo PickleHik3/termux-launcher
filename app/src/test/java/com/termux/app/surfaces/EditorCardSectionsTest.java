@@ -108,7 +108,8 @@ public class EditorCardSectionsTest {
             // links at the end. No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's.
             CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE, Row.FOLDERS,
                 Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
-                Row.GLASS_WIDGETS, Row.ELEMENTS, Row.ICON_PACK, Row.LINK_GESTURES,
+                Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON,
+                Row.ICON_PACK, Row.LINK_GESTURES,
                 Row.LINK_PAGES)));
     }
 
@@ -133,7 +134,7 @@ public class EditorCardSectionsTest {
     public void dock() {
         check(EditorCard.DOCK, expect(
             CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS, Row.DOCK_ICON_PACK,
-                Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME, Row.DOCK_BARS, Row.OPACITY, Row.FROST,
+                Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME, Row.DOCK_MOST_USED, Row.OPACITY, Row.FROST,
                 Row.REFLECTION)));
     }
 
@@ -145,7 +146,7 @@ public class EditorCardSectionsTest {
                 Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
                 Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT, Row.ADAPTIVE_LEGIBILITY,
                 Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SCREEN_EVENTS,
-                Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.ELEMENTS,
+                Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON,
                 Row.LINK_FONT, Row.PANE_BORDERS)));
     }
 

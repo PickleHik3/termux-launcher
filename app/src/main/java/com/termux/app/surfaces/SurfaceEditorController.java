@@ -1303,6 +1303,10 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
         sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
+        Element barCard = mPendingBarCard;
+        mPendingBarCard = null;
+        if (barCard != null && card == EditorCard.DOCK)
+            openBarCard(barCard);
         restateBar(animate);
         layoutSheet();
         applyPose(animate);
@@ -1535,6 +1539,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 "", animate, this::closeSubcard);
             return;
         }
+        if (mSubcardRow == Row.AZ_SHOW || mSubcardRow == Row.EXTRA_KEYS_EDITOR) {
+            boolean az = mSubcardRow == Row.AZ_SHOW;
+            sheet.showSubcard(parent,
+                az ? R.string.editor_dock_bar_az : R.string.editor_dock_bar_extra_keys,
+                az ? com.termux.app.surfaces.cards.DockCard.azRows()
+                    : com.termux.app.surfaces.cards.DockCard.extraKeysRows(),
+                "", animate, this::closeSubcard);
+            return;
+        }
         sheet.showSubcard(parent, R.string.appearance_row_pane_borders,
             com.termux.app.surfaces.cards.PaneBordersCard.rows(),
             getString(R.string.appearance_pane_borders_reset), animate, this::closeSubcard);
@@ -1695,7 +1708,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return;
         if (mSubcardParent != null) {
             // The Icon pack subcard has no Reset; Pane borders' is its own.
-            if (mSubcardRow != Row.ICON_PACK)
+            if (mSubcardRow == Row.PANE_BORDERS)
                 writePaneBorders(EditorCardReset::resetPaneBorders);
             return;
         }
@@ -2081,19 +2094,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     // ---------------------------------------------------------------------- the Elements list
 
-    /** The Elements list on the screen card that is up, or null. */
-    @Nullable private com.termux.app.surfaces.cards.ElementsList mElements;
-
-    /** The Elements list for {@code screen}'s card, as the sheet builds it. */
-    @NonNull
-    private View elementsView(@NonNull PageKind screen) {
-        com.termux.app.surfaces.cards.ElementsList list =
-            com.termux.app.surfaces.cards.ElementsList.build(mHost.context(), new ElementsHost(),
-                com.termux.app.surfaces.cards.ElementRows.rows(screen), true);
-        mElements = list;
-        return list.root;
-    }
-
     /**
      * Shows or puts away {@code element}, or the keyboard for null: what the card headers' eyes
      * write, and the Elements list's for the status bar and the keyboard. Through the layout
@@ -2117,127 +2117,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.setShown(element, shown);
         }
         positionTargets();
-    }
-
-    /**
-     * What the Elements list reads and writes: the same values as each element's own card (the
-     * header's eye, the Bars list's eye, the Dock card's Options tiles), so the two agree.
-     */
-    private final class ElementsHost implements com.termux.app.surfaces.cards.ElementsList.Host {
-        @NonNull private final DockHost mDock = new DockHost();
-
-        // The "<kind> | <page>" chip is gone with page layouts (ADR 0020 §2): every page of a
-        // kind wears its kind's layout.
-        @Nullable @Override public CharSequence[] chipLabels() {
-            return null;
-        }
-
-        // No "Home layout" under the card's Layout header (overhaul §2).
-        @Nullable @Override public String layoutTitle() {
-            return null;
-        }
-
-        @Override public boolean pageSide() {
-            return false;
-        }
-
-        @Override public void setPageSide(boolean pageSide) {
-        }
-
-        @Override public boolean offers(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            // A hidden element keeps its row, switch off: only what the kind never wears goes.
-            if (item.element != null)
-                return layout != null && layout.canWear(item.element);
-            if (item.ridesTheDock())
-                return layout != null && layout.offers(Element.APPS);
-            return true;
-        }
-
-        @Override public boolean shown(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            switch (item.visibility) {
-                case ELEMENT:
-                    return layout != null && item.element != null && layout.isShown(item.element);
-                case KEYBOARD:
-                    // The Keyboard card's eye and this switch share one answer.
-                    return keyboardSwitchOn(layout, mHost.isInAppKeyboardShown());
-                case SEARCH_FIELD:
-                    return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD);
-                case DRAWER_TILE:
-                    return mDock.option(com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON);
-                case COMMAND_PALETTE_BUTTON:
-                    return mDock.option(
-                        com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE);
-                case FLOAT_TERMINAL_BUTTON:
-                    return mDock.option(
-                        com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL);
-                case PAGE_BAR:
-                    return !"off".equals(AppearanceSettingsStore.getString(mHost.context(),
-                        HomeSettings.KEY_PAGE_INDICATOR, null));
-                case NONE:
-                default:
-                    return true;
-            }
-        }
-
-        @Override public void setShown(
-                @NonNull com.termux.app.surfaces.cards.ElementRows.Item item, boolean shown) {
-            switch (item.visibility) {
-                case ELEMENT:
-                    if (item.element == null)
-                        return;
-                    if (item.element == Element.STATUS)
-                        writeShown(Element.STATUS, shown);
-                    else
-                        mDock.setBarShown(item.element, shown);
-                    break;
-                case KEYBOARD:
-                    writeShown(null, shown);
-                    break;
-                case SEARCH_FIELD:
-                    mDock.setOption(com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD,
-                        shown);
-                    break;
-                case DRAWER_TILE:
-                    mDock.setOption(com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON,
-                        shown);
-                    break;
-                case COMMAND_PALETTE_BUTTON:
-                    mDock.setOption(
-                        com.termux.app.surfaces.cards.DockCard.Option.COMMAND_PALETTE, shown);
-                    break;
-                case FLOAT_TERMINAL_BUTTON:
-                    mDock.setOption(
-                        com.termux.app.surfaces.cards.DockCard.Option.FLOAT_TERMINAL, shown);
-                    break;
-                case PAGE_BAR:
-                    writeHomeString(HomeSettings.KEY_PAGE_INDICATOR, shown ? "dots" : "off");
-                    break;
-                case NONE:
-                default:
-                    return;
-            }
-            positionTargets();
-            syncDirty();
-            EditorCardSheet sheet = mSheet;
-            if (sheet != null && sheet.isShown())
-                sheet.restate();
-        }
-
-        @Override public void open(@NonNull com.termux.app.surfaces.cards.ElementRows.Item item) {
-            EditorCard card = EditorDoor.ELEMENTS_LIST.route(null, item.card);
-            if (card == null || !mOpen)
-                return;
-            if (card == EditorCard.DOCK)
-                dockCard().expand(item.expandedBar());
-            openCard(card, true);
-            EditorCardSheet sheet = mSheet;
-            if (item.section != null && sheet != null && mCard == card)
-                sheet.scrollTo(item.section);
-        }
     }
 
     // ------------------------------------------------------- Reset everything (§1, §6)
@@ -3076,6 +2955,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case GLASS_WIDGETS:
                     return AppearanceSettingsStore.getBoolean(context, "widgets_on_glass", false)
                         ? 1 : 0;
+                case SEARCH_FIELD:
+                    return dockOptionHost().option(
+                        com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD) ? 1 : 0;
+                case DRAWER_ICON:
+                    return dockOptionHost().option(
+                        com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON) ? 1 : 0;
                 case TWO_LINE:
                     return AppearanceSettingsStore.getBoolean(context,
                         HomeSettings.KEY_LABEL_TWO_LINES, false) ? 1 : 0;
@@ -3397,6 +3282,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 LayoutEditorController layout = mHost.layoutEditor();
                 return layout != null && layout.dockStyle() == DockStyle.PEEK_GLASS;
             }
+            // Search field and Drawer icon are the dock's: they stand where an apps row does.
+            if (row == Row.SEARCH_FIELD || row == Row.DRAWER_ICON) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                return layout != null && layout.offers(Element.APPS);
+            }
             // The Screen effect's two switches stand while an effect is on.
             if (row == Row.SCREEN_EVENTS || row == Row.COMPOSITE_SIGNAL) {
                 TermuxAppSharedPreferences prefs = prefs();
@@ -3439,14 +3329,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // Every link is one list row (overhaul §4); Font and Camera cutout are drawn by
             // their cards, which own what the tap opens.
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
-                    && row != Row.CAMERA_CUTOUT && !linkChip(card, row))
+                    && row != Row.CAMERA_CUTOUT && row != Row.EXTRA_KEYS_EDITOR
+                    && !linkChip(card, row))
                 return linkRow(row).root;
-            if (row == Row.ELEMENTS && card != null) {
-                // A page card's Layout lists the rows that page shows.
-                PageKind screen = com.termux.app.surfaces.cards.ElementRows.screenOf(card);
-                if (screen != null)
-                    return elementsView(screen);
-            }
             if (card == EditorCard.DOCK) {
                 View own = dockCard().view(row, widthPx);
                 if (own != null)
@@ -3469,16 +3354,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row == Row.ICON_PACK_PAGE)
                 return;
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
-                    && row != Row.CAMERA_CUTOUT && !linkChip(card, row))
+                    && row != Row.CAMERA_CUTOUT && row != Row.EXTRA_KEYS_EDITOR
+                    && !linkChip(card, row))
                 return;
             if (row == Row.TINT_HUE) {
                 com.termux.app.surfaces.rows.SegmentRow hue = mTintHueRow;
                 if (hue != null && hue.root == view) hue.select(value(row));
-                return;
-            }
-            com.termux.app.surfaces.cards.ElementsList elements = mElements;
-            if (row == Row.ELEMENTS && elements != null && elements.root == view) {
-                elements.restate();
                 return;
             }
             if (card == EditorCard.DOCK) {
@@ -3781,6 +3662,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (widgetGlass != null)
                     widgetGlass.followPage();
                 settingsWritten();
+                break;
+            case SEARCH_FIELD:
+                dockOptionHost().setOption(
+                    com.termux.app.surfaces.cards.DockCard.Option.SEARCH_FIELD, value != 0);
+                positionTargets();
+                syncDirty();
+                break;
+            case DRAWER_ICON:
+                dockOptionHost().setOption(
+                    com.termux.app.surfaces.cards.DockCard.Option.DRAWER_ICON, value != 0);
+                positionTargets();
+                syncDirty();
                 break;
             case TWO_LINE:
                 writeHomeBoolean(HomeSettings.KEY_LABEL_TWO_LINES, value != 0);
@@ -5110,7 +5003,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     EditorDoor.EDITOR_OUTLINE.log(card);
                     barPlaces().select(barDrag().touchedBar());
                     if (card == EditorCard.DOCK)
-                        dockCard().expand(dockBarAt(mDownRawX, mDownRawY));
+                        mPendingBarCard = smallBarOf(dockBarAt(mDownRawX, mDownRawY));
                     openCard(card, true);
                 } else {
                     barPlaces().clear();
@@ -5940,7 +5833,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             layout.setOnChangedListener(null);
             layout.setOnPlaceShownListener(null);
         }
-        mElements = null;
         cancelFrameAnimator();
         mFrameCtxValid = false;
         mTargetScale = -1f;
@@ -6533,6 +6425,15 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     // cards/DockCard and read and written here.
 
     @Nullable private com.termux.app.surfaces.cards.DockCard mDockCard;
+    @Nullable private DockHost mDockOptionHost;
+
+    /** The dock's reads and writes for the Search field and Drawer icon chips on Home and Terminal. */
+    @NonNull
+    private DockHost dockOptionHost() {
+        if (mDockOptionHost == null)
+            mDockOptionHost = new DockHost();
+        return mDockOptionHost;
+    }
 
     @NonNull
     private com.termux.app.surfaces.cards.DockCard dockCard() {
@@ -6546,7 +6447,26 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * door from outside the editor that names the bar pressed (the long-press popup's Edit).
      */
     public void expandDockBar(@Nullable Element bar) {
-        dockCard().expand(bar);
+        mPendingBarCard = smallBarOf(bar);
+    }
+
+    /** The bar that opens its own small card (A-Z, Extra keys), or null for any other. */
+    @Nullable
+    private static Element smallBarOf(@Nullable Element bar) {
+        return bar == Element.AZ || bar == Element.EXTRA_KEYS ? bar : null;
+    }
+
+    /** The small card the next Dock card opens on, or null for the Dock card itself. */
+    @Nullable private Element mPendingBarCard;
+
+    /** The A-Z or Extra keys small card in the Dock card's place (spec #326). */
+    private void openBarCard(@NonNull Element bar) {
+        EditorCardSheet sheet = mSheet;
+        if (sheet == null || mCard != EditorCard.DOCK || !sheet.isShown())
+            return;
+        mSubcardParent = mCard;
+        mSubcardRow = bar == Element.AZ ? Row.AZ_SHOW : Row.EXTRA_KEYS_EDITOR;
+        showSubcard(true);
     }
 
     /** The bar a tap at a raw screen point landed on: the A–Z strip, the extra keys, or neither. */

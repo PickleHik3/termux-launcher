@@ -276,8 +276,6 @@ public class WindowSourceRulesTest {
         // elevation for a shadow or lift: classify when its layer moves
         "app/surfaces/EditorCardSheet.java:1",
         // elevation for a shadow or lift: classify when its layer moves
-        "app/surfaces/cards/BarsList.java:2",
-        // elevation for a shadow or lift: classify when its layer moves
         "app/terminal/DepartureCard.java:2",
         // elevation for a shadow or lift: classify when its layer moves
         "app/terminal/TerminalCommandPaletteController.java:2",
