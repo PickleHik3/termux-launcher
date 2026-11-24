@@ -203,3 +203,9 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
 - **Drop Peek under Floating.** Rejected: it is the new-install default design and the setup every
   Floating snap above was found on. It also only removes this one case: any two rests with different cards on one host
   would snap the same way.
+- **2026-11-25, two answers from the code review.** A row both rests show in the stack's lane
+  keeps its vertical blend: Home drops its rows 16 px under Floating while the Terminal lifts 0 (0
+  and 15 px with a foot), so the shared row eases that difference over the crossing and stands
+  with each side's own rows at its rest. "Stays put" means it does not slide sideways. A Terminal
+  Peek card that stands apart from Home's (the two rests draw it at different rects) wears the
+  Peek dress and reflection on the Terminal's own host; that is built with #307's views.
