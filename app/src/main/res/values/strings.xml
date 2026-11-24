@@ -89,6 +89,10 @@
     <string name="editor_bar_az">A–Z</string>
     <string name="editor_bar_extra_keys">Extra keys</string>
     <string name="editor_bar_keyboard">Keyboard</string>
+    <string name="editor_grip_readout">%1$d%%</string>
+    <string name="editor_grip_readout_rows">%1$d%% · %2$d rows</string>
+    <string name="editor_grip_description">Keyboard height, %1$d percent. Drag to change.</string>
+    <string name="editor_grip_description_rows">Keyboard height, %1$d percent, %2$d terminal rows. Drag to change.</string>
     <string name="editor_place_move_here">Move %1$s here</string>
     <string name="editor_place_pane">Put it inside the pane</string>
     <string name="editor_place_hide">Hide</string>

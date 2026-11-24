@@ -4863,6 +4863,98 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     @Nullable private BarPlacesController mBarPlaces;
+    @Nullable private BarGripController mBarGrip;
+
+    /** The keyboard's height grip on the frame (#340). */
+    @NonNull
+    private BarGripController barGrip() {
+        if (mBarGrip == null)
+            mBarGrip = new BarGripController(new BarGripHost());
+        return mBarGrip;
+    }
+
+    private final class BarGripHost implements BarGripController.Host {
+        @NonNull @Override public Context context() {
+            return mHost.context();
+        }
+
+        @Nullable @Override public ViewGroup overlay() {
+            return barDragHost().overlay();
+        }
+
+        @Override public float scale() {
+            return barDragHost().scale();
+        }
+
+        @Override public boolean open() {
+            return mOpen;
+        }
+
+        @Override public boolean keyboardRect(@NonNull float[] out) {
+            return barDragHost().rectOf(BarLandingPolicy.Bar.KEYBOARD, out);
+        }
+
+        @Nullable @Override public LayoutEditorController layout() {
+            return mHost.layoutEditor();
+        }
+
+        @Override public int terminalRows() {
+            // Only a Workspace page has a terminal; Home reads no rows.
+            if (mScreen != PageKind.TERMINAL)
+                return 0;
+            return firstTerminalRows(mHost.findView(R.id.terminal_pane_wall));
+        }
+
+        @Override public int paneHeightPx() {
+            View wall = mHost.findView(R.id.terminal_pane_wall);
+            return wall == null ? 0 : wall.getHeight();
+        }
+
+        @Override public float defaultScale() {
+            TermuxAppSharedPreferences prefs = prefs();
+            return prefs == null ? 1f : prefs.getDefaultInAppKeyboardHeightScale();
+        }
+
+        @Override public int surfaceColor() {
+            return barDragHost().surfaceColor();
+        }
+
+        @Override public int onSurfaceColor() {
+            return barDragHost().onSurfaceColor();
+        }
+
+        @Override public void onPull(boolean pulling) {
+            if (pulling) {
+                beginDrag(true);
+            } else {
+                endDrag();
+            }
+        }
+
+        @Override public void onWritten(boolean released) {
+            syncDirty();
+            if (released)
+                positionTargets();
+        }
+    }
+
+    /** The first terminal's row count under {@code view}, or 0; read when a pull starts. */
+    private static int firstTerminalRows(@Nullable View view) {
+        if (view instanceof com.termux.view.TerminalView) {
+            com.termux.terminal.TerminalEmulator emulator =
+                ((com.termux.view.TerminalView) view).mEmulator;
+            return emulator == null ? 0 : emulator.mRows;
+        }
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++) {
+                int rows = firstTerminalRows(group.getChildAt(i));
+                if (rows > 0)
+                    return rows;
+            }
+        }
+        return 0;
+    }
 
     @NonNull
     private static BarLandingPolicy.Bar barOf(@NonNull Element element) {
@@ -5200,6 +5292,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         restyleOutlines();
         barDrag().placeChips();
         barPlaces().refresh();
+        barGrip().place();
     }
 
     @NonNull
@@ -5932,6 +6025,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBarDrag.release();
         if (mBarPlaces != null)
             mBarPlaces.release();
+        if (mBarGrip != null)
+            mBarGrip.release();
         detachHiddenColumn();
         for (int id : GROUP_IDS) {
             View group = mHost.findView(id);
