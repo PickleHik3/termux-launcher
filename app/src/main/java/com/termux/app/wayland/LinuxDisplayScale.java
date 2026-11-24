@@ -66,7 +66,8 @@ public final class LinuxDisplayScale {
         for (int step : steps) {
             if (step <= cap && widthPx / stepScale(step) >= MIN_COMFORTABLE_WIDTH) chosen = step;
         }
-        float floor = Math.max(1f, MIN_TEXT_FRACTION * dens);
+        float raw = density > 0f && !Float.isInfinite(density) ? Math.min(density, MAX_DENSITY_SCALE) : 1f;
+        float floor = Math.max(1f, MIN_TEXT_FRACTION * raw);
         int floorStep = steps[steps.length - 1];
         for (int i = steps.length - 1; i >= 0; i--) {
             if (stepScale(steps[i]) >= floor - 1e-4f) floorStep = steps[i];

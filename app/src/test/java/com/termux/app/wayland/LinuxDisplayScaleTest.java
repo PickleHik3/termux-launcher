@@ -39,9 +39,9 @@ public class LinuxDisplayScaleTest {
 
     @Test
     public void anUnknownScaleFollowsTheScreen() {
-        assertEquals(2.5f, LinuxDisplayScale.windowScale("3", 2.625f, 1080), 0f);
-        assertEquals(2.5f, LinuxDisplayScale.windowScale("bogus", 2.625f, 1080), 0f);
-        assertEquals(2.5f, LinuxDisplayScale.windowScale("", 2.625f, 1080), 0f);
+        assertEquals(2.5f, LinuxDisplayScale.windowScale("3", 2.625f, 0), 0f);
+        assertEquals(2.5f, LinuxDisplayScale.windowScale("bogus", 2.625f, 0), 0f);
+        assertEquals(2.5f, LinuxDisplayScale.windowScale("", 2.625f, 0), 0f);
     }
 
     /** A stop chosen on the rail, stored as the app's Scale, reads back as that stop's scale. */
