@@ -114,14 +114,16 @@ public class ElementRowsTest {
         assertTrue("without Home the Terminal still lists its rows",
             EditorRows.tier(EditorCard.TERMINAL, new EditorRows.Offers(true, true, false), 3)
                 .contains(Row.ELEMENTS));
-        assertTrue(EditorRows.tier(EditorCard.HOME, offers, 3).contains(Row.ELEMENTS));
+        // #345: the condensed Home card keeps its list in tier 1, after the switch chips.
+        assertTrue(EditorRows.tier(EditorCard.HOME, offers, 1).contains(Row.ELEMENTS));
     }
 
     @Test
     public void theListStandsBeforeTheLinkChips() {
         // ADR 0017 (fb44e0fb2): every glass card's own rows go under More, after Grain and Rim,
         // so the Elements list closes the More section and the link chips follow it.
-        for (EditorCard card : new EditorCard[] {EditorCard.HOME, EditorCard.TERMINAL}) {
+        // #345: Home is condensed and has no section headings, so only Terminal keeps the heading.
+        for (EditorCard card : new EditorCard[] {EditorCard.TERMINAL}) {
             List<Row> rows = rowsOf(card);
             int list = rows.indexOf(Row.ELEMENTS);
             // Overhaul §2: the list is the Layout section's, and no link repeats it.
