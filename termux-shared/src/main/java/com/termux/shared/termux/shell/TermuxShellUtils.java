@@ -125,4 +125,9 @@ public class TermuxShellUtils {
     public static OlderThanSweeper.Result clearTermuxTMPDIROlderThan(long ageMillis) {
         return OlderThanSweeper.sweep(new File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH), ageMillis, System.currentTimeMillis());
     }
+
+    /** Bytes of the regular files under this edition's tmp directory; 0 when it is missing. Off the main thread. */
+    public static long getTermuxTMPDIRSize() {
+        return OlderThanSweeper.sizeOf(new File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH));
+    }
 }

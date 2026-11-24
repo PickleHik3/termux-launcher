@@ -9,20 +9,14 @@ import com.termux.app.assistant.AssistantOffersPolicy.Offer;
 import com.termux.app.launcher.drawer.AppDrawerCategoryNudgePolicy;
 import com.termux.shared.file.OlderThanSweeper;
 
-import org.junit.Rule;
 import org.junit.Test;
-import org.junit.rules.TemporaryFolder;
 
-import java.io.File;
-import java.io.FileOutputStream;
 import java.util.List;
 
 public class AssistantOffersPolicyTest {
 
     private static final long GB = AssistantOffersPolicy.TMP_THRESHOLD_BYTES;
     private static final long NONE = AssistantOffersPolicy.NONE;
-
-    @Rule public TemporaryFolder tmp = new TemporaryFolder();
 
     private static List<Offer> offers(long pending, long tmpBytes, long dPending, long dTmp) {
         return AssistantOffersPolicy.offers(pending, tmpBytes, dPending, dTmp);
@@ -106,33 +100,5 @@ public class AssistantOffersPolicyTest {
 
     @Test public void aFailedClearFreesNothing() {
         assertEquals(0L, AssistantTmpHousekeeping.clearOld(age -> { throw new IllegalStateException(); }));
-    }
-
-    @Test public void sizeCountsFilesBelowDirectoriesAndNothingMissing() throws Exception {
-        File root = tmp.newFolder("t");
-        File sub = new File(root, "a/b");
-        assertTrue(sub.mkdirs());
-        write(new File(root, "x"), 100);
-        write(new File(sub, "y"), 50);
-        assertEquals(150L, AssistantTmpHousekeeping.sizeOf(root));
-        assertEquals(0L, AssistantTmpHousekeeping.sizeOf(new File(root, "missing")));
-    }
-
-    @Test public void sizeDoesNotFollowLinks() throws Exception {
-        File outside = tmp.newFolder("outside");
-        write(new File(outside, "big"), 1000);
-        File root = tmp.newFolder("t2");
-        write(new File(root, "x"), 10);
-        java.nio.file.Files.createSymbolicLink(new File(root, "link").toPath(), outside.toPath());
-        assertEquals(10L, AssistantTmpHousekeeping.sizeOf(root));
-        File linkedRoot = new File(tmp.getRoot(), "linkedRoot");
-        java.nio.file.Files.createSymbolicLink(linkedRoot.toPath(), root.toPath());
-        assertEquals(0L, AssistantTmpHousekeeping.sizeOf(linkedRoot));
-    }
-
-    private static void write(File f, int n) throws Exception {
-        try (FileOutputStream out = new FileOutputStream(f)) {
-            out.write(new byte[n]);
-        }
     }
 }

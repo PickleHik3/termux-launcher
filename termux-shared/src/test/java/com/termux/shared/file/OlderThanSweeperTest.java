@@ -154,4 +154,33 @@ public class OlderThanSweeperTest {
         FileTime t = FileTime.fromMillis(millis);
         v.setTimes(t, t, null);
     }
+
+    @Test public void sizeOfCountsRegularFilesRecursively() throws IOException {
+        File root = tmp.newFolder();
+        file(root, "a", 10, NEW);
+        file(dir(root, "d"), "b", 5, NEW);
+        assertEquals(15, OlderThanSweeper.sizeOf(root));
+    }
+
+    @Test public void sizeOfDoesNotFollowSymlinks() throws IOException {
+        File outside = tmp.newFolder();
+        file(outside, "big", 100, NEW);
+        File root = tmp.newFolder();
+        file(root, "a", 10, NEW);
+        Files.createSymbolicLink(new File(root, "dirLink").toPath(), outside.toPath());
+        Files.createSymbolicLink(new File(root, "fileLink").toPath(), new File(outside, "big").toPath());
+        assertEquals(10, OlderThanSweeper.sizeOf(root));
+    }
+
+    @Test public void sizeOfASymlinkedRootIsZero() throws IOException {
+        File real = tmp.newFolder();
+        file(real, "a", 10, NEW);
+        File link = new File(tmp.newFolder(), "link");
+        Files.createSymbolicLink(link.toPath(), real.toPath());
+        assertEquals(0, OlderThanSweeper.sizeOf(link));
+    }
+
+    @Test public void sizeOfAMissingRootIsZero() throws IOException {
+        assertEquals(0, OlderThanSweeper.sizeOf(new File(tmp.newFolder(), "missing")));
+    }
 }

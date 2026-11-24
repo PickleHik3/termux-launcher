@@ -12,10 +12,8 @@ import androidx.annotation.NonNull;
 import com.termux.R;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryPendingApps;
-import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.shell.TermuxShellUtils;
 
-import java.io.File;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
@@ -100,7 +98,7 @@ final class AssistantOffersController {
         measuredAt = now;
         try {
             io.execute(() -> {
-                long bytes = AssistantTmpHousekeeping.sizeOf(new File(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH));
+                long bytes = TermuxShellUtils.getTermuxTMPDIRSize();
                 main.post(() -> {
                     measuring = false;
                     tmpBytes = bytes;

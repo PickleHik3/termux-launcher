@@ -57,24 +57,11 @@ public final class OlderThanSweeper {
 
     /** Returns true when the entry is gone afterwards. */
     private static boolean sweepEntry(File entry, long cutoff, Result result) {
-        long mtime;
-        long size;
-        boolean isDirectory;
-        try {
-            BasicFileAttributes a = Files.readAttributes(entry.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
-            mtime = a.lastModifiedTime().toMillis();
-            size = a.isRegularFile() ? a.size() : 0;
-            isDirectory = a.isDirectory();
-        } catch (LinkageError e) {
-            // Android before 8 has no java.nio.file.
-            long[] s = lstat(entry.getPath());
-            if (s == null) return false;
-            mtime = s[0];
-            size = s[1];
-            isDirectory = s[2] == 1;
-        } catch (Exception e) {
-            return false;
-        }
+        long[] attrs = attributes(entry);
+        if (attrs == null) return false;
+        long mtime = attrs[0];
+        long size = attrs[1];
+        boolean isDirectory = attrs[2] == 1;
         boolean old = mtime < cutoff;
         if (isDirectory) {
             boolean allGone = true;
@@ -99,7 +86,42 @@ public final class OlderThanSweeper {
         return false;
     }
 
-    /** {mtimeMillis, size if regular else 0, 1 if a real directory}, or null. */
+    /**
+     * Bytes of the regular files under {@code root}, never following a symlink; 0 when the root is
+     * missing, unreadable or itself a link. Safe to call off the main thread.
+     */
+    public static long sizeOf(@NonNull File root) {
+        if (!isRealDirectory(root)) return 0L;
+        return sizeOfChildren(root);
+    }
+
+    private static long sizeOfChildren(File dir) {
+        File[] children = dir.listFiles();
+        if (children == null) return 0L;
+        long total = 0L;
+        for (File child : children) {
+            long[] a = attributes(child);
+            if (a == null) continue; // Gone mid-walk or unreadable: not counted.
+            total += a[1];
+            if (a[2] == 1) total += sizeOfChildren(child);
+        }
+        return total;
+    }
+
+    /** {mtimeMillis, size if regular else 0, 1 if a real directory} of the entry itself, or null. */
+    private static long[] attributes(File entry) {
+        try {
+            BasicFileAttributes a = Files.readAttributes(entry.toPath(), BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+            return new long[]{a.lastModifiedTime().toMillis(), a.isRegularFile() ? a.size() : 0, a.isDirectory() ? 1 : 0};
+        } catch (LinkageError e) {
+            // Android before 8 has no java.nio.file.
+            return lstat(entry.getPath());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
+    /** The pre-Android-8 path of {@link #attributes}. */
     private static long[] lstat(String path) {
         try {
             StructStat st = Os.lstat(path);
