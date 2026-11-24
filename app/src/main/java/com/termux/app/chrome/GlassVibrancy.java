@@ -103,7 +103,10 @@ public final class GlassVibrancy {
         if (!colours || (clampPercent(percent) == NO_VIBRANCY && frameTint == GlassFrameTint.NONE)) {
             return GlassFilters.frost(opacityPercent);
         }
-        int frost = GlassFilters.frost(opacityPercent) == GlassFilters.frost() ? 1 : 0;
+        // The cache key is the frost's two shapes (plain or Clear), not the opacity itself. This
+        // coloured filter is drawn as is and never handed to GlassFilters#undimmed, which would
+        // return a filter it did not make unchanged: a ground has no sink dim to undo.
+        int frost = GlassFilters.isPlainFrost(opacityPercent) ? 1 : 0;
         ColorFilter last = sGround;
         if (last != null && sGroundFrost == frost && sGroundPercent == clampPercent(percent)
             && sGroundTint == frameTint) return last;

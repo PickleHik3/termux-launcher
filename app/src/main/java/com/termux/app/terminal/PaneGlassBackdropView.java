@@ -1184,7 +1184,8 @@ public final class PaneGlassBackdropView extends View implements PaneRim.SlabEdg
         // Live blur: what is beneath, bent, in place of the frame; the layers below go on top.
         boolean live = kind == GlassSource.LIVE && drawLive(canvas, width, height);
         if (kind == GlassSource.LIVE && !live) {
-            // The phone refused the live effect: the frame this slab holds instead.
+            // The phone refused the live effect: the frame this slab holds instead. A second
+            // select, with liveShown false, overwrites the first one's kind and fields.
             kind = source.select(false, liveFrame, mFrame, mFrameShader, mFrameRect, storedParallax);
         }
         if (com.termux.app.chrome.MotionLog.enabled) diagRoute(live, canvas); // DIAG(slab-route)

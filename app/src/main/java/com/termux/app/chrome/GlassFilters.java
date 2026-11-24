@@ -47,9 +47,17 @@ public final class GlassFilters {
      */
     @NonNull
     public static synchronized ColorMatrixColorFilter frost(int opacityPercent) {
-        if (LowOpacityGlass.keep(opacityPercent / 100f) > 0f) return frost();
+        if (isPlainFrost(opacityPercent)) return frost();
         if (sFrostFilterClear == null) sFrostFilterClear = new ColorMatrixColorFilter(frostMatrix(CLEAR_OFFSET));
         return sFrostFilterClear;
+    }
+
+    /**
+     * True when {@link #frost(int)} at {@code opacityPercent} is the plain frost with its -6
+     * brightness offset, false when it is the Clear one (no offset).
+     */
+    public static boolean isPlainFrost(int opacityPercent) {
+        return LowOpacityGlass.keep(opacityPercent / 100f) > 0f;
     }
 
     /**
