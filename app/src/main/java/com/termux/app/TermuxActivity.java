@@ -11053,67 +11053,98 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The glass element of the Terminal's extra-keys card, one more Live entry while it is on screen. */
     private static final String KEYS_CARD_GLASS = "keys_card";
 
+    /** A rest rect, read when the frost of a parked card is asked for. */
+    private interface CardRestRect {
+        @Nullable com.termux.app.place.ChromeShape.Box get();
+    }
+
+    /** The foot a card wears under the gesture pill. */
+    private interface CardFoot {
+        int px();
+    }
+
+    /**
+     * What both cards that wear the dock slab's glass read from the activity: the blur, the
+     * picture, the frost, the plate. What is the card's own comes in at construction: its glass
+     * entry, its ground's tag, the rest rect its parked frost is measured under, its foot.
+     */
+    private class CardSource implements com.termux.app.dock.KeysCardDress.Source {
+        @NonNull private final String mGlassKey;
+        @NonNull private final String mGroundTag;
+        @NonNull private final CardRestRect mRestRect;
+        @NonNull private final CardFoot mFoot;
+
+        CardSource(@NonNull String glassKey, @NonNull String groundTag,
+                   @NonNull CardRestRect restRect, @NonNull CardFoot foot) {
+            mGlassKey = glassKey;
+            mGroundTag = groundTag;
+            mRestRect = restRect;
+            mFoot = foot;
+        }
+
+        @Override public boolean crossing() { return mCrossing.crossing(); }
+        @Override public boolean blurWanted(@NonNull ChromeSpec state) {
+            return shouldUseAccessoryRenderEffectBlur(state);
+        }
+        @Override public boolean pictureUp(@NonNull ImageView backdrop) {
+            return accessoryPictureUp(backdrop);
+        }
+        @Nullable @Override public android.graphics.drawable.Drawable attachLive(
+                @NonNull ImageView backdrop, int radiusDp) {
+            com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, radiusDp,
+                com.termux.app.chrome.LiveBackdrop.RANK_CHROME, mGlassKey,
+                mDockGlassRedress);
+            return picture == null ? null : picture.drawable();
+        }
+        @Override public void releaseLive(@NonNull ImageView backdrop) {
+            if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
+            mGlass.unregister(mGlassKey);
+        }
+        @Nullable @Override public Bitmap blurFrame(int radiusDp, @NonNull Rect outRect) {
+            Bitmap frame = mChrome.blurCache().obtain(radiusDp,
+                findViewById(R.id.activity_termux_root_view));
+            outRect.set(mChrome.blurCache().frameRectRef());
+            return frame;
+        }
+        @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
+            // The card's dress as a crossing toward it begins measures no view (it is parked):
+            // its frost is the Terminal's rest's own, under the card's rest rect.
+            if (surface == null && !mGlassDragPreview && mSideCards.hostLook() != null) {
+                android.graphics.ColorFilter rest = restFrostFilter(mCardRestFrost,
+                    com.termux.app.wall.PageRef.TERMINAL, mRestRect.get());
+                if (rest != null) return rest;
+            }
+            return dockFrostFilter(surface);
+        }
+        @Override public boolean managedSource() { return shouldUseManagedWallpaperBlurSource(); }
+        @Override public boolean glassDragPreview() { return mGlassDragPreview; }
+        @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
+            return mFancierGlassLook;
+        }
+        @Override public int footPx() { return mFoot.px(); }
+        @Nullable @Override public Drawable plate(float barAlpha) {
+            return dockSheetStandsDownOnFrame() ? null
+                : deckSlabOr(mChrome.glass().dockSurface(barAlpha, 0f, 1f, false));
+        }
+        @Override public int outlineColor() { return resolveAccessoryOutlineColor(); }
+        @Nullable @Override public com.termux.app.chrome.GroundUnderGlass ground(
+                @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop) {
+            return syncGround(held, backdrop, mGroundTag, false);
+        }
+        @Override public void installPicture(@NonNull ImageView backdrop,
+                @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
+                @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
+                @Nullable android.graphics.drawable.Drawable live) {
+            installBackdropPicture(backdrop, installed, frame, frameRect, radiusDp, live);
+        }
+    }
+
     /** The Terminal's extra-keys card wearing the dock capsule's glass (ADR 0032, #302). */
-    private final com.termux.app.dock.KeysCardDress.Source mKeysCardSource =
-        new com.termux.app.dock.KeysCardDress.Source() {
-            @Override public boolean crossing() { return mCrossing.crossing(); }
-            @Override public boolean blurWanted(@NonNull ChromeSpec state) {
-                return shouldUseAccessoryRenderEffectBlur(state);
-            }
-            @Override public boolean pictureUp(@NonNull ImageView backdrop) {
-                return accessoryPictureUp(backdrop);
-            }
-            @Nullable @Override public android.graphics.drawable.Drawable attachLive(
-                    @NonNull ImageView backdrop, int radiusDp) {
-                com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, radiusDp,
-                    com.termux.app.chrome.LiveBackdrop.RANK_CHROME, KEYS_CARD_GLASS,
-                    mDockGlassRedress);
-                return picture == null ? null : picture.drawable();
-            }
-            @Override public void releaseLive(@NonNull ImageView backdrop) {
-                if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
-                mGlass.unregister(KEYS_CARD_GLASS);
-            }
-            @Nullable @Override public Bitmap blurFrame(int radiusDp, @NonNull Rect outRect) {
-                Bitmap frame = mChrome.blurCache().obtain(radiusDp,
-                    findViewById(R.id.activity_termux_root_view));
-                outRect.set(mChrome.blurCache().frameRectRef());
-                return frame;
-            }
-            @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
-                // The card's dress as a crossing toward it begins measures no view (it is parked):
-                // its frost is the Terminal's rest's own, under the card's rest rect.
-                if (surface == null && !mGlassDragPreview && mSideCards.hostLook() != null) {
-                    android.graphics.ColorFilter rest = restFrostFilter(mCardRestFrost,
-                        com.termux.app.wall.PageRef.TERMINAL, mSideCards.keysCardRestRect());
-                    if (rest != null) return rest;
-                }
-                return dockFrostFilter(surface);
-            }
-            @Override public boolean managedSource() { return shouldUseManagedWallpaperBlurSource(); }
-            @Override public boolean glassDragPreview() { return mGlassDragPreview; }
-            @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
-                return mFancierGlassLook;
-            }
-            // The Terminal's card stands in from the screen's edge, so it owns no foot: apart, the
-            // page in front (Home's Peek card owns one) does not say whether it has one.
-            @Override public int footPx() { return mSideCards.apart() ? 0 : mDockFootPx; }
-            @Nullable @Override public Drawable plate(float barAlpha) {
-                return dockSheetStandsDownOnFrame() ? null
-                    : deckSlabOr(mChrome.glass().dockSurface(barAlpha, 0f, 1f, false));
-            }
-            @Override public int outlineColor() { return resolveAccessoryOutlineColor(); }
-            @Nullable @Override public com.termux.app.chrome.GroundUnderGlass ground(
-                    @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop) {
-                return syncGround(held, backdrop, "keys-card", false);
-            }
-            @Override public void installPicture(@NonNull ImageView backdrop,
-                    @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
-                    @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
-                    @Nullable android.graphics.drawable.Drawable live) {
-                installBackdropPicture(backdrop, installed, frame, frameRect, radiusDp, live);
-            }
-        };
+    private final com.termux.app.dock.KeysCardDress.Source mKeysCardSource = new CardSource(
+        KEYS_CARD_GLASS, "keys-card", () -> mSideCards.keysCardRestRect(),
+        // The Terminal's card stands in from the screen's edge, so it owns no foot: apart, the
+        // page in front (Home's Peek card owns one) does not say whether it has one.
+        () -> mSideCards.apart() ? 0 : mDockFootPx);
 
     private final com.termux.app.dock.KeysCardDress mKeysCardDress =
         new com.termux.app.dock.KeysCardDress(mDock, mKeysCardSource);
@@ -11128,64 +11159,21 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private final com.termux.app.dock.TerminalHostDress mTerminalHostDress =
         new com.termux.app.dock.TerminalHostDress(mDock,
-            new com.termux.app.dock.TerminalHostDress.Source() {
-            @Override public boolean crossing() { return mKeysCardSource.crossing(); }
-            @Override public boolean blurWanted(@NonNull ChromeSpec state) {
-                return mKeysCardSource.blurWanted(state);
-            }
-            @Override public boolean pictureUp(@NonNull ImageView backdrop) {
-                return mKeysCardSource.pictureUp(backdrop);
-            }
-            @Nullable @Override public android.graphics.drawable.Drawable attachLive(
-                    @NonNull ImageView backdrop, int radiusDp) {
-                com.termux.app.chrome.LivePicture picture = attachLivePicture(backdrop, radiusDp,
-                    com.termux.app.chrome.LiveBackdrop.RANK_CHROME, TERMINAL_HOST_GLASS,
-                    mDockGlassRedress);
-                return picture == null ? null : picture.drawable();
-            }
-            @Override public void releaseLive(@NonNull ImageView backdrop) {
-                if (mLiveBackdrop != null) mLiveBackdrop.detach(backdrop);
-                mGlass.unregister(TERMINAL_HOST_GLASS);
-            }
-            @Nullable @Override public Bitmap blurFrame(int radiusDp, @NonNull Rect outRect) {
-                return mKeysCardSource.blurFrame(radiusDp, outRect);
-            }
-            @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
-                // Dressed as a crossing toward it begins, it measures no view (it is parked): its
-                // frost is the Terminal's rest's own, under the host's rest rect.
-                if (surface == null && !mGlassDragPreview && mSideCards.hostLook() != null) {
-                    android.graphics.ColorFilter rest = restFrostFilter(mCardRestFrost,
-                        com.termux.app.wall.PageRef.TERMINAL, mSideCards.terminalHostRestRect());
-                    if (rest != null) return rest;
-                }
-                return dockFrostFilter(surface);
-            }
-            @Override public boolean managedSource() { return mKeysCardSource.managedSource(); }
-            @Override public boolean glassDragPreview() { return mKeysCardSource.glassDragPreview(); }
-            @Nullable @Override public com.termux.app.chrome.GlassRefraction.Look fancierLook() {
-                return mKeysCardSource.fancierLook();
-            }
+            new TerminalCardSource());
+
+    /** The Terminal's host card's source: the shared card source plus what only it answers. */
+    private final class TerminalCardSource extends CardSource
+            implements com.termux.app.dock.TerminalHostDress.Source {
+        TerminalCardSource() {
             // The host wears the Terminal's rest's foot under the gesture pill, as the answer cuts it.
-            @Override public int footPx() { return mSideCards.terminalHostFootPx(); }
-            @Nullable @Override public Drawable plate(float barAlpha) {
-                return mKeysCardSource.plate(barAlpha);
-            }
-            @Override public int outlineColor() { return mKeysCardSource.outlineColor(); }
-            @Nullable @Override public com.termux.app.chrome.GroundUnderGlass ground(
-                    @Nullable com.termux.app.chrome.GroundUnderGlass held, @NonNull ImageView backdrop) {
-                return syncGround(held, backdrop, "terminal-host", false);
-            }
-            @Override public void installPicture(@NonNull ImageView backdrop,
-                    @Nullable com.termux.app.chrome.SharedFrameDrawable installed,
-                    @NonNull Bitmap frame, @NonNull Rect frameRect, int radiusDp,
-                    @Nullable android.graphics.drawable.Drawable live) {
-                mKeysCardSource.installPicture(backdrop, installed, frame, frameRect, radiusDp, live);
-            }
-            @Override public boolean standsDownOnFrame() { return stackStandsDownOnFrame(); }
-            @Nullable @Override public com.termux.app.place.RestCards.Card card() {
-                return mSideCards.terminalHostCard();
-            }
-        });
+            super(TERMINAL_HOST_GLASS, "terminal-host",
+                () -> mSideCards.terminalHostRestRect(), () -> mSideCards.terminalHostFootPx());
+        }
+        @Override public boolean standsDownOnFrame() { return stackStandsDownOnFrame(); }
+        @Nullable @Override public com.termux.app.place.RestCards.Card card() {
+            return mSideCards.terminalHostCard();
+        }
+    }
 
     private final StackRenderer mStackRenderer = new StackRenderer(new StackRenderer.Views() {
         @Override public void laneMoved(@NonNull View host) {
