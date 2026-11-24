@@ -520,6 +520,10 @@ public class GuiAppsSetupGuideFragment extends Fragment {
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         lp.topMargin = dp(context, 12);
         mBody.addView(open, lp);
+        if (com.termux.app.wayland.GraphicsAddonRow.shows(com.termux.BuildConfig.WAYLAND_DISPLAY,
+            com.termux.app.wayland.LinuxDisplayBackend.current(context), mEdition)) {
+            renderAddon(context);
+        }
         MaterialButton skip = new MaterialButton(context);
         skip.setText(R.string.settings_gui_apps_skip);
         styleText(skip);
@@ -527,6 +531,76 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         mBody.addView(skip, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         if (isResumed()) probeGpu();
+    }
+
+    /**
+     * The graphics add-on's card (Wayland Display on the stock edition): its state read off the
+     * main thread, and a Copy button for the install command while it can be installed.
+     */
+    private void renderAddon(@NonNull Context context) {
+        LinearLayout card = new LinearLayout(context);
+        card.setOrientation(LinearLayout.VERTICAL);
+        int pad = dp(context, 16);
+        card.setPadding(pad, pad, pad, pad);
+        GradientDrawable shape = new GradientDrawable();
+        shape.setColor(M3.surfaceContainerHigh(context));
+        shape.setCornerRadius(dp(context, 16));
+        card.setBackground(shape);
+        TextView title = new TextView(context);
+        title.setText(com.termux.app.wayland.GraphicsAddonRow.title());
+        title.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_TitleMedium);
+        title.setTextColor(M3.onSurface(context));
+        card.addView(title);
+        TextView summary = new TextView(context);
+        summary.setTextAppearance(
+            com.google.android.material.R.style.TextAppearance_Material3_BodyMedium);
+        summary.setTextColor(M3.onSurface(context));
+        card.addView(summary);
+        MaterialButton copy = new MaterialButton(context);
+        copy.setText(R.string.settings_gui_apps_copy_button);
+        copy.setVisibility(View.GONE);
+        copy.setOnClickListener(v -> {
+            ShareUtils.copyTextToClipboard(context.getApplicationContext(),
+                context.getString(R.string.settings_gui_apps_clipboard_label),
+                com.termux.app.wayland.GraphicsAddonRow.INSTALL_COMMAND, null);
+            copy.setText(R.string.settings_gui_apps_copy_button_done);
+        });
+        LinearLayout.LayoutParams copyLp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        copyLp.topMargin = dp(context, 8);
+        card.addView(copy, copyLp);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.topMargin = dp(context, 12);
+        mBody.addView(card, lp);
+        if (mProbeExecutor.isShutdown()) return;
+        mProbeExecutor.execute(() -> {
+            com.termux.app.wayland.MesaWaylandOverlay.Answer answer =
+                com.termux.app.wayland.MesaWaylandOverlay.check();
+            boolean listed = com.termux.app.wayland.GraphicsAddonRow.listed(
+                readText(com.termux.app.store.TlstoreInstaller.refreshedCatalogFile()),
+                readText(com.termux.app.store.TlstoreInstaller.shippedCatalogFile()));
+            com.termux.app.wayland.GraphicsAddonRow.Row row =
+                com.termux.app.wayland.GraphicsAddonRow.of(answer.state, listed);
+            mHandler.post(() -> {
+                if (!isAdded() || summary.getParent() != card) return;
+                summary.setText(row.summary);
+                copy.setVisibility(row.action
+                    == com.termux.app.wayland.GraphicsAddonRow.Action.COPY_INSTALL
+                    ? View.VISIBLE : View.GONE);
+            });
+        });
+    }
+
+    @Nullable
+    private static String readText(@NonNull java.io.File file) {
+        try {
+            return new String(java.nio.file.Files.readAllBytes(file.toPath()),
+                java.nio.charset.StandardCharsets.UTF_8);
+        } catch (java.io.IOException | RuntimeException e) {
+            return null;
+        }
     }
 
     /** nix has no command to build: its own advice and the page that explains it. */
