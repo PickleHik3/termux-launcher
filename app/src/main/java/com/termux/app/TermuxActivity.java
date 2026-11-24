@@ -1119,8 +1119,28 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The surface editor overlay. All of its UI, gestures and dirty tracking live in the
      * controller; the activity lends it {@link SurfaceEditorHost} and keeps only the entry points.
      */
+    private final SurfaceEditorHost mSurfaceEditorHost = new SurfaceEditorHost();
     private final SurfaceEditorController mSurfaceEditor =
-        new SurfaceEditorController(new SurfaceEditorHost());
+        new SurfaceEditorController(mSurfaceEditorHost);
+
+    /**
+     * The Settings applier's way onto this screen while it is resumed ({@code LauncherSettings}):
+     * each refresh runs on the main thread the way the Settings row or the editor runs it, posted
+     * so that one owed at onResume runs after it, never inside it.
+     */
+    private final com.termux.app.settings.LauncherSettings.Screen mSettingsScreen = refresh ->
+        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> runSettingsRefresh(refresh));
+
+    private void runSettingsRefresh(
+            @NonNull com.termux.shared.termux.settings.registry.SettingRefresh refresh) {
+        if (isFinishing() || isDestroyed() || mPreferences == null) return;
+        switch (refresh) {
+            case RESTYLE: reloadActivityStyling(false); break;
+            case THEME: reloadActivityStyling(true); break;
+            case TEXT_SIZE: mSurfaceEditorHost.applyTextSizePreview(true); break;
+            default: break;
+        }
+    }
 
     /** The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). */
     private final com.termux.app.surfaces.SurfaceLongPress mSurfaceLongPress =
@@ -2990,6 +3010,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         holdVoiceScreen();
         if (mIsInvalidState)
             return;
+        // A setting saved while away (launcherctl config) refreshes now; a field write otherwise.
+        com.termux.app.settings.LauncherSettings.onLauncherResumed(mSettingsScreen);
         // The frost under a keyboard over the display was let go at pause; a pass makes it again.
         if (isInAppKeyboardShown() && inAppKeyboardSeesThroughToDisplay())
             mChrome.requestSync(ChromeRenderer.SCOPE_APPLY_THIS_FRAME);
@@ -3415,6 +3437,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     protected void onPause() {
+        com.termux.app.settings.LauncherSettings.onLauncherPaused();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();
