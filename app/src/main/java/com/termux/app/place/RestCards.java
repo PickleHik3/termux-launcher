@@ -83,12 +83,17 @@ import java.util.List;
  * {@link FloatingKeyboardGeometry} parks it in its room ({@link Rest#floatingKeyboardRoom}).
  *
  * <p>The A–Z bar: {@link #azPlacement} says where the layout stands it and {@link #carrierOf}
- * which card carries it. Off the dock (an edge strip on the top or a side) it is not a card here:
- * its host stands in the content column's own edge stack, whose bounds no pass carries.
+ * which card carries it: a row of the dock's card (or Peek's) on the dock, its own card
+ * ({@link CardId#AZ} on {@link StackView#AZ_EDGE}) off it, the shape model's piece at the
+ * thickness the activity measures ({@link Rest#azEdgeThicknessPx}). Its host stands in the
+ * content column's edge stack, which no crossing moves: a bar both ends stand alike is a shared
+ * card that stays put. The pull tab has no card.
  */
 public final class RestCards {
 
-    public enum CardId { STATUS, DOCK, PEEK, UNDER, KEYBOARD, FOOT }
+    public enum CardId { STATUS, DOCK, PEEK, UNDER, KEYBOARD, FOOT,
+        /** The A–Z bar standing alone off the dock, on its own edge host and glass sheet (#307). */
+        AZ }
 
     /** The views that carry cards or are laid out around them. */
     public enum StackView {
@@ -101,7 +106,12 @@ public final class RestCards {
          * host's rect at the Terminal's rest, the flush air above the keys and the foot under the
          * gesture pill included) and carried on the Terminal's lane.
          */
-        TERMINAL_HOST
+        TERMINAL_HOST,
+        /**
+         * The A–Z bar's own host off the dock ({@code place_az_bar_host}), in the content
+         * column's edge stack on the top or a side: a view no crossing moves (#307).
+         */
+        AZ_EDGE
     }
 
     /** Where the layout stands the A–Z bar (ResolvedArrangement's azRowOnDock, azBarEdge, azTab). */
@@ -135,6 +145,12 @@ public final class RestCards {
         public int keptBandPx = 0;
         /** The Terminal's flush padding at its own rest, as the activity last noted it. */
         public int restFlushPaddingPx = 0;
+        /**
+         * The A–Z bar's thickness off the dock (its edge host's height on the top, width on a
+         * side), as the activity measures it; 0 takes the letter band the policy gives the bar
+         * ({@code AccessoryStackLayoutPolicy#computeAzRowHeightPx}).
+         */
+        public int azEdgeThicknessPx = 0;
         /** The user's chin under the keyboard's keys (Settings), px. */
         public int keyboardChinPx = 0;
         /** The floating-form keyboard's room (its frame's parent), screen px; null while none. */
@@ -630,7 +646,8 @@ public final class RestCards {
             .contains(Element.STATUS);
         final boolean keyboardCard = containerLaidOut && up && keyboardLaid > 0
             && form != KeyboardForm.FLOATING && !unified;
-        final boolean wantsShape = statusOnTop || hostLaidOut && !peekStands && !floats
+        final boolean azAlone = mAz == AzPlacement.EDGE;
+        final boolean wantsShape = statusOnTop || azAlone || hostLaidOut && !peekStands && !floats
             || keyboardCard && !floating;
         final ChromeShape shape = wantsShape ? shapeOf(rest, r, dock, half, layout, style,
             cornersPx) : null;
@@ -640,6 +657,8 @@ public final class RestCards {
 
         // STATUS: the bar along the top edge.
         if (statusOnTop) addStatus(rest, shape, floating, w, h, density);
+        // AZ: the A–Z bar off the dock, a card of its own on its edge host (#307).
+        if (azAlone) addAzEdge(shape);
         // DOCK or PEEK: the host's glass.
         PeekGlassGeometry.Card peekCut = null;
         Box hostDrawn = null;
@@ -771,6 +790,7 @@ public final class RestCards {
         down.keptBandPx = rest.keptBandPx;
         down.restFlushPaddingPx = rest.restFlushPaddingPx;
         down.keyboardChinPx = rest.keyboardChinPx;
+        down.azEdgeThicknessPx = rest.azEdgeThicknessPx;
         down.floatingKeyboardRoom = rest.floatingKeyboardRoom;
         down.floatingKeyboardHeightPx = rest.floatingKeyboardHeightPx;
         down.floatingKeyboardWidthScale = rest.floatingKeyboardWidthScale;
@@ -828,6 +848,19 @@ public final class RestCards {
         mCards.add(new Card(CardId.STATUS, StackView.STATUS_BAR, box, piece.corners,
             piece.kind(Edge.TOP), piece.kind(Edge.BOTTOM), piece.kind(Edge.LEFT),
             piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.STATUS)));
+    }
+
+    /**
+     * The A–Z bar standing alone on the top or a side: the shape model's piece, on its own edge
+     * host. The edge stacks stand in the content column, which no crossing moves.
+     */
+    private void addAzEdge(@Nullable ChromeShape shape) {
+        ChromeShape.Piece piece = shape == null ? null : shape.piece(PieceId.AZ);
+        if (piece == null || piece.box.width() <= 0f || piece.box.height() <= 0f) return;
+        mLaidOut[StackView.AZ_EDGE.ordinal()] = piece.box;
+        mCards.add(new Card(CardId.AZ, StackView.AZ_EDGE, piece.box, piece.corners,
+            piece.kind(Edge.TOP), piece.kind(Edge.BOTTOM), piece.kind(Edge.LEFT),
+            piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.AZ)));
     }
 
     private void addFloatingDock(@NonNull StackView view, @NonNull PlaceLayout layout, @NonNull StackLayout.Input pass,
@@ -1064,7 +1097,8 @@ public final class RestCards {
         boolean floating = style == LayoutStyle.FLOATING;
         float status = rest.statusThicknessPx(floating);
         float apps = bandPx(Element.APPS, dock, pass);
-        float az = bandPx(Element.AZ, dock, pass);
+        float az = PlaceChromePolicy.azRowOnDock(layout) ? bandPx(Element.AZ, dock, pass)
+            : azEdgeThicknessPx(rest);
         float keys = bandPx(Element.EXTRA_KEYS, dock, pass);
         float keyboard = pass.keyboardShown ? pass.keyboardHeightPx : 0f;
         ChromeShapeModel.Thickness thickness = ChromeShapeModel.Thickness.of(status, status,
@@ -1076,6 +1110,13 @@ public final class RestCards {
     }
 
     // ---- Numbers ---------------------------------------------------------------------------
+
+    /** The A–Z bar's thickness off the dock: the measured one, else the policy's letter band. */
+    private static float azEdgeThicknessPx(@NonNull Rest rest) {
+        if (rest.azEdgeThicknessPx > 0) return rest.azEdgeThicknessPx;
+        return com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+            false, false, rest.density);
+    }
 
     /** The band an element stands in on the dock: its row, with what the Style adds to it. */
     static int bandPx(@NonNull Element element, @NonNull DockLayout dock,

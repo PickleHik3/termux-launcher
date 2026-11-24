@@ -316,7 +316,19 @@ public final class StackScene {
 
     /** The views the stack's writer poses a card on, and the layer each rides. */
     private static final int[] CARD_VIEWS = {RestCards.StackView.HOST.ordinal(),
-        RestCards.StackView.TERMINAL_HOST.ordinal(), RestCards.StackView.KEYS_CARD.ordinal()};
+        RestCards.StackView.TERMINAL_HOST.ordinal(), RestCards.StackView.KEYS_CARD.ordinal(),
+        RestCards.StackView.KEYBOARD_COLUMN.ordinal(),
+        RestCards.StackView.FLOATING_KEYBOARD.ordinal(), RestCards.StackView.AZ_EDGE.ordinal()};
+    /**
+     * The card views no layer of the stack carries (#307): the keyboard's column, the floating
+     * keyboard's frame and the A–Z bar's edge host. Their cards are the stack's own, so the scene
+     * keeps each at its rest; their own writers place the views.
+     */
+    private static boolean ownPlace(int v) {
+        return v == RestCards.StackView.KEYBOARD_COLUMN.ordinal()
+            || v == RestCards.StackView.FLOATING_KEYBOARD.ordinal()
+            || v == RestCards.StackView.AZ_EDGE.ordinal();
+    }
     private static final int HOST_VIEW = RestCards.StackView.HOST.ordinal();
     private static final int DOCK_CARD = RestCards.CardId.DOCK.ordinal();
     private static final int PEEK_CARD = RestCards.CardId.PEEK.ordinal();
@@ -357,7 +369,7 @@ public final class StackScene {
         StackEnd near = p < 0.5f ? from : to;
         for (int v : CARD_VIEWS) {
             boolean host = v == HOST_VIEW;
-            float base = host ? out.ty[V_HOST] : out.ty[V_ROWS];
+            float base = host ? out.ty[V_HOST] : ownPlace(v) ? 0f : out.ty[V_ROWS];
             int sideFrom = from.viewSide[v];
             int sideTo = to.viewSide[v];
             boolean shared = from.sameCard(to, v);

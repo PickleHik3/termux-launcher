@@ -397,10 +397,32 @@ public final class LayoutFixtures {
             .withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 9)), 1);
 
     /**
+     * The A–Z bar off the dock on {@code edge} on both sides: a bar of its own with a glass sheet
+     * of its own (#307), the rest of each side's layout as on pong.
+     */
+    private static Fixture azOn(@NonNull String name, @NonNull Edge edge) {
+        return new Fixture(name, 1080, 2412,
+            PONG.window.withSlot(Element.AZ, Slot.on(edge, 0)),
+            HOME.withSlot(Element.AZ, Slot.on(edge, 0)), 1);
+    }
+
+    /** The A–Z bar along the left edge on both sides (#307). */
+    public static final Fixture AZ_LEFT = azOn("a-z on the left edge", Edge.LEFT);
+    /** The A–Z bar along the top edge on both sides, under the status bar (#307). */
+    public static final Fixture AZ_TOP = azOn("a-z on the top edge", Edge.TOP);
+    /** The A–Z bar along the left edge on Home only: the Terminal shows none (#307). */
+    public static final Fixture AZ_LEFT_HOME_ONLY = new Fixture("a-z on Home's left edge only",
+        1080, 2412, PONG.window, HOME.withSlot(Element.AZ, Slot.on(Edge.LEFT, 0)), 1);
+    /** The A–Z bar as its pull tab on both sides: no band and no glass at rest (#307). */
+    public static final Fixture AZ_TAB = new Fixture("a-z as a pull tab", 1080, 2412,
+        AZ_ON_DOCK.window.withAzTab(true), AZ_ON_DOCK.home.withAzTab(true), 1);
+
+    /**
      * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot and flush padding, a split
-     * keyboard, the A–Z bar on the dock, a new install, a Terminal with no keys row, one with
-     * its keys under the keyboard and one with its status bar on the plank, each in every design. Kept
-     * apart from {@link #ALL}, whose numbers other tests pin.
+     * keyboard, the A–Z bar on the dock, on the left and the top edge, on Home's left edge alone
+     * and as its pull tab, the floating keyboard with a foot, a new install, a Terminal with no
+     * keys row, one with its keys under the keyboard and one with its status bar on the plank,
+     * each in every design. Kept apart from {@link #ALL}, whose numbers other tests pin.
      */
     @NonNull
     public static List<Fixture> cardFixtures() {
@@ -409,6 +431,11 @@ public final class LayoutFixtures {
         base.add(TL16.withFoot(KEPT_BAND_PX, FLUSH_PX));
         base.add(SPLIT_KEYBOARD);
         base.add(AZ_ON_DOCK);
+        base.add(AZ_LEFT);
+        base.add(AZ_TOP);
+        base.add(AZ_LEFT_HOME_ONLY);
+        base.add(AZ_TAB);
+        base.add(FLOATING_KEYBOARD.withFoot(KEPT_BAND_PX, FLUSH_PX));
         base.add(DEFAULT_INSTALL);
         base.add(NO_KEYS_ROW);
         base.add(KEYS_UNDER);

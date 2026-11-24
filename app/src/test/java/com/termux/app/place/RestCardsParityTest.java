@@ -335,7 +335,12 @@ public class RestCardsParityTest {
         PlaceLayout layout = f.layoutOf(page).withKeyboardShown(up);
         float status = StatusBarEdgeGeometry.thicknessPx(Edge.TOP, floating, false, f.density);
         float apps = bandOf(Element.APPS, dock, pass);
-        float az = bandOf(Element.AZ, dock, pass);
+        // The activity measures the A-Z bar's own host off the dock (chromeThicknessPx): its
+        // letter band there, the dock's band on it.
+        float az = PlaceChromePolicy.azRowOnDock(layout) ? bandOf(Element.AZ, dock, pass)
+            : PlaceChromePolicy.azRowShown(layout)
+                ? com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+                    false, false, f.density) : 0f;
         float keys = bandOf(Element.EXTRA_KEYS, dock, pass);
         float keyboard = up ? pass.keyboardHeightPx : 0f;
         return LiveChromeShape.of(layout, floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED,
@@ -913,9 +918,14 @@ public class RestCardsParityTest {
             } else {
                 wantCarrier = CardId.DOCK;
             }
+        } else if (want == RestCards.AzPlacement.EDGE) {
+            // Off the dock the bar stands on its own edge host with a glass sheet of its own
+            // (place_az_bar_host), a card of its own (#307).
+            wantCarrier = CardId.AZ;
         }
         assertEquals(at + " a-z carrier", wantCarrier, carrier == null ? null : carrier.id);
-        if (carrier != null && carrier.id != CardId.PEEK)
+        // A carrier on the stack stands on the dock's A-Z band; the edge card is its host's own.
+        if (carrier != null && carrier.id != CardId.PEEK && carrier.id != CardId.AZ)
             assertTrue(at + " a-z band laid out", bandOf(Element.AZ, v.dock, pass) > 0);
     }
 }
