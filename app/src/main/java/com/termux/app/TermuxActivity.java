@@ -2836,12 +2836,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The page bar (Home's, the key's and its open popup) takes its stream whole, ahead of
             // the seam's swipe and the surface long-press.
             if (mPageBar != null && mPageBar.claimsTouch(ev)) return super.dispatchTouchEvent(ev);
+            // The thin status row lies over the top pane, where the views would give its presses
+            // to the pane: it takes a stream that starts on it whole, its hold included.
+            com.termux.app.statusbar.StatusBarSwipeLayout statusHost = statusRowHost();
+            if (statusHost != null && statusHost.dispatchWindowRowTouch(ev)) return true;
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** The status host, found once: every window touch asks it whether the thin row owns it. */
+    @Nullable private com.termux.app.statusbar.StatusBarSwipeLayout mStatusRowHost;
+
+    @Nullable
+    private com.termux.app.statusbar.StatusBarSwipeLayout statusRowHost() {
+        if (mStatusRowHost == null) {
+            View host = findViewById(R.id.terminal_window_bar_host);
+            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
+                mStatusRowHost = (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+        }
+        return mStatusRowHost;
     }
 
     /**

@@ -405,6 +405,47 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         return true;
     }
 
+    /** The window's stream that the row owns, from its down on the row to the lift. */
+    private boolean mWindowRowStream;
+    /** This host's origin in the window, read once per down the row takes. */
+    private final int[] mWindowOrigin = new int[2];
+
+    /**
+     * Offers one window touch ({@code event} in window coordinates, as the activity gets it) to the
+     * thin row before any view sees it, and owns the whole stream when the down lands on the row
+     * (PaneRowPolicy.hitsRow). The row lies over the top pane, outside this host's own bounds and
+     * under the pane in draw order, so the views' own dispatch would hand those presses to the pane
+     * and never to this host. Anything else is not the row's: the terminal's first row of text and
+     * the pane's clearance keep their taps. Allocates nothing; the event is shifted into this
+     * host's coordinates for the row and shifted back.
+     *
+     * @return whether the row owns this event and the views are to see nothing of it
+     */
+    public boolean dispatchWindowRowTouch(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            mWindowRowStream = false;
+            if (!mRowPresented || mRowRect.isEmpty() || !isShown()) return false;
+            getLocationInWindow(mWindowOrigin);
+            if (!PaneRowPolicy.hitsRow(event.getX() - mWindowOrigin[0],
+                event.getY() - mWindowOrigin[1], mRowRect.left, mRowRect.top, mRowRect.right,
+                density(), mRowEnlarged)) return false;
+            mWindowRowStream = true;
+        }
+        if (!mWindowRowStream) return false;
+        float dx = -mWindowOrigin[0];
+        float dy = -mWindowOrigin[1];
+        event.offsetLocation(dx, dy);
+        try {
+            dispatchRowTouch(event);
+        } finally {
+            event.offsetLocation(-dx, -dy);
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+                mWindowRowStream = false;
+        }
+        return true;
+    }
+
     /** The fold has claimed the stream and the listener has heard at least one move of it. */
     private boolean mFoldDragActive;
     private boolean mExpansionAllowed = true;
