@@ -109,54 +109,6 @@ public class RestCardsCrossingTest {
         "(b) CONTAINER TOP FLOATING WALL_STRIP HOME->TERMINAL",
         // the Terminal's stack and Home's differ in height, so the container's top moves. Fixtures: floating keyboard, pong. e.g. pong (WALL_STRIP) up=false/false [0.0,1468.0 - 1080.0,2396.0] -> [0.0,1479.0 - 1080.0,2396.0]
         "(b) CONTAINER TOP FLOATING WALL_STRIP TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED GLASS_TRAY HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED GLASS_TRAY TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED LENS_BEADS HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED LENS_BEADS TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED PEEK_GLASS HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED PEEK_GLASS TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED WALL_STRIP HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED WALL_STRIP TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED GLASS_TRAY HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED GLASS_TRAY TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED LENS_BEADS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED LENS_BEADS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED PEEK_GLASS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED PEEK_GLASS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED WALL_STRIP HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED WALL_STRIP TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING GLASS_TRAY HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING GLASS_TRAY TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING LENS_BEADS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING LENS_BEADS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (the Peek design's bottom step no longer hides it). Fixtures: pong, pong with a foot, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING PEEK_GLASS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (the Peek design's bottom step no longer hides it). Fixtures: pong, pong with a foot, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING PEEK_GLASS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING WALL_STRIP HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING WALL_STRIP TERMINAL->HOME",
         // The shape model parts a split keyboard into two halves 0.4 of the width each, so the extra-keys row's bottom over the parting is a rim, while the keyboard's one host across both halves joins it. Fixtures: split keyboard. e.g. split keyboard (GLASS_TRAY) up=true [0.0,1493.0 - 1080.0,1591.0] RIM | [0.0,1591.0 - 1080.0,2261.0] JOIN
         "(c) DOCK/KEYBOARD EDGES DOCKED GLASS_TRAY TERMINAL",
         // The shape model parts a split keyboard into two halves 0.4 of the width each, so the extra-keys row's bottom over the parting is a rim, while the keyboard's one host across both halves joins it. Fixtures: split keyboard. e.g. split keyboard (LENS_BEADS) up=true [0.0,1493.0 - 1080.0,1591.0] RIM | [0.0,1591.0 - 1080.0,2261.0] JOIN
@@ -213,38 +165,6 @@ public class RestCardsCrossingTest {
         "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->HOME",
         // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED GLASS_TRAY HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED GLASS_TRAY TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED LENS_BEADS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED LENS_BEADS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED PEEK_GLASS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED WALL_STRIP HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED WALL_STRIP TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING GLASS_TRAY HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING GLASS_TRAY TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING LENS_BEADS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING LENS_BEADS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING PEEK_GLASS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING PEEK_GLASS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING WALL_STRIP HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING WALL_STRIP TERMINAL->HOME",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED GLASS_TRAY HOME->TERMINAL",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
@@ -350,7 +270,8 @@ public class RestCardsCrossingTest {
         }
         // The stack's keyboard; a floating-form keyboard is its own frame, not the column's.
         Card keyboard = cards.card(CardId.KEYBOARD);
-        if (keyboard != null && keyboard.view != StackView.KEYBOARD_COLUMN) keyboard = null;
+        if (keyboard != null && keyboard.view != StackView.KEYBOARD_COLUMN
+            && keyboard.view != StackView.TERMINAL_KEYBOARD) keyboard = null;
         boolean unified = host != null && host.pieces.contains(PieceId.KEYBOARD);
         int kb = keyboard != null ? Math.round(keyboard.box.height())
             : unified ? f.pass(page, up, floating).keyboardHeightPx : 0;

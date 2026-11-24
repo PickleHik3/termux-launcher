@@ -459,23 +459,32 @@ public class RestCardsParityTest {
                 }
                 // An A-Z bar off the dock is the Terminal's own card on its own edge host unless
                 // Home draws it at the same rect (#307 round 3).
+                // The keyboard is the Terminal's own card on its own column unless both rests draw
+                // it alike (#307 round 3).
                 StackView wantView = want.view == StackView.HOST ? termView
                     : want.view == StackView.AZ_EDGE && !sameAz(homeRest, got)
-                    ? StackView.TERMINAL_AZ_EDGE : want.view;
+                    ? StackView.TERMINAL_AZ_EDGE
+                    : want.view == StackView.KEYBOARD_COLUMN
+                        && termRest.laidOut(StackView.TERMINAL_KEYBOARD) != null
+                    ? StackView.TERMINAL_KEYBOARD : want.view;
                 assertEquals(at, wantView, got.view);
             }
             // Each side parks the other's glass, on screen it draws none of it; a Terminal with
             // no card at its rest (#305) has none to park.
             boolean termHostCard = false;
             for (RestCards.Card c : termSolo.cards()) termHostCard |= c.view == StackView.HOST;
-            boolean termAzApart = termRest.card(CardId.AZ) != null
-                && termRest.card(CardId.AZ).view == StackView.TERMINAL_AZ_EDGE;
-            assertEquals(at, !termHostCard && !termAzApart, homeRest.parked().isEmpty());
+            for (RestCards.Card c : termRest.cards())
+                termHostCard |= StackEnd.sideOf(c.view, true) == com.termux.app.page.Side.TERMINAL.ordinal();
+            assertEquals(at, !termHostCard, homeRest.parked().isEmpty());
             assertFalse(at, termRest.parked().isEmpty());
+            // Each side's parked cards stand on that side's own views (#307: its A-Z edge host
+            // and keyboard column too).
             for (RestCards.Card c : homeRest.parked())
-                assertEquals(at, c.id == CardId.AZ ? StackView.TERMINAL_AZ_EDGE : termView, c.view);
+                assertEquals(at + " " + c, com.termux.app.page.Side.TERMINAL.ordinal(),
+                    StackEnd.sideOf(c.view, true));
             for (RestCards.Card c : termRest.parked())
-                assertEquals(at, c.id == CardId.AZ ? StackView.AZ_EDGE : StackView.HOST, c.view);
+                assertEquals(at + " " + c, com.termux.app.page.Side.HOME.ordinal(),
+                    StackEnd.sideOf(c.view, true));
             for (RestCards.Card c : homeRest.cards())
                 assertTrue(at + " Home draws no Terminal card", c.view != termView);
             StackLayout.Input termPass = f.pass(PageRef.TERMINAL, up, true);

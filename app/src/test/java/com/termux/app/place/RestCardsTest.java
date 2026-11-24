@@ -180,7 +180,9 @@ public class RestCardsTest {
         RestCards cards = rest(TRAY, PageRef.TERMINAL, true, true);
         RestCards.Card keyboard = cards.card(CardId.KEYBOARD);
         assertNotNull(keyboard);
-        assertEquals(StackView.KEYBOARD_COLUMN, keyboard.view);
+        // The Terminal's keyboard card is its own column's while the cards stand apart (#307).
+        assertEquals(cards.apart() ? StackView.TERMINAL_KEYBOARD : StackView.KEYBOARD_COLUMN,
+            keyboard.view);
         for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, keyboard.edge(edge));
     }
 

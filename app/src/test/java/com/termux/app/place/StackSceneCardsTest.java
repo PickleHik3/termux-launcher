@@ -170,6 +170,12 @@ public class StackSceneCardsTest {
         assertEquals(TERMINAL, StackEnd.sideOf(StackView.TERMINAL_HOST, true));
         assertEquals(TERMINAL, StackEnd.sideOf(StackView.KEYS_CARD, true));
         assertEquals(StackEnd.STACK_SIDE, StackEnd.sideOf(StackView.HOST, false));
-        assertEquals(StackEnd.STACK_SIDE, StackEnd.sideOf(StackView.KEYBOARD_COLUMN, true));
+        // #307 round 3: the keyboard and the A-Z bar off the dock are one card per side.
+        assertEquals(HOME, StackEnd.sideOf(StackView.KEYBOARD_COLUMN, true));
+        assertEquals(TERMINAL, StackEnd.sideOf(StackView.TERMINAL_KEYBOARD, true));
+        assertEquals(HOME, StackEnd.sideOf(StackView.AZ_EDGE, true));
+        assertEquals(TERMINAL, StackEnd.sideOf(StackView.TERMINAL_AZ_EDGE, true));
+        assertEquals(StackEnd.STACK_SIDE, StackEnd.sideOf(StackView.FLOATING_KEYBOARD, true));
+        assertEquals(StackEnd.STACK_SIDE, StackEnd.sideOf(StackView.KEYBOARD_COLUMN, false));
     }
 }

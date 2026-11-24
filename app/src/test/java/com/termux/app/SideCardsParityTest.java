@@ -518,7 +518,11 @@ public class SideCardsParityTest {
                 if (!answer.apart()) continue;
                 String label = f.name + " terminal kb=" + up;
                 com.termux.app.place.ChromeShape.Box keys = answer.laidOut(RestCards.StackView.KEYS_CARD);
-                com.termux.app.place.ChromeShape.Box column = answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
+                // The Terminal's own column while the keyboard is two cards (#307 round 3).
+                com.termux.app.place.ChromeShape.Box column =
+                    answer.laidOut(RestCards.StackView.TERMINAL_KEYBOARD) != null
+                    ? answer.laidOut(RestCards.StackView.TERMINAL_KEYBOARD)
+                    : answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
                 if (keys == null || column == null) continue;
                 assertEquals(label, column.top, keys.bottom, 0f);
                 if (answer.terminalSideLiftPx() > 0) lifted++;

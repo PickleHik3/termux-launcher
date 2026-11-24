@@ -118,7 +118,14 @@ public final class RestCards {
          * bar at different rects ({@code place_terminal_az_bar_host}, #307 round 3): laid out
          * once at the Terminal's rest, it slides in with the Terminal as Home's slides out.
          */
-        TERMINAL_AZ_EDGE
+        TERMINAL_AZ_EDGE,
+        /**
+         * The Terminal's keyboard card while the cards stand apart (#307 round 3): laid out once at
+         * the Terminal's rest, over its bands under the keyboard, it travels with the Terminal as
+         * Home's, on {@link #KEYBOARD_COLUMN}, travels with Home. One keyboard's keys: the card
+         * holds no second keyboard's pixels.
+         */
+        TERMINAL_KEYBOARD
     }
 
     /** Where the layout stands the A–Z bar (ResolvedArrangement's azRowOnDock, azBarEdge, azTab). */
@@ -375,6 +382,7 @@ public final class RestCards {
             answer.mHomeRowsDropPx = otherCards.mRowsDropPx;
         }
         splitAz(answer, otherCards, frontHome);
+        splitKeyboard(answer, otherCards, frontHome);
         answer.mApart = true;
         answer.mContainerMarginPx = SideCards.containerMarginPx(homeMargin, terminalMargin, true,
             frontHome);
@@ -405,6 +413,48 @@ public final class RestCards {
         StackView view = frontHome ? StackView.TERMINAL_AZ_EDGE : StackView.AZ_EDGE;
         answer.mLaidOut[view.ordinal()] = theirs.box;
         answer.mParked.add(onView(theirs, view));
+    }
+
+    /**
+     * The keyboard while the cards stand apart (#307 round 3, ADR 0032 2026-11-24): two cards, one
+     * per side, each laid out once at its side's rest. Home's keyboard card (and a foot it wears)
+     * stays on {@link StackView#KEYBOARD_COLUMN}, the Terminal's moves to
+     * {@link StackView#TERMINAL_KEYBOARD}, and the front's answer parks the other side's with its
+     * column. Where both rests draw the keyboard alike (one card at one rect on one column) it
+     * stays one shared card.
+     */
+    private static void splitKeyboard(@NonNull RestCards answer, @NonNull RestCards other,
+                                      boolean frontHome) {
+        final int column = StackView.KEYBOARD_COLUMN.ordinal();
+        final int terminal = StackView.TERMINAL_KEYBOARD.ordinal();
+        if (sameKeyboard(answer, other)) return;
+        if (!frontHome) {
+            for (int i = 0; i < answer.mCards.size(); i++) {
+                Card card = answer.mCards.get(i);
+                if (card.view == StackView.KEYBOARD_COLUMN)
+                    answer.mCards.set(i, onView(card, StackView.TERMINAL_KEYBOARD));
+            }
+            answer.mLaidOut[terminal] = answer.mLaidOut[column];
+            answer.mLaidOut[column] = other.mLaidOut[column];
+            for (Card card : other.mCards)
+                if (card.view == StackView.KEYBOARD_COLUMN) answer.mParked.add(card);
+        } else {
+            answer.mLaidOut[terminal] = other.mLaidOut[column];
+            for (Card card : other.mCards)
+                if (card.view == StackView.KEYBOARD_COLUMN)
+                    answer.mParked.add(onView(card, StackView.TERMINAL_KEYBOARD));
+        }
+    }
+
+    /** Whether both rests lay the keyboard's column out alike and draw the same cards on it. */
+    private static boolean sameKeyboard(@NonNull RestCards a, @NonNull RestCards b) {
+        final int column = StackView.KEYBOARD_COLUMN.ordinal();
+        if (!java.util.Objects.equals(a.mLaidOut[column], b.mLaidOut[column])) return false;
+        List<Box> mine = new ArrayList<>(2);
+        List<Box> theirs = new ArrayList<>(2);
+        for (Card card : a.mCards) if (card.view == StackView.KEYBOARD_COLUMN) mine.add(card.box);
+        for (Card card : b.mCards) if (card.view == StackView.KEYBOARD_COLUMN) theirs.add(card.box);
+        return !mine.isEmpty() && mine.equals(theirs);
     }
 
     /** {@code card} carried by {@code view}. */

@@ -319,7 +319,8 @@ public final class StackScene {
         RestCards.StackView.TERMINAL_HOST.ordinal(), RestCards.StackView.KEYS_CARD.ordinal(),
         RestCards.StackView.KEYBOARD_COLUMN.ordinal(),
         RestCards.StackView.FLOATING_KEYBOARD.ordinal(), RestCards.StackView.AZ_EDGE.ordinal(),
-        RestCards.StackView.TERMINAL_AZ_EDGE.ordinal()};
+        RestCards.StackView.TERMINAL_AZ_EDGE.ordinal(),
+        RestCards.StackView.TERMINAL_KEYBOARD.ordinal()};
     /**
      * The card views no layer of the stack carries (#307): the keyboard's column, the floating
      * keyboard's frame and the A–Z bar's edge host. Their cards are the stack's own, so the scene
@@ -327,6 +328,7 @@ public final class StackScene {
      */
     private static boolean ownPlace(int v) {
         return v == RestCards.StackView.KEYBOARD_COLUMN.ordinal()
+            || v == RestCards.StackView.TERMINAL_KEYBOARD.ordinal()
             || v == RestCards.StackView.FLOATING_KEYBOARD.ordinal()
             || edgeHost(v);
     }
@@ -399,10 +401,15 @@ public final class StackScene {
             } else {
                 StackEnd owner = isSide(sideFrom) ? from : to;
                 boolean edge = edgeHost(v);
-                float cover = side == Side.HOME.ordinal() && !edge ? out.coverHomePx : 0f;
+                // The keyboard's cover on Home drops Home's rows and host, never the keyboard.
+                float cover = side == Side.HOME.ordinal() && !ownPlace(v) ? out.coverHomePx : 0f;
                 out.cardSide[v] = side;
                 out.cardTx[v] = sideSlide(SIDES[side], a, b, p, width);
-                out.cardTy[v] = base + (edge ? 0f : owner.sideRestTyPx(side)) + cover;
+                // A column's card one end does not draw (the keyboard down there) takes that
+                // end's offset there, so each end's frame is its rest's.
+                float rest = edge ? 0f : ownPlace(v) ? blend(from.sideRestTyPx(sideFrom),
+                    to.sideRestTyPx(sideTo), materialShare(p)) : owner.sideRestTyPx(side);
+                out.cardTy[v] = base + rest + cover;
                 out.cardCoverPx[v] = cover;
             }
             int nearCard = near.cardOn[v];
