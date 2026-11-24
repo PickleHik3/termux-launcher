@@ -92,6 +92,9 @@ final class BarDragController {
 
         int onSurfaceColor();
 
+        /** The held bar is over the Hidden column (letting go hides it), or left it. */
+        default void onHiddenTarget(boolean over) {}
+
         /** A drop wrote the draft: the targets are laid over the bars again. */
         void onWritten();
     }
@@ -206,6 +209,7 @@ final class BarDragController {
             if (mGroup != null && mGroup.getParent() != null)
                 mGroup.getParent().requestDisallowInterceptTouchEvent(false);
         }
+        mHost.onHiddenTarget(false);
         mArmed = false;
         mDragging = false;
         mHeld = null;
@@ -268,6 +272,7 @@ final class BarDragController {
         BarLandingPolicy.Hold hold = BarDragGeometry.holdAt(frame, held, mX, mY);
         Landing landing = BarLandingPolicy.land(state, held, hold);
         mLanding = landing;
+        mHost.onHiddenTarget(landing.allowed && landing.zone == Zone.HIDDEN);
         if (landing.zone == Zone.EDGE && BarDragGeometry.slotLine(frame, held, landing, mLine))
             showLine(landing.edge != null && landing.edge.isOnSide());
         else
@@ -290,7 +295,17 @@ final class BarDragController {
                     wrote = true;
                 }
             }
-            // Zone.HIDDEN (#339) and Zone.PANE (#342) land here when their rects exist.
+            if (landing.zone == Zone.HIDDEN) {
+                // Hiding is the layout's own: a status bar put away keeps its edge.
+                if (held.element() != null) {
+                    layout.setShown(held.element(), false);
+                    wrote = true;
+                } else if (held == Bar.KEYBOARD) {
+                    layout.setKeyboardShown(false);
+                    wrote = true;
+                }
+            }
+            // Zone.PANE (#342) lands here when the pane rect exists.
         }
         cancelHold();
         if (wrote)

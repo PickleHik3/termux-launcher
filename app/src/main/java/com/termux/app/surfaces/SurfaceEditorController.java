@@ -952,6 +952,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             mBar.setListener(new BarListener());
         }
         mBar.attach(com.termux.app.window.WindowLayers.panelHostIn(content));
+        attachHiddenColumn(com.termux.app.window.WindowLayers.panelHostIn(content));
         // A picture read before the bar existed is applied now; a new bar starts at the theme's.
         mLabelInk = 0;
         if (mLabelPicture == null)
@@ -1996,6 +1997,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             float nowTx = fromTx + (tx - fromTx) * f;
             float nowTy = fromTy + (ty - fromTy) * f;
             frame.setPose(nowScale, nowTx, nowTy);
+            placeHiddenColumn(nowScale, nowTx, nowTy);
         });
         animator.addListener(new android.animation.AnimatorListenerAdapter() {
             private boolean mCancelled;
@@ -2061,6 +2063,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         float halfLift = !up || barOverSheet() ? barLift + dp(EditorBar.BAR_DP) + gap
             : under + gap;
         bar.place(barLift, halfLift);
+        if (mTargetScale > 0f)
+            placeHiddenColumn(mTargetScale, mTargetTx, mTargetTy);
         applyLabelInk();
     }
 
@@ -2680,6 +2684,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The arrangement moved (a drop, a switch, a height): the dirty state and the card. */
     private void onArrangementChanged() {
         syncDirty();
+        refreshHiddenColumn();
         if (!mSliderDragActive && mSheet != null && mSheet.isShown())
             mSheet.restate();
     }
@@ -4730,6 +4735,73 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return card;
     }
 
+    // ------------------------------------------------------------------- the Hidden column
+
+    @Nullable private HiddenColumnView mHiddenColumn;
+    private final int[] mColumnFrame = new int[4];
+    private final int[] mColumnRectScratch = new int[4];
+
+    private void attachHiddenColumn(@NonNull ViewGroup host) {
+        HiddenColumnView column = mHiddenColumn;
+        if (column != null && column.getParent() == host)
+            return;
+        detachHiddenColumn();
+        column = new HiddenColumnView(mHost.context(), item -> {
+            LayoutEditorController layout = mHost.layoutEditor();
+            if (layout == null)
+                return;
+            if (item.element == null)
+                layout.setKeyboardShown(true);
+            else
+                layout.setShown(item.element, true);
+            positionTargets();
+        }, mHost.themeColor(com.google.android.material.R.attr.colorSurface,
+            R.color.termux_primary),
+            mHost.themeColor(com.google.android.material.R.attr.colorOnSurface,
+                R.color.termux_primary),
+            mHost.themeColor(androidx.appcompat.R.attr.colorPrimary, R.color.termux_primary));
+        // First in the host, so the card sheet and the bar stand over it.
+        host.addView(column, 0, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        mHiddenColumn = column;
+        refreshHiddenColumn();
+        if (mTargetScale > 0f)
+            placeHiddenColumn(mTargetScale, mTargetTx, mTargetTy);
+    }
+
+    private void detachHiddenColumn() {
+        HiddenColumnView column = mHiddenColumn;
+        mHiddenColumn = null;
+        if (column != null && column.getParent() instanceof ViewGroup)
+            ((ViewGroup) column.getParent()).removeView(column);
+    }
+
+    /** The chips for what the layout puts away. */
+    private void refreshHiddenColumn() {
+        HiddenColumnView column = mHiddenColumn;
+        LayoutEditorController layout = mHost.layoutEditor();
+        if (column != null && layout != null)
+            column.setItems(layout.trayItems());
+    }
+
+    /** The column beside the frame as the pose leaves it: translation only. */
+    private void placeHiddenColumn(float scale, float tx, float ty) {
+        HiddenColumnView column = mHiddenColumn;
+        AppearanceEditorFrame frame = mFrame;
+        if (column == null || frame == null || mWindowWidthPx <= 0)
+            return;
+        View root = frame.root();
+        float left = mContainerLeftPx + tx + root.getWidth() * (1f - scale) / 2f;
+        float top = mContainerTopPx + ty;
+        mColumnFrame[0] = (int) Math.floor(left);
+        mColumnFrame[1] = (int) Math.floor(top);
+        mColumnFrame[2] = (int) Math.ceil(left + root.getWidth() * scale);
+        mColumnFrame[3] = (int) Math.ceil(top + root.getHeight() * scale);
+        column.setFrameRect(mColumnFrame);
+        column.place(HiddenColumnGeometry.rect(mColumnFrame, mWindowWidthPx,
+            dp(HiddenColumnView.GAP_DP), dp(HiddenColumnView.WIDTH_DP)));
+    }
+
     @Nullable private BarDragController mBarDrag;
 
     /** The drag of a bar on the frame (#338); it joins the tap overlay and writes the draft. */
@@ -4832,7 +4904,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 R.color.termux_primary);
         }
 
+        @Override public boolean hiddenRect(@NonNull float[] out) {
+            HiddenColumnView column = mHiddenColumn;
+            int[] rect = mColumnRectScratch;
+            if (column == null || !column.rect(rect) || mTargetScale <= 0f)
+                return false;
+            // The column is in the window; the overlay is the frame, scaled about its corner.
+            float scale = mTargetScale;
+            out[0] = (rect[0] - mColumnFrame[0]) / scale;
+            out[1] = (rect[1] - mColumnFrame[1]) / scale;
+            out[2] = (rect[2] - mColumnFrame[0]) / scale;
+            out[3] = (rect[3] - mColumnFrame[1]) / scale;
+            return true;
+        }
+
+        @Override public void onHiddenTarget(boolean over) {
+            if (mHiddenColumn != null)
+                mHiddenColumn.setTarget(over);
+        }
+
         @Override public void onWritten() {
+            refreshHiddenColumn();
             positionTargets();
         }
     }
@@ -5727,6 +5819,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void clearOutlines() {
         if (mBarDrag != null)
             mBarDrag.release();
+        detachHiddenColumn();
         for (int id : GROUP_IDS) {
             View group = mHost.findView(id);
             if (group != null && group.getBackground() != null)
