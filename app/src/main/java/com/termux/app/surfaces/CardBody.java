@@ -288,7 +288,10 @@ final class CardBody {
         Row first = rows.get(0);
         switch (group.form) {
             case PAIR:
-                return rows.size() == 2 ? sliderPair(rows) : sliders(rows);
+                return rows.size() == 2 ? sliderPair(rows, null) : sliders(rows);
+            case LINKED_PAIR:
+                return rows.size() == 3 ? sliderPair(java.util.Arrays.asList(rows.get(0),
+                    rows.get(2)), rows.get(1)) : sliders(rows);
             case STEPPERS:
                 return rows.size() == 2 ? stepperPair(rows) : stepper(first);
             case CHIPS:
@@ -330,9 +333,12 @@ final class CardBody {
 
     // ------------------------------------------------------------------------ condensed forms
 
-    /** Two related sliders on one row ({@link Form#PAIR}). */
+    /**
+     * Two related sliders on one row ({@link Form#PAIR}), with {@code linkRow}, when given, as
+     * the link button standing between them ({@link Form#LINKED_PAIR}).
+     */
     @NonNull
-    private CardRowView sliderPair(@NonNull List<Row> rows) {
+    private CardRowView sliderPair(@NonNull List<Row> rows, @Nullable Row linkRow) {
         List<SliderRow.Track> tracks = new ArrayList<>(2);
         int[] values = new int[2];
         for (int i = 0; i < 2; i++) {
@@ -342,6 +348,9 @@ final class CardBody {
             values[i] = mModel.value(row);
         }
         SliderPairRow pair = SliderPairRow.build(mContext, tracks, values,
+            linkRow == null ? null : name(linkRow),
+            linkRow != null && mModel.value(linkRow) != 0,
+            on -> mModel.onValue(linkRow, on ? 1 : 0, false),
             new SliderRow.Listener() {
                 @Override public void onValue(int index, int value, boolean dragging) {
                     mModel.onValue(rows.get(index), value, dragging);
@@ -372,6 +381,8 @@ final class CardBody {
                 cell.root.setAlpha(enabled ? 1f : 0.5f);
                 pair.setOwn(i, mModel.ownValue(row), mModel.rowState(row));
             }
+            if (linkRow != null)
+                pair.setLinked(mModel.value(linkRow) != 0);
             int visibility = any ? View.VISIBLE : View.GONE;
             if (pair.root.getVisibility() != visibility)
                 pair.root.setVisibility(visibility);

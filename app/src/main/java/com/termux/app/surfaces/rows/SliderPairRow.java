@@ -14,6 +14,7 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.google.android.material.button.MaterialButton;
 import com.termux.R;
 import com.termux.app.surfaces.LegendSlider;
 
@@ -68,7 +69,8 @@ public final class SliderPairRow {
     @NonNull private final List<SliderRow.Track> mTracks;
 
     private SliderPairRow(@NonNull PairRow root, @NonNull List<Cell> cells,
-                          @NonNull List<SliderRow.Track> tracks) {
+                          @NonNull List<SliderRow.Track> tracks, @Nullable MaterialButton link) {
+        this.link = link;
         this.root = root;
         this.cells = Collections.unmodifiableList(cells);
         mTracks = tracks;
@@ -80,17 +82,86 @@ public final class SliderPairRow {
                                       @NonNull List<SliderRow.Track> tracks,
                                       @NonNull int[] values,
                                       @NonNull SliderRow.Listener listener) {
+        return build(context, tracks, values, null, false, null, listener);
+    }
+
+    /**
+     * The pair with a link button standing between its cells (the keyboard's Opacity and Key
+     * opacity), named {@code linkName} and on while {@code linked}; none when {@code linkName}
+     * is null. Where the cells stack the link stands between them.
+     */
+    @NonNull
+    public static SliderPairRow build(@NonNull Context context,
+                                      @NonNull List<SliderRow.Track> tracks,
+                                      @NonNull int[] values,
+                                      @Nullable CharSequence linkName, boolean linked,
+                                      @Nullable SliderRow.OnLink onLink,
+                                      @NonNull SliderRow.Listener listener) {
         if (tracks.size() != 2)
             throw new IllegalArgumentException("a pair holds two sliders, not " + tracks.size());
         List<Cell> cells = new ArrayList<>(2);
         for (int i = 0; i < 2; i++)
             cells.add(cell(context, tracks.get(i), i, listener));
-        PairRow row = new PairRow(context, cells.get(0).root, cells.get(1).root, null,
-            RowKit.dp(context, PairFit.MIN_SLIDER_CELL_DP));
-        SliderPairRow pair = new SliderPairRow(row, cells, new ArrayList<>(tracks));
+        MaterialButton link = linkName == null ? null : linkButton(context, linkName);
+        PairRow row = new PairRow(context, cells.get(0).root, cells.get(1).root, link,
+            RowKit.dp(context, PairFit.MIN_SLIDER_CELL_DP), true);
+        SliderPairRow pair = new SliderPairRow(row, cells, new ArrayList<>(tracks), link);
         for (int i = 0; i < 2; i++)
             pair.setValue(i, i < values.length ? values[i] : tracks.get(i).from);
+        if (link != null) {
+            pair.setLinked(linked);
+            dressLink(link, link.isChecked());
+            link.addOnCheckedChangeListener((button, on) -> {
+                dressLink(link, on);
+                if (!pair.mSettingLink && onLink != null)
+                    onLink.onLink(on);
+            });
+        }
         return pair;
+    }
+
+    /** The link between the cells, or null where the pair has none. */
+    @Nullable public final MaterialButton link;
+    private boolean mSettingLink;
+
+    /** Shows the link on or off without reporting it. */
+    public void setLinked(boolean on) {
+        if (link == null || link.isChecked() == on)
+            return;
+        mSettingLink = true;
+        try {
+            link.setChecked(on);
+        } finally {
+            mSettingLink = false;
+        }
+    }
+
+    /** Whether the link is on; false where there is none. */
+    public boolean isLinked() {
+        return link != null && link.isChecked();
+    }
+
+    /** The link as an icon button the size of a touch target, centred on the tracks. */
+    @NonNull
+    private static MaterialButton linkButton(@NonNull Context context, @NonNull CharSequence name) {
+        MaterialButton button = SegmentRow.connectedButton(context);
+        button.setCheckable(true);
+        button.setText("");
+        button.setIconGravity(MaterialButton.ICON_GRAVITY_TEXT_START);
+        button.setIconPadding(0);
+        button.setPadding(0, 0, 0, 0);
+        int touch = RowKit.dp(context, RowKit.TOUCH_DP);
+        button.setMinWidth(touch);
+        button.setMinimumWidth(touch);
+        button.setMinHeight(touch);
+        button.setMinimumHeight(touch);
+        button.setContentDescription(name);
+        return button;
+    }
+
+    /** The link glyph while on, the broken one while off. */
+    private static void dressLink(@NonNull MaterialButton link, boolean on) {
+        link.setIconResource(on ? R.drawable.ic_ms_link : R.drawable.ic_ms_link_off);
     }
 
     /** Shows slider {@code index} at {@code value} without reporting it; not while it drags. */
@@ -111,6 +182,14 @@ public final class SliderPairRow {
         View cell = cells.get(index).root;
         if (cell.getVisibility() != visibility)
             cell.setVisibility(visibility);
+        if (link != null) {
+            // The link stands while both cells do.
+            boolean both = cells.get(0).root.getVisibility() == View.VISIBLE
+                && cells.get(1).root.getVisibility() == View.VISIBLE;
+            int linkVisibility = both ? View.VISIBLE : View.GONE;
+            if (link.getVisibility() != linkVisibility)
+                link.setVisibility(linkVisibility);
+        }
     }
 
     /** Slider {@code index}'s own-value state: the reset arrow stands while it is. */

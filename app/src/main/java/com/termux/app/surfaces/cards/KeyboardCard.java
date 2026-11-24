@@ -32,7 +32,7 @@ public final class KeyboardCard {
             .tier(1, Row.BOTTOM_PADDING)
             .pair(1, Row.KEYBOARD_WIDTH, Row.KEYBOARD_FLOAT_HEIGHT)
             .tier(1, Row.KEYBOARD_SPLIT_GAP)
-            .tier(2, Row.OPACITY, Row.OPACITY_LINK, Row.KEY_OPACITY)
+            .linkedPair(2, Row.OPACITY, Row.OPACITY_LINK, Row.KEY_OPACITY)
             .tier(3, Row.FROST)
             .links(3, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)
             .build();

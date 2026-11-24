@@ -350,6 +350,8 @@ public final class EditorRows {
         PLAIN,
         /** Two value sliders on one row, the name and value over each track. */
         PAIR,
+        /** Two value sliders on one row with the opacity link between them (the keyboard's). */
+        LINKED_PAIR,
         /** Switches as chips that wrap onto as many lines as they need. */
         CHIPS,
         /** A short choice (a few words) beside its label. */
@@ -366,6 +368,7 @@ public final class EditorRows {
             switch (this) {
                 case PLAIN: return true;
                 case PAIR: return row.kind == Kind.SLIDER;
+                case LINKED_PAIR: return row.kind == Kind.SLIDER || row == Row.OPACITY_LINK;
                 case CHIPS: return row.kind == Kind.SWITCH;
                 case CHOICE: return row.kind == Kind.SEGMENTS;
                 case FOLD: return row.kind == Kind.SEGMENTS || row.kind == Kind.MENU;
@@ -378,6 +381,7 @@ public final class EditorRows {
         /** The most rows one widget of this form holds. */
         public int capacity() {
             switch (this) {
+                case LINKED_PAIR: return 3;
                 case PAIR:
                 case STEPPERS: return 2;
                 case CHOICE:
@@ -620,6 +624,13 @@ public final class EditorRows {
         @NonNull
         public CardRows pair(int tier, @NonNull Row first, @NonNull Row second) {
             return tier(tier, Form.PAIR, first, second);
+        }
+
+        /** Two sliders on one row with {@code link} standing between them. */
+        @NonNull
+        public CardRows linkedPair(int tier, @NonNull Row first, @NonNull Row link,
+                                   @NonNull Row second) {
+            return tier(tier, Form.LINKED_PAIR, first, link, second);
         }
 
         /** Two steppers on one row. */

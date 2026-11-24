@@ -132,6 +132,9 @@ public class EditorRowsTest {
         int at = rows.indexOf(Row.OPACITY);
         assertEquals(Row.OPACITY_LINK, rows.get(at + 1));
         assertEquals(Row.KEY_OPACITY, rows.get(at + 2));
+        assertEquals(EditorRows.Form.LINKED_PAIR, formOf(EditorCard.KEYBOARD, Row.OPACITY));
+        assertEquals(EditorRows.Form.LINKED_PAIR, formOf(EditorCard.KEYBOARD, Row.OPACITY_LINK));
+        assertEquals(EditorRows.Form.LINKED_PAIR, formOf(EditorCard.KEYBOARD, Row.KEY_OPACITY));
     }
 
     private static EditorRows.Form formOf(EditorCard card, Row row) {

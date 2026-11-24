@@ -23,11 +23,22 @@ public final class PairRow extends ViewGroup {
     private final int mMinCellPx;
     private final int mGutterPx;
     private final int mGapPx;
+    private final boolean mSeparatorStacks;
     private boolean mSideBySide;
 
     public PairRow(@NonNull Context context, @NonNull View first, @NonNull View second,
                    @Nullable View separator, int minCellPx) {
+        this(context, first, second, separator, minCellPx, false);
+    }
+
+    /**
+     * As above; with {@code separatorStacks} the separator (a control, as the opacity link is)
+     * stands centred between the cells when they stack, instead of going.
+     */
+    public PairRow(@NonNull Context context, @NonNull View first, @NonNull View second,
+                   @Nullable View separator, int minCellPx, boolean separatorStacks) {
         super(context);
+        mSeparatorStacks = separatorStacks;
         mFirst = first;
         mSecond = second;
         mSeparator = separator;
@@ -70,6 +81,10 @@ public final class PairRow extends ViewGroup {
             mSecond.measure(cell, unspecified);
             height = Math.max(mFirst.getMeasuredHeight(), mSecond.getMeasuredHeight());
         } else {
+            if (stackedSeparator(both)) {
+                mSeparator.measure(unspecified, unspecified);
+                height += mSeparator.getMeasuredHeight();
+            }
             int whole = MeasureSpec.makeMeasureSpec(inner, MeasureSpec.EXACTLY);
             for (View cell : new View[] {mFirst, mSecond}) {
                 if (!standing(cell))
@@ -102,15 +117,26 @@ public final class PairRow extends ViewGroup {
             return;
         }
         int top = 0;
+        boolean separate = stackedSeparator(standing(mFirst) && standing(mSecond));
         for (View cell : new View[] {mFirst, mSecond}) {
             if (!standing(cell))
                 continue;
             place(cell, mGutterPx, top, width, rtl);
             top += cell.getMeasuredHeight();
+            if (separate && cell == mFirst) {
+                place(mSeparator, (width - mSeparator.getMeasuredWidth()) / 2, top, width, false);
+                top += mSeparator.getMeasuredHeight();
+            }
         }
-        // Stacked, the separator has no place: it takes none.
-        if (mSeparator != null)
+        // Stacked, a plain separator (the Grid's x) has no place: it takes none.
+        if (mSeparator != null && !separate)
             mSeparator.layout(0, 0, 0, 0);
+    }
+
+    /** Whether a separator stands between stacked cells: a control, with both cells standing. */
+    private boolean stackedSeparator(boolean both) {
+        return mSeparator != null && mSeparatorStacks && both
+            && mSeparator.getVisibility() != GONE;
     }
 
     private static void place(@NonNull View child, int start, int top, int width, boolean rtl) {

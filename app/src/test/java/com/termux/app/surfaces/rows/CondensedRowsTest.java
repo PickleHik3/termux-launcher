@@ -103,6 +103,67 @@ public class CondensedRowsTest {
         }
     }
 
+    private static SliderPairRow linkedPair(Fixture f, List<String> heard) {
+        return SliderPairRow.build(f.themed, Arrays.asList(
+            new SliderRow.Track(0, "Opacity", 0, 100, 1, v -> v + "%"),
+            new SliderRow.Track(0, "Key opacity", 0, 100, 1, v -> v + "%")),
+            new int[] {50, 10}, "Link opacities", true, on -> heard.add("link=" + on),
+            new SliderRow.Listener() {
+                @Override public void onValue(int index, int value, boolean dragging) {
+                    heard.add(index + "=" + value);
+                }
+
+                @Override public void onReleased(int index) {}
+
+                @Override public void onReset(int index) {
+                    heard.add("reset" + index);
+                }
+            });
+    }
+
+    @Test
+    public void theOpacityLinkStandsBetweenTheTwoSlidersAndStillMarksOwnValues() {
+        for (float scale : SCALES) {
+            Fixture f = new Fixture(scale, 411);
+            List<String> heard = new ArrayList<>();
+            SliderPairRow row = linkedPair(f, heard);
+            f.layOut(row.root);
+            String at = "at " + scale;
+            assertTrue(at + ": one line", row.root.isSideBySide());
+            SliderPairRow.Cell a = row.cells.get(0);
+            SliderPairRow.Cell b = row.cells.get(1);
+            assertTrue(at + ": the link is after the first track",
+                f.left(row.link) >= f.left(a.slider) + a.slider.getWidth());
+            assertTrue(at + ": the link is before the second track",
+                f.left(row.link) + row.link.getWidth() <= f.left(b.slider));
+            assertTrue(at + ": linked", row.isLinked());
+            row.link.performClick();
+            assertFalse(row.isLinked());
+            assertEquals("a touch reports the link", Arrays.asList("link=false"), heard);
+            row.setLinked(true);
+            assertEquals("a restatement reports nothing", 1, heard.size());
+            row.setOwn(1, true, "Key opacity is its own");
+            assertEquals(View.VISIBLE, b.reset.getVisibility());
+            assertEquals(View.INVISIBLE, a.reset.getVisibility());
+            b.reset.performClick();
+            assertEquals("reset1", heard.get(heard.size() - 1));
+            row.setShown(1, false);
+            assertEquals("the link goes with a cell", View.GONE, row.link.getVisibility());
+        }
+    }
+
+    @Test
+    public void theOpacityLinkStaysBetweenTheSlidersWhereTheyStack() {
+        Fixture f = new Fixture(1f, 260);
+        SliderPairRow row = linkedPair(f, new ArrayList<>());
+        f.layOut(row.root);
+        assertFalse(row.root.isSideBySide());
+        SliderPairRow.Cell a = row.cells.get(0);
+        SliderPairRow.Cell b = row.cells.get(1);
+        assertTrue(f.top(row.link) >= f.top(a.slider) + a.slider.getHeight());
+        assertTrue(f.top(row.link) + row.link.getHeight() <= f.top(b.name));
+    }
+
     @Test
     public void aNarrowCardStacksTheTwoSliders() {
         Fixture f = new Fixture(1f, 260);
