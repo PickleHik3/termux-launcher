@@ -568,9 +568,13 @@ public final class MarksLineView extends View {
             }
             node.setClassName("android.widget.Button");
             node.setContentDescription(mSlotLabels[id]);
-            node.setSelected(line.slots().get(id).current);
-            node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
-            node.setClickable(true);
+            boolean current = line.slots().get(id).current;
+            node.setSelected(current);
+            // A tap on the current page does nothing, so it advertises no click.
+            if (!current) {
+                node.addAction(AccessibilityNodeInfoCompat.ACTION_CLICK);
+                node.setClickable(true);
+            }
             int start = Math.round(line.pitchPx() * id);
             int end = Math.round(line.pitchPx() * (id + 1));
             if (mVertical) {

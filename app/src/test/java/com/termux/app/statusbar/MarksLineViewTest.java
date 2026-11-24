@@ -231,6 +231,25 @@ public class MarksLineViewTest {
         assertFalse("the current page has nothing to go to", view.clickSlot(0));
     }
 
+    @Test public void theCurrentMarkIsSelectedAndOffersNoClick() {
+        view.setPages(model("HTA", 2, 1, -1), null);
+        layOut(400, 40);
+        android.view.accessibility.AccessibilityNodeProvider provider =
+            view.getAccessibilityNodeProvider();
+        android.view.accessibility.AccessibilityNodeInfo current =
+            provider.createAccessibilityNodeInfo(0);
+        assertTrue(current.isSelected());
+        assertFalse(current.isClickable());
+        assertFalse(current.getActionList().contains(
+            android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK));
+        android.view.accessibility.AccessibilityNodeInfo other =
+            provider.createAccessibilityNodeInfo(3);
+        assertFalse(other.isSelected());
+        assertTrue(other.isClickable());
+        assertTrue(other.getActionList().contains(
+            android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction.ACTION_CLICK));
+    }
+
     @Test public void aFoldedMarkIsLabelledWithItsCount() {
         view.setPages(model("HHHHHHHHHH", 0, 1, -1), null);
         layOut(120, 40);
