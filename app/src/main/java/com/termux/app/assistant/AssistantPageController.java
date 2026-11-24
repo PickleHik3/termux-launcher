@@ -269,7 +269,10 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         rc.generatingId = generating;
         rc.liveText = generating == 0L ? null : engine.liveText(generating);
         rc.sending = sending;
-        rc.cards = AssistantCards.shared().all();
+        AssistantCards cards = AssistantCards.shared();
+        cards.adopt(messages);
+        if (cards.anyApplied()) cards.refreshAll(AssistantEngine.deviceRegistry(context.getApplicationContext()));
+        rc.cards = cards.all();
         AssistantModelStatus.Snapshot snap = snapshot;
         rc.offerE2b = snap != null && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.NOT_DOWNLOADED
             && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.DOWNLOADING
@@ -429,6 +432,13 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
             LauncherSettings.applier())) {
             render();
         }
+    }
+
+    @Override
+    public void undoCard(long messageId) {
+        AssistantCards.shared().undo(messageId, AssistantEngine.deviceRegistry(context.getApplicationContext()),
+            LauncherSettings.applier());
+        render();
     }
 
     @Override

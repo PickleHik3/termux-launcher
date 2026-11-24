@@ -47,6 +47,10 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         default void applyCard(long messageId) {
         }
 
+        /** Undo on an applied settings card: puts the old values back. */
+        default void undoCard(long messageId) {
+        }
+
         /** A card's link: Settings search with {@code query} typed in. */
         default void openSettingsSearch(@NonNull String query) {
         }
@@ -577,6 +581,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         private final LinearLayout lines;
         private final MaterialButton apply;
         private final TextView applied;
+        private final MaterialButton undo;
         private final LinearLayout links;
         private final Actions actions;
         private AssistantRows.Row row;
@@ -607,7 +612,15 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
                 ViewGroup.LayoutParams.WRAP_CONTENT);
             dp.topMargin = AssistantUi.dp(context, 8);
             card.addView(applied, dp);
-            links = new LinearLayout(context);
+            undo = new MaterialButton(context, null, android.R.attr.borderlessButtonStyle);
+            undo.setAllCaps(false);
+            undo.setText(R.string.assistant_card_undo);
+            undo.setOnClickListener(x -> {
+                if (row != null) actions.undoCard(row.messageId);
+            });
+            card.addView(undo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            links =new LinearLayout(context);
             links.setOrientation(LinearLayout.VERTICAL);
             card.addView(links);
             ((FrameLayout) itemView).addView(card, new FrameLayout.LayoutParams(
@@ -630,9 +643,17 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             for (SettingsCard.Item item : c.items) addLine(context, p, item.line());
             boolean proposed = c.kind == SettingsCard.Kind.CHANGES && c.state() == SettingsCard.State.PROPOSED;
             AssistantUi.setVisible(apply, proposed);
-            AssistantUi.setVisible(applied, c.kind == SettingsCard.Kind.CHANGES
-                && c.state() == SettingsCard.State.APPLIED);
-            AssistantUi.bodySmall(applied, p.success);
+            SettingsCard.State state = c.state();
+            boolean changes = c.kind == SettingsCard.Kind.CHANGES;
+            AssistantUi.setVisible(applied, changes && state != SettingsCard.State.PROPOSED);
+            applied.setText(state == SettingsCard.State.UNDONE ? R.string.assistant_card_undone
+                : state == SettingsCard.State.CHANGED_SINCE ? R.string.assistant_card_changed_since
+                : R.string.assistant_card_applied);
+            AssistantUi.bodySmall(applied, state == SettingsCard.State.CHANGED_SINCE ? p.onSurface : p.success);
+            boolean showUndo = changes && (state == SettingsCard.State.APPLIED
+                || state == SettingsCard.State.CHANGED_SINCE);
+            AssistantUi.setVisible(undo, showUndo);
+            undo.setEnabled(state == SettingsCard.State.APPLIED);
             for (SettingsCard.Link link : c.links) {
                 MaterialButton button = new MaterialButton(context, null,
                     android.R.attr.borderlessButtonStyle);

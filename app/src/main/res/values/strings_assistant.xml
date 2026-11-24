@@ -39,6 +39,9 @@
     <string name="assistant_try_again">Try again</string>
     <string name="assistant_card_apply">Apply</string>
     <string name="assistant_card_applied">Applied</string>
+    <string name="assistant_card_undo">Undo</string>
+    <string name="assistant_card_undone">Undone</string>
+    <string name="assistant_card_changed_since">Changed since you applied it</string>
     <string name="assistant_card_no_match">No matching setting</string>
     <string name="assistant_card_search_settings">Search Settings</string>
     <string name="assistant_card_find_setting">Find %1$s in Settings</string>
