@@ -43,6 +43,16 @@ public final class AssistantCards {
         if (s != null) s.setCard(messageId, null);
     }
 
+    /** Drops every card held here; the chat store keeps them, and {@link #get} reads them back. */
+    void clear() {
+        cards.clear();
+    }
+
+    /** Drops the cards of the given messages from memory, as a deleted chat's go. */
+    void forget(@NonNull java.util.List<AssistantMessage> messages) {
+        for (AssistantMessage m : messages) cards.remove(m.id);
+    }
+
     /** The card of a message: from this process, else from the chat store; null when it has none. */
     @Nullable
     public SettingsCard get(long messageId) {

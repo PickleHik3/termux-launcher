@@ -148,6 +148,25 @@ public class AssistantCardStateTest {
     }
 
     @Test
+    public void leavingThePageDropsMemoryAndReopeningReadsTheStore() {
+        cards.attach(store);
+        long answer = askBigger(store.createChat(1));
+        cards.apply(answer, registry, applier);
+        cards.clear();
+        assertTrue(cards.all().isEmpty());
+        assertEquals(SettingsCard.State.APPLIED, cards.get(answer).state());
+    }
+
+    @Test
+    public void forgettingAChatsMessagesDropsTheirCards() {
+        long chat = store.createChat(1);
+        askBigger(chat);
+        assertFalse(cards.all().isEmpty());
+        cards.forget(store.messages(chat));
+        assertTrue(cards.all().isEmpty());
+    }
+
+    @Test
     public void anOutsideChangeDisablesUndoAndTheCardSaysSo() {
         long answer = askBigger(store.createChat(1));
         cards.apply(answer, registry, applier);
