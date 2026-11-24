@@ -126,6 +126,8 @@ public final class WaylandAppRunner {
     /** Which window is which launched app; see {@link LinuxAppWindowMatcher}. Main thread. */
     @NonNull private final LinuxAppWindowMatcher matcher =
         new LinuxAppWindowMatcher(WaylandAppRunner::parentPid);
+    /** Scales chosen on the rail for windows with no app to keep them (started from a shell); by window id. Main thread. */
+    @NonNull private final java.util.Map<Long, Float> windowScales = new java.util.HashMap<>();
 
     private final Runnable startTimeout = () -> {
         if (!pending.isEmpty()) {
@@ -152,6 +154,7 @@ public final class WaylandAppRunner {
             windows = 0;
             // The host replays its live windows next.
             matcher.clearWindows();
+            windowScales.clear();
             try {
                 b.linkToDeath(death, 0);
                 service.addCallback(callback);
@@ -207,6 +210,7 @@ public final class WaylandAppRunner {
         public void onWindowDestroyed(long id) {
             main.post(() -> {
                 matcher.windowDestroyed(id);
+                windowScales.remove(id);
                 if (windows > 0) windows--;
                 if (windows == 0) armIdleStop();
             });
@@ -317,6 +321,7 @@ public final class WaylandAppRunner {
         stateKnown = false;
         windows = 0;
         matcher.clear();
+        windowScales.clear();
         xDisplay = null;
         xWaitExpired = false;
         main.removeCallbacks(idleStop);
@@ -356,6 +361,7 @@ public final class WaylandAppRunner {
                 running = false;
                 windows = 0;
                 matcher.clear();
+                windowScales.clear();
                 xDisplay = null;
                 xWaitExpired = false;
                 main.removeCallbacks(idleStop);
@@ -477,6 +483,31 @@ public final class WaylandAppRunner {
         return xDisplay;
     }
 
+    /**
+     * The app window {@code windowId} was opened for: the launch key, which is the catalogue
+     * app's id ({@code LinuxAppCatalog.LinuxApp#id}, the key of its per-app settings); null for a
+     * window started from a shell or not yet matched. Main thread.
+     */
+    @Nullable
+    public String appFor(long windowId) {
+        return matcher.keyFor(windowId);
+    }
+
+    /**
+     * The scale chosen on the rail for window {@code windowId} when it has no app to store it
+     * for ({@link #appFor} null), kept while the window is open; 0 when none. Main thread.
+     */
+    public float windowScale(long windowId) {
+        Float scale = windowScales.get(windowId);
+        return scale == null ? 0f : scale;
+    }
+
+    /** Keeps {@code scale} for window {@code windowId} while it is open; main thread. */
+    public void setWindowScale(long windowId, float scale) {
+        if (scale > 0f) windowScales.put(windowId, scale);
+        else windowScales.remove(windowId);
+    }
+
     /** A launch started process {@code pid} for the app {@code key}; main thread. */
     public void processStarted(@NonNull String key, int pid) {
         matcher.started(key, pid);
@@ -544,8 +575,8 @@ public final class WaylandAppRunner {
 
     /**
      * The prefix's keymap data and {@code Xwayland} (each null when missing), and the default
-     * display's real size and refresh period with the output scale ({@link LinuxDisplayScale}: the
-     * Display scale setting once chosen, else the screen's density).
+     * display's real size and refresh period with the output scale ({@link LinuxDisplayScale#current}:
+     * the screen's density, which X apps under Xwayland keep).
      */
     @NonNull
     static HostStart hostStart(@NonNull Context context) {

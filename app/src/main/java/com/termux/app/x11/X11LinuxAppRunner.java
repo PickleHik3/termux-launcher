@@ -653,8 +653,19 @@ public final class X11LinuxAppRunner {
     /** {@code gpu}'s exports, then {@code app}'s scale lines: what an app's script exports. */
     @NonNull
     private List<String> appEnv(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull GpuChoice gpu) {
+        return appEnv(app, gpu, true);
+    }
+
+    /**
+     * {@code gpu}'s exports, and {@code app}'s scale lines when {@code toolkitScale}. Under Wayland
+     * Display the app's Scale is its window's scale (LinuxWindowsActivity), so the toolkit
+     * variables are left out: on top of it they would scale the app twice.
+     */
+    @NonNull
+    private List<String> appEnv(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull GpuChoice gpu,
+                                boolean toolkitScale) {
         List<String> env = new java.util.ArrayList<>(gpu.env);
-        env.addAll(X11AppLaunchEnv.scaleLines(app.session, appSettings.scale(app.id)));
+        if (toolkitScale) env.addAll(X11AppLaunchEnv.scaleLines(app.session, appSettings.scale(app.id)));
         return env;
     }
 
@@ -703,7 +714,7 @@ public final class X11LinuxAppRunner {
             GpuChoice gpu = appGraphics(app);
             String display = xDisplay == null ? "" : xDisplay;
             List<String> waylandLines = waylandEnv(waylandDisplay, xDisplay,
-                gpu.profile == null ? null : gpu.profile.id, appEnv(app, gpu));
+                gpu.profile == null ? null : gpu.profile.id, appEnv(app, gpu, false));
             com.termux.app.wayland.MesaWaylandOverlay.Answer mesa = gpu.profile == X11GpuProbe.Profile.TURNIP_ZINK
                 ? com.termux.app.wayland.MesaWaylandOverlay.check() : null;
             List<String> env = mesa == null ? waylandLines : LinuxWindowsEnv.withMesaOverlay(waylandLines, mesa);

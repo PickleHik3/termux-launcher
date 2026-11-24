@@ -58,7 +58,16 @@ import java.io.File;
  * {@link WaylandAppRunner} opens it after starting an app. A long press on the tab row shows the
  * developer controls (Start, Stop, Crash compositor, Probe, the copy log). The keyboard glyph at
  * the row's end shows the launcher's own keyboard below the window, which types into the focused
- * window as key presses ({@link LinuxWindowsKeyboard}); Back puts it away first. Not exported.
+ * window as key presses ({@link LinuxWindowsKeyboard}); Back puts it away first.
+ *
+ * <p>Each window draws at its app's own Scale, else at the screen's density
+ * ({@link LinuxDisplayScale#windowScale}). A hold on a corner of the window area brings out the
+ * scale rail ({@link LinuxWindowFrame}); a stop chosen there is stored as the app's Scale, the
+ * value its settings page shows, and every open window of that app takes it at once. A window
+ * with no app behind it (started from a shell) keeps the stop while it is open. X apps under
+ * Xwayland share the X server's one scale (the screen's): their hold says so instead of showing
+ * the rail. A Scale changed on the settings page reaches open windows when this screen is next
+ * shown. Not exported.
  */
 public final class LinuxWindowsActivity extends Activity {
 
@@ -107,7 +116,9 @@ public final class LinuxWindowsActivity extends Activity {
     private HorizontalScrollView mTabScroll;
     private LinearLayout mTabRow;
     private int mTabViewportWidth;
-    private FrameLayout mWindowHost;
+    private LinuxWindowFrame mWindowHost;
+    /** Per-app settings, where a window's app keeps its Scale; read fresh on each use. */
+    @Nullable private com.termux.app.x11.X11AppSettingsStore mAppSettings;
     private TextView mEmpty;
     /** The launcher's keyboard below the window area; the window gives up its height to it. */
     private final LinuxWindowsKeyboard mKeyboard = new LinuxWindowsKeyboard(new LinuxWindowsKeyboard.Host() {
@@ -269,6 +280,10 @@ public final class LinuxWindowsActivity extends Activity {
         int flags;
         int width;
         int height;
+        /** What the host was last told: the view's size and the scale; 0 before the first configure. */
+        int sentWidth;
+        int sentHeight;
+        float sentScale;
         int mouseButton;
         // Reused for every MotionEvent.
         final int[] slots = new int[MAX_POINTS];
@@ -334,7 +349,7 @@ public final class LinuxWindowsActivity extends Activity {
         void attach() {
             if (mService == null || surface == null) return;
             try {
-                mService.configure(id, view.getWidth(), view.getHeight(), density());
+                sendConfigure(view.getWidth(), view.getHeight());
                 mService.setSurface(id, surface);
                 mService.setVisible(id, mVisible && shown());
             } catch (RemoteException ignored) {
@@ -366,9 +381,48 @@ public final class LinuxWindowsActivity extends Activity {
 
         @Override
         public void onSurfaceTextureSizeChanged(@NonNull SurfaceTexture texture, int width, int height) {
-            if (mService == null) return;
             try {
-                mService.configure(id, width, height, density());
+                sendConfigure(width, height);
+            } catch (RemoteException ignored) {
+            }
+        }
+
+        /** Whether this window can take a scale of its own: an X window shares the X server's. */
+        boolean scales() {
+            return (flags & ILinuxWindows.WINDOW_X11) == 0;
+        }
+
+        /** The catalogue app this window was opened for, or null (a shell started it, or it is unmatched). */
+        @Nullable
+        String app() {
+            return WaylandAppRunner.shared(LinuxWindowsActivity.this).appFor(id);
+        }
+
+        /** The scale this window draws at: its app's Scale, the rail's stop kept for it, else the screen's. */
+        float scale() {
+            float density = getResources().getDisplayMetrics().density;
+            if (!scales()) return LinuxDisplayScale.current(LinuxWindowsActivity.this);
+            String app = app();
+            if (app != null) return LinuxDisplayScale.windowScale(appSettings().scale(app), density);
+            float kept = WaylandAppRunner.shared(LinuxWindowsActivity.this).windowScale(id);
+            return kept > 0f ? kept : LinuxDisplayScale.windowScale(null, density);
+        }
+
+        /** Tells the host the view's size and the window's scale, when either changed. */
+        void sendConfigure(int w, int h) throws RemoteException {
+            if (mService == null || w <= 0 || h <= 0) return;
+            float scale = scale();
+            if (w == sentWidth && h == sentHeight && scale == sentScale) return;
+            mService.configure(id, w, h, scale);
+            sentWidth = w;
+            sentHeight = h;
+            sentScale = scale;
+        }
+
+        /** Re-reads the scale and tells the host if it changed. */
+        void reconfigure() {
+            try {
+                sendConfigure(view.getWidth(), view.getHeight());
             } catch (RemoteException ignored) {
             }
         }
@@ -490,9 +544,60 @@ public final class LinuxWindowsActivity extends Activity {
         return b;
     }
 
-    /** The output scale: the Display scale setting, as X11 Display reads it. */
-    private float density() {
-        return LinuxDisplayScale.current(this);
+    @NonNull
+    private com.termux.app.x11.X11AppSettingsStore appSettings() {
+        com.termux.app.x11.X11AppSettingsStore store = mAppSettings;
+        if (store == null) mAppSettings = store = new com.termux.app.x11.X11AppSettingsStore(this);
+        return store;
+    }
+
+    /** The scale rail's stops are the shown window's scale. */
+    private final LinuxWindowFrame.Host mScaleHost = new LinuxWindowFrame.Host() {
+        @Override
+        public boolean hasShownWindow() {
+            return mPanes.get(mTabs.shown()) != null;
+        }
+
+        @Override
+        public boolean shownWindowScales() {
+            Pane pane = mPanes.get(mTabs.shown());
+            return pane != null && pane.scales();
+        }
+
+        @Override
+        public int currentScaleStep() {
+            Pane pane = mPanes.get(mTabs.shown());
+            return pane == null ? 0 : LinuxDisplayScale.railStep(pane.scale());
+        }
+
+        @Override
+        public void onScaleStepChosen(int step) {
+            Pane pane = mPanes.get(mTabs.shown());
+            if (pane != null && pane.scales()) applyScaleStep(pane, step);
+        }
+
+        @Override
+        public void onScaleRailUsed() {
+            mWindowHost.dismissRail();
+        }
+    };
+
+    /**
+     * {@code step} becomes {@code pane}'s app's Scale, and every open window of that app is told;
+     * a window with no app keeps it while it is open.
+     */
+    private void applyScaleStep(@NonNull Pane pane, int step) {
+        String app = pane.app();
+        if (app == null) {
+            WaylandAppRunner.shared(this).setWindowScale(pane.id, LinuxDisplayScale.stepScale(step));
+            pane.reconfigure();
+            return;
+        }
+        appSettings().setScale(app, com.termux.app.x11.DisplayScaleSteps.scaleValue(step));
+        for (int i = 0; i < mPanes.size(); i++) {
+            Pane other = mPanes.valueAt(i);
+            if (other == pane || app.equals(other.app())) other.reconfigure();
+        }
     }
 
     private int res(int dimenId) {
@@ -574,12 +679,11 @@ public final class LinuxWindowsActivity extends Activity {
         root.addView(mDevBar, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
             LinearLayout.LayoutParams.WRAP_CONTENT));
 
-        mWindowHost = new FrameLayout(this);
+        mWindowHost = new LinuxWindowFrame(this, mScaleHost);
         mEmpty = shadowedText();
         mEmpty.setGravity(Gravity.CENTER);
         mEmpty.setPadding(dp(24), dp(24), dp(24), dp(24));
-        mWindowHost.addView(mEmpty, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT));
+        mWindowHost.addWindowView(mEmpty);
         root.addView(mWindowHost, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
         // Shown, it takes its height from the window area, whose view resizes and so re-configures
         // the window (onSurfaceTextureSizeChanged); hidden, the window has the room back.
@@ -927,8 +1031,10 @@ public final class LinuxWindowsActivity extends Activity {
         mTabRow.addView(pane.tab, new LinearLayout.LayoutParams(res(R.dimen.linux_windows_tab_min_width),
             res(R.dimen.linux_windows_tab_height)));
         sizeTabs();
-        mWindowHost.addView(pane.view, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-            FrameLayout.LayoutParams.MATCH_PARENT));
+        mWindowHost.addWindowView(pane.view);
+        // The runner ties the window to its app from its own callback, which may land after this
+        // one: look again once both have run.
+        mMain.post(pane::reconfigure);
         long before = mTabs.shown();
         mTabs.add(id);
         applyShown(before);
@@ -1028,6 +1134,8 @@ public final class LinuxWindowsActivity extends Activity {
         if (before != shown) {
             Pane old = mPanes.get(before);
             if (old != null) old.setVisible(false);
+            // The rail was the window's that is going.
+            mWindowHost.dismissRail();
         }
         Pane now = mPanes.get(shown);
         if (now != null) scrollToTab(now.tab);
@@ -1161,6 +1269,8 @@ public final class LinuxWindowsActivity extends Activity {
     protected void onStart() {
         super.onStart();
         mVisible = true;
+        // A Scale changed on an app's settings page while this screen was away.
+        for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).reconfigure();
         Pane shown = mPanes.get(mTabs.shown());
         if (shown != null) {
             shown.setVisible(true);

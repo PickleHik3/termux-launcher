@@ -1,27 +1,23 @@
 package com.termux.app.wayland;
 
 import android.content.Context;
-import android.content.SharedPreferences;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.app.x11.DisplayScaleSteps;
+import com.termux.app.x11.X11AppSettings;
 
 /**
- * The Wayland output scale the Linux windows screen asks for.
+ * The scales of Linux windows under Wayland Display.
  *
- * <p>When the user has chosen a Display scale stop (the X11 Display setting,
- * {@link DisplayScaleSteps}), its percent is the scale, as on X11 Display: a stop of N% makes the
- * X screen 100/N of the real pixels, magnified N/100, and a Wayland output at scale N/100 is the
- * same. When they have not, the scale follows the screen's density ({@link #densityScale}), so an
- * app draws its text and controls at about the size Android draws its own.
+ * <p>Every window follows the screen's density ({@link #densityScale}), so an app draws its text
+ * and controls at about the size Android draws its own. An app's own Scale (the per-app value in
+ * {@link X11AppSettings}, set from its settings page or from the scale rail on the Linux windows
+ * screen) replaces that for its windows. The X11 Display's own scale setting is not read here.
  *
- * <p>"Not chosen" is read from the display's store: no {@code displayScale} stored, and no
- * resolution mode stored or the fresh-install one ({@code scaled}, written by {@code X11Defaults}
- * and by the settings page's mode row when it first shows). The rail writes {@code native} for
- * 100% and stores {@code displayScale} for every other stop, and the settings slider stores
- * {@code displayScale}, so any of the user's own choices, 100% included, is told apart.
+ * <p>A scale of N/100 is the rail's stop of N%, as on X11 Display: the window is told it is
+ * 100/N of its pixels wide, drawn at N/100.
  */
 public final class LinuxDisplayScale {
 
@@ -31,33 +27,27 @@ public final class LinuxDisplayScale {
     /** Density scales are snapped to quarters, which the fractional-scale protocol (120ths) carries exactly. */
     private static final float STEPS_PER_UNIT = 4f;
 
-    private static final String KEY_SCALE = "displayScale";
-    private static final String KEY_MODE = "displayResolutionMode";
-
     private LinuxDisplayScale() {}
 
-    /** The output scale for a stored resolution mode and scale percent, on a stop of the rail. Pure. */
-    public static float outputScale(@NonNull String resolutionMode, int scalePercent) {
-        return DisplayScaleSteps.fromPreferences(resolutionMode, scalePercent) / 100f;
-    }
-
     /**
-     * The output scale for the store's values and the screen's {@code density}
-     * ({@code DisplayMetrics.density}). Pure.
-     *
-     * @param storedMode    the stored resolution mode, or null when none is stored.
-     * @param storedPercent the stored scale percent, or null when none is stored.
+     * The scale a window draws at: its app's own Scale ({@code appScale}, one of
+     * {@link X11AppSettings#SCALES}) when it has one, else the density scale of a screen at
+     * {@code density} ({@code DisplayMetrics.density}). Pure.
      */
-    public static float outputScale(@Nullable String storedMode, @Nullable Integer storedPercent, float density) {
-        if (!isChosen(storedMode, storedPercent)) return densityScale(density);
-        // As X11 Display reads them: no stored mode is the store's default, the screen's pixels.
-        return outputScale(storedMode == null ? DisplayScaleSteps.modeFor(100) : storedMode,
-            storedPercent == null ? 100 : storedPercent);
+    public static float windowScale(@Nullable String appScale, float density) {
+        int step = DisplayScaleSteps.stepOf(appScale);
+        return step > 0 ? stepScale(step) : densityScale(density);
     }
 
-    /** Whether the stored values are the user's choice rather than a fresh install's. Pure. */
-    static boolean isChosen(@Nullable String storedMode, @Nullable Integer storedPercent) {
-        return storedPercent != null || (storedMode != null && !"scaled".equals(storedMode));
+    /** A rail stop's scale: 150% is 1.5. Pure. */
+    public static float stepScale(int step) {
+        return step / 100f;
+    }
+
+    /** The rail stop that shows {@code scale}: the nearest one (a density scale may sit between stops). Pure. */
+    public static int railStep(float scale) {
+        if (!(scale > 0f) || Float.isInfinite(scale)) return DisplayScaleSteps.STEPS[0];
+        return DisplayScaleSteps.nearest(Math.round(scale * 100f));
     }
 
     /**
@@ -72,17 +62,11 @@ public final class LinuxDisplayScale {
         return Math.max(MIN_DENSITY_SCALE, Math.min(MAX_DENSITY_SCALE, snapped));
     }
 
-    /** The scale to use now; the density scale when the store cannot be read. */
+    /**
+     * The screen's density scale: the host's output scale, the scale X apps under Xwayland are
+     * told, and every window's scale until its app has its own.
+     */
     public static float current(@NonNull Context context) {
-        float density = context.getResources().getDisplayMetrics().density;
-        try {
-            com.termux.x11.Prefs prefs = new com.termux.x11.Prefs(context.getApplicationContext());
-            SharedPreferences store = prefs.get();
-            String mode = store.contains(KEY_MODE) ? prefs.displayResolutionMode.get() : null;
-            Integer percent = store.contains(KEY_SCALE) ? prefs.displayScale.get() : null;
-            return outputScale(mode, percent, density);
-        } catch (RuntimeException e) {
-            return densityScale(density);
-        }
+        return densityScale(context.getResources().getDisplayMetrics().density);
     }
 }
