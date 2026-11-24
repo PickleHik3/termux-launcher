@@ -358,11 +358,11 @@ public final class SettingsBackupFormat {
      * {@code toDensity} one, clamped to this install's font size limits. An unknown density on
      * either side leaves the size as it was, still clamped.
      */
-    static int scaleFontSize(int px, float fromDensity, float toDensity, int min, int max) {
+    static int scaleFontSize(int px, float fromDensity, float toDensity,
+                             @NonNull FontSizeSettingsAdapter.Range range) {
         long scaled = fromDensity > 0f && toDensity > 0f
             ? Math.round((double) px * toDensity / fromDensity) : px;
-        return new FontSizeSettingsAdapter.Range(min, max, min)
-            .clamp((int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, scaled)));
+        return range.clamp((int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, scaled)));
     }
 
     /**
@@ -372,7 +372,8 @@ public final class SettingsBackupFormat {
      */
     @NonNull
     static Map<String, Object> withScaledFontSizes(@NonNull Map<String, Object> values, float fromDensity,
-                                                   float toDensity, int min, int max) {
+                                                   float toDensity,
+                                                   @NonNull FontSizeSettingsAdapter.Range range) {
         Map<String, Object> out = new LinkedHashMap<>(values);
         for (Map.Entry<String, Object> entry : values.entrySet()) {
             if (!isFontSizeKey(entry.getKey())) continue;
@@ -383,7 +384,7 @@ public final class SettingsBackupFormat {
                 try { px = Integer.parseInt(((String) value).trim()); } catch (NumberFormatException ignored) { }
             }
             if (px == null) { out.remove(entry.getKey()); continue; }
-            int scaled = scaleFontSize(px, fromDensity, toDensity, min, max);
+            int scaled = scaleFontSize(px, fromDensity, toDensity, range);
             out.put(entry.getKey(), value instanceof Integer ? (Object) scaled : Integer.toString(scaled));
         }
         return out;

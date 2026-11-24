@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider;
 import com.termux.app.settings.backup.SettingsBackupFormat.InvalidBackupException;
 import com.termux.app.settings.backup.SettingsBackupFormat.Root;
 import com.termux.app.settings.backup.SettingsBackupFormat.Store;
+import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 
 import org.json.JSONObject;
 import org.junit.Before;
@@ -86,7 +87,7 @@ public class SettingsBackupTest {
         SettingsBackupIo.Environment env() {
             return new SettingsBackupIo.Environment(prefs, roots,
                 Collections.singletonList(filesDir.getAbsolutePath()), filesDir.getAbsolutePath(),
-                density, (int) (4f * density), 256, "1.1.0-pre.2", "Termux",
+                density, new FontSizeSettingsAdapter.Range((int) (4f * density), 256, 0), "1.1.0-pre.2", "Termux",
                 new File(filesDir.getParentFile(), "cache/settings-import"),
                 new HashSet<>(SettingsBackupFormat.APP_FILES));
         }
@@ -343,8 +344,8 @@ public class SettingsBackupTest {
 
     @Test
     public void scaleFontSize_clampsToTheSmallestSize_andIgnoresAnUnknownDensity() {
-        assertEquals(12, SettingsBackupFormat.scaleFontSize(4, 3f, 1f, 12, 256));
-        assertEquals(30, SettingsBackupFormat.scaleFontSize(30, 0f, 2f, 8, 256));
+        assertEquals(12, SettingsBackupFormat.scaleFontSize(4, 3f, 1f, new FontSizeSettingsAdapter.Range(12, 256, 12)));
+        assertEquals(30, SettingsBackupFormat.scaleFontSize(30, 0f, 2f, new FontSizeSettingsAdapter.Range(8, 256, 8)));
     }
 
     // ------------------------------------------------------------------ files
