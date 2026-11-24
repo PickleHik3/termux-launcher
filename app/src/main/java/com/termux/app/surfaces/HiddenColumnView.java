@@ -58,6 +58,7 @@ final class HiddenColumnView extends FrameLayout {
     @NonNull private final List<TrayItem> mItems = new ArrayList<>(5);
     private final int mOnSurface;
     private final float mRadius;
+    @NonNull private final TextView mHint;
     private boolean mTarget;
     private boolean mPlaced;
 
@@ -81,7 +82,24 @@ final class HiddenColumnView extends FrameLayout {
         mList.setPadding(pad, pad, pad, pad);
         addView(mList, new LayoutParams(Math.round(WIDTH_DP * density),
             LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
+        mHint = new TextView(context);
+        mHint.setTextColor(onSurface);
+        mHint.setGravity(Gravity.CENTER_VERTICAL);
+        mHint.setIncludeFontPadding(false);
+        mHint.setPadding(pad, 0, pad, pad);
+        mHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
+        // Long lines shrink to fit the column's foot rather than overflow it.
+        mHint.setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, TypedValue.COMPLEX_UNIT_SP);
+        addView(mHint, new LayoutParams(Math.round(WIDTH_DP * density),
+            Math.round(HINT_RESERVE_DP * density), Gravity.TOP | Gravity.START));
         setVisibility(View.GONE);
+    }
+
+    /** The hint at the column's foot; the text is set (and laid out) only when it changed. */
+    void setHint(@NonNull CharSequence text) {
+        if (!text.toString().contentEquals(mHint.getText()))
+            mHint.setText(text);
     }
 
     /** The chips for {@code items}, rebuilt only when the list changed. */
@@ -125,6 +143,8 @@ final class HiddenColumnView extends FrameLayout {
         mPlaced = true;
         mList.setTranslationX(rect[0]);
         mList.setTranslationY(rect[1]);
+        mHint.setTranslationX(rect[0]);
+        mHint.setTranslationY(rect[3] - hintReservePx());
         if (getVisibility() != View.VISIBLE)
             setVisibility(View.VISIBLE);
         invalidate();
