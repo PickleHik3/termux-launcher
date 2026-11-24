@@ -3,7 +3,6 @@ package com.termux.app.wayland;
 import android.content.Context;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.SystemClock;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
 import android.view.View;
@@ -29,10 +28,13 @@ import com.termux.view.HoldTiming;
  * brings the rail out, as a hold on the display window's corners does; a hold while it is out, or
  * a touch anywhere off it, puts it away.
  *
- * <p>A corner square is not a button: the finger that lands in one is the window's until it has
- * rested for {@link HoldTiming#holdTimeoutMs()} ({@link CornerHoldArbiter}), so an app's own
- * corner controls answer a tap. When the hold fires the window is sent a cancel and the rest of
- * the gesture is this frame's. A mouse never holds a corner.
+ * <p>A press that lands in a corner square is held back from the window until it is known not to
+ * be a hold ({@link CornerHoldArbiter}, {@link HoldTiming#holdTimeoutMs()}): a lift, a move past
+ * the slop or a second finger hands the window the press and the rest of the gesture, so an app's
+ * own corner controls still answer a tap or a drag; a hold is the frame's alone, so the app never
+ * sees a touch it could take as its own long press. (The display window instead forwards the
+ * press and sends X a cancel when the hold fires; an app's long press can beat that cancel.)
+ * A mouse never holds a corner.
  *
  * <p>An X window under Xwayland has no scale of its own (one X server, one size for all its
  * apps): its hold shows a short line saying so instead of the rail.
@@ -60,8 +62,12 @@ final class LinuxWindowFrame extends FrameLayout {
     /** Says an X window shares the X server's one size; shown on its corner hold. */
     @NonNull private final android.widget.TextView mSharedLine;
     private final Runnable mHideSharedLine = this::hideSharedLine;
-    /** The cancel sent to the window when a corner claims its finger is passing through. */
-    private boolean mCancellingWindow;
+    /** A press in a corner square, held back from the window until it is known not to be a hold. */
+    @Nullable private MotionEvent mHeldDown;
+    /** The window that press landed on, which gets it (and the rest) if it is not a hold. */
+    @Nullable private View mTarget;
+    /** The held-back press was handed to the window: the rest of its gesture follows it there. */
+    private boolean mPassing;
     /** The rail was out when the finger landed: a corner hold then leaves it away. */
     private boolean mRailOutAtDown;
     private float mDownX;
@@ -147,27 +153,61 @@ final class LinuxWindowFrame extends FrameLayout {
 
     @Override
     public boolean onInterceptTouchEvent(@Nullable MotionEvent event) {
-        if (event == null || mCancellingWindow) return false;
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) return onFrameDown(event);
-        // Read before the event is played: the hold is claimed by its timer, so an event after it
-        // is one the window must not see.
-        boolean claimed = mHold.isClaimed();
-        onHoldEvent(event);
-        return claimed || mRail.isPressed();
+        // Only the landing decides: a press this frame takes (the rail, a corner) is its own from
+        // then on, and a press it leaves goes to the window whole.
+        if (event == null || event.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
+        return onFrameDown(event);
     }
 
     @Override
     public boolean onTouchEvent(@Nullable MotionEvent event) {
-        if (event == null || mCancellingWindow) return false;
+        if (event == null) return false;
         if (mRail.isPressed()) return mRail.onTouch(event);
-        if (!mHold.isTracking()) return super.onTouchEvent(event);
-        if (event.getActionMasked() != MotionEvent.ACTION_DOWN) onHoldEvent(event);
+        if (mPassing) {
+            forward(event);
+            if (endsGesture(event)) endPassing();
+            return true;
+        }
+        if (mHeldDown == null) return super.onTouchEvent(event);
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_MOVE:
+                if (mHold.move(event.getX(), event.getY()) == CornerHold.Move.ABANDONED) pass(event);
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+                // Two fingers are a scroll or a pinch, never a hold: the window has them both.
+                if (mHold.secondFinger()) pass(event);
+                break;
+            case MotionEvent.ACTION_UP:
+                mHandler.removeCallbacks(mHoldElapsed);
+                if (!mHold.isClaimed()) {
+                    // A tap in the corner: the window gets it whole, on the lift.
+                    pass(event);
+                    break;
+                }
+                mHold.lift();
+                dropHeldDown();
+                if (!mRailOutAtDown) {
+                    if (mHost.shownWindowScales()) mRail.show();
+                    else showSharedLine();
+                }
+                break;
+            case MotionEvent.ACTION_CANCEL:
+                cancelHold();
+                break;
+            default:
+                break;
+        }
         return true;
     }
 
-    /** The finger landed: the rail takes it at once; a corner only starts its timer. */
+    /**
+     * The finger landed: the rail takes it at once. One in a corner square is held back from the
+     * window until it is known not to be a hold, so an app never sees the start of a press that
+     * turns into one (its own long press could otherwise fire first and stay open).
+     */
     private boolean onFrameDown(@NonNull MotionEvent event) {
         cancelHold();
+        endPassing();
         mDownX = event.getX();
         mDownY = event.getY();
         mRailOutAtDown = mRail.isShown();
@@ -179,61 +219,77 @@ final class LinuxWindowFrame extends FrameLayout {
         int corner = mHold.down(mDownX, mDownY, getWidth(), getHeight(),
             getResources().getDisplayMetrics().density, false, slop);
         if (corner == CornerZones.NONE) return false;
+        mHeldDown = MotionEvent.obtain(event);
+        mTarget = windowAt(mDownX, mDownY);
         mHandler.postDelayed(mHoldElapsed, HoldTiming.holdTimeoutMs());
-        return false;
+        return true;
     }
 
-    private void onHoldEvent(@NonNull MotionEvent event) {
-        if (!mHold.isTracking()) return;
-        switch (event.getActionMasked()) {
-            case MotionEvent.ACTION_MOVE:
-                if (mHold.move(event.getX(), event.getY()) == CornerHold.Move.ABANDONED)
-                    mHandler.removeCallbacks(mHoldElapsed);
-                break;
-            case MotionEvent.ACTION_POINTER_DOWN:
-                // Two fingers are a scroll or a pinch, never a hold.
-                if (mHold.secondFinger()) mHandler.removeCallbacks(mHoldElapsed);
-                break;
-            case MotionEvent.ACTION_UP:
-                mHandler.removeCallbacks(mHoldElapsed);
-                if (mHold.lift() == CornerHold.Lift.OPEN_TAB && !mRailOutAtDown) {
-                    if (mHost.shownWindowScales()) mRail.show();
-                    else showSharedLine();
-                }
-                break;
-            case MotionEvent.ACTION_CANCEL:
-                cancelHold();
-                break;
-            default:
-                break;
-        }
-    }
-
-    /** The hold time passed with the finger still: the window forgets the touch, the hand feels it. */
+    /** The hold time passed with the finger still: the corner has it, and the window never saw it. */
     private void onHoldElapsed() {
         if (!mHold.holdElapsed()) return;
-        cancelWindowGesture();
         Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
         ViewParent parent = getParent();
         if (parent != null) parent.requestDisallowInterceptTouchEvent(true);
     }
 
-    /** A cancel down this frame's own dispatch, so the window holding the touch ends it with nothing pressed. */
-    private void cancelWindowGesture() {
-        long now = SystemClock.uptimeMillis();
-        MotionEvent cancel = MotionEvent.obtain(now, now, MotionEvent.ACTION_CANCEL, mDownX, mDownY, 0);
-        mCancellingWindow = true;
-        try {
-            dispatchTouchEvent(cancel);
-        } finally {
-            mCancellingWindow = false;
-            cancel.recycle();
+    /** Not a hold after all: the window gets the held-back press, then {@code event} and the rest. */
+    private void pass(@NonNull MotionEvent event) {
+        mHandler.removeCallbacks(mHoldElapsed);
+        mHold.reset();
+        MotionEvent down = mHeldDown;
+        mHeldDown = null;
+        mPassing = true;
+        if (down != null) {
+            forward(down);
+            down.recycle();
         }
+        forward(event);
+        if (endsGesture(event)) endPassing();
+    }
+
+    /** {@code event} to the window the press landed on, in its coordinates. */
+    private void forward(@NonNull MotionEvent event) {
+        View target = mTarget;
+        if (target == null) return;
+        MotionEvent copy = MotionEvent.obtain(event);
+        copy.offsetLocation(getScrollX() - target.getLeft(), getScrollY() - target.getTop());
+        target.dispatchTouchEvent(copy);
+        copy.recycle();
+    }
+
+    private static boolean endsGesture(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        return action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL;
+    }
+
+    private void endPassing() {
+        mPassing = false;
+        mTarget = null;
+    }
+
+    /** The topmost shown window under {@code (x, y)}; the rail and the line are not windows. */
+    @Nullable
+    private View windowAt(float x, float y) {
+        for (int i = getChildCount() - 1; i >= 0; i--) {
+            View child = getChildAt(i);
+            if (child == mRailView || child == mSharedLine || child.getVisibility() != VISIBLE) continue;
+            if (x >= child.getLeft() && x < child.getRight() && y >= child.getTop() && y < child.getBottom()) {
+                return child;
+            }
+        }
+        return null;
+    }
+
+    private void dropHeldDown() {
+        if (mHeldDown != null) mHeldDown.recycle();
+        mHeldDown = null;
     }
 
     private void cancelHold() {
         mHandler.removeCallbacks(mHoldElapsed);
         mHold.reset();
+        dropHeldDown();
     }
 
     @Override

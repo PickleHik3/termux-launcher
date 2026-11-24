@@ -153,7 +153,7 @@ public class X11AppPreferencesFragmentTest {
         assertEquals("1.5", store.scale(ID));
         ListPreference row = page.findPreference(X11AppPreferencesFragment.KEY_SCALE);
         assertEquals("1.5", row.getValue());
-        assertTrue(row.getSummary().toString().contains("Takes effect the next time the app opens."));
+        assertTrue(row.getSummary().toString().contains("Takes effect when the app next opens, or under Wayland Display when you return to its window."));
         pick(page, X11AppPreferencesFragment.KEY_SCALE, X11AppPreferencesFragment.FOLLOW);
         assertNull(store.scale(ID));
     }
