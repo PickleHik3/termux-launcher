@@ -262,6 +262,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mHost = host;
     }
 
+    /** The Text size was saved outside the editor: the panes and the keyboard re-stamp at it. */
+    public void applyTextSize() {
+        mHost.applyTextSizePreview(true);
+    }
+
     /** Whether the editor's session is open. */
     public boolean isActive() {
         return mSession;

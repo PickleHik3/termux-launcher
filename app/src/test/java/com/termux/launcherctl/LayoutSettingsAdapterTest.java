@@ -155,6 +155,28 @@ public class LayoutSettingsAdapterTest {
     }
 
     @Test
+    public void everyLayoutIdMarkedListenerRedressesWhenItIsSaved() {
+        store.load();
+        registry.set("layout.home.search_field", "true");
+        redressed = 0;
+        com.termux.shared.termux.settings.registry.SettingAdapter adapter =
+            new LayoutSettingsAdapter(store, main, () -> redressed++);
+        int checked = 0;
+        for (com.termux.shared.termux.settings.registry.SettingDeclaration each
+                : adapter.declarations()) {
+            if (each.refresh != com.termux.shared.termux.settings.registry.SettingRefresh.LISTENER
+                    || !adapter.overrides(each)) continue;
+            String value = adapter.get(each);
+            int before = redressed;
+            SettingsRegistry.Outcome outcome = adapter.set(each, value);
+            if (outcome.refusal() != null) continue; // a field the verb will not rewrite as it stands
+            assertEquals(each.id, before + 1, redressed);
+            checked++;
+        }
+        assertTrue("some layout field saved and redressed", checked > 0);
+    }
+
+    @Test
     public void aTimedOutWaitCancelsTheTaskSoALateSaveCannotLand() throws Exception {
         java.util.concurrent.FutureTask<String> task =
             new java.util.concurrent.FutureTask<>(() -> "saved");

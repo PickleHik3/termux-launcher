@@ -7,7 +7,9 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.shared.termux.settings.preferences.LookGrid;
+import com.termux.shared.termux.settings.registry.SettingAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingRefresh;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsFile;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
@@ -148,6 +150,43 @@ public class LookSettingsAdapterTest {
         assertEquals(60, fresh.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
         assertFalse(fresh.has(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
         assertEquals(30, fresh.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
+    }
+
+    @Test
+    public void everyLookIdMarkedListenerRefreshesWhenItIsSet() {
+        // The refresh these ids name is the adapter's own re-dress, the one the look verb runs;
+        // a set that goes through must run it exactly once.
+        SettingAdapter adapter = new LookSettingsAdapter(grid, background, () -> changed++);
+        int checked = 0;
+        for (SettingDeclaration each : adapter.declarations()) {
+            if (each.refresh != SettingRefresh.LISTENER) continue;
+            int before = changed;
+            SettingsRegistry.Outcome outcome = new SettingsRegistry(which -> {
+                throw new AssertionError("a look id reads no registry store");
+            }, Collections.emptyList(), Collections.singletonList(adapter))
+                .set(each.id, adapter.get(each));
+            assertNotNull(each.id + " " + outcome, outcome.change());
+            assertEquals(each.id, before + 1, changed);
+            checked++;
+        }
+        assertTrue(checked > 10);
+    }
+
+    @Test
+    public void aConfigSetWritesWhatALauncherctlLookWriteDoesWhetherOrNotTheEditorIsOpen()
+            throws Exception {
+        // The registry holds no editor state: its look door IS the verb, so both leave the same
+        // keys and re-dress once, and the editor's draft sees them as it sees the verb's write.
+        LookGrid verbGrid = new LookGrid(new LookGrid.MemoryStore());
+        int[] verbChanged = {0};
+        LookCommand.handle(verbGrid, new LookCommandTest.MemoryBackground(),
+            new org.json.JSONObject().put("op", "set").put("property", "opacity")
+                .put("element", "dock").put("value", "60"), () -> verbChanged[0]++);
+        registry.set("look.dock.opacity", "60");
+        assertEquals(verbGrid.store().keys(), grid.store().keys());
+        for (String key : grid.store().keys())
+            assertEquals(key, verbGrid.store().getInt(key, -1), grid.store().getInt(key, -2));
+        assertEquals(verbChanged[0], changed);
     }
 
     @Test
