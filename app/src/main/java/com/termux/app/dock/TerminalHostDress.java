@@ -73,6 +73,12 @@ public final class TerminalHostDress {
         }, SurfaceDirtyLedger.Backdrop.TERMINAL_HOST, R.id.terminal_dock_blur_backdrop, false);
     }
 
+    /** The stack's view of the host whose backdrop is {@code backdropId}; null for any other. */
+    @Nullable public static RestCards.StackView stackViewOf(int backdropId) {
+        return backdropId == R.id.terminal_dock_blur_backdrop
+            ? RestCards.StackView.TERMINAL_HOST : null;
+    }
+
     /** Whether the host's glass is up (dressed and not released). */
     public boolean shown() {
         return mBackdrop.shown();

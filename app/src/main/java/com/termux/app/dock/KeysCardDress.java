@@ -100,6 +100,12 @@ public final class KeysCardDress {
         mSource = source;
     }
 
+    /** The stack's view of the card whose backdrop is {@code backdropId}; null for any other. */
+    @Nullable public static com.termux.app.place.RestCards.StackView stackViewOf(int backdropId) {
+        return backdropId == R.id.extra_keys_card_blur_backdrop
+            ? com.termux.app.place.RestCards.StackView.KEYS_CARD : null;
+    }
+
     /** Whether the card's glass is up (dressed and not released). */
     public boolean shown() {
         return mBackdrop.shown();
