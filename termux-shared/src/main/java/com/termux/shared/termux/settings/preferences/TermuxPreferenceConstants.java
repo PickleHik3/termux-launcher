@@ -1888,6 +1888,8 @@ public final class TermuxPreferenceConstants {
         public static final int DEFAULT_TEXT_SIZE_PERCENT = 100;
         public static final int MIN_TEXT_SIZE_PERCENT = 80;
         public static final int MAX_TEXT_SIZE_PERCENT = 150;
+        /** One step of the Text size: the editor's slider and the registry's step. */
+        public static final int TEXT_SIZE_PERCENT_STEP = 5;
 
         /**
          * Where the Look editor's Glass slider was left, 0 to 100: Global's under this key, each
