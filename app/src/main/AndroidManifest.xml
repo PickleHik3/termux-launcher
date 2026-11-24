@@ -185,18 +185,6 @@
             </intent-filter>
         </activity-alias>
 
-        <!-- The Linux windows screen (-Pwayland=true): apps opened under Wayland Display, one
-             window shown at a time below a row of tabs, over the wallpaper. Opened by
-             WaylandAppRunner; it finishes at once in a build without the host. Recreating it
-             (rotation) re-attaches to the live windows: the compositor runs in
-             LinuxWindowsService's own process. One instance, so a second launch reuses it. -->
-        <activity
-            android:name=".app.wayland.LinuxWindowsActivity"
-            android:exported="false"
-            android:launchMode="singleTask"
-            android:taskAffinity="${TERMUX_PACKAGE_NAME}.wayland"
-            android:theme="@style/Theme.TermuxActivity.Wallpaper" />
-
         <!-- The Wayland compositor, in a process of its own so its crash is not the launcher's. -->
         <service
             android:name=".app.wayland.LinuxWindowsService"

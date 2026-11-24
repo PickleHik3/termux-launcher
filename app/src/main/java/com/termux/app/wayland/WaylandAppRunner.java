@@ -33,7 +33,7 @@ import java.util.List;
 /**
  * Opens Linux apps under Wayland Display: starts the Linux windows host when it is not running,
  * hands each waiting launch the host's socket once it runs, and brings up the Linux windows
- * screen ({@link LinuxWindowsActivity}). The app itself is run by whoever asked
+ * screen (the Linux windows in the row, {@link LinuxWindowsController}). The app itself is run by whoever asked
  * ({@link Launch#run}), as a Termux task with the same environment X11 Display gives it.
  *
  * <p>One per process, main thread only. It stays bound to {@link LinuxWindowsService} while the
@@ -139,11 +139,6 @@ public final class WaylandAppRunner {
     @Nullable private WaylandSocketOwner socketOwner;
     /** A client is waiting on the launcher's socket for the host to start. */
     private boolean connectionWaiting;
-    /**
-     * This runner started the running host, so a window that appears in it is new and brings the
-     * Linux windows screen up; a host found running on attach replays windows that are not.
-     */
-    private boolean surfaceNewWindows;
     /** Scales chosen on the rail for windows with no app to keep them (started from a shell); by window id. Main thread. */
     @NonNull private final java.util.Map<Long, Float> windowScales = new java.util.HashMap<>();
 
@@ -219,14 +214,14 @@ public final class WaylandAppRunner {
         public void onClipboardText(String text) {}
 
         @Override
-        public void onWindowCreated(long id, String title, String appId, int clientPid, int flags) {
+        public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;
                 main.removeCallbacks(idleStop);
                 matcher.windowCreated(id, clientPid, (flags & ILinuxWindows.WINDOW_X11) != 0,
                     SystemClock.uptimeMillis());
-                // A window from a client started in a terminal comes up like a launched app's.
-                if (surfaceNewWindows && !LinuxWindowsActivity.isInFront()) openWindowsScreen(id);
+                // A new window gets its place in the row from the Linux windows' controller,
+                // which hears the host itself (spec #384).
             });
         }
 
@@ -267,8 +262,8 @@ public final class WaylandAppRunner {
         if (key != null && running && service != null) {
             long window = matcher.windowFor(key);
             if (window >= 0) {
-                // The app's window is still open: show it, and start nothing.
-                openWindowsScreen(window);
+                // The app's window is still open: go to it, and start nothing.
+                if (windowsSurface != null) windowsSurface.showWindow(window);
                 return;
             }
         }
@@ -362,7 +357,6 @@ public final class WaylandAppRunner {
         windowScales.clear();
         xDisplay = null;
         xWaitExpired = false;
-        surfaceNewWindows = false;
         connectionWaiting = false;
         main.removeCallbacks(connectionTimeout);
         publishToSessions();
@@ -463,7 +457,6 @@ public final class WaylandAppRunner {
         switch (state) {
             case ILinuxWindows.STATE_RUNNING: {
                 // A host this runner started: windows from here on are new.
-                if (startAsked) surfaceNewWindows = true;
                 running = true;
                 startAsked = false;
                 boolean forConnection = pending.isEmpty();
@@ -610,7 +603,6 @@ public final class WaylandAppRunner {
             if (key != null) matcher.launched(key, SystemClock.uptimeMillis());
             launch.run(wayland, x);
         }
-        openWindowsScreen();
         if (pendingListener != null) pendingListener.onPendingEnded(true);
     }
 
@@ -694,21 +686,20 @@ public final class WaylandAppRunner {
         }
     }
 
-    private void openWindowsScreen() {
-        openWindowsScreen(-1L);
+    /**
+     * Where Linux windows show (spec #384): the row's controller, set while the launcher's
+     * activity lives; null otherwise.
+     */
+    public interface WindowsSurface {
+        /** Goes to window {@code id}; false when it is not open there. */
+        boolean showWindow(long id);
     }
 
-    /** Opens the screen; {@code showWindow} 0 or above names the window to bring forward. */
-    private void openWindowsScreen(long showWindow) {
-        try {
-            Intent intent = new Intent(context, LinuxWindowsActivity.class)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            if (showWindow >= 0) intent.putExtra(LinuxWindowsActivity.EXTRA_SHOW_WINDOW, showWindow);
-            else intent.putExtra(LinuxWindowsActivity.EXTRA_OPENING, true);
-            context.startActivity(intent);
-        } catch (RuntimeException e) {
-            Log.w(LOG_TAG, "cannot open the Linux windows screen: " + e);
-        }
+    @Nullable private WindowsSurface windowsSurface;
+
+    /** The Linux windows' place on screen; null when the activity is gone. Main thread. */
+    public void setWindowsSurface(@Nullable WindowsSurface surface) {
+        windowsSurface = surface;
     }
 
     /** Whether the host's process is alive (one of this app's own, so it is listed). */

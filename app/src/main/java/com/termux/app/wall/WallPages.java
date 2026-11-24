@@ -272,7 +272,7 @@ public final class WallPages {
     /** The temporary Display page on the wall; null when there is none. */
     @Nullable
     public Page temporaryDisplay() {
-        for (Page p : pages()) if (p.temporary) return p;
+        for (Page p : pages()) if (p.temporary && p.kind == PageKind.DISPLAY) return p;
         return null;
     }
 
@@ -418,6 +418,7 @@ public final class WallPages {
             }
             case TERMINAL: return "Terminal";
             case ASSISTANT: return "Assistant";
+            case LINUX: return appName != null ? appName : "Linux app";
             case DISPLAY:
             default: return page.binding != null && appName != null ? appName : "Display";
         }
@@ -442,6 +443,15 @@ public final class WallPages {
     @NonNull
     public Result addTemporaryDisplay(int afterId) {
         return add(PageKind.DISPLAY, afterId, null, true);
+    }
+
+    /**
+     * Adds a Linux window's page after {@code afterId} ({@link #END}: the end): temporary, so Edit
+     * pages never lists it and the start-up sweep drops one a past launcher process left.
+     */
+    @NonNull
+    public Result addLinuxWindow(int afterId) {
+        return add(PageKind.LINUX, page(afterId) != null ? afterId : END, null, true);
     }
 
     /**
@@ -480,11 +490,25 @@ public final class WallPages {
      */
     @NonNull
     public WallPages withoutTemporaryPages() {
+        return without(p -> p.temporary);
+    }
+
+    /**
+     * Without its Linux windows' pages: the sweep when the launcher meets its Linux windows host
+     * again (it replays the windows that still run) or loses it.
+     */
+    @NonNull
+    public WallPages withoutLinuxWindows() {
+        return without(p -> p.kind == PageKind.LINUX);
+    }
+
+    @NonNull
+    private WallPages without(@NonNull java.util.function.Predicate<Page> gone) {
         List<Page> list = new ArrayList<>(all.size());
         List<Integer> marked = new ArrayList<>(pending);
         boolean any = false;
         for (Page p : all) {
-            if (p.temporary) {
+            if (gone.test(p)) {
                 any = true;
                 marked.remove(Integer.valueOf(p.id));
             } else {

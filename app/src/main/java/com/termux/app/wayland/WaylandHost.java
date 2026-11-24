@@ -23,7 +23,7 @@ public final class WaylandHost {
 
     /** What the service hears from the compositor, on the main thread. */
     public interface Listener {
-        void onWindowCreated(long id, String title, String appId, int clientPid, int flags);
+        void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId);
         void onWindowChanged(long id, String title, String appId, int width, int height);
         void onWindowDestroyed(long id);
         /** Xwayland's display (":0"), or empty when it is gone. */
@@ -96,11 +96,11 @@ public final class WaylandHost {
     // Called from native code on the compositor thread.
 
     @Keep
-    static void onWindowCreated(long id, String title, String appId, int clientPid, int flags) {
+    static void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
         final int generation = sGeneration;
         MAIN.post(() -> {
             Listener l = sListener;
-            if (l != null && generation == sGeneration) l.onWindowCreated(id, title, appId, clientPid, flags);
+            if (l != null && generation == sGeneration) l.onWindowCreated(id, title, appId, clientPid, flags, parentId);
         });
     }
 

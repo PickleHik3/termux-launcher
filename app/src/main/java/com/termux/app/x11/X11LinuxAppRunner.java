@@ -668,7 +668,7 @@ public final class X11LinuxAppRunner {
 
     /**
      * {@code gpu}'s exports, and {@code app}'s scale lines when {@code toolkitScale}. Under Wayland
-     * Display the app's Scale is its window's scale (LinuxWindowsActivity), so the toolkit
+     * Display the app's Scale is its window's scale (LinuxWindowsController), so the toolkit
      * variables are left out: on top of it they would scale the app twice.
      */
     @NonNull

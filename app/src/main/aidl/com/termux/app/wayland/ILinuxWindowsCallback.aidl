@@ -11,9 +11,11 @@ oneway interface ILinuxWindowsCallback {
     void onHostState(int state, String message);
     /**
      * A window to show. clientPid: the app's process id, 0 when unknown. flags: ILinuxWindows.WINDOW_*.
+     * parentId: the window this one is a dialog of (xdg parent, X11 transient-for), as it stood
+     * when the window was announced; 0 for a window of its own (since VERSION 5).
      * A window the app hides and shows again comes back as a new window with a new id.
      */
-    void onWindowCreated(long id, String title, String appId, int clientPid, int flags);
+    void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId);
     /** Title, app id or the drawn size (pixels, 0 before the first frame) changed. */
     void onWindowChanged(long id, String title, String appId, int width, int height);
     void onWindowDestroyed(long id);

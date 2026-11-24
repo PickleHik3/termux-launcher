@@ -89,7 +89,7 @@ public final class PaneWallPolicy {
      */
     public static boolean isTerminalPlace(@Nullable PageKind page) {
         return page == PageKind.TERMINAL || page == PageKind.DISPLAY
-            || page == PageKind.ASSISTANT;
+            || page == PageKind.ASSISTANT || page == PageKind.LINUX;
     }
 
     /** Whether {@code page} is a Home page. */
@@ -119,6 +119,7 @@ public final class PaneWallPolicy {
         if (page == PageKind.TERMINAL) return terminalGivesAway;
         if (page == PageKind.ASSISTANT) return assistantGivesAway;
         if (page == PageKind.DISPLAY) return !displayRunning;
+        // A Linux window's picture takes every touch: it pages only by its border.
         return false;
     }
 
