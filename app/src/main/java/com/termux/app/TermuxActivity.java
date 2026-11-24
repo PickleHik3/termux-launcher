@@ -28622,6 +28622,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
         mWidgetPaneController.setPageIndicator(
             com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
+        syncHomeBandLook();
         mWidgetPaneController.setLayoutLocked(
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
         mWidgetPaneController.setFolderStyle(
@@ -30120,6 +30121,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             .fromValue(mPreferences.getPageBarLook()).marksShown();
     }
 
+    /**
+     * Tells Home's pane the status bar's page bar look: under Marks the pill's band goes to the
+     * grid. Called when the look can have changed (settings return, the editor's row), never per
+     * page change; the pane compares before it resizes.
+     */
+    private void syncHomeBandLook() {
+        if (mWidgetPaneController == null || mPreferences == null) return;
+        mWidgetPaneController.setPageBarLook(com.termux.app.wall.pageswitch.PageBarLook
+            .fromValue(mPreferences.getPageBarLook()));
+    }
+
     /** Which of the Terminal's windows want the user, by window index, as the chips last said. */
     @Nullable private boolean[] mMarksWindowAttention;
     @Nullable private com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator mMarksNavigator;
@@ -30933,6 +30945,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
+        syncHomeBandLook();
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
         applyLazyMode();
