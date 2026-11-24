@@ -132,6 +132,16 @@ public class OlderThanSweeperTest {
         assertTrue(outside.exists());
     }
 
+    @Test public void symlinkedRootIsNotSwept() throws IOException {
+        File real = tmp.newFolder();
+        File old = file(real, "old", 10, OLD);
+        File rootLink = new File(tmp.getRoot(), "rootlink");
+        Files.createSymbolicLink(rootLink.toPath(), real.toPath());
+        OlderThanSweeper.Result r = OlderThanSweeper.sweep(rootLink, AGE, NOW);
+        assertTrue(old.exists());
+        assertEquals(0, r.entriesDeleted);
+    }
+
     @Test public void missingRootIsEmptyResult() {
         OlderThanSweeper.Result r = OlderThanSweeper.sweep(new File(tmp.getRoot(), "nope"), AGE, NOW);
         assertEquals(0, r.entriesDeleted);

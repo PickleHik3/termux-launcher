@@ -37,11 +37,22 @@ public final class OlderThanSweeper {
     @NonNull
     public static Result sweep(@NonNull File root, long ageMillis, long nowMillis) {
         Result result = new Result();
+        if (!isRealDirectory(root)) return result;
         File[] children = root.listFiles();
         if (children == null) return result;
         long cutoff = nowMillis - ageMillis;
         for (File child : children) sweepEntry(child, cutoff, result);
         return result;
+    }
+
+    /** A symlinked root is a user's opt-out of clearing, so only a real directory is swept. */
+    private static boolean isRealDirectory(File root) {
+        try {
+            return Files.isDirectory(root.toPath(), LinkOption.NOFOLLOW_LINKS);
+        } catch (LinkageError e) {
+            long[] s = lstat(root.getPath());
+            return s != null && s[2] == 1;
+        }
     }
 
     /** Returns true when the entry is gone afterwards. */
