@@ -82,4 +82,37 @@ public class EditorBarBubblesTest {
         for (EditorBubbles bubble : EditorBubbles.values())
             assertEquals(1, bar.bubbleView(bubble).getMaxLines());
     }
+
+    @Test
+    public void theWallpaperButtonReportsAndOpensGlobal() {
+        EditorBar bar = bar();
+        final int[] taps = new int[1];
+        bar.setListener(new EditorBar.Listener() {
+            @Override public void onUndo() {}
+            @Override public void onDone() {}
+            @Override public void onPalette() {}
+            @Override public void onThemeHintSeen() {}
+            @Override public void onWallpaper() {
+                taps[0]++;
+            }
+        });
+        bar.wallpaperButton().performClick();
+        assertEquals(1, taps[0]);
+        assertEquals(EditorCard.APPEARANCE, EditorBar.WALLPAPER_CARD);
+        assertEquals(EditorBubbles.GLOBAL, EditorBubbles.markedFor(EditorBar.WALLPAPER_CARD));
+    }
+
+    @Test
+    public void theButtonShowsTheThumbAtItsPixelSizeAndTheGlyphWithoutOne() {
+        EditorBar bar = bar();
+        int px = EditorBar.wallpaperThumbPx(2.625f);
+        assertEquals(74, px);
+        android.graphics.Bitmap thumb = android.graphics.Bitmap.createBitmap(px, px,
+            android.graphics.Bitmap.Config.ARGB_8888);
+        bar.setWallpaperThumb(thumb);
+        assertEquals(px, bar.wallpaperButton().getIconSize());
+        assertTrue(bar.wallpaperButton().getIcon() instanceof android.graphics.drawable.BitmapDrawable);
+        bar.setWallpaperThumb(null);
+        assertFalse(bar.wallpaperButton().getIcon() instanceof android.graphics.drawable.BitmapDrawable);
+    }
 }
