@@ -60,7 +60,8 @@ use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::selection::data_device::{
     ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
 };
-use smithay::wayland::selection::SelectionHandler;
+use smithay::wayland::selection::{SelectionHandler, SelectionSource, SelectionTarget};
+use std::os::fd::OwnedFd;
 use smithay::wayland::shell::xdg::decoration::{XdgDecorationHandler, XdgDecorationState};
 use smithay::wayland::shell::xdg::{
     PopupSurface, PositionerState, SurfaceCachedState, ToplevelSurface, XdgPopupSurfaceData, XdgShellHandler,
@@ -85,6 +86,7 @@ use crate::png;
 use crate::protocol::*;
 
 use super::focus::KeyboardFocus;
+use super::clipboard::ClipSource;
 use super::java::HostEvents;
 use super::log::{lerror, linfo, lwarn};
 use super::source::{self, fourcc_name, Desc, DmabufMaps, Kind};
@@ -126,6 +128,8 @@ pub enum Command {
     /// An Android key code; the host maps it to evdev.
     Key { id: i64, android_keycode: i32, down: bool, time: u32 },
     Close { id: i64 },
+    /// Android's clipboard text, for Linux clients.
+    SetClipboardText { text: String },
     /// Debug: write the window's shown pixels as a PNG to `path` (checked by the service).
     Dump { id: i64, path: String },
 }
@@ -483,6 +487,7 @@ pub struct State {
     last_keepalive: Instant,
     pub events: Box<dyn HostEvents>,
     pub xwayland: Option<super::xwayland::XwaylandState>,
+    pub clip: super::clipboard::ClipState,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
     teardown: crate::teardown::Teardown,
 }
@@ -635,6 +640,14 @@ fn setup(
         }
     })?;
 
+    // Texts the clipboard reader threads read come back to the compositor thread here.
+    let (clip_tx, clip_rx) = channel::channel::<String>();
+    loop_handle.insert_source(clip_rx, |event, _, state| {
+        if let channel::Event::Msg(text) = event {
+            state.linux_text(text);
+        }
+    })?;
+
     let now = Instant::now();
     let mut state = State {
         display_handle: dh,
@@ -674,6 +687,7 @@ fn setup(
         last_keepalive: now,
         events,
         xwayland: None,
+        clip: super::clipboard::ClipState::new(clip_tx),
         teardown: Default::default(),
     };
     // Last in, first out: the listening socket goes (and its files with it), then the display.
@@ -813,6 +827,7 @@ impl State {
             Command::Pointer { id, action, button, x, y, time } => self.pointer(id, action, button, x, y, time),
             Command::Key { id, android_keycode, down, time } => self.key(id, android_keycode, down, time),
             Command::Close { id } => self.close(id),
+            Command::SetClipboardText { text } => self.set_android_text(text),
             Command::Dump { id, path } => self.dump(id, &path),
         }
     }
@@ -2153,10 +2168,26 @@ impl SeatHandler for State {
     fn seat_state(&mut self) -> &mut SeatState<State> {
         &mut self.seat_state
     }
+
+    fn focus_changed(&mut self, seat: &Seat<State>, focused: Option<&KeyboardFocus>) {
+        self.focus_data_device(seat, focused);
+    }
 }
 
 impl SelectionHandler for State {
-    type SelectionUserData = ();
+    type SelectionUserData = ClipSource;
+
+    fn new_selection(&mut self, ty: SelectionTarget, source: Option<SelectionSource>, _seat: Seat<State>) {
+        if ty == SelectionTarget::Clipboard {
+            self.wayland_selection_set(source.map(|s| s.mime_types()));
+        }
+    }
+
+    fn send_selection(&mut self, ty: SelectionTarget, mime_type: String, fd: OwnedFd, _seat: Seat<State>, source: &ClipSource) {
+        if ty == SelectionTarget::Clipboard {
+            self.serve_selection(*source, mime_type, fd);
+        }
+    }
 }
 
 impl DataDeviceHandler for State {

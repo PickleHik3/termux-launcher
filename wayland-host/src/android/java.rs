@@ -21,6 +21,7 @@ struct Methods {
     destroyed: JStaticMethodID,
     ended: JStaticMethodID,
     x_display: JStaticMethodID,
+    clipboard: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -36,6 +37,8 @@ pub trait HostEvents {
     fn window_destroyed(&mut self, id: i64);
     /// The X display Xwayland got (":0"), or "" when it is gone.
     fn x_display(&mut self, display: &str);
+    /// Text a Linux client copied.
+    fn clipboard_text(&mut self, text: &str);
 }
 
 impl JavaCallbacks {
@@ -48,6 +51,7 @@ impl JavaCallbacks {
             destroyed: env.get_static_method_id(&local, "onWindowDestroyed", "(J)V")?,
             ended: env.get_static_method_id(&local, "onHostEnded", "(Z)V")?,
             x_display: env.get_static_method_id(&local, "onXDisplay", "(Ljava/lang/String;)V")?,
+            clipboard: env.get_static_method_id(&local, "onClipboardText", "(Ljava/lang/String;)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -127,6 +131,11 @@ impl HostEvents for AttachedCallbacks {
     fn x_display(&mut self, display: &str) {
         let m = self.methods.x_display;
         call(&mut self.env, &self.class, m, |env| Ok(vec![jvalue { l: env.new_string(display)?.into_raw() }]));
+    }
+
+    fn clipboard_text(&mut self, text: &str) {
+        let m = self.methods.clipboard;
+        call(&mut self.env, &self.class, m, |env| Ok(vec![jvalue { l: env.new_string(text)?.into_raw() }]));
     }
 }
 
