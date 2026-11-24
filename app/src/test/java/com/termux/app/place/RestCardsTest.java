@@ -328,7 +328,9 @@ public class RestCardsTest {
             }
         }
         assertTrue("some fixtures stand apart", apart > 0);
-        assertTrue("and some do not", together > 0);
+        // Since #305 every fixture stands apart (the rows beside the keys included); the
+        // together branch keeps the refusals left honest should a fixture reach one.
+        assertTrue("none stands together", together == 0);
     }
 
     private static String hostCards(RestCards cards) {
@@ -389,5 +391,45 @@ public class RestCardsTest {
         }
         assertTrue("some Docked rests stand apart", cases > 0);
         assertTrue("some wear the foot", feet > 0);
+    }
+
+    /**
+     * Floating with the apps row or A-Z beside the keys (#305): the cards stand apart and the
+     * Terminal's card is its own back host, the one host's Floating card at the Terminal's rest
+     * (box, corners, edges, pieces: the rows beside the keys included), never the keys row's
+     * card; Home's host keeps Home's card (the Peek card, or the apps row's) at Home's rest.
+     */
+    @Test public void floatingWithRowsBesideTheKeysTheTerminalsHostIsTheOneHostsCard() {
+        int cases = 0;
+        int peeks = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures()) {
+            if (SideCards.keysAlone(base.layoutOf(PageRef.TERMINAL))) continue;
+            for (DockStyle design : DockStyle.CHOICES) {
+                LayoutFixtures.Fixture f = base.withHomeDesign(design);
+                for (boolean up : new boolean[] {false, true}) {
+                    RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false,
+                        true));
+                    if (!terminal.apart()) continue;
+                    String label = f.name + " " + design + " terminal kb=" + up;
+                    RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, true));
+                    String want = cardsOn(alone.cards(), StackView.HOST);
+                    assertTrue(label, !want.isEmpty());
+                    assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
+                    assertEquals(label, "", cardsOn(terminal.cards(), StackView.KEYS_CARD));
+                    assertEquals(label, null, terminal.laidOut(StackView.KEYS_CARD));
+                    assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
+                    RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, true));
+                    assertEquals(label + " parked", want,
+                        cardsOn(home.parked(), StackView.TERMINAL_HOST));
+                    RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, true));
+                    assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
+                        cardsOn(home.cards(), StackView.HOST));
+                    if (home.card(CardId.PEEK) != null) peeks++;
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some Floating rests with rows beside the keys stand apart", cases > 0);
+        assertTrue("Home wears the Peek card in some", peeks > 0);
     }
 }

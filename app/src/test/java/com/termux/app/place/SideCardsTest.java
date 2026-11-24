@@ -60,16 +60,25 @@ public class SideCardsTest {
         assertEquals(Refusal.KEYS_NOT_OVER_KEYBOARD, SideCards.refusal(HOME, under, true, false));
     }
 
-    @Test public void anAppsRowBesideTheKeysRefuses() {
-        assertEquals(Refusal.ROWS_BESIDE_KEYS, SideCards.refusal(LayoutFixtures.TL16.home,
-            LayoutFixtures.TL16.window, true, false));
+    /** #305: the apps row or A-Z beside the keys no longer keeps the two cards together. */
+    @Test public void anAppsRowBesideTheKeysStandsApartOnTheTerminalsOwnHost() {
+        assertNull(SideCards.refusal(LayoutFixtures.TL16.home, LayoutFixtures.TL16.window, true,
+            false));
+        assertFalse(SideCards.keysAlone(LayoutFixtures.TL16.window));
     }
 
-    @Test public void anAzRowBesideTheKeysRefuses() {
-        assertEquals(Refusal.ROWS_BESIDE_KEYS, SideCards.refusal(LayoutFixtures.AZ_ON_DOCK.home,
+    @Test public void anAzRowBesideTheKeysStandsApart() {
+        assertNull(SideCards.refusal(LayoutFixtures.AZ_ON_DOCK.home,
             LayoutFixtures.AZ_ON_DOCK.window, true, false));
-        assertEquals(Refusal.ROWS_BESIDE_KEYS, SideCards.refusal(HOME,
-            layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM), true, false));
+        assertFalse(SideCards.keysAlone(LayoutFixtures.AZ_ON_DOCK.window));
+        PlaceLayout azBeside = layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM);
+        assertNull(SideCards.refusal(HOME, azBeside, true, false));
+        assertFalse(SideCards.keysAlone(azBeside));
+    }
+
+    @Test public void theKeysAloneAreTheKeysRowsOwnCard() {
+        assertTrue(SideCards.keysAlone(DEFAULT_TERMINAL));
+        assertTrue(SideCards.keysAlone(LayoutFixtures.PONG.window));
     }
 
     @Test public void aStatusBarOnThePlankRefuses() {

@@ -13,12 +13,14 @@ import com.termux.app.page.PageKind;
  * activity's rest pass and the stack's renderer both read these, so the margin and the drop have
  * one owner.
  *
- * <p>The two cards stand "apart" when the Terminal's card carries the extra-keys row and nothing
- * else: it then travels with the Terminal, and Home's card travels with Home. Every Dock design
+ * <p>The two cards stand "apart" when the Terminal's card carries the extra-keys row over the
+ * keyboard, with or without the apps row and A-Z beside it (#305): it then travels with the
+ * Terminal, and Home's card (the Peek card or the apps row's) travels with Home. Every Dock design
  * and both Styles are the same here (the rule reads layouts, never the design or the Style;
- * {@code floating} stays a parameter for the callers). Under Floating the Terminal's card is the
- * extra-keys band alone; under Docked it is a second back host cut by the Docked dock formula
- * ({@code RestCards.StackView#TERMINAL_HOST}), the same card the one host wore at that rest.
+ * {@code floating} stays a parameter for the callers). Under Floating with the keys alone the
+ * Terminal's card is the extra-keys band ({@link #keysAlone}); otherwise it is a second back host
+ * cut by its Style's dock formula ({@code RestCards.StackView#TERMINAL_HOST}), the same card the
+ * one host wore at that rest.
  */
 public final class SideCards {
 
@@ -30,8 +32,6 @@ public final class SideCards {
         NO_KEYS_ROW,
         /** The Terminal's extra-keys row stands under the keyboard, in a view of its own. */
         KEYS_NOT_OVER_KEYBOARD,
-        /** The Terminal's card over the keyboard carries the apps row or A-Z too, a row Home shares. */
-        ROWS_BESIDE_KEYS,
         /** The Terminal's status bar is a band of the dock's plank, so the card spans it too. */
         STATUS_ON_PLANK
     }
@@ -46,10 +46,23 @@ public final class SideCards {
         if (!PlaceChromePolicy.extraKeysRowShown(terminal)) return Refusal.NO_KEYS_ROW;
         if (StackLanes.where(terminal, Element.EXTRA_KEYS) != StackLanes.Where.BOTTOM_OVER)
             return Refusal.KEYS_NOT_OVER_KEYBOARD;
-        for (Element element : EdgeStackPolicy.overKeyboard(terminal))
-            if (element == Element.APPS || element == Element.AZ) return Refusal.ROWS_BESIDE_KEYS;
         if (statusOnDockPlank) return Refusal.STATUS_ON_PLANK;
         return null;
+    }
+
+    /**
+     * Whether the Terminal's extra-keys row is its only row over the keyboard: Floating then
+     * carries its card in the keys row's own host ({@code RestCards.StackView#KEYS_CARD}). With
+     * the apps row or A-Z beside the keys (#305) the card spans those rows too and stands on the
+     * Terminal's own back host under either Style.
+     */
+    public static boolean keysAlone(@NonNull PlaceLayout terminal) {
+        if (!PlaceChromePolicy.extraKeysRowShown(terminal)
+            || StackLanes.where(terminal, Element.EXTRA_KEYS) != StackLanes.Where.BOTTOM_OVER)
+            return false;
+        for (Element element : EdgeStackPolicy.overKeyboard(terminal))
+            if (element == Element.APPS || element == Element.AZ) return false;
+        return true;
     }
 
     /** Whether the two cards stand apart: {@link #refusal} is null. */
@@ -105,8 +118,10 @@ public final class SideCards {
     /**
      * The translation the stack's renderer draws a lane's rows at while the cards stand apart
      * ({@code lane} a {@link StackLanes} constant): Home's lane its drop, the Terminal's lane its
-     * lift (up), and the stack's own lane, which is the front page's, its share of the lift
-     * ({@link #columnLiftPx}). 0 while the cards do not stand apart.
+     * lift (up), and the stack's own lane, which is the front page's and holds the rows both
+     * sides show (#305), Home's drop by Home's share and the lift by the Terminal's
+     * ({@link #columnLiftPx}), so a shared row stands at each rest where that side's rows stand.
+     * 0 while the cards do not stand apart.
      *
      * @param terminalShare how much of the scene is the Terminal's: 1 at its rest, 0 at Home's,
      *                      between across a crossing
@@ -128,7 +143,9 @@ public final class SideCards {
         if (!apart) return 0f;
         if (lane == StackLanes.HOME) return homeDropPx + coverHomePx;
         if (lane == StackLanes.TERMINAL) return -Math.max(0, terminalLiftPx);
-        return -columnLiftPx(true, terminalLiftPx, terminalShare) + coverSharedPx;
+        float share = terminalShare < 0f ? 0f : terminalShare > 1f ? 1f : terminalShare;
+        return homeDropPx * (1f - share) - columnLiftPx(true, terminalLiftPx, terminalShare)
+            + coverSharedPx;
     }
 
     /**

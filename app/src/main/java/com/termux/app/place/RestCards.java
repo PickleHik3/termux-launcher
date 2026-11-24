@@ -299,7 +299,9 @@ public final class RestCards {
         // its host keeps its keyboard-down rect at both keyboard states.
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome, frontHome);
         RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome, !frontHome);
-        answer.adopt(otherCards, frontHome ? terminalCardView(half.floating) : StackView.HOST);
+        answer.adopt(otherCards, frontHome
+            ? terminalCardView(half.floating, terminal.pass.dock.half(PageRef.TERMINAL).layout)
+            : StackView.HOST);
         if (!frontHome) {
             answer.mHostLook = otherCards.mHostLook;
             answer.mHomeRowsDropPx = otherCards.mRowsDropPx;
@@ -464,11 +466,14 @@ public final class RestCards {
 
     /**
      * The view that carries the Terminal's card while the cards stand apart: the extra-keys card
-     * under Floating, the Terminal's own back host under Docked.
+     * under Floating while the keys are the Terminal's only row over the keyboard
+     * ({@link SideCards#keysAlone}), else the Terminal's own back host, under Floating too (#305:
+     * the apps row or A-Z beside the keys is a card the keys row's host cannot hold).
      */
     @NonNull
-    public static StackView terminalCardView(boolean floating) {
-        return floating ? StackView.KEYS_CARD : StackView.TERMINAL_HOST;
+    public static StackView terminalCardView(boolean floating, @NonNull PlaceLayout terminal) {
+        return floating && SideCards.keysAlone(terminal) ? StackView.KEYS_CARD
+            : StackView.TERMINAL_HOST;
     }
 
     /**
@@ -492,12 +497,14 @@ public final class RestCards {
         final StackLayout.Input pass = rest.pass;
         mPage = rest.page;
         final DockGeometry.Half half = pass.dock.rowsHalf();
-        // Under Floating the Terminal's card is the keys band alone; under Docked it keeps the
-        // Docked dock formula on a host of its own (#304), so it looks as the one host did.
-        final boolean keysCard = terminalCard && half.floating;
-        final StackView hostView = terminalCard ? terminalCardView(half.floating) : StackView.HOST;
+        // Under Floating the Terminal's card is the keys band alone while the keys stand alone;
+        // otherwise (Docked, #304; Floating with rows beside the keys, #305) it keeps the dock
+        // formula of its Style on a host of its own, so it looks as the one host did.
         // The layout the stack stands, as StackLayout reads it for the half whose rows stand.
         final PlaceLayout layout = pass.dock.arrangement;
+        final StackView hostView = terminalCard ? terminalCardView(half.floating, layout)
+            : StackView.HOST;
+        final boolean keysCard = hostView == StackView.KEYS_CARD;
         final boolean floating = half.floating;
         final boolean up = pass.keyboardShown;
         final int w = rest.screenWidthPx;

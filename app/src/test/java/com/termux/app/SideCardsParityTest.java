@@ -250,7 +250,8 @@ public class SideCardsParityTest {
             }
         }
         assertTrue("some fixtures stand apart", apartCases > 0);
-        assertTrue("and some do not", apartCases < cases);
+        // Since #305 the apps row or A-Z beside the keys stands apart too; the refusals left
+        // (no keys row, keys under the keyboard, a status band on the plank) are in no fixture.
     }
 
     /**
@@ -395,7 +396,8 @@ public class SideCardsParityTest {
     @Test public void theCoverDropsHomesLaneAndTheStacksShareAndNotTheTerminals() {
         assertEquals(7f + 40f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, 5, 0.5f, 40f, 20f), 0f);
         assertEquals(-5f, SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, 5, 0.5f, 40f, 20f), 0f);
-        assertEquals(-2.5f + 20f, SideCards.laneTyPx(StackLanes.STACK, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        assertEquals(-2.5f + 3.5f + 20f,
+            SideCards.laneTyPx(StackLanes.STACK, true, 7f, 5, 0.5f, 40f, 20f), 0f);
         for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})
             assertEquals(0f, SideCards.laneTyPx(lane, false, 7f, 5, 0.5f, 40f, 20f), 0f);
     }
@@ -403,8 +405,9 @@ public class SideCardsParityTest {
     /**
      * The lanes' numbers have one owner (SideCards#laneTyPx): Home's lane draws its drop and the
      * Terminal's its lift at every share of the scene, so neither moves at a landing; only the
-     * stack's own lane and the keyboard's column, the front page's, follow the share, and the
-     * scene's value at each end is that end's rest.
+     * stack's own lane (Home's drop and the Terminal's lift, each by its side's share) and the
+     * keyboard's column, the front page's, follow the share, and the scene's value at each end is
+     * that end's rest.
      */
     @Test public void eachLaneDrawsItsOwnSidesNumberAtEveryShare() {
         for (float share : new float[] {0f, 0.25f, 0.5f, 1f}) {
@@ -413,7 +416,10 @@ public class SideCardsParityTest {
                 assertEquals(label, 7f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, lift, share), 0f);
                 assertEquals(label, -lift,
                     SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, lift, share), 0f);
-                assertEquals(label, -lift * share,
+                // The stack's lane holds the rows both sides show (#305: the apps row or A-Z
+                // beside the keys): Home's drop by Home's share, the Terminal's lift by its own,
+                // so at each rest a shared row stands where that side's own rows stand.
+                assertEquals(label, -lift * share + 7f * (1f - share),
                     SideCards.laneTyPx(StackLanes.STACK, true, 7f, lift, share), 0f);
                 assertEquals(label, lift * share, SideCards.columnLiftPx(true, lift, share), 0f);
                 for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})

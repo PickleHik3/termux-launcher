@@ -129,7 +129,8 @@ public class StackRendererApartTest {
         assertEquals(DROP, mUnderlay.getTranslationY(), 0f);
         assertEquals("Home's lane rows stand the drop lower", DROP, mHomeRow.getTranslationY(), 0f);
         assertEquals(0f, mKeysRow.getTranslationY(), 0f);
-        assertEquals("the shared row keeps its place", 0f, mSharedRow.getTranslationY(), 0f);
+        // #305: a row both sides show stands with Home's rows at Home's rest.
+        assertEquals("the shared row stands with Home's", DROP, mSharedRow.getTranslationY(), 0f);
         assertEquals(0f, mRenderer.hostShiftPx(), 0f);
     }
 

@@ -422,7 +422,10 @@ public class RestCardsParityTest {
                 }
                 continue;
             }
-            // (i) Home draws what it drew alone; the Terminal's dock card is the keys card.
+            // (i) Home draws what it drew alone; the Terminal's dock card is the keys card, or
+            // with rows beside the keys (#305) its own back host, the one host's card.
+            StackView termView = RestCards.terminalCardView(true, f.window);
+            boolean keysCard = termView == StackView.KEYS_CARD;
             assertEquals(at, homeSolo.cards().size(), homeRest.cards().size());
             for (int i = 0; i < homeSolo.cards().size(); i++)
                 assertSameCard(at + " home", homeSolo.cards().get(i), homeRest.cards().get(i));
@@ -430,7 +433,7 @@ public class RestCardsParityTest {
             for (int i = 0; i < termSolo.cards().size(); i++) {
                 RestCards.Card want = termSolo.cards().get(i);
                 RestCards.Card got = termRest.cards().get(i);
-                if (want.id == CardId.DOCK && !up) {
+                if (want.id == CardId.DOCK && !up && keysCard) {
                     // The keys card is the keys band only (ADR 0032, the developer's 2026-11-21
                     // decision): with the keyboard down the capsule alone stands the flush
                     // padding taller, and the card does not. The keys stand where they stood in
@@ -447,22 +450,22 @@ public class RestCardsParityTest {
                 } else {
                     assertSameCard(at + " terminal", want, got);
                 }
-                assertEquals(at, want.view == StackView.HOST ? StackView.KEYS_CARD : want.view,
-                    got.view);
+                assertEquals(at, want.view == StackView.HOST ? termView : want.view, got.view);
             }
             // Each side parks the other's glass, on screen it draws none of it.
             assertFalse(at, homeRest.parked().isEmpty());
             assertFalse(at, termRest.parked().isEmpty());
             for (RestCards.Card c : homeRest.parked())
-                assertEquals(at, StackView.KEYS_CARD, c.view);
+                assertEquals(at, termView, c.view);
             for (RestCards.Card c : termRest.parked())
                 assertEquals(at, StackView.HOST, c.view);
             for (RestCards.Card c : homeRest.cards())
-                assertTrue(at + " Home draws no keys card", c.view != StackView.KEYS_CARD);
-            // (ii) The keys card is the extra-keys row's band inset by the dock's side margin,
-            // its corners Corners clamped to half its height, a rim on every edge.
+                assertTrue(at + " Home draws no Terminal card", c.view != termView);
             StackLayout.Input termPass = f.pass(PageRef.TERMINAL, up, true);
             Views tv = views(PageRef.TERMINAL, up, true, termPass);
+            if (keysCard) {
+            // (ii) The keys card is the extra-keys row's band inset by the dock's side margin,
+            // its corners Corners clamped to half its height, a rim on every edge.
             RestCards.Card keys = termRest.card(CardId.DOCK);
             assertNotNull(at, keys);
             assertEquals(at, StackView.KEYS_CARD, keys.view);
@@ -483,11 +486,16 @@ public class RestCardsParityTest {
                 assertEquals(at + " keys card " + e, EdgeKind.RIM, keys.edge(e));
             assertEquals(at + " keys card pieces",
                 java.util.Collections.singletonList(PieceId.EXTRA_KEYS), keys.pieces);
+            }
             // (iii) A view is laid out the same at both rests.
             assertBox(at + " HOST laid out at both", homeRest.laidOut(StackView.HOST),
                 termRest.laidOut(StackView.HOST));
-            assertBox(at + " KEYS_CARD laid out at both", homeRest.laidOut(StackView.KEYS_CARD),
-                termRest.laidOut(StackView.KEYS_CARD));
+            assertEquals(at + " KEYS_CARD laid out at both",
+                String.valueOf(homeRest.laidOut(StackView.KEYS_CARD)),
+                String.valueOf(termRest.laidOut(StackView.KEYS_CARD)));
+            assertEquals(at + " TERMINAL_HOST laid out at both",
+                String.valueOf(homeRest.laidOut(StackView.TERMINAL_HOST)),
+                String.valueOf(termRest.laidOut(StackView.TERMINAL_HOST)));
             // (iv) One container margin, and Home's drawn cards that much lower than laid out.
             int homeMargin = Math.max(0, f.settle(PageRef.HOME, up, true).bottomMarginPx);
             int termMargin = Math.max(0, f.settle(PageRef.TERMINAL, up, true).bottomMarginPx);
