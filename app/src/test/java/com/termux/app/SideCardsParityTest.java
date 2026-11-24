@@ -101,6 +101,9 @@ public class SideCardsParityTest {
         });
     }
 
+    /** Views the controller lays out besides the keys card (the foot, the Terminal's host). */
+    private static final SparseArray<View> sHostViews = new SparseArray<>();
+
     private static DisplayMetrics metrics(@NonNull Fixture f) {
         DisplayMetrics metrics = new DisplayMetrics();
         metrics.widthPixels = f.widthPx;
@@ -131,7 +134,7 @@ public class SideCardsParityTest {
             f.keyboardLaidOutPx() > 0));
         return new SideCardsController.Host() {
             @Nullable @Override public View view(int id) {
-                return id == R.id.extra_keys_card ? keysCard : null;
+                return id == R.id.extra_keys_card ? keysCard : sHostViews.get(id);
             }
             @Nullable @Override public PageRef frontPage() { return front; }
             @Nullable @Override public PlaceLayout layoutOf(@NonNull PageRef page) {
@@ -633,5 +636,84 @@ public class SideCardsParityTest {
                 if (com.termux.app.place.RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, floating))
                     .card(com.termux.app.place.RestCards.CardId.PEEK) != null) return true;
         return false;
+    }
+
+    /** A view that counts the layouts asked of it. */
+    private static final class CountingFrame extends FrameLayout {
+        int layouts;
+
+        CountingFrame() {
+            super(RuntimeEnvironment.getApplication());
+            super.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(0, 0));
+        }
+
+        @Override public void setLayoutParams(android.view.ViewGroup.LayoutParams params) {
+            layouts++;
+            super.setLayoutParams(params);
+        }
+    }
+
+    /**
+     * The foot's own view (#307 views A): where both hosts share the foot, it is laid out at the
+     * answer's foot, Home's pinned host and the Terminal's own host stop at its top, and a second
+     * pass at the same rest lays out nothing.
+     */
+    @Test public void theSharedFootIsLaidOutOnceAndBothHostsStopAtItsTop() {
+        int shared = 0;
+        try {
+            for (Fixture base : LayoutFixtures.cardFixtures())
+                for (DockStyle design : DockStyle.CHOICES)
+                    for (PageRef front : new PageRef[] {PageRef.HOME, PageRef.TERMINAL})
+                        for (boolean up : new boolean[] {false, true}) {
+                Fixture f = base.withHomeDesign(design);
+                CountingFrame foot = new CountingFrame();
+                CountingFrame terminalHost = new CountingFrame();
+                sHostViews.clear();
+                sHostViews.put(R.id.dock_foot_host, foot);
+                sHostViews.put(R.id.terminal_dock_host, terminalHost);
+                StackRenderer renderer = rendererFor(front.isHome());
+                SideCardsController controller = new SideCardsController(
+                    hostOf(f, front, up, false, renderer));
+                controller.update(f.pass(front, up, false));
+                RestCards.Card card = controller.footCard();
+                String label = f.name + " " + design + " " + front + " up=" + up;
+                if (card == null) {
+                    assertEquals(label, View.GONE, foot.getVisibility());
+                    continue;
+                }
+                shared++;
+                assertEquals(label, View.VISIBLE, foot.getVisibility());
+                android.widget.RelativeLayout.LayoutParams footParams =
+                    (android.widget.RelativeLayout.LayoutParams) foot.getLayoutParams();
+                int footTop = footParams.bottomMargin + footParams.height;
+                assertEquals(label, f.widthPx - footParams.leftMargin - footParams.rightMargin,
+                    Math.round(card.box.width()));
+                assertTrue(label + " the foot has a band", footParams.height > 0);
+                // Home's pinned host stands on the foot's top, measured from the container's bottom.
+                if (controller.hostPinned()) {
+                    android.widget.RelativeLayout.LayoutParams host =
+                        new android.widget.RelativeLayout.LayoutParams(0, 0);
+                    controller.layOutHost(host, 0);
+                    assertEquals(label + " Home's host stops at the foot's top", footTop,
+                        host.bottomMargin, 1);
+                }
+                if (terminalHost.getVisibility() == View.VISIBLE) {
+                    android.widget.RelativeLayout.LayoutParams host =
+                        (android.widget.RelativeLayout.LayoutParams) terminalHost.getLayoutParams();
+                    assertEquals(label + " the Terminal's host stops at the foot's top", footTop,
+                        host.bottomMargin, 1);
+                }
+                int footLayouts = foot.layouts;
+                int hostLayouts = terminalHost.layouts;
+                controller.update(f.pass(front, up, false));
+                assertEquals(label + " the foot is laid out once per rest", footLayouts,
+                    foot.layouts);
+                assertEquals(label + " the Terminal's host is laid out once per rest",
+                    hostLayouts, terminalHost.layouts);
+            }
+        } finally {
+            sHostViews.clear();
+        }
+        assertTrue("some Docked rests share the foot", shared > 0);
     }
 }
