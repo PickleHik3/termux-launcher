@@ -842,7 +842,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     @Override
     public void onSettings() {
-        startSafely(new Intent(mHost.context(), SettingsActivity.class));
+        startSafely(com.termux.app.activities.SettingsDoor.plain(mHost.context()));
     }
 
     @Override

@@ -20273,7 +20273,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     private void openSettingsHome() {
-        ActivityUtils.startActivity(this, new Intent(this, SettingsActivity.class));
+        ActivityUtils.startActivity(this, com.termux.app.activities.SettingsDoor.plain(this));
     }
 
     /** Clock apps the platform intents do not reach, tried in order once those have failed. */
@@ -24218,7 +24218,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Opened from Settings' Appearance page: Back returns to Settings, not the launcher (the
             // row's CLEAR_TOP launch closed Settings underneath the surface; its saved stack brings
             // the page back).
-            startActivity(new Intent(TermuxActivity.this, com.termux.app.activities.SettingsActivity.class));
+            startActivity(com.termux.app.activities.SettingsDoor.plain(TermuxActivity.this));
         }
     }
 
@@ -31653,7 +31653,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mAiIndicatorController = new com.termux.app.statusbar.AiIndicatorController(ai,
                 () -> mStatusBar.syncRowDots());
             ai.setOnClickListener(view -> {
-                Intent intent = new Intent(this, com.termux.app.activities.SettingsActivity.class);
+                Intent intent = com.termux.app.activities.SettingsDoor.plain(this);
                 intent.putExtra(com.termux.app.activities.SettingsActivity.EXTRA_OPEN_TAI_SETTINGS, true);
                 startActivity(intent);
             });
