@@ -65,6 +65,11 @@ public final class PageBarModel {
         @NonNull public List<Page> pages = Collections.emptyList();
         /** The Terminal page's windows, by the window bar's labels; null or empty is unnamed. */
         @NonNull public List<String> windowNames = Collections.emptyList();
+        /**
+         * Which of {@link #windowNames} are Linux windows (#392); they wear the Linux glyph. Null
+         * or shorter than the names means the rest are terminal windows.
+         */
+        @Nullable public boolean[] linuxWindows;
         /** The window you are on or would return to; -1 when there is none. */
         public int currentWindow = -1;
         /** The wall's current page; -1 when there is none. */
@@ -218,8 +223,12 @@ public final class PageBarModel {
             boolean current = onPage && w == in.currentWindow;
             String name = in.windowNames.get(w);
             String plain = name == null || name.isEmpty() ? null : plainLabel(name);
-            out.add(new Entry(PageKind.TERMINAL, w + 1,
-                label(in, PageKind.TERMINAL, w + 1, plain), current, w == in.currentWindow,
+            boolean linux = in.linuxWindows != null && w < in.linuxWindows.length && in.linuxWindows[w];
+            PageKind kind = linux ? PageKind.LINUX : PageKind.TERMINAL;
+            out.add(new Entry(kind, linux ? 0 : w + 1,
+                linux ? (plain != null ? plain : in.kindNames[PageKind.DISPLAY.ordinal()])
+                    : label(in, PageKind.TERMINAL, w + 1, plain),
+                current, w == in.currentWindow,
                 new Target(current ? Action.CLOSE
                     : Action.GO_TERMINAL, p.id, w)));
         }

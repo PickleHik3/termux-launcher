@@ -30593,11 +30593,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 rowWindows();
             // In row order, a Linux window's name among the terminal windows' (#392).
             int places = rowWindowCount();
+            boolean[] linux = new boolean[places];
             for (int i = 0; i < places; i++) {
                 int terminal = terminalAtPlace(i);
+                linux[i] = terminal < 0;
                 windowNames.add(terminal >= 0 ? mPaneController.windowName(windows.get(terminal))
                     : linuxWindowName(mCurrentWSession.row.linuxAt(windows, i)));
             }
+            in.linuxWindows = linux;
         }
         in.windowNames = windowNames;
         in.currentWindow = windowNames.isEmpty() ? -1 : rowCurrentIndex();
