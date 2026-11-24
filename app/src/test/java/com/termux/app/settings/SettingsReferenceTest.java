@@ -1,4 +1,4 @@
-package com.termux.launcherctl;
+package com.termux.app.settings;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -41,7 +41,7 @@ public class SettingsReferenceTest {
             ? new String(Files.readAllBytes(page.toPath()), StandardCharsets.UTF_8) : "";
         assertEquals("docs/en/" + SettingsReference.PAGE + " is out of date. Regenerate it with: "
             + REGENERATE + "=1 ./gradlew :app:testDebugUnitTest"
-            + " --tests 'com.termux.launcherctl.SettingsReferenceTest' and commit the page.",
+            + " --tests 'com.termux.app.settings.SettingsReferenceTest' and commit the page.",
             expected, actual);
     }
 

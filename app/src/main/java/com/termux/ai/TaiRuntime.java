@@ -22,6 +22,12 @@ public interface TaiRuntime {
         return isModelLoaded(modelId) ? unload() : keptChatModel(this, modelId);
     }
 
+    /** Closes the idle embedding models; a runtime without any has nothing to do. */
+    @NonNull
+    default JSONObject unloadEmbedder() throws JSONException {
+        return new JSONObject().put("ok", true).put("unloaded", false);
+    }
+
     /** The answer when {@link #unloadChatModel} leaves the runtime as it is: ok, nothing unloaded. */
     @NonNull
     static JSONObject keptChatModel(@NonNull TaiRuntime runtime, @NonNull String modelId) throws JSONException {

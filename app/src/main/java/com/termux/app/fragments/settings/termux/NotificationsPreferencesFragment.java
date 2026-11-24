@@ -14,6 +14,7 @@ import androidx.preference.SwitchPreferenceCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
+import com.termux.app.fragments.settings.RegistryPreferenceDataStore;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
 import com.termux.app.fragments.settings.StatusActionPreference;
 import com.termux.app.launcher.notifications.LauncherNotificationAccess;
@@ -38,7 +39,9 @@ public final class NotificationsPreferencesFragment extends MaterialPreferenceFr
         Context context = getContext();
         if (context == null) return;
         PreferenceManager manager = getPreferenceManager();
-        manager.setPreferenceDataStore(TermuxStylePreferencesDataStore.getInstance(context));
+        RegistryPreferenceDataStore store = RegistryPreferenceDataStore.forDevice(context,
+            TermuxStylePreferencesDataStore.getInstance(context));
+        manager.setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.notifications_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
 
@@ -51,6 +54,7 @@ public final class NotificationsPreferencesFragment extends MaterialPreferenceFr
                 return true;
             });
         }
+        store.bind(getPreferenceScreen());
         refresh(context);
     }
 

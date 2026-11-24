@@ -56,18 +56,6 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
             case "terminal_margin_adjustment":
                 mPreferences.setTerminalMarginAdjustment(value);
                 break;
-            case "terminal_screen_events":
-                // Read by each pane when an event fires; nothing to restyle.
-                mPreferences.setTerminalScreenEventsEnabled(value);
-                break;
-            case "terminal_retro_composite":
-                // Each pane re-reads it when its window shows again (PaneContentFrame#refreshAmbient).
-                mPreferences.setTerminalRetroCompositeEnabled(value);
-                break;
-            case "idle_animations":
-                // Each pane re-reads it when its window shows again (PaneContentFrame#refreshAmbient).
-                mPreferences.setIdleAnimationsEnabled(value);
-                break;
             default:
                 break;
         }
@@ -85,14 +73,6 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 // Read when a pane is opened; open panes keep their engine.
                 mPreferences.setTerminalEngine(value);
                 break;
-            case "terminal_retro_effect":
-                mPreferences.setTerminalRetroEffect(value);
-                TermuxActivity.requestTermuxActivityStylingOnNextResume(mContext, false);
-                break;
-            case "idle_tear_rate":
-                // Each pane re-reads it when its ambient loop next starts (RetroEffectBinder).
-                mPreferences.setIdleTearRate(value);
-                break;
             default:
                 break;
         }
@@ -106,10 +86,6 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.getTerminalCursorTrailStyle();
             case "terminal_engine":
                 return mPreferences.getTerminalEngine();
-            case "terminal_retro_effect":
-                return mPreferences.getTerminalRetroEffect();
-            case "idle_tear_rate":
-                return mPreferences.getIdleTearRate();
             default:
                 return defValue;
         }
@@ -127,12 +103,6 @@ class TerminalViewPreferencesDataStore extends PreferenceDataStore {
                     TermuxPropertyConstants.KEY_USE_FULLSCREEN, Boolean.toString(defValue)));
             case "terminal_margin_adjustment":
                 return mPreferences.isTerminalMarginAdjustmentEnabled();
-            case "terminal_screen_events":
-                return mPreferences.isTerminalScreenEventsEnabled();
-            case "terminal_retro_composite":
-                return mPreferences.isTerminalRetroCompositeEnabled();
-            case "idle_animations":
-                return mPreferences.isIdleAnimationsEnabled();
             default:
                 return defValue;
         }

@@ -3,9 +3,11 @@ package com.termux.shared.termux.settings.registry;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
+import java.util.function.UnaryOperator;
 
 /**
  * One setting written down once: its dotted id, its kind and range or choices, its default, the
@@ -23,7 +25,9 @@ public final class SettingDeclaration {
     public enum Kind {
         INTEGER, CHOICE,
         /** A value only its {@link SettingAdapter} can judge (a layout field); no range here. */
-        TEXT
+        TEXT,
+        /** On or off, as {@code true} or {@code false}; a store keeps it as a boolean. */
+        BOOLEAN
     }
 
     /** The store a setting already lives in. */
@@ -80,6 +84,15 @@ public final class SettingDeclaration {
      */
     @NonNull public final String rangeNote;
     @NonNull public final String defaultNote;
+    /** How people say they want it changed; empty until {@link #saidAs}. */
+    @NonNull public final List<String> phrases;
+    /**
+     * How the launcher reads a stored choice before matching it, for a store that still holds old
+     * spellings; null reads the stored text as it is.
+     */
+    @Nullable private final UnaryOperator<String> storedReader;
+    /** Whether the Assistant may offer to change it; false after {@link #notOffered}. */
+    public final boolean mayOffer;
 
     private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
                                @NonNull String key, @NonNull SettingRefresh refresh, int min,
@@ -88,7 +101,8 @@ public final class SettingDeclaration {
                                boolean ordered, boolean exported,
                                @NonNull ResetGroup resetGroup) {
         this(id, kind, store, key, refresh, min, max, step, defaultInt, choices, storedChoices,
-            defaultChoice, ordered, exported, resetGroup, "", "", "", "");
+            defaultChoice, ordered, exported, resetGroup, "", "", "", "",
+            Collections.emptyList(), true, null);
     }
 
     private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
@@ -98,11 +112,16 @@ public final class SettingDeclaration {
                                boolean ordered, boolean exported,
                                @NonNull ResetGroup resetGroup, @NonNull String title,
                                @NonNull String summary, @NonNull String rangeNote,
-                               @NonNull String defaultNote) {
+                               @NonNull String defaultNote, @NonNull List<String> phrases,
+                               boolean mayOffer,
+                               @Nullable UnaryOperator<String> storedReader) {
+        this.storedReader = storedReader;
         this.title = title;
         this.summary = summary;
         this.rangeNote = rangeNote;
         this.defaultNote = defaultNote;
+        this.phrases = phrases;
+        this.mayOffer = mayOffer;
         this.id = id;
         this.kind = kind;
         this.store = store;
@@ -125,7 +144,7 @@ public final class SettingDeclaration {
     public SettingDeclaration resetBy(@NonNull ResetGroup group) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, group, title, summary,
-            rangeNote, defaultNote);
+            rangeNote, defaultNote, phrases, mayOffer, storedReader);
     }
 
     /** This declaration with the name and sentence the settings reference page shows. */
@@ -133,7 +152,7 @@ public final class SettingDeclaration {
     public SettingDeclaration described(@NonNull String title, @NonNull String summary) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            rangeNote, defaultNote);
+            rangeNote, defaultNote, phrases, mayOffer, storedReader);
     }
 
     /** This declaration with the range and default the reference page words in place of numbers. */
@@ -141,7 +160,7 @@ public final class SettingDeclaration {
     public SettingDeclaration shownAs(@NonNull String range, @NonNull String defaultText) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            range, defaultText);
+            range, defaultText, phrases, mayOffer, storedReader);
     }
 
     /** This declaration kept out of a settings file's export and apply. */
@@ -149,7 +168,39 @@ public final class SettingDeclaration {
     public SettingDeclaration notExported() {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, false, resetGroup, title, summary,
-            rangeNote, defaultNote);
+            rangeNote, defaultNote, phrases, mayOffer, storedReader);
+    }
+
+    /** This choice reading what its store holds through {@code reader} (the launcher's own mapping). */
+    @NonNull
+    public SettingDeclaration readingStoredAs(@NonNull UnaryOperator<String> reader) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            rangeNote, defaultNote, phrases, mayOffer, reader);
+    }
+
+    /**
+     * This declaration with the words people use when they want it changed ("too small", "eyes
+     * hurt at night"), for the Assistant to match a complaint to it.
+     */
+    @NonNull
+    public SettingDeclaration saidAs(@NonNull String... complaints) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            rangeNote, defaultNote, Collections.unmodifiableList(Arrays.asList(complaints.clone())), mayOffer,
+            storedReader);
+    }
+
+    /**
+     * This declaration kept from the Assistant's offers: a setting that can hide the launcher, lock
+     * the user out, wipe data, change privileged access or cost heavy battery is only changed by
+     * the user's own hand.
+     */
+    @NonNull
+    public SettingDeclaration notOffered() {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            rangeNote, defaultNote, phrases, false, storedReader);
     }
 
     /** A whole number from {@code min} to {@code max}, stepped by {@code step}. */
@@ -182,6 +233,16 @@ public final class SettingDeclaration {
             defaultIndex, ordered, true, ResetGroup.NONE);
     }
 
+    /** On or off, kept as a boolean under {@code key}; {@code true} or {@code false} as text. */
+    @NonNull
+    public static SettingDeclaration bool(@NonNull String id, @NonNull Store store,
+                                          @NonNull String key, boolean defaultValue,
+                                          @NonNull SettingRefresh refresh) {
+        List<String> names = Collections.unmodifiableList(Arrays.asList("false", "true"));
+        return new SettingDeclaration(id, Kind.BOOLEAN, store, key, refresh, 0, 0, 0, 0, names,
+            names, defaultValue ? 1 : 0, false, true, ResetGroup.NONE);
+    }
+
     /**
      * A setting an adapter validates itself: it lists as text, and the adapter's own refusal says
      * what it may be. {@code defaultValue} is what {@code config list} shows as its default.
@@ -212,6 +273,7 @@ public final class SettingDeclaration {
     @NonNull
     public String storedChoiceOrDefault(@Nullable String stored) {
         if (stored == null) return defaultStoredChoice();
+        if (storedReader != null) stored = storedReader.apply(stored);
         String value = stored.trim().toLowerCase(Locale.ROOT);
         return storedChoices.contains(value) ? value : defaultStoredChoice();
     }
@@ -225,6 +287,8 @@ public final class SettingDeclaration {
         switch (kind) {
             case INTEGER:
                 return stored instanceof Integer && (Integer) stored >= min && (Integer) stored <= max;
+            case BOOLEAN:
+                return stored instanceof Boolean;
             case CHOICE:
                 return stored instanceof String
                     && storedChoices.contains(((String) stored).trim().toLowerCase(Locale.ROOT));

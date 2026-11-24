@@ -65,12 +65,9 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         MAIN_HANDLER.postDelayed(mDrawerSyncRunnable, STYLE_SYNC_DEBOUNCE_MS);
     }
 
-    /**
-     * Lazy mode, Fancier Glass and the terminal swipe (on Home › Gestures) are stored by the
-     * terminal I/O store, whoever asks this one.
-     */
+    /** The terminal swipe (on Home › Gestures) is stored by the terminal I/O store, whoever asks this one. */
     private static boolean isTerminalIoToggle(String key) {
-        return "lazy_mode".equals(key) || "fancier_glass".equals(key) || "terminal_body_swipe".equals(key);
+        return "terminal_body_swipe".equals(key);
     }
 
     @Override
@@ -90,12 +87,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch(key) {
             case "use_system_wallpaper":
                 TermuxActivity.setWallpaperModeEnabled(mContext, value);
-                break;
-            case "wallpaper_parallax":
-                // The captured frame changes width with this, so the styling reload re-captures
-                // and every surface re-cuts; no recreate needed.
-                mPreferences.setWallpaperParallaxEnabled(value);
-                scheduleTermuxActivityStylingSync(false);
                 break;
             case "terminal_dynamic_colors_enabled":
                 // This switch is the whole palette decision: on, the terminal and the chrome both
@@ -120,10 +111,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 break;
             case "app_launcher_display_app_names":
                 mPreferences.setAppLauncherDisplayAppNamesEnabled(value);
-                scheduleTermuxActivityStylingSync(false);
-                break;
-            case "app_launcher_notification_dots":
-                mPreferences.setAppLauncherNotificationDotsEnabled(value);
                 scheduleTermuxActivityStylingSync(false);
                 break;
             case "app_launcher_quick_reply_swipe":
@@ -173,8 +160,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
         switch(key) {
             case "use_system_wallpaper":
                 return mPreferences.isUseSystemWallpaperEnabled();
-            case "wallpaper_parallax":
-                return mPreferences.isWallpaperParallaxEnabled();
             case "terminal_dynamic_colors_enabled":
                 return mPreferences.isTerminalDynamicColorsEnabled();
             case "widgets_on_glass":
@@ -185,8 +170,6 @@ class TermuxStylePreferencesDataStore extends PreferenceDataStore {
                 return mPreferences.isShowInRecentsWhenNotDefaultEnabled();
             case "app_launcher_display_app_names":
                 return mPreferences.isAppLauncherDisplayAppNamesEnabled();
-            case "app_launcher_notification_dots":
-                return mPreferences.isAppLauncherNotificationDotsEnabled();
             case "app_launcher_quick_reply_swipe":
                 return mPreferences.isAppLauncherQuickReplySwipeEnabled();
             case "app_launcher_most_used_page":

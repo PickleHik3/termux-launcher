@@ -252,6 +252,13 @@ final class FakeTaiRuntimeLink implements TaiRuntimeLink {
 
     @NonNull
     @Override
+    public JSONObject unloadEmbedder() throws JSONException {
+        calls.add("unloadEmbedder");
+        return new JSONObject().put("ok", true);
+    }
+
+    @NonNull
+    @Override
     public JSONObject keepWarm(@NonNull String body) throws JSONException {
         calls.add("keepWarm:" + body);
         return new JSONObject().put("ok", true);

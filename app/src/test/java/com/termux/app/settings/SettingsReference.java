@@ -1,4 +1,4 @@
-package com.termux.launcherctl;
+package com.termux.app.settings;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -28,7 +28,8 @@ final class SettingsReference {
     /** The page's file name in {@code docs/en}. */
     static final String PAGE = "Settings_Reference.md";
 
-    private static final String[] SECTIONS = {"Colours and text", "Look", "Layout sizes"};
+    private static final String[] SECTIONS = {"Colours and text", "Motion and battery",
+        "Status bar, dock and Home", "Look", "Layout sizes"};
 
     private SettingsReference() {}
 
@@ -49,6 +50,11 @@ final class SettingsReference {
                 @Override public void set(@NonNull LookCommand.Setting setting, int value) { }
             }, () -> { }));
         adapters.add(new FontSizeSettingsAdapter(store, 1f, ""));
+        adapters.add(new LowMemoryPresetAdapter(new LowMemoryPresetAdapter.Preset() {
+            @Override public boolean isOn() { return false; }
+            @Override public void turnOn() { }
+            @Override public void turnOff() { }
+        }));
         adapters.add(new LayoutSettingsAdapter(layouts, new LayoutSettingsAdapter.Main() {
             @Override public <T> T call(@NonNull Callable<T> work) throws Exception {
                 return work.call();
@@ -65,7 +71,7 @@ final class SettingsReference {
         page.append("# Settings reference\n\n")
             .append("<!-- Generated from the launcher's settings; do not edit by hand. To update it, run\n")
             .append("REGENERATE_SETTINGS_REFERENCE=1 ./gradlew")
-            .append(" :app:testDebugUnitTest --tests 'com.termux.launcherctl.SettingsReferenceTest' -->\n\n")
+            .append(" :app:testDebugUnitTest --tests 'com.termux.app.settings.SettingsReferenceTest' -->\n\n")
             .append("Every setting [`launcherctl config`](LauncherCtl.md#config) can read and change, ")
             .append("with the values it accepts and what a fresh install uses. A value outside the ")
             .append("range is refused and nothing changes.\n");
@@ -98,6 +104,11 @@ final class SettingsReference {
     private static String sectionOf(@NonNull String id) {
         if (id.startsWith("look.")) return "Look";
         if (id.startsWith("layout.")) return "Layout sizes";
+        if (id.startsWith("motion.") || id.startsWith("battery.") || id.startsWith("glass.")
+            || id.equals("terminal.effect") || id.equals("terminal.screen_events")
+            || id.equals("terminal.effect_composite")) return "Motion and battery";
+        if (id.startsWith("status.") || id.startsWith("dock.") || id.startsWith("notifications.")
+            || id.startsWith("home.") || id.startsWith("drawer.")) return "Status bar, dock and Home";
         return "Colours and text";
     }
 

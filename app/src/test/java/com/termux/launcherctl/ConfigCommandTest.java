@@ -88,7 +88,8 @@ public class ConfigCommandTest {
         JSONObject answer = handle("{\"op\":\"list\"}");
         assertTrue(answer.getBoolean("ok"));
         JSONArray settings = answer.getJSONArray("settings");
-        assertEquals(3, settings.length());
+        assertEquals(com.termux.shared.termux.settings.registry.SettingDeclarations.ALL.size(),
+            settings.length());
         JSONObject theme = settings.getJSONObject(0);
         assertEquals("theme.mode", theme.getString("id"));
         assertEquals("choice", theme.getString("kind"));
@@ -105,11 +106,65 @@ public class ConfigCommandTest {
     }
 
     @Test
+    public void listShowsEveryDeclaredSettingWithItsCurrentValue() throws Exception {
+        store.putBoolean("live_blur", true);
+        store.putString("idle_tear_rate", "often");
+        store.putString("animation_speed", "off");
+        JSONObject answer = handle("{\"op\":\"list\"}");
+        java.util.Map<String, JSONObject> byId = new java.util.HashMap<>();
+        JSONArray settings = answer.getJSONArray("settings");
+        for (int i = 0; i < settings.length(); i++)
+            byId.put(settings.getJSONObject(i).getString("id"), settings.getJSONObject(i));
+        for (com.termux.shared.termux.settings.registry.SettingDeclaration each
+                : com.termux.shared.termux.settings.registry.SettingDeclarations.ALL) {
+            JSONObject listed = byId.get(each.id);
+            assertTrue(each.id + " is not listed", listed != null);
+            assertEquals(each.id, each.defaultValue(), listed.getString("default"));
+        }
+        assertEquals("true", byId.get("glass.live_blur").getString("value"));
+        assertEquals("boolean", byId.get("glass.live_blur").getString("kind"));
+        assertEquals("[\"false\",\"true\"]",
+            byId.get("glass.live_blur").getJSONArray("choices").toString());
+        assertEquals("true", byId.get("glass.refraction").getString("value"));
+        assertEquals("often", byId.get("motion.idle_tear_rate").getString("value"));
+        assertEquals("off", byId.get("motion.animation_speed").getString("value"));
+    }
+
+    @Test
+    public void configGetReadsALegacyDockStyleAsTheLauncherDoes() throws Exception {
+        store.putString("app_launcher_dock_style", "rounded");
+        assertEquals("floating",
+            handle("{\"op\":\"get\",\"id\":\"dock.style\"}").getString("value"));
+        store.putString("app_launcher_dock_style", "valarie_capsule");
+        assertEquals("floating",
+            handle("{\"op\":\"get\",\"id\":\"dock.style\"}").getString("value"));
+        store.putString("app_launcher_dock_style", "default");
+        assertEquals("docked",
+            handle("{\"op\":\"get\",\"id\":\"dock.style\"}").getString("value"));
+    }
+
+    @Test
+    public void aBooleanSettingIsSetThroughConfigSet() throws Exception {
+        JSONObject answer = handle("{\"op\":\"set\",\"id\":\"motion.cursor_trail\",\"value\":\"false\"}");
+        assertTrue(answer.getBoolean("ok"));
+        assertEquals("true", answer.getString("old"));
+        assertEquals("false", answer.getString("value"));
+        assertEquals(false, store.getBoolean("terminal_cursor_trail", true));
+        JSONObject refused = handle("{\"op\":\"set\",\"id\":\"motion.cursor_trail\",\"value\":\"sometimes\"}");
+        assertEquals("invalid_value", refused.getString("error"));
+        assertEquals("false, true", refused.getString("allowed"));
+    }
+
+    @Test
     public void listAsTextIsOneLinePerSetting() throws Exception {
         JSONObject answer = handle("{\"op\":\"list\",\"format\":\"text\"}");
         // No last newline: the script prints the body with one, as it does a JSON answer.
-        assertEquals("theme.mode = system\nterminal.contrast = default\ntext.size = 100",
-            answer.getString(ConfigCommand.TEXT));
+        String text = answer.getString(ConfigCommand.TEXT);
+        assertTrue(text, text.startsWith(
+            "theme.mode = system\nterminal.contrast = default\ntext.size = 100\n"));
+        assertTrue(text, text.contains("\nmotion.animation_speed = normal\n"));
+        assertEquals(com.termux.shared.termux.settings.registry.SettingDeclarations.ALL.size(),
+            text.split("\n").length);
     }
 
     /** An id whose check passes and whose save is then refused, as a store may. */

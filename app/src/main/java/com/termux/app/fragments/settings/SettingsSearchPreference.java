@@ -89,6 +89,14 @@ public final class SettingsSearchPreference extends Preference {
         notifyChanged();
     }
 
+    /** Types {@code query} into the field and reports it, as if it had been typed. */
+    public void setQuery(@NonNull String query) {
+        if (query.equals(mQuery)) return;
+        mQuery = query;
+        if (mListener != null) mListener.onQueryChanged(mQuery);
+        notifyChanged();
+    }
+
     /** Exposed for tests driving a query without a bound view. */
     @Nullable
     public OnQueryChangedListener getOnQueryChangedListener() {

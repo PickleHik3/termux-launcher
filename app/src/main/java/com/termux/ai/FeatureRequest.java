@@ -117,7 +117,7 @@ public final class FeatureRequest {
 
         /** Reads one chunk or reply: an ERROR as the wire marks one, else a TEXT. */
         @NonNull
-        static Event of(@NonNull JSONObject chunk) {
+        public static Event of(@NonNull JSONObject chunk) {
             JSONObject error = chunk.optJSONObject("error");
             boolean failed = chunk.has("ok") && !chunk.optBoolean("ok", true);
             if (error != null || failed || (chunk.has("error") && !chunk.isNull("error"))) {

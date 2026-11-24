@@ -1,4 +1,4 @@
-package com.termux.launcherctl;
+package com.termux.app.settings;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;

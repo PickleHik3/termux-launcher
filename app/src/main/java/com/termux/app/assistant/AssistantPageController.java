@@ -24,7 +24,9 @@ import androidx.core.app.ActivityCompat;
 import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
+import com.termux.shared.termux.settings.registry.SettingsRegistry;
 import com.termux.R;
+import com.termux.app.settings.LauncherSettings;
 import com.termux.app.page.Page;
 import com.termux.app.page.PageHost;
 import com.termux.app.activities.SettingsActivity;
@@ -63,6 +65,8 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     private static final long SNACKBAR_MS = 4000L;
 
     private final Context context;
+    /** The launcher's settings registry, fetched once per page: render, Apply and Undo reuse it. */
+    @Nullable private SettingsRegistry deviceRegistry;
     private final View page;
     private final PageHost host;
     private final Page self;
@@ -158,11 +162,23 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         offers.onShown();
     }
 
+    @NonNull
+    private SettingsRegistry registry() {
+        SettingsRegistry r = deviceRegistry;
+        if (r == null) {
+            r = AssistantEngine.deviceRegistry(context.getApplicationContext());
+            deviceRegistry = r;
+        }
+        return r;
+    }
+
     void onHidden() {
         if (!shown) return;
         shown = false;
         offers.onHidden();
         engine.removeListener(this);
+        engine.releaseSettingsLookup();
+        AssistantCards.shared().clear();
         status.removeObserver(this);
         if (dictation.isActive()) dictation.cancel();
         if (sheet != null) sheet.dismiss();
@@ -267,6 +283,10 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         rc.generatingId = generating;
         rc.liveText = generating == 0L ? null : engine.liveText(generating);
         rc.sending = sending;
+        AssistantCards cards = AssistantCards.shared();
+        cards.adopt(messages);
+        if (cards.anyApplied()) cards.refreshAll(registry());
+        rc.cards = cards.all();
         AssistantModelStatus.Snapshot snap = snapshot;
         rc.offerE2b = snap != null && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.NOT_DOWNLOADED
             && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.DOWNLOADING
@@ -417,6 +437,27 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
             failures.remove(AssistantModelStatus.MODEL_E4B);
             status.load(l -> engine.retry(row.messageId));
         });
+    }
+
+    @Override
+    public void applyCard(long messageId) {
+        AssistantCards cards = AssistantCards.shared();
+        if (cards.apply(messageId, registry(),
+            LauncherSettings.applier())) {
+            render();
+        }
+    }
+
+    @Override
+    public void undoCard(long messageId) {
+        AssistantCards.shared().undo(messageId, registry(),
+            LauncherSettings.applier());
+        render();
+    }
+
+    @Override
+    public void openSettingsSearch(@NonNull String query) {
+        SettingsActivity.openSearch(context, query);
     }
 
     @NonNull
@@ -650,7 +691,10 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         final long id = pendingDeleteId;
         if (id <= 0) return;
         pendingDeleteId = -1L;
-        io.execute(() -> store.deleteChat(id));
+        io.execute(() -> {
+            AssistantCards.shared().forget(store.messages(id));
+            store.deleteChat(id);
+        });
         main.post(this::loadRecent);
     }
 

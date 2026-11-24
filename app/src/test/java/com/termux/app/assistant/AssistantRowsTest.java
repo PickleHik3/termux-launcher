@@ -26,6 +26,23 @@ public class AssistantRowsTest {
     }
 
     @Test
+    public void anAnswerWithACardIsACardRowThatTracksItsState() {
+        SettingsCard card = SettingsCard.changes(Collections.singletonList(
+            new SettingsCard.Item("text.size", "Text size", "100", "105", "100", "105")), Collections.emptyList());
+        AssistantRows.Context context = new AssistantRows.Context();
+        context.cards = Collections.singletonMap(2L, card);
+        List<AssistantMessage> messages = Arrays.asList(user(1, "bigger text"),
+            answer(2, card.summary(), AssistantMessage.STATE_COMPLETE, null));
+        List<AssistantRows.Row> before = build(messages, -1, context);
+        assertEquals(AssistantRows.Type.CARD, before.get(1).type);
+        assertEquals(card, before.get(1).card);
+        card.setState(SettingsCard.State.APPLIED);
+        List<AssistantRows.Row> after = build(messages, -1, context);
+        assertFalse("applying redraws the row", before.get(1).equals(after.get(1)));
+        assertEquals(before.get(1).key, after.get(1).key);
+    }
+
+    @Test
     public void aFinishedAnswerOffersCopyShareAndTryAgainOnlyWhenNewest() {
         List<AssistantMessage> messages = Arrays.asList(
             user(1, "q1"), answer(2, "a1", AssistantMessage.STATE_COMPLETE, null),

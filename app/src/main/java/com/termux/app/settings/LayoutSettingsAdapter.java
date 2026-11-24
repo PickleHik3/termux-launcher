@@ -1,4 +1,4 @@
-package com.termux.launcherctl;
+package com.termux.app.settings;
 
 import android.os.Handler;
 import android.os.Looper;
@@ -46,7 +46,7 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
     private static final String PREFIX = "layout.";
 
     /** Where the layout store may be touched. */
-    interface Main {
+    public interface Main {
         /** Runs {@code work} on the main thread and waits for it. */
         <T> T call(@NonNull Callable<T> work) throws Exception;
     }
@@ -55,10 +55,10 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
     static final long MAIN_TIMEOUT_SECONDS = 5;
 
     /** What a caller is told when the main thread did not run its work. */
-    static final String NOT_ANSWERED = "the launcher did not answer; try again";
+    public static final String NOT_ANSWERED = "the launcher did not answer; try again";
 
     /** The device's main thread: the work runs in place when already there, else is posted. */
-    static final Main DEVICE = new Main() {
+    public static final Main DEVICE = new Main() {
         @Nullable private Handler mHandler;
 
         @Override

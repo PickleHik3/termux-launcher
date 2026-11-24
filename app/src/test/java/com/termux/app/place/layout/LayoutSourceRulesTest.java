@@ -24,7 +24,9 @@ public class LayoutSourceRulesTest {
 
     private static final List<String> ALLOWED = Arrays.asList(
         "place/PlaceLayoutStore.java", "place/LayoutsMigration.java",
-        "place/LayoutDocumentPrefs.java", "place/LayoutVariant.java");
+        "place/LayoutDocumentPrefs.java", "place/LayoutVariant.java",
+        // Names registry ids "layout.<kind>.<field>" for launcherctl config; reads no stored key.
+        "settings/LayoutSettingsAdapter.java");
 
     private static final Pattern RETIRED = Pattern.compile(
         "\"layout\\.|\"place\\.dress\\.|\"place\\.page_layout|hasPageLayout\\(|setPageLayout\\("

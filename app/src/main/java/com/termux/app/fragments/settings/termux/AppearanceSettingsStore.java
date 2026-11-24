@@ -4,7 +4,9 @@ import android.content.Context;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import androidx.preference.PreferenceDataStore;
 
+import com.termux.app.fragments.settings.RegistryPreferenceDataStore;
 import com.termux.shared.termux.settings.properties.TermuxPropertyConstants;
 
 import java.util.Set;
@@ -28,10 +30,22 @@ public final class AppearanceSettingsStore {
         return KEY_FULLSCREEN.equals(key);
     }
 
+    /**
+     * The store a key is read and written through: the registry for a migrated Settings row
+     * ({@link RegistryPreferenceDataStore#ROWS}), so a write from a card refreshes as the row's
+     * does, else the style store.
+     */
+    @NonNull
+    private static PreferenceDataStore styleOrRegistry(@NonNull Context context, @NonNull String key) {
+        TermuxStylePreferencesDataStore style = TermuxStylePreferencesDataStore.getInstance(context);
+        return RegistryPreferenceDataStore.ROWS.containsKey(key)
+            ? RegistryPreferenceDataStore.forDevice(context, style) : style;
+    }
+
     public static boolean getBoolean(@NonNull Context context, @NonNull String key, boolean def) {
         if (terminalKey(key))
             return TerminalViewPreferencesDataStore.getInstance(context).getBoolean(key, def);
-        return TermuxStylePreferencesDataStore.getInstance(context).getBoolean(key, def);
+        return styleOrRegistry(context, key).getBoolean(key, def);
     }
 
     public static void putBoolean(@NonNull Context context, @NonNull String key, boolean value) {
@@ -39,18 +53,18 @@ public final class AppearanceSettingsStore {
             TerminalViewPreferencesDataStore.getInstance(context).putBoolean(key, value);
             return;
         }
-        TermuxStylePreferencesDataStore.getInstance(context).putBoolean(key, value);
+        styleOrRegistry(context, key).putBoolean(key, value);
     }
 
     @Nullable
     public static String getString(@NonNull Context context, @NonNull String key,
                                    @Nullable String def) {
-        return TermuxStylePreferencesDataStore.getInstance(context).getString(key, def);
+        return styleOrRegistry(context, key).getString(key, def);
     }
 
     public static void putString(@NonNull Context context, @NonNull String key,
                                  @Nullable String value) {
-        TermuxStylePreferencesDataStore.getInstance(context).putString(key, value);
+        styleOrRegistry(context, key).putString(key, value);
     }
 
     @Nullable

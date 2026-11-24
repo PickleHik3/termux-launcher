@@ -149,6 +149,24 @@ public class MultiBackendTaiRuntime implements TaiRuntime {
      * closed what it held, so the model in progress is another caller's. A generation in flight is
      * likewise someone's request and is left to finish, as {@link #evict} leaves a busy chat model.
      */
+    /**
+     * Closes the embedding models that are idle and leaves chat, speech and image as they are. A
+     * model an embedding batch is using is left, as {@link #evict} leaves a busy one.
+     */
+    @NonNull @Override public JSONObject unloadEmbedder() throws JSONException {
+        synchronized (loadLock) {
+            for (TaiResidency.Entry entry : residency.snapshot()) {
+                if (entry.kind == TaiResidency.Kind.EMBEDDING && entry.busy) {
+                    return new JSONObject().put("ok", true).put("unloaded", false);
+                }
+            }
+            embeddings.close();
+            litertLmEmbeddings.close();
+            mnnEmbeddings.close();
+            return new JSONObject().put("ok", true).put("unloaded", true);
+        }
+    }
+
     @NonNull @Override public JSONObject unloadChatModel(@NonNull String modelId) throws JSONException {
         // Read before loadLock, which a load in progress holds for as long as it runs.
         if ("loading".equals(activeAssistant.getState().state)) return TaiRuntime.keptChatModel(this, modelId);

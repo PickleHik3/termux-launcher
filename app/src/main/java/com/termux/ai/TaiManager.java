@@ -296,6 +296,12 @@ public final class TaiManager {
 
         @NonNull
         @Override
+        public JSONObject unloadEmbedderHere() throws JSONException {
+            return localRuntime().unloadEmbedder();
+        }
+
+        @NonNull
+        @Override
         public JSONObject keepWarmHere(@NonNull String body) throws JSONException {
             return keepWarmRuntimeHere(body);
         }
@@ -618,6 +624,15 @@ public final class TaiManager {
         TaiModelSpec spec = resolveModel(requested);
         String id = spec != null ? spec.id : TaiSettings.migrateBuiltInModelId(requested);
         return runtimeLink().unloadChat(id);
+    }
+
+    /**
+     * Closes the idle embedding models and nothing else: for a caller that embedded for one turn and
+     * gives the memory back (the Assistant's settings lookup). A model another request is using stays.
+     */
+    @NonNull
+    public JSONObject unloadEmbedder() throws JSONException {
+        return runtimeLink().unloadEmbedder();
     }
 
     @NonNull

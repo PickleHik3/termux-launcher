@@ -17,6 +17,7 @@ import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The app's one Settings registry and Settings applier, over the stores the settings already use:
@@ -149,6 +150,15 @@ public final class LauncherSettings {
             try { return mPrefs.getInt(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
         }
 
+        @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
+            if (mPrefs == null) return defaultValue;
+            try { return mPrefs.getBoolean(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
+        }
+
+        @Override public void putBoolean(@NonNull String key, boolean value) {
+            if (mPrefs != null) mPrefs.edit().putBoolean(key, value).apply();
+        }
+
         @Override public void putString(@NonNull String key, @NonNull String value) {
             if (mPrefs != null) mPrefs.edit().putString(key, value).apply();
         }
@@ -178,6 +188,17 @@ public final class LauncherSettings {
             } catch (NumberFormatException e) {
                 return defaultValue;
             }
+        }
+
+        @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
+            String text = getString(key);
+            if (text == null) return defaultValue;
+            String value = text.trim().toLowerCase(Locale.ROOT);
+            return value.equals("true") || (!value.equals("false") && defaultValue);
+        }
+
+        @Override public void putBoolean(@NonNull String key, boolean value) {
+            TermuxPropertiesFile.write(key, String.valueOf(value));
         }
 
         @Override public void putString(@NonNull String key, @NonNull String value) {

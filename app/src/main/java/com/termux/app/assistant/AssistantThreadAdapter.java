@@ -42,6 +42,18 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
         void errorAction(@NonNull AssistantRows.Row row);
 
         void useE2b(@NonNull AssistantRows.Row row);
+
+        /** Apply on a settings card: writes its changes. */
+        default void applyCard(long messageId) {
+        }
+
+        /** Undo on an applied settings card: puts the old values back. */
+        default void undoCard(long messageId) {
+        }
+
+        /** A card's link: Settings search with {@code query} typed in. */
+        default void openSettingsSearch(@NonNull String query) {
+        }
     }
 
     private static final float USER_MAX_FRACTION = 0.84f;
@@ -112,6 +124,7 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             case WORKING: return new StatusHolder(context, false);
             case WAITING: return new StatusHolder(context, true);
             case ERROR: return new ErrorHolder(context, actions);
+            case CARD: return new CardHolder(context, actions);
             default: return new CutoffHolder(context);
         }
     }
@@ -557,6 +570,108 @@ final class AssistantThreadAdapter extends RecyclerView.Adapter<AssistantThreadA
             alt.setTextColor(p.onErrorContainer);
             alt.setStrokeColor(android.content.res.ColorStateList.valueOf(p.onErrorContainer));
             AssistantUi.setVisible(alt, r.offerE2b && r.retry);
+        }
+    }
+
+    // ------------------------------------------------------------------------------ settings card
+
+    /** A settings answer: each change as "Title: from \u2192 to" with one Apply, or links into Settings. */
+    private static final class CardHolder extends Holder {
+        private final LinearLayout card;
+        private final LinearLayout lines;
+        private final MaterialButton apply;
+        private final TextView applied;
+        private final MaterialButton undo;
+        private final LinearLayout links;
+        private final Actions actions;
+        private AssistantRows.Row row;
+
+        CardHolder(@NonNull Context context, @NonNull Actions actions) {
+            super(new FrameLayout(context));
+            this.actions = actions;
+            card = new LinearLayout(context);
+            card.setOrientation(LinearLayout.VERTICAL);
+            int h = AssistantUi.dp(context, 16);
+            int v = AssistantUi.dp(context, 12);
+            card.setPadding(h, v, h, v);
+            lines = new LinearLayout(context);
+            lines.setOrientation(LinearLayout.VERTICAL);
+            card.addView(lines);
+            apply = new MaterialButton(context);
+            apply.setText(R.string.assistant_card_apply);
+            apply.setOnClickListener(x -> {
+                if (row != null) actions.applyCard(row.messageId);
+            });
+            LinearLayout.LayoutParams ap = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            ap.topMargin = AssistantUi.dp(context, 8);
+            card.addView(apply, ap);
+            applied = AssistantUi.text(context);
+            applied.setText(R.string.assistant_card_applied);
+            LinearLayout.LayoutParams dp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT);
+            dp.topMargin = AssistantUi.dp(context, 8);
+            card.addView(applied, dp);
+            undo = new MaterialButton(context, null, android.R.attr.borderlessButtonStyle);
+            undo.setAllCaps(false);
+            undo.setText(R.string.assistant_card_undo);
+            undo.setOnClickListener(x -> {
+                if (row != null) actions.undoCard(row.messageId);
+            });
+            card.addView(undo, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                ViewGroup.LayoutParams.WRAP_CONTENT));
+            links =new LinearLayout(context);
+            links.setOrientation(LinearLayout.VERTICAL);
+            card.addView(links);
+            ((FrameLayout) itemView).addView(card, new FrameLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+            card.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
+        }
+
+        @Override
+        void bind(@NonNull AssistantRows.Row r, @NonNull AssistantUi.Palette p) {
+            row = r;
+            SettingsCard c = r.card;
+            Context context = itemView.getContext();
+            card.setBackground(AssistantUi.fill(p.surfaceHigh, AssistantUi.dp(context, 16)));
+            lines.removeAllViews();
+            links.removeAllViews();
+            if (c == null) return;
+            if (c.kind == SettingsCard.Kind.NO_MATCH) {
+                addLine(context, p, context.getString(R.string.assistant_card_no_match));
+            }
+            for (SettingsCard.Item item : c.items) addLine(context, p, item.line());
+            boolean proposed = c.kind == SettingsCard.Kind.CHANGES && c.state() == SettingsCard.State.PROPOSED;
+            AssistantUi.setVisible(apply, proposed);
+            SettingsCard.State state = c.state();
+            boolean changes = c.kind == SettingsCard.Kind.CHANGES;
+            AssistantUi.setVisible(applied, changes && state != SettingsCard.State.PROPOSED);
+            applied.setText(state == SettingsCard.State.UNDONE ? R.string.assistant_card_undone
+                : state == SettingsCard.State.CHANGED_SINCE ? R.string.assistant_card_changed_since
+                : R.string.assistant_card_applied);
+            AssistantUi.bodySmall(applied, state == SettingsCard.State.CHANGED_SINCE ? p.onSurface : p.success);
+            boolean showUndo = changes && (state == SettingsCard.State.APPLIED
+                || state == SettingsCard.State.CHANGED_SINCE);
+            AssistantUi.setVisible(undo, showUndo);
+            undo.setEnabled(state == SettingsCard.State.APPLIED);
+            for (SettingsCard.Link link : c.links) {
+                MaterialButton button = new MaterialButton(context, null,
+                    android.R.attr.borderlessButtonStyle);
+                button.setAllCaps(false);
+                button.setGravity(Gravity.START | Gravity.CENTER_VERTICAL);
+                button.setText(link.title.isEmpty() ? context.getString(R.string.assistant_card_search_settings)
+                    : context.getString(R.string.assistant_card_find_setting, link.title));
+                button.setOnClickListener(x -> actions.openSettingsSearch(link.query));
+                links.addView(button, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                    ViewGroup.LayoutParams.WRAP_CONTENT));
+            }
+        }
+
+        private void addLine(@NonNull Context context, @NonNull AssistantUi.Palette p, @NonNull String text) {
+            TextView line = AssistantUi.text(context);
+            AssistantUi.body(line, p.onSurface);
+            line.setText(text);
+            lines.addView(line);
         }
     }
 

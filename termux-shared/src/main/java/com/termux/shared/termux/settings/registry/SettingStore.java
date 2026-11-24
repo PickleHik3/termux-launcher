@@ -17,9 +17,13 @@ public interface SettingStore {
 
     int getInt(@NonNull String key, int defaultValue);
 
+    boolean getBoolean(@NonNull String key, boolean defaultValue);
+
     void putString(@NonNull String key, @NonNull String value);
 
     void putInt(@NonNull String key, int value);
+
+    void putBoolean(@NonNull String key, boolean value);
 
     /** The store a {@link SettingDeclaration} names. */
     interface Stores {
