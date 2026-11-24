@@ -92,6 +92,7 @@ import com.termux.app.chrome.ChromeRenderer;
 import com.termux.app.chrome.ChromeSpec;
 import com.termux.app.chrome.GlassBackdropCache;
 import com.termux.app.chrome.GlassInk;
+import com.termux.app.chrome.HomeExitPolicy;
 import com.termux.app.chrome.KeyboardMaterialPolicy;
 import com.termux.app.chrome.OnGlass;
 import com.termux.app.chrome.SurfaceDirtyLedger;
@@ -2704,60 +2705,46 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * a Back press. {@link com.termux.app.chrome.HomeExitPolicy} picks the step.
      */
     private void handleHomePress() {
-        // A press during the exit finishes it at once.
-        if (mHomeExit.isRunning()) {
-            mHomeExit.finishNow();
-            return;
-        }
-        com.termux.app.chrome.HomeExitPolicy.Step step = com.termux.app.chrome.HomeExitPolicy.decide(
-            mOverlays.anyOpen(), mOverlays.anyHoldsUnsavedChanges(), mHomePress.goesHome());
-        if (step == com.termux.app.chrome.HomeExitPolicy.Step.ASK) {
-            mOverlays.askBeforeLeaving(() -> {
-                carryOutHomeExit(com.termux.app.chrome.HomeExitPolicy.afterAnswer(true));
-            }, () -> {
-                carryOutHomeExit(com.termux.app.chrome.HomeExitPolicy.afterAnswer(false));
-            });
-            return;
-        }
-        carryOutHomeExit(step);
+        mHomeExitController.onHomePress();
     }
 
-    /** The one animator of the Home exit, and the views it runs over (reused). */
-    private final com.termux.app.chrome.HomeExit mHomeExit =
-        new com.termux.app.chrome.HomeExit(com.termux.app.chrome.HomeExit.pipelineFrames(mFrames));
-    private final java.util.ArrayList<View> mHomeExitViews = new java.util.ArrayList<>();
-
-    private void carryOutHomeExit(@NonNull com.termux.app.chrome.HomeExitPolicy.Step step) {
-        if (step == com.termux.app.chrome.HomeExitPolicy.Step.NONE) return;
-        // Before resetTransientVisualState(): that call stomps every dock child's alpha, scale and
-        // translation, so a drawer left open across HOME would strand faded pinned icons.
-        if (step == com.termux.app.chrome.HomeExitPolicy.Step.CLOSE_STAY
-            && !ReducedMotion.isEnabled(this)) {
-            // The members fade out as one group; every other overlay closes now. The page
-            // underneath settles at the end, when each member has closed.
-            mHomeExitViews.clear();
-            if (mOverlays.beginExit(mHomeExitViews) > 0) {
-                mHomeExit.start(mHomeExitViews, false, () -> {
-                    mOverlays.endExit();
+    /** The home press, carried out through the activity's registry and page ({@code HomeExitController}). */
+    private final com.termux.app.chrome.HomeExitController mHomeExitController =
+        new com.termux.app.chrome.HomeExitController(
+            new com.termux.app.chrome.HomeExitController.Host() {
+                @Override public boolean anyOpen() { return mOverlays.anyOpen(); }
+                @Override public boolean anyHoldsUnsavedChanges() {
+                    return mOverlays.anyHoldsUnsavedChanges();
+                }
+                @Override public boolean goesHome() { return mHomePress.goesHome(); }
+                @Override public boolean reducedMotion() {
+                    return ReducedMotion.isEnabled(TermuxActivity.this);
+                }
+                @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+                    mOverlays.askBeforeLeaving(leave, stay);
+                }
+                @Override public int beginExit(@NonNull java.util.List<View> out) {
+                    return mOverlays.beginExit(out);
+                }
+                @Override public void endExit() { mOverlays.endExit(); }
+                @Override public void closeAllForHome() {
+                    // Before settle(): resetTransientVisualState() stomps every dock child's
+                    // alpha, scale and translation, so a drawer left open across HOME would
+                    // strand faded pinned icons.
+                    mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
+                }
+                @Override public void settle(@NonNull com.termux.app.chrome.HomeExitPolicy.Step step) {
                     settleHomePress(step);
-                });
-                mHomeExitViews.clear();
-                return;
-            }
-            mHomeExitViews.clear();
-            settleHomePress(step);
-            return;
-        }
-        mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
-        settleHomePress(step);
-    }
+                }
+            },
+            new com.termux.app.chrome.HomeExit(com.termux.app.chrome.HomeExit.pipelineFrames(mFrames)));
 
-    private void settleHomePress(@NonNull com.termux.app.chrome.HomeExitPolicy.Step step) {
+    private void settleHomePress(@NonNull HomeExitPolicy.Step step) {
         restoreInAppKeyboardTypingClaim();
         // A home press while the launcher is in front and nothing was open lands on the page Start
         // in names as Home, from a window or from another Home page; with something open it stays
         // on the page underneath; a return from another app finds the page it left.
-        if (step == com.termux.app.chrome.HomeExitPolicy.Step.GO_HOME && mPaneWallController != null) {
+        if (step == HomeExitPolicy.Step.GO_HOME && mPaneWallController != null) {
             mPaneWallController.goHome(isVisible());
             // Home floats stay on their pages; a focused one gives the keyboard back.
             if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
@@ -11556,7 +11543,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mWidgetPaneController != null) mWidgetPaneController.onStop();
         if (mWidgetHostController != null) mWidgetHostController.onStop();
         mIsVisible = false;
-        mHomeExit.finishNow();
+        mHomeExitController.finishNow();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.STOP);
         if (mDisplayServer.controller() != null) mDisplayServer.controller().detachView();
         // Leaving the app counts as leaving the place on screen: it comes back the way it was
@@ -11882,7 +11869,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Every open surface measured the old orientation's geometry. The palette alone needs a
         // refresh pass afterwards; a sheet's glass is built per show(), so the next one already
         // picks up the new configuration.
-        mHomeExit.finishNow();
+        mHomeExitController.finishNow();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.ROTATION);
         // The surfaces that closed may have held the keyboard's keys; they go back to whoever
         // is under them — the display window, when that is where the wall rests.
@@ -21373,7 +21360,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // None: the page tail of the Back chain, nothing is drawn.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
-        registry.setExitFinisher(() -> mHomeExit.finishNow());
+        registry.setExitFinisher(() -> mHomeExitController.finishNow());
         return registry;
     }
 

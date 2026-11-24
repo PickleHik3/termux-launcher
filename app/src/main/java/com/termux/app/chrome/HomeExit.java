@@ -65,13 +65,14 @@ public final class HomeExit {
                 if (target != null) target.run();
             };
 
+            { pipeline.bind(FrameStep.HOME_EXIT, mStep); }
+
             @Override public long nowMs() {
                 return android.os.SystemClock.uptimeMillis();
             }
 
             @Override public void requestFrame(@NonNull Runnable callback) {
                 mTarget = callback;
-                pipeline.bind(FrameStep.HOME_EXIT, mStep);
                 pipeline.requestFrame(FrameStep.HOME_EXIT);
             }
 
