@@ -316,6 +316,28 @@ public class ProotDistroTest {
         }
     }
 
+    @Test public void aWaylandLoginBindsTheSocketDirAndCarriesItsOwnVariables() throws IOException {
+        File containers = temp.newFolder("containersW");
+        File rootfs = rootfs(containers, "debian");
+        write(rootfs, "etc/passwd", "amal:x:1000:1000::/home/amal:/bin/bash\n");
+        ProotDistro.Container debian = ProotDistro.byName(ProotDistro.containers(containers), "debian");
+        assertNotNull(debian);
+        String socket = "/data/p/tmp/tl-wayland/wayland-0";
+        ProotDistro.LoginExtras extras = new ProotDistro.LoginExtras(
+            com.termux.app.wayland.LinuxWindowsProot.binds(socket),
+            com.termux.app.wayland.LinuxWindowsProot.env(socket, 1));
+
+        String line = ProotDistro.loginCommand(debian, "gimp", extras);
+
+        assertTrue(line, line.startsWith("proot-distro login debian -u amal --shared-x11"
+            + " --bind '/data/p/tmp/tl-wayland:/tmp/tl-wayland' -e MOZ_USE_XINPUT2=1"
+            + " -e 'WAYLAND_DISPLAY=/tmp/tl-wayland/wayland-0' -e 'DISPLAY=:1'"
+            + " -e 'GDK_BACKEND=wayland,x11' -e 'QT_QPA_PLATFORM=wayland;xcb' "));
+        assertTrue(line, line.endsWith(" -- /bin/sh -c 'gimp'"));
+        // The X11 Display fallback to :0 is not there.
+        assertTrue(line, !line.contains("DISPLAY=${DISPLAY"));
+    }
+
     @Test public void thePrefixIsNotWrappedAtAll() {
         assertEquals("gimp", ProotDistro.loginCommand(ProotDistro.Container.PREFIX, "gimp"));
     }

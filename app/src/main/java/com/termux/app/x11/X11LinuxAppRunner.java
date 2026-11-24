@@ -682,9 +682,9 @@ public final class X11LinuxAppRunner {
     /**
      * A drawer tap when Settings chooses Wayland Display: {@code app} opens in its own window on
      * the Linux windows screen, and no Display page or X server is involved. Answers false when the
-     * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} lives
-     * in a proot-distro container, which keeps using X11 Display for now
-     * ({@link LinuxDisplayBackend#forApp}). A whole desktop opens as one window in an X server of
+     * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} is a
+     * whole desktop in a proot-distro container ({@link LinuxDisplayBackend#forApp}); an app in a
+     * container opens as a window too, rendering in software inside it. A whole desktop opens as one window in an X server of
      * its own ({@link #launchDesktopOnWayland}). Main thread.
      */
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
@@ -734,8 +734,25 @@ public final class X11LinuxAppRunner {
         EXECUTOR.execute(() -> {
             sound.prepareContainer(app.container);
             boolean noSandbox = shouldStartWithNoSandbox(app);
-            GpuChoice gpu = appGraphics(app);
             String display = xDisplay == null ? "" : xDisplay;
+            if (app.container.kind == ProotDistro.Container.Kind.DISTRO) {
+                // An app in a container: the socket's directory is bound in and the login carries
+                // the variables; the prefix's graphics stay out (software rendering in the distro).
+                ProotDistro.LoginExtras login = new ProotDistro.LoginExtras(
+                    com.termux.app.wayland.LinuxWindowsProot.binds(waylandDisplay),
+                    com.termux.app.wayland.LinuxWindowsProot.env(waylandDisplay,
+                        LinuxWindowsEnv.displayNumber(xDisplay)));
+                List<String> none = java.util.Collections.emptyList();
+                String script = script(app, display, none, noSandbox, null, login);
+                handler.post(() -> {
+                    Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display in "
+                        + app.container.name + (noSandbox ? " with --no-sandbox" : ""));
+                    runAndWatch(app, script, noSandbox, display, none, null,
+                        pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), login);
+                });
+                return;
+            }
+            GpuChoice gpu = appGraphics(app);
             List<String> waylandLines = waylandEnv(waylandDisplay, xDisplay,
                 gpu.profile == null ? null : gpu.profile.id, appEnv(app, gpu, false));
             com.termux.app.wayland.MesaWaylandOverlay.Answer mesa = gpu.profile == X11GpuProbe.Profile.TURNIP_ZINK
@@ -896,7 +913,17 @@ public final class X11LinuxAppRunner {
                       @NonNull String display, @NonNull List<String> env,
                       @Nullable String windowManagerRestart,
                       @Nullable java.util.function.IntConsumer onPid) {
-        new Watch(app, display, env, windowManagerRestart, onPid).start(script, noSandbox);
+        runAndWatch(app, script, noSandbox, display, env, windowManagerRestart, onPid, null);
+    }
+
+    /** As above; {@code login} is a container app's Wayland Display login, kept for the retry. */
+    @VisibleForTesting
+    void runAndWatch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String script, boolean noSandbox,
+                      @NonNull String display, @NonNull List<String> env,
+                      @Nullable String windowManagerRestart,
+                      @Nullable java.util.function.IntConsumer onPid,
+                      @Nullable ProotDistro.LoginExtras login) {
+        new Watch(app, display, env, windowManagerRestart, onPid, login).start(script, noSandbox);
         if (app.session && windowManagerRestart != null) {
             handler.postDelayed(() -> windowManagerSafetyNet(app, windowManagerRestart),
                 WM_SAFETY_NET_MS);
@@ -936,13 +963,16 @@ public final class X11LinuxAppRunner {
         private final List<String> env;
         @Nullable private final String windowManagerRestart;
         @Nullable private final java.util.function.IntConsumer onPid;
+        @Nullable private final ProotDistro.LoginExtras login;
         private final Runnable timeout = () -> resolve(false);
         private boolean noSandbox;
         private boolean decided;
 
         Watch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
               @NonNull List<String> env, @Nullable String windowManagerRestart,
-              @Nullable java.util.function.IntConsumer onPid) {
+              @Nullable java.util.function.IntConsumer onPid,
+              @Nullable ProotDistro.LoginExtras login) {
+            this.login = login;
             this.onPid = onPid;
             this.app = app;
             this.display = display;
@@ -1038,7 +1068,8 @@ public final class X11LinuxAppRunner {
                 return;
             }
             Logger.logInfo(LOG_TAG, "Retrying " + app.id + " on the display with --no-sandbox");
-            new Watch(app, display, env, null, onPid).start(script(app, display, env, true), true);
+            new Watch(app, display, env, null, onPid, login)
+                .start(script(app, display, env, true, null, login), true);
         }
     }
 
@@ -1198,6 +1229,18 @@ public final class X11LinuxAppRunner {
     static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                          @NonNull List<String> env, boolean noSandbox,
                          @Nullable String awaitWindowManager) {
+        return script(app, display, env, noSandbox, awaitWindowManager, null);
+    }
+
+    /**
+     * The same, with {@code login} for an app in a container that opens under Wayland Display:
+     * the bind and variables its {@code proot-distro login} carries ({@link ProotDistro#loginCommand}).
+     */
+    @NonNull
+    static String script(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
+                         @NonNull List<String> env, boolean noSandbox,
+                         @Nullable String awaitWindowManager,
+                         @Nullable ProotDistro.LoginExtras login) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
@@ -1211,7 +1254,7 @@ public final class X11LinuxAppRunner {
         // through the virgl server has frozen whole phones, and Chromium's software path is fine.
         String extraArgs = noSandbox
             ? (usesVirgl(env) ? "--no-sandbox --disable-gpu" : "--no-sandbox") : "";
-        script.append("exec ").append(noSandbox ? app.commandWith(extraArgs) : app.command())
+        script.append("exec ").append(noSandbox || login != null ? app.commandWith(extraArgs, login) : app.command())
             .append('\n');
         return script.toString();
     }
