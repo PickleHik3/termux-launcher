@@ -4898,16 +4898,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return mHost.layoutEditor();
         }
 
-        @Override public int terminalRows() {
+        @Override public boolean terminalMetrics(@NonNull int[] out) {
             // Only a Workspace page has a terminal; Home reads no rows.
             if (mScreen != PageKind.TERMINAL)
-                return 0;
-            return firstTerminalRows(mHost.findView(R.id.terminal_pane_wall));
-        }
-
-        @Override public int paneHeightPx() {
-            View wall = mHost.findView(R.id.terminal_pane_wall);
-            return wall == null ? 0 : wall.getHeight();
+                return false;
+            com.termux.view.TerminalView view =
+                firstTerminalView(mHost.findView(R.id.terminal_pane_wall));
+            if (view == null || view.mRenderer == null || view.getHeight() <= 0)
+                return false;
+            out[0] = view.getHeight();
+            out[1] = view.getTextTopInsetPx();
+            out[2] = view.mRenderer.getFontLineSpacingAndAscent();
+            out[3] = view.mRenderer.getFontLineSpacing();
+            return true;
         }
 
         @Override public float defaultScale() {
@@ -4938,22 +4941,20 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The first terminal's row count under {@code view}, or 0; read when a pull starts. */
-    private static int firstTerminalRows(@Nullable View view) {
-        if (view instanceof com.termux.view.TerminalView) {
-            com.termux.terminal.TerminalEmulator emulator =
-                ((com.termux.view.TerminalView) view).mEmulator;
-            return emulator == null ? 0 : emulator.mRows;
-        }
+    /** The first terminal view under {@code view}, or null; read when a pull starts. */
+    @Nullable
+    private static com.termux.view.TerminalView firstTerminalView(@Nullable View view) {
+        if (view instanceof com.termux.view.TerminalView)
+            return (com.termux.view.TerminalView) view;
         if (view instanceof ViewGroup) {
             ViewGroup group = (ViewGroup) view;
             for (int i = 0; i < group.getChildCount(); i++) {
-                int rows = firstTerminalRows(group.getChildAt(i));
-                if (rows > 0)
-                    return rows;
+                com.termux.view.TerminalView found = firstTerminalView(group.getChildAt(i));
+                if (found != null)
+                    return found;
             }
         }
-        return 0;
+        return null;
     }
 
     @NonNull

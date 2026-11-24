@@ -3961,7 +3961,7 @@ public final class TerminalView extends View {
      * The rows a view {@code heightPx} tall holds below a text inset of {@code topInsetPx}: what
      * the session is sized to. Never fewer than four.
      */
-    static int rowsFor(int heightPx, int topInsetPx, int spacingAndAscentPx, int lineSpacingPx) {
+    public static int rowsFor(int heightPx, int topInsetPx, int spacingAndAscentPx, int lineSpacingPx) {
         int usable = heightPx - Math.max(0, topInsetPx);
         return Math.max(4, (usable - spacingAndAscentPx) / lineSpacingPx);
     }

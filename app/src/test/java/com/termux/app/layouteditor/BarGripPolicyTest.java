@@ -40,20 +40,26 @@ public class BarGripPolicyTest {
         assertEquals(160, BarGripPolicy.percent(1.6f));
     }
 
-    @Test public void terminalRowsLoseTheRowsTheKeyboardGrowthCovers() {
-        // A 1000px pane of 40 rows: 25px a row. 60px more keyboard covers three rows.
-        assertEquals(37, BarGripPolicy.terminalRows(40, 1000, 60));
-        // Nothing changed: no rows move.
-        assertEquals(40, BarGripPolicy.terminalRows(40, 1000, 0));
+    // Line 25px, spacing-and-ascent 20px, inset 0: a 1020px view holds (1020 - 20) / 25 = 40 rows.
+    @Test public void terminalRowsAreTheRowsTheTerminalSizesItselfTo() {
+        assertEquals(40, BarGripPolicy.terminalRows(1020, 0, 0, 20, 25));
+        assertEquals(40, com.termux.view.TerminalView.rowsFor(1020, 0, 20, 25));
+        assertEquals(36, BarGripPolicy.terminalRows(1020, 100, 0, 20, 25));
+        assertEquals(36, com.termux.view.TerminalView.rowsFor(920, 0, 20, 25));
     }
 
-    @Test public void terminalRowsGainRowsWhenTheKeyboardShrinks() {
-        assertEquals(43, BarGripPolicy.terminalRows(40, 1000, -60));
+    @Test public void terminalRowsGrowWhenTheKeyboardShrinks() {
+        assertEquals(44, BarGripPolicy.terminalRows(1020, -100, 0, 20, 25));
     }
 
-    @Test public void terminalRowsNeverReachZeroOrFollowAnUnmeasuredPane() {
-        assertEquals(1, BarGripPolicy.terminalRows(5, 100, 10_000));
-        assertEquals(40, BarGripPolicy.terminalRows(40, 0, 60));
-        assertEquals(0, BarGripPolicy.terminalRows(0, 1000, 60));
+    @Test public void theTextInsetCostsRowsLikeTheTerminal() {
+        assertEquals(com.termux.view.TerminalView.rowsFor(1020, 50, 20, 25),
+            BarGripPolicy.terminalRows(1020, 0, 50, 20, 25));
+    }
+
+    @Test public void terminalRowsHoldTheTerminalsMinimumAndSkipAnUnmeasuredView() {
+        assertEquals(4, BarGripPolicy.terminalRows(1020, 5000, 0, 20, 25));
+        assertEquals(0, BarGripPolicy.terminalRows(0, 100, 0, 20, 25));
+        assertEquals(0, BarGripPolicy.terminalRows(1020, 0, 0, 20, 0));
     }
 }

@@ -1,6 +1,6 @@
 package com.termux.app.layouteditor;
 
-import com.termux.app.place.PlaceKeyboard;
+import com.termux.view.TerminalView;
 
 /**
  * The grip on a bar's inner edge (#340), pure: how far it was pulled becomes the stored height
@@ -35,20 +35,18 @@ public final class BarGripPolicy {
     }
 
     /**
-     * The readout's row count: the terminal's {@code startRows} less the whole rows
-     * {@code keyboardDeltaPx} of added keyboard covers (more when the keyboard shrank), counted by
-     * the policy the keyboard uses ({@link PlaceKeyboard#keyboardRows}). This is the one call
-     * #262 swaps for its own source; the readout reads nothing else for rows. Zero for an
-     * unmeasured terminal.
+     * The readout's row count: the rows the terminal view holds once the keyboard has grown
+     * {@code keyboardDeltaPx} (negative when it shrank) and the view is that much shorter (taller).
+     * It is {@link TerminalView#rowsFor}, the expression {@code updateSize} sizes the session with,
+     * so the readout and the terminal cannot drift. The view's height, text inset and the
+     * renderer's two spacings are the caller's. This is the one call #262 swaps for its own
+     * source. Zero for an unmeasured terminal.
      */
-    public static int terminalRows(int startRows, int paneHeightPx, int keyboardDeltaPx) {
-        if (startRows <= 0)
+    public static int terminalRows(int viewHeightPx, int keyboardDeltaPx, int topInsetPx,
+                                   int spacingAndAscentPx, int lineSpacingPx) {
+        if (viewHeightPx <= 0 || lineSpacingPx <= 0)
             return 0;
-        if (paneHeightPx <= 0 || keyboardDeltaPx == 0)
-            return startRows;
-        int covered = PlaceKeyboard.keyboardRows(Math.abs(keyboardDeltaPx), paneHeightPx,
-            startRows);
-        int rows = keyboardDeltaPx > 0 ? startRows - covered : startRows + covered;
-        return Math.max(1, rows);
+        return TerminalView.rowsFor(Math.max(0, viewHeightPx - keyboardDeltaPx), topInsetPx,
+            spacingAndAscentPx, lineSpacingPx);
     }
 }

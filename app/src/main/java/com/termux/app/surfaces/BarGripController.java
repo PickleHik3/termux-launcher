@@ -52,11 +52,11 @@ final class BarGripController {
 
         @Nullable LayoutEditorController layout();
 
-        /** The Workspace's terminal rows now, or 0 on a page with none. */
-        int terminalRows();
-
-        /** The terminal pane's height in pixels, or 0. */
-        int paneHeightPx();
+        /**
+         * The first terminal view's {height, text top inset, spacing-and-ascent, line spacing}
+         * in pixels into {@code out}; false on a page with no terminal (Home) or none measured.
+         */
+        boolean terminalMetrics(@NonNull int[] out);
 
         /** The shipped keyboard height scale, where a pull snaps. */
         float defaultScale();
@@ -85,8 +85,8 @@ final class BarGripController {
     private float mDownRawY;
     private float mStartScale;
     private float mStartHeightPx;
-    private int mStartRows;
-    private int mPanePx;
+    private final int[] mMetrics = new int[4];
+    private boolean mHasMetrics;
     private float mLastScale;
     private int mShownPercent = -1;
     private int mShownRows = -1;
@@ -124,7 +124,7 @@ final class BarGripController {
         pill.setTranslationY(edge - height / 2f);
         EditorViews.setVisible(pill, true);
         if (!mPulling)
-            readout(layout.keyboardHeightScale(), mHost.terminalRows());
+            readout(layout.keyboardHeightScale(), rowsAt(0));
     }
 
     void release() {
@@ -152,8 +152,7 @@ final class BarGripController {
                 mStartScale = scale;
                 mLastScale = scale;
                 mStartHeightPx = mRect[3] - mRect[1];
-                mStartRows = mHost.terminalRows();
-                mPanePx = mHost.paneHeightPx();
+                mHasMetrics = mHost.terminalMetrics(mMetrics);
                 mDownRawY = event.getRawY();
                 mPulling = true;
                 view.getParent().requestDisallowInterceptTouchEvent(true);
@@ -176,7 +175,7 @@ final class BarGripController {
                 }
                 // The bar's pixel change, from the scales, whether or not the view has re-laid.
                 int deltaPx = Math.round(mStartHeightPx * (next / mStartScale - 1f));
-                readout(next, BarGripPolicy.terminalRows(mStartRows, mPanePx, deltaPx));
+                readout(next, rowsAt(deltaPx));
                 return true;
             }
             case MotionEvent.ACTION_UP:
@@ -191,6 +190,15 @@ final class BarGripController {
             default:
                 return mPulling;
         }
+    }
+
+    /** The terminal's rows with the keyboard {@code deltaPx} taller; 0 where there is no terminal. */
+    private int rowsAt(int deltaPx) {
+        if (!mPulling) {
+            mHasMetrics = mHost.terminalMetrics(mMetrics);
+        }
+        return mHasMetrics ? BarGripPolicy.terminalRows(mMetrics[0], deltaPx, mMetrics[1],
+            mMetrics[2], mMetrics[3]) : 0;
     }
 
     /** Sets the readout only when what it says changed. */
