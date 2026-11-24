@@ -2154,6 +2154,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return shouldUseManagedWallpaperBlurSource();
         }
 
+        /** Fancier Glass draws the backdrop: its look carries the colour, the frames stay raw. */
+        @Override public boolean glassColourOnDraw() {
+            return mFancierGlassLook != null;
+        }
+
         @Override public int systemWallpaperId() {
             return wallpaperSourceFacts().systemWallpaperId;
         }
@@ -2329,8 +2334,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             public Object attach(@NonNull View surface, float radiusPx, int priority) {
                 com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
                 if (recorder == null) return null;
-                com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
-                recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
                 int rank = com.termux.app.chrome.LiveBackdrop.rankOf(priority);
                 return recorder.attach(surface, radiusPx, rank);
             }
@@ -4431,7 +4434,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // the inner border. The rim's light stays; only the pull goes.
                 if (mFancierGlassLook != null && frameStandsDown())
                     return new com.termux.app.chrome.GlassRefraction.Look(0,
-                        mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent);
+                        mFancierGlassLook.edgeWidthDp, mFancierGlassLook.edgeLightPercent)
+                        .withColour(mFancierGlassLook.vibrancyPercent, mFancierGlassLook.frameTint);
                 // Depth and Edge are Global's alone (ADR 0031 §2): the terminal holds none.
                 return mFancierGlassLook;
             }
@@ -4792,7 +4796,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mPreferences.isFancierGlassEnabled(), shouldUseManagedWallpaperBlurSource())) {
             return null;
         }
-        return com.termux.app.chrome.GlassRefraction.Look.of(mPreferences);
+        // The glass's colour rides on the look: the program applies it to the backdrop, so the
+        // stored frames and the live pictures carry none (#321).
+        com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
+        return com.termux.app.chrome.GlassRefraction.Look.of(mPreferences)
+            .withColour(cache.glassVibrancyPercent(), cache.glassFrameTint());
     }
 
     /**
@@ -4883,9 +4891,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         com.termux.app.chrome.LiveBackdrop recorder = liveBackdrop();
         if (recorder == null) return null;
-        // The picture takes the stored frames' Vibrancy and frame tint, so a hand-off never shows.
-        com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
-        recorder.setStoredBake(cache.bakedVibrancy(), cache.bakedFrameTint());
         return recorder.attach(surface,
             blurRadiusDp * getResources().getDisplayMetrics().density, rank);
     }
@@ -32306,16 +32311,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The frost the panes' glass puts over the frame it samples, as a ground drawn beside them
      * (the departure card's, a switch's gap) wears it: the glass's frost at the Terminal's
-     * opacity; over the scene's live frame, which is the raw scene, the stored frame's bake first.
+     * opacity, after the glass's colour wherever the picture does not already carry it: the
+     * scene's live frame, which is the raw scene, and a stored frame while the program applies
+     * the colour (#321). A ground has no program of its own.
      */
     @NonNull
     private android.graphics.ColorFilter glassGroundFilter(boolean scene) {
         int opacity = mPreferences != null ? mPreferences.getTerminalBackgroundOpacity() : 100;
-        if (!scene) return com.termux.app.chrome.GlassFilters.frost(opacity);
         com.termux.app.chrome.WallpaperBlurCache cache = mChrome.blurCache();
-        return com.termux.app.chrome.LiveStoredParity.sceneGroundFilter(opacity,
-            cache.bakedVibrancy(), cache.bakedFrameTint(),
-            mPreferences != null && mPreferences.getTerminalGlassBlurRadius() > 0);
+        boolean colours = mPreferences != null && mPreferences.getTerminalGlassBlurRadius() > 0
+            && (scene || cache.glassColourOnDraw());
+        return com.termux.app.chrome.GlassVibrancy.groundFilter(opacity, colours,
+            cache.glassVibrancyPercent(), cache.glassFrameTint());
     }
 
     /**

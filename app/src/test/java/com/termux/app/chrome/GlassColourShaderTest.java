@@ -109,6 +109,18 @@ public class GlassColourShaderTest {
     }
 
     @Test
+    public void theInkCheckMeasuresTheColourTheProgramShows() {
+        // A raw frame's pixel through apply() is the pixel the baked frame held: the ink check
+        // reads the same colour on either route.
+        float[] matrix = GlassVibrancy.bakeMatrix(100, TINT);
+        for (int[] rgb : WALLPAPER) {
+            int color = 0xFF000000 | (rgb[0] << 16) | (rgb[1] << 8) | rgb[2];
+            assertEquals(Integer.toHexString(color), GlassFrameTint.apply(TINT, color),
+                GlassVibrancy.apply(matrix, color));
+        }
+    }
+
+    @Test
     public void premultipliedSamplesStayUnderTheirAlpha() {
         float[] out = new float[3];
         float[] matrix = look().withColour(150, TINT).colourMatrix();

@@ -3231,6 +3231,10 @@ public final class ChromeInk {
                 ? GlassBackdropCache.sampleBitmapRegion(frame, mTmpSampleRect, grid)
                 : sampleThroughSoftwareCopy(frame, mTmpSampleRect, grid);
             if (Color.alpha(raw) == 0) return GlassBackdropCache.UNREADABLE;
+            // The program colours the raw frame as it draws it (#321): measure what it shows.
+            if (mBlurCache.glassColourOnDraw() && mBlurCache.radiusDpOf(frame) > 0) {
+                raw = glassColour(raw);
+            }
             return frostColor(raw);
         } catch (Throwable ignored) {
             // A Sampler never throws: a band that cannot be read is a band that keeps the mode's
@@ -3288,6 +3292,27 @@ public final class ChromeInk {
      */
     /** {@link #sampleWallpaper(Rect, int)}'s radius for the default frame ({@link #residentFrame()}). */
     private static final int DEFAULT_FRAME = -1;
+
+    /** The glass's colour matrix as last built, and what it was built for; see {@link #glassColour}. */
+    @Nullable private float[] mColourMatrix;
+    private int mColourVibrancy = 100;
+    private int mColourTint = GlassFrameTint.NONE;
+
+    /**
+     * {@code color} through the colour the glass program applies (Vibrancy, the frame tint),
+     * as the frame used to carry it baked. The matrix is rebuilt only when the colour moves.
+     */
+    @ColorInt
+    private int glassColour(@ColorInt int color) {
+        int vibrancy = mBlurCache.glassVibrancyPercent();
+        int tint = mBlurCache.glassFrameTint();
+        if (mColourMatrix == null || vibrancy != mColourVibrancy || tint != mColourTint) {
+            mColourMatrix = GlassVibrancy.bakeMatrix(vibrancy, tint);
+            mColourVibrancy = vibrancy;
+            mColourTint = tint;
+        }
+        return GlassVibrancy.apply(mColourMatrix, color);
+    }
 
     /** The frame blurred at {@code blurRadiusDp} if it is resident, or null; never asks for one. */
     @Nullable
