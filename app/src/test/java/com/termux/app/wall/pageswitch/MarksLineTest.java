@@ -51,9 +51,9 @@ public class MarksLineTest {
         assertEquals(-1, line.slotAt(line.contentLengthPx()));
     }
 
-    @Test public void aShortLineFoldsByTheBarsRule() {
+    @Test public void aShortLineFoldsByItsOwnRoomRule() {
         PageBarModel m = model("HHHHT", 3, 1, -1);
-        float length = 200f * DENSITY;
+        float length = 100f * DENSITY;
         int fit = MarksLine.maxSlots(DENSITY, length);
         MarksLine line = new MarksLine(m.entries(), null, DENSITY, length);
         PageBarFold.Result want = PageBarFold.fold(m.entries(), fit);

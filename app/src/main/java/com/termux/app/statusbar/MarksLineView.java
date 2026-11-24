@@ -153,6 +153,7 @@ public final class MarksLineView extends View {
         if (mVertical == vertical) return;
         mVertical = vertical;
         rebuild();
+        requestLayout();
     }
 
     /**
@@ -183,6 +184,8 @@ public final class MarksLineView extends View {
         mModel = model;
         mAttention = attention == null ? null : attention.clone();
         rebuild();
+        // The line sizes to its marks, so a changed list is a new size; never from inside a pass.
+        requestLayout();
     }
 
     /** The layout in use, or null while there are no entries or no length; for later tickets and tests. */
@@ -198,8 +201,39 @@ public final class MarksLineView extends View {
 
     // ---- build ------------------------------------------------------------------------------
 
+    /** What an unbounded measure offers the line: room for every mark open. */
+    private static final float UNBOUNDED_PX = 100000f;
+
+    /** The length along the axis the line was last built for: what the parent offered, not its own size. */
+    private float mAvailPx;
+
     private float axisLength() {
-        return mVertical ? getHeight() : getWidth();
+        return mAvailPx;
+    }
+
+    /**
+     * The line asks for the length its marks take and no more: it folds by the room the parent
+     * offers along its axis ({@link MarksLine#maxSlots}), then sizes to the folded marks. A fixed
+     * line over the status row therefore leaves the readings and Home's float chips their room,
+     * and a hidden twin in Home's strip (the spacer) asks for the same.
+     */
+    @Override
+    protected void onMeasure(int widthSpec, int heightSpec) {
+        int alongSpec = mVertical ? heightSpec : widthSpec;
+        int crossSpec = mVertical ? widthSpec : heightSpec;
+        int mode = MeasureSpec.getMode(alongSpec);
+        int size = MeasureSpec.getSize(alongSpec);
+        float avail = mode == MeasureSpec.UNSPECIFIED ? UNBOUNDED_PX : size;
+        if (avail != mAvailPx) {
+            mAvailPx = avail;
+            rebuild();
+        }
+        int content = mLine == null ? 0 : (int) Math.ceil(mLine.contentLengthPx());
+        int along = mode == MeasureSpec.EXACTLY ? size
+            : mode == MeasureSpec.AT_MOST ? Math.min(size, content) : content;
+        int cross = getDefaultSize(0, crossSpec);
+        if (mVertical) setMeasuredDimension(cross, along);
+        else setMeasuredDimension(along, cross);
     }
 
     private void rebuild() {
@@ -242,12 +276,6 @@ public final class MarksLineView extends View {
     @NonNull
     String[] slotLabels() {
         return mSlotLabels.clone();
-    }
-
-    @Override
-    protected void onSizeChanged(int w, int h, int oldw, int oldh) {
-        super.onSizeChanged(w, h, oldw, oldh);
-        rebuild();
     }
 
     private static boolean sameEntries(@Nullable PageBarModel a, @Nullable PageBarModel b) {

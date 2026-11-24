@@ -86,6 +86,32 @@ public class MarksLineViewTest {
         up.recycle();
     }
 
+    @Test public void theLineAsksForItsMarksAndFoldsByTheRoomItIsOffered() {
+        float density = RuntimeEnvironment.getApplication().getResources().getDisplayMetrics()
+            .density;
+        view.setPages(model("HHTA", 1, 1, -1), null);
+        int offered = Math.round(4 * MarksLine.MAX_PITCH_DP * density) + 40;
+        view.measure(View.MeasureSpec.makeMeasureSpec(offered, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
+        assertEquals("every mark open: the room holds them", 4, view.line().slotCount());
+        assertTrue("it takes its marks' length, not the room offered",
+            view.getMeasuredWidth() < offered);
+        int twin = view.getMeasuredWidth();
+
+        MarksLineView spacer = new MarksLineView(RuntimeEnvironment.getApplication(), null);
+        spacer.setPages(model("HHTA", 1, 1, -1), null);
+        spacer.measure(View.MeasureSpec.makeMeasureSpec(offered, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
+        assertEquals("Home's spacer holds the room the fixed line takes", twin,
+            spacer.getMeasuredWidth());
+
+        int tight = Math.round(3 * MarksLine.MIN_PITCH_DP * density);
+        view.measure(View.MeasureSpec.makeMeasureSpec(tight, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(40, View.MeasureSpec.EXACTLY));
+        assertTrue("fewer slots when the room is short", view.line().slotCount() < 4);
+        assertTrue(view.getMeasuredWidth() <= tight);
+    }
+
     @Test public void aTapOnAMarkGoesToThatPage() {
         view.setPages(model("HTA", 2, 1, -1), null);
         layOut(400, 40);

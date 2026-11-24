@@ -304,26 +304,6 @@
                             android:visibility="gone"
                             android:contentDescription="@string/termux_window_bar_content_description" />
 
-                        <!-- The Marks look's line of page marks, in the chips' place: along the
-                             row, or down the column on a side edge. Only one of the four is
-                             shown (TermuxActivity#syncMarksLine). -->
-                        <com.termux.app.statusbar.MarksLineView
-                            android:id="@+id/terminal_status_marks_row"
-                            android:layout_width="0dp"
-                            android:layout_height="match_parent"
-                            android:layout_weight="1"
-                            android:layout_marginStart="6dp"
-                            android:visibility="gone"
-                            android:contentDescription="@string/status_marks_content_description" />
-
-                        <com.termux.app.statusbar.MarksLineView
-                            android:id="@+id/terminal_status_marks_column"
-                            android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="1"
-                            android:layout_marginTop="6dp"
-                            android:visibility="gone"
-                            android:contentDescription="@string/status_marks_content_description" />
                     </com.termux.app.statusbar.PlaceContentStrip>
 
                     <!-- Home's own chips: one per float on the Home page shown, the window
@@ -335,23 +315,23 @@
                         android:paddingStart="14dp"
                         android:gravity="center_vertical">
 
-                        <!-- The Marks line on Home's side, ahead of Home's float chips, which the
-                             line does not mark: the two share the row (MarksLineController). -->
+                        <!-- Under Marks these two are the line's spacers: invisible twins of the
+                             fixed line below, which ask for the same room so Home's float chips
+                             start after the marks. They draw and take nothing, and travel with
+                             Home's page while the fixed line stays (MarksLineController). -->
                         <com.termux.app.statusbar.MarksLineView
                             android:id="@+id/terminal_status_home_marks_row"
-                            android:layout_width="0dp"
+                            android:layout_width="wrap_content"
                             android:layout_height="match_parent"
-                            android:layout_weight="1"
                             android:visibility="gone"
-                            android:contentDescription="@string/status_marks_content_description" />
+                            android:importantForAccessibility="no" />
                         <com.termux.app.statusbar.MarksLineView
                             android:id="@+id/terminal_status_home_marks_column"
                             android:layout_width="match_parent"
-                            android:layout_height="0dp"
-                            android:layout_weight="1"
+                            android:layout_height="wrap_content"
                             android:layout_marginTop="6dp"
                             android:visibility="gone"
-                            android:contentDescription="@string/status_marks_content_description" />
+                            android:importantForAccessibility="no" />
                         <com.termux.app.terminal.TerminalWindowBar
                             android:id="@+id/terminal_home_float_bar"
                             android:layout_width="0dp"
@@ -370,6 +350,27 @@
                             android:visibility="gone"
                             android:contentDescription="@string/termux_home_float_bar_content_description" />
                     </com.termux.app.statusbar.PlaceContentStrip>
+
+                    <!-- The Marks look's line of page marks, one for every page: it stands in the
+                         slot, which holds still, not in either side's strip, which slides with
+                         its page, so the marks stay put through a crossing. Along the row, or
+                         down the column on a side edge; only one of the two is shown
+                         (MarksLineController). The inset is the strips' lens inset. -->
+                    <com.termux.app.statusbar.MarksLineView
+                        android:id="@+id/terminal_status_marks_row"
+                        android:layout_width="wrap_content"
+                        android:layout_height="match_parent"
+                        android:layout_marginStart="14dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/status_marks_content_description" />
+
+                    <com.termux.app.statusbar.MarksLineView
+                        android:id="@+id/terminal_status_marks_column"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="20dp"
+                        android:visibility="gone"
+                        android:contentDescription="@string/status_marks_content_description" />
 
                     </FrameLayout>
 

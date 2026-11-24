@@ -65,24 +65,46 @@ public final class MarksLineController {
     public void syncMarksLine() {
         boolean marks = marksLookShown();
         boolean vertical = mHost.statusBarVertical();
-        // The Terminal's side and Home's side each carry the line, so it stands in the strip on
-        // every page; on Home it leads Home's float chips, which it does not mark.
+        // One line marks every page: it stands in the status slot, which holds still, so it
+        // neither travels with a page nor blanks through a crossing. Home's strip keeps a hidden
+        // spacer of the same size so its float chips start after the marks, which it does not mark.
         syncLine(R.id.terminal_status_marks_row, R.id.terminal_status_marks_column, marks,
-            vertical);
+            vertical, false);
         syncLine(R.id.terminal_status_home_marks_row, R.id.terminal_status_home_marks_column,
-            marks, vertical);
+            marks, vertical, true);
     }
 
-    private void syncLine(int rowId, int columnId, boolean marks, boolean vertical) {
+    /**
+     * The one rule for which of the line's views stands, whatever page or crossing the wall is
+     * in: under Marks the fixed line in the slot shows (the row or the column for the bar's form)
+     * and Home's twin holds its room invisibly; otherwise both are gone.
+     *
+     * @param spacer whether this is Home's twin in its strip rather than the fixed line
+     * @param column whether this is the column's view rather than the row's
+     */
+    public static int lineVisibility(boolean marks, boolean vertical, boolean spacer,
+                                     boolean column) {
+        if (!marks || vertical != column) return View.GONE;
+        return spacer ? View.INVISIBLE : View.VISIBLE;
+    }
+
+    private void syncLine(int rowId, int columnId, boolean marks, boolean vertical,
+                          boolean spacer) {
         com.termux.app.statusbar.MarksLineView row = find(rowId);
         com.termux.app.statusbar.MarksLineView column = find(columnId);
         if (row == null || column == null) return;
-        int rowShown = marks && !vertical ? View.VISIBLE : View.GONE;
-        int columnShown = marks && vertical ? View.VISIBLE : View.GONE;
+        int rowShown = lineVisibility(marks, vertical, spacer, false);
+        int columnShown = lineVisibility(marks, vertical, spacer, true);
         if (row.getVisibility() != rowShown) row.setVisibility(rowShown);
         if (column.getVisibility() != columnShown) column.setVisibility(columnShown);
         if (!marks) return;
         com.termux.app.statusbar.MarksLineView line = vertical ? column : row;
+        if (spacer) {
+            line.setVertical(vertical);
+            com.termux.app.wall.pageswitch.PageBarModel twin = mHost.pageBarModel();
+            line.setPages(twin, null);
+            return;
+        }
         if (mMarksNavigator == null) mMarksNavigator = mHost.pageSwitchNavigator();
         if (!line.hasSlideSupport()) {
             // The slide's tick and its lift read the page bar's own switches.
