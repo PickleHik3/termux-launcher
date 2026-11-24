@@ -77,6 +77,8 @@ public class SettingsActivity extends AppCompatActivity implements
      * row that would open the editor goes back to it instead of opening it again.
      */
     public static final String EXTRA_FROM_EDITOR = "settings_from_editor";
+    /** Words the Settings search opens with; read by {@link #deepLinkArguments}. */
+    public static final String EXTRA_SEARCH_QUERY = "settings_search_query";
 
     /** SharedPreferences key for the JSON stack {@link SettingsBackStackState} serializes. */
     static final String PREFS_KEY_BACK_STACK_STATE = "settings_back_stack_state_v1";
@@ -139,6 +141,19 @@ public class SettingsActivity extends AppCompatActivity implements
         }
     }
 
+    /** Opens Settings search with {@code query} already typed in. */
+    public static void openSearch(@NonNull Context context, @NonNull String query) {
+        Intent intent = createFragmentIntent(context, SettingsSearchFragment.class,
+            com.termux.R.string.settings_search_hint);
+        intent.putExtra(EXTRA_SEARCH_QUERY, query);
+        if (!(context instanceof android.app.Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException ignored) {
+            // Offered from the Assistant page: a settings screen that cannot open must not crash it.
+        }
+    }
+
     /** The same Intent, opened on one place and scrolled to one of its rows. */
     public static Intent createFragmentIntent(@NonNull Context context,
                                               @NonNull Class<? extends Fragment> fragmentClass,
@@ -171,12 +186,14 @@ public class SettingsActivity extends AppCompatActivity implements
         String scrollToKey = intent.getStringExtra(EXTRA_SCROLL_TO_KEY);
         String section = intent.getStringExtra(EXTRA_SECTION_KEY);
         boolean fromEditor = intent.getBooleanExtra(EXTRA_FROM_EDITOR, false);
-        if (place == null && scrollToKey == null && section == null && !fromEditor) return null;
+        String query = intent.getStringExtra(EXTRA_SEARCH_QUERY);
+        if (place == null && scrollToKey == null && section == null && !fromEditor && query == null) return null;
         Bundle arguments = new Bundle();
         if (place != null) arguments.putString(EXTRA_INITIAL_PLACE, place);
         if (scrollToKey != null) arguments.putString(EXTRA_SCROLL_TO_KEY, scrollToKey);
         if (section != null) arguments.putString(EXTRA_SECTION_KEY, section);
         if (fromEditor) arguments.putBoolean(EXTRA_FROM_EDITOR, true);
+        if (query != null) arguments.putString(EXTRA_SEARCH_QUERY, query);
         return arguments;
     }
 

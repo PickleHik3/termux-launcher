@@ -19,7 +19,7 @@ import java.util.Objects;
  */
 public final class AssistantRows {
 
-    public enum Type { USER, ANSWER, WORKING, WAITING, ERROR, CUTOFF }
+    public enum Type { USER, ANSWER, WORKING, WAITING, ERROR, CUTOFF, CARD }
 
     /** Why an answer failed, as the row words it. */
     public enum ErrorKind { MODEL_STOPPED, TIMEOUT, EMPTY, OTHER, NOT_LOADED, NOT_DOWNLOADED, MEMORY }
@@ -52,6 +52,10 @@ public final class AssistantRows {
         @NonNull public final String thinking;
         public final long thinkingMs;
         public final boolean thinkingLive;
+        /** A CARD row's card: the settings changes or links the answer is. */
+        @Nullable public SettingsCard card;
+        /** What the card looked like when the row was built, so a later state change reads as a change. */
+        @NonNull private String cardSignature = "";
 
         Row(@NonNull Type type, long messageId, @NonNull String text, boolean streaming, boolean stopped,
             boolean copyShare, boolean retry, @Nullable ErrorKind error, boolean offerE2b, @NonNull String key) {
@@ -95,7 +99,17 @@ public final class AssistantRows {
                 && streaming == r.streaming && stopped == r.stopped && copyShare == r.copyShare
                 && retry == r.retry && error == r.error && offerE2b == r.offerE2b && key.equals(r.key)
                 && durationMs == r.durationMs && ttftMs == r.ttftMs && tokens == r.tokens
-                && thinking.equals(r.thinking) && thinkingMs == r.thinkingMs && thinkingLive == r.thinkingLive;
+                && thinking.equals(r.thinking) && thinkingMs == r.thinkingMs && thinkingLive == r.thinkingLive
+                && cardSignature.equals(r.cardSignature);
+        }
+
+        /** The same row as a card. */
+        @NonNull
+        Row withCard(@NonNull SettingsCard card) {
+            Row row = new Row(Type.CARD, messageId, text, false, false, false, false, null, false, key);
+            row.card = card;
+            row.cardSignature = card.signature();
+            return row;
         }
 
         /** The same row with the model's thinking on it. */
@@ -131,6 +145,8 @@ public final class AssistantRows {
         @NonNull public List<String> sending = Collections.emptyList();
         /** Gemma E2B is on the phone and the chat model is not it: memory errors offer it. */
         public boolean offerE2b;
+        /** The settings cards of this process's answers, by message; null for none. */
+        @Nullable public java.util.Map<Long, SettingsCard> cards;
     }
 
     private AssistantRows() {
@@ -189,6 +205,12 @@ public final class AssistantRows {
                     rows.add(new Row(Type.WAITING, m.id, "", false, false, false, false, null, false, "q" + m.id));
                     break;
                 default:
+                    SettingsCard card = context.cards == null ? null : context.cards.get(m.id);
+                    if (card != null) {
+                        rows.add(new Row(Type.CARD, m.id, text, false, false, false, false, null, false, key)
+                            .withCard(card));
+                        break;
+                    }
                     rows.add(new Row(Type.ANSWER, m.id, text, false, false, !text.isEmpty(), newest, null, false, key,
                         speedDuration(m, text), speedTtft(m, text), speedTokens(m)));
                     break;

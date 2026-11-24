@@ -21,6 +21,9 @@ public class SettingsSearchFragment extends PreferenceFragmentCompat {
     /** The section the search was opened from, as a {@link SettingsTree.Section} name. */
     public static final String ARG_SCOPE = "settings_search_scope";
 
+    /** Words the field starts with, as the Assistant's "No matching setting" link hands them over. */
+    public static final String ARG_QUERY = "settings_search_query";
+
     @Nullable private SettingsSearchResults mResults;
 
     @NonNull
@@ -41,6 +44,9 @@ public class SettingsSearchFragment extends PreferenceFragmentCompat {
         screen.addPreference(search);
         setPreferenceScreen(screen);
         mResults = SettingsSearchResults.attach(this, search, scope());
+        Bundle arguments = getArguments();
+        String query = arguments == null ? null : arguments.getString(ARG_QUERY);
+        if (query != null && !query.trim().isEmpty()) search.setQuery(query.trim());
     }
 
     @Override

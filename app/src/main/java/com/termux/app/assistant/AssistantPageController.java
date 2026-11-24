@@ -25,6 +25,7 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder;
 import com.google.android.material.snackbar.BaseTransientBottomBar;
 import com.google.android.material.snackbar.Snackbar;
 import com.termux.R;
+import com.termux.app.settings.LauncherSettings;
 import com.termux.app.page.Page;
 import com.termux.app.page.PageHost;
 import com.termux.app.activities.SettingsActivity;
@@ -267,6 +268,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         rc.generatingId = generating;
         rc.liveText = generating == 0L ? null : engine.liveText(generating);
         rc.sending = sending;
+        rc.cards = AssistantCards.shared().all();
         AssistantModelStatus.Snapshot snap = snapshot;
         rc.offerE2b = snap != null && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.NOT_DOWNLOADED
             && snap.gemmaE2b.state.kind != AssistantModelStatus.Kind.DOWNLOADING
@@ -417,6 +419,20 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
             failures.remove(AssistantModelStatus.MODEL_E4B);
             status.load(l -> engine.retry(row.messageId));
         });
+    }
+
+    @Override
+    public void applyCard(long messageId) {
+        AssistantCards cards = AssistantCards.shared();
+        if (cards.apply(messageId, AssistantEngine.deviceRegistry(context.getApplicationContext()),
+            LauncherSettings.applier())) {
+            render();
+        }
+    }
+
+    @Override
+    public void openSettingsSearch(@NonNull String query) {
+        SettingsActivity.openSearch(context, query);
     }
 
     @NonNull
