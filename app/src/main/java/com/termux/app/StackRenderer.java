@@ -594,7 +594,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             // a transform alone redraws nothing, so they are re-aimed here.
             invalidateIfShown(R.id.accessory_blur_backdrop);
             invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
-            invalidateIfShown(R.id.terminal_surface_blur_backdrop);
+            invalidateIfShown(R.id.terminal_dock_blur_backdrop);
             invalidateIfDressed(R.id.inapp_keyboard_view_host);
             invalidateIfDressed(R.id.accessory_under_keyboard_stack);
         }
@@ -832,7 +832,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * samples where it is drawn, so the offset beyond its layout goes to its anchor.
      */
     private void writeTerminalHost(boolean tilts) {
-        View host = mViews.view(R.id.terminal_surface_host);
+        View host = mViews.view(R.id.terminal_dock_host);
         if (host == null) return;
         boolean on = mApart && host.getVisibility() == View.VISIBLE;
         float tx = on ? mFrame.sideTx[Side.TERMINAL.ordinal()] : 0f;
@@ -845,7 +845,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         writePlank(SLOT_TERMINAL_HOST, host, stands ? PLANK_HOST : PLANK_NONE, tx);
         moved |= host.getTranslationX() != txWas;
         moved |= writeTerminalHostMotion(host, on, tx, ty);
-        if (moved) invalidateIfShown(R.id.terminal_surface_blur_backdrop);
+        if (moved) invalidateIfShown(R.id.terminal_dock_blur_backdrop);
     }
 
     private boolean writeTerminalHostMotion(@NonNull View host, boolean on, float tx, float ty) {
@@ -875,7 +875,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     public boolean terminalHostStands() {
         if (!mApart || mViews.frontIsHome()) return false;
-        View host = mViews.view(R.id.terminal_surface_host);
+        View host = mViews.view(R.id.terminal_dock_host);
         return host != null && host.getVisibility() == View.VISIBLE;
     }
 
@@ -893,7 +893,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     @Nullable
     private View plankView(int target) {
         if (target == PLANK_HOST && terminalHostStands())
-            return mViews.view(R.id.terminal_surface_host);
+            return mViews.view(R.id.terminal_dock_host);
         if (target == PLANK_HOST && keysCardTilts()) return mViews.view(R.id.extra_keys_card);
         return target == PLANK_HOST ? mViews.view(R.id.accessory_surface_host)
             : target == PLANK_CONTAINER ? mViews.view(R.id.accessory_stack_container) : null;

@@ -29,7 +29,7 @@ import com.termux.app.place.RestCards;
 
 /**
  * The Terminal's Docked card wearing the dock slab's glass while the cards stand apart (ADR 0032,
- * #304): a second back host ({@code terminal_surface_host}) beside the glass host, dressed the way
+ * #304): a second back host ({@code terminal_dock_host}) beside the glass host, dressed the way
  * the activity dresses the host under Docked, on its own views. Its shape is the card the rest's
  * answer cuts ({@link SideCardsController#terminalHostCard}): the outline from its corners, the
  * rim under the glass on its rim edges only ({@code rimUnderGlass(0, rimEdges)}), every other
@@ -79,7 +79,7 @@ public final class TerminalHostDress {
                 return mHost.density();
             }
             @Nullable @Override public View dockBackdrop() {
-                return mHost.findViewById(R.id.terminal_surface_blur_backdrop);
+                return mHost.findViewById(R.id.terminal_dock_blur_backdrop);
             }
             @Nullable @Override public float[] peekGlassRect() {
                 return null;
@@ -117,7 +117,7 @@ public final class TerminalHostDress {
      */
     public void update(@NonNull ChromeSpec state) {
         if (mSource.crossing()) return;
-        View host = mHost.findViewById(R.id.terminal_surface_host);
+        View host = mHost.findViewById(R.id.terminal_dock_host);
         boolean standing = host != null && host.getVisibility() == View.VISIBLE
             && state.toolbarShown && mSource.card() != null && !mSource.standsDownOnFrame()
             && mHost.stackRenderer().terminalHostStands();
@@ -133,7 +133,7 @@ public final class TerminalHostDress {
      * dressed now so its picture is up when it first shows. A rest-like step, once per crossing.
      */
     public void onCrossingBegin(@NonNull ChromeSpec state) {
-        View host = mHost.findViewById(R.id.terminal_surface_host);
+        View host = mHost.findViewById(R.id.terminal_dock_host);
         if (host == null || host.getVisibility() != View.VISIBLE || !state.toolbarShown
             || mSource.card() == null || mSource.standsDownOnFrame()) return;
         dress(state, false);
@@ -143,38 +143,38 @@ public final class TerminalHostDress {
     public void release() {
         if (!mShown && mWatched == null) return;
         mShown = false;
-        ImageView backdrop = mHost.findViewById(R.id.terminal_surface_blur_backdrop);
+        ImageView backdrop = mHost.findViewById(R.id.terminal_dock_blur_backdrop);
         if (backdrop != null) clearBackdrop(backdrop);
-        hide(R.id.terminal_surface_top_edge_fx);
-        hide(R.id.terminal_surface_background);
-        hide(R.id.terminal_surface_edge_glow_fx);
-        hide(R.id.terminal_surface_specular_fx);
-        View host = mHost.findViewById(R.id.terminal_surface_host);
+        hide(R.id.terminal_dock_top_edge_fx);
+        hide(R.id.terminal_dock_background);
+        hide(R.id.terminal_dock_edge_glow_fx);
+        hide(R.id.terminal_dock_specular_fx);
+        View host = mHost.findViewById(R.id.terminal_dock_host);
         if (host != null && host.getBackground() != null) host.setBackground(null);
     }
 
     // ---- The dress -----------------------------------------------------------------------------
 
     private void dress(@NonNull ChromeSpec state, boolean atRest) {
-        View host = mHost.findViewById(R.id.terminal_surface_host);
-        ImageView backdrop = mHost.findViewById(R.id.terminal_surface_blur_backdrop);
+        View host = mHost.findViewById(R.id.terminal_dock_host);
+        ImageView backdrop = mHost.findViewById(R.id.terminal_dock_blur_backdrop);
         RestCards.Card card = mSource.card();
         if (host == null || backdrop == null || card == null) return;
         watch(host);
         mShown = true;
         mRimEdges = rimEdges(card);
         float barAlpha = state.barAlpha;
-        View plate = mHost.findViewById(R.id.terminal_surface_background);
+        View plate = mHost.findViewById(R.id.terminal_dock_background);
         if (plate != null) {
             plate.setBackground(mSource.plate(barAlpha));
             plate.setAlpha(1f);
             if (plate.getVisibility() != View.VISIBLE) plate.setVisibility(View.VISIBLE);
         }
-        View specular = mHost.findViewById(R.id.terminal_surface_specular_fx);
-        View glow = mHost.findViewById(R.id.terminal_surface_edge_glow_fx);
+        View specular = mHost.findViewById(R.id.terminal_dock_specular_fx);
+        View glow = mHost.findViewById(R.id.terminal_dock_edge_glow_fx);
         mDock.dressPlankLayers(specular, glow, 0f, mHost.resolveDockAccentColor(), barAlpha);
         if (glow != null && glow.getVisibility() != View.VISIBLE) glow.setVisibility(View.VISIBLE);
-        View edgeFx = mHost.findViewById(R.id.terminal_surface_top_edge_fx);
+        View edgeFx = mHost.findViewById(R.id.terminal_dock_top_edge_fx);
         if (edgeFx != null) {
             CapsuleGlass.dressTopEdge(edgeFx, (mRimEdges & ChromeEdgeRule.TOP) != 0, barAlpha,
                 mSource.outlineColor());

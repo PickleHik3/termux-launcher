@@ -97,7 +97,7 @@ public class StackRendererApartTest {
      */
     @Test public void dockedTheTerminalsHostRidesTheTerminalsLane() {
         View terminalHost = new FrameLayout(RuntimeEnvironment.getApplication());
-        mViews.put(R.id.terminal_surface_host, terminalHost);
+        mViews.put(R.id.terminal_dock_host, terminalHost);
         mKeysCard.setVisibility(View.GONE);
         View rows = mViews.get(R.id.accessory_row_stack);
         for (boolean frontHome : new boolean[] {true, false}) {

@@ -857,7 +857,7 @@
                  rest's answer (SideCardsController) and carried on the Terminal's lane by the
                  stack's renderer. Gone whenever the cards stand together or the dock floats. -->
             <FrameLayout
-                android:id="@+id/terminal_surface_host"
+                android:id="@+id/terminal_dock_host"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_alignParentBottom="true"
@@ -866,34 +866,34 @@
                 android:visibility="gone">
 
                 <ImageView
-                    android:id="@+id/terminal_surface_blur_backdrop"
+                    android:id="@+id/terminal_dock_blur_backdrop"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:scaleType="fitXY"
                     android:visibility="gone" />
 
                 <View
-                    android:id="@+id/terminal_surface_top_edge_fx"
+                    android:id="@+id/terminal_dock_top_edge_fx"
                     android:layout_width="match_parent"
                     android:layout_height="12dp"
                     android:layout_gravity="top"
                     android:visibility="gone" />
 
                 <View
-                    android:id="@+id/terminal_surface_background"
+                    android:id="@+id/terminal_dock_background"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone"
                     android:background="?attr/termuxColorSurfacePanelHigh"/>
 
                 <com.termux.app.DockEdgeGlowView
-                    android:id="@+id/terminal_surface_edge_glow_fx"
+                    android:id="@+id/terminal_dock_edge_glow_fx"
                     android:layout_width="match_parent"
                     android:layout_height="match_parent"
                     android:visibility="gone" />
 
                 <View
-                    android:id="@+id/terminal_surface_specular_fx"
+                    android:id="@+id/terminal_dock_specular_fx"
                     android:layout_width="300dp"
                     android:layout_height="300dp"
                     android:layout_gravity="center"

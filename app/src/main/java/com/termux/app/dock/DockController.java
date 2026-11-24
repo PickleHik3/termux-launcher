@@ -1379,9 +1379,9 @@ public final class DockController {
         // Under Docked the Terminal's own host is that slab (#304).
         boolean onHost = mHost.stackRenderer().terminalHostStands();
         boolean onCard = !onHost && mHost.stackRenderer().keysCardStands();
-        View specular = mHost.findViewById(onHost ? R.id.terminal_surface_specular_fx
+        View specular = mHost.findViewById(onHost ? R.id.terminal_dock_specular_fx
             : onCard ? R.id.extra_keys_card_specular_fx : R.id.accessory_specular_fx);
-        View glow = mHost.findViewById(onHost ? R.id.terminal_surface_edge_glow_fx
+        View glow = mHost.findViewById(onHost ? R.id.terminal_dock_edge_glow_fx
             : onCard ? R.id.extra_keys_card_edge_glow_fx : R.id.accessory_edge_glow_fx);
         if (mDockPlankController == null || mDockPlankSpecular != specular
             || mDockPlankGlow != glow) {
@@ -1404,11 +1404,11 @@ public final class DockController {
         // Under Docked the Terminal's own host is that slab (#304).
         boolean onHost = mHost.stackRenderer().terminalHostStands();
         boolean onCard = !onHost && mHost.stackRenderer().keysCardStands();
-        View specular = mHost.findViewById(onHost ? R.id.terminal_surface_specular_fx
+        View specular = mHost.findViewById(onHost ? R.id.terminal_dock_specular_fx
             : onCard ? R.id.extra_keys_card_specular_fx : R.id.accessory_specular_fx);
-        View glow = mHost.findViewById(onHost ? R.id.terminal_surface_edge_glow_fx
+        View glow = mHost.findViewById(onHost ? R.id.terminal_dock_edge_glow_fx
             : onCard ? R.id.extra_keys_card_edge_glow_fx : R.id.accessory_edge_glow_fx);
-        View surfaceHost = mHost.findViewById(onHost ? R.id.terminal_surface_host
+        View surfaceHost = mHost.findViewById(onHost ? R.id.terminal_dock_host
             : onCard ? R.id.extra_keys_card : R.id.accessory_surface_host);
         int surfaceHeightPx = surfaceHost != null ? surfaceHost.getHeight() : 0;
         boolean capsuleDock = onCard ? dockFloats() : hostFloats();

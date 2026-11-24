@@ -352,7 +352,7 @@ public final class SideCardsController {
         mTerminalHostCard = on ? dock : null;
         mTerminalHostRestRect = on ? dock.box : null;
         mTerminalHostFootPx = on ? foot : 0;
-        View view = mHost.view(R.id.terminal_surface_host);
+        View view = mHost.view(R.id.terminal_dock_host);
         if (view == null) return moved;
         if (!on) {
             if (view.getVisibility() != View.GONE) view.setVisibility(View.GONE);

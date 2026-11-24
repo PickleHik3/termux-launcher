@@ -9266,7 +9266,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** The expanded surface's own geometry: laid out over the dock and the keyboard together. */
     private boolean isUnifiedAccessorySurfaceLaidOut(@NonNull ChromeSpec state) {
         // Apart under Docked the unified surface is the Terminal's own host (#304).
-        View surfaceHost = findViewById(mSideCards.terminalHostOn() ? R.id.terminal_surface_host
+        View surfaceHost = findViewById(mSideCards.terminalHostOn() ? R.id.terminal_dock_host
             : R.id.accessory_surface_host);
         View accessoryContainer = findViewById(R.id.accessory_stack_container);
         View keyboardContainer = findViewById(R.id.inapp_keyboard_container);
@@ -9295,7 +9295,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mSideCards.terminalHostOn()) {
             // Apart under Docked the unified surface is the Terminal's own host (#304): its
             // dress keeps its own record, clean once its crop is installed for this geometry.
-            ImageView terminal = findViewById(R.id.terminal_surface_blur_backdrop);
+            ImageView terminal = findViewById(R.id.terminal_dock_blur_backdrop);
             return mTerminalHostDress.shown() && terminal != null
                 && terminal.getDrawable() != null && terminal.getVisibility() == View.VISIBLE
                 && !mChrome.ledger().isDirty(SurfaceDirtyLedger.Backdrop.TERMINAL_HOST);
