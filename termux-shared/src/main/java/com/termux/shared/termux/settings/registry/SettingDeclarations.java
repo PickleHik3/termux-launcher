@@ -105,7 +105,8 @@ public final class SettingDeclarations {
         "motion.cursor_trail", SettingDeclaration.Store.APP_PREFERENCES, "terminal_cursor_trail",
         true, SettingRefresh.RESTYLE).described("Cursor trail",
         "Draws a trail behind the terminal's cursor as it moves.")
-        .saidAs("the cursor leaves a streak", "my phone feels slow", "turn off the cursor effect");
+        .saidAs("the cursor leaves a streak", "my phone feels slow", "turn off the cursor effect")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     /** Whether the wallpaper pans a little as pages and windows slide. */
     @NonNull
@@ -162,7 +163,8 @@ public final class SettingDeclarations {
         false, SettingRefresh.RESTYLE).described("Terminal effect",
         "Gives the terminal an old monitor look, or none.")
         .saidAs("I don't like the retro screen effect", "the screen looks like an old TV",
-            "remove the scanlines", "I want a retro look");
+            "remove the scanlines", "I want a retro look")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     /** Whether the terminal's bell and other events flash the screen effect. */
     @NonNull
@@ -170,7 +172,8 @@ public final class SettingDeclarations {
         "terminal.screen_events", SettingDeclaration.Store.APP_PREFERENCES,
         "terminal_screen_events", true, SettingRefresh.LISTENER).described("Screen events",
         "Lets the terminal's bell and other events flicker the screen effect.")
-        .saidAs("the screen flickers when something beeps", "stop the flashing");
+        .saidAs("the screen flickers when something beeps", "stop the flashing")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     /** The extra layer that blends the retro effect into the terminal. */
     @NonNull
@@ -178,7 +181,8 @@ public final class SettingDeclarations {
         "terminal.effect_composite", SettingDeclaration.Store.APP_PREFERENCES,
         "terminal_retro_composite", false, SettingRefresh.LISTENER).described("Effect blending",
         "Blends the retro effect into the terminal's colours.")
-        .saidAs("my battery drains too fast", "my phone feels slow").notOffered();
+        .saidAs("my battery drains too fast", "my phone feels slow").notOffered()
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     // ---- Status bar chips ----
 
@@ -187,21 +191,24 @@ public final class SettingDeclarations {
         "status.battery", SettingDeclaration.Store.APP_PREFERENCES, "status_widget_battery", false,
         SettingRefresh.RESTYLE).described("Battery in the status bar",
         "Shows the battery level in the status bar.")
-        .saidAs("show the battery", "I can't see my battery level", "show the battery percentage");
+        .saidAs("show the battery", "I can't see my battery level", "show the battery percentage")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     @NonNull
     public static final SettingDeclaration STATUS_MEDIA = SettingDeclaration.bool(
         "status.media", SettingDeclaration.Store.APP_PREFERENCES, "status_widget_media", true,
         SettingRefresh.RESTYLE).described("Media in the status bar",
         "Shows what is playing in the status bar.")
-        .saidAs("show what's playing", "I can't see the song", "hide the music from the status bar");
+        .saidAs("show what's playing", "I can't see the song", "hide the music from the status bar")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     @NonNull
     public static final SettingDeclaration STATUS_WEATHER = SettingDeclaration.bool(
         "status.weather", SettingDeclaration.Store.APP_PREFERENCES, "status_widget_weather", true,
         SettingRefresh.RESTYLE).described("Weather in the status bar",
         "Shows the weather in the status bar.")
-        .saidAs("I want to see the weather up top", "show the weather", "hide the weather");
+        .saidAs("I want to see the weather up top", "show the weather", "hide the weather")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     @NonNull
     public static final SettingDeclaration STATUS_CLOCK_AM_PM = SettingDeclaration.bool(
@@ -209,7 +216,8 @@ public final class SettingDeclarations {
         true, SettingRefresh.RESTYLE).described("AM and PM on the clock",
         "Shows AM or PM beside the status bar clock.")
         .saidAs("the clock should show am/pm", "I can't tell morning from evening",
-            "remove am/pm from the clock");
+            "remove am/pm from the clock")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     // ---- Dock, Home and notifications ----
 
@@ -223,7 +231,8 @@ public final class SettingDeclarations {
             ::normalizeAppLauncherDockStyle).described("Dock style",
         "Whether the dock and bars sit on the screen's edge or float as cards.")
         .saidAs("the dock should float", "the dock touches the edge of the screen",
-            "I want rounded cards", "make the dock square");
+            "I want rounded cards", "make the dock square")
+        .resetBy(SettingDeclaration.ResetGroup.APPEARANCE);
 
     @NonNull
     public static final SettingDeclaration NOTIFICATION_DOTS = SettingDeclaration.bool(
