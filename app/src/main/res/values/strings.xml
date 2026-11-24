@@ -98,6 +98,19 @@
     <string name="editor_place_hide">Hide</string>
     <string name="editor_place_hide_bar">Hide %1$s</string>
     <string name="editor_place_bring_back">Bring %1$s back</string>
+    <string name="editor_reach_every_page">every page</string>
+    <string name="editor_reach_home_pages">the Home pages</string>
+    <string name="editor_reach_workspace_pages">the Workspace pages</string>
+    <string name="editor_reach_minimal_layout">the Minimal layout</string>
+    <string name="editor_hint_rest">Tap a bar for its settings. Drag it to move, or drop it here to hide.</string>
+    <string name="editor_hint_rest_hidden">Tap a bar for its settings. Drag it to move, or drop it here to hide. Drag one back to show it.</string>
+    <string name="editor_hint_selected_movable">Drag it to move, or tap a dashed place. Changes apply on %1$s.</string>
+    <string name="editor_hint_selected_hide_only">Drop it here to hide. Changes apply on %1$s.</string>
+    <string name="editor_hint_selected_hidden">Hidden. Tap its dashed place to bring it back. Changes apply on %1$s.</string>
+    <string name="editor_hint_drag_refused">Not here. Try an edge or this column.</string>
+    <string name="editor_hint_drag_place">Let go to place %1$s here, on %2$s.</string>
+    <string name="editor_hint_drag_pane">Let go to put %1$s inside the pane, on %2$s.</string>
+    <string name="editor_hint_drag_hide">Let go to hide %1$s on %2$s.</string>
     <string name="az_pull_tab_description">A–Z index. Slide along it to find and open apps.</string>
     <!-- The one Settings row and corner button for wallpaper, Look, Layout and the icon pack. -->
     <string name="settings_destination_terminal">Terminal</string>

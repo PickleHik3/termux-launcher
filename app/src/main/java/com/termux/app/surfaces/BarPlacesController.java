@@ -15,10 +15,12 @@ import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.layouteditor.BarDragGeometry;
+import com.termux.app.layouteditor.BarLandingPolicy;
 import com.termux.app.layouteditor.BarLandingPolicy.Bar;
 import com.termux.app.layouteditor.BarLandingPolicy.FrameState;
 import com.termux.app.layouteditor.BarLandingPolicy.Zone;
 import com.termux.app.layouteditor.BarPlaceOffers;
+import com.termux.app.layouteditor.HintText;
 import com.termux.app.layouteditor.BarPlaceOffers.Label;
 import com.termux.app.layouteditor.BarPlaceOffers.Offer;
 import com.termux.app.layouteditor.LayoutEditorController;
@@ -95,8 +97,33 @@ final class BarPlacesController {
         mButtons.clear();
     }
 
-    /** Lays the selected bar's places over the frame; with no selection every button goes. */
+    /** Lays the selected bar's places over the frame, then tells the host (the hint reads it). */
     void refresh() {
+        layPlaces();
+        mHost.onPlacesRefreshed();
+    }
+
+    /**
+     * The hint for the state at rest: the selected bar with its reach from the policy, or the
+     * general line (#343).
+     */
+    @NonNull
+    HintText hint() {
+        LayoutEditorController layout = mHost.layout();
+        Bar bar = mSelected;
+        boolean anyHidden = layout != null && !layout.trayItems().isEmpty();
+        PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
+        PlaceOrientation orientation = layout == null ? null : layout.shownOrientation();
+        LayoutKind kind = layout == null ? null : layout.layoutKind();
+        if (bar == null || arranged == null || orientation == null || kind == null)
+            return HintText.atRest(anyHidden);
+        BarLandingPolicy.Places places = BarLandingPolicy.places(
+            new FrameState(arranged, orientation, kind, mHost.statusPlace()), bar);
+        return HintText.selected(bar, !shownOn(layout, bar), places.scope, places.hideScope);
+    }
+
+    /** Lays the selected bar's places over the frame; with no selection every button goes. */
+    private void layPlaces() {
         ViewGroup overlay = mHost.overlay();
         LayoutEditorController layout = mHost.layout();
         Bar bar = mSelected;

@@ -49,6 +49,7 @@ import com.termux.app.launcher.home.HomeSettings;
 import com.termux.app.layouteditor.BarLandingPolicy;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
+import com.termux.app.layouteditor.HintText;
 import com.termux.app.layouteditor.LayoutEditorPlan;
 import com.termux.app.page.PageKind;
 import com.termux.app.place.Element;
@@ -4832,6 +4833,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         LayoutEditorController layout = mHost.layoutEditor();
         if (column != null && layout != null)
             column.setItems(layout.trayItems());
+        updateHint();
+    }
+
+    /** What a lifted bar's landing says, or null while none is lifted. */
+    @Nullable private HintText mDragHint;
+
+    /** The one hint at the column's foot: the drag's line while a bar is lifted, else the rest's. */
+    private void updateHint() {
+        HiddenColumnView column = mHiddenColumn;
+        if (column == null)
+            return;
+        HintText hint = mDragHint != null ? mDragHint : barPlaces().hint();
+        column.setHint(HintStrings.titleOf(mHost.context(), hint), HintStrings.of(mHost.context(), hint));
     }
 
     /** The column beside the frame as the pose leaves it: translation only. */
@@ -5127,6 +5141,19 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onWritten() {
             refreshHiddenColumn();
             positionTargets();
+        }
+
+        @Override public void onHold(@Nullable BarLandingPolicy.Bar held,
+                                     @Nullable BarLandingPolicy.Landing landing) {
+            HintText next = held == null ? null : HintText.dragging(held, landing);
+            if (java.util.Objects.equals(next, mDragHint))
+                return;
+            mDragHint = next;
+            updateHint();
+        }
+
+        @Override public void onPlacesRefreshed() {
+            updateHint();
         }
     }
 

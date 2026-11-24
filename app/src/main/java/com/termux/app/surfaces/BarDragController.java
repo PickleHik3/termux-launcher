@@ -99,6 +99,14 @@ final class BarDragController {
 
         /** A drop wrote the draft: the targets are laid over the bars again. */
         void onWritten();
+
+        /**
+         * What letting go would do (#343); {@code held} null when no bar is lifted any more.
+         */
+        default void onHold(@Nullable Bar held, @Nullable Landing landing) {}
+
+        /** The selected bar changed or its places were laid again (#343). */
+        default void onPlacesRefreshed() {}
     }
 
     private static final Bar[] BARS = {
@@ -221,6 +229,8 @@ final class BarDragController {
                 mGroup.getParent().requestDisallowInterceptTouchEvent(false);
         }
         mHost.onHiddenTarget(false);
+        if (mDragging)
+            mHost.onHold(null, null);
         mArmed = false;
         mDragging = false;
         mHeld = null;
@@ -331,6 +341,7 @@ final class BarDragController {
         Landing landing = BarLandingPolicy.land(state, held, hold);
         mLanding = landing;
         mHost.onHiddenTarget(landing.allowed && landing.zone == Zone.HIDDEN);
+        mHost.onHold(held, landing);
         if (landing.zone != Zone.HIDDEN && BarDragGeometry.slotLine(frame, held, landing, mLine))
             showLine(landing.edge != null && landing.edge.isOnSide());
         else
