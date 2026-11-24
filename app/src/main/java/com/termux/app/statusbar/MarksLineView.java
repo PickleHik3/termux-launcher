@@ -68,7 +68,6 @@ public final class MarksLineView extends View {
     @Nullable private boolean[] mAttention;
     @Nullable private MarksLine mLine;
     private boolean mVertical;
-    private int mAccent;
     private int mNeutral;
     private int mError;
     @Nullable private ChromeInk mChromeInk;
@@ -77,7 +76,7 @@ public final class MarksLineView extends View {
     @NonNull private final Rect mBandRect = new Rect();
     @NonNull private final Rect mMeasuredRect = new Rect();
     private boolean mInkMeasured;
-    /** The authored inks are the ones held, for this accent and chrome. */
+    /** The authored inks are the ones held, for this chrome. */
     private boolean mAuthored;
     private float mDownX;
     private float mDownY;
@@ -105,13 +104,11 @@ public final class MarksLineView extends View {
         mAccess = new Access(this);
         ViewCompat.setAccessibilityDelegate(this, mAccess);
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mAccent = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorPrimary,
-            ContextCompat.getColor(context, R.color.termux_primary));
         mNeutral = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorOnSurface,
             ContextCompat.getColor(context, R.color.termux_on_surface));
         mError = MaterialColors.getColor(context, com.termux.shared.R.attr.termuxColorError,
             ContextCompat.getColor(context, R.color.termux_error));
-        mInk = MarksLineInk.authored(mNeutral, mAccent, mError);
+        mInk = MarksLineInk.authored(mNeutral, mError);
     }
 
     public void setNavigator(@Nullable PageSwitchTargets.Navigator navigator) {
@@ -149,16 +146,6 @@ public final class MarksLineView extends View {
         if (mVertical == vertical) return;
         mVertical = vertical;
         rebuild();
-    }
-
-    /** The place's accent, the current mark's colour before it is made legible on the band. */
-    public void setPlaceAccent(int accent) {
-        if (mAccent == accent) return;
-        mAccent = accent;
-        mInkMeasured = false;
-        mAuthored = false;
-        syncInk();
-        invalidate();
     }
 
     /**
@@ -289,7 +276,7 @@ public final class MarksLineView extends View {
             if (mAuthored && !mInkMeasured) return false;
             mInkMeasured = false;
             mAuthored = true;
-            MarksLineInk authored = MarksLineInk.authored(mNeutral, mAccent, mError);
+            MarksLineInk authored = MarksLineInk.authored(mNeutral, mError);
             boolean changed = !sameInk(authored, mInk);
             mInk = authored;
             return changed;
@@ -303,7 +290,7 @@ public final class MarksLineView extends View {
             com.termux.shared.R.attr.termuxColorSurfaceBase,
             ContextCompat.getColor(getContext(), R.color.termux_surface_base));
         MarksLineInk solved = MarksLineInk.onBand(resolved.surface, pale,
-            WindowChipInk.neutralSeed(mNeutral, surfaceBase, pale), mAccent, mError);
+            WindowChipInk.neutralSeed(mNeutral, surfaceBase, pale), mError);
         boolean changed = !sameInk(solved, mInk);
         mInk = solved;
         mInkMeasured = true;
@@ -498,7 +485,7 @@ public final class MarksLineView extends View {
         }
         int surface = MaterialColors.getColor(this, com.termux.shared.R.attr.termuxColorSurfaceBase,
             ContextCompat.getColor(getContext(), R.color.termux_surface_base));
-        bubble.setInks(surface, mNeutral, mAccent);
+        bubble.setInks(surface, mNeutral);
         bubble.setBounds(0, 0, host.getWidth(), host.getHeight());
         bubble.setAppear(mAppear);
         host.getOverlay().add(bubble);

@@ -30394,8 +30394,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         line.setNavigator(mMarksNavigator);
         line.setVertical(vertical);
         line.setChromeInk(mChrome.ink());
-        line.setPlaceAccent(com.termux.app.statusbar.StatusBarLensView.accentFor(this,
-            com.termux.app.page.PageKind.TERMINAL));
         com.termux.app.wall.pageswitch.PageBarModel model = pageBarModel();
         line.setPages(model, marksAttention(model));
         line.refreshInk();

@@ -7,10 +7,10 @@ import com.termux.app.chrome.PageMarkInk;
 import com.termux.app.terminal.WindowChipInk;
 
 /**
- * The inks of the Marks line on the status bar's ground: the current mark in the place's accent,
- * the other marks in the ground's neutral ink a tier under it ({@link PageMarkInk}, so the page
- * bar's marks and these read alike), and attention in the error colour, each solved on the band the
- * line stands on and on that band's side ({@code pale}). The band is what
+ * The inks of the Marks line on the status bar's ground: every mark in the legibility ink, the
+ * current one at full strength and the others a tier under it ({@link PageMarkInk}, so the page
+ * bar's marks and these read alike), and the attention burst in the error colour, the only colour
+ * on the line, each solved on the band the line stands on and on that band's side ({@code pale}). The band is what
  * {@code ChromeInk.onGlass} resolved for the bar, so light, dark, black, Material You and the
  * launcher's scheme chrome all arrive through it. Pure; asked when the band or the palette moves,
  * never per frame.
@@ -32,13 +32,12 @@ public final class MarksLineInk {
      *
      * @param pale whether the chrome's ink is the pale one on this band
      * @param neutral the band's neutral ink seed ({@link WindowChipInk#neutralSeed})
-     * @param accent the place's accent
      * @param error the error role, the attention colour
      */
     public static MarksLineInk onBand(@ColorInt int band, boolean pale, @ColorInt int neutral,
-                                      @ColorInt int accent, @ColorInt int error) {
+                                      @ColorInt int error) {
         int ground = OnGlass.opaque(band);
-        int current = PageMarkInk.current(ground, accent, pale);
+        int current = PageMarkInk.current(ground, neutral, pale);
         int other = PageMarkInk.other(ground, neutral, current);
         int attention = WindowChipInk.towardPolarity(ground, error, pale,
             OnGlass.TARGET_LARGE_TEXT);
@@ -49,8 +48,7 @@ public final class MarksLineInk {
      * The authored inks, for a bar nothing can measure yet (no chrome, or a band not laid out):
      * the roles themselves, as the chips wear them, until a measurement lands.
      */
-    public static MarksLineInk authored(@ColorInt int neutral, @ColorInt int accent,
-                                        @ColorInt int error) {
-        return new MarksLineInk(accent, neutral, error);
+    public static MarksLineInk authored(@ColorInt int neutral, @ColorInt int error) {
+        return new MarksLineInk(neutral, neutral, error);
     }
 }

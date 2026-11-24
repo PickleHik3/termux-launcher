@@ -86,10 +86,10 @@ final class MarksBubbleLayer extends Drawable {
         return mWidth;
     }
 
-    void setInks(@ColorInt int fill, @ColorInt int text, @ColorInt int disc) {
+    void setInks(@ColorInt int fill, @ColorInt int text) {
         mFill.setColor(fill);
         mText.setColor(text);
-        mDisc = disc;
+        mDisc = text;
     }
 
     /** What the bubble names; re-measures only when the name or the host's room differs. */
