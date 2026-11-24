@@ -654,6 +654,11 @@ public final class WidgetPaneController implements LauncherWidgetHostController.
         pane.setPageIndicator(indicator);
     }
 
+    /** Under the Marks look Home gives the pill's band to its grid (Status bar card › Page bar). */
+    public void setPageBarLook(@NonNull com.termux.app.wall.pageswitch.PageBarLook look) {
+        pane.setPageBarLook(look);
+    }
+
     /** How Home's app icons and folders are drawn (Settings › Home › Icons and labels). */
     public void setIconStyle(@NonNull HomeIconStyle style) {
         appIcons.setStyle(style);

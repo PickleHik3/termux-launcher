@@ -6355,6 +6355,7 @@ public class TerminalPaneController {
             boolean bare = !split && mMaximizedLeaf == null && !floating && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, paneSession, border, bare, glassShape, density);
+            frame.setStatusRowPx(!floating && frame == statusRowFrame() ? mStatusRowPx : 0);
             if (bare) continue;
             // A float's titlebar wears the border its pane wears: the focused float's strip
             // carries the active rim with it.
@@ -6442,7 +6443,58 @@ public class TerminalPaneController {
             boolean bare = !split && !stacked && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
+            frame.setStatusRowPx(leaf == topLeftLeaf(shownTreeOf(w)) ? mStatusRowPx : 0);
         }
+    }
+
+    /** The status bar's thin row the top pane of every window holds ({@link #setStatusRowPx}). */
+    private int mStatusRowPx;
+
+    /**
+     * Gives the top pane of every window (the one on screen at the top-left of its tiled tree, in
+     * either reading direction, or the maximized or stacked pane alone) the status bar's thin row above its
+     * content, and every other pane none (PaneRowPolicy.paneTopInsetPx). Floats never hold it.
+     * Neighbour windows hold it too, so the window a slide brings in is the window that lands.
+     * Only a change re-dresses, so the terminals take their rows once per change of place.
+     */
+    public void setStatusRowPx(int rowPx) {
+        int row = Math.max(0, rowPx);
+        if (row == mStatusRowPx) return;
+        mStatusRowPx = row;
+        updateActiveBorders();
+        for (int slot = 0; slot < mNeighbourWindows.length; slot++) {
+            Window w = mNeighbourWindows[slot];
+            if (w != null && mNeighbourContainers[slot] != null)
+                dressNeighbourFrames(w, mNeighbourContainers[slot]);
+        }
+    }
+
+    /**
+     * The frame that holds the status bar's thin row in the window in front, the one the row is
+     * laid over; null when no pane holds it.
+     */
+    @Nullable
+    public PaneContentFrame statusRowFrame() {
+        if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
+        Leaf top = mMaximizedLeaf != null ? mMaximizedLeaf
+            : topLeftLeaf(shownTreeOf(mActiveWindow));
+        return top == null ? null : mPaneFrames.get(top.session);
+    }
+
+    /**
+     * The leaf on screen at the top-left of {@code node}: the first child of every split but a
+     * side-by-side one in a right-to-left layout, which lays its first child on the right
+     * ({@link StatusRowPane#takesFirst}).
+     */
+    @Nullable
+    private Leaf topLeftLeaf(@Nullable Node node) {
+        boolean rtl = mHostView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        while (node instanceof Split) {
+            Split split = (Split) node;
+            node = StatusRowPane.takesFirst(split.orientation == LinearLayout.HORIZONTAL, rtl)
+                ? split.a : split.b;
+        }
+        return (Leaf) node;
     }
 
     @Nullable

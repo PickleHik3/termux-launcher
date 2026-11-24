@@ -760,6 +760,27 @@ public final class TermuxPreferenceConstants {
         public static final String KEY_STATUS_ROW_ORDER = "status_row_order";
         public static final String DEFAULT_STATUS_ROW_ORDER = "";
 
+        /**
+         * How the status bar marks the pages: {@link #PAGE_BAR_LOOK_GLYPHS} (the window chips) or
+         * {@link #PAGE_BAR_LOOK_MARKS} (a line of marks, one per page). One global value. Absent
+         * reads Glyphs, which is what every existing install keeps; a new install is written Marks
+         * by the shipped-defaults step ({@code PageBarLook} in the app).
+         */
+        public static final String KEY_PAGE_BAR_LOOK = "page_bar_look";
+        public static final String PAGE_BAR_LOOK_GLYPHS = "glyphs";
+        public static final String PAGE_BAR_LOOK_MARKS = "marks";
+        public static final String DEFAULT_PAGE_BAR_LOOK = PAGE_BAR_LOOK_GLYPHS;
+
+        /**
+         * Where the status bar stands: {@link #STATUS_PLACE_STRIP} (its own strip) or
+         * {@link #STATUS_PLACE_PANE} (a thin row inside the top pane). One global value; absent
+         * reads the strip, which every install, new or existing, keeps ({@code StatusPlace}).
+         */
+        public static final String KEY_STATUS_PLACE = "status_place";
+        public static final String STATUS_PLACE_STRIP = "strip";
+        public static final String STATUS_PLACE_PANE = "pane";
+        public static final String DEFAULT_STATUS_PLACE = STATUS_PLACE_STRIP;
+
         public static final String KEY_STATUS_WIDGET_RAM = "status_widget_ram";
         public static final boolean DEFAULT_STATUS_WIDGET_RAM = false;
 

@@ -122,7 +122,8 @@ public class EditorCardSectionsTest {
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS),
+            CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
+                Row.STATUS_INDICATORS),
             "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
             "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST),

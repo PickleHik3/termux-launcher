@@ -2908,12 +2908,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // The page bar (Home's, the key's and its open popup) takes its stream whole, ahead of
             // the seam's swipe and the surface long-press.
             if (mPageBar != null && mPageBar.claimsTouch(ev)) return super.dispatchTouchEvent(ev);
+            // The thin status row lies over the top pane, where the views would give its presses
+            // to the pane: it takes a stream that starts on it whole, its hold included.
+            com.termux.app.statusbar.StatusBarSwipeLayout statusHost = statusRowHost();
+            if (statusHost != null && statusHost.dispatchWindowRowTouch(ev)) return true;
             if (!pillStream && mSurfaceLongPress.onWindowTouch(ev)) return true;
             if (routeDockSeamTouch(ev)) return true;
             return dispatchTouchToViews(ev);
         } finally {
             Trace.endSection();
         }
+    }
+
+    /** The status host, found once: every window touch asks it whether the thin row owns it. */
+    @Nullable private com.termux.app.statusbar.StatusBarSwipeLayout mStatusRowHost;
+
+    @Nullable
+    private com.termux.app.statusbar.StatusBarSwipeLayout statusRowHost() {
+        if (mStatusRowHost == null) {
+            View host = findViewById(R.id.terminal_window_bar_host);
+            if (host instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
+                mStatusRowHost = (com.termux.app.statusbar.StatusBarSwipeLayout) host;
+        }
+        return mStatusRowHost;
     }
 
     /**
@@ -3448,6 +3465,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
+        mStatusRow.endStatusRowEnlargement();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
         endHomePillFlight();
@@ -4057,6 +4075,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPanesForScreenTop() {
         syncBarSplit();
+        // The thin row follows the top pane's laid-out place (a split, a keyboard, a rotation).
+        mStatusRow.syncStatusRowPlace();
         int[] box = panesReachScreenTop() ? mCameraBox : null;
         java.util.List<TerminalView> panes = mPaneController != null
             ? mPaneController.getVisiblePaneViews()
@@ -17898,9 +17918,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // one band of its own bar below it, the same band where Home wears the Terminal's bar
         // (#90), so a slide across the seam settles without moving either and the two line up.
         boolean reachedBefore = mCanvasReachesUnderBar;
+        boolean barShown = isSplitPanesEnabled();
+        // Status bar › Place: In the pane. The row stands where the Terminal's layout stands the
+        // bar along the top; then every page reaches under the bar as Home does and the top pane
+        // holds the row (PaneRowPolicy), read once here per arrangement, never per frame.
+        PlaceLayout terminalLayout = terminalPlaceLayout();
+        mStatusRow.readArrangement(barShown, layout, terminalLayout);
         boolean reaches = canvasReachesUnderBarNow();
         mCanvasReachesUnderBar = reaches;
-        boolean barShown = isSplitPanesEnabled();
         int reachPx = com.termux.app.place.PageTopInsets.canvasReachPx(reaches, barShown, layout,
             metrics);
         boolean reached = applyTopStackOverlap(reachPx);
@@ -17921,10 +17946,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reached |= applySideStackTopInset(1, R.id.place_edge_stack_right,
             EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.RIGHT, metrics,
                 overlays));
-        PlaceLayout terminal = terminalPlaceLayout();
         applyTerminalTopInset(com.termux.app.place.PageTopInsets.terminalTopInsetPx(reaches,
-                barShown, layout, terminal == null ? layout : terminal, metrics),
-            com.termux.app.place.PageTopInsets.bodySurfaceTopPx(mLastWallPage, reachPx));
+                barShown, layout, terminalLayout == null ? layout : terminalLayout, metrics,
+                mStatusRow.paneRowStands()),
+            com.termux.app.place.PageTopInsets.bodySurfaceTopPx(mLastWallPage, reachPx,
+                mStatusRow.paneRowStands()));
+        mStatusRow.syncStatusPresentation();
         // The canvas reaching up or coming back down moves nothing on screen (every page keeps
         // its rect), so only a reach that changed for any other reason re-cuts the glass.
         if (reached && reaches == reachedBefore) moved = true;
@@ -17941,8 +17968,102 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController == null ? null : mPaneWallController.wall();
         boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
             mLastWallPage, wall.isMoving(), wall.offsetPx(), wall.currentPage());
-        return com.termux.app.place.PageTopInsets.canvasReachesUnderBar(mLastWallPage, atRest);
+        return com.termux.app.place.PageTopInsets.canvasReachesUnderBar(mLastWallPage, atRest,
+            mStatusRow.paneRowStands());
     }
+
+    /** The thin row's presentation, place and sizes (StatusRowController). */
+    @NonNull private final com.termux.app.statusbar.StatusRowController mStatusRow =
+        new com.termux.app.statusbar.StatusRowController(
+            new com.termux.app.statusbar.StatusRowController.Host() {
+                @Nullable @Override public TermuxAppSharedPreferences preferences() {
+                    return mPreferences;
+                }
+
+                @NonNull @Override public android.content.Context context() {
+                    return TermuxActivity.this;
+                }
+
+                @Nullable @Override public View findView(int id) {
+                    return findViewById(id);
+                }
+
+                @NonNull @Override public com.termux.app.page.PageKind wallPage() {
+                    return mLastWallPage;
+                }
+
+                @Nullable @Override public com.termux.app.wall.PaneWallLayout wall() {
+                    return mPaneWallController == null ? null : mPaneWallController.wall();
+                }
+
+                @Nullable @Override public com.termux.app.wall.PageRef crossingOtherEnd() {
+                    return mCrossing == null ? null : mCrossing.seam().otherEnd();
+                }
+
+                @Nullable @Override public View displayWindow() {
+                    return mPaneWallController == null ? null : mPaneWallController.displayWindow();
+                }
+
+                @Nullable @Override public com.termux.app.terminal.PaneContentFrame statusRowFrame() {
+                    return mPaneController == null ? null : mPaneController.statusRowFrame();
+                }
+
+                @Override public void setPaneStatusRowPx(int px) {
+                    if (mPaneController != null) mPaneController.setStatusRowPx(px);
+                }
+
+                @Override public boolean isReducedMotionEnabled() {
+                    return TermuxActivity.this.isReducedMotionEnabled();
+                }
+
+                @Override public int surfaceBaseColor() {
+                    return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorSurfaceBase,
+                        R.color.termux_surface_base);
+                }
+
+                @Override public void refreshTerminalWindowBar() {
+                    TermuxActivity.this.refreshTerminalWindowBar();
+                }
+
+                @Override public boolean marksLookShown() {
+                    return mMarksLine.marksLookShown();
+                }
+            });
+
+    /** The status bar's Marks line (MarksLineController). */
+    @NonNull private final com.termux.app.statusbar.MarksLineController mMarksLine =
+        new com.termux.app.statusbar.MarksLineController(
+            new com.termux.app.statusbar.MarksLineController.Host() {
+                @Nullable @Override public TermuxAppSharedPreferences preferences() {
+                    return mPreferences;
+                }
+
+                @Nullable @Override public View findView(int id) {
+                    return findViewById(id);
+                }
+
+                @Override public boolean isReducedMotionEnabled() {
+                    return TermuxActivity.this.isReducedMotionEnabled();
+                }
+
+                @Override public boolean statusBarVertical() {
+                    return mStatusBar.isStatusBarVertical();
+                }
+
+                @NonNull @Override
+                public com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator
+                pageSwitchNavigator() {
+                    return TermuxActivity.this.pageSwitchNavigator();
+                }
+
+                @NonNull @Override public com.termux.app.wall.pageswitch.PageBarModel pageBarModel() {
+                    return TermuxActivity.this.pageBarModel();
+                }
+
+                @Nullable @Override public com.termux.app.chrome.ChromeInk chromeInk() {
+                    return mChrome.ink();
+                }
+            });
 
     /**
      * The canvas reaches up under the bar as the wall leaves its rest on the Terminal, and comes
@@ -17950,6 +18071,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * makes it, and nothing on the frames between. No page moves on screen either way.
      */
     private void syncCanvasTopReach() {
+        mStatusRow.syncStatusPresentation();
         if (canvasReachesUnderBarNow() == mCanvasReachesUnderBar) return;
         Trace.beginSection("Wall.canvasReach");
         try {
@@ -25234,6 +25356,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         flushLandingRestyle();
         com.termux.app.page.PageKind left = mLastWallPage;
         mLastWallPage = page;
+        // The enlarged thin row always ends with the page it was pressed on.
+        mStatusRow.endStatusRowEnlargement();
         // The dock is dressed once in the commit: a dress the place pass makes is noted, and the
         // Dock design step below finds it worn (CommitDockDress).
         mDock.commitDockDress().begin();
@@ -25243,6 +25367,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.beginSection("Settle.arrangement");
             syncChromeArrangement();
             Trace.endSection();
+            // The status host follows the committed page: the row on a page with a pane, the
+            // strip on Home (StatusPresentation); a compare under the strip.
+            mStatusRow.syncStatusPresentation();
             // Home wears its own Style, Corners and Margin: a crossing between halves that differ
             // dresses the chrome for the arriving one, as the variant above re-arranged it. A slide
             // whose stack already changed into that dress on the way leaves the landed frame
@@ -27639,7 +27766,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
             sessions.setAccent(placeAccent);
-            sessions.setVisibility(terminal ? View.VISIBLE : View.GONE);
+            sessions.setVisibility(mStatusRow.sessionsIndicatorVisibility(terminal,
+                mMarksLine.marksLookShown()));
         }
         boolean windowsShown = terminal
             && com.termux.app.wall.PaneWallPolicy.showsWindowChips(currentWallPage());
@@ -27649,7 +27777,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rather than trusting a role colour authored against an opaque card.
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
-            bar.setVisibility(windowsShown && !mStatusBar.isStatusBarVertical() ? View.VISIBLE : View.GONE);
+            bar.setVisibility(windowsShown && !mStatusRow.chipsKeptAway(mMarksLine.marksLookShown())
+                && !mStatusBar.isStatusBarVertical()
+                ? View.VISIBLE : View.GONE);
             // The font toggle's pill follows the page the bar is dressed for.
             syncFontToggle();
             // The plus opens a terminal window right after the window in front, whichever it is;
@@ -27664,9 +27794,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (windowColumn != null) {
             windowColumn.setChromeInk(mChrome.ink());
             windowColumn.setPlaceAccent(placeAccent);
-            windowColumn.setVisibility(windowsShown && mStatusBar.isStatusBarVertical()
-                ? View.VISIBLE : View.GONE);
+            windowColumn.setVisibility(windowsShown && !mMarksLine.marksLookShown()
+                && mStatusBar.isStatusBarVertical() ? View.VISIBLE : View.GONE);
         }
+        // Under the Marks look the line stands where the chips were, so the chips are put away.
+        mMarksLine.syncMarksLine();
         // Home's float chips, in Home's accent: they are Home's content, not the Terminal's.
         homeFloatChipBar().dress(mChrome.ink(), com.termux.app.statusbar.StatusBarLensView
             .accentFor(this, com.termux.app.page.PageKind.HOME), mStatusBar.isStatusBarVertical());
@@ -28826,6 +28958,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mWidgetPaneController.setIconStyle(com.termux.app.launcher.home.HomeSettings.iconStyle(this));
         mWidgetPaneController.setPageIndicator(
             com.termux.app.launcher.home.HomeSettings.pageIndicator(this));
+        syncHomeBandLook();
         mWidgetPaneController.setLayoutLocked(
             com.termux.app.launcher.home.HomeSettings.isLayoutLocked(this));
         mWidgetPaneController.setFolderStyle(
@@ -30329,6 +30462,18 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mWidgetPaneController.setPageBar(pageBarModel());
         }
         refreshPageSwitcherKey();
+        mMarksLine.syncMarksLine();
+    }
+
+    /**
+     * Tells Home's pane the status bar's page bar look: under Marks the pill's band goes to the
+     * grid. Called when the look can have changed (settings return, the editor's row), never per
+     * page change; the pane compares before it resizes.
+     */
+    private void syncHomeBandLook() {
+        if (mWidgetPaneController == null || mPreferences == null) return;
+        mWidgetPaneController.setPageBarLook(com.termux.app.wall.pageswitch.PageBarLook
+            .fromValue(mPreferences.getPageBarLook()));
     }
 
     /** The window count and current window the glyphs were last given. */
@@ -31142,6 +31287,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View host = findViewById(R.id.terminal_window_bar_host);
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
+        syncHomeBandLook();
+        // Status bar › Place changed (the editor's row, a settings return): the reach, the
+        // Terminal's top and the top pane's row are re-read on the one arrangement pass.
+        if (mStatusRow.placeChanged()) {
+            applyEdgeStacksAndInvalidate(arrangement().layout());
+        }
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
         applyLazyMode();
@@ -31152,7 +31303,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !arrangement().layout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
-            ? View.VISIBLE : View.GONE;
+            && !mStatusRow.chipsKeptAway(mMarksLine.marksLookShown()) ? View.VISIBLE : View.GONE;
         if (bar.getVisibility() != chips) bar.setVisibility(chips);
         mStatusBar.syncBorderStatusSwipe(visible);
         if (!visible) {
@@ -31362,6 +31513,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPages.isCommitted(com.termux.app.page.PageKind.HOME) || wallStripFed() && wallStripOn(mLastWallPage))
             syncWallStrip(chips, items);
         int selected = chips.selected(com.termux.app.chrome.WindowChips.Surface.BAR);
+        mMarksLine.setWindowAttention(chips, items);
         // The bar lists the Terminal's own windows; the floats are Home's chips (#295).
         items = new java.util.ArrayList<>(
             items.subList(0, chips.count(com.termux.app.chrome.WindowChips.Surface.BAR)));
@@ -31380,6 +31532,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         bar.setWindows(items, selected);
         syncFontToggle();
         refreshPageGlyphsIfWindowsMoved();
+        mMarksLine.syncMarksLine();
         if (mScene != null && selected >= 0 && selected < items.size())
             mScene.onFocusedWindow(items.get(selected).label);
         com.termux.app.statusbar.StatusBarWindowColumn windowColumn =

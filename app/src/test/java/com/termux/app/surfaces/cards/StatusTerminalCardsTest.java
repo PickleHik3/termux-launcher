@@ -66,8 +66,8 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_INDICATORS,
-            Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
+        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
+            Row.STATUS_INDICATORS, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
             Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
             Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
             rows(StatusBarCard.rows(ALL)));
@@ -230,6 +230,38 @@ public class StatusTerminalCardsTest {
         host.position = 0;
         position.restate();
         assertTrue("restated to Top", segments.get(0).isChecked());
+
+        CardRowView pageBar = StatusBarCard.view(f.themed, Row.STATUS_PAGE_BAR, f.width, host);
+        f.layOut(pageBar.view);
+        List<MaterialButton> looks = buttons(pageBar.view);
+        assertEquals("Glyphs and Marks", 2, looks.size());
+        assertEquals("Glyphs", String.valueOf(looks.get(0).getText()));
+        assertEquals("Marks", String.valueOf(looks.get(1).getText()));
+        looks.get(1).performClick();
+        assertEquals(StatusBarCard.PAGE_BAR_MARKS, host.pageBar);
+        host.pageBar = StatusBarCard.PAGE_BAR_GLYPHS;
+        pageBar.restate();
+        assertTrue("restated to Glyphs", looks.get(0).isChecked());
+        assertEquals(StatusBarCard.PAGE_BAR_MARKS, StatusBarCard.pageBarIndex("marks"));
+        assertEquals("absent reads Glyphs", StatusBarCard.PAGE_BAR_GLYPHS,
+            StatusBarCard.pageBarIndex(null));
+        assertEquals("marks", StatusBarCard.pageBarValue(StatusBarCard.PAGE_BAR_MARKS));
+
+        CardRowView place = StatusBarCard.view(f.themed, Row.STATUS_PLACE, f.width, host);
+        f.layOut(place.view);
+        List<MaterialButton> places = buttons(place.view);
+        assertEquals("Strip and In the pane", 2, places.size());
+        assertEquals("Strip", String.valueOf(places.get(0).getText()));
+        assertEquals("In the pane", String.valueOf(places.get(1).getText()));
+        places.get(1).performClick();
+        assertEquals(StatusBarCard.PLACE_PANE, host.place);
+        host.place = StatusBarCard.PLACE_STRIP;
+        place.restate();
+        assertTrue("restated to Strip", places.get(0).isChecked());
+        assertEquals(StatusBarCard.PLACE_PANE, StatusBarCard.placeIndex("pane"));
+        assertEquals("absent reads the strip", StatusBarCard.PLACE_STRIP,
+            StatusBarCard.placeIndex(null));
+        assertEquals("pane", StatusBarCard.placeValue(StatusBarCard.PLACE_PANE));
 
         CardRowView clock = StatusBarCard.view(f.themed, Row.CLOCK_FACE, f.width, host);
         f.layOut(clock.view);
@@ -465,16 +497,32 @@ public class StatusTerminalCardsTest {
         int position;
         int face = 5;
         int align;
+        int pageBar;
+        int place;
         final boolean[] options = {false, false, false, true};
         final boolean[] indicators = {true, true, false, true, true, false, true, false, false};
         int cameraGapOpened;
 
-        @Override public int position() { return position; }
-        @Override public void setPosition(int index) { position = index; }
-        @Override public int clockFace() { return face; }
-        @Override public void setClockFace(int index) { face = index; }
-        @Override public int clockPosition() { return align; }
-        @Override public void setClockPosition(int index) { align = index; }
+        @Override public int choice(@NonNull Row row) {
+            switch (row) {
+                case STATUS_POSITION: return position;
+                case CLOCK_FACE: return face;
+                case CLOCK_POSITION: return align;
+                case STATUS_PAGE_BAR: return pageBar;
+                case STATUS_PLACE: return place;
+                default: return 0;
+            }
+        }
+        @Override public void setChoice(@NonNull Row row, int index) {
+            switch (row) {
+                case STATUS_POSITION: position = index; break;
+                case CLOCK_FACE: face = index; break;
+                case CLOCK_POSITION: align = index; break;
+                case STATUS_PAGE_BAR: pageBar = index; break;
+                case STATUS_PLACE: place = index; break;
+                default: break;
+            }
+        }
         @Override public boolean option(int index) { return options[index]; }
         @Override public void setOption(int index, boolean on) { options[index] = on; }
         @Override public boolean indicator(int index) { return indicators[index]; }

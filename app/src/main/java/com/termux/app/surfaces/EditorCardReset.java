@@ -67,6 +67,10 @@ final class EditorCardReset {
                 prefs.setStatusWidgetMediaEnabled(TERMUX_APP.DEFAULT_STATUS_WIDGET_MEDIA);
                 // Absent, as shipped: the row stands in its shipped order.
                 remove(prefs, TERMUX_APP.KEY_STATUS_ROW_ORDER);
+                // As a new install ships it, not the Glyphs an absent key reads.
+                prefs.setPageBarLook(TERMUX_APP.PAGE_BAR_LOOK_MARKS);
+                // The status bar on its own strip, as every install starts.
+                prefs.setStatusPlace(TERMUX_APP.STATUS_PLACE_STRIP);
                 break;
             case TERMINAL:
                 prefs.setTerminalContrastLevel(TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL);

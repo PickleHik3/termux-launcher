@@ -541,6 +541,7 @@
     <string name="launcher_media_channel_name">Media controls</string>
     <string name="launcher_media_play">Play</string>
     <string name="launcher_media_pause">Pause</string>
+    <string name="status_marks_content_description">Pages</string>
     <string name="page_switch_home">Home</string>
     <string name="page_switch_terminal">Terminal</string>
     <string name="page_switch_assistant">Assistant</string>

@@ -214,4 +214,81 @@ public class PageTopInsetsTest {
         assertEquals(0, PageTopInsets.bodySurfaceTopPx(WINDOW, 0));
         assertEquals(0, PageTopInsets.bodySurfaceTopPx(HOME, BAR));
     }
+
+    // ---- Place: In the pane (#333) ---------------------------------------------------------
+
+    /**
+     * {@link #pageTopPx} with the status bar standing as the thin row inside the Terminal's top
+     * pane: the canvas reaches up under the bar on every page and the Terminal's pages start at
+     * its top, so the strip's band comes back to the terminal as rows.
+     */
+    private static int pageTopInPanePx(PageKind page, PageKind committed, boolean wallAtRest,
+                                       PlaceLayout onScreen, PlaceLayout home,
+                                       EdgeStackPolicy.Metrics metrics) {
+        boolean reaches = PageTopInsets.canvasReachesUnderBar(committed, wallAtRest, true);
+        int reach = PageTopInsets.canvasReachPx(reaches, true, onScreen, metrics);
+        int canvasTop = EdgeStackPolicy.stackThicknessPx(onScreen, Edge.TOP, metrics) - reach;
+        return canvasTop + com.termux.app.wall.PageTopInset.pageTopInsetPx(page,
+            PageTopInsets.terminalTopInsetPx(reaches, true, onScreen, TERMINAL, metrics, true),
+            PageTopInsets.homeTopInsetPx(reaches, true, home, metrics));
+    }
+
+    @Test
+    public void inThePaneTheCanvasReachesUnderTheBarEvenAtRestOnTheTerminal() {
+        assertTrue(PageTopInsets.canvasReachesUnderBar(WINDOW, true, true));
+        assertTrue(PageTopInsets.canvasReachesUnderBar(PageKind.DISPLAY, true, true));
+        assertTrue(PageTopInsets.canvasReachesUnderBar(HOME, true, true));
+        // The strip keeps today's answer.
+        assertFalse(PageTopInsets.canvasReachesUnderBar(WINDOW, true, false));
+        assertTrue(PageTopInsets.canvasReachesUnderBar(WINDOW, false, false));
+    }
+
+    @Test
+    public void inThePaneTheTerminalStartsAtTheCanvasTopAndTheBodyWithIt() {
+        EdgeStackPolicy.Metrics m = metrics(BAR);
+        assertEquals(0, PageTopInsets.terminalTopInsetPx(true, true, TERMINAL, TERMINAL, m,
+            true));
+        assertEquals("the strip", BAR, PageTopInsets.terminalTopInsetPx(true, true, TERMINAL,
+            TERMINAL, m, false));
+        assertEquals(0, PageTopInsets.bodySurfaceTopPx(WINDOW, BAR, true));
+        assertEquals("the strip", BAR, PageTopInsets.bodySurfaceTopPx(WINDOW, BAR, false));
+    }
+
+    @Test
+    public void inThePaneTheTerminalGetsTheStripsBandBackAsRows() {
+        EdgeStackPolicy.Metrics m = metrics(BAR);
+        int strip = pageTopPx(WINDOW, WINDOW, true, TERMINAL, TERMINAL, m);
+        int pane = pageTopInPanePx(WINDOW, WINDOW, true, TERMINAL, TERMINAL, m);
+        assertEquals(BAR, strip - pane);
+    }
+
+    @Test
+    public void inThePaneNoPageMovesAtAnyStepOfEitherCrossing() {
+        EdgeStackPolicy.Metrics m = metrics(BAR);
+        int window = pageTopInPanePx(WINDOW, WINDOW, true, TERMINAL, TERMINAL, m);
+        int home = pageTopInPanePx(HOME, HOME, true, TERMINAL, TERMINAL, m);
+        assertEquals("Home keeps its strip's band", BAR, home - window);
+        for (PageKind committed : new PageKind[] {WINDOW, HOME}) {
+            for (boolean rest : new boolean[] {true, false}) {
+                assertEquals(window, pageTopInPanePx(WINDOW, committed, rest, TERMINAL,
+                    TERMINAL, m));
+                assertEquals(home, pageTopInPanePx(HOME, committed, rest, TERMINAL, TERMINAL,
+                    m));
+            }
+        }
+        // A Home that puts the bar away: the Terminal's bar is brought over it for the slide.
+        int bareHome = pageTopInPanePx(HOME, HOME, true, HOME_LAYOUT, HOME_LAYOUT, m);
+        assertEquals(bareHome, pageTopInPanePx(HOME, HOME, false, HOME_WITH_BAR, HOME_LAYOUT, m));
+        assertEquals(bareHome, pageTopInPanePx(HOME, WINDOW, false, HOME_WITH_BAR, HOME_LAYOUT,
+            m));
+    }
+
+    @Test
+    public void inThePaneTheTerminalKeepsItsHeightWhereverTheCanvasStands() {
+        EdgeStackPolicy.Metrics m = metrics(BAR);
+        int top = pageTopInPanePx(WINDOW, WINDOW, true, TERMINAL, TERMINAL, m);
+        assertEquals(top, pageTopInPanePx(WINDOW, WINDOW, false, TERMINAL, TERMINAL, m));
+        assertEquals(top, pageTopInPanePx(WINDOW, HOME, true, TERMINAL, TERMINAL, m));
+        assertEquals(top, pageTopInPanePx(WINDOW, HOME, false, HOME_WITH_BAR, HOME_LAYOUT, m));
+    }
 }

@@ -325,6 +325,11 @@ public final class SurfaceLongPress {
                 // margins round the rows are the frame, so a hold there opens the popup.
                 if (onKeyCore((juloo.keyboard2.Keyboard2View) view, box, x, y))
                     out.add(box);
+            } else if (view instanceof com.termux.app.statusbar.MarksLineView) {
+                // A press on a mark starts the line's tap or slide, never the bar's popup; the
+                // line's bare stretch beyond the marks is still the bar's.
+                if (((com.termux.app.statusbar.MarksLineView) view).holdsMarkAt(x - box.left,
+                    y - box.top)) out.add(box);
             } else if (ownsLongPress(view)) {
                 out.add(box);
             }
