@@ -492,12 +492,11 @@ public final class AssistantEngine {
             text = answer.question;
         } else if (!answer.text.isEmpty()) {
             text = answer.text;
-        } else if (answer.dropped > 0 || calls.length() > 0 || shortlist.offered.isEmpty()) {
+        } else {
+            // No valid call and no words of its own: the model found nothing to change.
             card = SettingsCard.noMatch(lastUserText(store.messages(g.chatId)));
             cards.put(g.messageId, card);
             text = card.summary();
-        } else {
-            return false;
         }
         synchronized (g) {
             g.text.setLength(0);
