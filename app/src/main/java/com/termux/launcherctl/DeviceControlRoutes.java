@@ -312,7 +312,8 @@ final class DeviceControlRoutes {
     @NonNull
     private static List<SettingAdapter> adapters(
             @NonNull Context context) {
-        return LauncherSettingsAdapters.forDeviceRedressing(context);
+        return LauncherSettingsAdapters.forDevice(context,
+            () -> TerminalActionDispatcher.getInstance().redressChrome());
     }
 
     /**

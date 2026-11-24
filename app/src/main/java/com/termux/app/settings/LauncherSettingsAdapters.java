@@ -5,7 +5,6 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 
 import com.termux.app.place.layout.LayoutStore;
-import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 import com.termux.shared.termux.settings.registry.SettingAdapter;
@@ -22,12 +21,6 @@ import java.util.List;
 public final class LauncherSettingsAdapters {
 
     private LauncherSettingsAdapters() {}
-
-    /** {@link #forDevice} for a door that re-dresses the live chrome after a save. */
-    @NonNull
-    public static List<SettingAdapter> forDeviceRedressing(@NonNull Context context) {
-        return forDevice(context, () -> TerminalActionDispatcher.getInstance().redressChrome());
-    }
 
     /** The device's adapters; nothing is read until an id is asked for. */
     @NonNull

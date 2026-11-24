@@ -12,6 +12,7 @@ import androidx.preference.PreferenceScreen;
 import com.termux.app.settings.LauncherSettings;
 import com.termux.app.settings.LauncherSettingsAdapters;
 import com.termux.app.settings.LowMemoryPresetAdapter;
+import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
@@ -112,7 +113,8 @@ public final class RegistryPreferenceDataStore extends PreferenceDataStore {
         Context app = context.getApplicationContext() != null ? context.getApplicationContext()
             : context;
         return new RegistryPreferenceDataStore(fallback,
-            LauncherSettings.registry(app, LauncherSettingsAdapters::forDeviceRedressing),
+            LauncherSettings.registry(app, c -> LauncherSettingsAdapters.forDevice(c,
+                () -> TerminalActionDispatcher.getInstance().redressChrome())),
             LauncherSettings.applier(), ROWS,
             message -> Toast.makeText(app, message, Toast.LENGTH_SHORT).show());
     }
