@@ -525,4 +525,48 @@ public class RestCardsTest {
         assertTrue("some Terminals wear Home's Peek card at Home's rect", together > 0);
         assertTrue("some Terminals wear a Peek card Home's rest does not draw there", apart > 0);
     }
+    /**
+     * While the cards stand apart with two keyboard cards, each keyboard view is one side's at
+     * both rests (#307): {@link StackView#KEYBOARD_COLUMN} is laid out at Home's rest and carries
+     * Home's keyboard card, parked while the Terminal is in front, and
+     * {@link StackView#TERMINAL_KEYBOARD} at the Terminal's, parked while Home is in front.
+     */
+    @Test public void apartTheKeyboardColumnIsHomesAndTheTerminalKeyboardTheTerminalsAtBothRests() {
+        int cases = 0;
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : new boolean[] {false, true})
+                for (boolean homeUp : new boolean[] {false, true})
+                    for (boolean terminalUp : new boolean[] {false, true}) {
+            RestCards atTerminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, terminalUp, homeUp,
+                floating));
+            if (atTerminal.laidOut(StackView.TERMINAL_KEYBOARD) == null) continue;
+            String label = f.name + (floating ? " FLOATING" : " DOCKED") + " home kb=" + homeUp
+                + " terminal kb=" + terminalUp;
+            RestCards atHome = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, terminalUp,
+                floating));
+            assertEquals(label + " Home's column",
+                String.valueOf(atHome.laidOut(StackView.KEYBOARD_COLUMN)),
+                String.valueOf(atTerminal.homeKeyboardColumn()));
+            assertEquals(label + " Home's column, by its view",
+                String.valueOf(atHome.laidOut(StackView.KEYBOARD_COLUMN)),
+                String.valueOf(atTerminal.laidOut(StackView.KEYBOARD_COLUMN)));
+            assertEquals(label + " the Terminal's keyboard",
+                String.valueOf(atHome.laidOut(StackView.TERMINAL_KEYBOARD)),
+                String.valueOf(atTerminal.laidOut(StackView.TERMINAL_KEYBOARD)));
+            for (RestCards.Card card : atTerminal.cards())
+                assertTrue(label + " " + card, card.view != StackView.KEYBOARD_COLUMN);
+            for (RestCards.Card card : atHome.cards())
+                assertTrue(label + " " + card, card.view != StackView.TERMINAL_KEYBOARD);
+            StringBuilder homeKeys = new StringBuilder();
+            for (RestCards.Card card : atHome.cards())
+                if (card.view == StackView.KEYBOARD_COLUMN) homeKeys.append(card).append(' ');
+            StringBuilder parked = new StringBuilder();
+            for (RestCards.Card card : atTerminal.parked())
+                if (card.view == StackView.KEYBOARD_COLUMN) parked.append(card).append(' ');
+            assertEquals(label + " Home's keyboard card parked", homeKeys.toString(),
+                parked.toString());
+            cases++;
+        }
+        assertTrue("some rests draw two keyboard cards", cases > 0);
+    }
 }

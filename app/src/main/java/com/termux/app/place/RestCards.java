@@ -97,7 +97,16 @@ public final class RestCards {
 
     /** The views that carry cards or are laid out around them. */
     public enum StackView {
-        CONTAINER, HOST, KEYBOARD_COLUMN, UNDER, STATUS_BAR, FLOATING_KEYBOARD,
+        CONTAINER, HOST,
+        /**
+         * The keyboard's column. While the cards stand apart and the two rests draw the keyboard
+         * differently, it is Home's at both rests (#307 round 3): laid out at Home's rest and
+         * carrying Home's keyboard card, parked while the Terminal is in front
+         * ({@link #homeKeyboardColumn}); the Terminal's is {@link #TERMINAL_KEYBOARD}. Otherwise
+         * it is the front rest's.
+         */
+        KEYBOARD_COLUMN,
+        UNDER, STATUS_BAR, FLOATING_KEYBOARD,
         /** The Terminal's extra-keys card while it stands apart from Home's under Floating (SideCards). */
         KEYS_CARD,
         /**
@@ -422,7 +431,8 @@ public final class RestCards {
      * per side, each laid out once at its side's rest. Home's keyboard card (and a foot it wears)
      * stays on {@link StackView#KEYBOARD_COLUMN}, the Terminal's moves to
      * {@link StackView#TERMINAL_KEYBOARD}, and the front's answer parks the other side's with its
-     * column. Where both rests draw the keyboard alike (one card at one rect on one column) it
+     * column: with the Terminal in front, {@code laidOut(KEYBOARD_COLUMN)} is Home's parked
+     * column ({@link #homeKeyboardColumn}), not the Terminal's. Where both rests draw the keyboard alike (one card at one rect on one column) it
      * stays one shared card.
      */
     private static void splitKeyboard(@NonNull RestCards answer, @NonNull RestCards other,
@@ -598,6 +608,16 @@ public final class RestCards {
     @Nullable
     public Box laidOut(@NonNull StackView view) {
         return mLaidOut[view.ordinal()];
+    }
+
+    /**
+     * Home's keyboard column as laid out at Home's rest, whichever page is in front while the
+     * cards stand apart ({@link StackView#KEYBOARD_COLUMN}); with the Terminal in front and the
+     * cards together, null: the column is then the Terminal's own.
+     */
+    @Nullable
+    public Box homeKeyboardColumn() {
+        return mApart || mPage.isHome() ? laidOut(StackView.KEYBOARD_COLUMN) : null;
     }
 
     @NonNull
