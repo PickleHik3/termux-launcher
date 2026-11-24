@@ -188,6 +188,9 @@ public final class WaylandAppRunner {
         }
 
         @Override
+        public void onClipboardText(String text) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags) {
             main.post(() -> {
                 windows++;

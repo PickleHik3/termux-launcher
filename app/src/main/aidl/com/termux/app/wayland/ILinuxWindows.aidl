@@ -27,7 +27,7 @@ import com.termux.app.wayland.ILinuxWindowsCallback;
  */
 oneway interface ILinuxWindows {
     /** Raised with every change to this interface or its callback. */
-    const int VERSION = 2;
+    const int VERSION = 3;
 
     // Host states, ILinuxWindowsCallback.onHostState.
     /** Asked to start; running or stopped follows. */
@@ -107,4 +107,10 @@ oneway interface ILinuxWindows {
     void key(long id, int keyCode, boolean down, long eventTimeMs);
     /** Asks the window to close (the app may ask the user first). */
     void close(long id);
+
+    /**
+     * Android's clipboard text, offered to Linux apps as the plain-text selection. Texts longer
+     * than the host takes (see LinuxClipboardText) and null are dropped.
+     */
+    void setClipboardText(String text);
 }

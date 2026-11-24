@@ -28,6 +28,8 @@ public final class WaylandHost {
         void onWindowDestroyed(long id);
         /** Xwayland's display (":0"), or empty when it is gone. */
         void onXDisplay(String display);
+        /** Text a Linux app copied. */
+        void onClipboardText(String text);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -80,6 +82,8 @@ public final class WaylandHost {
     public static native void nativePointer(long id, int action, int button, float x, float y, long eventTimeMs);
     public static native void nativeKey(long id, int androidKeyCode, boolean down, long eventTimeMs);
     public static native void nativeClose(long id);
+    /** Android's clipboard text, for Linux apps. */
+    public static native void nativeSetClipboardText(String text);
     /** Debug: abort() this process. */
     public static native void nativeAbort();
     /** Debug: log what the GPU drivers offer, on a thread of its own. */
@@ -124,6 +128,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onXDisplay(display);
+        });
+    }
+
+    @Keep
+    static void onClipboardText(String text) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onClipboardText(text);
         });
     }
 
