@@ -801,9 +801,11 @@ public final class X11LinuxAppRunner {
             }
             GpuChoice gpu = appGraphics(app);
             // The desktop is drawn at the screen's pixels and told its scale as DPI: its app's
-            // Scale (the rail's stop) or the screen's density, read once, at start.
+            // Scale (the rail's stop) or the default for the screen's shorter side, read once, at start.
+            android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
             float scale = com.termux.app.wayland.LinuxDisplayScale.windowScale(
-                appSettings.scale(app.id), context.getResources().getDisplayMetrics().density);
+                appSettings.scale(app.id), metrics.density,
+                Math.min(metrics.widthPixels, metrics.heightPixels));
             List<String> env = new java.util.ArrayList<>(appEnv(app, gpu));
             env.addAll(WaylandDesktopServer.scaleEnv(scale));
             int[] size = WaylandDesktopServer.startSize(context, scale);
