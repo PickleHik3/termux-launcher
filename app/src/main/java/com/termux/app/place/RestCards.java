@@ -358,10 +358,12 @@ public final class RestCards {
         final boolean frontHome = rest.page.isHome();
         final DockGeometry.Half half = rest.pass.dock.rowsHalf();
         final Rest terminal = frontHome ? other : rest;
+        final Rest home = frontHome ? rest : other;
         // A Terminal whose own rest wears the Peek card (no keys row, its apps row alone with the
-        // keyboard down) wears Home's card at Home's rect: a card both ends draw in one place
-        // stays put on the one host (ADR 0032 §3). The Terminal's own host has no Peek dress.
-        if (wearsPeek(terminal)) return new RestCards(rest, 0, false);
+        // keyboard down) stays on the one host only while that card is Home's card at Home's
+        // rect: a card both ends draw in one place stays put (ADR 0032 §3). Anywhere else the
+        // two cards stand apart like every other layout.
+        if (sharesHomesPeek(home, terminal)) return new RestCards(rest, 0, false);
         // Each side's own rest margin, worked out by the one helper; the container keeps the
         // Terminal's at both rests and Home's side is drawn the difference lower.
         final int mine = restMarginPx(rest);
@@ -465,9 +467,17 @@ public final class RestCards {
             .withRuns(card.runs());
     }
 
-    /** Whether {@code side}'s own rest, standing alone, wears the Peek card. */
-    static boolean wearsPeek(@NonNull Rest side) {
-        return new RestCards(side, 0, false).card(CardId.PEEK) != null;
+    /**
+     * Whether the Terminal's own rest wears the Peek card and Home's own rest draws that same
+     * card at the same rect with the same corners, each standing alone: the one card both ends
+     * draw in one place (ADR 0032 §3).
+     */
+    static boolean sharesHomesPeek(@NonNull Rest home, @NonNull Rest terminal) {
+        Card mine = new RestCards(terminal, 0, false).card(CardId.PEEK);
+        if (mine == null) return false;
+        Card homes = new RestCards(home, 0, false).card(CardId.PEEK);
+        return homes != null && homes.box.equals(mine.box)
+            && homes.corners.equals(mine.corners);
     }
 
     /**
@@ -812,7 +822,7 @@ public final class RestCards {
                 && (insets.dockFootPx > 0 || unified && keyboardFootPx > 0);
             float cardBottom = hostFoot ? footTop : drawnBottom;
             if (peekStands) {
-                peekCut = addPeek(rest, layout, dock, hostTop, hostBottom, columnTop, w, h,
+                peekCut = addPeek(hostView, rest, layout, dock, hostTop, hostBottom, columnTop, w, h,
                     hostShift, density);
             } else if (floats) {
                 addFloatingDock(hostView, layout, pass, rest, dock, hostTop, cardBottom,
@@ -1034,7 +1044,8 @@ public final class RestCards {
      * the keyboard column's top, even while the host runs on over the keyboard.
      */
     @Nullable
-    private PeekGlassGeometry.Card addPeek(@NonNull Rest rest, @NonNull PlaceLayout layout, @NonNull DockLayout dock,
+    private PeekGlassGeometry.Card addPeek(@NonNull StackView hostView, @NonNull Rest rest,
+                         @NonNull PlaceLayout layout, @NonNull DockLayout dock,
                          float hostTop, float hostBottom, float rowsBottom, int w, int h,
                          float shift, float density) {
         // The apps band's top: bands at and below the apps row, up from where the rows stand.
@@ -1091,7 +1102,7 @@ public final class RestCards {
         List<PieceId> pieces = new ArrayList<>(2);
         pieces.add(PieceId.APPS);
         if (DockPlacement.peekCardCarriesAz(layout, false)) pieces.add(PieceId.AZ);
-        mCards.add(new Card(CardId.PEEK, StackView.HOST, box,
+        mCards.add(new Card(CardId.PEEK, hostView, box,
             new Corners(card.radiusPx, card.radiusPx, 0f, 0f), EdgeKind.RIM, EdgeKind.SCREEN,
             EdgeKind.RIM, EdgeKind.RIM, pieces));
         return card;

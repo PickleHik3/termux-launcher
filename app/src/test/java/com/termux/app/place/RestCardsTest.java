@@ -492,4 +492,37 @@ public class RestCardsTest {
         assertTrue("some Terminals have none", none > 0);
         assertTrue("some Terminals wear Home's Peek card", peek > 0);
     }
+    /**
+     * The one host stays shared only while the Terminal's Peek card is Home's card at Home's rect
+     * (ADR 0032, 2026-11-24): wherever Home's rest draws no Peek card, or draws it elsewhere (its
+     * own design or its keyboard up), the two cards stand apart, whichever page is in front.
+     */
+    @Test public void theTerminalsPeekCardStaysSharedOnlyAtHomesRect() {
+        int together = 0;
+        int apart = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures())
+            for (DockStyle homeDesign : DockStyle.CHOICES)
+                for (DockStyle terminalDesign : DockStyle.CHOICES)
+                    for (boolean floating : new boolean[] {false, true})
+                        for (boolean homeUp : new boolean[] {false, true}) {
+            LayoutFixtures.Fixture f = base.withDesign(terminalDesign).withHomeDesign(homeDesign);
+            RestCards.Card mine = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, false, floating))
+                .card(CardId.PEEK);
+            if (mine == null) continue;
+            RestCards.Card home = RestCards.of(f.cardsRestOf(PageRef.HOME, homeUp, floating))
+                .card(CardId.PEEK);
+            boolean shared = home != null && home.toString().equals(mine.toString());
+            String label = f.name + " " + homeDesign + "/" + terminalDesign
+                + (floating ? " FLOATING" : " DOCKED") + " home kb=" + homeUp;
+            RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, false, homeUp,
+                floating));
+            RestCards front = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, false, floating));
+            assertEquals(label, !shared, terminal.apart());
+            assertEquals(label + " Home in front", !shared, front.apart());
+            if (shared) together++;
+            else apart++;
+        }
+        assertTrue("some Terminals wear Home's Peek card at Home's rect", together > 0);
+        assertTrue("some Terminals wear a Peek card Home's rest does not draw there", apart > 0);
+    }
 }

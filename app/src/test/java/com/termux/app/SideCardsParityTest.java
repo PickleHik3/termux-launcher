@@ -236,7 +236,7 @@ public class SideCardsParityTest {
                         int homeMargin = f.settle(PageRef.HOME, up, floating).bottomMarginPx;
                         int terminalMargin = f.settle(PageRef.TERMINAL, up, floating).bottomMarginPx;
                         // Every layout stands apart since #305, but a Terminal whose rest
-                        // wears Home's Peek card (RestCards#wearsPeek).
+                        // wears Home's Peek card at Home's rect (RestCards#sharesHomesPeek).
                         boolean apart = RestCards.of(f.cardsRest(page, up, floating)).apart();
                         assertEquals(label, apart, controller.apart());
                         int frontMargin = page.isHome() ? homeMargin : terminalMargin;
