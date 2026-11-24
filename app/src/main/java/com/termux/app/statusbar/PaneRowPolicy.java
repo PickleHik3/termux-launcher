@@ -35,6 +35,16 @@ public final class PaneRowPolicy {
     public static final float START_INSET_DP = 10f;
     /** The row's content ends this far in from the pane's end edge, in dp (the mock-up's). */
     public static final float END_INSET_DP = 16f;
+    /**
+     * How far above the row a press still reaches it, in dp: the mock-up's 6dp. Nothing below it,
+     * so the terminal's first row of text keeps its own taps (#334 settles the reach).
+     */
+    public static final float TOUCH_ABOVE_DP = 6f;
+    /**
+     * The dark band the row lies on over a display's top edge, whatever the theme: it sits on the
+     * display's own pixels, which no theme colours (the mock-up's rgba(10, 16, 26, .62)).
+     */
+    public static final int DISPLAY_BAND_ARGB = 0x9E0A101A;
 
     public static int rowHeightPx(float density) {
         return Math.round(REST_HEIGHT_DP * density);

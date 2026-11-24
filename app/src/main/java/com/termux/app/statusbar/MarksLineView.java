@@ -130,6 +130,20 @@ public final class MarksLineView extends View {
         mReducedMotion = reducedMotion;
     }
 
+    /** The largest a mark is drawn, in px; 0 for no cap beyond the line's own (the strip). */
+    private float mMarkCapPx;
+
+    /**
+     * Caps the marks at {@code capPx} (the thin row's {@code PaneRowPolicy.MARK_DP}); 0 lifts the
+     * cap. Redraws only on a change.
+     */
+    public void setMarkCapPx(float capPx) {
+        float cap = Math.max(0f, capPx);
+        if (cap == mMarkCapPx) return;
+        mMarkCapPx = cap;
+        invalidate();
+    }
+
     /** Along y for a column on a side edge, along x for the row. */
     public void setVertical(boolean vertical) {
         if (mVertical == vertical) return;
@@ -313,6 +327,7 @@ public final class MarksLineView extends View {
         boolean rtl = !mVertical && getLayoutDirection() == LAYOUT_DIRECTION_RTL;
         float cross = (mVertical ? getWidth() : getHeight()) / 2f;
         float size = Math.min(line.markSizePx(), cross * 2f);
+        if (mMarkCapPx > 0f) size = Math.min(size, mMarkCapPx);
         List<PageBarFold.Slot> slots = line.slots();
         MarksSlide slide = mSlide;
         boolean sliding = mSliding && slide != null;

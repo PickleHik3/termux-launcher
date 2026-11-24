@@ -119,8 +119,103 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      */
     public void setExpansionAllowed(boolean allowed) { mExpansionAllowed = allowed; }
 
+    // ---- the thin row (Status bar › Place: In the pane, #333) ------------------------------
+
+    /** Whether the host presents as the thin row over the top pane rather than as the strip. */
+    private boolean mRowPresented;
+    /** Where the row stands, in this host's own coordinates; empty until placed. */
+    private final android.graphics.Rect mRowRect = new android.graphics.Rect();
+    /** How far above the row a press still reaches it. */
+    private int mRowTouchAbovePx;
+    /** The band drawn behind the row, 0 for none (the Display page's dark band). */
+    private int mRowBandArgb;
+    private final android.graphics.Paint mRowBandPaint =
+        new android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG);
+    /** The press that started outside the row: the whole stream goes to the pane below. */
+    private boolean mRowPassThrough;
+
+    /**
+     * Presents the host as the thin row ({@code row}) or as the strip. As the row the host stays
+     * laid out where the strip stands, so the top edge's stack keeps its band and no page moves;
+     * it draws only its status row, which it lays out itself at {@link #setRowRect}, with no
+     * glass, lens or widget slot behind it, no fold and no expansion, and it hands every press
+     * outside the row to the pane under it. Redraws only on a change.
+     */
+    public void setRowPresented(boolean row) {
+        if (row == mRowPresented) return;
+        mRowPresented = row;
+        mRowPassThrough = false;
+        requestLayout();
+        invalidate();
+    }
+
+    public boolean isRowPresented() {
+        return mRowPresented;
+    }
+
+    /**
+     * Where the row stands in this host's own coordinates, the band behind it ({@code bandArgb},
+     * 0 for none) and how far above it a press still reaches it. Lays out only when the rect
+     * changes: once per change of the top pane's place, never per frame.
+     */
+    public void setRowRect(int left, int top, int right, int bottom, int bandArgb,
+                           int touchAbovePx) {
+        mRowTouchAbovePx = Math.max(0, touchAbovePx);
+        if (mRowBandArgb != bandArgb) {
+            mRowBandArgb = bandArgb;
+            mRowBandPaint.setColor(bandArgb);
+            invalidate();
+        }
+        if (mRowRect.left == left && mRowRect.top == top && mRowRect.right == right
+            && mRowRect.bottom == bottom) return;
+        mRowRect.set(left, top, right, bottom);
+        if (mRowPresented) requestLayout();
+    }
+
+    /** The row's rect in this host's coordinates (read, never kept). */
+    @NonNull
+    public android.graphics.Rect rowRect() {
+        return mRowRect;
+    }
+
+    @Override
+    protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
+        super.onLayout(changed, left, top, right, bottom);
+        if (!mRowPresented || mRowRect.isEmpty()) return;
+        // The row is laid out here, over the top pane, whatever the strip's writers asked of its
+        // layout params: they keep writing the strip's geometry, which comes back with the strip.
+        View row = findViewById(R.id.terminal_status_row);
+        if (row == null || row.getParent() != this) return;
+        int width = mRowRect.width();
+        int height = mRowRect.height();
+        if (row.getMeasuredWidth() != width || row.getMeasuredHeight() != height) {
+            row.measure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
+                MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+        }
+        row.layout(mRowRect.left, mRowRect.top, mRowRect.right, mRowRect.bottom);
+    }
+
+    @Override
+    protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
+        if (mRowPresented && mRowBandArgb != 0 && !mRowRect.isEmpty())
+            canvas.drawRect(mRowRect, mRowBandPaint);
+        super.dispatchDraw(canvas);
+    }
+
+    @Override
+    protected boolean drawChild(@NonNull android.graphics.Canvas canvas, @NonNull View child,
+                                long drawingTime) {
+        // As the row only the status row draws: the strip's glass, lens and widget slot stay laid
+        // out for the strip's return and cost nothing meanwhile.
+        // Unplaced (no pane laid out yet), it draws nothing rather than the strip's row.
+        if (mRowPresented && (mRowRect.isEmpty() || child.getId() != R.id.terminal_status_row))
+            return false;
+        return super.drawChild(canvas, child, drawingTime);
+    }
+
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
+        if (mRowPresented) return dispatchRowTouch(event);
         mDispatchInProgress = true;
         try {
             int action = event.getActionMasked();
@@ -136,6 +231,27 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         }
     }
 
+    /**
+     * A press on the row goes to its marks and readings, with no fold to claim it; a press that
+     * starts anywhere else on the host is not the host's (false), so the pane under it gets the
+     * whole stream and the terminal's first row keeps its own taps.
+     */
+    private boolean dispatchRowTouch(@NonNull MotionEvent event) {
+        int action = event.getActionMasked();
+        if (action == MotionEvent.ACTION_DOWN) {
+            float x = event.getX();
+            float y = event.getY();
+            mRowPassThrough = mRowRect.isEmpty() || x < mRowRect.left || x >= mRowRect.right
+                || y < mRowRect.top - mRowTouchAbovePx || y >= mRowRect.bottom;
+        }
+        if (mRowPassThrough) {
+            if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
+                mRowPassThrough = false;
+            return false;
+        }
+        return super.dispatchTouchEvent(event);
+    }
+
     /** The fold has claimed the stream and the listener has heard at least one move of it. */
     private boolean mFoldDragActive;
     private boolean mExpansionAllowed = true;
@@ -146,7 +262,7 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      */
     @Override public boolean onInterceptTouchEvent(MotionEvent event) {
         StatusBarGesturePolicy gesture = mGesture;
-        if (gesture == null) return false;
+        if (gesture == null || mRowPresented) return false;
         // The fold works from anywhere on the bar, so it starts over the clock, a chip or a tile
         // as readily as over bare chrome. Taking the stream the moment it is claimed is what keeps
         // those children usable: they get their CANCEL, exactly as a scroll container's children
@@ -157,6 +273,8 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        // As the row there is no fold: a press between its marks falls through to the pane.
+        if (mRowPresented) return false;
         StatusBarGesturePolicy gesture = mGesture;
         if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             return gesture != null && gesture.claim() == StatusBarGesturePolicy.Claim.PENDING;

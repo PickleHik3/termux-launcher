@@ -3982,6 +3982,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private void syncPanesForScreenTop() {
         syncBarSplit();
+        // The thin row follows the top pane's laid-out place (a split, a keyboard, a rotation).
+        syncStatusRowPlace();
         int[] box = panesReachScreenTop() ? mCameraBox : null;
         java.util.List<TerminalView> panes = mPaneController != null
             ? mPaneController.getVisiblePaneViews()
@@ -17810,9 +17812,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // one band of its own bar below it, the same band where Home wears the Terminal's bar
         // (#90), so a slide across the seam settles without moving either and the two line up.
         boolean reachedBefore = mCanvasReachesUnderBar;
+        boolean barShown = isSplitPanesEnabled();
+        // Status bar › Place: In the pane. The row stands where the Terminal's layout stands the
+        // bar along the top; then every page reaches under the bar as Home does and the top pane
+        // holds the row (PaneRowPolicy), read once here per arrangement, never per frame.
+        PlaceLayout terminalLayout = terminalPlaceLayout();
+        mPaneRowPlace = statusPlace();
+        mPaneRowStands = com.termux.app.statusbar.PaneRowPolicy.rowStands(mPaneRowPlace,
+            com.termux.app.page.PageKind.TERMINAL, barShown && mPaneRowPlace.inPane()
+                && EdgeStackPolicy.stack(
+                terminalLayout == null ? layout : terminalLayout, PlaceLayout.Edge.TOP)
+                .contains(Element.STATUS));
+        if (mPaneController != null) {
+            mPaneController.setStatusRowPx(com.termux.app.statusbar.PaneRowPolicy.paneTopInsetPx(
+                mPaneRowStands, true, com.termux.app.statusbar.PaneRowPolicy.rowHeightPx(
+                    getResources().getDisplayMetrics().density)));
+        }
         boolean reaches = canvasReachesUnderBarNow();
         mCanvasReachesUnderBar = reaches;
-        boolean barShown = isSplitPanesEnabled();
         int reachPx = com.termux.app.place.PageTopInsets.canvasReachPx(reaches, barShown, layout,
             metrics);
         boolean reached = applyTopStackOverlap(reachPx);
@@ -17833,10 +17850,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         reached |= applySideStackTopInset(1, R.id.place_edge_stack_right,
             EdgeStackPolicy.sideStackTopInsetPx(layout, PlaceLayout.Edge.RIGHT, metrics,
                 overlays));
-        PlaceLayout terminal = terminalPlaceLayout();
         applyTerminalTopInset(com.termux.app.place.PageTopInsets.terminalTopInsetPx(reaches,
-                barShown, layout, terminal == null ? layout : terminal, metrics),
-            com.termux.app.place.PageTopInsets.bodySurfaceTopPx(mLastWallPage, reachPx));
+                barShown, layout, terminalLayout == null ? layout : terminalLayout, metrics,
+                mPaneRowStands),
+            com.termux.app.place.PageTopInsets.bodySurfaceTopPx(mLastWallPage, reachPx,
+                mPaneRowStands));
+        syncStatusPresentation();
         // The canvas reaching up or coming back down moves nothing on screen (every page keeps
         // its rect), so only a reach that changed for any other reason re-cuts the glass.
         if (reached && reaches == reachedBefore) moved = true;
@@ -17853,7 +17872,144 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mPaneWallController == null ? null : mPaneWallController.wall();
         boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
             mLastWallPage, wall.isMoving(), wall.offsetPx(), wall.currentPage());
-        return com.termux.app.place.PageTopInsets.canvasReachesUnderBar(mLastWallPage, atRest);
+        return com.termux.app.place.PageTopInsets.canvasReachesUnderBar(mLastWallPage, atRest,
+            mPaneRowStands);
+    }
+
+    /** Whether the status bar stands as the thin row in the Terminal's top pane (PaneRowPolicy). */
+    private boolean mPaneRowStands;
+    /** Status bar › Place as the last arrangement pass read it; null before the first. */
+    @Nullable private com.termux.app.statusbar.StatusPlace mPaneRowPlace;
+    /** How the status host presents right now (syncStatusPresentation). */
+    @NonNull private com.termux.app.statusbar.StatusPresentation mStatusPresentation =
+        com.termux.app.statusbar.StatusPresentation.STRIP;
+
+    /** Status bar › Place, as stored; the strip before there is a store. */
+    @NonNull
+    private com.termux.app.statusbar.StatusPlace statusPlace() {
+        return mPreferences == null ? com.termux.app.statusbar.StatusPlace.DEFAULT
+            : com.termux.app.statusbar.StatusPlace.fromValue(mPreferences.getStatusPlace());
+    }
+
+    /**
+     * Presents the one status host as the thin row or as the strip (StatusPresentation): the row
+     * at rest on a page with a pane, the strip on Home and through any slide that can show Home.
+     * Called on every arrangement pass and every wall offset, it compares first: under the strip
+     * it is two field reads, and a swap costs one host relayout. No page moves on a swap, since
+     * each page's top is its own (PageTopInsets).
+     */
+    private void syncStatusPresentation() {
+        if (!mPaneRowStands && !mStatusPresentation.isRow()) return;
+        com.termux.app.wall.PaneWallLayout wall =
+            mPaneWallController == null ? null : mPaneWallController.wall();
+        boolean atRest = wall == null || com.termux.app.place.PageTopInsets.wallAtRestOn(
+            mLastWallPage, wall.isMoving(), wall.offsetPx(), wall.currentPage());
+        com.termux.app.wall.PageRef other = mCrossing == null ? null : mCrossing.seam().otherEnd();
+        boolean homeInView = mLastWallPage == com.termux.app.page.PageKind.HOME
+            || (wall != null && wall.currentPage() == com.termux.app.page.PageKind.HOME)
+            || (other != null && other.isHome());
+        com.termux.app.statusbar.StatusPresentation presentation =
+            com.termux.app.statusbar.StatusPresentation.of(mPaneRowStands, mLastWallPage, atRest,
+                homeInView);
+        if (presentation == mStatusPresentation) return;
+        mStatusPresentation = presentation;
+        boolean row = presentation.isRow();
+        View hostView = findViewById(R.id.terminal_window_bar_host);
+        if (hostView instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
+            com.termux.app.statusbar.StatusBarSwipeLayout host =
+                (com.termux.app.statusbar.StatusBarSwipeLayout) hostView;
+            // The row has no expansion; the strip's own rule comes back with the strip.
+            host.setExpansionAllowed(!row && com.termux.app.statusbar.StatusBarGesturePolicy
+                .expansionAllowed(host.edge()));
+            host.setRowPresented(row);
+        }
+        float density = getResources().getDisplayMetrics().density;
+        com.termux.app.statusbar.MarksLineView marks = findViewById(R.id.terminal_status_marks_row);
+        if (marks != null)
+            marks.setMarkCapPx(row ? com.termux.app.statusbar.PaneRowPolicy.MARK_DP * density : 0f);
+        // The readings at the row's size, scaled about their end so they keep their place.
+        View readings = findViewById(R.id.terminal_status_widgets);
+        if (readings != null) {
+            float scale = row ? com.termux.app.statusbar.PaneRowPolicy.READING_SP
+                / com.termux.app.statusbar.StatusBarInk.SIZE_TERTIARY_SP : 1f;
+            readings.setPivotX(readings.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
+                ? 0f : readings.getWidth());
+            readings.setPivotY(readings.getHeight() / 2f);
+            if (readings.getScaleX() != scale) {
+                readings.setScaleX(scale);
+                readings.setScaleY(scale);
+            }
+        }
+        syncStatusRowPlace();
+        // The chips stand in the strip only (chipsKeptAway).
+        refreshTerminalWindowBar();
+    }
+
+    private final int[] mStatusRowOrigin = new int[2];
+    private final int[] mStatusRowHostOrigin = new int[2];
+    private final int[] mStatusRowScratch = new int[2];
+
+    /**
+     * Lays the row over the top-left pane of the page in front, read off where the pane and the
+     * host are laid out (not where a slide draws them): over the top pane's top margin on a
+     * Terminal window, which holds the row (PaneShape.topInsetPx), and over the display's top
+     * edge on a dark band on the Display page. Runs after every window layout and on a swap;
+     * the host relays out only when the rect changed.
+     *
+     * <p>#334 grows the row from here: the pane's inset stays {@link
+     * com.termux.app.statusbar.PaneRowPolicy#rowHeightPx}, and the enlarged row is drawn over
+     * the pane (a taller rect in the host, on a solid band) without touching the pane's layout.
+     */
+    private void syncStatusRowPlace() {
+        if (!mStatusPresentation.isRow()) return;
+        View hostView = findViewById(R.id.terminal_window_bar_host);
+        if (!(hostView instanceof com.termux.app.statusbar.StatusBarSwipeLayout)
+            || hostView.getWidth() <= 0) return;
+        com.termux.app.statusbar.StatusBarSwipeLayout host =
+            (com.termux.app.statusbar.StatusBarSwipeLayout) hostView;
+        boolean display = mLastWallPage == com.termux.app.page.PageKind.DISPLAY;
+        View pane;
+        float radius;
+        if (display) {
+            pane = mPaneWallController == null ? null : mPaneWallController.displayWindow();
+            radius = 0f;
+        } else if (mLastWallPage != com.termux.app.page.PageKind.TERMINAL) {
+            // A page with no terminal pane (the Assistant): the row lies along the canvas's top.
+            pane = mPaneWallController == null ? null : mPaneWallController.wall();
+            radius = 0f;
+        } else {
+            com.termux.app.terminal.PaneContentFrame frame =
+                mPaneController == null ? null : mPaneController.statusRowFrame();
+            pane = frame;
+            radius = frame == null ? 0f : com.termux.app.terminal.PaneShape.radiusForBounds(
+                frame.requestedRadiusPx(), frame.getWidth(), frame.getHeight());
+        }
+        if (pane == null || pane.getWidth() <= 0) {
+            host.setRowRect(0, 0, 0, 0, 0, 0);
+            return;
+        }
+        float density = getResources().getDisplayMetrics().density;
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(pane, mStatusRowOrigin,
+            mStatusRowScratch);
+        com.termux.app.chrome.GlassAnchor.layoutOriginOnScreen(host, mStatusRowHostOrigin,
+            mStatusRowScratch);
+        int rowPx = com.termux.app.statusbar.PaneRowPolicy.rowHeightPx(density);
+        boolean rtl = host.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        int start = com.termux.app.statusbar.PaneRowPolicy.startInsetPx(radius, rowPx, density);
+        int end = com.termux.app.statusbar.PaneRowPolicy.endInsetPx(radius, rowPx, density);
+        int left = mStatusRowOrigin[0] - mStatusRowHostOrigin[0];
+        int top = mStatusRowOrigin[1] - mStatusRowHostOrigin[1];
+        int right = left + pane.getWidth();
+        int band = display ? com.termux.app.statusbar.PaneRowPolicy.DISPLAY_BAND_ARGB : 0;
+        // The display's band spans its whole top edge; the row's content keeps its insets.
+        int touchAbove = Math.round(com.termux.app.statusbar.PaneRowPolicy.TOUCH_ABOVE_DP
+            * density);
+        if (display) {
+            host.setRowRect(left, top, right, top + rowPx, band, touchAbove);
+        } else {
+            host.setRowRect(left + (rtl ? end : start), top, right - (rtl ? start : end),
+                top + rowPx, band, touchAbove);
+        }
     }
 
     /**
@@ -17862,6 +18018,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * makes it, and nothing on the frames between. No page moves on screen either way.
      */
     private void syncCanvasTopReach() {
+        syncStatusPresentation();
         if (canvasReachesUnderBarNow() == mCanvasReachesUnderBar) return;
         Trace.beginSection("Wall.canvasReach");
         try {
@@ -25041,6 +25198,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             Trace.beginSection("Settle.arrangement");
             syncChromeArrangement();
             Trace.endSection();
+            // The status host follows the committed page: the row on a page with a pane, the
+            // strip on Home (StatusPresentation); a compare under the strip.
+            syncStatusPresentation();
             // Home wears its own Style, Corners and Margin: a crossing between halves that differ
             // dresses the chrome for the arriving one, as the variant above re-arranged it. A slide
             // whose stack already changed into that dress on the way leaves the landed frame
@@ -27446,7 +27606,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // rather than trusting a role colour authored against an opaque card.
             bar.setChromeInk(mChrome.ink());
             bar.setPlaceAccent(placeAccent);
-            bar.setVisibility(windowsShown && !marksLookShown() && !mStatusBar.isStatusBarVertical()
+            bar.setVisibility(windowsShown && !chipsKeptAway() && !mStatusBar.isStatusBarVertical()
                 ? View.VISIBLE : View.GONE);
             // The font toggle's pill follows the page the bar is dressed for.
             syncFontToggle();
@@ -30122,6 +30282,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * Whether the window chips stay away from the bar: under the Marks look, and in the thin row,
+     * which has no room for them (under Glyphs the row shows its readings only).
+     */
+    private boolean chipsKeptAway() {
+        return marksLookShown() || mStatusPresentation.isRow();
+    }
+
+    /**
      * Tells Home's pane the status bar's page bar look: under Marks the pill's band goes to the
      * grid. Called when the look can have changed (settings return, the editor's row), never per
      * page change; the pane compares before it resizes.
@@ -30946,6 +31114,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalWindowBar bar = findViewById(R.id.terminal_window_bar);
         if (host == null || bar == null) return;
         syncHomeBandLook();
+        // Status bar › Place changed (the editor's row, a settings return): the reach, the
+        // Terminal's top and the top pane's row are re-read on the one arrangement pass.
+        if (mPaneRowPlace != null && statusPlace() != mPaneRowPlace) {
+            applyEdgeStacksAndInvalidate(arrangement().layout());
+        }
         // Re-applied here, not only at setup, so a lazy-mode toggle takes effect on the
         // settings-return refresh instead of waiting for the activity to be recreated.
         applyLazyMode();
@@ -30956,7 +31129,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             && !arrangement().layout().slot(Element.STATUS).hidden;
         host.setVisibility(visible ? View.VISIBLE : View.GONE);
         int chips = com.termux.app.wall.PaneWallPolicy.showsWindowChips(mLastWallPage)
-            && !marksLookShown() ? View.VISIBLE : View.GONE;
+            && !chipsKeptAway() ? View.VISIBLE : View.GONE;
         if (bar.getVisibility() != chips) bar.setVisibility(chips);
         mStatusBar.syncBorderStatusSwipe(visible);
         if (!visible) {
