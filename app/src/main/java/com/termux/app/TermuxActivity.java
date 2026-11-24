@@ -20030,6 +20030,42 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             com.termux.app.dock.WallStripModel.of(chips,
                 com.termux.app.chrome.WindowChips.Surface.WALL_STRIP, items,
                 getString(R.string.launcher_entry_new_window));
+        // The row's Linux windows stand among its terminal windows, in row order (#392); their
+        // tiles show one whole pane and are keyed by their window.
+        WSession ws = mCurrentWSession;
+        if (ws != null && mLinuxWindows != null && ws.row.hasLinux()) {
+            int places = ws.row.count(ws.windows);
+            int[] terminalAt = new int[places];
+            java.util.List<String> linuxLabels = new java.util.ArrayList<>();
+            java.util.List<Long> linuxIds = new java.util.ArrayList<>();
+            for (int i = 0; i < places; i++) {
+                terminalAt[i] = ws.row.terminalAt(ws.windows, i);
+                if (terminalAt[i] < 0) {
+                    long id = ws.row.linuxAt(ws.windows, i);
+                    linuxLabels.add(linuxWindowName(id));
+                    linuxIds.add(id);
+                }
+            }
+            entries = com.termux.app.dock.WallStripModel.withLinux(entries, terminalAt,
+                linuxLabels, rowCurrentIndex());
+            java.util.List<float[]> mixedShapes = new java.util.ArrayList<>(entries.size());
+            java.util.List<Long> mixedKeys = new java.util.ArrayList<>(entries.size());
+            int linuxSeen = 0;
+            for (com.termux.app.dock.WallStripModel.Entry entry : entries) {
+                if (entry.kind == com.termux.app.dock.WallStripModel.Kind.LINUX_WINDOW) {
+                    mixedShapes.add(null);
+                    mixedKeys.add((1L << 40) + linuxIds.get(linuxSeen++));
+                } else if (entry.chipIndex >= 0 && entry.chipIndex < shapes.size()) {
+                    mixedShapes.add(shapes.get(entry.chipIndex));
+                    mixedKeys.add(keys.get(entry.chipIndex));
+                } else {
+                    mixedShapes.add(null);
+                    mixedKeys.add(null);
+                }
+            }
+            shapes = mixedShapes;
+            keys = mixedKeys;
+        }
         // Every entry but + is a tile (tilesOf leaves + out): the row's windows, then the floats,
         // in the chips' order, as the shapes and keys were laid down above.
         row.setTiles(com.termux.app.dock.WallStripRowView.tilesOf(
@@ -20097,9 +20133,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View contentView = com.termux.app.window.WindowLayers.host(this,
             com.termux.app.window.WindowLayer.NOTICES);
         if (row == null || !(contentView instanceof FrameLayout) || mPaneController == null) return;
-        // The strip's tiles are the terminal windows (#392 leaves Linux windows off it).
-        int count = terminalWindowCount();
-        if (chipIndex < 0 || chipIndex >= count) return;
+        // The row's tiles, Linux windows' among them, are row places (#392); the Home floats'
+        // tiles after them have no menu.
+        boolean linuxTile = com.termux.app.dock.WallStripModel.isLinuxChip(chipIndex);
+        int count = rowWindowCount();
+        int tilePlace = linuxTile ? com.termux.app.dock.WallStripModel.placeOfLinuxChip(chipIndex)
+            : (chipIndex < 0 || chipIndex >= terminalWindowCount() ? -1 : placeOfTerminal(chipIndex));
+        if (tilePlace < 0 || tilePlace >= count) return;
         FrameLayout content = (FrameLayout) contentView;
         int[] rowAt = new int[2];
         int[] contentAt = new int[2];
@@ -20119,8 +20159,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 new androidx.appcompat.widget.PopupMenu(this, pin);
             Menu items = menu.getMenu();
             items.add(Menu.NONE, 0, 0, R.string.tool_window_select);
-            if (chipIndex > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
-            if (chipIndex < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
+            if (tilePlace > 0) items.add(Menu.NONE, 1, 1, R.string.tool_window_move_left);
+            if (tilePlace < count - 1) items.add(Menu.NONE, 2, 2, R.string.tool_window_move_right);
             items.add(Menu.NONE, 3, 3, R.string.tool_window_close);
             // The row's chips are terminal windows only (ADR 0015): no display apps to list.
             java.util.List<com.termux.app.x11.X11WindowList.Window> others = new java.util.ArrayList<>();
@@ -20135,8 +20175,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
                             chipIndex, false);
                         return true;
-                    case 1: moveWindow(placeOfTerminal(chipIndex), placeOfTerminal(chipIndex - 1)); return true;
-                    case 2: moveWindow(placeOfTerminal(chipIndex), placeOfTerminal(chipIndex + 1)); return true;
+                    case 1: moveWindow(tilePlace, tilePlace - 1); return true;
+                    case 2: moveWindow(tilePlace, tilePlace + 1); return true;
                     case 3:
                         onWindowChip(com.termux.app.chrome.WindowChips.Surface.WALL_STRIP,
                             chipIndex, true);
@@ -31028,6 +31068,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                               int index, boolean close) {
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isSplitPanesEnabled())
             return;
+        // A Wall strip tile of a Linux window carries its row place (#392).
+        if (surface == com.termux.app.chrome.WindowChips.Surface.WALL_STRIP
+                && com.termux.app.dock.WallStripModel.isLinuxChip(index)) {
+            onLinuxWindowChip(com.termux.app.dock.WallStripModel.placeOfLinuxChip(index), close);
+            return;
+        }
         if (surface == com.termux.app.chrome.WindowChips.Surface.BAR && !isDisplayWindowInFront()) {
             // The bar's chips are row places, Linux windows' among them, then minimised Linux
             // windows (#392); the terminal windows' meaning is read by their own index.
