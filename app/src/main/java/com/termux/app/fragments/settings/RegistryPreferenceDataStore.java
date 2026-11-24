@@ -13,6 +13,7 @@ import com.termux.app.settings.LauncherSettings;
 import com.termux.app.settings.LauncherSettingsAdapters;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.app.settings.LowMemoryPresetAdapter;
+import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
@@ -39,6 +40,8 @@ public final class RegistryPreferenceDataStore extends PreferenceDataStore {
     }
 
     /** Settings row key to registry id, for every migrated row. Only ever grows with a screen. */
+    private static final String LOG_TAG = "RegistryPreferenceDataStore";
+
     @NonNull
     public static final Map<String, String> ROWS = rows();
 
@@ -81,6 +84,26 @@ public final class RegistryPreferenceDataStore extends PreferenceDataStore {
         mApplier = applier;
         mRows = rows;
         mRefused = refused;
+    }
+
+    /**
+     * A fallback for a screen whose every row is migrated: androidx's own data store throws on a
+     * write, so a key that is not migrated is ignored and logged instead of crashing the page.
+     */
+    @NonNull
+    public static PreferenceDataStore ignoringUnknownKeys() {
+        return new PreferenceDataStore() {
+            private void ignored(String key) {
+                Logger.logWarn(LOG_TAG, "Ignored a save of " + key + ": not a migrated row");
+            }
+
+            @Override public void putString(String key, @Nullable String value) { ignored(key); }
+            @Override public void putStringSet(String key, @Nullable Set<String> values) { ignored(key); }
+            @Override public void putInt(String key, int value) { ignored(key); }
+            @Override public void putLong(String key, long value) { ignored(key); }
+            @Override public void putFloat(String key, float value) { ignored(key); }
+            @Override public void putBoolean(String key, boolean value) { ignored(key); }
+        };
     }
 
     /** The device's wrapper over {@code fallback} for the rows in {@link #ROWS}. */

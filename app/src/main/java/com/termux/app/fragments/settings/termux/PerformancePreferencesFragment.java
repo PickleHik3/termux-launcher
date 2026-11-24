@@ -12,7 +12,6 @@ import androidx.annotation.Nullable;
 import androidx.annotation.StringRes;
 import androidx.preference.ListPreference;
 import androidx.preference.Preference;
-import androidx.preference.PreferenceDataStore;
 import androidx.preference.SwitchPreferenceCompat;
 
 import com.termux.R;
@@ -61,7 +60,7 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         // Every row on this page saves through the registry: the declaration clamps the value and
         // runs the refresh, so the old store has nothing left to answer for.
         RegistryPreferenceDataStore store = RegistryPreferenceDataStore.forDevice(context,
-            new PreferenceDataStore() { });
+            RegistryPreferenceDataStore.ignoringUnknownKeys());
         getPreferenceManager().setPreferenceDataStore(store);
         setPreferencesFromResource(R.xml.performance_preferences, rootKey);
         SettingsLayoutUtils.applyScreenLayout(this);
@@ -162,9 +161,12 @@ public class PerformancePreferencesFragment extends MaterialPreferenceFragment {
         row.setSummary(summary(reason, normalSummary));
         // A row shown off is not persisted while it is, so the stored choice is left alone; once
         // persisting again, setting it back writes only the value that is already stored.
-        row.setPersistent(!reason.shownOff());
         boolean shown = !reason.shownOff() && stored;
+        // The row only shows what is stored, so showing it must not save it again (a save re-runs
+        // the setting's refresh, which rewrites the rows once more).
+        row.setPersistent(false);
         if (row.isChecked() != shown) row.setChecked(shown);
+        row.setPersistent(!reason.shownOff());
     }
 
     @NonNull
