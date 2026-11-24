@@ -427,6 +427,31 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
         return mRetroEffect.style();
     }
 
+    /** The status bar's thin row this pane holds above its content ({@link #setStatusRowPx}). */
+    private int mStatusRowPx;
+
+    /**
+     * Holds the content {@code rowPx} further below the pane's top, where the status bar stands as
+     * the thin row (PaneRowPolicy.paneTopInsetPx: the top pane, while the row stands); 0 gives it
+     * back. Relays out only when it changes, once per change of place, never per frame.
+     */
+    public void setStatusRowPx(int rowPx) {
+        int row = Math.max(0, rowPx);
+        if (row == mStatusRowPx) return;
+        mStatusRowPx = row;
+        requestLayout();
+    }
+
+    /** The row this pane holds above its content; 0 for every pane but the top one. */
+    public int statusRowPx() {
+        return mStatusRowPx;
+    }
+
+    /** The radius this pane rounds its corners at, as it was asked for. */
+    public float requestedRadiusPx() {
+        return mRequestedRadiusPx;
+    }
+
     /** The span of the top line left unstroked round the camera ({@link #setTopGap}). */
     private int mTopGapStartPx;
     private int mTopGapEndPx;
@@ -821,7 +846,7 @@ public class PaneContentFrame extends FrameLayout implements TerminalView.Paddin
                 side = mBezelInsets[0];
                 bottom = mBezelInsets[1];
             }
-            int top = PaneShape.topInsetPx(bottom, contentHeadroomPx());
+            int top = PaneShape.topInsetPx(bottom, contentHeadroomPx(), mStatusRowPx);
             MarginLayoutParams params = (MarginLayoutParams) mContent.getLayoutParams();
             if (params.leftMargin != side || params.topMargin != top
                 || params.rightMargin != side || params.bottomMargin != bottom) {
