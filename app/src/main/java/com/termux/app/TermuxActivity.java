@@ -21237,8 +21237,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return mAppearance.holdsUnsavedChanges();
             }
             @Override public void exitViews(@NonNull java.util.List<View> out) {
-                View host = mAppearance.exitView();
-                if (host != null) out.add(host);
+                mAppearance.exitViews(out);
             }
             @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
                 mAppearance.askBeforeLeaving(leave, stay);

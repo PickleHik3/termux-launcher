@@ -491,10 +491,13 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
         return mOpen;
     }
 
-    /** The plane the Home exit fades while the drawer is open; null otherwise. */
+    /**
+     * The host the Home exit fades while the drawer is open; null otherwise. It carries the glass
+     * pane, the dim and the plane, so they leave as one surface.
+     */
     @Nullable
     public View exitView() {
-        return mOpen ? mPlane : null;
+        return mOpen ? mHostLayout : null;
     }
 
     /**

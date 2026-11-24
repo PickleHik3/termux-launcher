@@ -299,8 +299,14 @@ public class OverlayRegistryTest {
             super(name, true, log);
         }
 
+        final android.view.View second = new android.view.View(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext());
+
+        /** The editor gives its host, sheet and bar; the drawer gives its host. */
         @Override public void exitViews(@NonNull List<android.view.View> out) {
-            if (open) out.add(view);
+            if (!open) return;
+            out.add(view);
+            out.add(second);
         }
     }
 
@@ -312,7 +318,7 @@ public class OverlayRegistryTest {
         registry.register(new Member("drawer", log));
         List<android.view.View> views = new ArrayList<>();
         assertEquals(1, registry.beginExit(views));
-        assertEquals(1, views.size());
+        assertEquals(2, views.size());
         assertEquals(List.of("sheet:HOME"), log);
         registry.endExit();
         assertEquals(List.of("sheet:HOME", "drawer:HOME"), log);

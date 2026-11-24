@@ -219,6 +219,15 @@ public final class AppearanceSurfaceController {
          */
         void requestLeave(@NonNull Runnable proceed);
 
+        /** Adds the editor's own views (card sheet, bar) to a Home exit's group, when up. */
+        default void exitViews(@NonNull java.util.List<View> out) { }
+
+        /**
+         * While on, ending the session moves nothing of its own on the sheet and bar: a Home
+         * exit has already faded them. The frame still grows back, which is the page settling.
+         */
+        default void setHomeExit(boolean on) { }
+
         /** {@link #requestLeave(Runnable)}, with {@code keep} run when the answer is Keep editing. */
         default void requestLeave(@NonNull Runnable proceed, @NonNull Runnable keep) {
             requestLeave(proceed);
@@ -894,10 +903,11 @@ public final class AppearanceSurfaceController {
         leave(this::closeNow);
     }
 
-    /** The surface's host view for the Home exit; null when it is not up. */
-    @Nullable
-    public View exitView() {
-        return mOpen ? mView : null;
+    /** The surface's views for the Home exit: its host, and the editor's sheet and bar. */
+    public void exitViews(@NonNull java.util.List<View> out) {
+        if (!mOpen) return;
+        if (mView != null) out.add(mView);
+        mEditor.exitViews(out);
     }
 
     /** Whether leaving now would lose the editor's draft or the picker's pending wallpaper. */
@@ -922,7 +932,12 @@ public final class AppearanceSurfaceController {
     public void exitAnswered() {
         if (!mOpen || mCommitting)
             return;
-        closeNow();
+        mEditor.setHomeExit(true);
+        try {
+            closeNow();
+        } finally {
+            mEditor.setHomeExit(false);
+        }
     }
 
     /**

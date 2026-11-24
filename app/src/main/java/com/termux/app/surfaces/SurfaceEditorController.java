@@ -5498,6 +5498,25 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         });
     }
 
+    private boolean mHomeExit;
+
+    @Override
+    public void setHomeExit(boolean on) {
+        mHomeExit = on;
+    }
+
+    @Override
+    public void exitViews(@NonNull List<View> out) {
+        if (!mOpen)
+            return;
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.view().getVisibility() == View.VISIBLE)
+            out.add(sheet.view());
+        EditorBar bar = mBar;
+        if (bar != null)
+            bar.exitViews(out);
+    }
+
     /** Takes the editor off screen: the card, the bar, then the frame back to size. */
     private void dismiss(@Nullable Runnable onHidden) {
         if (!mOpen) {
@@ -5541,7 +5560,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mChromeVeiled = false;
         EditorCardSheet sheet = mSheet;
         if (sheet != null) {
-            sheet.hide(true, () -> {
+            sheet.hide(!mHomeExit, () -> {
                 sheet.detach();
                 sheet.setVeiled(false);
             });
