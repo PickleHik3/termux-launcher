@@ -2,9 +2,6 @@
 <!-- The Status bar and Terminal cards of the Appearance editor (editor-redesign §2). -->
 <resources>
     <!-- Status bar card -->
-    <string name="editor_st_position">Position</string>
-    <string name="editor_st_position_top">Top</string>
-    <string name="editor_st_position_bottom">Bottom</string>
     <string name="editor_st_section_glass">Glass</string>
     <string name="editor_st_section_glass_note">Shape</string>
     <string name="editor_st_section_clock">Clock</string>

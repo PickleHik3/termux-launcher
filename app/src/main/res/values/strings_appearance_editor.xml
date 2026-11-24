@@ -47,7 +47,7 @@
     <string name="appearance_card_reset">Reset</string>
     <!-- Appearance cards overhaul §1: the header rows. -->
     <string name="appearance_card_customization">Global</string>
-    <string name="appearance_header_show">Show</string>
+    <string name="appearance_bubble_workspace">Workspace</string>
     <string name="appearance_header_more">More options</string>
     <string name="appearance_header_back">Back</string>
     <string name="appearance_header_editing_portrait">Editing portrait</string>
@@ -70,8 +70,6 @@
     <!-- Card rows: a label of one or two words each. -->
     <string name="appearance_row_opacity">Opacity</string>
     <string name="appearance_row_tint">Tint</string>
-    <string name="appearance_row_height">Height</string>
-    <string name="appearance_row_visible">Visible</string>
     <string name="appearance_row_style">Layout style</string>
     <string name="appearance_row_tint_colour">Tint colour</string>
     <string name="appearance_row_design">Design</string>

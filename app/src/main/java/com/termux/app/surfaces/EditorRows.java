@@ -75,8 +75,6 @@ public final class EditorRows {
     public enum Row {
         OPACITY(Kind.SLIDER, R.string.appearance_row_opacity, R.drawable.ic_editor_opacity),
         TINT(Kind.SLIDER, R.string.appearance_row_tint, R.drawable.ic_editor_tint),
-        HEIGHT(Kind.SLIDER, R.string.appearance_row_height, R.drawable.ic_editor_height),
-        VISIBLE(Kind.SWITCH, R.string.appearance_row_visible, R.drawable.ic_editor_visible),
         STYLE(Kind.SEGMENTS, R.string.appearance_row_style, R.drawable.ic_style_floating),
         DESIGN(Kind.CHIPS, R.string.appearance_row_design, R.drawable.ic_rl_dock_tray),
         /**
@@ -180,8 +178,6 @@ public final class EditorRows {
         // The Status bar and Terminal cards' own rows (editor-redesign §2): each is drawn by its
         // card from the row kinds (EditorCardSheet.Model#rowView); the Kind is the sheet's
         // stand-in where no card draws it.
-        /** The status bar's edge, Top or Bottom, as glyph segments. */
-        STATUS_POSITION(Kind.MENU, R.string.editor_st_position, R.drawable.ic_editor_position),
         /** The header over a card's glass and shape strip: "Glass", noted "Shape". */
         GLASS_SECTION(Kind.MENU, R.string.editor_st_section_glass, R.drawable.ic_editor_blur),
         /** The status clock's place in the bar, Left, Center or Right, as glyph segments. */
@@ -196,8 +192,6 @@ public final class EditorRows {
         STATUS_UNIT(Kind.SEGMENTS, R.string.editor_st_unit, R.drawable.ic_ms_thermostat),
         /** Page bar: Glyphs or Marks, how the status bar shows the pages. */
         STATUS_PAGE_BAR(Kind.SEGMENTS, R.string.editor_st_page_bar, R.drawable.ic_ms_more_horiz),
-        /** Place: Strip or In the pane, where the status bar stands. */
-        STATUS_PLACE(Kind.SEGMENTS, R.string.editor_st_place, R.drawable.ic_ms_more_horiz),
         /** Camera cutout ↗: opens the cutout setting the Camera gap tile opened. */
         CAMERA_CUTOUT(Kind.LINK, R.string.editor_st_option_camera_gap, R.drawable.ic_ms_crop_free),
         /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */
@@ -207,8 +201,6 @@ public final class EditorRows {
         // EditorCardSheet.Model#rowView like the rows above; the Kind is again the stand-in.
         /** The dock's Style, Docked or Floating, as glyph segments. */
         DOCK_STYLE(Kind.MENU, R.string.editor_dock_row_style, R.drawable.ic_style_floating),
-        /** The Bars list: the dock's bars in order, each shown or not, each opening its settings. */
-        DOCK_BARS(Kind.MENU, R.string.editor_dock_row_bars, R.drawable.ic_rl_drag_grip),
         /** The Dock type tiles, one chosen at a time. */
         DOCK_TYPE(Kind.MENU, R.string.editor_dock_row_type, R.drawable.ic_rl_dock_tray),
         /** The dock's Show/hide tiles. */
@@ -216,6 +208,18 @@ public final class EditorRows {
         /** The dock's Monochrome icons, a switch row of its own (was a Show/hide tile). */
         DOCK_MONOCHROME(Kind.SWITCH, R.string.editor_dock_option_monochrome,
             R.drawable.ic_ed_monochrome),
+        /** The dock's Most used apps, a switch chip beside the other dock options. */
+        DOCK_MOST_USED(Kind.SWITCH, R.string.editor_dock_most_used, R.drawable.ic_ms_star),
+        /** Search field and Drawer icon: the dock's, one value for every page, on Home and Terminal. */
+        SEARCH_FIELD(Kind.SWITCH, R.string.editor_dock_option_search_field,
+            R.drawable.ic_symbol_search),
+        DRAWER_ICON(Kind.SWITCH, R.string.editor_dock_option_drawer_icon, R.drawable.ic_rl_apps),
+        /** The small A-Z card's Glass background, and how the strip shows. */
+        AZ_GLASS(Kind.SWITCH, R.string.editor_dock_az_glass, R.drawable.ic_ms_blur_on),
+        AZ_SHOW(Kind.SEGMENTS, R.string.editor_dock_az_show, R.drawable.ic_ms_visibility),
+        /** The small Extra keys card's way to the extra keys editor. */
+        EXTRA_KEYS_EDITOR(Kind.LINK, R.string.editor_dock_extra_keys_editor,
+            R.drawable.ic_symbol_edit),
         // The Keyboard, Home, Global and Terminal cards' own rows (editor-redesign §2), drawn by
         // CardBody through EditorCardSheet.Model#rowView like the rows above; where the Kind is
         // not the row's own (a section's header, a stepper, the opacity link) it is the stand-in.
@@ -234,6 +238,12 @@ public final class EditorRows {
          */
         CHANGE_WALLPAPER(Kind.SWITCH, R.string.editor_row_change_wallpaper,
             R.drawable.ic_ms_wallpaper),
+        /**
+         * The Global card's first row: the wallpaper's name and the way to its picker (the same
+         * page the Home and Terminal sheets open). Shown or not is {@link #SHOW_WALLPAPER}, which
+         * stands right under it.
+         */
+        WALLPAPER(Kind.WALLPAPER, R.string.editor_row_wallpaper, R.drawable.ic_symbol_wallpaper),
         /** The wallpaper behind both screens, shown or not. */
         SHOW_WALLPAPER(Kind.SWITCH, R.string.editor_row_show_wallpaper,
             R.drawable.ic_ed_show_wallpaper),
@@ -269,15 +279,8 @@ public final class EditorRows {
         SECTION_PANES(Kind.MENU, R.string.editor_section_panes, 0),
         SECTION_EFFECTS(Kind.MENU, R.string.editor_section_effects, 0),
         SECTION_BACKGROUND(Kind.MENU, R.string.editor_section_background, 0),
-        SECTION_BARS(Kind.MENU, R.string.editor_section_bars, 0),
         /** Small print under the glass material strips, where Edge and Depth show: the name. */
         HINT_GLASS_MATERIAL(Kind.MENU, R.string.editor_hint_glass_material, 0),
-        /**
-         * The Elements list at the end of a screen's card (cards/ElementsList): every element of
-         * the screen, its eye and the sliders glyph that opens its card. Drawn by the editor
-         * through EditorCardSheet.Model#rowView; the Kind is the stand-in.
-         */
-        ELEMENTS(Kind.MENU, R.string.editor_section_elements, R.drawable.ic_symbol_tune),
         /** The Terminal card's way to its Pane borders card (#206). */
         PANE_BORDERS(Kind.LINK, R.string.appearance_row_pane_borders, R.drawable.ic_editor_corners),
         /**
@@ -337,26 +340,84 @@ public final class EditorRows {
         }
     }
 
-    /** One row of one card, in its tier (1, 2 or 3). */
+    /**
+     * How a card draws a run of its rows (spec #326, condensed cards). Every form keeps each
+     * row's own {@link Row}, so a row reads and writes the key it always did; the form only
+     * decides how rows that follow one another share a line. {@link RowForms} holds the grouping.
+     */
+    public enum Form {
+        /** The row's own {@link Kind}: what a card gets by listing the row with {@code tier}. */
+        PLAIN,
+        /** Two value sliders on one row, the name and value over each track. */
+        PAIR,
+        /** Two value sliders on one row with the opacity link between them (the keyboard's). */
+        LINKED_PAIR,
+        /** Switches as chips that wrap onto as many lines as they need. */
+        CHIPS,
+        /** A short choice (a few words) beside its label. */
+        CHOICE,
+        /** A long choice folded into one line that opens its list in place. */
+        FOLD,
+        /** Two steppers on one row (Columns x Rows). */
+        STEPPERS,
+        /** Links that share one row of chips, at the card's end. */
+        LINKS;
+
+        /** Whether {@code row} may be drawn in this form. */
+        public boolean accepts(@NonNull Row row) {
+            switch (this) {
+                case PLAIN: return true;
+                case PAIR: return row.kind == Kind.SLIDER;
+                case LINKED_PAIR: return row.kind == Kind.SLIDER || row == Row.OPACITY_LINK;
+                case CHIPS: return row.kind == Kind.SWITCH;
+                case CHOICE: return row.kind == Kind.SEGMENTS;
+                case FOLD: return row.kind == Kind.SEGMENTS || row.kind == Kind.MENU;
+                case STEPPERS: return row.kind == Kind.MENU || row.kind == Kind.SLIDER;
+                case LINKS: return row.kind == Kind.LINK || row.kind == Kind.EXPANDER;
+                default: return false;
+            }
+        }
+
+        /** The most rows one widget of this form holds. */
+        public int capacity() {
+            switch (this) {
+                case LINKED_PAIR: return 3;
+                case PAIR:
+                case STEPPERS: return 2;
+                case CHOICE:
+                case FOLD: return 1;
+                default: return Integer.MAX_VALUE;
+            }
+        }
+    }
+
+    /** One row of one card, in its tier (1, 2 or 3) and the form it is drawn in. */
     public static final class Spec {
         @NonNull public final Row row;
         public final int tier;
+        @NonNull public final Form form;
 
         Spec(@NonNull Row row, int tier) {
+            this(row, tier, Form.PLAIN);
+        }
+
+        Spec(@NonNull Row row, int tier, @NonNull Form form) {
             this.row = row;
             this.tier = tier;
+            this.form = form;
         }
 
         @Override public boolean equals(Object o) {
-            return o instanceof Spec && ((Spec) o).row == row && ((Spec) o).tier == tier;
+            return o instanceof Spec && ((Spec) o).row == row && ((Spec) o).tier == tier
+                && ((Spec) o).form == form;
         }
 
         @Override public int hashCode() {
-            return row.hashCode() * 31 + tier;
+            return (row.hashCode() * 31 + tier) * 31 + form.hashCode();
         }
 
         @NonNull @Override public String toString() {
-            return row + "@" + tier;
+            return row + "@" + tier + (form == Form.PLAIN ? "" : ":" + form);
         }
     }
 
@@ -463,7 +524,6 @@ public final class EditorRows {
             case DOCK_TYPE:
             case DOCK_STYLE:
             case DESIGN:
-            case STATUS_POSITION:
             case CLOCK_FACE:
             case CLOCK_POSITION:
             case FORM:
@@ -479,6 +539,9 @@ public final class EditorRows {
     @NonNull
     public static Group groupOf(@NonNull Row row) {
         if (isStructural(row))
+            return Group.LOOK;
+        // The wallpaper is what Global is first: Wallpaper, Show wallpaper, then the Look.
+        if (row == Row.WALLPAPER || row == Row.SHOW_WALLPAPER)
             return Group.LOOK;
         if (row == Row.OPACITY_LINK)
             return Group.SLIDERS;
@@ -541,6 +604,63 @@ public final class EditorRows {
             for (Row row : rows)
                 mOut.add(new Spec(row, tier));
             return this;
+        }
+
+        /**
+         * Appends {@code rows} to {@code tier} in {@code form}; a row the form cannot draw is a
+         * mistake of the card file, so it throws.
+         */
+        @NonNull
+        public CardRows tier(int tier, @NonNull Form form, @NonNull Row... rows) {
+            for (Row row : rows) {
+                if (!form.accepts(row))
+                    throw new IllegalArgumentException(row + " cannot be drawn as " + form);
+                mOut.add(new Spec(row, tier, form));
+            }
+            return this;
+        }
+
+        /** Two sliders on one row, the name and value over each track. */
+        @NonNull
+        public CardRows pair(int tier, @NonNull Row first, @NonNull Row second) {
+            return tier(tier, Form.PAIR, first, second);
+        }
+
+        /** Two sliders on one row with {@code link} standing between them. */
+        @NonNull
+        public CardRows linkedPair(int tier, @NonNull Row first, @NonNull Row link,
+                                   @NonNull Row second) {
+            return tier(tier, Form.LINKED_PAIR, first, link, second);
+        }
+
+        /** Two steppers on one row. */
+        @NonNull
+        public CardRows steppers(int tier, @NonNull Row first, @NonNull Row second) {
+            return tier(tier, Form.STEPPERS, first, second);
+        }
+
+        /** Switches as chips that wrap. */
+        @NonNull
+        public CardRows chips(int tier, @NonNull Row... switches) {
+            return tier(tier, Form.CHIPS, switches);
+        }
+
+        /** A short choice beside its label. */
+        @NonNull
+        public CardRows choice(int tier, @NonNull Row... choices) {
+            return tier(tier, Form.CHOICE, choices);
+        }
+
+        /** A long choice folded into a menu that opens in place. */
+        @NonNull
+        public CardRows fold(int tier, @NonNull Row... choices) {
+            return tier(tier, Form.FOLD, choices);
+        }
+
+        /** Links sharing one row of chips. */
+        @NonNull
+        public CardRows links(int tier, @NonNull Row... links) {
+            return tier(tier, Form.LINKS, links);
         }
 
         @NonNull

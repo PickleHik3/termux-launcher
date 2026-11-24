@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.termux.app.surfaces.EditorRows.Offers;
 import com.termux.app.surfaces.EditorRows.Row;
@@ -89,69 +90,64 @@ public class EditorCardSectionsTest {
     @Test
     public void global() {
         check(EditorCard.APPEARANCE, expect(
-            "SECTION_LOOK", Arrays.asList(Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
-            "SECTION_FINE_TUNE", Arrays.asList(Row.DEPTH, Row.SHINE),
-            "SECTION_SHAPE", Arrays.asList(Row.STYLE, Row.CORNERS, Row.MARGIN,
-                Row.HOME_ICON_SIZE),
-            "SECTION_COLOURS", Arrays.asList(Row.THEME, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-                Row.WALLPAPER_COLOURS,
+            // No headings but Fine-tune (#346): what it is, the sliders, the choices, the
+            // switches, the colour and the links stand in group order.
+            CARD, Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER, Row.LOOK,
+                Row.OPACITY, Row.FROST, Row.TINT,
+                Row.STYLE, Row.THEME, Row.CORNERS, Row.MARGIN, Row.TEXT_SIZE,
+                Row.HOME_ICON_SIZE, Row.CONTRAST, Row.PAGE_TRANSITION,
+                Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.FULL_SCREEN,
                 Row.TINT_HUE, Row.TOOL_COLOURS),
-            "SECTION_SCREEN", Arrays.asList(Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN,
-                Row.PAGE_TRANSITION)));
+            "SECTION_FINE_TUNE", Arrays.asList(Row.DEPTH, Row.SHINE)));
     }
 
     @Test
     public void home() {
         check(EditorCard.HOME, expect(
-            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-                Row.ICON_PACK),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW,
-                Row.FOLDERS, Row.WALLPAPER_SCROLL),
-            "SECTION_WIDGETS", Arrays.asList(Row.GLASS_WIDGETS, Row.NUMERALS),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            // No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's (#287).
-            "SECTION_LINKS", Arrays.asList(Row.LINK_GESTURES, Row.LINK_PAGES)));
+            // One section and no headings (#345); the condensed rows stand in group order, the
+            // links at the end. No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's.
+            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE, Row.FOLDERS,
+                Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
+                Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON,
+                Row.ICON_PACK, Row.LINK_GESTURES,
+                Row.LINK_PAGES)));
     }
 
     @Test
     public void homeUnderTheOverviewHasNoPagesLink() {
         Map<String, List<Row>> got = sections(EditorCard.HOME, new Offers(true, true, true, true));
-        assertEquals(Arrays.asList(Row.LINK_GESTURES), got.get("SECTION_LINKS"));
+        assertFalse(got.get(CARD).contains(Row.LINK_PAGES));
+        assertTrue(got.get(CARD).contains(Row.LINK_GESTURES));
     }
 
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
-                Row.STATUS_INDICATORS),
-            "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
-                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
-            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST),
-            "SECTION_LINKS", Arrays.asList(Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)));
+            // No headings (#347): the clock rows, the glass pair and the links follow in order.
+            CARD, Arrays.asList(Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS,
+                Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS, Row.STATUS_SECONDS,
+                Row.STATUS_UNIT, Row.OPACITY, Row.FROST, Row.CAMERA_CUTOUT,
+                Row.PINNED_NOTIFICATIONS)));
     }
 
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-                Row.DOCK_MONOCHROME),
-            "SECTION_BARS", Arrays.asList(Row.DOCK_BARS),
-            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST, Row.REFLECTION)));
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS, Row.DOCK_ICON_PACK,
+                Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME, Row.DOCK_MOST_USED, Row.OPACITY, Row.FROST,
+                Row.REFLECTION)));
     }
 
     @Test
     public void terminal() {
         check(EditorCard.TERMINAL, expect(
-            "SECTION_TEXT", Arrays.asList(Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-                Row.LINK_FONT),
-            "SECTION_BACKGROUND", Arrays.asList(Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
-                Row.WALLPAPER_DIM),
-            "SECTION_PANES", Arrays.asList(Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING,
-                Row.FOCUS_GROWS, Row.PANE_BORDERS),
-            "SECTION_EFFECTS", Arrays.asList(Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
-                Row.COMPOSITE_SIGNAL),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS, Row.MINIMAL)));
+            // One section and no headings (#346); the Layout list stays until #344.
+            CARD, Arrays.asList(Row.FONT_SIZE, Row.SPLIT_GAP, Row.TERMINAL_OPACITY,
+                Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+                Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT, Row.ADAPTIVE_LEGIBILITY,
+                Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS, Row.SCREEN_EVENTS,
+                Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON,
+                Row.LINK_FONT, Row.PANE_BORDERS)));
     }
 
     /** Under Use as Terminal only, Pages is the Terminal card's (Home's card is gone). */
@@ -159,18 +155,17 @@ public class EditorCardSectionsTest {
     public void terminalWithoutHomeLinksPages() {
         Map<String, List<Row>> got = sections(EditorCard.TERMINAL,
             new Offers(true, true, false, false));
-        assertEquals(Arrays.asList(Row.LINK_PAGES), got.get("SECTION_LINKS"));
+        assertTrue(got.get(CARD).contains(Row.LINK_PAGES));
     }
 
     @Test
     public void keyboard() {
         check(EditorCard.KEYBOARD, expect(
-            CARD, Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
+            CARD, Arrays.asList(Row.FORM, Row.KEY_SPACING,
                 Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH,
-                Row.KEYBOARD_FLOAT_HEIGHT, Row.KEYBOARD_SPLIT_GAP),
-            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.OPACITY_LINK,
-                Row.KEY_OPACITY, Row.FROST),
-            "SECTION_LINKS", Arrays.asList(Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)));
+                Row.KEYBOARD_FLOAT_HEIGHT, Row.KEYBOARD_SPLIT_GAP, Row.OPACITY,
+                Row.OPACITY_LINK, Row.KEY_OPACITY, Row.FROST, Row.KEYBOARD_THEME,
+                Row.LINK_LAYOUTS)));
     }
 
     @Test

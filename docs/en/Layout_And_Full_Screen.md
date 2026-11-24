@@ -23,10 +23,12 @@ have their own layout.
 
 ## Move a bar
 
-Every bar has a **Position** on its card. The status bar's is on the Status bar card. The apps
-row, the A–Z index and the extra keys are the **Bars** list on the Dock card: tap a bar's sliders
-glyph for its settings, Position among them. Where two bars share an edge, the order of the Bars
-list is the order they stack in; hold a row's handle to reorder.
+Drag a bar on the editor's frame to move it: dashed places show where it can go, and Hide puts it
+away until you bring it back from the Hidden column. Where two bars share an edge, the order they
+stand in is the order they stack in. Tap the A–Z index or the extra keys to open a small card for
+that bar: its Opacity and Frost, the A–Z index's Glass background and Show, and the extra keys'
+link to their editor. **Most used** is a chip on the Dock card; **Search field** and **Drawer
+icon** are chips on the Home and Terminal cards.
 
 The terminal stays where it is and the bars arrange around it. The A–Z index can ride the apps
 row.
@@ -41,11 +43,11 @@ its cards turn with it.
 
 ## Hide and bring back
 
-Turn a bar off with the eye on its card (on the Dock card, the eye on its row in the Bars list).
-Hidden bars wait as small cards beside the frame: tap one to open its card, or drag it onto the
-frame and let go to bring it back where it was.
+Turn a bar off with **Hide** on the bar in the frame, or by dragging it onto the Hidden column
+beside the frame. Hidden bars wait there as small cards: tap one and choose **Bring back**, or drag
+it onto the frame and let go to bring it back where it was.
 
-**Keyboard on/off.** The keyboard's **Visible** is the keyboard's on/off switch. Off, nothing raises
+**Keyboard on/off.** Hiding the keyboard on the frame is its on/off switch. Off, nothing raises
 it, not a tap on the terminal and not a text field, until you turn it on again. It is the same
 switch as **Keyboard on/off** in the command palette, and one switch for every place and both
 orientations. A swipe up from the bottom border also turns it back on. On Home it decides whether
@@ -60,7 +62,7 @@ Each size is set per orientation.
   terminals). **Search field**, under More, adds the command-palette field under the apps row (with
   Beads it sits in its own capsule under the beads).
 - **Dock height**: **Height** on the Dock card. The icons grow and shrink with it.
-- **Keyboard height**: **Height** on the Keyboard card.
+- **Keyboard height**: pull the grip on the keyboard in the frame.
 - **Strip height**: under **Dock type** on the Dock card while the Strip is the type.
 - **Bottom padding**: on the Keyboard card, the air under the last row of keys.
 - **Widget grid**: **Columns** and **Rows** on the Home card. See [Widgets](Widgets.md#grid-size).

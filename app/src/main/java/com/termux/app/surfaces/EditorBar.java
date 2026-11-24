@@ -41,11 +41,27 @@ final class EditorBar {
         void onThemeHintSeen();
         /** The page label under the frame (Home or Terminal) was tapped: that screen's card. */
         default void onPageLabel() {}
+        /** A bubble of the first row (Global, Home or Workspace) was tapped. */
+        default void onBubble(@NonNull EditorBubbles bubble) {}
+        /** The wallpaper button was tapped: the Global card, at its top. */
+        default void onWallpaper() {}
     }
 
-    /** The bar's height and its items' visual height inside their 48dp targets. */
-    static final int BAR_DP = 48;
+    /** The bubble row over the controls: three bubbles, each a full-height target. */
+    static final int BUBBLE_ROW_DP = 44;
+    /** The controls row: Undo, Done and the palette glyph. */
+    static final int CONTROLS_DP = 48;
+    /** The bar's height (the bubble row over the controls) and its items' visual height. */
+    static final int BAR_DP = BUBBLE_ROW_DP + CONTROLS_DP;
+    /** The bar's corner radius: a card, not a capsule, now that it holds two rows. */
+    private static final int BAR_RADIUS_DP = 24;
+    private static final int BUBBLE_MIN_SP = 9;
+    private static final int BUBBLE_MAX_SP = 14;
     private static final int ITEM_DP = 40;
+    /** The wallpaper button's picture is drawn this far inside the item's body. */
+    private static final int THUMB_DP = 28;
+    /** The card the wallpaper button opens: Global, whose first row is the wallpaper. */
+    static final EditorCard WALLPAPER_CARD = EditorCard.APPEARANCE;
     private static final int PAD_DP = 4;
     /** The bar stands this far above the navigation inset. */
     static final int FOOT_GAP_DP = 8;
@@ -60,9 +76,16 @@ final class EditorBar {
 
     @NonNull private final Context mContext;
     @NonNull private final LinearLayout mBar;
+    /** The bar's first row: the bubbles. */
+    @NonNull private final LinearLayout mBubbleRow;
+    /** The bar's second row: Undo, Done, palette. */
+    @NonNull private final LinearLayout mControls;
+    @NonNull private final TextView[] mBubbleViews = new TextView[EditorBubbles.values().length];
+    @Nullable private EditorBubbles mMarked;
     @NonNull private final MaterialButton mUndo;
     @NonNull private final MaterialButton mDone;
     @NonNull private final MaterialButton mPalette;
+    @NonNull private final MaterialButton mWallpaper;
     @NonNull private final TextView mHint;
     private boolean mHintWanted;
     /**
@@ -83,15 +106,28 @@ final class EditorBar {
     EditorBar(@NonNull Context context) {
         mContext = context;
         mBar = new LinearLayout(context);
-        mBar.setOrientation(LinearLayout.HORIZONTAL);
-        mBar.setGravity(Gravity.CENTER_VERTICAL);
+        mBar.setOrientation(LinearLayout.VERTICAL);
         int pad = dp(PAD_DP);
         mBar.setPadding(pad, 0, pad, 0);
+        mBubbleRow = new LinearLayout(context);
+        mBubbleRow.setOrientation(LinearLayout.HORIZONTAL);
+        mBubbleRow.setGravity(Gravity.CENTER_VERTICAL);
+        mBar.addView(mBubbleRow, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, dp(BUBBLE_ROW_DP)));
+        mControls = new LinearLayout(context);
+        mControls.setOrientation(LinearLayout.HORIZONTAL);
+        mControls.setGravity(Gravity.CENTER_VERTICAL);
+        mBar.addView(mControls, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, dp(CONTROLS_DP)));
+        for (EditorBubbles bubble : EditorBubbles.values())
+            mBubbleViews[bubble.ordinal()] = bubbleView(bubble);
+        setBubbles(java.util.Arrays.asList(EditorBubbles.values()), null);
         GradientDrawable pill = new GradientDrawable();
-        pill.setCornerRadius(dp(BAR_DP) / 2f);
+        pill.setCornerRadius(dp(BAR_RADIUS_DP));
         pill.setColor(MaterialColors.getColor(context,
             com.google.android.material.R.attr.colorSurfaceContainerHigh, 0));
         mBar.setBackground(pill);
+        mBar.setMinimumHeight(dp(BAR_DP));
         mBar.setElevation(dp(3));
         mBar.setClickable(true);
 
@@ -117,6 +153,12 @@ final class EditorBar {
             if (mListener != null) mListener.onPalette();
         });
         addItem(mPalette, dp(48));
+
+        mWallpaper = iconButton(R.drawable.ic_symbol_wallpaper, R.string.editor_row_wallpaper);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(mWallpaper,
+            context.getString(R.string.editor_row_wallpaper));
+        mWallpaper.setOnClickListener(v -> { if (mListener != null) mListener.onWallpaper(); });
+        addItem(mWallpaper, dp(48));
 
         mHint = new TextView(context);
         EditorViews.textAppearance(mHint, com.google.android.material.R.attr.textAppearanceLabelLarge);
@@ -485,7 +527,8 @@ final class EditorBar {
         if (mHint.getVisibility() != View.VISIBLE || !(mHint.getParent() instanceof View)) return;
         View content = (View) mHint.getParent();
         if (mPalette.getWidth() == 0 || mHint.getWidth() == 0 || content.getWidth() == 0) return;
-        float palette = mBar.getLeft() + mPalette.getLeft() + mPalette.getWidth() / 2f;
+        float palette = mBar.getLeft() + mControls.getLeft() + mPalette.getLeft()
+            + mPalette.getWidth() / 2f;
         float shift = palette - content.getWidth() / 2f;
         float side = dp(HINT_SIDE_DP);
         float room = content.getWidth() / 2f - side - mHint.getWidth() / 2f;
@@ -494,6 +537,35 @@ final class EditorBar {
     }
 
     @NonNull
+    /** The pixel size of the wallpaper button's picture at {@code density}. */
+    static int wallpaperThumbPx(float density) {
+        return Math.max(1, Math.round(THUMB_DP * density));
+    }
+
+    /**
+     * Shows {@code thumb} (made at {@link #wallpaperThumbPx}) on the wallpaper button, or the
+     * wallpaper glyph for null. The bar does not own the bitmap.
+     */
+    void setWallpaperThumb(@Nullable android.graphics.Bitmap thumb) {
+        if (thumb == null) {
+            mWallpaper.setIconResource(R.drawable.ic_symbol_wallpaper);
+            mWallpaper.setIconTint(ColorStateList.valueOf(MaterialColors.getColor(mContext,
+                com.google.android.material.R.attr.colorOnSurface, 0)));
+            mWallpaper.setIconSize(dp(24));
+            return;
+        }
+        mWallpaper.setIconTint(null);
+        mWallpaper.setIconSize(thumb.getWidth());
+        mWallpaper.setIcon(new android.graphics.drawable.BitmapDrawable(mContext.getResources(),
+            thumb));
+    }
+
+    /** The wallpaper button, for tests. */
+    @NonNull
+    MaterialButton wallpaperButton() {
+        return mWallpaper;
+    }
+
     private MaterialButton iconButton(int iconRes, int descriptionRes) {
         MaterialButton button = new MaterialButton(mContext, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
@@ -504,16 +576,91 @@ final class EditorBar {
         return button;
     }
 
+    /**
+     * Offers {@code bubbles} in the first row and marks {@code marked} (null for none). Changes
+     * only what differs, so a card opening never lays the bar out again for nothing.
+     */
+    void setBubbles(@NonNull java.util.List<EditorBubbles> bubbles, @Nullable EditorBubbles marked) {
+        for (EditorBubbles bubble : EditorBubbles.values()) {
+            TextView view = mBubbleViews[bubble.ordinal()];
+            boolean offered = bubbles.contains(bubble);
+            if (offered && view.getParent() == null) {
+                // Keep the declared order whichever bubbles stand.
+                int at = 0;
+                for (EditorBubbles before : EditorBubbles.values()) {
+                    if (before == bubble) break;
+                    if (mBubbleViews[before.ordinal()].getParent() != null) at++;
+                }
+                mBubbleRow.addView(view, at);
+            } else if (!offered && view.getParent() != null) {
+                mBubbleRow.removeView(view);
+            }
+        }
+        setMarked(marked);
+    }
+
+    /** The bubble of the card on show is marked; null marks none (a bar card is up). */
+    void setMarked(@Nullable EditorBubbles marked) {
+        mMarked = marked;
+        for (EditorBubbles bubble : EditorBubbles.values())
+            paintBubble(bubble, bubble == marked);
+    }
+
+    @Nullable
+    EditorBubbles markedBubble() {
+        return mMarked;
+    }
+
+    /** The bubble's view, for the tests. */
+    @NonNull
+    TextView bubbleView(@NonNull EditorBubbles bubble) {
+        TextView view = mBubbleViews[bubble.ordinal()];
+        if (view != null) return view;
+        view = new TextView(mContext);
+        EditorViews.textAppearance(view, com.google.android.material.R.attr.textAppearanceLabelLarge);
+        view.setText(bubble.labelRes);
+        view.setSingleLine(true);
+        view.setEllipsize(TextUtils.TruncateAt.END);
+        view.setGravity(Gravity.CENTER);
+        view.setMinWidth(0);
+        view.setPadding(dp(8), 0, dp(8), 0);
+        androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(view,
+            BUBBLE_MIN_SP, BUBBLE_MAX_SP, 1, android.util.TypedValue.COMPLEX_UNIT_SP);
+        view.setClickable(true);
+        view.setOnClickListener(v -> {
+            if (mListener != null) mListener.onBubble(bubble);
+        });
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.MATCH_PARENT, 1f);
+        view.setLayoutParams(params);
+        return view;
+    }
+
+    private void paintBubble(@NonNull EditorBubbles bubble, boolean marked) {
+        TextView view = mBubbleViews[bubble.ordinal()];
+        GradientDrawable shape = new GradientDrawable();
+        shape.setCornerRadius(dp(16));
+        shape.setColor(marked ? MaterialColors.getColor(mContext,
+            com.google.android.material.R.attr.colorSecondaryContainer, 0) : 0);
+        int vertical = dp((BUBBLE_ROW_DP - ITEM_DP) / 2f + 2);
+        view.setBackground(new android.graphics.drawable.InsetDrawable(shape, 0, vertical, 0, vertical));
+        view.setTextColor(MaterialColors.getColor(mContext, marked
+            ? com.google.android.material.R.attr.colorOnSecondaryContainer
+            : com.google.android.material.R.attr.colorOnSurface, 0));
+        view.setSelected(marked);
+        view.setContentDescription(mContext.getString(bubble.labelRes));
+    }
+
     /** Each item is a 48dp target; its visible body is {@link #ITEM_DP} inside it. */
     private void addItem(@NonNull MaterialButton button, int width) {
-        int inset = (dp(BAR_DP) - dp(ITEM_DP)) / 2;
+        int inset = (dp(CONTROLS_DP) - dp(ITEM_DP)) / 2;
         button.setInsetTop(inset);
         button.setInsetBottom(inset);
-        button.setMinHeight(dp(BAR_DP));
-        button.setMinimumHeight(dp(BAR_DP));
-        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(width, dp(BAR_DP));
-        params.setMarginStart(mBar.getChildCount() == 0 ? 0 : dp(PAD_DP));
-        mBar.addView(button, params);
+        button.setMinHeight(dp(CONTROLS_DP));
+        button.setMinimumHeight(dp(CONTROLS_DP));
+        LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(width, dp(CONTROLS_DP));
+        params.setMarginStart(mControls.getChildCount() == 0 ? 0 : dp(PAD_DP));
+        mControls.addView(button, params);
     }
 
     private int dp(float value) {

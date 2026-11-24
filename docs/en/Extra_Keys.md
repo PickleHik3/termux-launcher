@@ -60,8 +60,9 @@ terminal float on Home has the keys.
 
 ## Where the row stands
 
-In **Appearance → Layout** the row can be moved to any edge, dropped into the slot under the
-keyboard, or hidden by dragging it onto the eye-off button. See
+In **Appearance**, hold the row and drag it to any edge or into the slot under the keyboard. To
+hide it, drop it on the **Hidden** column or tap it and tap **Hide**; drag its chip back onto the
+screen to show it again. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
 The wall is the list of pages in the order Edit pages arranged them. Two Display pages may sit next

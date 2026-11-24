@@ -20,8 +20,6 @@ import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Offers;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.EditorRows.Spec;
-import com.termux.app.surfaces.cards.BarOrder.Position;
-import com.termux.app.surfaces.cards.BarOrder.Setting;
 import com.termux.app.surfaces.rows.ActionRow;
 import com.termux.app.surfaces.rows.ChipsRow;
 import com.termux.app.surfaces.rows.EditorGlyphs;
@@ -83,7 +81,8 @@ public final class DockCard {
             R.string.editor_dock_option_notification_dots, 0),
         QUICK_REPLY(R.drawable.ic_ms_swipe_up_alt, R.string.editor_dock_option_quick_reply,
             R.string.editor_dock_option_quick_reply_hint),
-        MONOCHROME(R.drawable.ic_ed_monochrome, R.string.editor_dock_option_monochrome, 0);
+        MONOCHROME(R.drawable.ic_ed_monochrome, R.string.editor_dock_option_monochrome, 0),
+        MOST_USED(R.drawable.ic_ms_star, R.string.editor_dock_most_used, 0);
 
         @DrawableRes final int glyph;
         @StringRes final int word;
@@ -110,16 +109,6 @@ public final class DockCard {
 
         boolean floating();
         void setFloating(boolean floating);
-
-        /** The Bars list, top to bottom, as it reads on screen. */
-        @NonNull List<Element> barOrder();
-        void setBarOrder(@NonNull List<Element> order);
-        /** Whether the page being edited wears {@code bar} at all (Home has no extra keys). */
-        boolean offers(@NonNull Element bar);
-        boolean barShown(@NonNull Element bar);
-        void setBarShown(@NonNull Element bar, boolean shown);
-        @NonNull Position position(@NonNull Element bar);
-        void setPosition(@NonNull Element bar, @NonNull Position position);
 
         int appIcons();
         int appIconsFrom();
@@ -188,11 +177,11 @@ public final class DockCard {
         EditorRows.CardRows rows = new EditorRows.CardRows();
         if (offers.appsRow)
             rows.tier(1, Row.DOCK_TYPE, Row.DOCK_APP_ICONS)
-                .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-                    Row.DOCK_MONOCHROME);
+                .tier(2, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME,
+                    Row.DOCK_MOST_USED);
         return rows
-            .tier(3, Row.SECTION_BARS, Row.DOCK_BARS)
-            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST, Row.REFLECTION)
+            .pair(3, Row.OPACITY, Row.FROST)
+            .tier(3, Row.REFLECTION)
             .build();
     }
 
@@ -203,26 +192,13 @@ public final class DockCard {
     }
 
     @NonNull private final Host mHost;
-    @Nullable private Element mExpanded;
     @Nullable private PreviewTilesRow mStyle;
-    @Nullable private BarsList mBars;
     @Nullable private PreviewTilesRow mType;
     /** The Strip type's height, under the type tiles; shown while the Strip is the type. */
     @Nullable private StepperRow mStripHeight;
-    @Nullable private TileGrid mOptions;
-    @Nullable private com.termux.app.surfaces.rows.SwitchRow mMonochrome;
-    @NonNull private final Map<Element, BarViews> mBarViews = new EnumMap<>(Element.class);
+    @Nullable private com.termux.app.surfaces.rows.SwitchChipsRow mOptions;
     /** A restatement sets the switches; only a touch reports. */
     private boolean mRestating;
-
-    /** One bar's open settings. */
-    private static final class BarViews {
-        @Nullable SegmentRow position;
-        @Nullable List<Position> positions;
-        @Nullable MaterialSwitch mostUsed;
-        @Nullable MaterialSwitch azGlass;
-        @Nullable SegmentRow azShow;
-    }
 
     /** Apps in the dock, and the hint under it while + is out at the fit. */
     @Nullable private StepperRow mAppIcons;
@@ -268,22 +244,6 @@ public final class DockCard {
         mHost = host;
     }
 
-    /** The bar whose settings are open, or null. */
-    @Nullable
-    public Element expanded() {
-        return mExpanded;
-    }
-
-    /**
-     * Opens the card on {@code bar}'s settings (a door that names a bar), or with every bar's
-     * closed for anything else ({@link BarOrder#expandedOnOpen}).
-     */
-    public void expand(@Nullable Element bar) {
-        mExpanded = BarOrder.expandedOnOpen(bar);
-        if (mBars != null)
-            mBars.expand(mExpanded);
-    }
-
     /** One of the card's own rows, {@code widthPx} wide; null for a row the sheet draws. */
     @Nullable
     public View view(@NonNull Row row, int widthPx) {
@@ -297,11 +257,6 @@ public final class DockCard {
                             R.string.appearance_editor_style_floating)),
                     mHost.floating() ? 1 : 0, index -> mHost.setFloating(index == 1));
                 return mStyle.picker(context, context.getString(R.string.editor_dock_row_style));
-            }
-            case DOCK_BARS: {
-                mBarViews.clear();
-                mBars = BarsList.build(context, barsHost(), widthPx, mExpanded);
-                return mBars.root;
             }
             case DOCK_TYPE: {
                 List<PreviewTilesRow.Tile> tiles = new ArrayList<>(TYPE_GLYPHS.length);
@@ -327,17 +282,21 @@ public final class DockCard {
                 return body;
             }
             case DOCK_OPTIONS: {
-                List<TileGrid.Tile> tiles = new ArrayList<>();
-                boolean[] on = new boolean[SHOW_HIDE.size()];
-                for (int i = 0; i < SHOW_HIDE.size(); i++) {
-                    Option option = SHOW_HIDE.get(i);
-                    tiles.add(new TileGrid.Tile(option.glyph, context.getString(option.word),
-                        option.hint == 0 ? null : context.getString(option.hint)));
-                    on[i] = mHost.option(option);
-                }
-                mOptions = TileGrid.build(context, tiles, on, widthPx, (index, checked) ->
-                    mHost.setOption(SHOW_HIDE.get(index), checked));
-                return section(context, R.string.editor_dock_row_options, mOptions.root);
+                // The show/hide options and Monochrome icons share one row of switch chips;
+                // Monochrome's own row stands in it.
+                List<com.termux.app.surfaces.rows.SwitchChipsRow.Item> items = new ArrayList<>();
+                for (Option option : chipOptions())
+                    items.add(new com.termux.app.surfaces.rows.SwitchChipsRow.Item(option.glyph,
+                        context.getString(option.word)));
+                List<Option> options = chipOptions();
+                mOptions = com.termux.app.surfaces.rows.SwitchChipsRow.build(context, items,
+                    (index, checked) -> setChip(options.get(index), checked));
+                restateOptions();
+                return mOptions.root;
+            }
+            case DOCK_MONOCHROME:
+            case DOCK_MOST_USED: {
+                return new android.widget.Space(context);
             }
             case DOCK_APP_ICONS: {
                 mAppIcons = StepperRow.build(context, R.drawable.ic_ms_tag,
@@ -364,16 +323,55 @@ public final class DockCard {
                     v -> mHost.pickIconPack());
                 return mDockIconPack.root;
             }
-            case DOCK_MONOCHROME: {
-                mMonochrome = com.termux.app.surfaces.rows.SwitchRow.build(context,
-                    Option.MONOCHROME.glyph, context.getString(Option.MONOCHROME.word),
-                    mHost.option(Option.MONOCHROME),
-                    on -> mHost.setOption(Option.MONOCHROME, on));
-                return mMonochrome.root;
+            case AZ_GLASS: {
+                mAzGlass = com.termux.app.surfaces.rows.SwitchRow.build(context,
+                    R.drawable.ic_ms_blur_on, context.getString(R.string.editor_dock_az_glass),
+                    mHost.azGlass(), mHost::setAzGlass);
+                return mAzGlass.root;
+            }
+            case AZ_SHOW: {
+                mAzShow = SegmentRow.build(context, R.drawable.ic_ms_visibility,
+                    context.getString(R.string.editor_dock_az_show), Arrays.asList(
+                        SegmentRow.Segment.glyph(EditorGlyphs.AZ_SHOWN,
+                            context.getString(R.string.editor_dock_az_shown)),
+                        SegmentRow.Segment.glyph(EditorGlyphs.AZ_FAINT,
+                            context.getString(R.string.editor_dock_az_faint)),
+                        SegmentRow.Segment.glyph(EditorGlyphs.AZ_PULL_TAB,
+                            context.getString(R.string.editor_dock_az_pull_tab))),
+                    mHost.azShow(), widthPx, mHost::setAzShow);
+                return mAzShow.root;
+            }
+            case EXTRA_KEYS_EDITOR: {
+                ChipsRow chips = ChipsRow.build(context, Collections.singletonList(
+                    new ChipsRow.Link(R.drawable.ic_symbol_edit,
+                        context.getString(R.string.editor_dock_extra_keys_editor))),
+                    index -> mHost.openExtraKeysEditor());
+                return chips.root;
             }
             default:
                 return null;
         }
+    }
+
+    @Nullable private com.termux.app.surfaces.rows.SwitchRow mAzGlass;
+    @Nullable private SegmentRow mAzShow;
+
+    /** The rows of the small A-Z card: the dock's Opacity and Frost, Glass background, Show. */
+    @NonNull
+    public static List<Spec> azRows() {
+        return new EditorRows.CardRows()
+            .pair(1, Row.OPACITY, Row.FROST)
+            .tier(1, Row.AZ_GLASS, Row.AZ_SHOW)
+            .build();
+    }
+
+    /** The rows of the small Extra keys card: the dock's Opacity and Frost, the editor link. */
+    @NonNull
+    public static List<Spec> extraKeysRows() {
+        return new EditorRows.CardRows()
+            .pair(1, Row.OPACITY, Row.FROST)
+            .links(1, Row.EXTRA_KEYS_EDITOR)
+            .build();
     }
 
     /** One of the card's own rows read again. */
@@ -383,22 +381,22 @@ public final class DockCard {
                 if (mStyle != null)
                     mStyle.select(mHost.floating() ? 1 : 0);
                 break;
-            case DOCK_BARS:
-                if (mBars != null)
-                    mBars.restate();
-                break;
             case DOCK_TYPE:
                 restateType();
                 break;
             case DOCK_OPTIONS:
-                if (mOptions != null) {
-                    for (int i = 0; i < SHOW_HIDE.size(); i++)
-                        mOptions.setOn(i, mHost.option(SHOW_HIDE.get(i)));
-                }
+                restateOptions();
                 break;
             case DOCK_MONOCHROME:
-                if (mMonochrome != null)
-                    mMonochrome.setOn(mHost.option(Option.MONOCHROME));
+                restateOptions();
+                break;
+            case AZ_GLASS:
+                if (mAzGlass != null)
+                    mAzGlass.setOn(mHost.azGlass());
+                break;
+            case AZ_SHOW:
+                if (mAzShow != null)
+                    mAzShow.select(mHost.azShow());
                 break;
             case DOCK_APP_ICONS:
                 restateAppIcons();
@@ -410,6 +408,36 @@ public final class DockCard {
             default:
                 break;
         }
+    }
+
+    /** The options the chips row holds, in order: the show/hide ones, then Monochrome icons. */
+    @NonNull
+    static List<Option> chipOptions() {
+        List<Option> options = new ArrayList<>(SHOW_HIDE);
+        options.add(Option.MONOCHROME);
+        options.add(Option.MOST_USED);
+        return options;
+    }
+
+    /** Most used is the apps row's; every other chip is a dock option. */
+    private boolean chipOn(@NonNull Option option) {
+        return option == Option.MOST_USED ? mHost.mostUsed() : mHost.option(option);
+    }
+
+    private void setChip(@NonNull Option option, boolean on) {
+        if (option == Option.MOST_USED)
+            mHost.setMostUsed(on);
+        else
+            mHost.setOption(option, on);
+    }
+
+    private void restateOptions() {
+        com.termux.app.surfaces.rows.SwitchChipsRow chips = mOptions;
+        if (chips == null)
+            return;
+        List<Option> options = chipOptions();
+        for (int i = 0; i < options.size(); i++)
+            chips.setChecked(i, chipOn(options.get(i)));
     }
 
     private void restateType() {
@@ -437,155 +465,6 @@ public final class DockCard {
             return;
         strip.root.setVisibility(mHost.dockType() == STRIP_TYPE ? View.VISIBLE : View.GONE);
         strip.setValue(mHost.stripHeightDp());
-    }
-
-    // ------------------------------------------------------------------------------- the bars
-
-    @NonNull
-    private BarsList.Host barsHost() {
-        return new BarsList.Host() {
-            @NonNull @Override public List<Element> order() {
-                return mHost.barOrder();
-            }
-
-            @Override public boolean offers(@NonNull Element bar) {
-                return mHost.offers(bar);
-            }
-
-            @Override public boolean shown(@NonNull Element bar) {
-                return mHost.barShown(bar);
-            }
-
-            @Override public void reorder(@NonNull List<Element> order) {
-                mHost.setBarOrder(order);
-            }
-
-            @NonNull @Override public View settings(@NonNull Element bar, int widthPx) {
-                return barSettings(bar, widthPx);
-            }
-
-            @Override public void restateSettings(@NonNull Element bar) {
-                restateBar(bar);
-            }
-
-            @Override public void expanded(@Nullable Element bar) {
-                mExpanded = bar;
-            }
-        };
-    }
-
-    /** {@code bar}'s settings, as {@link BarOrder#settingsOf} lists them. */
-    @NonNull
-    private View barSettings(@NonNull Element bar, int widthPx) {
-        Context context = mHost.context();
-        LinearLayout column = new LinearLayout(context);
-        column.setOrientation(LinearLayout.VERTICAL);
-        column.setPadding(0, 0, 0, RowKit.dp(context, 8));
-        BarViews views = new BarViews();
-        mBarViews.put(bar, views);
-        for (Setting setting : BarOrder.settingsOf(bar)) {
-            switch (setting) {
-                case POSITION: {
-                    List<Position> positions = BarOrder.positionsFor(bar);
-                    List<SegmentRow.Segment> segments = new ArrayList<>(positions.size());
-                    for (Position position : positions)
-                        segments.add(SegmentRow.Segment.glyph(glyphOf(position),
-                            context.getString(nameOf(position))));
-                    views.positions = positions;
-                    views.position = SegmentRow.build(context, R.drawable.ic_ms_open_in_full,
-                        context.getString(R.string.editor_dock_position), segments,
-                        positions.indexOf(mHost.position(bar)), widthPx,
-                        index -> mHost.setPosition(bar, positions.get(index)));
-                    column.addView(views.position.root);
-                    break;
-                }
-                case MOST_USED:
-                    views.mostUsed = switchRow(context, column, R.drawable.ic_ms_star,
-                        R.string.editor_dock_most_used, mHost.mostUsed(), mHost::setMostUsed);
-                    break;
-                case GLASS_BACKGROUND:
-                    views.azGlass = switchRow(context, column, R.drawable.ic_ms_blur_on,
-                        R.string.editor_dock_az_glass, mHost.azGlass(), mHost::setAzGlass);
-                    break;
-                case SHOW:
-                    views.azShow = SegmentRow.build(context, R.drawable.ic_ms_visibility,
-                        context.getString(R.string.editor_dock_az_show), Arrays.asList(
-                            SegmentRow.Segment.glyph(EditorGlyphs.AZ_SHOWN,
-                                context.getString(R.string.editor_dock_az_shown)),
-                            SegmentRow.Segment.glyph(EditorGlyphs.AZ_FAINT,
-                                context.getString(R.string.editor_dock_az_faint)),
-                            SegmentRow.Segment.glyph(EditorGlyphs.AZ_PULL_TAB,
-                                context.getString(R.string.editor_dock_az_pull_tab))),
-                        mHost.azShow(), widthPx, mHost::setAzShow);
-                    column.addView(views.azShow.root);
-                    column.addView(hint(context, R.string.editor_dock_az_hint));
-                    break;
-                case EXTRA_KEYS_EDITOR: {
-                    ChipsRow chips = ChipsRow.build(context, Collections.singletonList(
-                        new ChipsRow.Link(R.drawable.ic_symbol_edit,
-                            context.getString(R.string.editor_dock_extra_keys_editor))),
-                        index -> mHost.openExtraKeysEditor());
-                    column.addView(chips.root);
-                    break;
-                }
-                default:
-                    break;
-            }
-        }
-        return column;
-    }
-
-    /** {@code bar}'s open settings read again. */
-    private void restateBar(@NonNull Element bar) {
-        BarViews views = mBarViews.get(bar);
-        if (views == null)
-            return;
-        mRestating = true;
-        try {
-            restateBar(bar, views);
-        } finally {
-            mRestating = false;
-        }
-    }
-
-    private void restateBar(@NonNull Element bar, @NonNull BarViews views) {
-        if (views.position != null && views.positions != null)
-            views.position.select(views.positions.indexOf(mHost.position(bar)));
-        if (views.mostUsed != null && views.mostUsed.isChecked() != mHost.mostUsed())
-            views.mostUsed.setChecked(mHost.mostUsed());
-        if (views.azGlass != null && views.azGlass.isChecked() != mHost.azGlass())
-            views.azGlass.setChecked(mHost.azGlass());
-        if (views.azShow != null)
-            views.azShow.select(mHost.azShow());
-    }
-
-    // ----------------------------------------------------------------------------- the pieces
-
-    /** The glyph of a position: the phone outline with the bar on that edge. */
-    @DrawableRes
-    static int glyphOf(@NonNull Position position) {
-        switch (position) {
-            case TOP: return EditorGlyphs.POS_TOP;
-            case BOTTOM: return EditorGlyphs.POS_BOTTOM;
-            case LEFT: return EditorGlyphs.POS_LEFT;
-            case RIGHT: return EditorGlyphs.POS_RIGHT;
-            case ABOVE_KEYBOARD: return EditorGlyphs.POS_ABOVE_KEYBOARD;
-            case RIDES_APPS_ROW:
-            default: return EditorGlyphs.POS_RIDES_APPS_ROW;
-        }
-    }
-
-    @StringRes
-    static int nameOf(@NonNull Position position) {
-        switch (position) {
-            case TOP: return R.string.editor_dock_position_top;
-            case BOTTOM: return R.string.editor_dock_position_bottom;
-            case LEFT: return R.string.editor_dock_position_left;
-            case RIGHT: return R.string.editor_dock_position_right;
-            case ABOVE_KEYBOARD: return R.string.editor_dock_position_above_keyboard;
-            case RIDES_APPS_ROW:
-            default: return R.string.editor_dock_position_rides_apps_row;
-        }
     }
 
     /** A section's heading over {@code body}. */

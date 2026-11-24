@@ -4,7 +4,6 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.LinearGradient;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.RectF;
 import android.graphics.Shader;
 import android.view.View;
@@ -19,10 +18,8 @@ import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Offers;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.EditorRows.Spec;
-import com.termux.app.surfaces.rows.ChipsRow;
 import com.termux.app.surfaces.rows.PreviewTilesRow;
 import com.termux.app.surfaces.rows.RowKit;
-import com.termux.app.surfaces.rows.SegmentRow;
 import com.termux.app.terminal.PaneRetroStyle;
 
 import java.util.ArrayList;
@@ -32,14 +29,16 @@ import java.util.List;
 
 /**
  * The Terminal card (appearance-one-look spec §3, Terminal; the old Workspace card merged into it; no
- * eye, the terminal cannot be hidden): Text (the terminal's Font size, Contrast as words, the
- * Font link), Background (the panes' Opacity and Blur and the Wallpaper dim of the Terminal's
- * pages, none of which follows Global), Panes, Effects (Cursor trail and Screen effect as
- * preview tiles, Screen effect only where its shader runs), and Layout, the rows the Terminal's
- * pages show with Minimal layout.
+ * eye, the terminal cannot be hidden) in the condensed kinds (spec #326): the sliders in pairs
+ * (Font size with Inner gap, the panes' Opacity with Frost; the Wallpaper dim of the Terminal's
+ * pages, which does not follow Global, stands alone), Contrast beside its label, Cursor trail
+ * folded into a menu, Screen effect as preview tiles (only where its shader runs), the switches
+ * as chips, the Layout list, and the Font, Pane borders and Pages links on one row. Order does
+ * the grouping in place of headings; every knob of the earlier card is still here.
  *
  * <p>{@link #rows} is the card's table and the pure policy below it maps stored values to the
- * tiles, so JVM tests hold both; {@link #view} builds the card's own rows over a {@link Host}.</p>
+ * tiles, so JVM tests hold both; {@code CardBody} draws the table, and {@link #view} builds the
+ * one row it does not, the Screen effect tiles, over a {@link Host}.</p>
  */
 public final class TerminalCard {
 
@@ -49,21 +48,24 @@ public final class TerminalCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-                Row.LINK_FONT)
+            .pair(1, Row.FONT_SIZE, Row.SPLIT_GAP)
             // The Terminal's Background (ADR 0031 §4): never Global's, no preset, no reset arrow.
-            .tier(3, Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR,
-                Row.WALLPAPER_DIM)
-            .tier(3, Row.SECTION_PANES, Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER,
-                Row.AUTO_TILING, Row.FOCUS_GROWS)
-            .tier(3, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL);
+            .pair(1, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR)
+            .tier(1, Row.WALLPAPER_DIM)
+            .choice(3, Row.CONTRAST)
+            .fold(3, Row.CURSOR_TRAIL);
+        if (offers.terminalEffect)
+            rows.tier(3, Row.EFFECT);
+        rows.chips(3, Row.ADAPTIVE_LEGIBILITY, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS);
         // Screen events and Composite signal stand only while a Screen effect is on (shown).
         if (offers.terminalEffect)
-            rows.tier(3, Row.EFFECT, Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL);
-        rows.tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS, Row.MINIMAL);
+            rows.chips(3, Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL);
+        rows.chips(3, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON);
         // Under Terminal only the Home card, Edit pages' usual door, is gone: Pages is here.
         if (!offers.homeShown && !offers.overviewUp)
-            rows.tier(3, Row.SECTION_LINKS, Row.LINK_PAGES);
+            rows.links(3, Row.LINK_FONT, Row.PANE_BORDERS, Row.LINK_PAGES);
+        else
+            rows.links(3, Row.LINK_FONT, Row.PANE_BORDERS);
         return rows.build();
     }
 
@@ -77,7 +79,7 @@ public final class TerminalCard {
         "off", "default", "motion_blur", "railgun", "torpedo", "pixiedust", "comet"));
 
     @StringRes
-    static final int[] TRAIL_NAMES = {R.string.editor_st_trail_off,
+    public static final int[] TRAIL_NAMES = {R.string.editor_st_trail_off,
         R.string.editor_st_trail_default, R.string.editor_st_trail_motion,
         R.string.editor_st_trail_railgun, R.string.editor_st_trail_torpedo,
         R.string.editor_st_trail_pixie, R.string.editor_st_trail_comet};
@@ -112,61 +114,23 @@ public final class TerminalCard {
 
     // ------------------------------------------------------------------------------- views
 
-    /** What the card's own rows read and write: the editor's side. */
+    /** What the card's own row reads and writes: the editor's side. */
     public interface Host {
-        /** Contrast's segment: Softer, Default, Harder. */
-        int contrast();
-        void setContrast(int index);
-        /** The Cursor trail tile ({@link #trailIndex}). */
-        int trail();
-        void setTrail(int index);
         /** The Screen effect tile ({@link #effectIndex}). */
         int effect();
         void setEffect(int index);
-        /** The Font chip was tapped. */
-        void openFont();
     }
 
-    /**
-     * The card's own row for {@code row}, {@code widthPx} wide, or null for a row the sheet
-     * draws (the strips).
-     */
+    /** The row the card draws itself, the Screen effect tiles; the rest are the body's. */
+    public static boolean owns(@NonNull Row row) {
+        return row == Row.EFFECT;
+    }
+
+    /** The card's own row for {@code row}, or null for a row the body draws. */
     @Nullable
     public static CardRowView view(@NonNull Context context, @NonNull Row row, int widthPx,
                                    @NonNull Host host) {
-        switch (row) {
-            case CONTRAST: return contrast(context, widthPx, host);
-            case CURSOR_TRAIL: return trails(context, host);
-            case EFFECT: return effects(context, host);
-            case LINK_FONT: return more(context, host);
-            default: return null;
-        }
-    }
-
-    @NonNull
-    private static CardRowView contrast(@NonNull Context context, int widthPx,
-                                        @NonNull Host host) {
-        SegmentRow row = SegmentRow.build(context, R.drawable.ic_editor_contrast,
-            context.getString(R.string.appearance_row_contrast),
-            Arrays.asList(
-                SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_softer)),
-                SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_default)),
-                SegmentRow.Segment.word(context.getString(R.string.appearance_contrast_harder))),
-            host.contrast(), widthPx, host::setContrast);
-        // The row's own title names it: no Contrast sub-label over it.
-        return new CardRowView(row.root, () -> row.select(host.contrast()));
-    }
-
-    @NonNull
-    private static CardRowView trails(@NonNull Context context, @NonNull Host host) {
-        List<PreviewTilesRow.Tile> tiles = new ArrayList<>(TRAILS.size());
-        for (int i = 0; i < TRAILS.size(); i++)
-            tiles.add(new PreviewTilesRow.Tile(context.getString(TRAIL_NAMES[i]),
-                new TrailPreview(context, TRAILS.get(i))));
-        PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.trail(), host::setTrail);
-        View section = CardRowView.section(context,
-            context.getString(R.string.editor_st_section_cursor_trail), null, true, row.root);
-        return new CardRowView(section, () -> row.select(host.trail()));
+        return row == Row.EFFECT ? effects(context, host) : null;
     }
 
     @NonNull
@@ -182,141 +146,7 @@ public final class TerminalCard {
         return new CardRowView(section, () -> row.select(host.effect()));
     }
 
-    @NonNull
-    private static CardRowView more(@NonNull Context context, @NonNull Host host) {
-        // Font ↗, a list row in the Links section (overhaul §4).
-        com.termux.app.surfaces.rows.LinkRow link = com.termux.app.surfaces.rows.LinkRow.build(
-            context, R.drawable.ic_ms_font_download, context.getString(R.string.appearance_row_font),
-            context.getString(R.string.editor_link_font_summary), true, v -> host.openFont());
-        return new CardRowView(link.root, () -> {});
-    }
-
     // ---------------------------------------------------------------------------- previews
-
-    /**
-     * A cursor trail drawn still: the block cursor at the end, and what each style leaves behind
-     * it, in the theme's primary. Off is the cursor alone.
-     */
-    static final class TrailPreview extends View {
-        @NonNull final String style;
-        private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
-        private final Path mPath = new Path();
-        private final RectF mRect = new RectF();
-        @ColorInt private final int mInk;
-
-        TrailPreview(@NonNull Context context, @NonNull String style) {
-            super(context);
-            this.style = style;
-            mInk = RowKit.color(context, androidx.appcompat.R.attr.colorPrimary);
-        }
-
-        @Override
-        protected void onDraw(@NonNull Canvas canvas) {
-            super.onDraw(canvas);
-            float w = getWidth();
-            float h = getHeight();
-            if (w <= 0f || h <= 0f)
-                return;
-            float d = getResources().getDisplayMetrics().density;
-            float cursorW = 6f * d;
-            float cursorH = Math.min(h - 4f * d, 16f * d);
-            float right = w - 6f * d;
-            float left = right - cursorW;
-            float top = (h - cursorH) / 2f;
-            float cy = h / 2f;
-            float start = 4f * d;
-            mPaint.setShader(null);
-            mPaint.setStyle(Paint.Style.FILL);
-            switch (style) {
-                case "default":
-                    // One smear from the old cell to the new.
-                    mPath.reset();
-                    mPath.moveTo(start, cy - 1.5f * d);
-                    mPath.lineTo(left, top);
-                    mPath.lineTo(left, top + cursorH);
-                    mPath.lineTo(start, cy + 1.5f * d);
-                    mPath.close();
-                    mPaint.setShader(new LinearGradient(start, 0f, left, 0f,
-                        withAlpha(mInk, 0f), withAlpha(mInk, 0.55f), Shader.TileMode.CLAMP));
-                    canvas.drawPath(mPath, mPaint);
-                    mPaint.setShader(null);
-                    break;
-                case "motion_blur":
-                    // Ghost cells fading out behind it.
-                    for (int i = 1; i <= 4; i++) {
-                        float x = left - i * (cursorW + 2f * d);
-                        if (x < start) break;
-                        mPaint.setColor(withAlpha(mInk, 0.6f - i * 0.13f));
-                        mRect.set(x, top, x + cursorW, top + cursorH);
-                        canvas.drawRoundRect(mRect, d, d, mPaint);
-                    }
-                    break;
-                case "railgun":
-                    // A thin beam with rings along it.
-                    mPaint.setColor(withAlpha(mInk, 0.7f));
-                    mRect.set(start, cy - 0.75f * d, left, cy + 0.75f * d);
-                    canvas.drawRect(mRect, mPaint);
-                    mPaint.setStyle(Paint.Style.STROKE);
-                    mPaint.setStrokeWidth(1.2f * d);
-                    for (int i = 1; i <= 3; i++) {
-                        float x = start + (left - start) * i / 4f;
-                        mPaint.setColor(withAlpha(mInk, 0.25f + i * 0.15f));
-                        canvas.drawCircle(x, cy, 2.5f * d + i * 0.6f * d, mPaint);
-                    }
-                    mPaint.setStyle(Paint.Style.FILL);
-                    break;
-                case "torpedo":
-                    // A tapered wake and a few bubbles.
-                    mPath.reset();
-                    mPath.moveTo(start, cy);
-                    mPath.lineTo(left, top + cursorH * 0.2f);
-                    mPath.lineTo(left, top + cursorH * 0.8f);
-                    mPath.close();
-                    mPaint.setShader(new LinearGradient(start, 0f, left, 0f,
-                        withAlpha(mInk, 0.1f), withAlpha(mInk, 0.7f), Shader.TileMode.CLAMP));
-                    canvas.drawPath(mPath, mPaint);
-                    mPaint.setShader(null);
-                    mPaint.setColor(withAlpha(mInk, 0.45f));
-                    canvas.drawCircle(start + (left - start) * 0.3f, cy - 4f * d, 1.3f * d, mPaint);
-                    canvas.drawCircle(start + (left - start) * 0.55f, cy + 4.5f * d, 1.1f * d,
-                        mPaint);
-                    break;
-                case "pixiedust":
-                    // Sparks scattered behind it.
-                    float[][] sparks = {{0.15f, -0.30f, 0.9f}, {0.30f, 0.25f, 1.2f},
-                        {0.45f, -0.10f, 1.0f}, {0.55f, 0.35f, 0.8f}, {0.68f, -0.32f, 1.3f},
-                        {0.80f, 0.10f, 1.1f}, {0.38f, -0.42f, 0.7f}};
-                    for (float[] spark : sparks) {
-                        mPaint.setColor(withAlpha(mInk, 0.25f + spark[0] * 0.6f));
-                        canvas.drawCircle(start + (left - start) * spark[0],
-                            cy + cursorH * spark[1], spark[2] * d, mPaint);
-                    }
-                    break;
-                case "comet":
-                    // A round head with a tail running out to nothing.
-                    float head = Math.min(cursorH, cursorW * 1.6f) / 2f;
-                    float hx = left + cursorW / 2f;
-                    mPath.reset();
-                    mPath.moveTo(start, cy);
-                    mPath.lineTo(hx, cy - head);
-                    mPath.lineTo(hx, cy + head);
-                    mPath.close();
-                    mPaint.setShader(new LinearGradient(start, 0f, hx, 0f,
-                        withAlpha(mInk, 0f), withAlpha(mInk, 0.6f), Shader.TileMode.CLAMP));
-                    canvas.drawPath(mPath, mPaint);
-                    mPaint.setShader(null);
-                    mPaint.setColor(mInk);
-                    canvas.drawCircle(hx, cy, head, mPaint);
-                    return;
-                case "off":
-                default:
-                    break;
-            }
-            mPaint.setColor(mInk);
-            mRect.set(left, top, right, top + cursorH);
-            canvas.drawRoundRect(mRect, d, d, mPaint);
-        }
-    }
 
     /**
      * A screen effect drawn small: a terminal screen in the effect's colour, scanlines for the CRT

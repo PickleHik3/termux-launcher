@@ -51,16 +51,6 @@ public enum EditorCard {
     }
 
     /**
-     * Whether the card's header carries the eye that shows or hides its object (editor-redesign
-     * §2): the status bar, the dock and the keyboard. The terminal, the two screens and the
-     * palette's card cannot be hidden. The eye reads and writes {@link EditorRows.Row#VISIBLE}
-     * through the card's model; it is not one of the card's rows.
-     */
-    public boolean hasEye() {
-        return this == STATUS || this == DOCK || this == KEYBOARD;
-    }
-
-    /**
      * Whether the card's object stands on the {@code screen} kind of page ({@link
      * PageKind#HOME} is Home's, anything else the Terminal's): Home only on Home, the Terminal
      * only on the Terminal's, everything else on both.

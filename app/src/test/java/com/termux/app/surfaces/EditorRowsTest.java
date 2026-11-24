@@ -59,9 +59,9 @@ public class EditorRowsTest {
             EditorRows.tier(EditorCard.DOCK, ALL, 1));
         // Bars keep order and settings; Appearance holds the dock's own Opacity and Blur and
         // Peek's Reflection (spec §3, Dock). No Links: Global is the pill's.
-        assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-            Row.DOCK_MONOCHROME, Row.SECTION_BARS, Row.DOCK_BARS, Row.SECTION_APPEARANCE,
-            Row.OPACITY, Row.FROST, Row.REFLECTION),
+        assertEquals(Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME,
+            Row.DOCK_MOST_USED), EditorRows.tier(EditorCard.DOCK, ALL, 2));
+        assertEquals(Arrays.asList(Row.OPACITY, Row.FROST, Row.REFLECTION),
             EditorRows.tier(EditorCard.DOCK, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.DOCK, ALL);
         assertFalse("no dock-wide Style or Design rows", rows.contains(Row.STYLE)
@@ -73,12 +73,11 @@ public class EditorRowsTest {
         EditorRows.Offers noAppsRow =
             new EditorRows.Offers(true, true, true, false, false, false);
         List<Row> rows = rowsOf(EditorCard.DOCK, noAppsRow);
-        for (Row row : new Row[] {Row.DOCK_TYPE, Row.DOCK_APP_ICONS, Row.SECTION_MORE_OPTIONS,
-            Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME})
+        for (Row row : new Row[] {Row.DOCK_TYPE, Row.DOCK_APP_ICONS,
+            Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME, Row.DOCK_MOST_USED})
             assertFalse(row + " stands without an apps row", rows.contains(row));
         // No empty section: Bars and Appearance are the card's own and stay, headers with rows.
-        assertEquals(Arrays.asList(Row.SECTION_BARS, Row.DOCK_BARS, Row.SECTION_APPEARANCE,
-            Row.OPACITY, Row.FROST, Row.REFLECTION), rows);
+        assertEquals(Arrays.asList(Row.OPACITY, Row.FROST, Row.REFLECTION), rows);
 
         EditorRows.Offers appsRow = new EditorRows.Offers(true, true, true, false, false, true);
         assertEquals(rowsOf(EditorCard.DOCK, ALL), rowsOf(EditorCard.DOCK, appsRow));
@@ -87,51 +86,87 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theStatusBarCardOpensOnItsPlaceAndStrip() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
-            Row.STATUS_INDICATORS),
+    public void theSmallBarCardsHoldTheDocksGlassAndTheirOwnKnobs() {
+        // #344/#347: tapping A-Z or Extra keys opens a small card named for that bar.
+        java.util.List<Row> az = new java.util.ArrayList<>();
+        for (EditorRows.Spec spec : com.termux.app.surfaces.cards.DockCard.azRows())
+            az.add(spec.row);
+        assertEquals(Arrays.asList(Row.OPACITY, Row.FROST, Row.AZ_GLASS, Row.AZ_SHOW), az);
+        java.util.List<Row> keys = new java.util.ArrayList<>();
+        for (EditorRows.Spec spec : com.termux.app.surfaces.cards.DockCard.extraKeysRows())
+            keys.add(spec.row);
+        assertEquals(Arrays.asList(Row.OPACITY, Row.FROST, Row.EXTRA_KEYS_EDITOR), keys);
+        assertEquals(EditorRows.Form.PAIR, com.termux.app.surfaces.cards.DockCard.azRows().get(0).form);
+        assertEquals(EditorRows.Form.LINKS,
+            com.termux.app.surfaces.cards.DockCard.extraKeysRows().get(2).form);
+    }
+
+    @Test
+    public void theStatusBarCardOpensOnItsPageBar() {
+        assertEquals(Arrays.asList(Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS),
             EditorRows.tier(EditorCard.STATUS, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
-            Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE,
-            Row.OPACITY, Row.FROST, Row.SECTION_LINKS, Row.CAMERA_CUTOUT,
-            Row.PINNED_NOTIFICATIONS),
-            EditorRows.tier(EditorCard.STATUS, ALL, 3));
+        assertEquals(Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS,
+            Row.STATUS_SECONDS, Row.STATUS_UNIT), EditorRows.tier(EditorCard.STATUS, ALL, 2));
+        assertEquals(Arrays.asList(Row.OPACITY, Row.FROST, Row.CAMERA_CUTOUT,
+            Row.PINNED_NOTIFICATIONS), EditorRows.tier(EditorCard.STATUS, ALL, 3));
+    }
+
+    @Test
+    public void theStatusDockAndKeyboardCardsDrawTheirRunsInTheCondensedForms() {
+        // #347: the glass pair on all three, the clock format as one row of chips, the floating
+        // size as a pair, the opacities with the link between them, links as chips.
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.STATUS, Row.OPACITY));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.STATUS, Row.FROST));
+        assertEquals(EditorRows.Form.LINKS, formOf(EditorCard.STATUS, Row.CAMERA_CUTOUT));
+        assertEquals(EditorRows.Form.LINKS, formOf(EditorCard.STATUS, Row.PINNED_NOTIFICATIONS));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.DOCK, Row.OPACITY));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.DOCK, Row.FROST));
+        assertEquals(EditorRows.Form.PLAIN, formOf(EditorCard.DOCK, Row.REFLECTION));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.KEYBOARD, Row.KEY_SPACING));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.KEYBOARD, Row.KEY_CORNERS));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.KEYBOARD, Row.KEYBOARD_WIDTH));
+        assertEquals(EditorRows.Form.PAIR, formOf(EditorCard.KEYBOARD, Row.KEYBOARD_FLOAT_HEIGHT));
+        assertEquals(EditorRows.Form.LINKS, formOf(EditorCard.KEYBOARD, Row.LINK_LAYOUTS));
+        // The two opacities and their link stand together, in this order, in one run.
+        List<Row> rows = rowsOf(EditorCard.KEYBOARD, ALL);
+        int at = rows.indexOf(Row.OPACITY);
+        assertEquals(Row.OPACITY_LINK, rows.get(at + 1));
+        assertEquals(Row.KEY_OPACITY, rows.get(at + 2));
+        assertEquals(EditorRows.Form.LINKED_PAIR, formOf(EditorCard.KEYBOARD, Row.OPACITY));
+        assertEquals(EditorRows.Form.LINKED_PAIR, formOf(EditorCard.KEYBOARD, Row.OPACITY_LINK));
+        assertEquals(EditorRows.Form.LINKED_PAIR, formOf(EditorCard.KEYBOARD, Row.KEY_OPACITY));
+    }
+
+    private static EditorRows.Form formOf(EditorCard card, Row row) {
+        for (EditorRows.Spec spec : EditorRows.rows(card, ALL))
+            if (spec.row == row)
+                return spec.form;
+        throw new AssertionError(row + " is not on " + card);
     }
 
     @Test
     public void theKeyboardCardOpensOnItsTypeThenItsGlassWithTheOpacityLink() {
-        assertEquals(Arrays.asList(Row.FORM, Row.HEIGHT, Row.KEY_SPACING,
+        assertEquals(Arrays.asList(Row.FORM, Row.KEY_SPACING,
             Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH, Row.KEYBOARD_FLOAT_HEIGHT,
             Row.KEYBOARD_SPLIT_GAP), EditorRows.tier(EditorCard.KEYBOARD, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_APPEARANCE, Row.OPACITY, Row.OPACITY_LINK,
-            Row.KEY_OPACITY, Row.FROST, Row.SECTION_LINKS, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
+        assertEquals(Arrays.asList(Row.OPACITY, Row.OPACITY_LINK, Row.KEY_OPACITY),
+            EditorRows.tier(EditorCard.KEYBOARD, ALL, 2));
+        assertEquals(Arrays.asList(Row.FROST, Row.KEYBOARD_THEME, Row.LINK_LAYOUTS),
             EditorRows.tier(EditorCard.KEYBOARD, ALL, 3));
     }
 
     @Test
-    public void theEyeStandsInTheHeaderOfTheCardsWhoseObjectCanBeHidden() {
-        for (EditorCard card : EditorCard.values()) {
-            boolean eye = card == EditorCard.STATUS || card == EditorCard.DOCK
-                || card == EditorCard.KEYBOARD;
-            assertEquals(card + " has an eye", eye, card.hasEye());
-            assertFalse(card + ": the eye is not a row", rowsOf(card, ALL).contains(Row.VISIBLE));
-        }
-    }
-
-    @Test
     public void theTerminalCardHoldsTextItsBackgroundPanesEffectsAndLayout() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST,
-            Row.ADAPTIVE_LEGIBILITY, Row.LINK_FONT),
+        // #346: no headings; the sliders in pairs first, the rest in group order.
+        assertEquals(Arrays.asList(Row.FONT_SIZE, Row.SPLIT_GAP, Row.TERMINAL_OPACITY,
+            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY,
-            Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
-            Row.SECTION_PANES, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.PANE_BORDERS, Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT,
-            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.MINIMAL),
+        assertEquals(Arrays.asList(Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT,
+            Row.ADAPTIVE_LEGIBILITY, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.SEARCH_FIELD,
+            Row.DRAWER_ICON,
+            Row.LINK_FONT, Row.PANE_BORDERS),
             EditorRows.tier(EditorCard.TERMINAL, ALL, 3));
-        List<Row> all = rowsOf(EditorCard.TERMINAL, ALL);
-        assertFalse(all.contains(Row.VISIBLE));
     }
 
     @Test
@@ -157,13 +192,13 @@ public class EditorRowsTest {
 
     @Test
     public void theHomeCardOpensOnHomesGridLookAndGlassAndItIsAlwaysTheHomeHalfs() {
+        // The condensed kinds (#345): no headings; the groups in order (the grid, the short
+        // choices, the switches, the Layout list), the links sharing one row at the end.
         assertEquals(Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-            Row.ICON_PACK), EditorRows.tier(EditorCard.HOME, ALL, 1));
-        assertEquals(Arrays.asList(Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
-            Row.FOLDERS, Row.WALLPAPER_SCROLL, Row.SECTION_WIDGETS,
-            Row.GLASS_WIDGETS, Row.NUMERALS, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.SECTION_LINKS, Row.LINK_GESTURES,
-            Row.LINK_PAGES),
+            Row.FOLDERS, Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
+            Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON),
+            EditorRows.tier(EditorCard.HOME, ALL, 1));
+        assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
@@ -175,21 +210,21 @@ public class EditorRowsTest {
 
     @Test
     public void theGlobalCardOpensOnTheLookAndKeepsTheRestOfTheGlassUnderFineTune() {
-        assertEquals(Arrays.asList(Row.SECTION_LOOK, Row.LOOK, Row.OPACITY, Row.FROST, Row.TINT),
+        assertEquals(Arrays.asList(Row.WALLPAPER, Row.SHOW_WALLPAPER, Row.LOOK,
+            Row.OPACITY, Row.FROST, Row.TINT),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 1));
         assertEquals(EditorRows.tier(EditorCard.APPEARANCE, ALL, 1),
             EditorRows.tier(EditorCard.APPEARANCE, NONE, 1));
-        assertEquals(Arrays.asList(Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE, Row.SECTION_SHAPE, Row.STYLE, Row.CORNERS, Row.MARGIN,
-            Row.HOME_ICON_SIZE, Row.SECTION_COLOURS, Row.THEME, Row.CONTRAST,
-            Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_SCREEN,
-            Row.TEXT_SIZE, Row.SHOW_WALLPAPER, Row.FULL_SCREEN, Row.PAGE_TRANSITION),
+        assertEquals(Arrays.asList(Row.STYLE, Row.THEME, Row.CORNERS, Row.MARGIN, Row.TEXT_SIZE,
+            Row.HOME_ICON_SIZE, Row.CONTRAST, Row.PAGE_TRANSITION,
+            Row.ADAPTIVE_LEGIBILITY, Row.WALLPAPER_COLOURS, Row.FULL_SCREEN,
+            Row.TINT_HUE, Row.TOOL_COLOURS, Row.SECTION_FINE_TUNE, Row.DEPTH, Row.SHINE),
             EditorRows.tier(EditorCard.APPEARANCE, ALL, 3));
         List<Row> rows = rowsOf(EditorCard.APPEARANCE, ALL);
         // Status position and Dock type are on their own cards; the Layout lists on the page
         // cards (spec §3, Global).
         for (Row gone : new Row[] {Row.CHANGE_WALLPAPER, Row.MINIMAL, Row.ICON_PACK,
-            Row.FONT_SIZE, Row.HINT_GLASS_MATERIAL, Row.STATUS_POSITION, Row.DOCK_TYPE,
-            Row.ELEMENTS})
+            Row.FONT_SIZE, Row.HINT_GLASS_MATERIAL, Row.DOCK_TYPE})
             assertFalse(gone + " is not Global's", rows.contains(gone));
     }
 
@@ -224,7 +259,7 @@ public class EditorRowsTest {
 
     @Test
     public void everyValueSliderIsAStripColumnAndTheLookIsTheOneHorizontalSlider() {
-        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.HEIGHT, Row.CORNERS,
+        for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT, Row.CORNERS,
             Row.MARGIN, Row.TEXT_SIZE, Row.SPLIT_GAP,
             Row.KEY_OPACITY, Row.KEY_CORNERS, Row.KEY_SPACING, Row.DEPTH,
             Row.SHINE})
@@ -307,8 +342,8 @@ public class EditorRowsTest {
         for (PageKind half : PageKind.values()) {
             assertEquals(TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(EditorCard.TERMINAL, Row.OPACITY));
             for (EditorCard card : EditorCard.values()) {
-                for (Row row : new Row[] {Row.CORNERS, Row.MARGIN, Row.HEIGHT,
-                    Row.VISIBLE, Row.STYLE, Row.DESIGN, Row.TEXT_SIZE})
+                for (Row row : new Row[] {Row.CORNERS, Row.MARGIN,
+                    Row.STYLE, Row.DESIGN, Row.TEXT_SIZE})
                     assertEquals(card + " " + row, TermuxAppSharedPreferences.PAGE_ALL, EditorRows.pageFor(card, row));
             }
         }

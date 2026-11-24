@@ -148,12 +148,11 @@ public class EditorCardBodyTest {
     public void theSectionsCarryTheirNamesAndNotes() {
         Fixture home = new Fixture(EditorCard.HOME, 1f);
         List<String> texts = texts(home.sheet.rows());
-        // Home's sections (spec §3, Home): Home · More options · Widgets · Layout · Links; its
-        // Wallpaper dim is the Terminal's Background's since #287.
-        for (int res : new int[] {R.string.appearance_card_home,
-            R.string.editor_section_more_options, R.string.editor_section_widgets,
-            R.string.editor_section_layout, R.string.editor_section_links})
-            assertTrue("Home shows " + home.themed.getString(res),
+        // Home's one section is named for the card; the headings are gone (#345).
+        assertTrue(texts.contains(home.themed.getString(R.string.appearance_card_home)));
+        for (int res : new int[] {R.string.editor_section_more_options,
+            R.string.editor_section_widgets, R.string.editor_section_links})
+            assertFalse("Home has no " + home.themed.getString(res) + " heading",
                 texts.contains(home.themed.getString(res)));
         // Section titles are W1b's collapsible headers: a section's note is no longer drawn.
         Fixture global = new Fixture(EditorCard.APPEARANCE, 1f);
@@ -161,9 +160,72 @@ public class EditorCardBodyTest {
         // Edge and Depth stay on the card; the glass-material hint row is gone.
         assertFalse(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
-        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
+        // #346: Global keeps one heading, Fine-tune; the Colours heading is gone.
+        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_fine_tune)));
+        assertFalse(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
         assertFalse("Home has no Appearance section",
             texts.contains(home.themed.getString(R.string.editor_section_appearance)));
+    }
+
+    @Test
+    public void homesCondensedRowsWriteTheRowsTheyAlwaysWrote() {
+        for (float scale : SCALES) {
+            Fixture f = new Fixture(EditorCard.HOME, scale);
+            f.layOut();
+            String at = "at " + scale;
+            // Columns x Rows on one row: each stepper writes its own row.
+            MaterialButton moreColumns = null;
+            MaterialButton moreRows = null;
+            for (MaterialButton button : views(f.sheet.rows(), MaterialButton.class)) {
+                String name = String.valueOf(button.getContentDescription());
+                if (name.equals(f.themed.getString(R.string.appearance_stepper_more,
+                    f.themed.getString(R.string.editor_row_columns))))
+                    moreColumns = button;
+                if (name.equals(f.themed.getString(R.string.appearance_stepper_more,
+                    f.themed.getString(R.string.editor_row_rows))))
+                    moreRows = button;
+            }
+            assertNotNull(at + ": Columns", moreColumns);
+            assertNotNull(at + ": Rows", moreRows);
+            assertEquals(at + ": the grid shares one row", f.top(moreColumns), f.top(moreRows));
+            moreColumns.performClick();
+            moreRows.performClick();
+            assertEquals(at, Integer.valueOf(5), f.model.values.get(Row.HOME_COLUMNS));
+            assertEquals(at, Integer.valueOf(5), f.model.values.get(Row.HOME_ROWS));
+            // The four switches are chips; each toggles its own row (all start on).
+            Object[][] switches = {{R.string.appearance_row_two_line, Row.TWO_LINE},
+                {R.string.appearance_row_label_shadow, Row.LABEL_SHADOW},
+                {R.string.appearance_row_wallpaper_scroll, Row.WALLPAPER_SCROLL},
+                {R.string.appearance_row_glass_widgets, Row.GLASS_WIDGETS}};
+            for (Object[] pair : switches) {
+                String name = f.themed.getString((Integer) pair[0]);
+                boolean found = false;
+                for (com.google.android.material.chip.Chip chip
+                    : views(f.sheet.rows(), com.google.android.material.chip.Chip.class)) {
+                    if (!name.contentEquals(chip.getText()))
+                        continue;
+                    found = true;
+                    assertTrue(at + ": " + name + " is checkable", chip.isCheckable());
+                    chip.performClick();
+                }
+                assertTrue(at + ": chip " + name, found);
+                assertEquals(at + ": " + name, Integer.valueOf(0), f.model.values.get(pair[1]));
+            }
+            // The links share one row at the card's end, under every switch.
+            int linksTop = Integer.MAX_VALUE;
+            int switchesBottom = 0;
+            for (com.google.android.material.chip.Chip chip
+                : views(f.sheet.rows(), com.google.android.material.chip.Chip.class)) {
+                String text = chip.getText().toString();
+                if (text.equals(f.themed.getString(R.string.appearance_row_gestures))
+                    || text.equals(f.themed.getString(R.string.appearance_row_pages))
+                    || text.equals(f.themed.getString(R.string.appearance_row_icon_pack)))
+                    linksTop = Math.min(linksTop, f.top(chip));
+                else
+                    switchesBottom = Math.max(switchesBottom, f.top(chip));
+            }
+            assertTrue(at + ": links stand under the switches", linksTop > switchesBottom);
+        }
     }
 
     @Test

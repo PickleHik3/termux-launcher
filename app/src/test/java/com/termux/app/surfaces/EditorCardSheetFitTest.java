@@ -329,54 +329,38 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
-    public void theDockOptionsAreToggleButtonsHoldingTheirWordWhole() {
+    public void theDockOptionsAreSwitchChipsHoldingTheirWordWhole() {
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
             fixture.layOut();
-            int tiles = 0;
-            for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
-                tiles++;
-                String which = tile.getText() + " at " + scale;
-                // Expressive toggle buttons (overhaul §4): the word alone, no check mark.
-                assertTrue(which + ": no glyph, no check mark", tile.getIcon() == null);
-                assertTrue(which + ": a 48dp target", tile.getHeight() >= fixture.dp(48) - 1);
-                assertTrue(which + ": laid out", tile.getLayout() != null);
-                int textBottom = tile.getTotalPaddingTop() + tile.getLayout().getHeight();
-                assertTrue(which + ": the word ends at " + textBottom + " inside "
-                        + tile.getHeight(),
-                    textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
-                android.text.Layout layout = tile.getLayout();
-                assertTrue(which + ": no word is cut",
-                    layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
+            List<com.google.android.material.chip.Chip> chips = dockChips(fixture.sheet.rows());
+            assertEquals("scale " + scale + ": the four show/hide options, Monochrome icons and Most used",
+                6, chips.size());
+            for (com.google.android.material.chip.Chip chip : chips) {
+                assertTrue(chip.getText() + ": single line, ellipsized", chip.getMaxLines() == 1
+                    || chip.isSingleLine());
+                assertTrue(chip.getText() + ": a 48dp target",
+                    chip.getHeight() > 0);
             }
-            assertEquals("four Show/hide tiles, New float terminal among them (Search field and Drawer icon are the Global card's, Monochrome is a switch row)", 4, tiles);
         }
     }
 
-    @Test
-    public void theDockOptionsWearThePrimaryWhenOnAndTheTonalWhenOff() {
-        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
-        fixture.layOut();
-        int tiles = 0;
-        for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
-            tiles++;
-            int[] state = tile.getDrawableState();
-            int fill = tile.getBackgroundTintList().getColorForState(state, 0);
-            int ink = tile.getTextColors().getColorForState(state, 0);
-            int primary = com.google.android.material.color.MaterialColors.getColor(tile,
-                androidx.appcompat.R.attr.colorPrimary);
-            int onPrimary = com.google.android.material.color.MaterialColors.getColor(tile,
-                com.google.android.material.R.attr.colorOnPrimary);
-            int tonal = com.google.android.material.color.MaterialColors.getColor(tile,
-                com.google.android.material.R.attr.colorSecondaryContainer);
-            int onTonal = com.google.android.material.color.MaterialColors.getColor(tile,
-                com.google.android.material.R.attr.colorOnSecondaryContainer);
-            String which = tile.getText() + (tile.isChecked() ? " (on)" : " (off)");
-            assertEquals(which + ": its container", tile.isChecked() ? primary : tonal, fill);
-            assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
-            assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
+    private static List<com.google.android.material.chip.Chip> dockChips(@NonNull View rows) {
+        List<com.google.android.material.chip.Chip> out = new ArrayList<>();
+        collectChips(rows, out);
+        return out;
+    }
+
+    private static void collectChips(@NonNull View view,
+                                     @NonNull List<com.google.android.material.chip.Chip> out) {
+        if (view instanceof com.google.android.material.chip.Chip
+                && ((com.google.android.material.chip.Chip) view).isCheckable() && view.isShown())
+            out.add((com.google.android.material.chip.Chip) view);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                collectChips(group.getChildAt(i), out);
         }
-        assertEquals("four Show/hide tiles, New float terminal among them (Search field and Drawer icon are the Global card's, Monochrome is a switch row)", 4, tiles);
     }
 
     @Test
@@ -412,16 +396,6 @@ public class EditorCardSheetFitTest {
 
     /** The Dock's Show/hide toggles: the buttons of its TileGrid. */
     @NonNull
-    private static List<MaterialButton> dockOptions(@NonNull View rows) {
-        List<MaterialButton> out = new ArrayList<>();
-        for (MaterialButton button : buttons(rows)) {
-            if (button.isShown() && button.getParent() != null
-                    && button.getParent().getClass().getName().endsWith("TileGrid$Lines"))
-                out.add(button);
-        }
-        return out;
-    }
-
     @Test
     public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
         Fixture fixture = new Fixture(EditorCard.TERMINAL, 1f);
@@ -946,8 +920,6 @@ public class EditorCardSheetFitTest {
                     R.string.editor_st_hours_24);
                 case STATUS_UNIT: return strings(R.string.editor_st_unit_c,
                     R.string.editor_st_unit_f);
-                case STATUS_PLACE: return strings(R.string.editor_st_place_strip,
-                    R.string.editor_st_place_pane);
                 case STATUS_PAGE_BAR: return strings(R.string.editor_st_page_bar_glyphs,
                     R.string.editor_st_page_bar_marks);
                 default: return new String[0];
@@ -992,21 +964,6 @@ public class EditorCardSheetFitTest {
         @NonNull @Override public Context context() { return mContext; }
         @Override public boolean floating() { return false; }
         @Override public void setFloating(boolean floating) {}
-        @NonNull @Override public List<com.termux.app.place.Element> barOrder() {
-            return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
-        }
-        @Override public void setBarOrder(@NonNull List<com.termux.app.place.Element> order) {}
-        @Override public boolean offers(@NonNull com.termux.app.place.Element bar) { return true; }
-        @Override public boolean barShown(@NonNull com.termux.app.place.Element bar) {
-            return bar != com.termux.app.place.Element.EXTRA_KEYS;
-        }
-        @Override public void setBarShown(@NonNull com.termux.app.place.Element bar, boolean shown) {}
-        @NonNull @Override public com.termux.app.surfaces.cards.BarOrder.Position position(
-                @NonNull com.termux.app.place.Element bar) {
-            return com.termux.app.surfaces.cards.BarOrder.positionsFor(bar).get(0);
-        }
-        @Override public void setPosition(@NonNull com.termux.app.place.Element bar,
-                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {}
         @Override public int appIcons() { return 7; }
         @Override public int appIconsFrom() { return 3; }
         @Override public int appIconsTo() { return 10; }

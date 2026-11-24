@@ -444,9 +444,11 @@ public final class LayoutEditorPlan {
         PINNED_APPS(Element.APPS),
         AZ_INDEX(Element.AZ),
         EXTRA_KEYS(Element.EXTRA_KEYS),
-        KEYBOARD(null);
+        KEYBOARD(null),
+        /** Home's page bar, put away by its own setting; the plan never lists it ({@link LayoutEditorPlan#withPageBar}). */
+        PAGE_BAR(null);
 
-        /** The bar this chip brings back, or null for the keyboard, which has no slot. */
+        /** The bar this chip brings back, or null for the keyboard and the page bar, which have no slot. */
         @Nullable public final Element element;
 
         TrayItem(@Nullable Element element) {
@@ -465,6 +467,8 @@ public final class LayoutEditorPlan {
         List<TrayItem> items = new ArrayList<>(5);
         PlaceLayout layout = shownLayout();
         for (TrayItem item : TrayItem.values()) {
+            if (item == TrayItem.PAGE_BAR)
+                continue;
             if (item.element == null) {
                 if (!layout.keyboardShown) items.add(item);
             } else if (DressResolver.wornOn(mVariant, item.element)
@@ -476,12 +480,29 @@ public final class LayoutEditorPlan {
     }
 
     /**
+     * The tray with Home's page bar after the layout's own chips while it is put away. The page bar
+     * is a Home setting, so the layout does not know it; only Home's layout offers it.
+     */
+    @NonNull
+    public static List<TrayItem> withPageBar(@NonNull List<TrayItem> items, boolean onHome,
+                                             boolean pageBarShown) {
+        if (!onHome || pageBarShown)
+            return items;
+        List<TrayItem> all = new ArrayList<>(items.size() + 1);
+        all.addAll(items);
+        all.add(TrayItem.PAGE_BAR);
+        return all;
+    }
+
+    /**
      * A tray chip tapped: the element comes back to the edge it was put away from, at the place
      * in that edge's stack it held, the way a bar that was never moved comes back to its default
      * edge (spec §3.6). The keyboard is switched back on.
      */
     @NonNull
     public Drop restore(@NonNull TrayItem item) {
+        if (item == TrayItem.PAGE_BAR)
+            return Drop.NONE;
         if (item.element == null)
             return setKeyboardShown(true);
         // What the kind can wear, not what it wears now: an element put away in both
@@ -675,15 +696,5 @@ public final class LayoutEditorPlan {
         }
         if (!wrote) return Drop.NONE;
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
-    }
-
-    /** The Dock card's Bars list for the shown orientation, or null where it never was stored. */
-    @Nullable
-    public String barOrder() {
-        return mPlaces.barOrder(mShownOrientation);
-    }
-
-    public void setBarOrder(@NonNull String order) {
-        mPlaces.setBarOrder(mShownOrientation, order);
     }
 }

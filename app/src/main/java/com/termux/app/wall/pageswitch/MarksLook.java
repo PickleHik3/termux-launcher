@@ -113,6 +113,7 @@ public final class MarksLook implements PageMarkLook {
                 promptStroke(canvas, size, 1f, mStroke);
                 break;
             case DISPLAY:
+            case LINUX:
                 mStroke.setColor(ink);
                 mStroke.setStrokeWidth(PageMarkShapes.strokeWidth(size));
                 screenStroke(canvas, size, 1f, mStroke);
@@ -144,6 +145,7 @@ public final class MarksLook implements PageMarkLook {
                     promptStroke(canvas, size, PageMarkShapes.SIGN_SCALE, mCut);
                     break;
                 case DISPLAY:
+                case LINUX:
                     screenStroke(canvas, size, PageMarkShapes.SIGN_SCALE, mCut);
                     break;
                 default:

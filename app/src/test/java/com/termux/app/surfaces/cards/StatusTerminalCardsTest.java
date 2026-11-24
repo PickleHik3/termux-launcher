@@ -65,27 +65,24 @@ public class StatusTerminalCardsTest {
     // ------------------------------------------------------------------------------ tables
 
     @Test
-    public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
-            Row.STATUS_INDICATORS, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
-            Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
-            Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
+    public void theStatusBarCardReadsPageBarClockOptionsIndicators() {
+        assertEquals(Arrays.asList(Row.STATUS_PAGE_BAR,
+            Row.STATUS_INDICATORS, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS,
+            Row.STATUS_SECONDS, Row.STATUS_UNIT, Row.OPACITY, Row.FROST, Row.CAMERA_CUTOUT,
+            Row.PINNED_NOTIFICATIONS),
             rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
-        assertFalse("the Visible switch is the header's eye", rows.contains(Row.VISIBLE));
         assertFalse("12 h · 24 h is the card's own pair", rows.contains(Row.CLOCK_12H));
     }
 
     @Test
-    public void theTerminalCardReadsBackgroundContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-            Row.LINK_FONT,
-            Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
-            Row.SECTION_PANES,
-            Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
-            Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.MINIMAL),
+    public void theTerminalCardListsItsKnobsInTheCondensedKinds() {
+        assertEquals(Arrays.asList(Row.FONT_SIZE, Row.SPLIT_GAP,
+            Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+            Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT,
+            Row.ADAPTIVE_LEGIBILITY, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.SEARCH_FIELD, Row.DRAWER_ICON,
+            Row.LINK_FONT, Row.PANE_BORDERS),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));
@@ -96,15 +93,6 @@ public class StatusTerminalCardsTest {
     }
 
     // ------------------------------------------------------------------------------ policy
-
-    @Test
-    public void positionIsTopOrBottomAndAColumnChoosesNeither() {
-        assertEquals(0, StatusBarCard.positionIndex(PlaceLayout.Edge.TOP));
-        assertEquals(1, StatusBarCard.positionIndex(PlaceLayout.Edge.BOTTOM));
-        assertEquals(-1, StatusBarCard.positionIndex(PlaceLayout.Edge.LEFT));
-        assertEquals(-1, StatusBarCard.positionIndex(PlaceLayout.Edge.RIGHT));
-        assertEquals("no session yet reads Top", 0, StatusBarCard.positionIndex(null));
-    }
 
     @Test
     public void theFaceTilesFollowTheStoredStyleAndMinimalKeepsItsWeight() {
@@ -174,19 +162,38 @@ public class StatusTerminalCardsTest {
     // ----------------------------------------------------------------------- status rows
 
     @Test
-    public void theClockFormatAndUnitStandBesideTheirTitleAtDefaultText() {
-        Fixture f = new Fixture(1f);
-        FakeStatus host = new FakeStatus();
-        for (Row row : new Row[] {Row.STATUS_HOURS, Row.STATUS_UNIT}) {
-            CardRowView built = StatusBarCard.view(f.themed, row, f.width, host);
+    public void theClockFormatSecondsAndUnitShareOneRowOfSwitchChips() {
+        for (float scale : SCALES) {
+            Fixture f = new Fixture(scale);
+            FakeStatus host = new FakeStatus();
+            CardRowView built = StatusBarCard.view(f.themed, Row.STATUS_HOURS, f.width, host);
             f.layOut(built.view);
-            List<MaterialButton> pills = buttons(built.view);
-            StringBuilder said = new StringBuilder();
-            for (MaterialButton b : pills)
-                said.append(b.getText()).append('=').append(b.getWidth()).append(' ');
-            android.view.ViewParent group = pills.get(0).getParent();
-            assertTrue(row + " inline (row " + f.width + "px, " + said + ")",
-                com.termux.app.surfaces.rows.SegmentRow.standsInline((View) group));
+            List<com.google.android.material.chip.Chip> chips = new ArrayList<>();
+            collect(built.view, com.google.android.material.chip.Chip.class, chips);
+            assertEquals("12 h, Seconds and °F at " + scale, 3, chips.size());
+            // Each writes the option it always wrote; nothing is written by a restatement.
+            host.options[StatusBarCard.OPTION_12H] = false;
+            host.options[StatusBarCard.OPTION_SECONDS] = false;
+            host.options[StatusBarCard.OPTION_FAHRENHEIT] = false;
+            built.restate();
+            chips.get(1).performClick();
+            assertTrue("Seconds writes the Seconds option",
+                host.options[StatusBarCard.OPTION_SECONDS]);
+            chips.get(2).performClick();
+            assertTrue("°F writes the Fahrenheit option",
+                host.options[StatusBarCard.OPTION_FAHRENHEIT]);
+            chips.get(0).performClick();
+            assertTrue("12 h writes the 12-hour option", host.options[StatusBarCard.OPTION_12H]);
+            host.options[StatusBarCard.OPTION_SECONDS] = false;
+            built.restate();
+            assertFalse("restated off", chips.get(1).isChecked());
+            // The row's other two entries stand inside it: no chips of their own.
+            for (Row row : new Row[] {Row.STATUS_SECONDS, Row.STATUS_UNIT}) {
+                List<com.google.android.material.chip.Chip> none = new ArrayList<>();
+                collect(StatusBarCard.view(f.themed, row, f.width, host).view,
+                    com.google.android.material.chip.Chip.class, none);
+                assertTrue(row + " is drawn by the format row", none.isEmpty());
+            }
         }
     }
 
@@ -196,9 +203,9 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeStatus host = new FakeStatus();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.STATUS_POSITION, Row.GLASS_SECTION, Row.CLOCK_FACE,
+            for (Row row : new Row[] {Row.GLASS_SECTION, Row.CLOCK_FACE,
                 Row.CLOCK_POSITION, Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT,
-                Row.STATUS_INDICATORS, Row.CAMERA_CUTOUT}) {
+                Row.STATUS_INDICATORS}) {
                 CardRowView built = StatusBarCard.view(f.themed, row, f.width, host);
                 assertNotNull(row + " is the card's own", built);
                 f.layOut(built.view);
@@ -210,7 +217,7 @@ public class StatusTerminalCardsTest {
                     assertInsideGutter(f, button, row + " " + at);
                 }
             }
-            for (Row row : new Row[] {Row.FROST, Row.CORNERS, Row.CLOCK_12H})
+            for (Row row : new Row[] {Row.FROST, Row.CORNERS, Row.CLOCK_12H, Row.CAMERA_CUTOUT})
                 assertNull(row + " is the sheet's", StatusBarCard.view(f.themed, row, f.width, host));
         }
     }
@@ -219,18 +226,6 @@ public class StatusTerminalCardsTest {
     public void theStatusRowsWriteThroughTheHostAndRestateFromIt() {
         Fixture f = new Fixture(1f);
         FakeStatus host = new FakeStatus();
-        CardRowView position = StatusBarCard.view(f.themed, Row.STATUS_POSITION, f.width, host);
-        f.layOut(position.view);
-        List<MaterialButton> segments = buttons(position.view);
-        assertEquals("Top and Bottom", 2, segments.size());
-        // Position reads in words (overhaul §4/§7), the glyph before them.
-        assertEquals("Top", String.valueOf(segments.get(0).getText()));
-        segments.get(1).performClick();
-        assertEquals(1, host.position);
-        host.position = 0;
-        position.restate();
-        assertTrue("restated to Top", segments.get(0).isChecked());
-
         CardRowView pageBar = StatusBarCard.view(f.themed, Row.STATUS_PAGE_BAR, f.width, host);
         f.layOut(pageBar.view);
         List<MaterialButton> looks = buttons(pageBar.view);
@@ -247,49 +242,13 @@ public class StatusTerminalCardsTest {
             StatusBarCard.pageBarIndex(null));
         assertEquals("marks", StatusBarCard.pageBarValue(StatusBarCard.PAGE_BAR_MARKS));
 
-        CardRowView place = StatusBarCard.view(f.themed, Row.STATUS_PLACE, f.width, host);
-        f.layOut(place.view);
-        List<MaterialButton> places = buttons(place.view);
-        assertEquals("Strip and In the pane", 2, places.size());
-        assertEquals("Strip", String.valueOf(places.get(0).getText()));
-        assertEquals("In the pane", String.valueOf(places.get(1).getText()));
-        places.get(1).performClick();
-        assertEquals(StatusBarCard.PLACE_PANE, host.place);
-        host.place = StatusBarCard.PLACE_STRIP;
-        place.restate();
-        assertTrue("restated to Strip", places.get(0).isChecked());
-        assertEquals(StatusBarCard.PLACE_PANE, StatusBarCard.placeIndex("pane"));
-        assertEquals("absent reads the strip", StatusBarCard.PLACE_STRIP,
-            StatusBarCard.placeIndex(null));
-        assertEquals("pane", StatusBarCard.placeValue(StatusBarCard.PLACE_PANE));
-
         CardRowView clock = StatusBarCard.view(f.themed, Row.CLOCK_FACE, f.width, host);
         f.layOut(clock.view);
-        List<View> faces = tiles(clock.view);
-        assertEquals(6, faces.size());
+        List<com.google.android.material.chip.Chip> faces = new ArrayList<>();
+        collect(clock.view, com.google.android.material.chip.Chip.class, faces);
+        assertEquals("the six faces fold into one list", 6, faces.size());
         faces.get(1).performClick();
         assertEquals("LCD", 1, host.face);
-        List<TerminalClockWidget> clocks = new ArrayList<>();
-        collect(clock.view, TerminalClockWidget.class, clocks);
-        assertEquals("every tile draws its face", 6, clocks.size());
-        for (TerminalClockWidget face : clocks) {
-            assertFalse("a tile reads 07:48 with no seconds", face.isShowingSeconds());
-            assertTrue("drawn whole in its tile",
-                face.getWidth() * face.getScaleX() <= ((View) face.getParent()).getWidth() + 1);
-        }
-
-        CardRowView seconds = StatusBarCard.view(f.themed, Row.STATUS_SECONDS, f.width, host);
-        f.layOut(seconds.view);
-        // The clock rows stand in a column with their "Clock is hidden" note under them.
-        ((ViewGroup) seconds.view).getChildAt(0).performClick();
-        assertTrue("Show seconds is a switch row on the Seconds option",
-            host.options[StatusBarCard.OPTION_SECONDS]);
-
-        CardRowView cutout = StatusBarCard.view(f.themed, Row.CAMERA_CUTOUT, f.width, host);
-        f.layOut(cutout.view);
-        cutout.view.performClick();
-        ShadowLooper.idleMainLooper();
-        assertEquals("Camera cutout opens its setting", 1, host.cameraGapOpened);
 
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
@@ -374,39 +333,32 @@ public class StatusTerminalCardsTest {
         FakeStatus host = new FakeStatus();
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
-        Row[] clockRows = {Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
-            Row.STATUS_HOURS};
+        Row[] clockRows = {Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS};
         List<CardRowView> held = new ArrayList<>();
         for (Row row : clockRows) {
-            assertTrue(StatusBarCard.clockRow(row));
             CardRowView view = StatusBarCard.view(f.themed, row, f.width, host);
             f.layOut(view.view);
             held.add(view);
-            assertFalse(row + ": no note while the clock shows",
-                hasShownText(view.view, "Clock is hidden"));
         }
+        List<com.google.android.material.chip.Chip> format = new ArrayList<>();
+        collect(held.get(2).view, com.google.android.material.chip.Chip.class, format);
         buttons(indicators.view).get(StatusBarCard.INDICATOR_CLOCK).performClick();
         assertFalse("the Clock tile hides the clock", host.indicators[StatusBarCard.INDICATOR_CLOCK]);
-        for (int i = 0; i < clockRows.length; i++) {
-            CardRowView view = held.get(i);
+        for (CardRowView view : held)
             view.restate();
-            assertTrue(clockRows[i] + " says the clock is hidden",
-                hasShownText(view.view, "Clock is hidden"));
-            for (MaterialButton button : buttons(view.view))
-                assertFalse(clockRows[i] + ": its buttons are out", button.isEnabled());
-        }
-        CardRowView unit = StatusBarCard.view(f.themed, Row.STATUS_UNIT, f.width, host);
-        f.layOut(unit.view);
-        assertFalse("°C · °F is the weather's", StatusBarCard.clockRow(Row.STATUS_UNIT));
-        for (MaterialButton button : buttons(unit.view))
-            assertTrue("°C · °F stays live", button.isEnabled());
+        assertFalse("the face stands out", held.get(0).view.isEnabled());
+        for (MaterialButton button : buttons(held.get(1).view))
+            assertFalse("Clock position's buttons are out", button.isEnabled());
+        assertFalse("12 h is out", format.get(0).isEnabled());
+        assertFalse("Seconds is out", format.get(1).isEnabled());
+        assertTrue("°F is the weather's and stays live", format.get(2).isEnabled());
         host.indicators[StatusBarCard.INDICATOR_CLOCK] = true;
-        for (CardRowView view : held) {
+        for (CardRowView view : held)
             view.restate();
-            assertFalse(hasShownText(view.view, "Clock is hidden"));
-            for (MaterialButton button : buttons(view.view))
-                assertTrue(button.isEnabled());
-        }
+        assertTrue(format.get(0).isEnabled());
+        assertTrue(format.get(1).isEnabled());
+        for (MaterialButton button : buttons(held.get(1).view))
+            assertTrue(button.isEnabled());
     }
 
     private static boolean hasShownText(@NonNull View view, @NonNull String text) {
@@ -431,19 +383,17 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeTerminal host = new FakeTerminal();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL,
-                Row.EFFECT, Row.LINK_FONT}) {
-                CardRowView built = TerminalCard.view(f.themed, row, f.width, host);
-                assertNotNull(row + " is the card's own", built);
-                f.layOut(built.view);
-                for (MaterialButton button : buttons(built.view)) {
-                    assertNotCut(button, row + " " + at);
-                    assertTrue(row + " " + at + ": a 48dp target",
-                        button.getHeight() >= f.dp(48) - 1);
-                    assertInsideGutter(f, button, row + " " + at);
-                }
+            CardRowView built = TerminalCard.view(f.themed, Row.EFFECT, f.width, host);
+            assertNotNull("Screen effect is the card's own", built);
+            f.layOut(built.view);
+            for (MaterialButton button : buttons(built.view)) {
+                assertNotCut(button, "effect " + at);
+                assertInsideGutter(f, button, "effect " + at);
             }
-            assertNull(TerminalCard.view(f.themed, Row.TEXT_SIZE, f.width, host));
+            // The rest is the body's (CardBody, #346).
+            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL, Row.LINK_FONT,
+                    Row.TEXT_SIZE})
+                assertNull(row + " is the body's", TerminalCard.view(f.themed, row, f.width, host));
         }
     }
 
@@ -451,23 +401,6 @@ public class StatusTerminalCardsTest {
     public void theTerminalRowsWriteThroughTheHost() {
         Fixture f = new Fixture(1f);
         FakeTerminal host = new FakeTerminal();
-        CardRowView contrast = TerminalCard.view(f.themed, Row.CONTRAST, f.width, host);
-        f.layOut(contrast.view);
-        List<MaterialButton> words = buttons(contrast.view);
-        assertEquals(Arrays.asList("Softer", "Default", "Harder"), Arrays.asList(
-            words.get(0).getText().toString(), words.get(1).getText().toString(),
-            words.get(2).getText().toString()));
-        assertTrue("Default at open", words.get(1).isChecked());
-        words.get(2).performClick();
-        assertEquals(2, host.contrast);
-
-        CardRowView trails = TerminalCard.view(f.themed, Row.CURSOR_TRAIL, f.width, host);
-        f.layOut(trails.view);
-        List<View> trailTiles = tiles(trails.view);
-        assertEquals(7, trailTiles.size());
-        trailTiles.get(6).performClick();
-        assertEquals("Comet", 6, host.trail);
-
         CardRowView effects = TerminalCard.view(f.themed, Row.EFFECT, f.width, host);
         f.layOut(effects.view);
         List<View> effectTiles = tiles(effects.view);
@@ -478,48 +411,31 @@ public class StatusTerminalCardsTest {
         host.effect = 0;
         effects.restate();
         assertTrue(effectTiles.get(0).isSelected());
-
-        CardRowView more = TerminalCard.view(f.themed, Row.LINK_FONT, f.width, host);
-        f.layOut(more.view);
-        // Font ↗ is a list row naming the page it opens (overhaul §4); the row is the target.
-        List<android.widget.TextView> fontWords = new ArrayList<>();
-        collect(more.view, android.widget.TextView.class, fontWords);
-        assertEquals("Font", fontWords.get(0).getText().toString());
-        assertEquals(f.themed.getString(com.termux.R.string.editor_link_font_summary),
-            fontWords.get(1).getText().toString());
-        more.view.performClick();
-        assertEquals(1, host.fontOpened);
     }
 
     // ------------------------------------------------------------------------------ fakes
 
     private static final class FakeStatus implements StatusBarCard.Host {
-        int position;
         int face = 5;
         int align;
         int pageBar;
-        int place;
         final boolean[] options = {false, false, false, true};
         final boolean[] indicators = {true, true, false, true, true, false, true, false, false};
         int cameraGapOpened;
 
         @Override public int choice(@NonNull Row row) {
             switch (row) {
-                case STATUS_POSITION: return position;
                 case CLOCK_FACE: return face;
                 case CLOCK_POSITION: return align;
                 case STATUS_PAGE_BAR: return pageBar;
-                case STATUS_PLACE: return place;
                 default: return 0;
             }
         }
         @Override public void setChoice(@NonNull Row row, int index) {
             switch (row) {
-                case STATUS_POSITION: position = index; break;
                 case CLOCK_FACE: face = index; break;
                 case CLOCK_POSITION: align = index; break;
                 case STATUS_PAGE_BAR: pageBar = index; break;
-                case STATUS_PLACE: place = index; break;
                 default: break;
             }
         }
@@ -534,18 +450,10 @@ public class StatusTerminalCardsTest {
     }
 
     private static final class FakeTerminal implements TerminalCard.Host {
-        int contrast = 1;
-        int trail = 1;
         int effect;
-        int fontOpened;
 
-        @Override public int contrast() { return contrast; }
-        @Override public void setContrast(int index) { contrast = index; }
-        @Override public int trail() { return trail; }
-        @Override public void setTrail(int index) { trail = index; }
         @Override public int effect() { return effect; }
         @Override public void setEffect(int index) { effect = index; }
-        @Override public void openFont() { fontOpened++; }
     }
 
     // ---------------------------------------------------------------------------- helpers

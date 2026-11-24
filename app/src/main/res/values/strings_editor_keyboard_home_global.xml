@@ -28,7 +28,6 @@
     <string name="editor_section_panes">Panes</string>
     <string name="editor_section_effects">Effects</string>
     <string name="editor_section_background">Background</string>
-    <string name="editor_section_bars">Bars</string>
     <string name="editor_row_not_on_this_phone">Not on this phone.</string>
     <string name="editor_row_refraction_off_switch">Glass refraction is off.</string>
     <string name="editor_row_refraction_off_lazy">Off while Reduce idle activity is on.</string>
@@ -44,10 +43,6 @@
     <string name="editor_st_page_bar_summary">Show your pages as glyphs, or as a line of marks in the status bar.</string>
     <string name="editor_st_page_bar_glyphs">Glyphs</string>
     <string name="editor_st_page_bar_marks">Marks</string>
-    <string name="editor_st_place">Place</string>
-    <string name="editor_st_place_summary">Keep the status bar as its own strip, or as a thin row inside the top pane.</string>
-    <string name="editor_st_place_strip">Strip</string>
-    <string name="editor_st_place_pane">In the pane</string>
     <!-- Link rows (overhaul §4): a one-fact line for a card (›), the page's path for Settings (↗). -->
     <string name="editor_link_pages_summary">Add, remove and reorder pages</string>
     <string name="editor_link_pane_borders_summary">Frames, focus and glow around panes</string>
@@ -60,7 +55,6 @@
     <string name="editor_link_opens_card">Opens a card</string>
     <string name="editor_link_opens_settings">Opens Settings</string>
     <!-- Layout rows: the card a row opens, where it is not the element's own. -->
-    <string name="editor_elements_opens_card">%1$s card</string>
     <string name="editor_note_home_only">Home only</string>
     <string name="editor_note_terminal_only">Terminal only</string>
     <string name="editor_note_home_glass">Widgets, status bar, dock</string>
@@ -85,6 +79,7 @@
 
     <!-- Global card. -->
     <string name="editor_row_change_wallpaper">Change wallpaper</string>
+    <string name="editor_row_wallpaper">Wallpaper</string>
     <string name="editor_row_show_wallpaper">Show wallpaper</string>
 
     <!-- Home icon size presets: the Home card's glyphs name them on long-press, and Settings ›

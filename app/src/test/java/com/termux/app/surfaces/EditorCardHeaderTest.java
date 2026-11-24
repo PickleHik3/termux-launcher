@@ -61,16 +61,14 @@ public class EditorCardHeaderTest {
                 assertEquals(at + ": the pill", main, f.sheet.mainPill().getVisibility() == View.VISIBLE);
                 assertEquals(at + ": the phone glyph", main, f.sheet.phoneGlyph().getVisibility() == View.VISIBLE);
                 assertFalse(at + ": the glyph is no button", f.sheet.phoneGlyph().isClickable());
-                // Element cards: back, name, Show where the object can be hidden.
+                // Element cards: back and name; hiding is the frame's Hide, not a header switch.
                 assertEquals(at + ": back", !main, f.sheet.backButton().getVisibility() == View.VISIBLE);
                 assertEquals(at + ": the name", !main, f.sheet.titleView().getVisibility() == View.VISIBLE);
-                assertEquals(at + ": Show", !main && card.hasEye(), f.sheet.eyeButton().getVisibility() == View.VISIBLE);
                 assertTrue(at + ": the More menu", f.sheet.resetButton().getVisibility() == View.VISIBLE);
                 assertEquals(at, "More options",
                     String.valueOf(f.sheet.resetButton().getContentDescription()));
                 View last = f.sheet.resetButton();
-                View before = main ? f.sheet.phoneGlyph()
-                    : card.hasEye() ? f.sheet.eyeButton() : f.sheet.titleView();
+                View before = main ? f.sheet.phoneGlyph() : f.sheet.titleView();
                 assertTrue(at + ": nothing runs under the More button",
                     f.left(before) + before.getWidth() <= f.left(last) + 1);
                 if (main) {
@@ -106,35 +104,6 @@ public class EditorCardHeaderTest {
         assertEquals("Reset dock", String.valueOf(menu.getMenu().getItem(0).getTitle()));
         menu.getMenu().performIdentifierAction(R.id.editor_header_reset, 0);
         assertEquals(1, f.resets);
-    }
-
-    @Test
-    public void theEyeShowsAndHidesTheObjectThroughTheModel() {
-        Fixture f = new Fixture(EditorCard.KEYBOARD, 1f);
-        assertTrue("shown reads checked", f.sheet.eyeButton().isChecked());
-        f.sheet.eyeButton().performClick();
-        assertEquals(0, f.model.visible);
-        assertFalse("hidden reads unchecked", f.sheet.eyeButton().isChecked());
-        f.sheet.eyeButton().performClick();
-        assertEquals(1, f.model.visible);
-        assertTrue(f.sheet.eyeButton().isChecked());
-        f.model.visible = 0;
-        f.sheet.restate();
-        assertFalse("a restatement reads the model again", f.sheet.eyeButton().isChecked());
-    }
-
-    @Test
-    public void noCardHasAVisibleSwitchRow() {
-        // One sheet; each card is raised on it in turn.
-        Fixture f = null;
-        for (EditorCard card : EditorCard.values()) {
-            if (f == null)
-                f = new Fixture(card, 1f);
-            else
-                f.show(card);
-            assertFalse(card + " has no Visible row", hasText(f.sheet.rows(),
-                f.themed.getString(R.string.appearance_row_visible)));
-        }
     }
 
     private static boolean hasDescription(@NonNull View view, @NonNull String text) {
@@ -245,17 +214,15 @@ public class EditorCardHeaderTest {
         }
     }
 
-    /** A model with mid-range values and a Visible that the eye can turn. */
+    /** A model with mid-range values. */
     private static final class Model implements EditorCardSheet.Model {
         private final Context mContext;
-        int visible = 1;
 
         Model(@NonNull Context context) {
             mContext = context;
         }
 
         @Override public int value(@NonNull Row row) {
-            if (row == Row.VISIBLE) return visible;
             return row.kind == EditorRows.Kind.SLIDER ? 50 : 0;
         }
 
@@ -311,7 +278,7 @@ public class EditorCardHeaderTest {
         }
 
         @Override public void onValue(@NonNull Row row, int value, boolean dragging) {
-            if (row == Row.VISIBLE) visible = value;
+            // Writes are not read back.
         }
 
         @Override public void onReleased(@NonNull Row row) {}

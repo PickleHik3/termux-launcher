@@ -446,15 +446,6 @@ public final class WallPages {
     }
 
     /**
-     * Adds a Linux window's page after {@code afterId} ({@link #END}: the end): temporary, so Edit
-     * pages never lists it and the start-up sweep drops one a past launcher process left.
-     */
-    @NonNull
-    public Result addLinuxWindow(int afterId) {
-        return add(PageKind.LINUX, page(afterId) != null ? afterId : END, null, true);
-    }
-
-    /**
      * Edit pages' "Add display": a lasting unbound Display page. A temporary one is made lasting
      * where it stands (its app stays on it); else a lasting unbound one already on the wall is
      * the answer (NONE); else a new one goes after {@code afterId} (the end when that page is
@@ -494,8 +485,8 @@ public final class WallPages {
     }
 
     /**
-     * Without its Linux windows' pages: the sweep when the launcher meets its Linux windows host
-     * again (it replays the windows that still run) or loses it.
+     * Without Linux window pages: Linux windows stand in the Terminal's row since #392, so a page
+     * a launcher before it left goes when the launcher meets its Linux windows host.
      */
     @NonNull
     public WallPages withoutLinuxWindows() {

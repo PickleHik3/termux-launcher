@@ -32,6 +32,11 @@ import com.termux.app.surfaces.rows.SectionHeader;
 import com.termux.app.surfaces.rows.SegmentRow;
 import com.termux.app.surfaces.rows.StepperRow;
 import com.termux.app.surfaces.rows.SliderRow;
+import com.termux.app.surfaces.rows.SliderPairRow;
+import com.termux.app.surfaces.rows.StepperPairRow;
+import com.termux.app.surfaces.rows.SwitchChipsRow;
+import com.termux.app.surfaces.rows.FoldChoiceRow;
+import com.termux.app.surfaces.EditorRows.Form;
 import com.termux.app.surfaces.rows.TileGrid;
 
 import java.util.ArrayList;
@@ -60,7 +65,14 @@ final class CardBody {
     /** Whether {@code card} is drawn with these rows. */
     static boolean redesigned(@NonNull EditorCard card) {
         return card == EditorCard.KEYBOARD || card == EditorCard.HOME
-            || card == EditorCard.APPEARANCE;
+            || card == EditorCard.APPEARANCE || card == EditorCard.TERMINAL
+            || card == EditorCard.STATUS || card == EditorCard.DOCK;
+    }
+
+    /** Whether the card lists {@code row} as a chip of its Links row ({@link Form#LINKS}). */
+    boolean drawsAsLinkChip(@NonNull Row row) {
+        Group group = mGroups.get(row);
+        return group != null && group.form == Form.LINKS;
     }
 
     /**
@@ -127,7 +139,6 @@ final class CardBody {
             case SECTION_TEXT:
             case SECTION_PANES:
             case SECTION_EFFECTS:
-            case SECTION_BARS:
                 return Shape.SECTION;
             case HINT_GLASS_MATERIAL:
                 return Shape.HINT;
@@ -160,11 +171,14 @@ final class CardBody {
         @NonNull final List<Row> rows;
         /** Whether the divider stands over it: not first on the card or in its tier. */
         final boolean divider;
+        /** How the card file listed them: {@link Form#PLAIN} groups by the rows' kind. */
+        @NonNull final Form form;
         @Nullable CardRowView built;
 
-        Group(@NonNull List<Row> rows, boolean divider) {
+        Group(@NonNull List<Row> rows, boolean divider, @NonNull Form form) {
             this.rows = rows;
             this.divider = divider;
+            this.form = form;
         }
     }
 
@@ -195,7 +209,8 @@ final class CardBody {
             List<Row> rows = new ArrayList<>(end - i);
             for (int j = i; j < end; j++)
                 rows.add(specs.get(j).row);
-            Group group = new Group(rows, i > 0 && specs.get(i - 1).tier == specs.get(i).tier);
+            Group group = new Group(rows, i > 0 && specs.get(i - 1).tier == specs.get(i).tier,
+                specs.get(i).form);
             for (Row row : rows)
                 mGroups.put(row, group);
             i = end;
@@ -243,8 +258,11 @@ final class CardBody {
     /** Where the group that starts at {@code start} ends (exclusive); a group keeps to its tier. */
     private static int groupEnd(@NonNull List<Spec> specs, int start) {
         Spec first = specs.get(start);
+        if (first.form != Form.PLAIN)
+            return RowForms.groupEnd(specs, start);
         int end = start + 1;
         while (end < specs.size() && specs.get(end).tier == first.tier
+            && specs.get(end).form == Form.PLAIN
             && sameGroup(shape(first.row), shape(specs.get(end).row)))
             end++;
         return end;
@@ -268,6 +286,25 @@ final class CardBody {
     private CardRowView buildGroup(@NonNull Group group, int widthPx) {
         List<Row> rows = group.rows;
         Row first = rows.get(0);
+        switch (group.form) {
+            case PAIR:
+                return rows.size() == 2 ? sliderPair(rows, null) : sliders(rows);
+            case LINKED_PAIR:
+                return rows.size() == 3 ? sliderPair(java.util.Arrays.asList(rows.get(0),
+                    rows.get(2)), rows.get(1)) : sliders(rows);
+            case STEPPERS:
+                return rows.size() == 2 ? stepperPair(rows) : stepper(first);
+            case CHIPS:
+                return switchChips(rows);
+            case FOLD:
+                return fold(first);
+            case LINKS:
+                return chips(rows);
+            case CHOICE:
+            case PLAIN:
+            default:
+                break;
+        }
         switch (shape(first)) {
             case SLIDER:
             case SLIDER_LINK:
@@ -292,6 +329,126 @@ final class CardBody {
             default:
                 return action(first);
         }
+    }
+
+    // ------------------------------------------------------------------------ condensed forms
+
+    /**
+     * Two related sliders on one row ({@link Form#PAIR}), with {@code linkRow}, when given, as
+     * the link button standing between them ({@link Form#LINKED_PAIR}).
+     */
+    @NonNull
+    private CardRowView sliderPair(@NonNull List<Row> rows, @Nullable Row linkRow) {
+        List<SliderRow.Track> tracks = new ArrayList<>(2);
+        int[] values = new int[2];
+        for (int i = 0; i < 2; i++) {
+            Row row = rows.get(i);
+            tracks.add(new SliderRow.Track(0, name(row), mModel.from(row), mModel.to(row),
+                mModel.step(row), value -> mModel.readout(row, value)));
+            values[i] = mModel.value(row);
+        }
+        SliderPairRow pair = SliderPairRow.build(mContext, tracks, values,
+            linkRow == null ? null : name(linkRow),
+            linkRow != null && mModel.value(linkRow) != 0,
+            on -> mModel.onValue(linkRow, on ? 1 : 0, false),
+            new SliderRow.Listener() {
+                @Override public void onValue(int index, int value, boolean dragging) {
+                    mModel.onValue(rows.get(index), value, dragging);
+                }
+
+                @Override public void onReleased(int index) {
+                    mModel.onReleased(rows.get(index));
+                }
+
+                @Override public void onReset(int index) {
+                    mModel.resetRow(rows.get(index));
+                }
+            });
+        for (int i = 0; i < 2; i++)
+            pair.cells.get(i).slider.setTag(rows.get(i));
+        return new CardRowView(pair.root, () -> {
+            boolean any = false;
+            for (int i = 0; i < 2; i++) {
+                Row row = rows.get(i);
+                boolean shown = mModel.shown(row);
+                pair.setShown(i, shown);
+                any |= shown;
+                pair.setValue(i, mModel.value(row));
+                boolean enabled = mModel.enabled(row);
+                SliderPairRow.Cell cell = pair.cells.get(i);
+                if (cell.slider.isEnabled() != enabled)
+                    cell.slider.setEnabled(enabled);
+                cell.root.setAlpha(enabled ? 1f : 0.5f);
+                pair.setOwn(i, mModel.ownValue(row), mModel.rowState(row));
+            }
+            if (linkRow != null)
+                pair.setLinked(mModel.value(linkRow) != 0);
+            int visibility = any ? View.VISIBLE : View.GONE;
+            if (pair.root.getVisibility() != visibility)
+                pair.root.setVisibility(visibility);
+        });
+    }
+
+    /** Two steppers on one row ({@link Form#STEPPERS}). */
+    @NonNull
+    private CardRowView stepperPair(@NonNull List<Row> rows) {
+        Row a = rows.get(0);
+        Row b = rows.get(1);
+        StepperPairRow pair = StepperPairRow.build(mContext,
+            name(a), mModel.from(a), mModel.to(a), mModel.step(a), mModel.value(a),
+            value -> mModel.readout(a, value), value -> mModel.onValue(a, value, false),
+            name(b), mModel.from(b), mModel.to(b), mModel.step(b), mModel.value(b),
+            value -> mModel.readout(b, value), value -> mModel.onValue(b, value, false));
+        return new CardRowView(pair.root, () -> {
+            boolean shown = mModel.shown(a) || mModel.shown(b);
+            int visibility = shown ? View.VISIBLE : View.GONE;
+            if (pair.root.getVisibility() != visibility)
+                pair.root.setVisibility(visibility);
+            pair.first.setValue(mModel.value(a));
+            pair.second.setValue(mModel.value(b));
+        });
+    }
+
+    /** A run of switches as chips that wrap ({@link Form#CHIPS}). */
+    @NonNull
+    private CardRowView switchChips(@NonNull List<Row> rows) {
+        List<SwitchChipsRow.Item> items = new ArrayList<>(rows.size());
+        for (Row row : rows)
+            items.add(new SwitchChipsRow.Item(glyph(row), name(row)));
+        SwitchChipsRow chips = SwitchChipsRow.build(mContext, items,
+            (index, on) -> mModel.onValue(rows.get(index), on ? 1 : 0, false));
+        return new CardRowView(chips.root, () -> {
+            boolean any = false;
+            for (int i = 0; i < rows.size(); i++) {
+                Row row = rows.get(i);
+                boolean shown = mModel.shown(row);
+                chips.setShown(i, shown);
+                any |= shown;
+                chips.setChecked(i, mModel.value(row) != 0);
+                chips.setEnabled(i, mModel.enabled(row));
+            }
+            int visibility = any ? View.VISIBLE : View.GONE;
+            if (chips.root.getVisibility() != visibility)
+                chips.root.setVisibility(visibility);
+        });
+    }
+
+    /** A long choice folded into one line that opens its list in place ({@link Form#FOLD}). */
+    @NonNull
+    private CardRowView fold(@NonNull Row row) {
+        String[] choices = mModel.choices(row);
+        FoldChoiceRow fold = FoldChoiceRow.build(mContext, glyph(row), name(row),
+            java.util.Arrays.asList(choices), mModel.value(row),
+            index -> mModel.onValue(row, index, false));
+        return new CardRowView(fold.root, () -> {
+            showRoot(fold.root, row);
+            fold.select(mModel.value(row));
+            for (int i = 0; i < fold.chips.size(); i++) {
+                boolean enabled = mModel.choiceEnabled(row, i);
+                if (fold.chips.get(i).isEnabled() != enabled)
+                    fold.chips.get(i).setEnabled(enabled);
+            }
+        });
     }
 
     /** {@code row}'s name on this card. */

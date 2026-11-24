@@ -93,6 +93,12 @@ public final class LayoutEditorController {
         return mPlan == null ? null : mPlan.place();
     }
 
+    /** The kind of layout the session edits (what a held bar's landing is asked against). */
+    @Nullable
+    public com.termux.app.place.layout.LayoutKind layoutKind() {
+        return mPlan == null ? null : mPlan.layoutKind();
+    }
+
     /** The orientation every write is on (the phone's), or null while no session is open. */
     @Nullable
     public PlaceOrientation shownOrientation() {
@@ -559,16 +565,5 @@ public final class LayoutEditorController {
     public void writeSlots(@NonNull PlaceLayout next) {
         if (mPlan != null)
             afterWrite(mPlan.writeSlots(next));
-    }
-
-    /** The Dock card's Bars list as stored for the shown orientation, or null. */
-    @Nullable
-    public String barOrder() {
-        return mPlan == null ? null : mPlan.barOrder();
-    }
-
-    public void setBarOrder(@NonNull String order) {
-        if (mPlan != null)
-            mPlan.setBarOrder(order);
     }
 }

@@ -191,7 +191,7 @@ public class EditorCardSheetScrollTest {
         layOut();
         mSheet.scroll().scrollTo(0, 400);
         int before = mSheet.scroll().getScrollY();
-        assertTrue(before > 0);
+        assertTrue("scrolled " + before, before > 0);
         // A glass column's slider is vertical and owns a vertical drag, so flick on a text row.
         View scroll = mSheet.scroll();
         float y = -1f;
@@ -200,7 +200,8 @@ public class EditorCardSheetScrollTest {
             if (deepest(scroll, mWidth / 2f, at).endsWith("TextView")) y = at;
         }
         assertTrue("a text row is under the finger somewhere", y >= 0);
-        flick(y, 150f);
+        // The card is short now: flick less than the content has to give back.
+        flick(y, Math.min(150f, before - 1f));
         assertEquals(EditorCardSheet.DETENT_FULL, mSheet.detent());
         assertTrue("the content scrolled back", mSheet.scroll().getScrollY() < before);
     }
@@ -319,21 +320,6 @@ public class EditorCardSheetScrollTest {
         @NonNull @Override public Context context() { return mContext; }
         @Override public boolean floating() { return false; }
         @Override public void setFloating(boolean floating) {}
-        @NonNull @Override public List<com.termux.app.place.Element> barOrder() {
-            return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
-        }
-        @Override public void setBarOrder(@NonNull List<com.termux.app.place.Element> order) {}
-        @Override public boolean offers(@NonNull com.termux.app.place.Element bar) { return true; }
-        @Override public boolean barShown(@NonNull com.termux.app.place.Element bar) {
-            return bar != com.termux.app.place.Element.EXTRA_KEYS;
-        }
-        @Override public void setBarShown(@NonNull com.termux.app.place.Element bar, boolean shown) {}
-        @NonNull @Override public com.termux.app.surfaces.cards.BarOrder.Position position(
-                @NonNull com.termux.app.place.Element bar) {
-            return com.termux.app.surfaces.cards.BarOrder.positionsFor(bar).get(0);
-        }
-        @Override public void setPosition(@NonNull com.termux.app.place.Element bar,
-                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {}
         @Override public int appIcons() { return 7; }
         @Override public int appIconsFrom() { return 3; }
         @Override public int appIconsTo() { return 10; }
