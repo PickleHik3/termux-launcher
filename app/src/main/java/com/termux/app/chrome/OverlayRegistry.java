@@ -94,6 +94,8 @@ public final class OverlayRegistry {
      * the overlay is closing and would answer no.
      */
     private boolean mClaimedBackDown;
+    /** An unsaved-changes question is up and has not been answered. */
+    private boolean mAsking;
 
     /** Registers the next overlay outward; the first registered is the innermost. */
     public void register(@NonNull Overlay overlay) {
@@ -175,10 +177,19 @@ public final class OverlayRegistry {
     /**
      * Asks each open overlay that holds unsaved changes, innermost first, one question at a time.
      * {@code leave} runs when every one let go; {@code stay} runs at the first that did not (the
-     * rest are not asked).
+     * rest are not asked). A no-op while a question is pending; {@link #closeAll} forgets it, as
+     * a dialog dropped with its surface never answers.
      */
     public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
-        askFrom(0, leave, stay);
+        if (mAsking) return;
+        mAsking = true;
+        askFrom(0, () -> {
+            mAsking = false;
+            leave.run();
+        }, () -> {
+            mAsking = false;
+            stay.run();
+        });
     }
 
     private void askFrom(int from, @NonNull Runnable leave, @NonNull Runnable stay) {
@@ -194,6 +205,7 @@ public final class OverlayRegistry {
 
     /** Drops every overlay for {@code reason}, innermost first. */
     public void closeAll(@NonNull CloseReason reason) {
+        mAsking = false;
         for (Overlay overlay : mOverlays) overlay.closeImmediately(reason);
     }
 

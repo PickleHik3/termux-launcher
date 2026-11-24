@@ -2698,9 +2698,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
     }
 
-    /** A question about unsaved changes is up over a home press; a second press adds none. */
-    private boolean mHomeAsking;
-
     /**
      * HOME means the home screen, not the home screen with something still up (ADR 0034). HOME
      * while already home never stops the activity, so this is the one exit these get that is not
@@ -2710,13 +2707,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.chrome.HomeExitPolicy.Step step = com.termux.app.chrome.HomeExitPolicy.decide(
             mOverlays.anyOpen(), mOverlays.anyHoldsUnsavedChanges(), mHomePress.goesHome());
         if (step == com.termux.app.chrome.HomeExitPolicy.Step.ASK) {
-            if (mHomeAsking) return;
-            mHomeAsking = true;
             mOverlays.askBeforeLeaving(() -> {
-                mHomeAsking = false;
                 carryOutHomeExit(com.termux.app.chrome.HomeExitPolicy.afterAnswer(true));
             }, () -> {
-                mHomeAsking = false;
                 carryOutHomeExit(com.termux.app.chrome.HomeExitPolicy.afterAnswer(false));
             });
             return;

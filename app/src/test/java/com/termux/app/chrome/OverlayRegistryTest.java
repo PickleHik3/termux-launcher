@@ -230,4 +230,63 @@ public class OverlayRegistryTest {
         registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
         assertEquals(List.of("leave"), out);
     }
+
+    /** An open draft that keeps its question pending until the test answers. */
+    private static final class Pending extends Pane {
+        Runnable leave;
+        Runnable stay;
+        int asked;
+
+        Pending(List<String> log) {
+            super("p", true, log);
+        }
+
+        @Override public boolean holdsUnsavedChanges() {
+            return true;
+        }
+
+        @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            asked++;
+            this.leave = leave;
+            this.stay = stay;
+        }
+    }
+
+    @Test
+    public void aSecondAskWhilePendingIsIgnored() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(1, pending.asked);
+    }
+
+    @Test
+    public void closeAllWhilePendingLetsTheNextAskThrough() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        registry.closeAll(OverlayRegistry.CloseReason.STOP);
+        pending.open = true;
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(2, pending.asked);
+    }
+
+    @Test
+    public void stayAndLeaveEachClearThePendingQuestion() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        pending.stay.run();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(2, pending.asked);
+        pending.leave.run();
+        assertEquals(List.of("stay", "leave"), out);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(3, pending.asked);
+    }
 }
