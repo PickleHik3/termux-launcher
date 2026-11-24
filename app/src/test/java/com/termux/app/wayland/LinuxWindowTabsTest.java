@@ -64,11 +64,19 @@ public class LinuxWindowTabsTest {
 
     @Test
     public void tabsShareTheRowButNeverGoUnderTheMinimum() {
-        assertEquals(400, LinuxWindowTabs.tabWidth(400, 1, 100, 10, 0));
-        assertEquals(195, LinuxWindowTabs.tabWidth(400, 2, 100, 10, 0));
-        assertEquals(175, LinuxWindowTabs.tabWidth(400, 2, 100, 10, 20));
-        assertEquals(100, LinuxWindowTabs.tabWidth(400, 4, 100, 10, 20));
-        assertEquals(100, LinuxWindowTabs.tabWidth(400, 0, 100, 10, 20));
+        assertEquals(400, LinuxWindowTabs.tabWidth(400, 1, 100, 1000, 10, 0));
+        assertEquals(195, LinuxWindowTabs.tabWidth(400, 2, 100, 1000, 10, 0));
+        assertEquals(175, LinuxWindowTabs.tabWidth(400, 2, 100, 1000, 10, 20));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 4, 100, 1000, 10, 20));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 0, 100, 1000, 10, 20));
+    }
+
+    @Test
+    public void fewTabsKeepTheirNaturalWidth() {
+        assertEquals(200, LinuxWindowTabs.tabWidth(1000, 1, 100, 200, 10, 20));
+        assertEquals(200, LinuxWindowTabs.tabWidth(1000, 2, 100, 200, 10, 20));
+        assertEquals(184, LinuxWindowTabs.tabWidth(1000, 5, 100, 200, 10, 20));
+        assertEquals(100, LinuxWindowTabs.tabWidth(400, 4, 100, 200, 10, 20));
     }
 
     @Test
