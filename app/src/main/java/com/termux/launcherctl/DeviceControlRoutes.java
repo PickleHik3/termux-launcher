@@ -67,6 +67,7 @@ final class DeviceControlRoutes {
             case "/v1/toast":
             case "/v1/look":
             case "/v1/layout":
+            case "/v1/config":
                 return "POST".equals(method);
             case "/v1/root/lock":
             case "/v1/root/reboot":
@@ -118,6 +119,10 @@ final class DeviceControlRoutes {
                 return look(context, arguments);
             case "/v1/layout":
                 return layout(context, arguments);
+            case "/v1/config":
+                return ConfigCommand.handle(
+                    com.termux.app.settings.LauncherSettings.registry(context),
+                    com.termux.app.settings.LauncherSettings.applier(), arguments);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":

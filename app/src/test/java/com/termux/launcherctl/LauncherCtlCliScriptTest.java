@@ -42,7 +42,7 @@ import static org.junit.Assert.assertTrue;
 public class LauncherCtlCliScriptTest {
 
     private static final String[] GROUPS = {"launch", "pane", "window", "agent", "notify", "progress",
-        "clipboard", "notifications", "keyboard", "vibrate", "torch", "battery", "motion-log", "look", "volume", "toast",
+        "clipboard", "notifications", "keyboard", "vibrate", "torch", "battery", "motion-log", "look", "config", "volume", "toast",
         "wallpaper", "x11", "media"};
 
     @Rule public final TemporaryFolder folder = new TemporaryFolder();
@@ -94,7 +94,7 @@ public class LauncherCtlCliScriptTest {
     @Test
     public void aGroupThatNeedsACommandExplainsItselfInsteadOfActing() throws Exception {
         for (String group : new String[]{"launch", "pane", "window", "agent", "progress", "clipboard",
-                "keyboard", "torch", "wallpaper", "x11", "media"}) {
+                "keyboard", "torch", "wallpaper", "x11", "media", "config"}) {
             Run bare = run(null, group);
             assertEquals(group, 2, bare.code);
             assertEquals(group, "", bare.out);
@@ -140,6 +140,12 @@ public class LauncherCtlCliScriptTest {
             {"media", "streams"},
             {"media", "streams", "-1"},
             {"media", "player", "org.mpris.MediaPlayer2.kew/../x"},
+            {"config", "get"},
+            {"config", "get", ""},
+            {"config", "set", "text.size"},
+            {"config", "set", "text.size", "120", "extra"},
+            {"config", "list", "--yaml"},
+            {"config", "export"},
         };
         for (String[] mistake : mistakes) {
             Run result = run(null, mistake);
@@ -225,6 +231,41 @@ public class LauncherCtlCliScriptTest {
         Run timedOut = run(null, "pane", "wait", "p1", "--match", "done");
         assertEquals(1, timedOut.code);
         assertTrue(server.requests.poll().body.contains("\"timeout_ms\":" + PaneWait.DEFAULT_TIMEOUT_MS));
+    }
+
+    @Test
+    public void configGetSetAndListEachSendOneRequest() throws Exception {
+        server.answer(200, "application/json", "{\"ok\":true,\"id\":\"text.size\",\"value\":\"100\"}");
+        Run got = run(null, "config", "get", "text.size");
+        assertEquals(got.err, 0, got.code);
+        Request get = server.requests.poll();
+        assertEquals("POST /v1/config", get.line);
+        assertEquals("{\"op\":\"get\",\"id\":\"text.size\"}", get.body);
+
+        server.answer(200, "application/json", "{\"ok\":true}");
+        assertEquals(0, run(null, "config", "set", "terminal.contrast", "har\"der").code);
+        assertEquals("{\"op\":\"set\",\"id\":\"terminal.contrast\",\"value\":\"har\\\"der\"}",
+            server.requests.poll().body);
+
+        server.answer(200, "text/plain; charset=utf-8", "text.size = 100");
+        Run listed = run(null, "config", "list");
+        assertEquals(listed.err, 0, listed.code);
+        assertEquals("text.size = 100\n", listed.out);
+        assertEquals("{\"op\":\"list\",\"format\":\"text\"}", server.requests.poll().body);
+
+        server.answer(200, "application/json", "{\"ok\":true,\"settings\":[]}");
+        assertEquals(0, run(null, "config", "list", "--json").code);
+        assertEquals("{\"op\":\"list\"}", server.requests.poll().body);
+    }
+
+    @Test
+    public void configSetsRefusalIsPrintedWithTheRangeAndExitsOne() throws Exception {
+        String refusal = "{\"ok\":false,\"error\":\"invalid_value\",\"message\":\"text.size is 80-150\","
+            + "\"allowed\":\"80-150\"}";
+        server.answer(400, "application/json", refusal);
+        Run refused = run(null, "config", "set", "text.size", "400");
+        assertEquals(1, refused.code);
+        assertEquals(refusal + "\n", refused.out);
     }
 
     @Test
