@@ -39,12 +39,27 @@ import java.util.concurrent.ConcurrentHashMap;
  *       display and ends.</li>
  * </ul>
  *
- * <p>Size and scale: the server is not given {@code -hidpi}. Its root is the window's logical
- * size (the host configures an xdg window in logical units), so a desktop draws at the size it
- * would on an ordinary 96 dpi monitor and the window's view scales it up to the screen's density:
- * the right size on every desktop and every X toolkit inside it, a little soft. Xwayland 24.1
- * resizes its root to each configure, so the desktop follows the window (rotation, keyboard).
- * {@code -geometry} starts it at the screen's logical size so the first configure is a small step.
+ * <p>Size and scale: the server runs with {@code -hidpi}. Xwayland 24.1 then takes the host's
+ * fractional scale (wp_fractional_scale with a viewport) for its window and makes its root the
+ * configured logical size times that scale: the window's own pixels, drawn 1:1, sharp. (Without
+ * {@code -hidpi} the root is the logical size and the view magnifies it.) It resizes the root to
+ * each configure, so the desktop follows the window (rotation, keyboard). The desktop is told how
+ * big to draw the way an X desktop is told on a dense monitor, with the maths the host's shared
+ * Xwayland uses ({@code wayland-host/src/xscale.rs}), all of it read once at start
+ * ({@link #scaleEnv}, {@link #startBlock}):
+ * <ul>
+ *   <li>{@code GDK_SCALE} (the whole part of the scale) and {@code GDK_DPI_SCALE} (the rest):
+ *       GTK 3 and 4 take these over any XSETTINGS, so XFCE's and MATE's own settings daemons,
+ *       which own XSETTINGS in their session, cannot undo them. GTK multiplies the desktop's
+ *       {@code Xft/DPI} (96 unless the user set one) by {@code GDK_DPI_SCALE}.</li>
+ *   <li>{@code Xft.dpi} on the root window (96 x scale), through {@code xrdb} when it is there:
+ *       Qt 6 on X11 draws at Xft.dpi / 96 (LXQt), Xft clients size their fonts by it. XFCE's
+ *       settings daemon writes its own value there later.</li>
+ *   <li>{@code XCURSOR_SIZE}, so the pointer is not a speck.</li>
+ * </ul>
+ * The scale is the desktop app's Scale (the rail's stop) or the screen's density; a new stop
+ * reaches the desktop the next time it starts. {@code -geometry} starts the server at the
+ * screen's logical size so the first configure is a small step.
  */
 public final class WaylandDesktopServer {
 
@@ -72,6 +87,10 @@ public final class WaylandDesktopServer {
     private static final String LOCK_SUFFIX = "-lock";
     private static final String SOCKET_DIR = ".X11-unix";
     private static final String SOCKET_PREFIX = "X";
+
+    /** The DPI X toolkits take as scale 1, and the cursor size at scale 1 ({@code xscale.rs}). */
+    static final int BASE_DPI = 96;
+    static final int BASE_CURSOR_SIZE = 24;
 
     /** Each running desktop's name by its display number, for the window's tab. */
     private static final Map<Integer, String> NAMES = new ConcurrentHashMap<>();
@@ -144,11 +163,43 @@ public final class WaylandDesktopServer {
         return new int[] {Math.max(1, Math.round(width / s)), Math.max(1, Math.round(height / s))};
     }
 
-    /** The size a desktop's server starts at: the screen's logical size now. */
+    /** The size a desktop's server starts at: the screen's logical size now, at {@code scale}. */
     @NonNull
-    public static int[] startSize(@NonNull Context context) {
+    public static int[] startSize(@NonNull Context context, float scale) {
         WaylandAppRunner.HostStart start = WaylandAppRunner.hostStart(context);
-        return logicalSize(start.width, start.height, start.scale);
+        return logicalSize(start.width, start.height, scale);
+    }
+
+    /** {@code scale} when usable, else 1. */
+    private static float sane(float scale) {
+        return scale > 0f && !Float.isNaN(scale) && !Float.isInfinite(scale) ? scale : 1f;
+    }
+
+    /** {@code GDK_SCALE}: the whole part of {@code scale}, at least 1. Pure. */
+    static int windowScale(float scale) {
+        return Math.max(1, (int) Math.floor(sane(scale)));
+    }
+
+    /** The {@code Xft.dpi} a desktop at {@code scale} is told: 96 x scale, rounded. Pure. */
+    static int xftDpi(float scale) {
+        return Math.round(BASE_DPI * sane(scale));
+    }
+
+    /**
+     * The exports a desktop at {@code scale} gets so its toolkits draw at that scale (see the class
+     * comment): {@code GDK_SCALE}, {@code GDK_DPI_SCALE} (the rest of the scale, so text comes out
+     * at the whole scale) and {@code XCURSOR_SIZE}. Pure.
+     */
+    @NonNull
+    public static List<String> scaleEnv(float scale) {
+        float s = sane(scale);
+        int whole = windowScale(s);
+        List<String> env = new ArrayList<>();
+        env.add("GDK_SCALE=" + whole);
+        env.add("GDK_DPI_SCALE=" + String.format(java.util.Locale.ROOT, "%.4f", s / whole)
+            .replaceAll("0+$", "").replaceAll("\\.$", ""));
+        env.add("XCURSOR_SIZE=" + Math.round(BASE_CURSOR_SIZE * s));
+        return Collections.unmodifiableList(env);
     }
 
     /** The prefix's Xwayland when it is executable; null otherwise. File work. */
@@ -159,7 +210,8 @@ public final class WaylandDesktopServer {
 
     /**
      * The server's arguments after its program: the display, the start size ({@code -geometry},
-     * rootful), and {@code -noreset}, so the server does not reset (and drop its window) whenever
+     * rootful, logical), {@code -hidpi} (the root at the window's real pixels, see the class
+     * comment) and {@code -noreset}, so the server does not reset (and drop its window) whenever
      * its last client leaves, as it would between a desktop's start-up helpers. Size below 1 is
      * left out. Pure.
      */
@@ -171,6 +223,7 @@ public final class WaylandDesktopServer {
             args.add("-geometry");
             args.add(width + "x" + height);
         }
+        args.add("-hidpi");
         args.add("-noreset");
         return Collections.unmodifiableList(args);
     }
@@ -191,6 +244,8 @@ public final class WaylandDesktopServer {
      *       server is ended and the script exits with {@link #EXIT_NO_SCREEN};</li>
      *   <li>the watcher, which ends the server once the session's process ({@code $$}, which the
      *       script becomes) is gone;</li>
+     *   <li>{@code Xft.dpi} for {@code scale} merged into the server's resources, when {@code xrdb}
+     *       is installed;</li>
      *   <li>{@code WAYLAND_DISPLAY} and the toolkit hints taken out of the desktop's environment,
      *       so an app opened inside the desktop opens on its screen, not as a window of its own.</li>
      * </ul>
@@ -198,7 +253,7 @@ public final class WaylandDesktopServer {
      */
     @NonNull
     public static String startBlock(@NonNull String xwayland, @NonNull String waylandSocket, int display,
-                                    int width, int height) {
+                                    int width, int height, float scale) {
         String ready = ProotDistro.singleQuote(readyPath(display));
         StringBuilder b = new StringBuilder();
         b.append("tl_desktop_ready=").append(ready).append('\n');
@@ -223,6 +278,10 @@ public final class WaylandDesktopServer {
         b.append("rm -f \"$tl_desktop_ready\"\n");
         b.append("(while kill -0 $$ 2>/dev/null && kill -0 \"$tl_desktop_x\" 2>/dev/null; do sleep ")
             .append(WATCH_PERIOD_S).append("; done; kill \"$tl_desktop_x\" 2>/dev/null) &\n");
+        b.append("if command -v xrdb >/dev/null 2>&1; then\n");
+        b.append("echo 'Xft.dpi: ").append(xftDpi(scale)).append("' | DISPLAY=:").append(display)
+            .append(" xrdb -nocpp -merge\n");
+        b.append("fi\n");
         b.append("unset WAYLAND_DISPLAY GDK_BACKEND QT_QPA_PLATFORM tl_desktop_ready tl_desktop_n\n");
         return b.toString();
     }
@@ -235,6 +294,12 @@ public final class WaylandDesktopServer {
     /** The desktop on {@code display} ended. */
     public static void forget(int display) {
         NAMES.remove(display);
+    }
+
+    /** Whether {@code title} is a running desktop's server window. */
+    public static boolean isDesktopWindow(@Nullable String title) {
+        String named = tabTitle(title);
+        return named != null && !named.equals(title);
     }
 
     /** {@code title}, or the running desktop's name when it is that desktop's server window. */

@@ -46,6 +46,15 @@ final class LinuxWindowFrame extends FrameLayout {
 
         /** Whether the shown window can take a scale of its own; the rail comes out only then. */
         boolean shownWindowScales();
+
+        /**
+         * A line shown with the rail when a new stop does not change the shown window at once (a
+         * desktop takes it at its next start); null for none.
+         */
+        @Nullable
+        default String shownWindowScaleNote() {
+            return null;
+        }
     }
 
     /** How long the shared-size line stays up. */
@@ -107,6 +116,12 @@ final class LinuxWindowFrame extends FrameLayout {
     }
 
     private void showSharedLine() {
+        showLine(getContext().getString(com.termux.R.string.linux_windows_scale_shared));
+    }
+
+    /** The pill with {@code text}, for {@link #SHARED_LINE_MS}. */
+    private void showLine(@NonNull String text) {
+        if (!android.text.TextUtils.equals(mSharedLine.getText(), text)) mSharedLine.setText(text);
         if (mSharedLine.getVisibility() != VISIBLE) mSharedLine.setVisibility(VISIBLE);
         mHandler.removeCallbacks(mHideSharedLine);
         mHandler.postDelayed(mHideSharedLine, SHARED_LINE_MS);
@@ -120,6 +135,12 @@ final class LinuxWindowFrame extends FrameLayout {
     @VisibleForTesting
     boolean isSharedLineShown() {
         return mSharedLine.getVisibility() == VISIBLE;
+    }
+
+    @VisibleForTesting
+    @NonNull
+    String sharedLineText() {
+        return String.valueOf(mSharedLine.getText());
     }
 
     /** Adds a window (or the empty-state text) below the rail and the shared-size line. */
@@ -197,8 +218,13 @@ final class LinuxWindowFrame extends FrameLayout {
             case MotionEvent.ACTION_UP:
                 mHandler.removeCallbacks(mHoldElapsed);
                 if (mHold.lift() == CornerHold.Lift.OPEN_TAB && !mRailOutAtDown) {
-                    if (mHost.shownWindowScales()) mRail.show();
-                    else showSharedLine();
+                    if (mHost.shownWindowScales()) {
+                        mRail.show();
+                        String note = mHost.shownWindowScaleNote();
+                        if (note != null) showLine(note);
+                    } else {
+                        showSharedLine();
+                    }
                 }
                 break;
             case MotionEvent.ACTION_CANCEL:

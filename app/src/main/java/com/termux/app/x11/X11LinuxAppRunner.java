@@ -800,11 +800,17 @@ public final class X11LinuxAppRunner {
                 return;
             }
             GpuChoice gpu = appGraphics(app);
-            List<String> env = appEnv(app, gpu);
-            int[] size = WaylandDesktopServer.startSize(context);
+            // The desktop is drawn at the screen's pixels and told its scale as DPI: its app's
+            // Scale (the rail's stop) or the screen's density, read once, at start.
+            float scale = com.termux.app.wayland.LinuxDisplayScale.windowScale(
+                appSettings.scale(app.id), context.getResources().getDisplayMetrics().density);
+            List<String> env = new java.util.ArrayList<>(appEnv(app, gpu));
+            env.addAll(WaylandDesktopServer.scaleEnv(scale));
+            int[] size = WaylandDesktopServer.startSize(context, scale);
             String display = ":" + number;
             String script = gpuServerBlock(gpu.server) + sessionScript(app, display, env, null,
-                WaylandDesktopServer.startBlock(xwayland, waylandDisplay, number, size[0], size[1]));
+                WaylandDesktopServer.startBlock(xwayland, waylandDisplay, number, size[0], size[1],
+                    scale));
             handler.post(() -> {
                 // A desktop that got there first while this one was being prepared keeps the
                 // screen; the tap that lost the race is dropped rather than starting a second.
@@ -814,7 +820,7 @@ public final class X11LinuxAppRunner {
                     return;
                 }
                 Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display as a desktop on "
-                    + display + " at " + size[0] + "x" + size[1]
+                    + display + " at " + size[0] + "x" + size[1] + " scale " + scale
                     + " with graphics " + (gpu.profile == null ? "default" : gpu.profile.id));
                 if (gpu.fellBack) {
                     notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));

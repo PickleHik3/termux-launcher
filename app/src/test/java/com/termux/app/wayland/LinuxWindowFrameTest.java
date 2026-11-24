@@ -40,6 +40,7 @@ public class LinuxWindowFrameTest {
         boolean shown = true;
         boolean scales = true;
         int step = 250;
+        String note;
         final List<Integer> chosen = new ArrayList<>();
         LinuxWindowFrame frame;
 
@@ -48,6 +49,7 @@ public class LinuxWindowFrameTest {
         @Override public int currentScaleStep() { return step; }
         @Override public void onScaleStepChosen(int s) { chosen.add(s); }
         @Override public void onScaleRailUsed() { frame.dismissRail(); }
+        @Override public String shownWindowScaleNote() { return note; }
     }
 
     private final FakeHost host = new FakeHost();
@@ -125,6 +127,16 @@ public class LinuxWindowFrameTest {
         assertTrue(frame.isSharedLineShown());
         ShadowLooper.idleMainLooper(3000, TimeUnit.MILLISECONDS);
         assertFalse("the line goes by itself", frame.isSharedLineShown());
+    }
+
+    @Test
+    public void aDesktopsRailSaysWhenTheNewSizeArrives() {
+        host.note = "The desktop takes the new size the next time it opens.";
+        LinuxWindowFrame frame = frame();
+        holdCorner(frame);
+        assertTrue(frame.isRailShown());
+        assertTrue(frame.isSharedLineShown());
+        assertEquals(host.note, frame.sharedLineText());
     }
 
     @Test
