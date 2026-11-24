@@ -66,6 +66,7 @@ final class AssistantChatView extends LinearLayout {
     private final HorizontalScrollView rail;
     private final LinearLayout railRow;
     private final ImageButton jump;
+    private final AssistantOffersView offers;
     private final AssistantNoticeView notice;
     private final AssistantComposer composer;
     private final LinearLayout answerStatus;
@@ -167,6 +168,10 @@ final class AssistantChatView extends LinearLayout {
         addView(threadFrame, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         int inset = AssistantUi.dp(context, 8);
+        offers = new AssistantOffersView(context, palette);
+        LayoutParams op = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        op.setMargins(inset, 0, inset, inset);
+        addView(offers, op);
         notice = new AssistantNoticeView(context, palette);
         LayoutParams np = new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         np.setMargins(inset, 0, inset, inset);
@@ -227,6 +232,9 @@ final class AssistantChatView extends LinearLayout {
 
     @NonNull AssistantNoticeView notice() { return notice; }
 
+    /** The app's own offers, between the thread and the notice. */
+    @NonNull AssistantOffersView offers() { return offers; }
+
     /** The one line above the composer naming the stage of an answer in progress; gone when there is none. */
     void setAnswerStatus(@NonNull AssistantModelPresenter.Stage stage, @NonNull String modelName) {
         boolean sameName = stage != AssistantModelPresenter.Stage.LOADING_MODEL || answerModelName.equals(modelName);
@@ -267,6 +275,7 @@ final class AssistantChatView extends LinearLayout {
         adapter.setPalette(p);
         composer.applyPalette(p);
         notice.setPalette(p);
+        offers.setPalette(p);
         AssistantUi.bodySmall(answerStatusText, p.onSurfaceVariant);
         answerSpinner.setIndeterminateTintList(android.content.res.ColorStateList.valueOf(p.primary));
         applyChip();

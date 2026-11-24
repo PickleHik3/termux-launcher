@@ -72,6 +72,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     private final AssistantModelStatus status;
     private final AssistantDictation dictation;
     private final AssistantContextWindow window;
+    private final AssistantOffersController offers;
     private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "assistant-page");
         t.setDaemon(true);
@@ -122,6 +123,10 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         status = AssistantModelStatus.getInstance(app);
         dictation = new AssistantDictation(app);
         window = new AssistantContextWindow(app);
+        offers = new AssistantOffersController(app, chatView.offers(), prefs(), io, new AssistantOffersController.Host() {
+            @Override public void openDrawerSettings() { openAppDrawerSettings(); }
+            @Override public void say(@NonNull String message) { Snackbar.make(page, message, Snackbar.LENGTH_SHORT).show(); }
+        });
         chatView.setListener(this);
         chatView.composer().setListener(this);
         chatsView.setListener(this);
@@ -149,11 +154,13 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         reload();
         loadRecent();
         render();
+        offers.onShown();
     }
 
     void onHidden() {
         if (!shown) return;
         shown = false;
+        offers.onHidden();
         engine.removeListener(this);
         status.removeObserver(this);
         if (dictation.isActive()) dictation.cancel();
@@ -960,6 +967,18 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
                 composerNotice = null;
                 updateNotice();
             }, false);
+    }
+
+    /** The drawer nudge's own action: the drawer's settings. */
+    private void openAppDrawerSettings() {
+        Intent intent = SettingsActivity.createFragmentIntent(context,
+            com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
+            R.string.settings_app_drawer_view_type_title);
+        if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException ignored) {
+        }
     }
 
     private void hideKeyboard() {
