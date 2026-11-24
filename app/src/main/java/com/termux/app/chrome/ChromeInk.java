@@ -3294,9 +3294,7 @@ public final class ChromeInk {
     private static final int DEFAULT_FRAME = -1;
 
     /** The glass's colour matrix as last built, and what it was built for; see {@link #glassColour}. */
-    @Nullable private float[] mColourMatrix;
-    private int mColourVibrancy = GlassVibrancy.NO_VIBRANCY;
-    private int mColourTint = GlassFrameTint.NONE;
+    @NonNull private GlassColour mColour = GlassColour.NONE;
 
     /**
      * {@code color} through the colour the glass program applies (Vibrancy, the frame tint),
@@ -3306,12 +3304,8 @@ public final class ChromeInk {
     private int glassColour(@ColorInt int color) {
         int vibrancy = mBlurCache.glassVibrancyPercent();
         int tint = mBlurCache.glassFrameTint();
-        if (mColourMatrix == null || vibrancy != mColourVibrancy || tint != mColourTint) {
-            mColourMatrix = GlassVibrancy.bakeMatrix(vibrancy, tint);
-            mColourVibrancy = vibrancy;
-            mColourTint = tint;
-        }
-        return GlassVibrancy.apply(mColourMatrix, color);
+        if (!mColour.is(vibrancy, tint)) mColour = GlassColour.of(vibrancy, tint);
+        return GlassVibrancy.apply(mColour.matrix(), color);
     }
 
     /** The frame blurred at {@code blurRadiusDp} if it is resident, or null; never asks for one. */

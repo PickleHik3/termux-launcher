@@ -235,8 +235,7 @@ public final class WallpaperBlurCache {
      * The glass's colour now ({@link #glassVibrancyPercent}, {@link #glassFrameTint}): the
      * source's, kept as it was while the bakes are held.
      */
-    private int mColourVibrancy = GlassVibrancy.NO_VIBRANCY;
-    private int mColourTint = GlassFrameTint.NONE;
+    @NonNull private GlassColour mColour = GlassColour.NONE;
     /** The frame tint the resident frames were baked with. */
     private int mFrameTint = GlassFrameTint.NONE;
     /** While true, a new frame tint waits: frames keep, and new radii take, {@link #mFrameTint}. */
@@ -475,13 +474,13 @@ public final class WallpaperBlurCache {
      */
     public int glassVibrancyPercent() {
         refreshColour();
-        return mColourVibrancy;
+        return mColour.vibrancyPercent;
     }
 
     /** The frame tint the glass wears now; see {@link #glassVibrancyPercent}. */
     public int glassFrameTint() {
         refreshColour();
-        return mColourTint;
+        return mColour.frameTint;
     }
 
     /** True while the program applies the glass's colour and the frames stay the raw blur. */
@@ -491,8 +490,9 @@ public final class WallpaperBlurCache {
 
     private void refreshColour() {
         if (mFrameBakesHeld) return;
-        mColourVibrancy = GlassVibrancy.clampPercent(mSource.glassVibrancyPercent());
-        mColourTint = mSource.glassFrameTint();
+        int vibrancy = mSource.glassVibrancyPercent();
+        int tint = mSource.glassFrameTint();
+        if (!mColour.is(vibrancy, tint)) mColour = GlassColour.of(vibrancy, tint);
     }
 
     /**
@@ -557,9 +557,9 @@ public final class WallpaperBlurCache {
         refreshColour();
         final boolean onDraw = !mFrameBakesHeld && mSource.glassColourOnDraw();
         final int vibrancy = mFrameBakesHeld ? mVibrancy
-            : onDraw ? GlassVibrancy.NO_VIBRANCY : mColourVibrancy;
+            : onDraw ? GlassVibrancy.NO_VIBRANCY : mColour.vibrancyPercent;
         final int frameTint = mFrameBakesHeld ? mFrameTint
-            : onDraw ? GlassFrameTint.NONE : mColourTint;
+            : onDraw ? GlassFrameTint.NONE : mColour.frameTint;
         boolean sameSource = sourceStillMatches(frameRect, managedSource, systemWallpaperId,
             managedLastModified, managedLength);
         boolean sourceValid = sameSource && vibrancy == mVibrancy && frameTint == mFrameTint;
