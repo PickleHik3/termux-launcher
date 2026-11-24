@@ -10,27 +10,28 @@ import com.termux.app.surfaces.EditorRows.Spec;
 import java.util.List;
 
 /**
- * The Home card's rows (appearance-one-look spec §3, Home): the widget grid, labels and icon pack;
- * More options; Widgets; Layout, the rows Home shows (hidden or shown here, the Terminal's own
- * list untouched); and the Gestures and Pages links. No glass: the chrome wears one look on every
- * page, set on Global (ADR 0031).
+ * The Home card's rows in the condensed kinds (spec #326): the widget grid as Columns x Rows on
+ * one row, the three short choices beside their labels, the four switches as chips that wrap, the
+ * Layout list, and the Icon pack, Gestures and Pages links sharing one row at the card's end.
+ * Order does the grouping in place of headings. Every knob of the earlier card is still here and
+ * writes the key it wrote. No glass: the chrome wears one look on every page, set on Global
+ * (ADR 0031).
  */
 public final class HomeCard {
 
     private HomeCard() {}
 
-    /** Every row of the card, tier by tier, in the order the card shows them. */
+    /** Every row of the card, in the order the card shows them. */
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         EditorRows.CardRows rows = new EditorRows.CardRows()
-            .tier(1, Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE, Row.ICON_PACK)
-            .tier(3, Row.SECTION_MORE_OPTIONS, Row.TWO_LINE, Row.LABEL_SHADOW,
-                Row.FOLDERS, Row.WALLPAPER_SCROLL)
-            .tier(3, Row.SECTION_WIDGETS, Row.GLASS_WIDGETS, Row.NUMERALS)
-            .tier(3, Row.SECTION_LAYOUT, Row.ELEMENTS)
-            .tier(3, Row.SECTION_LINKS, Row.LINK_GESTURES);
+            .steppers(1, Row.HOME_COLUMNS, Row.HOME_ROWS)
+            .choice(1, Row.LABEL_SIZE, Row.FOLDERS, Row.NUMERALS)
+            .chips(1, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL, Row.GLASS_WIDGETS)
+            .tier(1, Row.ELEMENTS);
         // Pages is not offered while the overview it opens is already up.
-        if (!offers.overviewUp) rows.tier(3, Row.LINK_PAGES);
+        if (offers.overviewUp) rows.links(3, Row.ICON_PACK, Row.LINK_GESTURES);
+        else rows.links(3, Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES);
         return rows.build();
     }
 }

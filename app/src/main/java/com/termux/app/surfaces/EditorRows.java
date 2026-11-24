@@ -337,26 +337,80 @@ public final class EditorRows {
         }
     }
 
-    /** One row of one card, in its tier (1, 2 or 3). */
+    /**
+     * How a card draws a run of its rows (spec #326, condensed cards). Every form keeps each
+     * row's own {@link Row}, so a row reads and writes the key it always did; the form only
+     * decides how rows that follow one another share a line. {@link RowForms} holds the grouping.
+     */
+    public enum Form {
+        /** The row's own {@link Kind}: what a card gets by listing the row with {@code tier}. */
+        PLAIN,
+        /** Two value sliders on one row, the name and value over each track. */
+        PAIR,
+        /** Switches as chips that wrap onto as many lines as they need. */
+        CHIPS,
+        /** A short choice (a few words) beside its label. */
+        CHOICE,
+        /** A long choice folded into one line that opens its list in place. */
+        FOLD,
+        /** Two steppers on one row (Columns x Rows). */
+        STEPPERS,
+        /** Links that share one row of chips, at the card's end. */
+        LINKS;
+
+        /** Whether {@code row} may be drawn in this form. */
+        public boolean accepts(@NonNull Row row) {
+            switch (this) {
+                case PLAIN: return true;
+                case PAIR: return row.kind == Kind.SLIDER;
+                case CHIPS: return row.kind == Kind.SWITCH;
+                case CHOICE: return row.kind == Kind.SEGMENTS;
+                case FOLD: return row.kind == Kind.SEGMENTS || row.kind == Kind.MENU;
+                case STEPPERS: return row.kind == Kind.MENU || row.kind == Kind.SLIDER;
+                case LINKS: return row.kind == Kind.LINK || row.kind == Kind.EXPANDER;
+                default: return false;
+            }
+        }
+
+        /** The most rows one widget of this form holds. */
+        public int capacity() {
+            switch (this) {
+                case PAIR:
+                case STEPPERS: return 2;
+                case CHOICE:
+                case FOLD: return 1;
+                default: return Integer.MAX_VALUE;
+            }
+        }
+    }
+
+    /** One row of one card, in its tier (1, 2 or 3) and the form it is drawn in. */
     public static final class Spec {
         @NonNull public final Row row;
         public final int tier;
+        @NonNull public final Form form;
 
         Spec(@NonNull Row row, int tier) {
+            this(row, tier, Form.PLAIN);
+        }
+
+        Spec(@NonNull Row row, int tier, @NonNull Form form) {
             this.row = row;
             this.tier = tier;
+            this.form = form;
         }
 
         @Override public boolean equals(Object o) {
-            return o instanceof Spec && ((Spec) o).row == row && ((Spec) o).tier == tier;
+            return o instanceof Spec && ((Spec) o).row == row && ((Spec) o).tier == tier
+                && ((Spec) o).form == form;
         }
 
         @Override public int hashCode() {
-            return row.hashCode() * 31 + tier;
+            return (row.hashCode() * 31 + tier) * 31 + form.hashCode();
         }
 
         @NonNull @Override public String toString() {
-            return row + "@" + tier;
+            return row + "@" + tier + (form == Form.PLAIN ? "" : ":" + form);
         }
     }
 
@@ -541,6 +595,56 @@ public final class EditorRows {
             for (Row row : rows)
                 mOut.add(new Spec(row, tier));
             return this;
+        }
+
+        /**
+         * Appends {@code rows} to {@code tier} in {@code form}; a row the form cannot draw is a
+         * mistake of the card file, so it throws.
+         */
+        @NonNull
+        public CardRows tier(int tier, @NonNull Form form, @NonNull Row... rows) {
+            for (Row row : rows) {
+                if (!form.accepts(row))
+                    throw new IllegalArgumentException(row + " cannot be drawn as " + form);
+                mOut.add(new Spec(row, tier, form));
+            }
+            return this;
+        }
+
+        /** Two sliders on one row, the name and value over each track. */
+        @NonNull
+        public CardRows pair(int tier, @NonNull Row first, @NonNull Row second) {
+            return tier(tier, Form.PAIR, first, second);
+        }
+
+        /** Two steppers on one row. */
+        @NonNull
+        public CardRows steppers(int tier, @NonNull Row first, @NonNull Row second) {
+            return tier(tier, Form.STEPPERS, first, second);
+        }
+
+        /** Switches as chips that wrap. */
+        @NonNull
+        public CardRows chips(int tier, @NonNull Row... switches) {
+            return tier(tier, Form.CHIPS, switches);
+        }
+
+        /** A short choice beside its label. */
+        @NonNull
+        public CardRows choice(int tier, @NonNull Row... choices) {
+            return tier(tier, Form.CHOICE, choices);
+        }
+
+        /** A long choice folded into a menu that opens in place. */
+        @NonNull
+        public CardRows fold(int tier, @NonNull Row... choices) {
+            return tier(tier, Form.FOLD, choices);
+        }
+
+        /** Links sharing one row of chips. */
+        @NonNull
+        public CardRows links(int tier, @NonNull Row... links) {
+            return tier(tier, Form.LINKS, links);
         }
 
         @NonNull

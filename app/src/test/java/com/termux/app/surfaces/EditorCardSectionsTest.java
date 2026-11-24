@@ -2,6 +2,7 @@ package com.termux.app.surfaces;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 
 import com.termux.app.surfaces.EditorRows.Offers;
 import com.termux.app.surfaces.EditorRows.Row;
@@ -103,20 +104,19 @@ public class EditorCardSectionsTest {
     @Test
     public void home() {
         check(EditorCard.HOME, expect(
-            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE,
-                Row.ICON_PACK),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.TWO_LINE, Row.LABEL_SHADOW,
-                Row.FOLDERS, Row.WALLPAPER_SCROLL),
-            "SECTION_WIDGETS", Arrays.asList(Row.GLASS_WIDGETS, Row.NUMERALS),
-            "SECTION_LAYOUT", Arrays.asList(Row.ELEMENTS),
-            // No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's (#287).
-            "SECTION_LINKS", Arrays.asList(Row.LINK_GESTURES, Row.LINK_PAGES)));
+            // One section and no headings (#345); the condensed rows stand in group order, the
+            // links at the end. No glass (ADR 0031) and no dim: Wallpaper dim is the Terminal's.
+            CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE, Row.FOLDERS,
+                Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
+                Row.GLASS_WIDGETS, Row.ELEMENTS, Row.ICON_PACK, Row.LINK_GESTURES,
+                Row.LINK_PAGES)));
     }
 
     @Test
     public void homeUnderTheOverviewHasNoPagesLink() {
         Map<String, List<Row>> got = sections(EditorCard.HOME, new Offers(true, true, true, true));
-        assertEquals(Arrays.asList(Row.LINK_GESTURES), got.get("SECTION_LINKS"));
+        assertFalse(got.get(CARD).contains(Row.LINK_PAGES));
+        assertTrue(got.get(CARD).contains(Row.LINK_GESTURES));
     }
 
     @Test

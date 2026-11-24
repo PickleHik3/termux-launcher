@@ -62,6 +62,41 @@ public final class StepperRow {
         TextView titleView = RowKit.title(context, title);
         root.addView(titleView, new LinearLayout.LayoutParams(0,
             ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        return finish(context, root, root, titleView, from, to, step, value, readout, onValue);
+    }
+
+    /**
+     * One stepper as a cell of a pair ({@link StepperPairRow}): its title over − value +, no
+     * glyph and no gutter, the title ellipsized to the cell.
+     */
+    @NonNull
+    public static StepperRow buildCell(@NonNull Context context, @NonNull CharSequence title,
+                                       int from, int to, int step, int value,
+                                       @NonNull SliderRow.Readout readout,
+                                       @NonNull OnValue onValue) {
+        LinearLayout cell = new LinearLayout(context);
+        cell.setOrientation(LinearLayout.VERTICAL);
+        TextView titleView = RowKit.title(context, title);
+        titleView.setMinWidth(0);
+        cell.addView(titleView, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        LinearLayout controls = new LinearLayout(context);
+        controls.setOrientation(LinearLayout.HORIZONTAL);
+        controls.setGravity(Gravity.CENTER_VERTICAL);
+        cell.addView(controls, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        return finish(context, cell, controls, titleView, from, to, step, value, readout,
+            onValue);
+    }
+
+    /** Adds − value + to {@code controls} and wires them; {@code root} is what the row exposes. */
+    @NonNull
+    private static StepperRow finish(@NonNull Context context, @NonNull LinearLayout root,
+                                     @NonNull LinearLayout controls, @NonNull TextView titleView,
+                                     int from, int to, int step, int value,
+                                     @NonNull SliderRow.Readout readout,
+                                     @NonNull OnValue onValue) {
+        CharSequence title = titleView.getText();
 
         MaterialButton minus = button(context, R.drawable.ic_rl_remove,
             context.getString(R.string.appearance_stepper_less, title));
@@ -77,10 +112,10 @@ public final class StepperRow {
         number.setMinWidth((int) Math.ceil(widest) + RowKit.dp(context, 8));
 
         int touch = RowKit.dp(context, RowKit.TOUCH_DP);
-        root.addView(minus, new LinearLayout.LayoutParams(touch, touch));
-        root.addView(number, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        controls.addView(minus, new LinearLayout.LayoutParams(touch, touch));
+        controls.addView(number, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT));
-        root.addView(plus, new LinearLayout.LayoutParams(touch, touch));
+        controls.addView(plus, new LinearLayout.LayoutParams(touch, touch));
 
         StepperRow row = new StepperRow(root, titleView, minus, plus, number, from, to, step,
             readout);
