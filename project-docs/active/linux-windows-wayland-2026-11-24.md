@@ -248,7 +248,8 @@ Display does not change.
   glass, corners, the active colour) and has a window chip with the **app's name and icon** from
   its desktop entry, not the window's changing title.
 - **Full screen first.** Opening an app, from the drawer or a shell, opens a new Linux window right
-  after the current window, and the wall pages to it, as a new terminal window does. Nothing is
+  after the current window, even between two terminal windows (the developer, 2026-11-24; #392 makes
+  a session's window list hold both kinds), and the wall pages to it, as a new terminal window does. Nothing is
   split or floated automatically: an X11 app split by itself is too small to use. The user moves it
   into a split or a Float on purpose.
 - **Dialogs** that name a parent (xdg parent, X11 transient-for) are drawn centred over their
