@@ -58,7 +58,10 @@ public final class LinuxWindowsActivity extends Activity {
     private static final String LOG_TAG = "TLWayland";
 
     /** {@code --es dump all}: write every window to files/wayland-dumps/<id>.png once connected. */
+    private boolean mStartPending;
     public static final String EXTRA_DUMP = "dump";
+    /** Developer extra, {@code --ez start true}: what the developer row's Start does, for a shell. */
+    static final String EXTRA_START = "start";
     private static final long DUMP_DELAY_MS = 1000;
     private static final int DUMP_TRIES = 5;
 
@@ -146,6 +149,10 @@ public final class LinuxWindowsActivity extends Activity {
             try {
                 binder.linkToDeath(mDeath, 0);
                 mService.addCallback(mCallback);
+                if (mStartPending) {
+                    mStartPending = false;
+                    startHost();
+                }
             } catch (RemoteException e) {
                 onHostDied();
             }
@@ -526,6 +533,7 @@ public final class LinuxWindowsActivity extends Activity {
         mOpeningExtra = getIntent() != null && getIntent().getBooleanExtra(EXTRA_OPENING, false);
         WaylandAppRunner.shared(this).setPendingListener(mPendingListener);
         settle();
+        handleStartIntent(getIntent());
         handleDumpIntent(getIntent());
         connect();
     }
@@ -923,6 +931,16 @@ public final class LinuxWindowsActivity extends Activity {
 
     /** {@code --es dump all}: at once when the host already runs (a launch of the live screen
      *  arrives in onNewIntent), else when it does. */
+    private void handleStartIntent(Intent intent) {
+        if (intent == null || !intent.getBooleanExtra(EXTRA_START, false)) return;
+        if (mService == null) {
+            mStartPending = true;
+            if (!mBound) connect();
+        } else {
+            startHost();
+        }
+    }
+
     private void handleDumpIntent(Intent intent) {
         if (intent == null || !"all".equals(intent.getStringExtra(EXTRA_DUMP))) return;
         if (mHostRunning) mMain.postDelayed(() -> dumpAll(DUMP_TRIES), DUMP_DELAY_MS);
@@ -939,6 +957,7 @@ public final class LinuxWindowsActivity extends Activity {
             mLaunchFailed = false;
             settle();
         }
+        handleStartIntent(intent);
         handleDumpIntent(intent);
     }
 
