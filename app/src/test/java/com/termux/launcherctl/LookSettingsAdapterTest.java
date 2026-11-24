@@ -91,6 +91,21 @@ public class LookSettingsAdapterTest {
     }
 
     @Test
+    public void checkRefusesAsSetDoesAndSavesNothing() {
+        assertEquals("opacity takes a whole number",
+            registry.check("look.dock.opacity", "loud").reason);
+        assertTrue(registry.check("look.dock.grain", "10").reason.contains("Global's only"));
+        assertNull(registry.check("look.dock.opacity", "60"));
+        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(0, changed);
+    }
+
+    @Test
+    public void lookIdsStayOutOfAnExportSoACellThatFollowsGlobalStaysFollowing() {
+        for (SettingsRegistry.Entry entry : registry.list()) assertFalse(entry.declaration.exported);
+    }
+
+    @Test
     public void anUnknownPropertyIsNoSetting() {
         assertNull(registry.get("look.sparkle"));
         assertNull(registry.declaration("look.dock.sparkle"));

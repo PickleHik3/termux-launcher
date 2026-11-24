@@ -89,16 +89,33 @@ public final class SettingsRegistry {
         if (declaration == null) return unknown(id);
         SettingAdapter adapter = adapterOf(declaration);
         if (adapter != null) return adapter.set(declaration, value == null ? "" : value);
+        String normal = normalized(declaration, value);
+        return normal == null ? outside(declaration) : write(declaration, normal);
+    }
+
+    /**
+     * What {@link #set} would refuse, without saving: the Refusal for an unknown id or a value
+     * outside the range or choices, else null.
+     */
+    @Nullable
+    public Refusal check(@Nullable String id, @Nullable String value) {
+        SettingDeclaration declaration = declaration(id);
+        if (declaration == null) return unknown(id);
+        SettingAdapter adapter = adapterOf(declaration);
+        if (adapter != null) return adapter.check(declaration, value == null ? "" : value);
+        return normalized(declaration, value) == null ? outside(declaration) : null;
+    }
+
+    /** {@code value} as the declaration holds it (digits, or a choice's name), or null if outside. */
+    @Nullable
+    private static String normalized(@NonNull SettingDeclaration declaration, @Nullable String value) {
         String text = value == null ? "" : value.trim();
         if (declaration.kind == SettingDeclaration.Kind.INTEGER) {
             Integer number = parseInteger(text);
-            if (number == null || number < declaration.min || number > declaration.max)
-                return outside(declaration);
-            return write(declaration, String.valueOf(number));
+            if (number == null || number < declaration.min || number > declaration.max) return null;
+            return String.valueOf(number);
         }
-        String name = declaration.parseChoice(text);
-        if (name == null) return outside(declaration);
-        return write(declaration, name);
+        return declaration.parseChoice(text);
     }
 
     /** Which way {@link #step} moves. */

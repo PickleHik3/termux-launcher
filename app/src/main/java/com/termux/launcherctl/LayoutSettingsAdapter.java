@@ -165,32 +165,73 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
         }
     }
 
-    /** Main thread: one field replaced in the document as it stands, then the verb's own save. */
+    @Nullable
+    @Override
+    public SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration,
+                                          @NonNull String value) {
+        Target target = parse(declaration.id);
+        if (target == null)
+            return new SettingsRegistry.Refusal("no setting is called \"" + declaration.id + "\"",
+                null);
+        try {
+            return mMain.call(() -> candidate(target, value.trim()).refusal);
+        } catch (Exception e) {
+            return new SettingsRegistry.Refusal("the launcher did not answer: " + e, null);
+        }
+    }
+
+    /** The document with one field replaced, or why it may not be. */
+    private static final class Candidate {
+        @Nullable final SettingsRegistry.Refusal refusal;
+        @Nullable final String json;
+        @NonNull final String old;
+
+        Candidate(@Nullable SettingsRegistry.Refusal refusal, @Nullable String json,
+                  @NonNull String old) {
+            this.refusal = refusal;
+            this.json = json;
+            this.old = old;
+        }
+    }
+
+    /** Main thread: one field replaced in the document as it stands, run through the verb's validation. */
     @NonNull
-    private SettingsRegistry.Outcome save(@NonNull SettingDeclaration declaration,
-                                          @NonNull Target target, @NonNull String text)
-            throws JSONException {
+    private Candidate candidate(@NonNull Target target, @NonNull String text) throws JSONException {
         String json = LayoutCommand.get(mStore, target.document);
         if (json == null)
-            return new SettingsRegistry.Refusal("the layouts are not ready", null);
+            return new Candidate(new SettingsRegistry.Refusal("the layouts are not ready", null),
+                null, "");
         JSONObject root = new JSONObject(json);
         String[] place = place(target.path);
         JSONObject section = place[0].isEmpty() ? root : root.optJSONObject(place[0]);
         Object existing = section == null ? null : section.opt(place[1]);
         if (existing == null && !known(place[1]))
-            return new SettingsRegistry.Refusal(target.document + " has no field \"" + target.path
-                + "\"; layout get " + target.document + " shows them", null);
+            return new Candidate(new SettingsRegistry.Refusal(target.document + " has no field \""
+                + target.path + "\"; layout get " + target.document + " shows them", null), null, "");
         if (section == null) {
             section = new JSONObject();
             root.put(place[0], section);
         }
-        String old = existing == null ? "" : String.valueOf(existing);
         section.put(place[1], typed(existing, text));
-        String refused = LayoutCommand.set(mStore, target.document, root.toString());
+        String refused = LayoutCommand.refusal(target.document, root.toString());
+        return new Candidate(refused == null ? null : new SettingsRegistry.Refusal(refused, null),
+            root.toString(), existing == null ? "" : String.valueOf(existing));
+    }
+
+    /** Main thread: the candidate saved through the verb's own set, then the re-dress. */
+    @NonNull
+    private SettingsRegistry.Outcome save(@NonNull SettingDeclaration declaration,
+                                          @NonNull Target target, @NonNull String text)
+            throws JSONException {
+        Candidate candidate = candidate(target, text);
+        if (candidate.refusal != null || candidate.json == null)
+            return candidate.refusal != null ? candidate.refusal
+                : new SettingsRegistry.Refusal("the layouts are not ready", null);
+        String refused = LayoutCommand.set(mStore, target.document, candidate.json);
         if (refused != null) return new SettingsRegistry.Refusal(refused, null);
         mRedress.run();
         String now = read(target);
-        return new SettingsRegistry.Change(declaration, old, now == null ? text : now);
+        return new SettingsRegistry.Change(declaration, candidate.old, now == null ? text : now);
     }
 
     /** Main thread: the field's current value as text, or null when the document lacks it. */

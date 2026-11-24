@@ -17,8 +17,8 @@ import org.json.JSONObject;
  * the registry and hands the Change to the applier, so the screen refreshes the way a Settings row
  * does; a bad value is a 400 naming the allowed range, the same as {@code layout}.
  *
- * <p>Request: {@code {"op":"get|set|list","id":"terminal.contrast","value":"harder"}};
- * {@code list} with {@code "format":"text"} answers {@code id = value} lines in {@link #TEXT}.</p>
+ * <p>Request: {@code {"op":"get|set|list|export|apply","id":"terminal.contrast","value":"harder"}};
+ * {@code export} and {@code apply} are {@link ConfigFileCommand}; {@code list} with {@code "format":"text"} answers {@code id = value} lines in {@link #TEXT}.</p>
  */
 final class ConfigCommand {
 
@@ -52,8 +52,12 @@ final class ConfigCommand {
             case "list":
                 return "text".equals(request.optString("format", "")) ? listText(registry)
                     : list(registry);
+            case "export":
+                return ConfigFileCommand.export(registry);
+            case "apply":
+                return ConfigFileCommand.apply(registry, applier, request);
             default:
-                return error("bad_request", "'op' must be get, set or list", null);
+                return error("bad_request", "'op' must be get, set, list, export or apply", null);
         }
     }
 

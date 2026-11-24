@@ -107,6 +107,11 @@ public final class LookSettingsAdapter implements SettingAdapter {
     /** The id's range and choices, read off the property the look grid already holds. */
     @NonNull
     private static SettingDeclaration declare(@NonNull String id, @NonNull Target target) {
+        return build(id, target).withoutExport();
+    }
+
+    @NonNull
+    private static SettingDeclaration build(@NonNull String id, @NonNull Target target) {
         if (BACKGROUND.equals(target.element) || target.property.equals("dim")) {
             LookCommand.Setting setting = LookCommand.Setting.forKey(
                 target.property.equals("frost") ? "blur" : target.property);
@@ -148,18 +153,47 @@ public final class LookSettingsAdapter implements SettingAdapter {
         }
     }
 
+    @Nullable
+    @Override
+    public SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration,
+                                          @NonNull String value) {
+        // The verb's own answer over a scratch grid: the same refusals, nothing saved or re-dressed.
+        LookGrid scratch = new LookGrid(new LookGrid.MemoryStore());
+        LookCommand.TerminalBackground scratchBackground = new LookCommand.TerminalBackground() {
+            private final int[] mValues = new int[LookCommand.Setting.values().length];
+
+            @Override public int get(@NonNull LookCommand.Setting setting) {
+                return mValues[setting.ordinal()];
+            }
+
+            @Override public void set(@NonNull LookCommand.Setting setting, int number) {
+                mValues[setting.ordinal()] = number;
+            }
+        };
+        SettingsRegistry.Outcome outcome = run(declaration, value, scratch, scratchBackground, () -> { });
+        return outcome.refusal();
+    }
+
     @NonNull
     @Override
     public SettingsRegistry.Outcome set(@NonNull SettingDeclaration declaration,
                                         @NonNull String value) {
+        return run(declaration, value, mGrid, mBackground, mOnChanged);
+    }
+
+    @NonNull
+    private SettingsRegistry.Outcome run(@NonNull SettingDeclaration declaration,
+                                         @NonNull String value, @NonNull LookGrid grid,
+                                         @NonNull LookCommand.TerminalBackground background,
+                                         @NonNull Runnable onChanged) {
         Target target = parse(declaration.id);
         if (target == null)
             return new SettingsRegistry.Refusal("no setting is called \"" + declaration.id + "\"",
                 null);
         String old = get(declaration);
         try {
-            JSONObject answer = LookCommand.handle(mGrid, mBackground,
-                request("set", target, value), mOnChanged);
+            JSONObject answer = LookCommand.handle(grid, background,
+                request("set", target, value), onChanged);
             if (!answer.optBoolean("ok")) {
                 String allowed = declaration.kind == SettingDeclaration.Kind.TEXT ? null
                     : declaration.allowed();

@@ -34,6 +34,13 @@ public class SettingAdapterTest {
             return String.valueOf(held);
         }
 
+        @Nullable @Override
+        public SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration,
+                                              @NonNull String value) {
+            return value.equals("99") ? new SettingsRegistry.Refusal("fake.size is 0–10", "0–10")
+                : null;
+        }
+
         @NonNull @Override
         public SettingsRegistry.Outcome set(@NonNull SettingDeclaration declaration,
                                             @NonNull String value) {
@@ -61,6 +68,13 @@ public class SettingAdapterTest {
     public void anAdaptersRefusalComesBackAsIs() {
         SettingsRegistry.Refusal refusal = registry.set("fake.size", "99").refusal();
         assertEquals("fake.size is 0–10", refusal.reason);
+        assertEquals("5", registry.get("fake.size"));
+    }
+
+    @Test
+    public void checkAsksTheAdapterAndSavesNothing() {
+        assertNull(registry.check("fake.size", "7"));
+        assertEquals("fake.size is 0–10", registry.check("fake.size", "99").reason);
         assertEquals("5", registry.get("fake.size"));
     }
 

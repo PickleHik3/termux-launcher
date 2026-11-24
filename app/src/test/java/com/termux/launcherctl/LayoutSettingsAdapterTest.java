@@ -126,6 +126,16 @@ public class LayoutSettingsAdapterTest {
     }
 
     @Test
+    public void checkRefusesAsSetDoesAndWritesNothing() {
+        store.load();
+        assertTrue(registry.check("layout.display.search_field", "yes").reason
+            .contains("search_field"));
+        assertNull(registry.check("layout.display.search_field", "true"));
+        assertTrue(written.isEmpty());
+        assertEquals(0, redressed);
+    }
+
+    @Test
     public void anUnknownDocumentIsNoSetting() {
         assertNull(registry.declaration("layout.page2.search_field"));
         assertNull(registry.declaration("layout.home"));

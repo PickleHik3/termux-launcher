@@ -31,6 +31,14 @@ public interface SettingAdapter {
     String get(@NonNull SettingDeclaration declaration);
 
     /**
+     * What {@link #set} would refuse for {@code value}, without saving or refreshing: the same
+     * Refusal, or null when the value would be saved. {@code config apply} checks a whole file
+     * with it before writing any line.
+     */
+    @Nullable
+    SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration, @NonNull String value);
+
+    /**
      * Validates and saves {@code value}, and carries out the refresh itself, so a caller on any
      * thread need not: a {@link SettingsRegistry.Change} (whose declaration should name
      * {@link SettingRefresh#LISTENER}, so the applier adds nothing) or a Refusal.

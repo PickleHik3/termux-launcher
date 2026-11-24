@@ -52,12 +52,14 @@ public final class SettingDeclaration {
     private final int mDefaultChoice;
     /** Whether a choice's names run from less to more, so a step moves along them. */
     public final boolean ordered;
+    /** Whether a settings file carries it; false for secrets and device-bound values. */
+    public final boolean exported;
 
     private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
                                @NonNull String key, @NonNull SettingRefresh refresh, int min,
                                int max, int step, int defaultInt, @NonNull List<String> choices,
                                @NonNull List<String> storedChoices, int defaultChoice,
-                               boolean ordered) {
+                               boolean ordered, boolean exported) {
         this.id = id;
         this.kind = kind;
         this.store = store;
@@ -71,6 +73,14 @@ public final class SettingDeclaration {
         this.storedChoices = storedChoices;
         mDefaultChoice = defaultChoice;
         this.ordered = ordered;
+        this.exported = exported;
+    }
+
+    /** This declaration kept out of a settings file's export and apply. */
+    @NonNull
+    public SettingDeclaration notExported() {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, false);
     }
 
     /** A whole number from {@code min} to {@code max}, stepped by {@code step}. */
@@ -81,7 +91,7 @@ public final class SettingDeclaration {
         if (min > max || step <= 0 || defaultValue < min || defaultValue > max)
             throw new IllegalArgumentException(id + ": bad range");
         return new SettingDeclaration(id, Kind.INTEGER, store, key, refresh, min, max, step,
-            defaultValue, Collections.emptyList(), Collections.emptyList(), -1, true);
+            defaultValue, Collections.emptyList(), Collections.emptyList(), -1, true, true);
     }
 
     /**
@@ -99,7 +109,7 @@ public final class SettingDeclaration {
             throw new IllegalArgumentException(id + ": bad choices");
         return new SettingDeclaration(id, Kind.CHOICE, store, key, refresh, 0, 0, 0, 0,
             Collections.unmodifiableList(names), Collections.unmodifiableList(stored),
-            defaultIndex, ordered);
+            defaultIndex, ordered, true);
     }
 
     /**
@@ -111,7 +121,17 @@ public final class SettingDeclaration {
                                           @NonNull SettingRefresh refresh) {
         return new SettingDeclaration(id, Kind.TEXT, Store.APP_PREFERENCES, id, refresh, 0, 0, 0,
             0, Collections.singletonList(defaultValue), Collections.singletonList(defaultValue),
-            0, false);
+            0, false, false);
+    }
+
+    /**
+     * This declaration left out of {@code config export}: an adapter's id whose cell may be absent
+     * (a surface's own opacity follows Global) must not become explicit by a round trip.
+     */
+    @NonNull
+    public SettingDeclaration withoutExport() {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, false);
     }
 
     /** {@code value} held inside this integer's range. */

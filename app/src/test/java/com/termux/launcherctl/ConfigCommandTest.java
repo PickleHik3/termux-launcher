@@ -114,8 +114,36 @@ public class ConfigCommandTest {
 
     @Test
     public void anUnknownOpIsA400() throws Exception {
-        JSONObject answer = handle("{\"op\":\"export\"}");
+        JSONObject answer = handle("{\"op\":\"frobnicate\"}");
         assertEquals(400, answer.getInt("_statusCode"));
-        assertEquals("'op' must be get, set or list", answer.getString("message"));
+        assertEquals("'op' must be get, set, list, export or apply", answer.getString("message"));
+    }
+
+    @Test
+    public void exportAnswersTheFileAsTextAndApplyingItBackChangesNothing() throws Exception {
+        store.putInt("text_size_percent", 120);
+        String file = handle("{\"op\":\"export\"}").getString(ConfigCommand.TEXT);
+        assertTrue(file, file.contains("text.size = 120"));
+
+        store.putInt("text_size_percent", 90);
+        JSONObject applied = handle(new JSONObject().put("op", "apply").put("text", file).toString());
+        assertTrue(applied.toString(), applied.getBoolean("ok"));
+        assertEquals("120", registry.get("text.size"));
+        assertEquals(1, applied.getInt("changed"));
+        assertTrue(refreshed.contains(SettingRefresh.TEXT_SIZE));
+    }
+
+    @Test
+    public void applyWithOneBadLineChangesNothingAndNamesThatLine() throws Exception {
+        String file = "# setup\ntext.size = 120\n\nterminal.contrast = harder\ntext.size = 400\n";
+        JSONObject answer = handle(new JSONObject().put("op", "apply").put("text", file).toString());
+        assertFalse(answer.getBoolean("ok"));
+        assertEquals(400, answer.getInt("_statusCode"));
+        assertEquals("invalid_file", answer.getString("error"));
+        assertEquals("line 5: text.size is 80–150", answer.getString("message"));
+        assertEquals("100", registry.get("text.size"));
+        assertEquals("default", registry.get("terminal.contrast"));
+        assertTrue(refreshed.isEmpty());
+        assertEquals(400, handle("{\"op\":\"apply\"}").getInt("_statusCode"));
     }
 }
