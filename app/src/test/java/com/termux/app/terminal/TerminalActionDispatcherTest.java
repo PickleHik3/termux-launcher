@@ -1109,6 +1109,21 @@ public class TerminalActionDispatcherTest {
     }
 
     @Test
+    public void workspaceToolsAcceptTheArgumentsTheyRetiredAndIgnoreThem() throws Exception {
+        FakeTerminalHost host = attach();
+
+        JSONObject saved = dispatcher.execute("workspace.save", new JSONObject()
+            .put("name", "old").put("captureCommands", false));
+        assertEquals("old", saved.getString("name"));
+        assertEquals("old", host.lastSavedWorkspaceName);
+
+        JSONObject loaded = dispatcher.execute("workspace.load", new JSONObject()
+            .put("name", "old").put("runCommands", false));
+        assertEquals("old", loaded.getString("name"));
+        assertEquals(3, loaded.getInt("panes"));
+    }
+
+    @Test
     public void workspaceLoadValidatesItsModeAndReportsTheCounts() throws Exception {
         FakeTerminalHost host = attach();
 

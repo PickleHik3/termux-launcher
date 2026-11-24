@@ -149,6 +149,43 @@ public class ClaudeHooksInstallerTest {
             new String(Files.readAllBytes(other.toPath()), StandardCharsets.UTF_8));
     }
 
+    @Test
+    public void installAllTwiceLeavesEveryFileAsTheFirstRunLeftItAndKeepsUserHooks() throws Exception {
+        File home = Files.createTempDirectory("all-agents").toFile();
+        String userHook = "{\"hooks\":{\"SessionStart\":[{\"hooks\":["
+            + "{\"type\":\"command\",\"command\":\"mine\"}]}]}}";
+        File claude = ClaudeHooksInstaller.fileFor("claude", home);
+        File codex = ClaudeHooksInstaller.fileFor("codex", home);
+        File opencode = ClaudeHooksInstaller.fileFor("opencode", home);
+        File otherPlugin = new File(opencode.getParentFile(), "mine.js");
+        for (File file : new File[] {claude, codex, otherPlugin}) {
+            file.getParentFile().mkdirs();
+        }
+        Files.write(claude.toPath(), userHook.getBytes(StandardCharsets.UTF_8));
+        Files.write(codex.toPath(), userHook.getBytes(StandardCharsets.UTF_8));
+        Files.write(otherPlugin.toPath(), "export const Mine = async () => ({})"
+            .getBytes(StandardCharsets.UTF_8));
+
+        assertTrue(ClaudeHooksInstaller.installAll(home, CTL, null).getBoolean("ok"));
+        byte[] claudeOnce = Files.readAllBytes(claude.toPath());
+        byte[] codexOnce = Files.readAllBytes(codex.toPath());
+        byte[] opencodeOnce = Files.readAllBytes(opencode.toPath());
+
+        assertTrue(ClaudeHooksInstaller.installAll(home, CTL, null).getBoolean("ok"));
+        assertTrue(java.util.Arrays.equals(claudeOnce, Files.readAllBytes(claude.toPath())));
+        assertTrue(java.util.Arrays.equals(codexOnce, Files.readAllBytes(codex.toPath())));
+        assertTrue(java.util.Arrays.equals(opencodeOnce, Files.readAllBytes(opencode.toPath())));
+
+        for (File file : new File[] {claude, codex}) {
+            JSONArray start = new JSONObject(new String(Files.readAllBytes(file.toPath()),
+                StandardCharsets.UTF_8)).getJSONObject("hooks").getJSONArray("SessionStart");
+            assertEquals(file.getName(), "mine", start.getJSONObject(0).getJSONArray("hooks")
+                .getJSONObject(0).getString("command"));
+        }
+        assertEquals("export const Mine = async () => ({})",
+            new String(Files.readAllBytes(otherPlugin.toPath()), StandardCharsets.UTF_8));
+    }
+
     private static String command(JSONObject hooks, String event) throws Exception {
         return hooks.getJSONArray(event).getJSONObject(hooks.getJSONArray(event).length() - 1)
             .getJSONArray("hooks").getJSONObject(0).getString("command");

@@ -9,6 +9,7 @@ import com.termux.app.notice.AppNotice;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The sessions drawer's front door: every way into it, and everything it asks the activity for.
@@ -202,18 +203,20 @@ public final class TerminalSessionBrowser {
             saveWorkspace(name, false);
         }
 
-        @NonNull @Override public List<String> agentsNeedingResumeSetup() {
-            return mActivity.agentsNeedingResumeSetup();
+        @Override public void requestResumeAgents(@NonNull Consumer<List<String>> onResult) {
+            mActivity.requestAgentsNeedingResumeSetup(onResult);
         }
 
-        @Override public void onSetUpResume() {
-            List<String> agents = mActivity.agentsNeedingResumeSetup();
-            mActivity.installAgentResume(agents);
-            // Codex skips a hook until it is trusted once, in Codex itself.
-            if (agents.contains(AgentStatus.AGENT_CODEX)) {
-                AppNotice.show(mActivity,
-                    mActivity.getString(R.string.session_browser_resume_setup_codex), false);
-            }
+        @Override public void onSetUpResume(@NonNull List<String> agents,
+                                            @NonNull Consumer<Boolean> onDone) {
+            mActivity.installAgentResume(agents, ok -> {
+                // Codex skips a hook until it is trusted once, in Codex itself.
+                if (ok && agents.contains(AgentStatus.AGENT_CODEX)) {
+                    AppNotice.show(mActivity,
+                        mActivity.getString(R.string.session_browser_resume_setup_codex), false);
+                }
+                onDone.accept(ok);
+            });
         }
 
         @Override public void onLoadWorkspace(@NonNull String name, boolean replace) {

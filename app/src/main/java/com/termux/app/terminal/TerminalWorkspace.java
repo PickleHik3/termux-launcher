@@ -170,12 +170,12 @@ public final class TerminalWorkspace {
         @Nullable public final String cwd;
         @Nullable public final String title;
         /** Full argv, or an empty list when command capture was disabled/unavailable. */
-        @NonNull public final List<String> command;
+        @NonNull public List<String> command;
 
         /** The agent whose conversation {@link #agentSessionId} is ({@code claude}), or null. */
-        @Nullable public final String agent;
+        @Nullable public String agent;
         /** The id that agent reported for this pane, which restore resumes; null when none. */
-        @Nullable public final String agentSessionId;
+        @Nullable public String agentSessionId;
 
         public Pane(@Nullable String cwd, @Nullable String title, @Nullable List<String> command) {
             this(cwd, title, command, null, null);
@@ -185,6 +185,18 @@ public final class TerminalWorkspace {
                     @Nullable String agent, @Nullable String agentSessionId) {
             this.cwd = cwd;
             this.title = title;
+            this.command = command == null ? Collections.emptyList() : immutable(command);
+            this.agent = agent;
+            this.agentSessionId = agentSessionId;
+        }
+
+        /**
+         * Fills in what a snapshot left for later: the program and agent of a pane whose /proc
+         * reading is taken off the main thread. Called once, by the thread that then publishes
+         * the workspace (the writer's executor hands it on), never on a workspace already in use.
+         */
+        public void completeCapture(@Nullable List<String> command, @Nullable String agent,
+                                    @Nullable String agentSessionId) {
             this.command = command == null ? Collections.emptyList() : immutable(command);
             this.agent = agent;
             this.agentSessionId = agentSessionId;

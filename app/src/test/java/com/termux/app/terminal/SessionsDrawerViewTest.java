@@ -28,6 +28,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The drawer's two halves and the state a row can be in.
@@ -227,6 +228,53 @@ public class SessionsDrawerViewTest {
         assertFalse(drawer.isSaveFieldOpen());
     }
 
+    /**
+     * An agent without resume hooks gets the line and the button under the Save field; a setup
+     * that worked takes both away, one that failed keeps them and says so.
+     */
+    @Test
+    public void theSaveFieldOffersResumeSetupUntilItWorks() {
+        ResumeListener listener = new ResumeListener();
+        SessionsDrawerView drawer = drawer(listener);
+        drawer.bindLive(Collections.singletonList(session(7, 0, true, "build", 70)));
+        String line = RuntimeEnvironment.getApplication().getString(
+            R.string.session_browser_resume_setup_line, "Claude");
+        String button = string(R.string.session_browser_resume_setup_action);
+        String failed = string(R.string.session_browser_resume_setup_failed);
+
+        drawer.openSaveField();
+        assertNotNull(findText(drawer, line));
+        assertNull(findText(drawer, failed));
+
+        listener.setupWorks = false;
+        findText(drawer, button).performClick();
+        assertNotNull(findText(drawer, line));
+        assertNotNull(findText(drawer, button));
+        assertNotNull(findText(drawer, failed));
+
+        listener.setupWorks = true;
+        findText(drawer, button).performClick();
+        assertNull(findText(drawer, line));
+        assertNull(findText(drawer, button));
+        assertNull(findText(drawer, failed));
+    }
+
+    /** Claude lacks hooks until its setup has worked once. */
+    private static final class ResumeListener extends RecordingListener {
+        boolean setupWorks = true;
+        boolean installed;
+
+        @Override public void requestResumeAgents(@NonNull Consumer<List<String>> onResult) {
+            onResult.accept(installed ? new ArrayList<>() : Collections.singletonList("claude"));
+        }
+
+        @Override public void onSetUpResume(@NonNull List<String> agents,
+                                            @NonNull Consumer<Boolean> onDone) {
+            if (setupWorks) installed = true;
+            onDone.accept(setupWorks);
+        }
+    }
+
     /** Back folds one level at a time, and says so, so the drawer's own Back can take over. */
     @Test
     public void collapseOneClosesWhatIsUnfoldedAndReportsWhetherItHadAnything() {
@@ -337,7 +385,7 @@ public class SessionsDrawerViewTest {
         return null;
     }
 
-    private static final class RecordingListener implements SessionsDrawerView.Listener {
+    private static class RecordingListener implements SessionsDrawerView.Listener {
         final List<String> events = new ArrayList<>();
 
         @Override public void onNewSession() { events.add("new"); }

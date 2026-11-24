@@ -2924,6 +2924,7 @@
     <string name="workspace_restore_agent_fresh">%1$s started a new conversation.</string>
     <string name="session_browser_resume_setup_line">%1$s will start a new conversation when restored</string>
     <string name="session_browser_resume_setup_action">Set up resume</string>
+    <string name="session_browser_resume_setup_failed">Resume could not be set up</string>
     <string name="session_browser_resume_setup_codex">Open Codex and run /hooks once to trust the new hook.</string>
     <string name="workspace_restore_folder_missing">Folder %1$s is gone, so this opened in your home folder.</string>
     <string name="workspace_restore_folder_missing_program">%1$s did not start: folder %2$s is gone.</string>

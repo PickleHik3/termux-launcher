@@ -457,7 +457,9 @@ public final class TerminalBindingConfig {
             int equals = word.indexOf('=');
             String name = equals > 0 ? word.substring(0, equals) : null;
             String value;
-            if (name != null && properties.has(name)) {
+            if (name != null && LauncherToolRegistry.isRetiredArgument(tool.name, name)) {
+                continue;
+            } else if (name != null && properties.has(name)) {
                 value = word.substring(equals + 1);
             } else {
                 while (next < positional.size() && arguments.has(positional.get(next))) next++;

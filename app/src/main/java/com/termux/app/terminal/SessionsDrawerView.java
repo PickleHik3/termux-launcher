@@ -27,6 +27,7 @@ import com.termux.shared.termux.font.NerdFontSpans;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * The one sessions surface: what is running, what was saved, and every action either of them has.
@@ -106,15 +107,20 @@ public final class SessionsDrawerView extends LinearLayout
 
         /**
          * The agents running in the live panes whose resume hook is not set up, by name
-         * ({@code claude}); empty when there is nothing to offer. Asked when the save field opens.
+         * ({@code claude}), handed to {@code onResult} on the main thread, possibly after a
+         * background read; empty when there is nothing to offer. Asked when the save field opens.
          */
-        @NonNull
-        default List<String> agentsNeedingResumeSetup() {
-            return new ArrayList<>();
+        default void requestResumeAgents(@NonNull Consumer<List<String>> onResult) {
+            onResult.accept(new ArrayList<>());
         }
 
-        /** The Set up resume button: install the hooks and plugin for those agents. */
-        default void onSetUpResume() {}
+        /**
+         * The Set up resume button: install the hooks and plugin for {@code agents}, then say on
+         * the main thread whether it worked.
+         */
+        default void onSetUpResume(@NonNull List<String> agents, @NonNull Consumer<Boolean> onDone) {
+            onDone.accept(true);
+        }
     }
 
     private static final float TITLE_SP = 14f;
@@ -153,6 +159,9 @@ public final class SessionsDrawerView extends LinearLayout
     private boolean mSaveFieldOpen;
     /** Agents the Save field offers to set up resume for; read once per opening, not per rebuild. */
     @NonNull private List<String> mResumeAgents = new ArrayList<>();
+    private int mResumeAsk;
+    /** The Set up resume button was pressed and the files could not be written. */
+    private boolean mResumeSetupFailed;
 
     /** Where keystrokes aimed at the drawer land, or null while nothing is being typed into. */
     @Nullable private TerminalSheetController.TextField mActiveField;
@@ -289,8 +298,22 @@ public final class SessionsDrawerView extends LinearLayout
         rebuild();
     }
 
+    /**
+     * Asks the listener which agents lack resume; the answer may land later, and only the latest
+     * ask counts. The save field rebuilds when it is still open.
+     */
     private void refreshResumeAgents() {
-        mResumeAgents = mListener == null ? new ArrayList<>() : mListener.agentsNeedingResumeSetup();
+        mResumeSetupFailed = false;
+        final int ask = ++mResumeAsk;
+        if (mListener == null) {
+            mResumeAgents = new ArrayList<>();
+            return;
+        }
+        mListener.requestResumeAgents(agents -> {
+            if (ask != mResumeAsk) return;
+            mResumeAgents = agents;
+            if (mSaveFieldOpen) rebuild();
+        });
     }
 
     /**
@@ -768,11 +791,24 @@ public final class SessionsDrawerView extends LinearLayout
             LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
         lineParams.topMargin = dp(6);
         column.addView(line, lineParams);
+        if (mResumeSetupFailed) {
+            TextView failed = label(SUBTITLE_SP, mDress.subTextColor);
+            failed.setSingleLine(false);
+            failed.setText(R.string.session_browser_resume_setup_failed);
+            column.addView(failed, new LayoutParams(
+                LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        }
         LinearLayout actions = actionStrip();
         addAction(actions, getContext().getString(R.string.session_browser_resume_setup_action), () -> {
-            if (mListener != null) mListener.onSetUpResume();
-            refreshResumeAgents();
-            rebuild();
+            if (mListener == null) return;
+            mListener.onSetUpResume(new ArrayList<>(mResumeAgents), ok -> {
+                if (ok) {
+                    refreshResumeAgents();
+                } else {
+                    mResumeSetupFailed = true;
+                    rebuild();
+                }
+            });
         });
         column.addView(actions, new LayoutParams(
             LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));

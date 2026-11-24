@@ -1568,6 +1568,17 @@ public final class LauncherToolRegistry {
             ? Availability.available()
             : Availability.unavailable(R.string.palette_unavailable_no_session);
 
+    /**
+     * An argument a tool used to take and no longer does: older keybind files and callers still
+     * pass it, and it is accepted and ignored rather than rejected. {@code workspace.save} had
+     * {@code captureCommands}, {@code workspace.load} had {@code runCommands}; both now always
+     * happen.
+     */
+    public static boolean isRetiredArgument(@NonNull String tool, @NonNull String argument) {
+        return (TOOL_WORKSPACE_SAVE.equals(tool) && "captureCommands".equals(argument))
+            || (TOOL_WORKSPACE_LOAD.equals(tool) && "runCommands".equals(argument));
+    }
+
     private static JSONObject schemaEmpty() {
         JSONObject schema = new JSONObject();
         try {

@@ -12191,12 +12191,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         mArrangementAutosaveHandler.removeCallbacks(mArrangementAutosave);
         if (!mArrangementAutosaveArmed || mTermuxService == null || mTermuxService.mWantsToStop
             || mPaneController == null) return;
+        final java.util.List<PaneProbe> probes = new java.util.ArrayList<>();
         final com.termux.app.terminal.TerminalWorkspace arrangement = snapshotArrangement(
-            com.termux.app.terminal.TerminalWorkspaceStore.AUTOSAVE_NAME);
+            com.termux.app.terminal.TerminalWorkspaceStore.AUTOSAVE_NAME, probes);
         final TermuxService service = mTermuxService;
         ARRANGEMENT_AUTOSAVE_WRITER.execute(() -> {
             // An Exit between the snapshot and the write wins.
             if (service.mWantsToStop) return;
+            // The /proc reads of each pane's program happen here, not on the main thread.
+            for (PaneProbe probe : probes) probe.resolve();
             try {
                 new com.termux.app.terminal.TerminalWorkspaceStore().saveAutosave(arrangement);
             } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
@@ -23542,8 +23545,35 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         syncBackgroundProcessStack();
-        // What runs in a pane is part of the arrangement the autosave keeps for a kill.
-        scheduleArrangementAutosave();
+        // What runs in a pane is part of the arrangement the autosave keeps for a kill; a poll
+        // that moved only a CPU reading changes nothing it keeps.
+        int programs = paneProgramsKey();
+        if (programs != mPaneProgramsKey) {
+            mPaneProgramsKey = programs;
+            scheduleArrangementAutosave();
+        }
+    }
+
+    /** Last {@link #paneProgramsKey} an autosave was scheduled for. */
+    private int mPaneProgramsKey;
+
+    /**
+     * Folds every live pane's resolved foreground program (pid and argv) into one number, so the
+     * poll can tell whether any pane's program changed. No allocation: it runs on every poll.
+     */
+    private int paneProgramsKey() {
+        if (mPaneController == null || mWindowForegroundResolver == null) return 0;
+        int key = 17;
+        for (WSession ws : mWSessions) {
+            for (com.termux.app.terminal.TerminalPaneController.Window window : ws.windows) {
+                for (TerminalSession shell : mPaneController.shellsOf(window)) {
+                    com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+                        mWindowForegroundResolver.get(shell.getPid());
+                    key = key * 31 + (info == null ? 0 : info.foregroundPid * 31 + info.command.hashCode());
+                }
+            }
+        }
+        return key;
     }
 
     /**
@@ -23664,17 +23694,49 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mCurrentWSession == null ? null : mCurrentWSession.name;
     }
 
+    /**
+     * One pane of a snapshot whose program is still to be read: the view tree's part (pid, agent)
+     * is taken on the main thread, {@link #resolve} does the /proc reads.
+     */
+    private static final class PaneProbe {
+        final com.termux.app.terminal.TerminalWorkspace.Pane pane;
+        final int pid;
+        @Nullable final String agentName;
+        @Nullable final String agentSessionId;
+
+        PaneProbe(@NonNull com.termux.app.terminal.TerminalWorkspace.Pane pane, int pid,
+                  @Nullable String agentName, @Nullable String agentSessionId) {
+            this.pane = pane;
+            this.pid = pid;
+            this.agentName = agentName;
+            this.agentSessionId = agentSessionId;
+        }
+
+        void resolve() {
+            java.util.List<String> command =
+                com.termux.app.statusbar.WindowForegroundResolver.captureCommand(pid);
+            // The conversation id the agent in this pane reported, kept only while that agent is
+            // still what runs there.
+            String sessionId = com.termux.app.terminal.AgentResume.sessionToSave(
+                command, agentName, agentSessionId);
+            pane.completeCapture(command, sessionId == null ? null : agentName, sessionId);
+        }
+    }
+
     /** Capture the complete live session/window/pane topology into a durable JSON file. */
     @NonNull
     public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
             @NonNull String requestedName, boolean overwrite)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
-        com.termux.app.terminal.TerminalWorkspace workspace = snapshotArrangement(name);
+        java.util.List<PaneProbe> probes = new java.util.ArrayList<>();
+        com.termux.app.terminal.TerminalWorkspace workspace = snapshotArrangement(name, probes);
         if (workspace == null) {
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "no_session", "There are no terminal sessions to save");
         }
+        // Explicit Save answers with the workspace, so it reads what runs here, fresh.
+        for (PaneProbe probe : probes) probe.resolve();
         workspace.validate();
         new com.termux.app.terminal.TerminalWorkspaceStore().save(name, workspace, overwrite);
         return workspace;
@@ -23684,10 +23746,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * The live arrangement — every session's row of windows with their trees, then the Home
      * floats — in the Saved sessions model under {@code name}, or null when there is nothing
      * (no window and no float). Every pane keeps the program running in it, read from the system
-     * now rather than from the window pills' cache; the autosave keeps them too.
+     * now rather than from the window pills' cache; the autosave keeps them too. The panes come
+     * back without their program: the caller resolves {@code probes} (one per pane) before it
+     * uses the workspace, which reads /proc and so can run off the main thread.
      */
     @Nullable
-    private com.termux.app.terminal.TerminalWorkspace snapshotArrangement(@NonNull String name) {
+    private com.termux.app.terminal.TerminalWorkspace snapshotArrangement(@NonNull String name,
+            @NonNull java.util.List<PaneProbe> probes) {
         if (mPaneController == null) return null;
         boolean anyWindow = false;
         for (WSession ws : mWSessions) anyWindow |= !ws.windows.isEmpty();
@@ -23697,15 +23762,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture = shell -> {
             String cwd = shell.getCwd();
             if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
-            java.util.List<String> command =
-                com.termux.app.statusbar.WindowForegroundResolver.captureCommand(shell.getPid());
-            // The conversation id the agent in this pane reported, kept only while that agent is
-            // still what runs there.
-            String sessionId = com.termux.app.terminal.AgentResume.sessionToSave(
-                command, shell.mAgentName, shell.mAgentSessionId);
-            return new com.termux.app.terminal.TerminalWorkspace.Pane(
-                cwd, shell.mSessionName, command,
-                sessionId == null ? null : shell.mAgentName, sessionId);
+            // The program is read from /proc by PaneProbe.resolve, on whichever thread the caller
+            // chooses; only what the view tree holds is read here.
+            com.termux.app.terminal.TerminalWorkspace.Pane pane =
+                new com.termux.app.terminal.TerminalWorkspace.Pane(cwd, shell.mSessionName, null);
+            probes.add(new PaneProbe(pane, shell.getPid(), shell.mAgentName, shell.mAgentSessionId));
+            return pane;
         };
         // Home floats are windows of the current session (the drawer lists them under it): they
         // are saved after its row's windows, in the order they were opened, as the chips run.
@@ -31327,47 +31389,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * The agents running in a live pane that have no resume hook set up yet, for the Save
-     * dialog's offer. Reads each pane's program fresh, once per call.
+     * dialog's offer. The panes' pids are taken here; their programs (/proc) and the hook files
+     * are read on the writer thread, and {@code onResult} runs back on the main thread.
      */
-    @NonNull
-    public java.util.List<String> agentsNeedingResumeSetup() {
-        java.util.List<java.util.List<String>> commands = new java.util.ArrayList<>();
+    public void requestAgentsNeedingResumeSetup(
+            @NonNull java.util.function.Consumer<java.util.List<String>> onResult) {
+        final java.util.List<Integer> pids = new java.util.ArrayList<>();
         if (mPaneController != null) {
             java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows =
                 new java.util.ArrayList<>(chipFloats());
             for (WSession ws : mWSessions) windows.addAll(ws.windows);
             for (com.termux.app.terminal.TerminalPaneController.Window window : windows) {
                 for (TerminalSession shell : mPaneController.shellsOf(window)) {
-                    commands.add(com.termux.app.statusbar.WindowForegroundResolver
-                        .captureCommand(shell.getPid()));
+                    pids.add(shell.getPid());
                 }
             }
         }
-        final java.io.File home = new java.io.File(
-            com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH);
-        final String launcherctl =
-            com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
-        return com.termux.app.terminal.AgentResume.agentsNeedingSetup(commands,
-            agent -> com.termux.launcherctl.ClaudeHooksInstaller.isInstalled(agent, home, launcherctl));
+        ARRANGEMENT_AUTOSAVE_WRITER.execute(() -> {
+            java.util.List<java.util.List<String>> commands = new java.util.ArrayList<>();
+            for (int pid : pids) {
+                commands.add(com.termux.app.statusbar.WindowForegroundResolver.captureCommand(pid));
+            }
+            final java.io.File home = new java.io.File(
+                com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH);
+            final String launcherctl = com.termux.shared.termux.TermuxConstants
+                .TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
+            final java.util.List<String> agents = com.termux.app.terminal.AgentResume
+                .agentsNeedingSetup(commands, agent -> com.termux.launcherctl.ClaudeHooksInstaller
+                    .isInstalled(agent, home, launcherctl));
+            mArrangementAutosaveHandler.post(() -> onResult.accept(agents));
+        });
     }
 
     /**
      * Set up resume for {@code agents} (the Save dialog's button): their hook or plugin files
-     * are written under the home folder.
+     * are written under the home folder on the writer thread, and {@code onDone} runs on the main
+     * thread with whether every file was written.
      */
-    public void installAgentResume(@NonNull java.util.List<String> agents) {
-        java.io.File home = new java.io.File(
+    public void installAgentResume(@NonNull java.util.List<String> agents,
+                                   @NonNull java.util.function.Consumer<Boolean> onDone) {
+        final java.io.File home = new java.io.File(
             com.termux.shared.termux.TermuxConstants.TERMUX_HOME_DIR_PATH);
-        String launcherctl =
+        final String launcherctl =
             com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/launcherctl";
-        for (String agent : agents) {
-            try {
-                com.termux.launcherctl.ClaudeHooksInstaller.installAll(home, launcherctl, agent);
-            } catch (org.json.JSONException ignored) {
-                // Building the answer cannot fail on these values; a file that could not be
-                // written shows as the offer staying.
+        final java.util.List<String> asked = new java.util.ArrayList<>(agents);
+        ARRANGEMENT_AUTOSAVE_WRITER.execute(() -> {
+            boolean ok = true;
+            for (String agent : asked) {
+                try {
+                    ok &= com.termux.launcherctl.ClaudeHooksInstaller
+                        .installAll(home, launcherctl, agent).optBoolean("ok", false);
+                } catch (org.json.JSONException e) {
+                    ok = false;
+                }
             }
-        }
+            final boolean result = ok;
+            mArrangementAutosaveHandler.post(() -> onDone.accept(result));
+        });
     }
 
     /**
