@@ -128,6 +128,17 @@ public final class SettingsRegistry {
      */
     @NonNull
     public synchronized Outcome step(@Nullable String id, @NonNull Direction direction) {
+        Outcome next = previewStep(id, direction);
+        Change change = next.change();
+        return change == null ? next : write(change.declaration, change.newValue);
+    }
+
+    /**
+     * What {@link #step} would do, without writing it: the Change it would make, or the Refusal it
+     * would give. The Assistant shows a step on a card before anything is saved.
+     */
+    @NonNull
+    public synchronized Outcome previewStep(@Nullable String id, @NonNull Direction direction) {
         SettingDeclaration declaration = declaration(id);
         if (declaration == null) return unknown(id);
         if (adapterOf(declaration) != null)
@@ -153,7 +164,7 @@ public final class SettingsRegistry {
             return new Refusal(declaration.id + " is already at its " + (up ? "highest" : "lowest")
                 + ", " + current, declaration.allowed());
         }
-        return write(declaration, next);
+        return new Change(declaration, current, next);
     }
 
     /** One declaration and its current value, as {@link #list} answers it. */

@@ -125,6 +125,18 @@ public class SettingsRegistryTest {
     }
 
     @Test
+    public void previewStepAnswersWhatStepWouldDoAndWritesNothing() {
+        SettingsRegistry.Change up = registry.previewStep("text.size", SettingsRegistry.Direction.UP).change();
+        assertEquals("100", up.oldValue);
+        assertEquals("105", up.newValue);
+        assertEquals("100", registry.get("text.size"));
+        assertNull(store.getString("text_size_percent"));
+        store.putInt("text_size_percent", 150);
+        assertNotNull(registry.previewStep("text.size", SettingsRegistry.Direction.UP).refusal());
+        assertNotNull(registry.previewStep("theme.mode", SettingsRegistry.Direction.UP).refusal());
+    }
+
+    @Test
     public void stepMovesAnOrderedChoiceAlongItsNames() {
         assertEquals("harder",
             registry.step("terminal.contrast", SettingsRegistry.Direction.UP).change().newValue);
