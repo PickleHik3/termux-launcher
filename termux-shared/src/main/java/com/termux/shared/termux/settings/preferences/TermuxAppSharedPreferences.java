@@ -18,6 +18,8 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 
 public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
@@ -4031,17 +4033,16 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         lookGrid().write(LookGrid.Property.VIBRANCY, null, value);
     }
 
-    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TEXT_SIZE_PERCENT}. Clamped. */
+    /** See {@link TermuxPreferenceConstants.TERMUX_APP#KEY_TEXT_SIZE_PERCENT}. Clamped by its declaration. */
     public int getTextSizePercent() {
-        return DataUtils.clamp(SharedPreferenceUtils.getInt(mSharedPreferences,
-                TERMUX_APP.KEY_TEXT_SIZE_PERCENT, TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT),
-            TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT);
+        SettingDeclaration textSize = SettingDeclarations.TEXT_SIZE;
+        return textSize.clamp(SharedPreferenceUtils.getInt(mSharedPreferences, textSize.key,
+            textSize.defaultInt));
     }
 
     public void setTextSizePercent(int value) {
-        SharedPreferenceUtils.setInt(mSharedPreferences, TERMUX_APP.KEY_TEXT_SIZE_PERCENT,
-            DataUtils.clamp(value, TERMUX_APP.MIN_TEXT_SIZE_PERCENT,
-                TERMUX_APP.MAX_TEXT_SIZE_PERCENT), false);
+        SettingDeclaration textSize = SettingDeclarations.TEXT_SIZE;
+        SharedPreferenceUtils.setInt(mSharedPreferences, textSize.key, textSize.clamp(value), false);
     }
 
     /** The shared Text size as a factor: 1 at the default. */
@@ -4469,9 +4470,10 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
     @NonNull
     public TerminalContrastLevel getTerminalContrastLevel() {
-        return TerminalContrastLevel.from(SharedPreferenceUtils.getString(mSharedPreferences,
-            TERMUX_APP.KEY_TERMINAL_CONTRAST_LEVEL,
-            TERMUX_APP.DEFAULT_VALUE_TERMINAL_CONTRAST_LEVEL, true));
+        SettingDeclaration contrast = SettingDeclarations.TERMINAL_CONTRAST;
+        return TerminalContrastLevel.from(contrast.storedChoiceOrDefault(
+            SharedPreferenceUtils.getString(mSharedPreferences, contrast.key,
+                contrast.defaultStoredChoice(), true)));
     }
 
     public void setTerminalContrastLevel(@Nullable String value) {

@@ -99,7 +99,8 @@ public final class AppearanceLooks {
         APP_ICONS(APP_ICONS_MIN, APP_ICONS_MAX, 1),
         CONTRAST(0, 2, 1),
         DEPTH(GlassEdgeControls.MIN, GlassEdgeControls.MAX, 1),
-        TEXT_SIZE(TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT, 5),
+        TEXT_SIZE(TERMUX_APP.MIN_TEXT_SIZE_PERCENT, TERMUX_APP.MAX_TEXT_SIZE_PERCENT,
+            TERMUX_APP.TEXT_SIZE_PERCENT_STEP),
         SPLIT_GAP(0, TERMUX_APP.MAX_TERMINAL_PANE_GAP, 1);
 
         public final int min;
