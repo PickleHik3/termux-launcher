@@ -84,4 +84,25 @@ public final class StatusRowFitPolicy {
         return Math.max(0, paddingPx) + Math.max(0, badgeLeadPx) + Math.max(0, badgeWidthPx)
             + Math.max(0, barChromePx) + Math.max(0, frontChipPx);
     }
+
+    /**
+     * How many readings stand while the enlarged thin row holds its marks where they stood at
+     * rest: the strip's slot keeps {@code floorPx} (the marks' extent from its start), and the
+     * readings, grown to their own size, keep as many whole items as fit what is left
+     * ({@link StatusRowKeepOut#readingsThatFit}), the far end going first.
+     * {@link StatusReadingsCluster#ALL} when the slot already has its floor.
+     *
+     * @param slotPx    what the slot was given with every reading standing
+     * @param floorPx   the least the slot keeps; 0 holds nothing
+     * @param readingsPx the room the readings' group stood in with every reading (its width and
+     *                  margins): the room left for them is this less what the slot lacks
+     */
+    public static int readingsKeptBesideFloor(int slotPx, int floorPx, int readingsPx,
+                                              @androidx.annotation.NonNull int[] itemWidth,
+                                              @androidx.annotation.NonNull boolean[] mark,
+                                              int count, int chromePx) {
+        if (floorPx <= 0 || slotPx >= floorPx) return StatusReadingsCluster.ALL;
+        int room = readingsPx - (floorPx - slotPx);
+        return StatusRowKeepOut.readingsThatFit(itemWidth, mark, count, chromePx, room);
+    }
 }
