@@ -46,9 +46,33 @@ public class LookSettingsAdapterTest {
     }
 
     @Test
-    public void aValueOutsideTheRangeIsClampedAsTheVerbClampsIt() {
-        assertEquals("100", registry.set("look.dock.opacity", "400").change().newValue);
-        assertEquals(100, grid.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+    public void aValueOutsideTheRangeIsRefusedWithTheRangeAndSavesNothing() {
+        SettingsRegistry.Refusal refusal = registry.set("look.dock.opacity", "400").refusal();
+        assertEquals("look.dock.opacity is 0–100", refusal.reason);
+        assertEquals("0–100", refusal.allowed);
+        assertEquals("look.dock.opacity is 0–100", registry.check("look.dock.opacity", "-1").reason);
+        assertEquals("look.background.dim is 0–100",
+            registry.set("look.background.dim", "101").refusal().reason);
+        assertEquals("look.opacity is 0–100", registry.set("look.opacity", "101").refusal().reason);
+        assertFalse(grid.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(0, changed);
+    }
+
+    @Test
+    public void theVerbItselfStillClampsTheSameValue() throws Exception {
+        org.json.JSONObject answer = LookCommand.handle(grid, background,
+            new org.json.JSONObject().put("op", "set").put("property", "opacity")
+                .put("element", "dock").put("value", "400"));
+        assertEquals("100", answer.getString("value"));
+    }
+
+    @Test
+    public void anAppliedFileWithAnOutOfRangeLineIsRefusedWithItsLineNumber() {
+        SettingsFile.Result result = SettingsFile.check(
+            "look.opacity = 30\n\nlook.dock.opacity = 400\n", registry);
+        assertEquals(java.util.Collections.singletonList("line 3: look.dock.opacity is 0–100"),
+            result.errors);
+        assertEquals(0, changed);
     }
 
     @Test

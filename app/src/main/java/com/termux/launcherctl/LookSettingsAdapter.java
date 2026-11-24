@@ -199,6 +199,8 @@ public final class LookSettingsAdapter implements SettingAdapter {
         Target target = parse(declaration.id);
         if (target == null)
             return SettingsRegistry.unknown(declaration.id);
+        SettingsRegistry.Refusal outside = outsideRange(declaration, target, value);
+        if (outside != null) return outside;
         String old = get(declaration);
         try {
             JSONObject answer = LookCommand.handle(grid, background,
@@ -213,6 +215,34 @@ public final class LookSettingsAdapter implements SettingAdapter {
         } catch (JSONException e) {
             return new SettingsRegistry.Refusal("not a look value: " + e.getMessage(), null);
         }
+    }
+
+    /**
+     * The registry's refusal for a whole number outside the property's own range. The {@code look}
+     * verb clamps such a number; a registry door refuses it, so a file or a script cannot save a
+     * value other than the one it named. Words that are no number, and a blur written in dp, are
+     * the verb's to judge.
+     */
+    @Nullable
+    private static SettingsRegistry.Refusal outsideRange(@NonNull SettingDeclaration declaration,
+                                                         @NonNull Target target,
+                                                         @NonNull String value) {
+        if (declaration.kind != SettingDeclaration.Kind.INTEGER) return null;
+        String text = value.trim().toLowerCase(Locale.ROOT);
+        boolean background = BACKGROUND.equals(target.element) || target.property.equals("dim");
+        if (text.endsWith("dp")) {
+            if (!background) return null;
+            text = text.substring(0, text.length() - 2);
+        }
+        int number;
+        try {
+            number = Integer.parseInt(text);
+        } catch (NumberFormatException e) {
+            return null;
+        }
+        if (number >= declaration.min && number <= declaration.max) return null;
+        return new SettingsRegistry.Refusal(declaration.id + " is " + declaration.allowed(),
+            declaration.allowed());
     }
 
     @NonNull
