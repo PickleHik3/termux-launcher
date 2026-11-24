@@ -3331,10 +3331,10 @@
     <string name="help_topic_appearance_title">Appearance editor</string>
     <string name="help_topic_appearance_summary">The Appearance editor changes how the launcher looks, with one Look for the whole of it.</string>
     <string name="help_topic_appearance_action">Hold a corner, tap Appearance, then Look.</string>
-    <string name="help_topic_appearance_step1">Slide between Clear, Mist, Tint and Solid. The last stop, Custom, sets Blur, Opacity and Grain for everything; tap anything in the frame to tune it on its own.</string>
+    <string name="help_topic_appearance_step1">Slide between Clear, Frosted, Tinted, Solid and Liquid. The last stop, Custom, sets Blur, Opacity and Grain for everything; tap anything in the frame to tune it on its own.</string>
     <string name="help_topic_appearance_step2">Changes preview as you make them.</string>
     <string name="help_topic_appearance_back">Undo returns to how it was; Done keeps it.</string>
-    <string name="help_topic_appearance_aliases">appearance, look, clear, mist, tint, solid, custom, glass, blur, colours, colors, editor</string>
+    <string name="help_topic_appearance_aliases">appearance, look, clear, frosted, tinted, solid, liquid, custom, glass, blur, colours, colors, editor</string>
     <string name="help_topic_themes_title">Colours, fonts and wallpaper</string>
     <string name="help_topic_themes_summary">Theme, wallpaper and icons are in Appearance; fonts are in Settings, under Terminal.</string>
     <string name="help_topic_themes_action">Open Appearance in Settings for colours, wallpaper and icons; fonts are under Terminal. Or hold a corner and tap Appearance.</string>
@@ -3495,7 +3495,7 @@
     <string name="help_term_minimal_title">Minimal mode</string>
     <string name="help_term_minimal_definition">A second saved layout, which starts with only each place\'s content: the bars and the keyboard put away.</string>
     <string name="help_term_look_title">Look</string>
-    <string name="help_term_look_definition">How the glass reads: Clear, Mist, Tint, Solid, or your own Custom.</string>
+    <string name="help_term_look_definition">How the glass reads: Clear, Frosted, Tinted, Solid, Liquid, or your own Custom.</string>
     <string name="help_term_style_title">Docked or Floating</string>
     <string name="help_term_style_definition">Docked joins the bars into one frame of glass; Floating gives each its own card.</string>
     <string name="help_term_tray_title">Hidden elements</string>
