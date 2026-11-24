@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.TreeMap;
 
 /**
  * The settings backup file, without Android: which preference keys and which files belong in it,
@@ -251,7 +252,7 @@ public final class SettingsBackupFormat {
     @NonNull
     public static JSONObject encodeStore(@NonNull Store store, @NonNull Map<String, ?> all) throws JSONException {
         JSONObject values = new JSONObject();
-        for (Map.Entry<String, ?> entry : new java.util.TreeMap<>(all).entrySet()) {
+        for (Map.Entry<String, ?> entry : new TreeMap<>(all).entrySet()) {
             String key = entry.getKey();
             if (!store.includes(key)) continue;
             JSONObject typed = encodeValue(entry.getValue());
@@ -401,7 +402,7 @@ public final class SettingsBackupFormat {
     @NonNull
     static List<String> invalidDeclaredKeys(@NonNull Map<String, Object> values) {
         List<String> invalid = new ArrayList<>();
-        for (Map.Entry<String, Object> entry : new java.util.TreeMap<>(values).entrySet()) {
+        for (Map.Entry<String, Object> entry : new TreeMap<>(values).entrySet()) {
             SettingDeclaration declaration = SettingDeclarations.forPreferenceKey(entry.getKey());
             if (declaration != null && !declaration.acceptsStored(entry.getValue()))
                 invalid.add(entry.getKey());

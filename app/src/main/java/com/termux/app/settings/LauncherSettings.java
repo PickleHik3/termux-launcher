@@ -17,6 +17,7 @@ import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The app's one Settings registry and Settings applier, over the stores the settings already use:
@@ -192,7 +193,7 @@ public final class LauncherSettings {
         @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
             String text = getString(key);
             if (text == null) return defaultValue;
-            String value = text.trim().toLowerCase(java.util.Locale.ROOT);
+            String value = text.trim().toLowerCase(Locale.ROOT);
             return value.equals("true") || (!value.equals("false") && defaultValue);
         }
 

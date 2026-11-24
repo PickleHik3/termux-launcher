@@ -11,6 +11,7 @@ import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * The Low memory preset as a setting. Switching it is more than storing a flag: turning it on
@@ -100,7 +101,7 @@ public final class LowMemoryPresetAdapter implements SettingAdapter {
 
     @Nullable
     private static Boolean parse(@NonNull String value) {
-        String text = value.trim().toLowerCase(java.util.Locale.ROOT);
+        String text = value.trim().toLowerCase(Locale.ROOT);
         if (text.equals("true")) return Boolean.TRUE;
         return text.equals("false") ? Boolean.FALSE : null;
     }

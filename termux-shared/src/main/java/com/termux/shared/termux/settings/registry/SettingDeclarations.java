@@ -1,7 +1,9 @@
 package com.termux.shared.termux.settings.registry;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
+import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 import com.termux.shared.termux.settings.preferences.TerminalContrastLevel;
 import com.termux.shared.theme.NightMode;
@@ -227,7 +229,7 @@ public final class SettingDeclarations {
         "dock.style", SettingDeclaration.Store.APP_PREFERENCES, "app_launcher_dock_style",
         Arrays.asList("docked", "floating"), Arrays.asList("docked", "floating"), "docked", false,
         SettingRefresh.RESTYLE).readingStoredAs(
-        com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences
+        TermuxAppSharedPreferences
             ::normalizeAppLauncherDockStyle).described("Dock style",
         "Whether the dock and bars sit on the screen's edge or float as cards.")
         .saidAs("the dock should float", "the dock touches the edge of the screen",
@@ -305,7 +307,7 @@ public final class SettingDeclarations {
      * The declaration whose key is {@code key} in the app preferences, else null. Font sizes are
      * not here: their range depends on the screen ({@link FontSizeSettingsAdapter}).
      */
-    @androidx.annotation.Nullable
+    @Nullable
     public static SettingDeclaration forPreferenceKey(@NonNull String key) {
         for (SettingDeclaration declaration : ALL) {
             if (declaration.store == SettingDeclaration.Store.APP_PREFERENCES

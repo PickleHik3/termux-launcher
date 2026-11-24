@@ -3,6 +3,7 @@ package com.termux.shared.termux.settings.registry;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Locale;
@@ -186,7 +187,7 @@ public final class SettingDeclaration {
     public SettingDeclaration saidAs(@NonNull String... complaints) {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
             choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
-            rangeNote, defaultNote, Collections.unmodifiableList(java.util.Arrays.asList(complaints.clone())), mayOffer,
+            rangeNote, defaultNote, Collections.unmodifiableList(Arrays.asList(complaints.clone())), mayOffer,
             storedReader);
     }
 
@@ -237,7 +238,7 @@ public final class SettingDeclaration {
     public static SettingDeclaration bool(@NonNull String id, @NonNull Store store,
                                           @NonNull String key, boolean defaultValue,
                                           @NonNull SettingRefresh refresh) {
-        List<String> names = Collections.unmodifiableList(java.util.Arrays.asList("false", "true"));
+        List<String> names = Collections.unmodifiableList(Arrays.asList("false", "true"));
         return new SettingDeclaration(id, Kind.BOOLEAN, store, key, refresh, 0, 0, 0, 0, names,
             names, defaultValue ? 1 : 0, false, true, ResetGroup.NONE);
     }

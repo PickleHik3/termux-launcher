@@ -1,9 +1,9 @@
 package com.termux.launcherctl;
 
-import com.termux.app.settings.LayoutSettingsAdapter;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.settings.LayoutSettingsAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
