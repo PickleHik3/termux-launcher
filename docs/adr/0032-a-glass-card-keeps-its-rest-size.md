@@ -108,6 +108,15 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   Home's cut. Neither host changes size in a crossing. A keys card in the row host was tried
   first and refused: it dropped the flush air and left a bare strip under the pill. Layouts the
   two-card rule refuses (the apps row or A–Z beside the keys) keep the one host.
+- **2026-11-24, shared rows (#305).** With the apps row or A–Z beside the keys the cards stand
+  apart too: the Terminal's card is its own host (`terminal_dock_host`) under either Style, and
+  a row both pages show stays put while the two cards slide under it. This replaces the
+  2026-11-21 decision "shared-row layouts keep the old morph". To be checked on pong.
+- **2026-11-24, the last shared host (#305).** A Terminal with no keys row, with its keys under
+  the keyboard, or with its status bar on the dock's plank stands apart as well, and a Terminal
+  with no card at its rest shows none. The one layout left on the one host is a Terminal whose
+  rest wears the Peek card (no keys row, its apps row alone, keyboard down): it is Home's card at
+  Home's rect, a shared card that stays put (§3). The Peek card's blend toward the slab is gone.
 
 ## Consequences
 
