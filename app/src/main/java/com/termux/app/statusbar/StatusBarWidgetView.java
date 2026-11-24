@@ -118,6 +118,8 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
     @Nullable private StatusStatNeedsPolicy.Hint mNeeds;
     /** The hint's size against the value's: the bar's small type. */
     private static final float HINT_SIZE_RATIO = 0.8f;
+    /** The size the value is laid out at instead of its tier's; 0 for the tier's. */
+    private float mSizeOverrideSp;
     @NonNull private ColorRole mColorRole = ColorRole.PRIMARY;
     /**
      * What the chrome measured this widget's band and decided its label, its icon and its muted
@@ -414,8 +416,18 @@ public final class StatusBarWidgetView extends LinearLayout implements TextScale
         TextScale.apply(mValue, valueSizeSp());
     }
 
+    /**
+     * Lays the value out at {@code sp} in place of its tier's size, or at the tier's with 0: the
+     * status row's readings are 9sp while it is thin. Compared before set.
+     */
+    public void setValueSizeOverrideSp(float sp) {
+        if (mSizeOverrideSp == sp) return;
+        mSizeOverrideSp = sp;
+        TextScale.apply(mValue, valueSizeSp());
+    }
+
     private float valueSizeSp() {
-        float sp = StatusBarInk.textSizeSpFor(mColorRole);
+        float sp = mSizeOverrideSp > 0f ? mSizeOverrideSp : StatusBarInk.textSizeSpFor(mColorRole);
         return mNeeds == null ? sp : sp * HINT_SIZE_RATIO;
     }
 

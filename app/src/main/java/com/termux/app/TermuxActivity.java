@@ -17941,9 +17941,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * The row's marks and readings at the size the row has: thin at rest (12dp marks, readings at
-     * 9sp scaled about their end so they keep their place), and while enlarged the full 18dp marks
-     * with the readings at their own size. The strip takes neither cap nor scale.
+     * The row's marks and readings at the size the row has: thin at rest (12dp marks, readings
+     * laid out at 9sp), and while enlarged the full 18dp marks with the readings at their own
+     * size. The strip takes neither cap nor size.
      */
     private void applyRowSizes(boolean row, boolean enlarged) {
         float density = getResources().getDisplayMetrics().density;
@@ -17955,15 +17955,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         View readings = findViewById(R.id.terminal_status_widgets);
         if (readings != null) {
-            float scale = row && !enlarged ? com.termux.app.statusbar.PaneRowPolicy.READING_SP
-                / com.termux.app.statusbar.StatusBarInk.SIZE_TERTIARY_SP : 1f;
-            readings.setPivotX(readings.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL
-                ? 0f : readings.getWidth());
-            readings.setPivotY(readings.getHeight() / 2f);
-            if (readings.getScaleX() != scale) {
-                readings.setScaleX(scale);
-                readings.setScaleY(scale);
-            }
+            setReadingSizes(readings, row && !enlarged
+                ? com.termux.app.statusbar.PaneRowPolicy.READING_SP : 0f);
+        }
+    }
+
+    /** Every reading under {@code view} at {@code sp}, or at its tier's with 0. */
+    private static void setReadingSizes(@NonNull View view, float sp) {
+        if (view instanceof com.termux.app.statusbar.StatusBarWidgetView) {
+            ((com.termux.app.statusbar.StatusBarWidgetView) view).setValueSizeOverrideSp(sp);
+        } else if (view instanceof android.view.ViewGroup) {
+            android.view.ViewGroup group = (android.view.ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                setReadingSizes(group.getChildAt(i), sp);
         }
     }
 
