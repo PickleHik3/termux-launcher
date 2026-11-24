@@ -478,6 +478,60 @@ public class RestCardsCrossingTest {
         assertKnown("(c)", found);
     }
 
+    // ---- (d) ---------------------------------------------------------------------------
+
+    /**
+     * Where the on-screen cards reach the screen's bottom edge, as merged runs along x: a card
+     * whose box runs down to the edge covers its width there.
+     */
+    private static List<float[]> bottomCover(RestCards cards, int heightPx) {
+        List<float[]> runs = new ArrayList<>();
+        for (Card card : cards.cards()) {
+            if (card.box.bottom < heightPx || card.box.top >= heightPx) continue;
+            runs.add(new float[] {card.box.left, card.box.right});
+        }
+        runs.sort((a, b) -> Float.compare(a[0], b[0]));
+        List<float[]> merged = new ArrayList<>();
+        for (float[] run : runs) {
+            float[] last = merged.isEmpty() ? null : merged.get(merged.size() - 1);
+            if (last != null && run[0] <= last[1]) last[1] = Math.max(last[1], run[1]);
+            else merged.add(new float[] {run[0], run[1]});
+        }
+        return merged;
+    }
+
+    private static boolean covers(List<float[]> runs, float left, float right) {
+        for (float[] run : runs) if (run[0] <= left && run[1] >= right) return true;
+        return false;
+    }
+
+    /**
+     * (d) A card against the screen's edge: wherever a rest standing alone (one side, as before
+     * the two cards) covers the screen's bottom edge, the same rest with the other side beside it
+     * covers it too. A side's card that stops short of the edge leaves a strip of bare wallpaper
+     * under the gesture pill that no pair of cards in (c) can see.
+     */
+    @Test public void aCardThatReachesTheScreensBottomEdgeAloneStillReachesItBesideTheOtherSide() {
+        Found found = new Found();
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : BOOLS)
+                for (PageRef page : new PageRef[] {PageRef.HOME, PageRef.TERMINAL})
+                    for (boolean up : BOOLS) {
+            RestCards alone = RestCards.of(f.cardsRestOf(page, up, floating));
+            RestCards beside = rest(f, page, up, floating);
+            List<float[]> was = bottomCover(alone, f.heightPx);
+            List<float[]> now = bottomCover(beside, f.heightPx);
+            for (float[] run : was) {
+                if (covers(now, run[0], run[1])) continue;
+                found.add("(d) BOTTOM " + style(floating) + " " + f.homeDesign + " " + name(page)
+                    + sharedRow(f, floating), f.name + " up=" + up + " alone " + alone.cards()
+                    + " | beside " + beside.cards());
+                break;
+            }
+        }
+        assertKnown("(d)", found);
+    }
+
     // ---- accessory_row_stack -----------------------------------------------------------
 
     /** The over-keyboard rows' height {@code page}'s own rest stands. */
