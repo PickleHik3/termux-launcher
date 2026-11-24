@@ -17940,6 +17940,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 readings.setScaleY(scale);
             }
         }
+        // The sessions indicator stands in the strip only, as syncPlaceBar decides it too.
+        View sessions = findViewById(R.id.terminal_sessions_indicator);
+        if (sessions != null) {
+            int shown = sessionsIndicatorVisibility(true);
+            if (sessions.getVisibility() != shown) sessions.setVisibility(shown);
+        }
         syncStatusRowPlace();
         // The chips stand in the strip only (chipsKeptAway).
         refreshTerminalWindowBar();
@@ -27596,7 +27602,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             findViewById(R.id.terminal_sessions_indicator);
         if (sessions != null) {
             sessions.setAccent(placeAccent);
-            sessions.setVisibility(terminal ? View.VISIBLE : View.GONE);
+            sessions.setVisibility(sessionsIndicatorVisibility(terminal));
         }
         boolean windowsShown = terminal
             && com.termux.app.wall.PaneWallPolicy.showsWindowChips(currentWallPage());
@@ -30287,6 +30293,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private boolean chipsKeptAway() {
         return marksLookShown() || mStatusPresentation.isRow();
+    }
+
+    /**
+     * The sessions indicator's visibility: shown on a bar dressed for the Terminal, and never in
+     * the thin row, which holds only the Marks line or the readings and the text size button.
+     */
+    private int sessionsIndicatorVisibility(boolean terminal) {
+        return terminal && !mStatusPresentation.isRow() ? View.VISIBLE : View.GONE;
     }
 
     /**
