@@ -400,19 +400,19 @@ public final class LinuxWindowsActivity extends Activity {
         }
 
         /** The scale this window draws at: its app's Scale, the rail's stop kept for it, else the screen's. */
-        float scale() {
+        float scale(int widthPx) {
             float density = getResources().getDisplayMetrics().density;
             if (!scales()) return LinuxDisplayScale.current(LinuxWindowsActivity.this);
             String app = app();
-            if (app != null) return LinuxDisplayScale.windowScale(appSettings().scale(app), density);
+            if (app != null) return LinuxDisplayScale.windowScale(appSettings().scale(app), density, widthPx);
             float kept = WaylandAppRunner.shared(LinuxWindowsActivity.this).windowScale(id);
-            return kept > 0f ? kept : LinuxDisplayScale.windowScale(null, density);
+            return kept > 0f ? kept : LinuxDisplayScale.windowScale(null, density, widthPx);
         }
 
         /** Tells the host the view's size and the window's scale, when either changed. */
         void sendConfigure(int w, int h) throws RemoteException {
             if (mService == null || w <= 0 || h <= 0) return;
-            float scale = scale();
+            float scale = scale(w);
             if (w == sentWidth && h == sentHeight && scale == sentScale) return;
             mService.configure(id, w, h, scale);
             sentWidth = w;
@@ -568,7 +568,7 @@ public final class LinuxWindowsActivity extends Activity {
         @Override
         public int currentScaleStep() {
             Pane pane = mPanes.get(mTabs.shown());
-            return pane == null ? 0 : LinuxDisplayScale.railStep(pane.scale());
+            return pane == null ? 0 : LinuxDisplayScale.railStep(pane.scale(pane.view.getWidth()));
         }
 
         @Override
