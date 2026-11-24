@@ -46,6 +46,7 @@ import com.termux.app.fragments.settings.termux.StatusBarPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TermuxFontsPreferencesFragment;
 import com.termux.app.fragments.settings.termux.TuiAppThemesPreferencesFragment;
 import com.termux.app.launcher.home.HomeSettings;
+import com.termux.app.launcher.home.HomePageIndicator;
 import com.termux.app.layouteditor.BarLandingPolicy;
 import com.termux.app.layouteditor.EditorM3;
 import com.termux.app.layouteditor.LayoutEditorController;
@@ -56,6 +57,7 @@ import com.termux.app.place.Element;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.PlaceOrientation;
 import com.termux.app.place.SeamDress;
+import com.termux.app.place.layout.LayoutKind;
 import com.termux.app.surfaces.AppearanceLooks.Control;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.terminal.Motion;
@@ -4618,16 +4620,21 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 LayoutEditorController layout = mHost.layoutEditor();
                 if (layout == null)
                     return;
-                if (item.element == null)
+                if (item == LayoutEditorPlan.TrayItem.PAGE_BAR)
+                    writePageBarShown(true);
+                else if (item.element == null)
                     layout.setKeyboardShown(true);
                 else
                     layout.setShown(item.element, true);
+                refreshHiddenColumn();
                 positionTargets();
             }
 
             @Override public void onSelect(@NonNull LayoutEditorPlan.TrayItem item) {
                 // A tap selects; the selected bar offers the place that brings it back.
-                barPlaces().select(item.element == null ? BarLandingPolicy.Bar.KEYBOARD
+                barPlaces().select(item == LayoutEditorPlan.TrayItem.PAGE_BAR
+                    ? BarLandingPolicy.Bar.PAGE_BAR
+                    : item.element == null ? BarLandingPolicy.Bar.KEYBOARD
                     : barOf(item.element));
             }
         }, mHost.themeColor(com.google.android.material.R.attr.colorSurface,
@@ -4655,9 +4662,27 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void refreshHiddenColumn() {
         HiddenColumnView column = mHiddenColumn;
         LayoutEditorController layout = mHost.layoutEditor();
-        if (column != null && layout != null)
-            column.setItems(layout.trayItems());
+        if (column != null && layout != null) {
+            LayoutKind kind = layout.layoutKind();
+            column.setItems(LayoutEditorPlan.withPageBar(layout.trayItems(),
+                kind != null && kind.live() == LayoutKind.HOME, pageBarShown()));
+        }
         updateHint();
+    }
+
+    /** Home's page bar shows unless its setting is off; the Elements list wrote the same value. */
+    private boolean pageBarShown() {
+        return HomeSettings.pageIndicator(mHost.context()).glyphsShown();
+    }
+
+    /**
+     * Puts Home's page bar away or back through the store the snapshot keeps, so Discard and Undo
+     * put the value back as they do any Home row. Shown is the stored "dots"; the Marks look is its
+     * own setting and stays as it was.
+     */
+    private void writePageBarShown(boolean shown) {
+        writeHomeString(HomeSettings.KEY_PAGE_INDICATOR,
+            (shown ? HomePageIndicator.GLYPHS : HomePageIndicator.OFF).value);
     }
 
     /** What a lifted bar's landing says, or null while none is lifted. */
@@ -4852,6 +4877,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     ids = mHost.isInAppKeyboardShown()
                         ? new int[] {R.id.inapp_keyboard_view_host} : new int[0];
                     break;
+                case PAGE_BAR:
+                    ids = new int[] {R.id.widget_page_dots};
+                    break;
                 default: {
                     Element element = bar.element();
                     if (element == null)
@@ -4955,6 +4983,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             prefs.setStatusPlace(place.value);
             mHost.refreshTerminalWindowBar();
             syncDirty();
+        }
+
+        @Override public boolean pageBarShown() {
+            return SurfaceEditorController.this.pageBarShown();
+        }
+
+        @Override public void setPageBarShown(boolean shown) {
+            writePageBarShown(shown);
         }
 
         @Override public void onHiddenTarget(boolean over) {

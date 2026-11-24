@@ -89,6 +89,7 @@
     <string name="editor_bar_az">A–Z</string>
     <string name="editor_bar_extra_keys">Extra keys</string>
     <string name="editor_bar_keyboard">Keyboard</string>
+    <string name="editor_bar_page_bar">Page bar</string>
     <string name="editor_grip_readout">%1$d%%</string>
     <string name="editor_grip_readout_rows">%1$d%% · %2$d rows</string>
     <string name="editor_grip_description">Keyboard height, %1$d percent. Drag to change.</string>

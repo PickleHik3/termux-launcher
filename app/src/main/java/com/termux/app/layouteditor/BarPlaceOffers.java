@@ -70,7 +70,9 @@ public final class BarPlaceOffers {
         Places places = BarLandingPolicy.places(state, bar);
         if (!places.available) return offers;
         if (!shown) {
-            Hold back = restoreHold(state, bar, places);
+            // The page bar has no edge to come back to: bringing it back is the Hidden column's
+            // own landing, written as a setting.
+            Hold back = bar == Bar.PAGE_BAR ? Hold.hidden() : restoreHold(state, bar, places);
             Landing landing = back == null ? null : BarLandingPolicy.land(state, bar, back);
             if (landing != null && landing.allowed)
                 offers.add(new Offer(Label.BRING_BACK, bar, landing));

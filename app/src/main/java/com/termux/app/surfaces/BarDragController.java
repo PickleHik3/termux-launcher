@@ -65,6 +65,14 @@ final class BarDragController {
         /** The status bar's one place for every page, written through the editor's preferences. */
         default void setStatusPlace(@NonNull StatusPlace place) {}
 
+        /** Whether Home's page bar shows (its setting is not "off"). */
+        default boolean pageBarShown() {
+            return true;
+        }
+
+        /** Home's page bar shown or put away, written through the editor's preferences. */
+        default void setPageBarShown(boolean shown) {}
+
         /** The held bar is over the Hidden column (letting go hides it), or left it. */
         default void onHiddenTarget(boolean over) {}
 
@@ -81,7 +89,8 @@ final class BarDragController {
     }
 
     private static final Bar[] BARS = {
-        Bar.STATUS_BAR, Bar.APPS_ROW, Bar.AZ_INDEX, Bar.EXTRA_KEYS, Bar.KEYBOARD};
+        Bar.STATUS_BAR, Bar.APPS_ROW, Bar.AZ_INDEX, Bar.EXTRA_KEYS, Bar.KEYBOARD,
+        Bar.PAGE_BAR};
     private static final int CHIP_HEIGHT_DP = 28;
     private static final int LINE_DP = 3;
 
@@ -271,8 +280,17 @@ final class BarDragController {
      * place. False when nothing changed. Both the drag's drop and a tapped place come here.
      */
     boolean commit(@NonNull Bar held, @NonNull Landing landing) {
+        if (!landing.allowed)
+            return false;
+        if (held == Bar.PAGE_BAR) {
+            // A Home setting, not a slot: hiding is the only landing it has.
+            if (landing.zone != Zone.HIDDEN || !mHost.pageBarShown())
+                return false;
+            mHost.setPageBarShown(false);
+            return true;
+        }
         LayoutEditorController layout = mHost.layout();
-        if (!landing.allowed || layout == null)
+        if (layout == null)
             return false;
         boolean wrote = false;
         if (landing.zone == Zone.EDGE) {
@@ -520,6 +538,7 @@ final class BarDragController {
             case APPS_ROW: return R.string.editor_bar_apps;
             case AZ_INDEX: return R.string.editor_bar_az;
             case EXTRA_KEYS: return R.string.editor_bar_extra_keys;
+            case PAGE_BAR: return R.string.editor_bar_page_bar;
             default: return R.string.editor_bar_keyboard;
         }
     }

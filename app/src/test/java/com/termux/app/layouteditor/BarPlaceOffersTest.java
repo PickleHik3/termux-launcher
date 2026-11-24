@@ -118,6 +118,17 @@ public class BarPlaceOffersTest {
             Bar.PAGE_BAR, true).isEmpty());
     }
 
+    @Test public void theHomePageBarOffersHideAndAPutAwayOneOffersTheWayBack() {
+        FrameState home = state(LayoutKind.HOME, StatusPlace.STRIP);
+        List<Offer> shown = BarPlaceOffers.of(home, Bar.PAGE_BAR, true);
+        assertEquals(1, shown.size());
+        assertEquals(Label.HIDE, shown.get(0).label);
+        List<Offer> away = BarPlaceOffers.of(home, Bar.PAGE_BAR, false);
+        assertEquals(1, away.size());
+        assertEquals(Label.BRING_BACK, away.get(0).label);
+        assertTrue(away.get(0).landing.allowed);
+    }
+
     // ------------------------------------------------- the pane hold, to the status place write
 
     private static BarDragGeometry.Frame frameWithPane() {

@@ -73,6 +73,7 @@ final class HintStrings {
             case APPS_ROW: return R.string.editor_bar_apps;
             case AZ_INDEX: return R.string.editor_bar_az;
             case EXTRA_KEYS: return R.string.editor_bar_extra_keys;
+            case PAGE_BAR: return R.string.editor_bar_page_bar;
             default: return R.string.editor_bar_keyboard;
         }
     }

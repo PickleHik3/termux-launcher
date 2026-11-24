@@ -213,7 +213,9 @@ final class BarPlacesController {
             return;
         boolean wrote;
         if (offer.label == Label.BRING_BACK) {
-            if (offer.bar.element() != null)
+            if (offer.bar == Bar.PAGE_BAR)
+                mHost.setPageBarShown(true);
+            else if (offer.bar.element() != null)
                 layout.setShown(offer.bar.element(), true);
             else
                 layout.setKeyboardShown(true);
@@ -225,7 +227,9 @@ final class BarPlacesController {
             mHost.onWritten();
     }
 
-    private static boolean shownOn(@NonNull LayoutEditorController layout, @NonNull Bar bar) {
+    private boolean shownOn(@NonNull LayoutEditorController layout, @NonNull Bar bar) {
+        if (bar == Bar.PAGE_BAR)
+            return mHost.pageBarShown();
         if (bar == Bar.KEYBOARD)
             return layout.isKeyboardShown();
         return bar.element() == null || layout.isShown(bar.element());
@@ -316,6 +320,7 @@ final class BarPlacesController {
             case APPS_ROW: return R.string.editor_bar_apps;
             case AZ_INDEX: return R.string.editor_bar_az;
             case EXTRA_KEYS: return R.string.editor_bar_extra_keys;
+            case PAGE_BAR: return R.string.editor_bar_page_bar;
             default: return R.string.editor_bar_keyboard;
         }
     }
