@@ -198,6 +198,45 @@ public final class SessionRow<T> {
         mLinux.add(firstAfter(after), new Entry<>(id, after));
     }
 
+    /**
+     * The terminal list index a new terminal window goes at so it stands right after the window
+     * in front: after terminal window {@code terminalCurrent}, or, with a Linux window in front,
+     * after the terminal window that Linux window stands after (0 at the row's start). Pair with
+     * {@link #terminalAdded} once it is in the list.
+     */
+    public int newTerminalIndex(@NonNull List<T> terminals, int terminalCurrent) {
+        heal(terminals);
+        int front = mFront == NONE ? -1 : find(mFront);
+        if (front >= 0) {
+            T after = mLinux.get(front).after;
+            return after == null ? 0 : terminals.indexOf(after) + 1;
+        }
+        if (terminals.isEmpty()) return 0;
+        return Math.max(0, Math.min(terminalCurrent, terminals.size() - 1)) + 1;
+    }
+
+    /**
+     * Terminal window {@code added} was put in the list at {@link #newTerminalIndex}: the Linux
+     * windows that stood after the window in front now follow it, so it stands right after that
+     * window ({@code [t] [new] [L]}, or {@code [t] [L1] [new] [L2]} with L1 in front). What is in
+     * front does not change: a caller that shows the new window calls {@link #clearFront}.
+     */
+    public void terminalAdded(@NonNull List<T> terminals, @NonNull T added) {
+        int at = terminals.indexOf(added);
+        if (at < 0) return;
+        T before = at > 0 ? terminals.get(at - 1) : null;
+        int front = mFront == NONE ? -1 : find(mFront);
+        boolean pastFront = front < 0;
+        for (int k = 0; k < mLinux.size(); k++) {
+            Entry<T> e = mLinux.get(k);
+            if (e.after != before) continue;
+            if (pastFront) e.after = added;
+            if (k == front) pastFront = true;
+        }
+        sortByAnchor(terminals);
+        remember(terminals);
+    }
+
     /** Where Linux window {@code id} stands, for putting it back there; null when the row does not hold it. */
     @Nullable
     public Place<T> placeOf(@NonNull List<T> terminals, long id) {

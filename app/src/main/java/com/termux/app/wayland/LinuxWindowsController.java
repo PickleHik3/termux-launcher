@@ -25,7 +25,6 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
-import com.termux.app.page.PageKind;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 import com.termux.app.wall.WallLinux;
@@ -35,15 +34,16 @@ import java.util.List;
 
 /**
  * The Linux windows in the Terminal's row (spec #384, "The window contract"), in the launcher
- * process: it listens to the Linux windows host ({@link LinuxWindowsService}), gives each app
- * window a temporary page of kind {@link PageKind#LINUX} right after the window in front
- * ({@link LinuxWindowRow#insertAfter}), and fills the one {@link LinuxWindowPageView} with the
- * window its page is bound to. Dialogs with a parent draw centred over the parent's window.
- * Only the bound window, while it is in front or next to it, holds a surface; others give their
- * buffers back and the host repaints their last frame when they return.
+ * process: it listens to the Linux windows host ({@link LinuxWindowsService}), puts each app
+ * window in the session's row right after the window in front, among the terminal windows
+ * ({@code SessionRow}, #392), and fills the one {@link LinuxWindowPageView} with the window the
+ * row binds it to; the wall stands that view in the Terminal page's place while a Linux window is
+ * in front. Dialogs with a parent draw centred over the parent's window. Only the bound window,
+ * while it is in front of the row or next to it, holds a surface; others give their buffers back
+ * and the host repaints their last frame when they return.
  *
  * <p>It binds the host without creating it (the runner's launch does), so a launcher that opens
- * no Linux app never starts the host's process. When the host dies its windows' pages go with a
+ * no Linux app never starts the host's process. When the host dies its windows leave the row with a
  * notice; shells are untouched. Main thread only.
  */
 public final class LinuxWindowsController implements WallLinux, LinuxWindowPageView.Host {
@@ -51,26 +51,28 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private static final String LOG_TAG = "TLWayland";
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
     /**
-     * Windows the host replays this soon after attaching were open before: they get their pages
+     * Windows the host replays this soon after attaching were open before: they get their places
      * back without the wall paging to them.
      */
     private static final long REPLAY_MS = 750;
 
-    /** What the controller asks of the activity: the wall's pages and its notices. */
+    /** What the controller asks of the activity: the session's row and its notices. */
     public interface Host {
-        /** Adds a Linux page after page {@code afterId} (-1: the end); its id, or -1. */
-        int addPage(int afterId);
-        void removePage(int pageId);
-        /** Removes every Linux page (a host met again replays its windows; a dead one has none). */
-        void removeAllPages();
-        /** The page standing left of {@code pageId}; -1 for none. */
-        int leftOf(int pageId);
-        boolean hasPage(int pageId);
-        int currentPageId();
-        @Nullable PageKind currentKind();
-        int terminalPageId();
-        void goToPage(int pageId);
-        void keepPicture(int pageId, @Nullable Bitmap picture);
+        /**
+         * Puts window {@code id} in the current session's row right after the window in front;
+         * {@code goTo}: the wall then pages to it.
+         */
+        void addWindow(long id, boolean goTo);
+        /** Takes window {@code id} out of its row; the window in front settles as a close does. */
+        void removeWindow(long id);
+        /** Every Linux window leaves every row (a host met again replays its windows; a dead one has none). */
+        void removeAllWindows();
+        /** Where window {@code id} stands in its row, to put it back there; null when it is in none. */
+        @Nullable Object placeOf(long id);
+        /** Puts window {@code id} back at {@code place} (else where a new one goes) and pages to it. */
+        void restoreWindow(long id, @Nullable Object place);
+        /** The wall pages to window {@code id}, already in a row. */
+        void goToWindow(long id);
         void notice(@NonNull String text);
         /** The Linux windows' chips changed. */
         void chipsChanged();
@@ -105,10 +107,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         long parentId;
         int width;
         int height;
-        int pageId = LinuxWindowRow.NO_PAGE;
+        /** It stands in a row (a dialog with a parent and a minimised window do not). */
+        boolean inRow;
         boolean minimised;
-        /** The page left of this one when it was minimised; -1 for none. */
-        int leftWhenMinimised = -1;
+        /** Where it stood when it was minimised ({@link Host#placeOf}); null for none. */
+        @Nullable Object placeWhenMinimised;
         @Nullable TextureView view;
         @Nullable Surface surface;
         int sentWidth;
@@ -190,8 +193,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Nullable private IBinder binder;
     private boolean bound;
     private long attachedAt;
-    /** The page the view stands at; -1 for none. */
-    private int boundPage = -1;
+    /** The window the view is bound to; 0 for none. */
+    private long boundId;
     private boolean nearFront;
     /** The Linux view is the page in front. */
     private boolean front;
@@ -298,11 +301,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     /**
-     * Listens to the host from now on, without starting it. Pages left by an earlier launcher
+     * Listens to the host from now on, without starting it. Places left by an earlier launcher
      * process go first; a running host replays its windows, which get theirs back.
      */
     public void start() {
-        host.removeAllPages();
+        host.removeAllWindows();
         if (bound) return;
         try {
             bound = context.bindService(new Intent(context, LinuxWindowsService.class), connection, 0);
@@ -332,7 +335,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         service = null;
         clipboard.setInFront(false);
         windows.clear();
-        boundPage = -1;
+        boundId = 0;
         rebuildChips();
     }
 
@@ -342,13 +345,36 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (w == null) return false;
         if (w.parentId != 0 && windows.get(w.parentId) != null) w = windows.get(w.parentId);
         if (w.minimised) restore(w);
-        else if (w.pageId >= 0) host.goToPage(w.pageId);
+        else if (w.inRow) host.goToWindow(w.id);
         return true;
+    }
+
+    /** Window {@code id}'s chip; null when it has none. */
+    @Nullable
+    public Chip chip(long id) {
+        for (int i = 0; i < chips.size(); i++) if (chips.get(i).id == id) return chips.get(i);
+        return null;
+    }
+
+    /**
+     * A half-size picture of the bound window as it is now, for the departure card of a step away
+     * from it; the caller owns it. Null when it shows nothing.
+     */
+    @Nullable
+    public Bitmap departurePicture() {
+        Win w = shownWindow();
+        TextureView v = w == null ? null : w.view;
+        if (v == null || !v.isAvailable() || v.getWidth() <= 0 || v.getHeight() <= 0) return null;
+        try {
+            return v.getBitmap(Math.max(1, v.getWidth() / 2), Math.max(1, v.getHeight() / 2));
+        } catch (RuntimeException | OutOfMemoryError e) {
+            return null;
+        }
     }
 
     // ---- chips ------------------------------------------------------------------------------
 
-    /** The Linux windows' chips: the windows with pages, in row order is the host's; then the minimised. */
+    /** The Linux windows' chips: the windows in a row, then the minimised; the row orders the first. */
     @NonNull
     public List<Chip> chips() {
         return chips;
@@ -374,11 +400,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         for (int pass = 0; pass < 2; pass++) {
             for (int i = 0; i < windows.size(); i++) {
                 Win w = windows.valueAt(i);
-                boolean listed = pass == 0 ? w.pageId >= 0 : w.minimised;
+                boolean listed = pass == 0 ? w.inRow : w.minimised;
                 if (!listed) continue;
                 String name = w.appId.isEmpty() ? null : host.appName(w.appId);
                 chips.add(new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId, fallback), w.appId,
-                    w.minimised, w.pageId >= 0 && w.pageId == boundPage && front));
+                    w.minimised, w.inRow && w.id == boundId && front));
             }
         }
         host.chipsChanged();
@@ -397,14 +423,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (!LinuxWindowRow.ownsPage(parentId, windows.get(parentId) != null)) {
             // A dialog: drawn over its parent's window, which shows it when bound.
             Win parent = windows.get(parentId);
-            if (parent != null && parent.pageId == boundPage && nearFront) attachViews(parent);
+            if (parent != null && parent.id == boundId && nearFront) attachViews(parent);
             return;
         }
         boolean replayed = SystemClock.uptimeMillis() - attachedAt < REPLAY_MS;
-        w.pageId = host.addPage(LinuxWindowRow.insertAfter(host.currentKind(), host.currentPageId(),
-            host.terminalPageId()));
+        w.inRow = true;
         rebuildChips();
-        if (!replayed && w.pageId >= 0) host.goToPage(w.pageId);
+        host.addWindow(w.id, !replayed);
     }
 
     private void windowChanged(long id, String title, String appId, int width, int height) {
@@ -426,27 +451,28 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         detachViews(w);
         windows.remove(id);
         if (focusedId == id) focusedId = 0;
-        if (w.pageId >= 0) host.removePage(w.pageId);
-        // A parent's dialogs lose their parent: each gets a page of its own.
+        if (boundId == id) boundId = 0;
+        if (w.inRow) host.removeWindow(id);
+        // A parent's dialogs lose their parent: each gets a place of its own.
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
             if (d.parentId != id) continue;
             d.parentId = 0;
             detachViews(d);
-            d.pageId = host.addPage(LinuxWindowRow.insertAfter(host.currentKind(), host.currentPageId(),
-                host.terminalPageId()));
+            d.inRow = true;
+            host.addWindow(d.id, false);
         }
         rebuildChips();
     }
 
-    /** The host stopped or died: its windows' pages go, with a notice when it died. */
+    /** The host stopped or died: its windows leave the row, with a notice when it died. */
     private void dropWindows(boolean died) {
         boolean had = windows.size() > 0;
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();
         focusedId = 0;
-        boundPage = -1;
-        host.removeAllPages();
+        boundId = 0;
+        host.removeAllWindows();
         rebuildChips();
         if (died && had) host.notice(context.getString(R.string.linux_windows_stopped));
     }
@@ -471,17 +497,16 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     // ---- WallLinux ------------------------------------------------------------------------------
 
     @Override
-    public void bind(int pageId) {
-        if (pageId == boundPage) return;
-        Win old = windowOnPage(boundPage);
+    public void bind(long id) {
+        if (id == boundId) return;
+        Win old = shownWindow();
         if (old != null) {
-            keepPicture(old);
             detachViews(old);
             setVisible(old, false);
         }
         page.dismissRail();
-        boundPage = pageId;
-        Win now = windowOnPage(pageId);
+        boundId = id;
+        Win now = shownWindow();
         if (now != null && nearFront) attachViews(now);
         if (now != null && front) {
             setVisible(now, true);
@@ -492,27 +517,24 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     @Override
     public void setNearFront(boolean near) {
+        if (near == nearFront) return;
         nearFront = near;
-        Win w = windowOnPage(boundPage);
+        Win w = shownWindow();
         if (w == null) return;
         if (near) attachViews(w);
-        else {
-            keepPicture(w);
-            detachViews(w);
-        }
+        else detachViews(w);
+    }
+
+    @Override
+    public void setInFront(boolean isFront) {
+        if (isFront == front) return;
+        if (!isFront) page.dismissRail();
+        frontChanged(isFront);
     }
 
     @Override
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         page.applyStyle(style);
-    }
-
-    /** The bound window's still, for its cell while the view stands elsewhere: half size, as the wall's. */
-    private void keepPicture(@NonNull Win w) {
-        TextureView v = w.view;
-        if (v == null || !v.isAvailable() || v.getWidth() <= 0 || v.getHeight() <= 0 || w.pageId < 0) return;
-        Bitmap picture = v.getBitmap(Math.max(1, v.getWidth() / 2), Math.max(1, v.getHeight() / 2));
-        host.keepPicture(w.pageId, picture);
     }
 
     // ---- views ----------------------------------------------------------------------------------
@@ -527,7 +549,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
-            if (d.parentId != w.id || d.pageId >= 0) continue;
+            if (d.parentId != w.id || d.inRow) continue;
             if (d.view().getParent() != slot) {
                 slot.addView(d.view(), new FrameLayout.LayoutParams(0, 0, Gravity.CENTER));
             }
@@ -540,7 +562,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         removeView(w.view);
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
-            if (d.parentId == w.id && d.pageId < 0) removeView(d.view);
+            if (d.parentId == w.id && !d.inRow) removeView(d.view);
         }
     }
 
@@ -564,19 +586,14 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private boolean isDialogOfBound(@NonNull Win w) {
         Win parent = w.parentId == 0 ? null : windows.get(w.parentId);
-        return parent != null && parent.pageId >= 0 && parent.pageId == boundPage;
-    }
-
-    @Nullable
-    private Win windowOnPage(int pageId) {
-        if (pageId < 0) return null;
-        for (int i = 0; i < windows.size(); i++) if (windows.valueAt(i).pageId == pageId) return windows.valueAt(i);
-        return null;
+        return parent != null && parent.inRow && parent.id == boundId;
     }
 
     @Nullable
     private Win shownWindow() {
-        return windowOnPage(boundPage);
+        if (boundId == 0) return null;
+        Win w = windows.get(boundId);
+        return w != null && w.inRow ? w : null;
     }
 
     // ---- LinuxWindowPageView.Host ----------------------------------------------------------------
@@ -605,25 +622,24 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Override
     public void minimiseWindow() {
         Win w = shownWindow();
-        if (w == null || w.pageId < 0) return;
-        int pageId = w.pageId;
-        w.leftWhenMinimised = host.leftOf(pageId);
-        keepPicture(w);
+        if (w == null) return;
+        w.placeWhenMinimised = host.placeOf(w.id);
         detachViews(w);
         setVisible(w, false);
         w.minimised = true;
-        w.pageId = LinuxWindowRow.NO_PAGE;
-        host.removePage(pageId);
+        w.inRow = false;
+        boundId = 0;
+        host.removeWindow(w.id);
         rebuildChips();
     }
 
     private void restore(@NonNull Win w) {
-        int after = LinuxWindowRow.restoreAfter(w.leftWhenMinimised, host.hasPage(w.leftWhenMinimised),
-            host.currentKind(), host.currentPageId(), host.terminalPageId());
         w.minimised = false;
-        w.pageId = host.addPage(after);
+        w.inRow = true;
+        Object place = w.placeWhenMinimised;
+        w.placeWhenMinimised = null;
         rebuildChips();
-        if (w.pageId >= 0) host.goToPage(w.pageId);
+        host.restoreWindow(w.id, place);
     }
 
     @Override
@@ -715,7 +731,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             service.setVisible(w.id, visible);
             for (int i = 0; i < windows.size(); i++) {
                 Win d = windows.valueAt(i);
-                if (d.parentId == w.id && d.pageId < 0) service.setVisible(d.id, visible);
+                if (d.parentId == w.id && !d.inRow) service.setVisible(d.id, visible);
             }
         } catch (RemoteException ignored) {
         }

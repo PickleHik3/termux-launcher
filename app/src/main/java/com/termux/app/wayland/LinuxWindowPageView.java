@@ -36,7 +36,8 @@ import com.termux.app.x11.DisplayScaleRailView;
  * glass pane dressed as the panes beside it, holding the bound window's {@code TextureView} (and
  * its dialogs, centred over it) below a band at the top where the rim tab sits, outside the app's
  * pixels. A tap on the rim tab shows Close, Minimise and Scale; Scale brings out the scale rail.
- * The wall owns this view; {@link LinuxWindowsController} fills its window slot.
+ * The wall stands it in the Terminal page's place while a Linux window is in front of the row
+ * (#392); {@link LinuxWindowsController} fills its window slot.
  */
 public final class LinuxWindowPageView extends PaneContentFrame implements Page, TypingPage {
 
@@ -183,7 +184,9 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @Override
     public boolean onTouchEvent(@Nullable MotionEvent event) {
         if (rail.isPressed()) return rail.onTouch(event);
-        return super.onTouchEvent(event);
+        super.onTouchEvent(event);
+        // It stands over the Terminal's pane host (#392): the terminal behind takes none of its touches.
+        return true;
     }
 
     /** How much of the page's rim the wall's slide leaves showing. */

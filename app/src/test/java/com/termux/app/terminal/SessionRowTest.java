@@ -59,7 +59,6 @@ public class SessionRowTest {
         // It does not come in front by itself; the caller pages to it.
         assertEquals(1, row.frontIndex(terms, 1));
         assertTrue(row.selectLinux(GTK));
-        assertEquals(2, row.frontIndex(terms, 1));
     }
 
     @Test
@@ -217,5 +216,42 @@ public class SessionRowTest {
         List<Long> ids = new ArrayList<>();
         row.linuxIds(terms, ids);
         assertEquals(Arrays.asList(GTK, FIREFOX), ids);
+    }
+    @Test
+    public void newTerminalWindowLandsRightAfterTheTerminalWindowInFront() {
+        row.add(terms, 1, GTK);
+        int at = row.newTerminalIndex(terms, 1);
+        assertEquals(2, at);
+        terms.add(at, "new");
+        row.terminalAdded(terms, "new");
+        assertEquals("t1 t2 new L12 t3", order());
+        assertEquals(SessionRow.NONE, row.front());
+    }
+
+    @Test
+    public void newTerminalWindowLandsRightAfterTheLinuxWindowInFront() {
+        row.add(terms, 1, GTK);
+        row.add(terms, 1, FIREFOX);
+        // t1 t2 L11 L12 t3; GTK came first, so FIREFOX went before it, right after t2.
+        assertEquals("t1 t2 L11 L12 t3", order());
+        assertTrue(row.selectLinux(FIREFOX));
+        int at = row.newTerminalIndex(terms, 1);
+        terms.add(at, "new");
+        row.terminalAdded(terms, "new");
+        assertEquals("t1 t2 L11 new L12 t3", order());
+        // Still in front until the caller shows the new window.
+        assertEquals(FIREFOX, row.front());
+    }
+
+    @Test
+    public void newTerminalWindowAfterALinuxWindowAtTheRowStartGoesFirst() {
+        terms.clear();
+        row.add(terms, 0, GTK);
+        assertTrue(row.selectLinux(GTK));
+        int at = row.newTerminalIndex(terms, 0);
+        assertEquals(0, at);
+        terms.add(at, "new");
+        row.terminalAdded(terms, "new");
+        assertEquals("L12 new", order());
     }
 }

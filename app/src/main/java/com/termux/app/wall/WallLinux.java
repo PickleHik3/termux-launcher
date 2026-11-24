@@ -5,20 +5,24 @@ import androidx.annotation.Nullable;
 import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
- * The Linux windows as the wall asks them (spec #384): one view for every Linux window's page,
- * bound to one page at a time as the display view is. {@link #NONE} for a build without Wayland
- * Display. Main thread only.
+ * The Linux windows as the session's row asks them (spec #384, #392): one view, which the wall
+ * stands in the Terminal page's place while a Linux window is in front of the row, bound to one
+ * window at a time. {@link #NONE} for a build without Wayland Display. Main thread only.
  */
 public interface WallLinux {
 
-    /** The Linux view now stands at page {@code pageId}; -1 when the wall has no Linux page. */
-    default void bind(int pageId) { }
+    /** The view now shows window {@code id}; 0 for none. */
+    default void bind(long id) { }
 
     /**
-     * Whether the window bound to the view may hold its surface now: its cell is in front or next
-     * to it ({@code LinuxWindowRow.holdsSurface}). Told on every landing and page-list change.
+     * Whether the window bound to the view may hold its surface now: it is in front of the row or
+     * next to it, on the Terminal page in front ({@code LinuxWindowRow.holdsSurface} over row
+     * places). Told on every landing and row change.
      */
     default void setNearFront(boolean near) { }
+
+    /** The bound window is the one in front: the Terminal page is in front and so is it in the row. */
+    default void setInFront(boolean front) { }
 
     /** Dress the view from the surface style, as the panes beside it are. */
     default void applyStyle(@Nullable PaneSurfaceStyle style) { }
