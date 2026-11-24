@@ -64,6 +64,28 @@ public class GlassSourceParityTest {
         assertEquals(rect, source.rect());
     }
 
+    /**
+     * SharedFrameDrawable needs a hardware canvas to reach the rebind, so the draw's order is pinned
+     * through the source: a pass that selects and sits out takes nothing, and the next one that
+     * draws still gets the one-shot rebind.
+     */
+    @Test
+    public void aPassThatSitsOutLeavesTheSceneRebindForTheNextDraw() {
+        LiveSceneFrame.setRect(0, 0, 100, 100);
+        Bitmap stored = Bitmap.createBitmap(25, 25, Bitmap.Config.ARGB_8888);
+        BitmapShader storedShader = shaderOf(stored);
+        Bitmap sceneBitmap = Bitmap.createBitmap(25, 25, Bitmap.Config.ARGB_8888);
+        BitmapShader sceneShader = shaderOf(sceneBitmap);
+        Rect rect = new Rect(0, 0, 100, 100);
+        GlassSource source = new GlassSource();
+        LiveSceneFrame.Frame scene = new LiveSceneFrame.Frame(sceneBitmap, sceneShader, 4);
+
+        source.select(false, scene, stored, storedShader, rect, 0f);
+        source.select(false, scene, stored, storedShader, rect, 0f);
+        assertTrue(source.takeRebind());
+        assertFalse(source.takeRebind());
+    }
+
     @Test
     public void theSceneIsBoundOnceAndTheStoredFrameComesBackAfterIt() {
         LiveSceneFrame.setRect(0, 0, 100, 100);

@@ -408,9 +408,10 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         // The live frame is a hardware bitmap: a software pass (a RealtimeBlurView capturing the
         // window) sits it out rather than throwing.
         if (kind == GlassSource.SCENE && !hardwareCanvas) return;
-        // The scene went off: the still frame goes back on the paints.
-        boolean rebind = source.takeRebind();
-        if (rebind && kind == GlassSource.STORED) syncRefraction();
+        // The scene went off: the still frame goes back on the paints. Re-syncing is safe on a
+        // software pass too, so it is taken here; the scene's one-shot rebind is taken only once
+        // this draw is past every early return, or a pass that sits out would consume it.
+        if (kind != GlassSource.SCENE && source.takeRebind()) syncRefraction();
         GlassRefraction.Program program = mProgram;
         // A software canvas refuses a RuntimeShader outright: a RealtimeBlurView drawing the
         // window into its bitmap is one. That pass only feeds another view's blur, so the frame
@@ -423,7 +424,7 @@ public final class SharedFrameDrawable extends Drawable implements LiveSceneFram
         BitmapShader aimShader = source.shader();
         Bitmap aimFrame = source.bitmap();
         if (aimShader == null || aimFrame == null) return;
-        if (rebind && kind == GlassSource.SCENE) {
+        if (kind == GlassSource.SCENE && source.takeRebind()) {
             if (program != null) program.setInput(aimShader);
             else mPaint.setShader(aimShader);
         }
