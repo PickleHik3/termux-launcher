@@ -3,7 +3,7 @@
 The layout editor (spec #326) and Overview (`overview-2026-11-24.md`) are two screens on one host:
 the registry of everything open over the page (`chrome/OverlayRegistry`). The host owns Back, the
 home press, the question about unsaved changes, and how things leave. Decided with the developer
-on 2026-11-24; the rule for the home press is [ADR 0034](../../docs/adr/0034-a-home-press-clears-then-goes-home.md).
+on 2026-11-24 (issue #361); the rule for the home press is [ADR 0034](../../docs/adr/0034-a-home-press-clears-then-goes-home.md).
 
 ## The problem
 
