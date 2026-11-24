@@ -628,6 +628,12 @@ public final class TerminalSheetController
         while (!mStack.isEmpty()) dismiss();
     }
 
+    /** The plane for the Home exit while a sheet is up, else null. */
+    @Nullable
+    public View exitView() {
+        return isOpen() ? mPlane : null;
+    }
+
     /** Drops the plane without animating, for pause, configuration change and destroy. */
     public void dismissImmediately() {
         for (Sheet sheet : mStack) {

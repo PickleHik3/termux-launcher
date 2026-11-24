@@ -57,7 +57,9 @@ public final class OverlayRegistry {
         /**
          * Adds the views this overlay gives to the Home exit, while it is open: they fade and
          * shrink with the other members, and {@code closeImmediately(HOME)} runs at the end. Adds
-         * nothing by default: such an overlay closes at once when the exit starts.
+         * nothing by default: such an overlay closes at once when the exit starts. Every overlay the
+         * activity registers states it, an empty body saying it has none ({@code
+         * OverlayExitStatedTest}); the surface's own leave animation must not run on a HOME close.
          */
         default void exitViews(@NonNull List<View> out) { }
 

@@ -646,6 +646,12 @@ public final class TerminalCommandPaletteController
         endHomeOverlay();
     }
 
+    /** The palette's host for the Home exit while it is open, else null. */
+    @Nullable
+    public View exitView() {
+        return mOpen ? mHost : null;
+    }
+
     /** Drops the overlay without animating, for pause, configuration change and destroy. */
     public void dismissImmediately() {
         mOpen = false;

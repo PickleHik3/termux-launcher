@@ -87,6 +87,8 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
     @NonNull private final TerminalFindController controller;
     @NonNull private final TerminalFindOverlay overlay = new TerminalFindOverlay();
     @Nullable private TerminalFindBarView bar;
+    /** A Home exit is ending the search: the strip goes at once rather than fading itself. */
+    private boolean instantHide;
     @Nullable private TerminalView pane;
 
     public TerminalFindCoordinator(@NonNull Host host, @NonNull ClipboardText clipboardSource) {
@@ -123,6 +125,24 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
     /** Ends any running session; safe to call from pause, teardown and pane switches. */
     public void cancel() {
         controller.cancel();
+    }
+
+    /** The bar's container (the strip's glass) for the Home exit while a search is up, else null. */
+    @Nullable
+    public View exitView() {
+        TerminalFindBarView view = bar;
+        if (!controller.isActive() || view == null) return null;
+        return view.getParent() instanceof View ? (View) view.getParent() : null;
+    }
+
+    /** Ends the search with no fade-out: the Home exit has already faded the strip. */
+    public void cancelImmediately() {
+        instantHide = true;
+        try {
+            controller.cancel();
+        } finally {
+            instantHide = false;
+        }
     }
 
     /** @return true when the stroke belonged to a running session. */
@@ -238,7 +258,8 @@ public final class TerminalFindCoordinator implements TerminalFindController.Hos
             container.setAlpha(1f);
             container.setTranslationY(0f);
         };
-        if (host.isReducedMotionEnabled()) {
+        if (instantHide || host.isReducedMotionEnabled()) {
+            container.animate().cancel();
             detach.run();
             return;
         }
