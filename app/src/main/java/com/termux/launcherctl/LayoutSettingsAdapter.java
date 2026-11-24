@@ -150,6 +150,18 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
         }
     }
 
+    /** A field the document does not hold yet (an absent size) reads its default and is not exported. */
+    @Override
+    public boolean overrides(@NonNull SettingDeclaration declaration) {
+        Target target = parse(declaration.id);
+        if (target == null) return true;
+        try {
+            return mMain.call(() -> read(target)) != null;
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
     @NonNull
     @Override
     public SettingsRegistry.Outcome set(@NonNull SettingDeclaration declaration,

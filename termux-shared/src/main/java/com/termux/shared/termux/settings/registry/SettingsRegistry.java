@@ -178,6 +178,26 @@ public final class SettingsRegistry {
         return entries;
     }
 
+    /**
+     * What a settings file carries: the declared settings that are exported, and the adapters' ids
+     * that are exported and hold a value of their own ({@link SettingAdapter#overrides}), so a
+     * value that follows another stays following after an apply.
+     */
+    @NonNull
+    public List<Entry> exported() {
+        List<Entry> entries = new ArrayList<>();
+        for (SettingDeclaration each : mDeclarations) {
+            if (each.exported) entries.add(new Entry(each, read(each)));
+        }
+        for (SettingAdapter adapter : mAdapters) {
+            for (SettingDeclaration each : adapter.declarations()) {
+                if (each.exported && adapter.overrides(each))
+                    entries.add(new Entry(each, adapter.get(each)));
+            }
+        }
+        return entries;
+    }
+
     /** Writes {@code value}, already checked against the declaration, and answers the Change. */
     @NonNull
     private synchronized Change write(@NonNull SettingDeclaration declaration, @NonNull String value) {
@@ -194,8 +214,9 @@ public final class SettingsRegistry {
         return new Change(declaration, old, value);
     }
 
+    /** The refusal for an id no declaration or adapter names; every door words it the same. */
     @NonNull
-    private static Refusal unknown(@Nullable String id) {
+    public static Refusal unknown(@Nullable String id) {
         return new Refusal("no setting is called \"" + id + "\"", null);
     }
 

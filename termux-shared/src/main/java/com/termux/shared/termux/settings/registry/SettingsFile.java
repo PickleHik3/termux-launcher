@@ -43,8 +43,7 @@ public final class SettingsFile {
     public static String export(@NonNull SettingsRegistry registry) {
         StringBuilder text = new StringBuilder(
             "# launcherctl config export; apply it with launcherctl config apply FILE");
-        for (SettingsRegistry.Entry entry : registry.list()) {
-            if (!entry.declaration.exported) continue;
+        for (SettingsRegistry.Entry entry : registry.exported()) {
             text.append('\n').append(entry.declaration.id).append(" = ").append(entry.value);
         }
         return text.toString();

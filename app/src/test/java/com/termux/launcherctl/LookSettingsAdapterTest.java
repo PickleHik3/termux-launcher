@@ -9,6 +9,7 @@ import static org.junit.Assert.assertTrue;
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
+import com.termux.shared.termux.settings.registry.SettingsFile;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import org.junit.Test;
@@ -101,8 +102,28 @@ public class LookSettingsAdapterTest {
     }
 
     @Test
-    public void lookIdsStayOutOfAnExportSoACellThatFollowsGlobalStaysFollowing() {
-        for (SettingsRegistry.Entry entry : registry.list()) assertFalse(entry.declaration.exported);
+    public void aSurfaceValueThatFollowsGlobalIsNotExportedSoItStaysFollowingAfterAnApply() {
+        registry.set("look.opacity", "30");
+        registry.set("look.dock.opacity", "60");
+        String file = SettingsFile.export(registry);
+        assertTrue(file, file.contains("\nlook.opacity = 30"));
+        assertTrue(file, file.contains("\nlook.dock.opacity = 60"));
+        assertFalse(file, file.contains("look.status.opacity"));
+        assertFalse(file, file.contains("look.keyboard.blur"));
+
+        LookGrid fresh = new LookGrid(new LookGrid.MemoryStore());
+        SettingsRegistry other = new SettingsRegistry(which -> {
+            throw new AssertionError("a look id reads no registry store");
+        }, Collections.emptyList(), Collections.singletonList(new LookSettingsAdapter(fresh,
+            new LookCommandTest.MemoryBackground(), () -> { })));
+        SettingsFile.Result result = SettingsFile.check(file, other);
+        assertTrue(result.errors.toString(), result.errors.isEmpty());
+        for (SettingsFile.Assignment each : result.assignments)
+            assertNotNull(each.id, other.set(each.id, each.value).change());
+        assertTrue(fresh.has(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertEquals(60, fresh.value(LookGrid.Property.OPACITY, LookGrid.Element.DOCK));
+        assertFalse(fresh.has(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
+        assertEquals(30, fresh.value(LookGrid.Property.OPACITY, LookGrid.Element.STATUS));
     }
 
     @Test

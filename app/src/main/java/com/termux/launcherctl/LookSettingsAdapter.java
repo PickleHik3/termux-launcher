@@ -66,12 +66,11 @@ public final class LookSettingsAdapter implements SettingAdapter {
         String element = parts.length == 2 ? parts[0].trim().toLowerCase(Locale.ROOT) : null;
         if (property.isEmpty() || (element != null && element.isEmpty())) return null;
         if (BACKGROUND.equals(element)) {
-            return LookCommand.Setting.forKey(property.equals("frost") ? "blur" : property) == null
+            return LookCommand.Setting.forKey(LookCommand.backgroundKey(property)) == null
                 ? null : new Target(property, element);
         }
         if (property.equals("dim")) return new Target(property, element);
-        LookGrid.Property known = LookGrid.Property.forKey(property.equals("colour") ? "tint_hue"
-            : property.equals("blur") ? "frost" : property);
+        LookGrid.Property known = LookGrid.Property.forKey(LookCommand.gridKey(property));
         return known == null ? null : new Target(property, element);
     }
 
@@ -107,21 +106,14 @@ public final class LookSettingsAdapter implements SettingAdapter {
     /** The id's range and choices, read off the property the look grid already holds. */
     @NonNull
     private static SettingDeclaration declare(@NonNull String id, @NonNull Target target) {
-        return build(id, target).withoutExport();
-    }
-
-    @NonNull
-    private static SettingDeclaration build(@NonNull String id, @NonNull Target target) {
         if (BACKGROUND.equals(target.element) || target.property.equals("dim")) {
             LookCommand.Setting setting = LookCommand.Setting.forKey(
-                target.property.equals("frost") ? "blur" : target.property);
+                LookCommand.backgroundKey(target.property));
             if (setting == null) return SettingDeclaration.text(id, "", SettingRefresh.LISTENER);
             return SettingDeclaration.integer(id, SettingDeclaration.Store.APP_PREFERENCES, id,
                 setting.min, setting.max, 1, setting.shipped, SettingRefresh.LISTENER);
         }
-        LookGrid.Property property = LookGrid.Property.forKey(
-            target.property.equals("colour") ? "tint_hue"
-                : target.property.equals("blur") ? "frost" : target.property);
+        LookGrid.Property property = LookGrid.Property.forKey(LookCommand.gridKey(target.property));
         if (property == LookGrid.Property.TINT_HUE) {
             return SettingDeclaration.choice(id, SettingDeclaration.Store.APP_PREFERENCES, id,
                 Arrays.asList("primary", "secondary", "tertiary"),
@@ -153,25 +145,43 @@ public final class LookSettingsAdapter implements SettingAdapter {
         }
     }
 
+    /**
+     * A surface's own opacity or blur is an override only while the grid holds it; one that
+     * follows Global is left out of a settings file, so it still follows after an apply. Global's
+     * values and the Terminal's Background are always their own.
+     */
+    @Override
+    public boolean overrides(@NonNull SettingDeclaration declaration) {
+        Target target = parse(declaration.id);
+        if (target == null || target.element == null || BACKGROUND.equals(target.element))
+            return true;
+        LookGrid.Element element = LookGrid.Element.forKey(target.element);
+        LookGrid.Property property = LookGrid.Property.forKey(LookCommand.gridKey(target.property));
+        return element == null || property == null || mGrid.has(property, element);
+    }
+
     @Nullable
     @Override
     public SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration,
                                           @NonNull String value) {
         // The verb's own answer over a scratch grid: the same refusals, nothing saved or re-dressed.
         LookGrid scratch = new LookGrid(new LookGrid.MemoryStore());
-        LookCommand.TerminalBackground scratchBackground = new LookCommand.TerminalBackground() {
-            private final int[] mValues = new int[LookCommand.Setting.values().length];
-
-            @Override public int get(@NonNull LookCommand.Setting setting) {
-                return mValues[setting.ordinal()];
-            }
-
-            @Override public void set(@NonNull LookCommand.Setting setting, int number) {
-                mValues[setting.ordinal()] = number;
-            }
-        };
-        SettingsRegistry.Outcome outcome = run(declaration, value, scratch, scratchBackground, () -> { });
+        SettingsRegistry.Outcome outcome = run(declaration, value, scratch,
+            new ScratchBackground(), () -> { });
         return outcome.refusal();
+    }
+
+    /** A Terminal Background that remembers nothing past a check. */
+    private static final class ScratchBackground implements LookCommand.TerminalBackground {
+        private final int[] mValues = new int[LookCommand.Setting.values().length];
+
+        @Override public int get(@NonNull LookCommand.Setting setting) {
+            return mValues[setting.ordinal()];
+        }
+
+        @Override public void set(@NonNull LookCommand.Setting setting, int number) {
+            mValues[setting.ordinal()] = number;
+        }
     }
 
     @NonNull
@@ -188,8 +198,7 @@ public final class LookSettingsAdapter implements SettingAdapter {
                                          @NonNull Runnable onChanged) {
         Target target = parse(declaration.id);
         if (target == null)
-            return new SettingsRegistry.Refusal("no setting is called \"" + declaration.id + "\"",
-                null);
+            return SettingsRegistry.unknown(declaration.id);
         String old = get(declaration);
         try {
             JSONObject answer = LookCommand.handle(grid, background,

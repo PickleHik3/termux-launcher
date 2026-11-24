@@ -121,17 +121,7 @@ public final class SettingDeclaration {
                                           @NonNull SettingRefresh refresh) {
         return new SettingDeclaration(id, Kind.TEXT, Store.APP_PREFERENCES, id, refresh, 0, 0, 0,
             0, Collections.singletonList(defaultValue), Collections.singletonList(defaultValue),
-            0, false, false);
-    }
-
-    /**
-     * This declaration left out of {@code config export}: an adapter's id whose cell may be absent
-     * (a surface's own opacity follows Global) must not become explicit by a round trip.
-     */
-    @NonNull
-    public SettingDeclaration withoutExport() {
-        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
-            choices, storedChoices, mDefaultChoice, ordered, false);
+            0, false, true);
     }
 
     /** {@code value} held inside this integer's range. */
