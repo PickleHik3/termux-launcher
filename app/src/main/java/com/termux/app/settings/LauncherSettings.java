@@ -7,14 +7,16 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
-import com.termux.launcherctl.LauncherCtlAdapters;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.registry.SettingAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingRefresh;
 import com.termux.shared.termux.settings.registry.SettingStore;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
+
+import java.util.List;
 
 /**
  * The app's one Settings registry and Settings applier, over the stores the settings already use:
@@ -29,20 +31,27 @@ public final class LauncherSettings {
         void run(@NonNull SettingRefresh refresh);
     }
 
+    /** The door's own adapters over stores it owns; asked once, when the registry is first built. */
+    public interface Adapters {
+        @NonNull
+        List<SettingAdapter> forDevice(@NonNull Context context);
+    }
+
     @Nullable private static volatile Screen sResumed;
     @Nullable private static SettingsRegistry sRegistry;
     @Nullable private static SettingsApplier sApplier;
 
     private LauncherSettings() {}
 
-    /** The registry over the device's stores, built on first use. */
+    /** The registry over the device's stores, built on first use; {@code adapters} only then. */
     @NonNull
-    public static synchronized SettingsRegistry registry(@NonNull Context context) {
+    public static synchronized SettingsRegistry registry(@NonNull Context context,
+                                                         @NonNull Adapters adapters) {
         if (sRegistry == null) {
             Context app = context.getApplicationContext() != null
                 ? context.getApplicationContext() : context;
             sRegistry = new SettingsRegistry(new DeviceStores(app), SettingDeclarations.ALL,
-                LauncherCtlAdapters.forDevice(app));
+                adapters.forDevice(app));
         }
         return sRegistry;
     }
