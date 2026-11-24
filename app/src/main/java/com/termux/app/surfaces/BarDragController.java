@@ -56,43 +56,14 @@ import com.termux.app.statusbar.StatusPlace;
  */
 final class BarDragController {
 
-    /** The editor's half: where bars stand, the session, and the colours. */
-    interface Host {
-        @NonNull Context context();
-
-        /** The tap overlay the chips and lines join, or null while it is not there. */
-        @Nullable ViewGroup overlay();
-
-        /** The frame's scale, so what is drawn keeps its on-screen size. */
-        float scale();
-
-        boolean open();
-
-        /** Where {@code bar} stands in the overlay (l, t, r, b); false when it is not on screen. */
-        boolean rectOf(@NonNull Bar bar, @NonNull float[] out);
-
-        /** The Hidden column's rect in the overlay (#339); false until it exists. */
-        default boolean hiddenRect(@NonNull float[] out) {
-            return false;
-        }
-
-        /** The pane's rect in the overlay (#342); false until the status bar may stand there. */
-        default boolean paneRect(@NonNull float[] out) {
-            return false;
-        }
-
+    /** The editor's half: the session, the status place and what a drop does. */
+    interface Host extends BarFrame {
         @Nullable LayoutEditorController layout();
 
         @NonNull StatusPlace statusPlace();
 
         /** The status bar's one place for every page, written through the editor's preferences. */
         default void setStatusPlace(@NonNull StatusPlace place) {}
-
-        int primaryColor();
-
-        int surfaceColor();
-
-        int onSurfaceColor();
 
         /** The held bar is over the Hidden column (letting go hides it), or left it. */
         default void onHiddenTarget(boolean over) {}
