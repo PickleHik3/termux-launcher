@@ -103,6 +103,18 @@ public final class SessionsDrawerView extends LinearLayout
          * empty list it was simply never given.
          */
         default void onSavedTabShown() {}
+
+        /**
+         * The agents running in the live panes whose resume hook is not set up, by name
+         * ({@code claude}); empty when there is nothing to offer. Asked when the save field opens.
+         */
+        @NonNull
+        default List<String> agentsNeedingResumeSetup() {
+            return new ArrayList<>();
+        }
+
+        /** The Set up resume button: install the hooks and plugin for those agents. */
+        default void onSetUpResume() {}
     }
 
     private static final float TITLE_SP = 14f;
@@ -139,6 +151,8 @@ public final class SessionsDrawerView extends LinearLayout
     @Nullable private String mActiveSavedName;
     @NonNull private SavedState mSavedState = SavedState.IDLE;
     private boolean mSaveFieldOpen;
+    /** Agents the Save field offers to set up resume for; read once per opening, not per rebuild. */
+    @NonNull private List<String> mResumeAgents = new ArrayList<>();
 
     /** Where keystrokes aimed at the drawer land, or null while nothing is being typed into. */
     @Nullable private TerminalSheetController.TextField mActiveField;
@@ -270,8 +284,13 @@ public final class SessionsDrawerView extends LinearLayout
         setTab(Tab.LIVE);
         collapseAll();
         mSaveFieldOpen = true;
+        refreshResumeAgents();
         beginTyping("");
         rebuild();
+    }
+
+    private void refreshResumeAgents() {
+        mResumeAgents = mListener == null ? new ArrayList<>() : mListener.agentsNeedingResumeSetup();
     }
 
     /**
@@ -711,6 +730,7 @@ public final class SessionsDrawerView extends LinearLayout
             mFooter.addView(footerEntry(R.string.sessions_drawer_save_workspace, () -> {
                 collapseAll();
                 mSaveFieldOpen = true;
+                refreshResumeAgents();
                 beginTyping("");
                 rebuild();
             }), footerParams());
@@ -727,7 +747,48 @@ public final class SessionsDrawerView extends LinearLayout
                 rebuild();
                 if (mListener != null) mListener.onSaveWorkspace(value);
             }), new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        if (!mResumeAgents.isEmpty()) column.addView(buildResumeSetupRow(),
+            new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
         mFooter.addView(column, footerParams());
+    }
+
+    /**
+     * Under the Save field, when a pane runs an agent that cannot resume yet: one line saying what
+     * restore will do, and the button that sets it up. It goes once the hooks are in.
+     */
+    @NonNull
+    private View buildResumeSetupRow() {
+        LinearLayout column = new LinearLayout(getContext());
+        column.setOrientation(VERTICAL);
+        TextView line = label(SUBTITLE_SP, mDress.subTextColor);
+        line.setSingleLine(false);
+        line.setText(getContext().getString(R.string.session_browser_resume_setup_line,
+            agentNames(mResumeAgents)));
+        LayoutParams lineParams = new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT);
+        lineParams.topMargin = dp(6);
+        column.addView(line, lineParams);
+        LinearLayout actions = actionStrip();
+        addAction(actions, getContext().getString(R.string.session_browser_resume_setup_action), () -> {
+            if (mListener != null) mListener.onSetUpResume();
+            refreshResumeAgents();
+            rebuild();
+        });
+        column.addView(actions, new LayoutParams(
+            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
+        return column;
+    }
+
+    /** "Claude", "Claude and Codex", "Claude, Codex and OpenCode". */
+    @NonNull
+    private static String agentNames(@NonNull List<String> agents) {
+        StringBuilder names = new StringBuilder();
+        for (int i = 0; i < agents.size(); i++) {
+            AgentResume.Row row = AgentResume.forAgent(agents.get(i));
+            if (i > 0) names.append(i == agents.size() - 1 ? " and " : ", ");
+            names.append(row == null ? agents.get(i) : row.displayName);
+        }
+        return names.toString();
     }
 
     /** One footer line: a label on a row surface, which wraps before it clips. */

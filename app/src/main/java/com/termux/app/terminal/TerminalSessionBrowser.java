@@ -202,6 +202,20 @@ public final class TerminalSessionBrowser {
             saveWorkspace(name, false);
         }
 
+        @NonNull @Override public List<String> agentsNeedingResumeSetup() {
+            return mActivity.agentsNeedingResumeSetup();
+        }
+
+        @Override public void onSetUpResume() {
+            List<String> agents = mActivity.agentsNeedingResumeSetup();
+            mActivity.installAgentResume(agents);
+            // Codex skips a hook until it is trusted once, in Codex itself.
+            if (agents.contains(AgentStatus.AGENT_CODEX)) {
+                AppNotice.show(mActivity,
+                    mActivity.getString(R.string.session_browser_resume_setup_codex), false);
+            }
+        }
+
         @Override public void onLoadWorkspace(@NonNull String name, boolean replace) {
             dismiss();
             try {
