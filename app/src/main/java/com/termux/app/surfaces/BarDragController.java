@@ -49,11 +49,10 @@ import com.termux.app.statusbar.StatusPlace;
  * overlay once, and a move only sets a translation. The held bar stays where it stands until the
  * drop, so the frame keeps its size. A tap is not a hold: the group's own click opens the card.
  *
- * <p>Hooks for what comes next: the Hidden column (#339) is {@link Frame#setHidden} fed from the
- * host's {@link Host#hiddenRect} and its drop is the {@code Zone.HIDDEN} branch of {@link #finish};
- * the dashed places of a selected bar (#341) read {@link BarLandingPolicy#places}; the status bar
- * into the pane (#342) is {@link Host#paneRect} and the {@code Zone.PANE} branch of
- * {@link #finish}. Both rects answer false for now, so those zones are never held.
+ * <p>The Hidden column (#339) is {@link Frame#setHidden} fed from {@link Host#hiddenRect}; the pane
+ * (#342) is {@link Host#paneRect}, held beyond an edge's reach, and a drop there writes the status
+ * place through {@link Host#setStatusPlace}. {@link #commit} is the one write a drop and a tapped
+ * place ({@link BarPlacesController}) share.
  */
 final class BarDragController {
 
@@ -86,6 +85,9 @@ final class BarDragController {
 
         @NonNull StatusPlace statusPlace();
 
+        /** The status bar's one place for every page, written through the editor's preferences. */
+        default void setStatusPlace(@NonNull StatusPlace place) {}
+
         int primaryColor();
 
         int surfaceColor();
@@ -114,6 +116,8 @@ final class BarDragController {
     @Nullable private View mVLine;
 
     // The hold in progress.
+    /** The bar a finger last went down on, for the tap that follows (it selects). */
+    @Nullable private Bar mTouched;
     @Nullable private Bar mHeld;
     @Nullable private View mGroup;
     private boolean mArmed;
@@ -148,6 +152,7 @@ final class BarDragController {
             case MotionEvent.ACTION_DOWN: {
                 cancelHold();
                 Bar bar = barAt(x, y);
+                mTouched = bar;
                 if (bar == null || mHost.layout() == null || mHost.layout().layoutKind() == null)
                     return false;
                 mHeld = bar;
@@ -195,6 +200,12 @@ final class BarDragController {
         }
     }
 
+    /** The bar the last touch went down on, or null when it went down on none. */
+    @Nullable
+    Bar touchedBar() {
+        return mTouched;
+    }
+
     /** Whether a bar is lifted. */
     boolean dragging() {
         return mDragging;
@@ -234,6 +245,25 @@ final class BarDragController {
             cancelHold();
             return;
         }
+        BarDragGeometry.Frame frame = buildFrame(overlay, arranged, kind);
+        mFrame = frame;
+        mState = new FrameState(arranged, orientation, kind, mHost.statusPlace());
+        mArmed = false;
+        mDragging = true;
+        if (mGroup != null && mGroup.getParent() != null)
+            mGroup.getParent().requestDisallowInterceptTouchEvent(true);
+        overlay.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
+        setHeldLook(held);
+        update();
+    }
+
+    /**
+     * The frame as it stands now: every bar's band, the keyboard, the Hidden column and the pane
+     * (not on Home). Built when a bar lifts and when one is selected, never per move.
+     */
+    @NonNull
+    BarDragGeometry.Frame buildFrame(@NonNull ViewGroup overlay, @NonNull PlaceLayout arranged,
+                                     @NonNull LayoutKind kind) {
         BarDragGeometry.Frame frame = new BarDragGeometry.Frame(overlay.getWidth(),
             overlay.getHeight());
         for (Bar bar : BARS) {
@@ -249,18 +279,46 @@ final class BarDragController {
         }
         if (mHost.hiddenRect(mScratch))
             frame.setHidden(mScratch[0], mScratch[1], mScratch[2], mScratch[3]);
-        if (mHost.paneRect(mScratch))
+        if (kind.live() != LayoutKind.HOME && mHost.paneRect(mScratch))
             frame.setPane(mScratch[0], mScratch[1], mScratch[2], mScratch[3],
                 dpToPx(CHIP_HEIGHT_DP * 2));
-        mFrame = frame;
-        mState = new FrameState(arranged, orientation, kind, mHost.statusPlace());
-        mArmed = false;
-        mDragging = true;
-        if (mGroup != null && mGroup.getParent() != null)
-            mGroup.getParent().requestDisallowInterceptTouchEvent(true);
-        overlay.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
-        setHeldLook(held);
-        update();
+        return frame;
+    }
+
+    /**
+     * Writes what an allowed landing says into the draft: a slot, hiding, or the status bar's
+     * place. False when nothing changed. Both the drag's drop and a tapped place come here.
+     */
+    boolean commit(@NonNull Bar held, @NonNull Landing landing) {
+        LayoutEditorController layout = mHost.layout();
+        if (!landing.allowed || layout == null)
+            return false;
+        boolean wrote = false;
+        if (landing.zone == Zone.EDGE) {
+            PlaceLayout arranged = layout.arrangedLayout();
+            PlaceLayout next = arranged == null ? null
+                : BarDrop.layoutAfter(arranged, held, landing);
+            if (next != null && !next.equals(arranged)) {
+                layout.writeSlots(next);
+                wrote = true;
+            }
+        }
+        if (landing.zone == Zone.HIDDEN) {
+            // Hiding is the layout's own: a status bar put away keeps its edge.
+            if (held.element() != null) {
+                layout.setShown(held.element(), false);
+                wrote = true;
+            } else if (held == Bar.KEYBOARD) {
+                layout.setKeyboardShown(false);
+                wrote = true;
+            }
+        }
+        StatusPlace place = BarDrop.statusPlaceAfter(held, landing, mHost.statusPlace());
+        if (place != null) {
+            mHost.setStatusPlace(place);
+            wrote = true;
+        }
+        return wrote;
     }
 
     private void update() {
@@ -273,7 +331,7 @@ final class BarDragController {
         Landing landing = BarLandingPolicy.land(state, held, hold);
         mLanding = landing;
         mHost.onHiddenTarget(landing.allowed && landing.zone == Zone.HIDDEN);
-        if (landing.zone == Zone.EDGE && BarDragGeometry.slotLine(frame, held, landing, mLine))
+        if (landing.zone != Zone.HIDDEN && BarDragGeometry.slotLine(frame, held, landing, mLine))
             showLine(landing.edge != null && landing.edge.isOnSide());
         else
             hideLines();
@@ -283,30 +341,7 @@ final class BarDragController {
     private void finish() {
         Bar held = mHeld;
         Landing landing = mLanding;
-        LayoutEditorController layout = mHost.layout();
-        boolean wrote = false;
-        if (held != null && landing != null && landing.allowed && layout != null) {
-            if (landing.zone == Zone.EDGE) {
-                PlaceLayout arranged = layout.arrangedLayout();
-                PlaceLayout next = arranged == null ? null
-                    : BarDrop.layoutAfter(arranged, held, landing);
-                if (next != null && !next.equals(arranged)) {
-                    layout.writeSlots(next);
-                    wrote = true;
-                }
-            }
-            if (landing.zone == Zone.HIDDEN) {
-                // Hiding is the layout's own: a status bar put away keeps its edge.
-                if (held.element() != null) {
-                    layout.setShown(held.element(), false);
-                    wrote = true;
-                } else if (held == Bar.KEYBOARD) {
-                    layout.setKeyboardShown(false);
-                    wrote = true;
-                }
-            }
-            // Zone.PANE (#342) lands here when the pane rect exists.
-        }
+        boolean wrote = held != null && landing != null && commit(held, landing);
         cancelHold();
         if (wrote)
             mHost.onWritten();

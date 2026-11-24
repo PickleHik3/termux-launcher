@@ -4788,15 +4788,23 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (column != null && column.getParent() == host)
             return;
         detachHiddenColumn();
-        column = new HiddenColumnView(mHost.context(), item -> {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return;
-            if (item.element == null)
-                layout.setKeyboardShown(true);
-            else
-                layout.setShown(item.element, true);
-            positionTargets();
+        column = new HiddenColumnView(mHost.context(), new HiddenColumnView.Listener() {
+            @Override public void onRestore(@NonNull LayoutEditorPlan.TrayItem item) {
+                LayoutEditorController layout = mHost.layoutEditor();
+                if (layout == null)
+                    return;
+                if (item.element == null)
+                    layout.setKeyboardShown(true);
+                else
+                    layout.setShown(item.element, true);
+                positionTargets();
+            }
+
+            @Override public void onSelect(@NonNull LayoutEditorPlan.TrayItem item) {
+                // A tap selects; the selected bar offers the place that brings it back.
+                barPlaces().select(item.element == null ? BarLandingPolicy.Bar.KEYBOARD
+                    : barOf(item.element));
+            }
         }, mHost.themeColor(com.google.android.material.R.attr.colorSurface,
             R.color.termux_primary),
             mHost.themeColor(com.google.android.material.R.attr.colorOnSurface,
@@ -4850,8 +4858,35 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @NonNull
     private BarDragController barDrag() {
         if (mBarDrag == null)
-            mBarDrag = new BarDragController(new BarDragHost());
+            mBarDrag = new BarDragController(barDragHost());
         return mBarDrag;
+    }
+
+    @Nullable private BarPlacesController mBarPlaces;
+
+    @NonNull
+    private static BarLandingPolicy.Bar barOf(@NonNull Element element) {
+        for (BarLandingPolicy.Bar bar : BarLandingPolicy.Bar.values())
+            if (bar.element() == element)
+                return bar;
+        return BarLandingPolicy.Bar.KEYBOARD;
+    }
+
+    /** The selected bar's dashed places and Hide button (#341, #342). */
+    @NonNull
+    private BarPlacesController barPlaces() {
+        if (mBarPlaces == null)
+            mBarPlaces = new BarPlacesController(barDragHost(), barDrag());
+        return mBarPlaces;
+    }
+
+    @Nullable private BarDragHost mBarDragHost;
+
+    @NonNull
+    private BarDragHost barDragHost() {
+        if (mBarDragHost == null)
+            mBarDragHost = new BarDragHost();
+        return mBarDragHost;
     }
 
     private final class BarDragHost implements BarDragController.Host {
@@ -4960,6 +4995,37 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             return true;
         }
 
+        @Override public boolean paneRect(@NonNull float[] out) {
+            // The pane is the Terminal's wall; Home has none, and the controller never asks there.
+            View overlay = mHost.findView(R.id.surface_tuning_gesture_overlay);
+            View root = mHost.findView(R.id.terminal_root_container);
+            View wall = mHost.findView(R.id.terminal_pane_wall);
+            if (overlay == null || root == null || wall == null || !wall.isShown()
+                || wall.getWidth() <= 0 || wall.getHeight() <= 0)
+                return false;
+            if (!AppearanceEditorFrame.offsetIn(overlay, root, mTmpOffset))
+                return false;
+            float left0 = mTmpOffset[0];
+            float top0 = mTmpOffset[1];
+            if (!AppearanceEditorFrame.offsetIn(wall, root, mTmpOffset))
+                return false;
+            out[0] = mTmpOffset[0] - left0;
+            out[1] = mTmpOffset[1] - top0;
+            out[2] = out[0] + wall.getWidth();
+            out[3] = out[1] + wall.getHeight();
+            return true;
+        }
+
+        @Override public void setStatusPlace(@NonNull com.termux.app.statusbar.StatusPlace place) {
+            // One value for every page; the editor's snapshot puts it back on Discard.
+            TermuxAppSharedPreferences prefs = prefs();
+            if (prefs == null || place.value.equals(prefs.getStatusPlace()))
+                return;
+            prefs.setStatusPlace(place.value);
+            mHost.refreshTerminalWindowBar();
+            syncDirty();
+        }
+
         @Override public void onHiddenTarget(boolean over) {
             if (mHiddenColumn != null)
                 mHiddenColumn.setTarget(over);
@@ -4991,10 +5057,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 EditorCard card = cardOfGroup(index);
                 if (card != null) {
                     EditorDoor.EDITOR_OUTLINE.log(card);
+                    barPlaces().select(barDrag().touchedBar());
                     if (card == EditorCard.DOCK)
                         dockCard().expand(dockBarAt(mDownRawX, mDownRawY));
                     openCard(card, true);
                 } else {
+                    barPlaces().clear();
                     collapseCard(true);
                 }
             });
@@ -5131,6 +5199,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
         restyleOutlines();
         barDrag().placeChips();
+        barPlaces().refresh();
     }
 
     @NonNull
@@ -5861,6 +5930,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     private void clearOutlines() {
         if (mBarDrag != null)
             mBarDrag.release();
+        if (mBarPlaces != null)
+            mBarPlaces.release();
         detachHiddenColumn();
         for (int id : GROUP_IDS) {
             View group = mHost.findView(id);
