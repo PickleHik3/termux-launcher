@@ -5498,6 +5498,32 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         });
     }
 
+    private boolean mHomeExit;
+
+    @Override
+    public void setHomeExit(boolean on) {
+        mHomeExit = on;
+    }
+
+    @Override
+    public void startHomeExitSettle(long durationMs) {
+        AppearanceEditorFrame frame = mFrame;
+        if (mOpen && frame != null)
+            frame.hide(true, durationMs, null);
+    }
+
+    @Override
+    public void exitViews(@NonNull List<View> out) {
+        if (!mOpen)
+            return;
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.view().getVisibility() == View.VISIBLE)
+            out.add(sheet.view());
+        EditorBar bar = mBar;
+        if (bar != null)
+            bar.exitViews(out);
+    }
+
     /** Takes the editor off screen: the card, the bar, then the frame back to size. */
     private void dismiss(@Nullable Runnable onHidden) {
         if (!mOpen) {
@@ -5541,7 +5567,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mChromeVeiled = false;
         EditorCardSheet sheet = mSheet;
         if (sheet != null) {
-            sheet.hide(true, () -> {
+            sheet.hide(!mHomeExit, () -> {
                 sheet.detach();
                 sheet.setVeiled(false);
             });
@@ -5559,7 +5585,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 onHidden.run();
             return;
         }
-        frame.hide(true, onHidden);
+        // A Home exit grew the frame back already: at its end it is put at rest, not animated.
+        frame.hide(!mHomeExit, onHidden);
     }
 
     /** The targets' outlines taken off, so the launcher wears none after the editor. */
