@@ -11,6 +11,8 @@ public enum SettingRefresh {
     THEME,
     /** The shared Text size re-applied to the chrome labels, the keyboard and the terminal. */
     TEXT_SIZE,
+    /** Every pane re-stamped at the font sizes now saved (terminal, Compact, scratchpad). */
+    FONT_SIZE,
     /**
      * An existing preference listener already refreshes this key; the applier adds nothing. A
      * declaration naming it is checked by a test that the listener exists.

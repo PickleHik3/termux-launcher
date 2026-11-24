@@ -33,7 +33,7 @@ import java.util.regex.Pattern;
 public final class WallStripModel {
 
     /** What an entry stands for. */
-    public enum Kind { WINDOW, HOME_FLOAT, NEW_WINDOW }
+    public enum Kind { WINDOW, HOME_FLOAT, NEW_WINDOW, LINUX_WINDOW }
 
     /** One entry of the strip. */
     public static final class Entry {
@@ -196,6 +196,65 @@ public final class WallStripModel {
     /** Working, as the column reads it: a running command, or an agent at work. */
     static boolean isWorking(@NonNull WindowItem chip) {
         return chip.busy || chip.agentState == AgentStatus.State.WORKING;
+    }
+
+    /**
+     * A Linux window's tile has no terminal chip: it stands at {@code LINUX_CHIP_BASE + place}
+     * (its row place) in the places a tile's chip index travels, so a tap and the move items can
+     * tell it from a terminal window's chip (#392).
+     */
+    public static final int LINUX_CHIP_BASE = 1 << 20;
+
+    public static int linuxChip(int place) {
+        return LINUX_CHIP_BASE + place;
+    }
+
+    public static boolean isLinuxChip(int chipIndex) {
+        return chipIndex >= LINUX_CHIP_BASE;
+    }
+
+    /** The row place of a Linux tile's chip index. */
+    public static int placeOfLinuxChip(int chipIndex) {
+        return chipIndex - LINUX_CHIP_BASE;
+    }
+
+    /**
+     * The strip with the row's Linux windows among its terminal windows, in row order (#392).
+     * The row's own entries ({@link Kind#WINDOW}) are put in {@code terminalAtPlace} order (the
+     * terminal window at each row place, -1 for a Linux window), a Linux window taking the next of
+     * {@code linuxLabels} at each -1; the row's entries are numbered by place, and the one at
+     * {@code currentPlace} is lit unless a Home float is. The floats and {@code +} follow as they
+     * were. {@code entries} is returned as it is when the row has no Linux window.
+     */
+    @NonNull
+    public static List<Entry> withLinux(@NonNull List<Entry> entries,
+                                        @NonNull int[] terminalAtPlace,
+                                        @NonNull List<String> linuxLabels, int currentPlace) {
+        List<Entry> row = rowEntries(entries);
+        int linuxCount = 0;
+        for (int terminal : terminalAtPlace) if (terminal < 0) linuxCount++;
+        if (linuxCount == 0 || linuxCount > linuxLabels.size()) return entries;
+        boolean floatLit = false;
+        for (Entry entry : entries) if (entry.isFloat() && entry.current) floatLit = true;
+        List<Entry> out = new ArrayList<>(entries.size() + linuxCount);
+        int linux = 0;
+        for (int place = 0; place < terminalAtPlace.length; place++) {
+            boolean current = !floatLit && place == currentPlace;
+            String number = String.valueOf(place + 1);
+            int terminal = terminalAtPlace[place];
+            if (terminal >= 0) {
+                if (terminal >= row.size()) continue;
+                Entry e = row.get(terminal);
+                out.add(new Entry(e.kind, e.chipIndex, number, e.label, e.glyph, e.shortLabel,
+                    e.spokenLabel, current, e.minimised, e.attention, e.busy));
+            } else {
+                String label = linuxLabels.get(linux++);
+                out.add(new Entry(Kind.LINUX_WINDOW, linuxChip(place), number, label, "", label,
+                    label, current, false, false, false));
+            }
+        }
+        for (Entry entry : entries) if (entry.kind != Kind.WINDOW) out.add(entry);
+        return out;
     }
 
     /**

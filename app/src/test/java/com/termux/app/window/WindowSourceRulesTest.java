@@ -108,7 +108,7 @@ public class WindowSourceRulesTest {
     /** Longer cycles that no pair explains. */
     static final List<String> LONGER_CYCLES = Arrays.asList(
         // settings reaches the privileged lane through the terminal
-        "privileged -> terminal -> settings -> privileged"
+        "terminal -> settings -> privileged -> terminal"
     );
 
     /** Files outside the activity's package that name TermuxActivity. */

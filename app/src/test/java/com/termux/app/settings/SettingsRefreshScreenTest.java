@@ -30,6 +30,8 @@ public class SettingsRefreshScreenTest {
             @Override public void restyle(boolean recreate) { done.add("restyle " + recreate); }
 
             @Override public void applyTextSize() { done.add("text size"); }
+
+            @Override public void applyFontSizes() { done.add("font sizes"); }
         });
 
     private void runPosted() {
@@ -42,7 +44,7 @@ public class SettingsRefreshScreenTest {
         for (SettingRefresh each : SettingRefresh.values()) screen.run(each);
         assertTrue("nothing runs inside the call that asked", done.isEmpty());
         runPosted();
-        assertEquals(Arrays.asList("restyle false", "restyle true", "text size"), done);
+        assertEquals(Arrays.asList("restyle false", "restyle true", "text size", "font sizes"), done);
     }
 
     @Test

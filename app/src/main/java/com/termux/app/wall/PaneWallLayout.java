@@ -637,6 +637,68 @@ public final class PaneWallLayout extends ViewGroup
 
     /** See {@link #setInnerNeighbourViews}: previous, next. */
     private final View[] mInnerNeighbours = new View[2];
+
+    /**
+     * A Linux window in front of the Terminal's row (spec #384, #392): drawn in the Terminal
+     * page's place and posed as it is, while the pane host behind it is drawn at zero alpha, as
+     * off screen. {@code GONE} while a terminal window is in front.
+     */
+    @Nullable private View mTerminalCover;
+    private boolean mTerminalCoverShown;
+
+    /** The view {@link #setTerminalCoverShown} stands in the Terminal page's place; null takes it away. */
+    public void setTerminalCover(@Nullable View cover) {
+        if (cover == mTerminalCover) return;
+        View old = mTerminalCover;
+        if (old != null && old.getParent() == this) removeView(old);
+        if (old != null) mSlides.remove(old);
+        mTerminalCover = cover;
+        mTerminalCoverShown = false;
+        if (cover != null) {
+            if (cover.getParent() instanceof ViewGroup) ((ViewGroup) cover.getParent()).removeView(cover);
+            cover.setVisibility(GONE);
+            // Right after the Terminal page, so it draws over the pane host it hides.
+            int at = mTerminalHost == null ? -1 : indexOfChild(mTerminalHost);
+            addView(cover, at < 0 ? getChildCount() : at + 1);
+        }
+        applyPagePositions();
+    }
+
+    /** Whether the cover stands in the Terminal page's place: a Linux window is in front of the row. */
+    public void setTerminalCoverShown(boolean shown) {
+        boolean now = shown && mTerminalCover != null;
+        if (now == mTerminalCoverShown) return;
+        mTerminalCoverShown = now;
+        applyPagePositions();
+    }
+
+    public boolean isTerminalCoverShown() {
+        return mTerminalCoverShown;
+    }
+
+    /**
+     * What the content in front is for the border and swipe rules: {@link PageKind#LINUX} while
+     * the cover stands in the Terminal page's place, else the page in front.
+     */
+    @NonNull
+    private PageKind frontContentPage() {
+        return mCurrent == PageKind.TERMINAL && mTerminalCoverShown ? PageKind.LINUX : mCurrent;
+    }
+
+    /** The cover where the Terminal page stands, {@code onScreen} as it is; put away when not shown. */
+    private void placeTerminalCover(float x, int width, boolean onScreen) {
+        View cover = mTerminalCover;
+        if (cover == null) return;
+        if (!mTerminalCoverShown) {
+            if (cover.getVisibility() != GONE) {
+                unpose(cover);
+                cover.setVisibility(GONE);
+            }
+            return;
+        }
+        poseOnWall(cover, x, width);
+        cover.setVisibility(onScreen ? VISIBLE : INVISIBLE);
+    }
     @Nullable private Runnable mPrepareInnerNeighbours;
     /** Between a released inner step's settle and its nudge (stepInside): the neighbours stay. */
     private boolean mInnerStepping;
@@ -2087,7 +2149,7 @@ public final class PaneWallLayout extends ViewGroup
         // On the page's text, the terminal there is asked whether it gives a sideways swipe away.
         boolean bodySwipe = canPage && mListener != null
             && mBorderZone.holds(event.getX(), event.getY())
-            && mListener.isBodySwipePaging(mCurrent, event.getRawX(), event.getRawY());
+            && mListener.isBodySwipePaging(frontContentPage(), event.getRawX(), event.getRawY());
         // On the seam band's last row, the terminal there is asked the same, whatever the
         // setting: the band is the bottom border's.
         boolean seamSwipe = canPage && mListener != null
@@ -2147,7 +2209,7 @@ public final class PaneWallLayout extends ViewGroup
                 BorderDrag.PILL_SWIPE_REACH_DP * density);
         // The display window's picture is the Linux app's to its rim: its borders stay in the
         // air around it (BorderReach). A terminal window shares its edges as it always has.
-        BorderReach.apply(mBorderZone, BorderReach.ownsContent(mCurrent,
+        BorderReach.apply(mBorderZone, BorderReach.ownsContent(frontContentPage(),
             mListener == null || mListener.isDisplayRunning()), density);
         // A window's bottom border is a seam band a fingertip tall, reaching into its last row
         // and the dock's top (SeamSwipe). Only for a press: the drawn borders never need it. A
@@ -3567,7 +3629,9 @@ public final class PaneWallLayout extends ViewGroup
         boolean onScreen = width <= 0 || Math.abs(x) < width;
         if (view == mTerminalHost) {
             view.setVisibility(VISIBLE);
-            view.setAlpha(onScreen ? mPose.alpha : 0f);
+            // Behind a Linux window in front it is drawn as off screen, so its glass never shows through.
+            view.setAlpha(onScreen && !mTerminalCoverShown ? mPose.alpha : 0f);
+            placeTerminalCover(x, width, onScreen);
             boolean offScreen = !onScreen;
             if (mListener != null
                     && (mTerminalOffScreen == null || mTerminalOffScreen != offScreen)) {
@@ -3591,6 +3655,10 @@ public final class PaneWallLayout extends ViewGroup
      */
     private void parkTerminalPage(@NonNull View view, int width) {
         parkFlat(view, 2f * Math.max(1, width));
+        if (mTerminalCover != null && mTerminalCover.getVisibility() != GONE) {
+            unpose(mTerminalCover);
+            mTerminalCover.setVisibility(GONE);
+        }
         view.setVisibility(VISIBLE);
         view.setAlpha(0f);
         if (mListener != null && (mTerminalOffScreen == null || !mTerminalOffScreen)) {
@@ -3700,6 +3768,8 @@ public final class PaneWallLayout extends ViewGroup
                 float[] slide = mSlides.get(child);
                 if (slide == null || child.getVisibility() != VISIBLE
                     || !(Math.abs(slide[0]) < width)) continue;
+                // Hidden behind the cover, the pane host is not one of the two sheets.
+                if (child == mTerminalHost && mTerminalCoverShown) continue;
                 if (first < 0) {
                     first = i;
                 } else if (second < 0) {
@@ -3789,7 +3859,7 @@ public final class PaneWallLayout extends ViewGroup
      */
     @Nullable
     private PageKind pageKindOf(@NonNull View child) {
-        return child == mTerminalHost || isInnerNeighbour(child) ? PageKind.TERMINAL
+        return child == mTerminalHost || child == mTerminalCover || isInnerNeighbour(child) ? PageKind.TERMINAL
             : pageOf(child);
     }
 

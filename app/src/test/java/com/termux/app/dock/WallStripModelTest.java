@@ -272,4 +272,47 @@ public class WallStripModelTest {
         assertEquals(entries,
             WallStripModel.of(chips, WindowChips.Surface.WALL_STRIP, items, "New window"));
     }
+
+    @Test
+    public void linuxWindowsStandAmongTheTerminalsInRowOrder() {
+        // Row: [nvim] [xeyes] [htop], a float, then +.
+        List<WallStripModel.Entry> base = build(
+            Arrays.asList(chip("nvim"), chip("htop"), chip("float")), 1, 2, null);
+        List<WallStripModel.Entry> mixed = WallStripModel.withLinux(base,
+            new int[] {0, -1, 1}, Collections.singletonList("xeyes"), 1);
+        assertEquals(5, mixed.size());
+        assertEquals("nvim", mixed.get(0).label);
+        assertEquals("1", mixed.get(0).number);
+        assertFalse(mixed.get(0).current);
+        WallStripModel.Entry linux = mixed.get(1);
+        assertEquals(WallStripModel.Kind.LINUX_WINDOW, linux.kind);
+        assertEquals("xeyes", linux.label);
+        assertEquals("2", linux.number);
+        assertTrue(linux.current);
+        assertTrue(WallStripModel.isLinuxChip(linux.chipIndex));
+        assertEquals(1, WallStripModel.placeOfLinuxChip(linux.chipIndex));
+        assertEquals("htop", mixed.get(2).label);
+        assertEquals("3", mixed.get(2).number);
+        assertEquals(1, mixed.get(2).chipIndex);
+        assertTrue(mixed.get(3).isFloat());
+        assertEquals(WallStripModel.Kind.NEW_WINDOW, mixed.get(4).kind);
+        assertEquals(4, WallStripModel.wallEntries(mixed).size());
+    }
+
+    @Test
+    public void withoutLinuxWindowsTheStripIsAsItWas() {
+        List<WallStripModel.Entry> base = build(Arrays.asList(chip("a"), chip("b")), 0, 2, null);
+        assertEquals(base, WallStripModel.withLinux(base, new int[] {0, 1},
+            Collections.emptyList(), 0));
+    }
+
+    @Test
+    public void aLitFloatKeepsTheRowUnlit() {
+        List<WallStripModel.Entry> base = build(Arrays.asList(chip("a"), chip("f")), 1, 1, null);
+        List<WallStripModel.Entry> mixed = WallStripModel.withLinux(base, new int[] {0, -1},
+            Collections.singletonList("app"), 1);
+        assertFalse(mixed.get(0).current);
+        assertFalse(mixed.get(1).current);
+        assertTrue(mixed.get(2).current);
+    }
 }

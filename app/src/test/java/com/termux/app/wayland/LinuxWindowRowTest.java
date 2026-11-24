@@ -9,7 +9,6 @@ import android.app.Application;
 import android.graphics.Rect;
 import android.os.Build;
 
-import com.termux.app.page.PageKind;
 
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -19,29 +18,6 @@ import org.robolectric.annotation.Config;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
 public class LinuxWindowRowTest {
-
-    @Test
-    public void aNewWindowGoesRightAfterTheLinuxWindowInFront() {
-        assertEquals(7, LinuxWindowRow.insertAfter(PageKind.LINUX, 7, 3));
-    }
-
-    @Test
-    public void fromATerminalWindowANewWindowGoesAfterTheTerminalPage() {
-        assertEquals(3, LinuxWindowRow.insertAfter(PageKind.TERMINAL, 3, 3));
-        assertEquals(3, LinuxWindowRow.insertAfter(PageKind.HOME, 1, 3));
-    }
-
-    @Test
-    public void withoutATerminalPageANewWindowGoesAfterThePageInFrontElseLast() {
-        assertEquals(1, LinuxWindowRow.insertAfter(PageKind.HOME, 1, -1));
-        assertEquals(LinuxWindowRow.NO_PAGE, LinuxWindowRow.insertAfter(null, -1, -1));
-    }
-
-    @Test
-    public void aRestoredWindowReturnsToItsSlotWhileItsNeighbourStands() {
-        assertEquals(5, LinuxWindowRow.restoreAfter(5, true, PageKind.HOME, 1, 3));
-        assertEquals(3, LinuxWindowRow.restoreAfter(5, false, PageKind.HOME, 1, 3));
-    }
 
     @Test
     public void theChipIsTheAppsNameNeverTheTitle() {

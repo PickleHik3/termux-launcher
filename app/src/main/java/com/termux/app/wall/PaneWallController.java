@@ -54,17 +54,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The Display pages registered in {@link #mPages}, by page id. */
     @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mDisplayPages =
         new java.util.HashMap<>();
-    /** The Linux windows' seam and their one view and page (spec #384); NONE and null without them. */
+    /** The Linux windows' seam (spec #384, #392); NONE without them. */
     @NonNull private WallLinux mLinux = WallLinux.NONE;
+    /** Re-reads where the row's Linux windows stand: run on every landing and cell change. */
+    @Nullable private Runnable mLinuxSync;
+    /** The cover the Linux window in front shows; null without Linux windows. */
     @Nullable private View mLinuxView;
-    @Nullable private java.util.function.IntFunction<com.termux.app.page.Page> mLinuxPageFactory;
-    /** The Linux pages registered in {@link #mPages}, by page id. */
-    @NonNull private final java.util.Map<Integer, com.termux.app.page.Page> mLinuxPages =
-        new java.util.HashMap<>();
-    /** The Linux page last handed to {@link #mLinux}; -1 for none. */
-    private int mBoundLinuxPageId = -1;
-    /** What {@link #mLinux} was last told of its window's surface. */
-    private boolean mLinuxNearFront;
     @Nullable private PaneSurfaceStyle mStyle;
     /** How much of the pages' outlines the last frame left showing; 1 at rest. */
     private float mOutlineAlpha = 1f;
@@ -178,8 +173,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mHomePages.clear();
         if (mPages != null) for (Integer id : mDisplayPages.keySet()) mPages.remove(id);
         mDisplayPages.clear();
-        if (mPages != null) for (Integer id : mLinuxPages.keySet()) mPages.remove(id);
-        mLinuxPages.clear();
         if (mPages != null && mTerminalStopsId != NO_ID) mPages.remove(mTerminalStopsId);
         mTerminalStopsId = NO_ID;
         mAssistantPageId = -1;
@@ -195,66 +188,34 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mPages = pages;
         syncHomePages();
         syncDisplayPages();
-        syncLinuxPages();
         syncTerminalStops();
         syncAssistantPage();
         recordFront();
     }
 
     /**
-     * The Linux windows (spec #384): {@code view} is the one view every Linux window's page shows,
-     * added to the wall here; {@code page} is the page every Linux page id registers; the seam
-     * hears where the view is bound and whether its window may hold a surface. Nulls take them
-     * away.
+     * The Linux windows (spec #384, #392): {@code cover} is the one view a Linux window in front of
+     * the Terminal's row shows, stood in the Terminal page's place ({@link
+     * PaneWallLayout#setTerminalCover}); {@code sync} re-reads where the row's Linux windows stand,
+     * run on every landing. Nulls take them away.
      */
-    public void setLinuxWindows(@Nullable View view, @Nullable com.termux.app.page.Page page,
-                                @Nullable WallLinux linux) {
-        View old = mLinuxView;
-        if (old != null && old != view) {
-            mWall.setPageView(PageKind.LINUX, null);
-            mWall.removeView(old);
-        }
+    public void setLinuxWindows(@Nullable View cover, @Nullable WallLinux linux,
+                                @Nullable Runnable sync) {
+        mWall.setTerminalCover(cover);
+        mLinuxView = cover;
         mLinux = linux == null ? WallLinux.NONE : linux;
-        mLinuxView = view;
-        mLinuxPageFactory = page == null ? null : id -> page;
-        if (view != null && view != old) {
-            mWall.addView(view);
-            mWall.setPageView(PageKind.LINUX, view);
-        }
-        mBoundLinuxPageId = -1;
+        mLinuxSync = sync;
         mLinux.applyStyle(mStyle);
-        syncLinuxPages();
-        bindLinux(mWall.boundPageId(PageKind.LINUX));
-        recordFront();
+        syncLinux();
     }
 
-    /** Page {@code pageId}'s still while the view stands elsewhere (see {@link PaneWallLayout#keepPicture}). */
-    public void keepPicture(int pageId, @Nullable android.graphics.Bitmap picture) {
-        mWall.keepPicture(pageId, picture);
+    /** Whether the cover stands in the Terminal page's place: a Linux window is in front of the row. */
+    public void setLinuxInFront(boolean front) {
+        mWall.setTerminalCoverShown(front);
     }
 
-    private void syncLinuxPages() {
-        java.util.List<Integer> ids = new java.util.ArrayList<>();
-        if (mKnownPages != null) {
-            for (WallPages.Page page : mKnownPages.pages()) {
-                if (page.kind == PageKind.LINUX) ids.add(page.id);
-            }
-        }
-        syncRegistered(mLinuxPageFactory, mLinuxPages, ids);
-    }
-
-    /** Hand the Linux seam the page its view stands at, then whether it may hold its surface. */
-    private void bindLinux(int pageId) {
-        int id = pageId >= 0 && mWall.kindOf(pageId) == PageKind.LINUX ? pageId : -1;
-        if (id != mBoundLinuxPageId) {
-            mBoundLinuxPageId = id;
-            mLinux.bind(id);
-        }
-        boolean near = com.termux.app.wayland.LinuxWindowRow.holdsSurface(id >= 0,
-            mWall.indexOfCell(id), mWall.indexOfCell(mWall.currentPageId()));
-        if (near == mLinuxNearFront) return;
-        mLinuxNearFront = near;
-        mLinux.setNearFront(near);
+    private void syncLinux() {
+        if (mLinuxSync != null) mLinuxSync.run();
     }
 
     /**
@@ -454,8 +415,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         bindDisplay(display >= 0 ? display : -1);
         syncHomePages();
         syncDisplayPages();
-        syncLinuxPages();
-        bindLinux(mWall.boundPageId(PageKind.LINUX));
+        syncLinux();
         syncTerminalStops();
         syncAssistantPage();
         recordFront();
@@ -494,10 +454,9 @@ public final class PaneWallController implements PaneWallLayout.Listener {
                 if (kind == PageKind.HOME && hasTerminal) homeAfterTerminal = true;
                 hasHome |= kind == PageKind.HOME;
                 hasTerminal |= kind == PageKind.TERMINAL;
-                // The Assistant page and Linux windows stand off the default order as a Display
-                // page does: the wallpaper's pan reads the pages' order.
-                hasDisplay |= kind == PageKind.DISPLAY || kind == PageKind.ASSISTANT
-                    || kind == PageKind.LINUX;
+                // The Assistant page stands off the default order as a Display page does: the
+                // wallpaper's pan reads the pages' order.
+                hasDisplay |= kind == PageKind.DISPLAY || kind == PageKind.ASSISTANT;
                 out.add(new PaneWallLayout.Cell(page.id, kind, pages.displayName(page, null)));
             }
         }
@@ -724,9 +683,6 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         } else if (kind == PageKind.DISPLAY) {
             if (pageId >= 0) bindDisplay(pageId);
             else mWall.bind(kind, pageId);
-        } else if (kind == PageKind.LINUX) {
-            mWall.bind(kind, pageId);
-            bindLinux(pageId);
         } else {
             mWall.bind(kind, pageId);
         }
@@ -1494,7 +1450,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mLanding.landed(page);
         if (page == PageKind.TERMINAL) startShellOnLanding();
         // Every landing: the bound Linux window keeps its surface only near the front.
-        bindLinux(mWall.boundPageId(PageKind.LINUX));
+        syncLinux();
         if (page == PageKind.DISPLAY && mBoundDisplayPageId >= 0) {
             mDisplay.landed(mBoundDisplayPageId);
         }

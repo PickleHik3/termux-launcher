@@ -29,6 +29,8 @@ import java.util.Locale;
  * stop ({@code 3}, not {@code 3 (8dp)}), a Background blur its dp, a colour its name.</p>
  */
 public final class LookSettingsAdapter implements SettingAdapter {
+    /** The summary of a property Shine replaced; `config list` keeps it, the settings reference leaves it out. */
+    static final String RETIRED = "No longer used; Shine replaced it.";
 
     private static final String PREFIX = "look.";
     private static final String BACKGROUND = "background";
@@ -106,6 +108,52 @@ public final class LookSettingsAdapter implements SettingAdapter {
     /** The id's range and choices, read off the property the look grid already holds. */
     @NonNull
     private static SettingDeclaration declare(@NonNull String id, @NonNull Target target) {
+        return describe(declareRange(id, target), target);
+    }
+
+    /** The name and one sentence the settings reference page shows for {@code target}. */
+    @NonNull
+    private static SettingDeclaration describe(@NonNull SettingDeclaration declaration,
+                                               @NonNull Target target) {
+        String what;
+        String how;
+        switch (target.property) {
+            case "blur": what = "blur"; how = "How frosted the glass is, from clear to heavily frosted."; break;
+            case "grain": what = "grain"; how = "How much film grain sits on the glass, in percent."; break;
+            case "opacity": what = "opacity"; how = "How solid the glass is, in percent."; break;
+            case "tint": what = "tint"; how = "How strongly the theme colour tints the glass, in percent."; break;
+            case "colour": what = "tint colour"; how = "Which theme colour tints the glass."; break;
+            case "depth": what = "depth"; how = "How strongly the glass bends the wallpaper at its edge, in dp."; break;
+            case "edge": what = "edge"; how = RETIRED; break;
+            case "corners": what = "corners"; how = "How round the corners are, in dp; the lowest value follows each surface's style."; break;
+            case "rim": what = "rim"; how = RETIRED; break;
+            case "shine": what = "shine"; how = "How much light catches the glass's rim and lens."; break;
+            case "vibrancy": what = "vibrancy"; how = "How much the glass lifts the colours behind it."; break;
+            case "margin": what = "edge gap"; how = "The gap between the glass and the screen edge, in dp."; break;
+            case "dim": what = "wallpaper dim"; how = "How much the wallpaper behind the terminal is darkened, in percent."; break;
+            default: what = target.property; how = ""; break;
+        }
+        if (BACKGROUND.equals(target.element)) {
+            String background = "blur".equals(target.property)
+                ? "How blurred the wallpaper behind the terminal panes is, in dp."
+                : "opacity".equals(target.property)
+                ? "How solid the terminal panes' background is, in percent." : how;
+            return declaration.described("Terminal background " + what, background);
+        }
+        if (target.element == null) return declaration.described("Global " + what, how);
+        String surface = "status".equals(target.element) ? "Status bar" : capitalize(target.element);
+        return declaration.described(surface + " " + what,
+            "The " + surface.toLowerCase(Locale.ROOT) + "'s own " + what
+                + "; until you set one it follows the Global look.");
+    }
+
+    @NonNull
+    private static String capitalize(@NonNull String word) {
+        return word.substring(0, 1).toUpperCase(Locale.ROOT) + word.substring(1);
+    }
+
+    @NonNull
+    private static SettingDeclaration declareRange(@NonNull String id, @NonNull Target target) {
         if (BACKGROUND.equals(target.element) || target.property.equals("dim")) {
             LookCommand.Setting setting = LookCommand.Setting.forKey(
                 LookCommand.backgroundKey(target.property));

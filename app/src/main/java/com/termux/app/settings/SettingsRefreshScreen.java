@@ -25,6 +25,9 @@ public final class SettingsRefreshScreen implements LauncherSettings.Screen {
 
         /** Re-stamps the panes and the keyboard at the Text size now saved. */
         void applyTextSize();
+
+        /** Re-stamps every pane at the terminal, Compact and scratchpad font sizes now saved. */
+        void applyFontSizes();
     }
 
     @NonNull private final Host mHost;
@@ -44,6 +47,7 @@ public final class SettingsRefreshScreen implements LauncherSettings.Screen {
             case RESTYLE: mHost.restyle(false); break;
             case THEME: mHost.restyle(true); break;
             case TEXT_SIZE: mHost.applyTextSize(); break;
+            case FONT_SIZE: mHost.applyFontSizes(); break;
             default: break;
         }
     }

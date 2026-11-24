@@ -9,6 +9,7 @@ import androidx.test.core.app.ApplicationProvider;
 import com.termux.app.settings.backup.SettingsBackupFormat.InvalidBackupException;
 import com.termux.app.settings.backup.SettingsBackupFormat.Root;
 import com.termux.app.settings.backup.SettingsBackupFormat.Store;
+import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 
 import org.json.JSONObject;
 import org.junit.Before;
@@ -86,7 +87,7 @@ public class SettingsBackupTest {
         SettingsBackupIo.Environment env() {
             return new SettingsBackupIo.Environment(prefs, roots,
                 Collections.singletonList(filesDir.getAbsolutePath()), filesDir.getAbsolutePath(),
-                density, (int) (4f * density), 256, "1.1.0-pre.2", "Termux",
+                density, new FontSizeSettingsAdapter.Range((int) (4f * density), 256, 0), "1.1.0-pre.2", "Termux",
                 new File(filesDir.getParentFile(), "cache/settings-import"),
                 new HashSet<>(SettingsBackupFormat.APP_FILES));
         }
@@ -185,6 +186,53 @@ public class SettingsBackupTest {
         assertEquals("jetbrains", target.prefs.get(Store.FONTS).getString("active_family_id", null));
         assertEquals(450, target.prefs.get(Store.FONTS).getInt("weight", 0));
         assertFalse(target.prefs.get(Store.PRIVILEGED).getBoolean("priv_lane_enabled", true));
+    }
+
+    @Test
+    public void restore_skipsAndReportsAnOutOfRangeValueOfADeclaredKey_andRestoresTheRest() throws IOException {
+        Install source = new Install("range_source", 2f);
+        source.main().edit()
+            .putInt("text_size_percent", 99_999)
+            .putString("terminal_contrast_level", "blinding")
+            .putBoolean("status_bar_twelve_hour", true)
+            .putInt("surface_base_blur", 7)
+            .commit();
+        byte[] bundle = export(source);
+
+        Install target = new Install("range_target", 2f);
+        target.main().edit().putInt("text_size_percent", 120)
+            .putString("terminal_contrast_level", "harder").commit();
+        SettingsBackupIo.ApplyResult result = restore(target, bundle);
+
+        assertEquals(0, result.failures);
+        assertEquals(new HashSet<>(Arrays.asList("text_size_percent", "terminal_contrast_level")),
+            new HashSet<>(result.skipped));
+        assertEquals("a refused value keeps what the device holds", 120,
+            target.main().getInt("text_size_percent", 0));
+        assertEquals("harder", target.main().getString("terminal_contrast_level", null));
+        assertTrue(target.main().getBoolean("status_bar_twelve_hour", false));
+        assertEquals(7, target.main().getInt("surface_base_blur", 0));
+    }
+
+    @Test
+    public void restore_keepsAValidDeclaredValue_andLeavesUndeclaredKeysToTheirOldHandling() throws IOException {
+        Install source = new Install("old_source", 2f);
+        source.main().edit()
+            .putInt("text_size_percent", 150)
+            .putString("terminal_contrast_level", "harder")
+            .putInt("terminal_corner_radius", 99_999)
+            .commit();
+        byte[] bundle = export(source);
+
+        Install target = new Install("old_target", 2f);
+        SettingsBackupIo.ApplyResult result = restore(target, bundle);
+
+        assertEquals(0, result.failures);
+        assertTrue(result.skipped.isEmpty());
+        assertEquals(150, target.main().getInt("text_size_percent", 0));
+        assertEquals("harder", target.main().getString("terminal_contrast_level", null));
+        assertEquals("an undeclared key is restored as it was", 99_999,
+            target.main().getInt("terminal_corner_radius", 0));
     }
 
     @Test
@@ -296,8 +344,8 @@ public class SettingsBackupTest {
 
     @Test
     public void scaleFontSize_clampsToTheSmallestSize_andIgnoresAnUnknownDensity() {
-        assertEquals(12, SettingsBackupFormat.scaleFontSize(4, 3f, 1f, 12, 256));
-        assertEquals(30, SettingsBackupFormat.scaleFontSize(30, 0f, 2f, 8, 256));
+        assertEquals(12, SettingsBackupFormat.scaleFontSize(4, 3f, 1f, new FontSizeSettingsAdapter.Range(12, 256, 12)));
+        assertEquals(30, SettingsBackupFormat.scaleFontSize(30, 0f, 2f, new FontSizeSettingsAdapter.Range(8, 256, 8)));
     }
 
     // ------------------------------------------------------------------ files

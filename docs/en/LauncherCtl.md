@@ -303,6 +303,27 @@ launcherctl motion-log clear
 launcherctl motion-log dump > motion.txt
 ```
 
+## config
+
+```
+launcherctl config list [--json]
+launcherctl config get ID
+launcherctl config set ID VALUE
+launcherctl config export
+launcherctl config apply FILE
+```
+
+Reads and changes the launcher's settings by id, the same ones the Settings and Appearance screens
+change. `list` prints every setting with its value; `set` takes effect at once while the launcher
+is open. A value outside a setting's range is refused and nothing changes. `export` prints your
+setup as `ID = VALUE` lines, and `apply` checks every line of a file before changing anything.
+Every id, its values and its default are on the [settings reference](Settings_Reference.md).
+
+```sh
+launcherctl config set theme.mode dark
+launcherctl config get text.size
+```
+
 ## look
 
 ```text

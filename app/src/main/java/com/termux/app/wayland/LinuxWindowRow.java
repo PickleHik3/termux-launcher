@@ -5,17 +5,12 @@ import android.graphics.Rect;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.page.PageKind;
-
 /**
  * Where a Linux window stands and what it shows (spec #384, "The window contract"): its place in
  * the Terminal's row, its chip's name, whether it holds a surface, where its rim tab sits and
  * where a dialog draws over its parent. Pure; the controller and the page view apply the answers.
  */
 public final class LinuxWindowRow {
-
-    /** No page: a Linux window that has none (a dialog, a minimised window). */
-    public static final int NO_PAGE = -1;
 
     /** The rim tab's size and its gap to the rim, in dp. */
     public static final float TAB_WIDTH_DP = 40f;
@@ -24,27 +19,6 @@ public final class LinuxWindowRow {
     public static final float TAB_BAND_DP = 22f;
 
     private LinuxWindowRow() {}
-
-    /**
-     * The page a new Linux window is added after: the window in front when it is a Linux window,
-     * else the Terminal page (whose windows the wall pages through inside one cell), else the page
-     * in front, else the end of the row ({@link #NO_PAGE}).
-     */
-    public static int insertAfter(@Nullable PageKind current, int currentPageId, int terminalPageId) {
-        if (current == PageKind.LINUX && currentPageId >= 0) return currentPageId;
-        if (terminalPageId >= 0) return terminalPageId;
-        return currentPageId >= 0 ? currentPageId : NO_PAGE;
-    }
-
-    /**
-     * A restored window's place: after the page that stood before it when it was minimised, while
-     * that page is still on the wall; else where a new window goes.
-     */
-    public static int restoreAfter(int leftWhenMinimised, boolean leftStillThere,
-                                   @Nullable PageKind current, int currentPageId, int terminalPageId) {
-        if (leftWhenMinimised >= 0 && leftStillThere) return leftWhenMinimised;
-        return insertAfter(current, currentPageId, terminalPageId);
-    }
 
     /**
      * A Linux window's chip name: its app's name from the desktop entry, else its app id, else
