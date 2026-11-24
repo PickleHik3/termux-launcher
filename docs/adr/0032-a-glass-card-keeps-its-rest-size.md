@@ -209,3 +209,13 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   with each side's own rows at its rest. "Stays put" means it does not slide sideways. A Terminal
   Peek card that stands apart from Home's (the two rests draw it at different rects) wears the
   Peek dress and reflection on the Terminal's own host; that is built with #307's views.
+- **2026-11-25, #307 views A.** The foot is a view of its own (`dock_foot_host`,
+  `StackView.FOOT`) wherever both hosts wear it at one rect and lay it out alike; both hosts stop
+  at its top, and its frost is the standing host's at a rest and blends between the two hosts'
+  on the crossing's share. Two cases keep a foot per owner: the Terminal's keyboard up on its own
+  host (the unified Docked glass), where the container is drawn the keyboard's height lower at
+  Home's keyboard-down rest, so one view would be laid out at two rects (tl16 1667..1730 against
+  2337..2400) and a crossing moves the container under it; and the keyboard's own foot (Peek with
+  Home's keyboard up), which is the keyboard's material. The Terminal's own Peek card wears the
+  Peek cut, rim and reflection; its reflection is drawn on the Live path only, so it holds no
+  bitmap, and shows none without it.
