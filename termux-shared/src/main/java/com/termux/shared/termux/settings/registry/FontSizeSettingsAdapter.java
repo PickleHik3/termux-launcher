@@ -87,7 +87,7 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
     @NonNull
     private SettingDeclaration declare(@NonNull String id) {
         return SettingDeclaration.integer(id, SettingDeclaration.Store.APP_PREFERENCES, key(id),
-            mRange.min, mRange.max, STEP, mRange.defaultSize, SettingRefresh.TEXT_SIZE);
+            mRange.min, mRange.max, STEP, mRange.defaultSize, SettingRefresh.FONT_SIZE);
     }
 
     @Nullable

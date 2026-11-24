@@ -93,6 +93,6 @@ public class FontSizeSettingsAdapterTest {
         assertNull(adapter.declaration("terminal.corner_radius"));
         assertEquals(3, adapter.declarations().size());
         assertEquals("12–256", adapter.declaration("terminal.font_size").allowed());
-        assertEquals(SettingRefresh.TEXT_SIZE, adapter.declaration("terminal.font_size").refresh);
+        assertEquals(SettingRefresh.FONT_SIZE, adapter.declaration("terminal.font_size").refresh);
     }
 }
