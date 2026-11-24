@@ -242,21 +242,13 @@ public final class StatusBarCard {
 
     /** What the card's own rows read and write: the editor's side. */
     public interface Host {
-        /** Position's segment ({@link #positionIndex}). */
-        int position();
-        void setPosition(int index);
-        /** The face tile ({@link #faceIndex}). */
-        int clockFace();
-        void setClockFace(int index);
-        /** Page bar's segment: 0 Glyphs, 1 Marks ({@link #PAGE_BAR_MARKS}). */
-        int pageBar();
-        void setPageBar(int index);
-        /** Place's segment: 0 Strip, 1 In the pane ({@link #PLACE_PANE}). */
-        int place();
-        void setPlace(int index);
-        /** Clock position's segment ({@link #alignmentIndex}). */
-        int clockPosition();
-        void setClockPosition(int index);
+        /**
+         * The choice row {@code row} stands on: Position ({@link #positionIndex}), Clock face
+         * ({@link #faceIndex}), Clock position ({@link #alignmentIndex}), Page bar (0 Glyphs,
+         * 1 Marks, {@link #PAGE_BAR_MARKS}) or Place (0 Strip, 1 In the pane, {@link #PLACE_PANE}).
+         */
+        int choice(@NonNull Row row);
+        void setChoice(@NonNull Row row, int index);
         /** Option tile {@code index} ({@link #OPTION_12H} and on). */
         boolean option(int index);
         void setOption(int index, boolean on);
@@ -362,8 +354,8 @@ public final class StatusBarCard {
                     context.getString(R.string.editor_st_position_top)),
                 SegmentRow.Segment.both(EditorGlyphs.POS_BOTTOM,
                     context.getString(R.string.editor_st_position_bottom))),
-            host.position(), widthPx, host::setPosition);
-        return new CardRowView(row.root, () -> row.select(host.position()));
+            host.choice(Row.STATUS_POSITION), widthPx, index -> host.setChoice(Row.STATUS_POSITION, index));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_POSITION)));
     }
 
     @NonNull
@@ -372,10 +364,10 @@ public final class StatusBarCard {
         for (int i = 0; i < FACES.length; i++)
             tiles.add(new PreviewTilesRow.Tile(context.getString(FACE_NAMES[i]),
                 facePreview(context, FACES[i])));
-        PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.clockFace(),
-            host::setClockFace);
+        PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.choice(Row.CLOCK_FACE),
+            index -> host.setChoice(Row.CLOCK_FACE, index));
         // The Clock & Weather section's heading stands over the faces: no label of their own.
-        return new CardRowView(row.root, () -> row.select(host.clockFace()));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.CLOCK_FACE)));
     }
 
     /**
@@ -408,8 +400,8 @@ public final class StatusBarCard {
                     context.getString(R.string.editor_st_clock_center)),
                 SegmentRow.Segment.both(EditorGlyphs.CLOCK_ALIGN_RIGHT,
                     context.getString(R.string.editor_st_clock_right))),
-            host.clockPosition(), widthPx, host::setClockPosition);
-        return new CardRowView(row.root, () -> row.select(host.clockPosition()));
+            host.choice(Row.CLOCK_POSITION), widthPx, index -> host.setChoice(Row.CLOCK_POSITION, index));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.CLOCK_POSITION)));
     }
 
     /** Show seconds, a switch row bound to the Seconds option. */
@@ -481,10 +473,10 @@ public final class StatusBarCard {
             context.getString(R.string.editor_st_page_bar),
             new CharSequence[] {context.getString(R.string.editor_st_page_bar_glyphs),
                 context.getString(R.string.editor_st_page_bar_marks)},
-            host.pageBar(), widthPx, host::setPageBar);
+            host.choice(Row.STATUS_PAGE_BAR), widthPx, index -> host.setChoice(Row.STATUS_PAGE_BAR, index));
         row.root.setContentDescription(context.getString(R.string.editor_st_page_bar) + ". "
             + context.getString(R.string.editor_st_page_bar_summary));
-        return new CardRowView(row.root, () -> row.select(host.pageBar()));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_PAGE_BAR)));
     }
 
     /** Place's segments, in order: the status bar's own strip, then the thin row in the pane. */
@@ -511,10 +503,10 @@ public final class StatusBarCard {
             context.getString(R.string.editor_st_place),
             new CharSequence[] {context.getString(R.string.editor_st_place_strip),
                 context.getString(R.string.editor_st_place_pane)},
-            host.place(), widthPx, host::setPlace);
+            host.choice(Row.STATUS_PLACE), widthPx, index -> host.setChoice(Row.STATUS_PLACE, index));
         row.root.setContentDescription(context.getString(R.string.editor_st_place) + ". "
             + context.getString(R.string.editor_st_place_summary));
-        return new CardRowView(row.root, () -> row.select(host.place()));
+        return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_PLACE)));
     }
 
     /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */

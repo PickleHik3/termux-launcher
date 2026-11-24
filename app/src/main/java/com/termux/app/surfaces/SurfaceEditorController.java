@@ -5869,78 +5869,77 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The Status bar card's reads and writes, through the paths its old rows and Settings take. */
     @NonNull private final com.termux.app.surfaces.cards.StatusBarCard.Host mStatusCardHost =
         new com.termux.app.surfaces.cards.StatusBarCard.Host() {
-            @Override public int position() {
-                LayoutEditorController layout = mHost.layoutEditor();
-                return com.termux.app.surfaces.cards.StatusBarCard.positionIndex(
-                    layout == null ? null : layout.edgeOf(Element.STATUS));
-            }
-
-            @Override public void setPosition(int index) {
-                LayoutEditorController layout = mHost.layoutEditor();
-                PlaceLayout.Edge[] edges = com.termux.app.surfaces.cards.StatusBarCard.POSITIONS;
-                if (layout == null || index < 0 || index >= edges.length)
-                    return;
-                layout.moveTo(Element.STATUS, edges[index]);
-                positionTargets();
-                syncDirty();
-            }
-
-            @Override public int clockFace() {
+            @Override public int choice(@NonNull Row row) {
                 TermuxAppSharedPreferences prefs = prefs();
-                return com.termux.app.surfaces.cards.StatusBarCard.faceIndex(
-                    prefs == null ? null : prefs.getTopPaneClockStyle());
+                switch (row) {
+                    case STATUS_POSITION: {
+                        LayoutEditorController layout = mHost.layoutEditor();
+                        return com.termux.app.surfaces.cards.StatusBarCard.positionIndex(
+                            layout == null ? null : layout.edgeOf(Element.STATUS));
+                    }
+                    case CLOCK_FACE:
+                        return com.termux.app.surfaces.cards.StatusBarCard.faceIndex(
+                            prefs == null ? null : prefs.getTopPaneClockStyle());
+                    case CLOCK_POSITION:
+                        return com.termux.app.surfaces.cards.StatusBarCard.alignmentIndex(
+                            prefs == null ? null : prefs.getTopPaneClockAlignment());
+                    case STATUS_PAGE_BAR:
+                        return com.termux.app.surfaces.cards.StatusBarCard.pageBarIndex(
+                            prefs == null ? null : prefs.getPageBarLook());
+                    case STATUS_PLACE:
+                        return com.termux.app.surfaces.cards.StatusBarCard.placeIndex(
+                            prefs == null ? null : prefs.getStatusPlace());
+                    default:
+                        return 0;
+                }
             }
 
-            @Override public void setClockFace(int index) {
+            @Override public void setChoice(@NonNull Row row, int index) {
                 TermuxAppSharedPreferences prefs = prefs();
-                if (prefs == null)
-                    return;
-                pickClockStyle(com.termux.app.surfaces.cards.StatusBarCard.faceStyle(index,
-                    prefs.getTopPaneClockStyle()));
-            }
-
-            @Override public int clockPosition() {
-                TermuxAppSharedPreferences prefs = prefs();
-                return com.termux.app.surfaces.cards.StatusBarCard.alignmentIndex(
-                    prefs == null ? null : prefs.getTopPaneClockAlignment());
-            }
-
-            @Override public void setClockPosition(int index) {
-                String[] alignments = com.termux.app.surfaces.cards.StatusBarCard.ALIGNMENTS;
-                if (index >= 0 && index < alignments.length)
-                    pickClockAlignment(alignments[index]);
-            }
-
-            @Override public int pageBar() {
-                TermuxAppSharedPreferences prefs = prefs();
-                return com.termux.app.surfaces.cards.StatusBarCard.pageBarIndex(
-                    prefs == null ? null : prefs.getPageBarLook());
-            }
-
-            @Override public void setPageBar(int index) {
-                TermuxAppSharedPreferences prefs = prefs();
-                if (prefs == null || pageBar() == index)
-                    return;
-                prefs.setPageBarLook(
-                    com.termux.app.surfaces.cards.StatusBarCard.pageBarValue(index));
-                mHost.refreshTerminalWindowBar();
-                syncDirty();
-            }
-
-            @Override public int place() {
-                TermuxAppSharedPreferences prefs = prefs();
-                return com.termux.app.surfaces.cards.StatusBarCard.placeIndex(
-                    prefs == null ? null : prefs.getStatusPlace());
-            }
-
-            @Override public void setPlace(int index) {
-                TermuxAppSharedPreferences prefs = prefs();
-                if (prefs == null || place() == index)
-                    return;
-                prefs.setStatusPlace(
-                    com.termux.app.surfaces.cards.StatusBarCard.placeValue(index));
-                mHost.refreshTerminalWindowBar();
-                syncDirty();
+                switch (row) {
+                    case STATUS_POSITION: {
+                        LayoutEditorController layout = mHost.layoutEditor();
+                        PlaceLayout.Edge[] edges =
+                            com.termux.app.surfaces.cards.StatusBarCard.POSITIONS;
+                        if (layout == null || index < 0 || index >= edges.length)
+                            return;
+                        layout.moveTo(Element.STATUS, edges[index]);
+                        positionTargets();
+                        syncDirty();
+                        return;
+                    }
+                    case CLOCK_FACE:
+                        if (prefs == null)
+                            return;
+                        pickClockStyle(com.termux.app.surfaces.cards.StatusBarCard.faceStyle(
+                            index, prefs.getTopPaneClockStyle()));
+                        return;
+                    case CLOCK_POSITION: {
+                        String[] alignments =
+                            com.termux.app.surfaces.cards.StatusBarCard.ALIGNMENTS;
+                        if (index >= 0 && index < alignments.length)
+                            pickClockAlignment(alignments[index]);
+                        return;
+                    }
+                    case STATUS_PAGE_BAR:
+                        if (prefs == null || choice(row) == index)
+                            return;
+                        prefs.setPageBarLook(
+                            com.termux.app.surfaces.cards.StatusBarCard.pageBarValue(index));
+                        mHost.refreshTerminalWindowBar();
+                        syncDirty();
+                        return;
+                    case STATUS_PLACE:
+                        if (prefs == null || choice(row) == index)
+                            return;
+                        prefs.setStatusPlace(
+                            com.termux.app.surfaces.cards.StatusBarCard.placeValue(index));
+                        mHost.refreshTerminalWindowBar();
+                        syncDirty();
+                        return;
+                    default:
+                        return;
+                }
             }
 
             @Override public boolean option(int index) {

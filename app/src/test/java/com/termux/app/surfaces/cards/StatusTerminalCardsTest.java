@@ -503,16 +503,26 @@ public class StatusTerminalCardsTest {
         final boolean[] indicators = {true, true, false, true, true, false, true, false, false};
         int cameraGapOpened;
 
-        @Override public int position() { return position; }
-        @Override public void setPosition(int index) { position = index; }
-        @Override public int clockFace() { return face; }
-        @Override public void setClockFace(int index) { face = index; }
-        @Override public int pageBar() { return pageBar; }
-        @Override public void setPageBar(int index) { pageBar = index; }
-        @Override public int place() { return place; }
-        @Override public void setPlace(int index) { place = index; }
-        @Override public int clockPosition() { return align; }
-        @Override public void setClockPosition(int index) { align = index; }
+        @Override public int choice(@NonNull Row row) {
+            switch (row) {
+                case STATUS_POSITION: return position;
+                case CLOCK_FACE: return face;
+                case CLOCK_POSITION: return align;
+                case STATUS_PAGE_BAR: return pageBar;
+                case STATUS_PLACE: return place;
+                default: return 0;
+            }
+        }
+        @Override public void setChoice(@NonNull Row row, int index) {
+            switch (row) {
+                case STATUS_POSITION: position = index; break;
+                case CLOCK_FACE: face = index; break;
+                case CLOCK_POSITION: align = index; break;
+                case STATUS_PAGE_BAR: pageBar = index; break;
+                case STATUS_PLACE: place = index; break;
+                default: break;
+            }
+        }
         @Override public boolean option(int index) { return options[index]; }
         @Override public void setOption(int index, boolean on) { options[index] = on; }
         @Override public boolean indicator(int index) { return indicators[index]; }
