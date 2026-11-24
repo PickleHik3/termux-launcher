@@ -29,6 +29,7 @@ import com.termux.app.AnimationSpeed;
 import com.termux.app.launcher.home.HomeGestures;
 import com.termux.app.launcher.home.HomePageIndicator;
 import com.termux.app.wall.pageswitch.PageBarBand;
+import com.termux.app.wall.pageswitch.PageBarLook;
 import com.termux.app.wall.pageswitch.PageBarModel;
 import com.termux.app.wall.pageswitch.PageBarView;
 import com.termux.app.launcher.home.HomePageTransition;
@@ -206,6 +207,7 @@ public final class WidgetPaneView extends FrameLayout
     private Listener listener;
     private boolean reducedMotion;
     @NonNull private HomePageIndicator indicator = HomePageIndicator.DEFAULT;
+    @NonNull private PageBarLook pageBarLook = PageBarLook.DEFAULT;
     /** How the page moves while a swipe turns it (Settings › Home › Page transition). */
     @NonNull private HomePageTransition transition = HomePageTransition.DEFAULT;
     /**
@@ -313,7 +315,7 @@ public final class WidgetPaneView extends FrameLayout
         // while the indicator is on (a keyboard hides the pill, not the band, and adding a page
         // does not shrink every cell); with the indicator off the grid takes the band's height.
         LayoutParams gridParams = new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT);
-        gridParams.bottomMargin = gridBottomInsetPx(0, indicator.glyphsShown(), 0,
+        gridParams.bottomMargin = gridBottomInsetPx(0, bandOn(), 0,
             getResources().getDisplayMetrics().density);
         addView(grid, gridParams);
 
@@ -328,7 +330,7 @@ public final class WidgetPaneView extends FrameLayout
 
         dots = new PageBarView(context); dots.setId(R.id.widget_page_dots);
         LayoutParams dotsParams = new LayoutParams(LayoutParams.MATCH_PARENT,
-            PageBarBand.bandHeightPx(indicator.glyphsShown(), false, dockEdgeGapPx, density()),
+            PageBarBand.bandHeightPx(bandOn(), false, dockEdgeGapPx, density()),
             Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL);
         dotsParams.bottomMargin = 0;
         addView(dots, dotsParams);
@@ -469,6 +471,20 @@ public final class WidgetPaneView extends FrameLayout
     }
 
     /**
+     * Status bar card › Page bar: under Marks Home gives the pill's band to the grid, as with the
+     * indicator off. Compared before it applies, so only a change of look resizes the grid.
+     */
+    public void setPageBarLook(@NonNull PageBarLook value) {
+        if (pageBarLook == value) return;
+        pageBarLook = value;
+        setPageState(pageCount, currentPage);
+    }
+
+    private boolean bandOn() {
+        return PageBarBand.bandOn(indicator.glyphsShown(), pageBarLook);
+    }
+
+    /**
      * Whether a keyboard, the in-app one or the system's, is up on Home. The pill is put away
      * while it is and comes back with the keyboard down; the band keeps its height, so no keyboard
      * toggle resizes the grid.
@@ -487,7 +503,7 @@ public final class WidgetPaneView extends FrameLayout
      */
     private void applyBand() {
         float density = density();
-        boolean on = indicator.glyphsShown();
+        boolean on = bandOn();
         LayoutParams gridParams = (LayoutParams) grid.getLayoutParams();
         int gridBottom = gridBottomInsetPx(dockReservePx, on, dockEdgeGapPx, density);
         if (gridParams.bottomMargin != gridBottom) {

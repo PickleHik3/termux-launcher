@@ -131,4 +131,34 @@ public class PageBarBandTest {
             new PageBarLayout(1f, 1000f, 3, 100f, 1200f).pillLeftPx(), EPS);
         assertEquals(16f, new PageBarLayout(1f, 360f, 3, true).pillLeftPx(), EPS);
     }
+
+    @Test public void marksLookGivesTheBandBackLikeTheIndicatorOff() {
+        assertTrue(PageBarBand.bandOn(true, PageBarLook.GLYPHS));
+        assertFalse(PageBarBand.bandOn(true, PageBarLook.MARKS));
+        assertFalse(PageBarBand.bandOn(false, PageBarLook.GLYPHS));
+        assertFalse(PageBarBand.bandOn(false, PageBarLook.MARKS));
+        assertTrue(PageBarBand.bandOn(true, null));
+    }
+
+    @Test public void everyCombinationOfLookDockRowsAndEdgeGapFeedsTheSameDecision() {
+        for (PageBarLook look : PageBarLook.values()) {
+            for (boolean indicator : new boolean[] {false, true}) {
+                for (int reserve : new int[] {0, 90, 180}) {      // none, Docked, Floating-ish
+                    for (int edgeGap : new int[] {0, 16, 40}) {   // flush, Floating gap
+                        boolean on = PageBarBand.bandOn(indicator, look);
+                        int band = PageBarBand.bandHeightPx(on, PageBarBand.dockRowsBelow(reserve),
+                            edgeGap, 2f);
+                        String what = look + " " + indicator + " " + reserve + " " + edgeGap;
+                        if (look == PageBarLook.MARKS || !indicator) {
+                            assertEquals(what, 0, band);
+                            assertFalse(what, PageBarBand.shown(on, false));
+                        } else {
+                            assertTrue(what, band > 0);
+                            assertTrue(what, PageBarBand.shown(on, false));
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
