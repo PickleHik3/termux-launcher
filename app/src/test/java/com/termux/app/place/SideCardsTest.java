@@ -36,9 +36,12 @@ public class SideCardsTest {
             false));
     }
 
-    @Test public void dockedRefuses() {
-        assertEquals(Refusal.DOCKED, SideCards.refusal(HOME, DEFAULT_TERMINAL, false, false));
-        assertFalse(SideCards.apart(HOME, DEFAULT_TERMINAL, false, false));
+    /** Docked's slab splits too (ADR 0032, accepted 2026-11-21; #304): the rule reads no Style. */
+    @Test public void dockedStandsApartToo() {
+        assertNull(SideCards.refusal(HOME, DEFAULT_TERMINAL, false, false));
+        assertTrue(SideCards.apart(HOME, DEFAULT_TERMINAL, false, false));
+        assertNull(SideCards.refusal(LayoutFixtures.PONG.home, LayoutFixtures.PONG.window, false,
+            false));
     }
 
     @Test public void aTerminalWithoutKeysRefuses() {

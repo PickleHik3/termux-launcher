@@ -6,7 +6,8 @@ import androidx.annotation.Nullable;
 import com.termux.app.page.PageKind;
 
 /**
- * When Home and the Terminal each wear a glass card of their own under Floating (ADR 0032, #302),
+ * When Home and the Terminal each wear a glass card of their own (ADR 0032: #302 under Floating,
+ * #304 under Docked),
  * and the two numbers that follow: the one bottom margin the stack's container keeps at both
  * rests, and how far below its layout Home's side is drawn to make up the difference. Pure: the
  * activity's rest pass and the stack's renderer both read these, so the margin and the drop have
@@ -14,7 +15,10 @@ import com.termux.app.page.PageKind;
  *
  * <p>The two cards stand "apart" when the Terminal's card carries the extra-keys row and nothing
  * else: it then travels with the Terminal, and Home's card travels with Home. Every Dock design
- * is the same here (the rule reads layouts, never the design).
+ * and both Styles are the same here (the rule reads layouts, never the design or the Style;
+ * {@code floating} stays a parameter for the callers). Under Floating the Terminal's card is the
+ * extra-keys band alone; under Docked it is a second back host cut by the Docked dock formula
+ * ({@code RestCards.StackView#TERMINAL_HOST}), the same card the one host wore at that rest.
  */
 public final class SideCards {
 
@@ -22,8 +26,6 @@ public final class SideCards {
 
     /** Why the two cards do not stand apart; the first reason that holds. */
     public enum Refusal {
-        /** The dock is Docked: its slab is not a card. */
-        DOCKED,
         /** The Terminal's layout shows no extra-keys row along the bottom. */
         NO_KEYS_ROW,
         /** The Terminal's extra-keys row stands under the keyboard, in a view of its own. */
@@ -41,7 +43,6 @@ public final class SideCards {
     @Nullable
     public static Refusal refusal(@NonNull PlaceLayout home, @NonNull PlaceLayout terminal,
                                   boolean floating, boolean statusOnDockPlank) {
-        if (!floating) return Refusal.DOCKED;
         if (!PlaceChromePolicy.extraKeysRowShown(terminal)) return Refusal.NO_KEYS_ROW;
         if (StackLanes.where(terminal, Element.EXTRA_KEYS) != StackLanes.Where.BOTTOM_OVER)
             return Refusal.KEYS_NOT_OVER_KEYBOARD;
@@ -79,17 +80,19 @@ public final class SideCards {
     /**
      * The container's bottom padding: none while the cards stand apart, so its inner box is the
      * same at both rests and Home's card, pinned to its bottom, stands at Home's rest whichever
-     * page is in front; else the pass's flush inset ({@code StackLayout.Result#flushBottomInsetPx}).
+     * page is in front; else the rest's own ({@code BottomInsets#stackPaddingPx},
+     * {@code RestCards#stackPaddingPx}: the pass's flush inset unless the dock wears the foot).
      */
-    public static int containerPaddingPx(int flushBottomInsetPx, boolean apart) {
-        return apart ? 0 : Math.max(0, flushBottomInsetPx);
+    public static int containerPaddingPx(int stackPaddingPx, boolean apart) {
+        return apart ? 0 : Math.max(0, stackPaddingPx);
     }
 
     /**
      * How far above its layout the Terminal's side is drawn while the cards stand apart: the
      * padding the container no longer pads at the Terminal's own rest
-     * ({@code BottomInsets#stackPaddingPx} of that rest: the lower half of its flush
-     * padding while its keyboard is down), so the Terminal's lane rows, its extra-keys card and its
+     * ({@code BottomInsets#stackPaddingPx} of that rest, {@code RestCards#stackPaddingPx}: the
+     * lower half of its flush padding while its keyboard is down, none while the Docked dock
+     * wears the foot and the keyboard column's margin holds that padding), so the Terminal's lane rows, its extra-keys card and its
      * keyboard column are drawn where the padding stood them. 0 otherwise. Like
      * {@link #homeSideDropPx}, a number of one side's rest, read from the Terminal's rest whichever
      * page is in front: nothing in the layout carries it (the keyboard column, which Home's rows

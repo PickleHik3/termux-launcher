@@ -167,9 +167,11 @@ public class SideCardsParityTest {
 
     /**
      * The container's inner box has one owner while apart: no padding at either rest, and the
-     * Terminal's flush inset carried as its own lift, the Terminal's own rest's whichever page is
-     * in front, so Home's pinned card stands on the container's true bottom and nothing the
-     * landing lays out carries the Terminal's lift.
+     * padding the Terminal's own rest pads ({@link RestCards#stackPaddingPx}, its
+     * {@link BottomInsets#stackPaddingPx}) carried as its own lift, whichever page is in front,
+     * so Home's pinned card stands on the container's true bottom and nothing the landing lays
+     * out carries the Terminal's lift. Under Docked with the dock's foot that padding stands in
+     * the keyboard column's margin, so the lift is none there.
      */
     @Test public void whileApartTheContainerPadsNothingAndTheTerminalCarriesItsInset() {
         int lifted = 0;
@@ -181,10 +183,9 @@ public class SideCardsParityTest {
                         SideCardsController controller = new SideCardsController(
                             hostOf(f, page, up, floating, rendererFor(page.isHome())));
                         controller.update(f.pass(page, up, floating));
-                        int inset = f.settle(page, up, floating).flushBottomInsetPx;
+                        int inset = stackPaddingPx(f, page, up, floating);
                         // The Terminal's own rest (hostOf gives both sides this keyboard).
-                        int terminalInset = f.settle(PageRef.TERMINAL, up, floating)
-                            .flushBottomInsetPx;
+                        int terminalInset = stackPaddingPx(f, PageRef.TERMINAL, up, floating);
                         boolean apart = controller.apart();
                         int padding = controller.containerPaddingPx(inset);
                         int lift = controller.terminalSideLiftPx();
@@ -196,6 +197,12 @@ public class SideCardsParityTest {
             }
         }
         assertTrue("some Terminal rests stand a lift", lifted > 0);
+    }
+
+    /** What {@code page}'s own rest pads the container by, as the activity pads it. */
+    private static int stackPaddingPx(@NonNull Fixture f, @NonNull PageRef page, boolean up,
+                                      boolean floating) {
+        return RestCards.of(f.cardsRestOf(page, up, floating)).stackPaddingPx();
     }
 
     @Test public void everyFixtureTheControllerAndTheRendererAgreeWithTheRule() {
@@ -228,8 +235,8 @@ public class SideCardsParityTest {
                         assertEquals(label, drop, mUnderlay.getTranslationY(), 0f);
                         assertEquals(label, drop, mHomeRow.getTranslationY(), 0f);
                         // The Terminal's lane: its own rest's lift, at both rests.
-                        float lift = SideCards.terminalSideLiftPx(f.settle(PageRef.TERMINAL, up,
-                            floating).flushBottomInsetPx, apart);
+                        float lift = SideCards.terminalSideLiftPx(stackPaddingPx(f,
+                            PageRef.TERMINAL, up, floating), apart);
                         assertEquals(label, -lift, mKeysRow.getTranslationY(), 0f);
                         assertEquals(label, lift, controller.terminalSideLiftPx(), 0f);
                         // Home's slide: 0 at Home's rest, a container's width to the left otherwise.

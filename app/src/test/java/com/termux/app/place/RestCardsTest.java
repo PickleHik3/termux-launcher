@@ -337,4 +337,57 @@ public class RestCardsTest {
             if (card.view == StackView.HOST) out.append(card).append(' ');
         return out.toString();
     }
+
+    /** A view's cards as the dress reads them: box, corners, each edge's kind and the pieces. */
+    private static String cardsOn(java.util.List<RestCards.Card> cards, StackView view) {
+        StringBuilder out = new StringBuilder();
+        for (RestCards.Card card : cards) {
+            if (card.view != view) continue;
+            out.append(card.id).append('@').append(card.box).append(' ').append(card.corners);
+            for (Edge edge : Edge.values()) out.append(' ').append(card.edge(edge));
+            out.append(' ').append(card.pieces).append("; ");
+        }
+        return out.toString();
+    }
+
+    /**
+     * Docked, while the cards stand apart (#304): the Terminal's own host carries the card the one
+     * host wore at the Terminal's rest, box, corners, edges and pieces alike (the flush air above
+     * the keys and the foot under the gesture pill included), whichever page is in front; Home's
+     * host keeps Home's with the keyboard down.
+     */
+    @Test public void dockedTheTerminalsHostIsTheOneHostsCardAtTheTerminalsRest() {
+        int cases = 0;
+        int feet = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures()) {
+            for (DockStyle design : DockStyle.CHOICES) {
+                LayoutFixtures.Fixture f = base.withHomeDesign(design);
+                for (boolean up : new boolean[] {false, true}) {
+                    RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false,
+                        false));
+                    if (!terminal.apart()) continue;
+                    String label = f.name + " " + design + " terminal kb=" + up;
+                    RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, false));
+                    String want = cardsOn(alone.cards(), StackView.HOST);
+                    assertTrue(label, !want.isEmpty());
+                    assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
+                    assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
+                    // Parked with the Terminal while Home is in front, at the same rest.
+                    RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, false));
+                    assertEquals(label + " parked", want,
+                        cardsOn(home.parked(), StackView.TERMINAL_HOST));
+                    assertEquals(label + " laid out", terminal.laidOut(StackView.TERMINAL_HOST),
+                        home.laidOut(StackView.TERMINAL_HOST));
+                    // Home's card at Home's rest is the one host's there.
+                    RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, false));
+                    assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
+                        cardsOn(home.cards(), StackView.HOST));
+                    if (want.contains("FOOT")) feet++;
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some Docked rests stand apart", cases > 0);
+        assertTrue("some wear the foot", feet > 0);
+    }
 }

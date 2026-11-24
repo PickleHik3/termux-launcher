@@ -248,10 +248,10 @@ public final class SideCardsController {
 
     /**
      * The container's bottom padding ({@link com.termux.app.place.SideCards#containerPaddingPx}):
-     * none while apart, else {@code flushBottomInsetPx}, the pass's.
+     * none while apart, else {@code stackPaddingPx}, the rest's ({@code BottomInsets#stackPaddingPx}).
      */
-    public int containerPaddingPx(int flushBottomInsetPx) {
-        return com.termux.app.place.SideCards.containerPaddingPx(flushBottomInsetPx, mApart);
+    public int containerPaddingPx(int stackPaddingPx) {
+        return com.termux.app.place.SideCards.containerPaddingPx(stackPaddingPx, mApart);
     }
 
     /**
