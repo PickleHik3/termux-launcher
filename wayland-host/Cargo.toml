@@ -23,6 +23,10 @@ libc = "0.2"
 # Only for the driver probe; loads the system libvulkan.so at run time.
 ash = "0.38"
 
+# The clipboard bridge's pipe code runs in the host's tests too.
+[target.'cfg(all(unix, not(target_os = "android")))'.dependencies]
+libc = "0.2"
+
 # Line tables only, so a tombstone names functions and lines (ndk-stack with the unstripped copy
 # the build script keeps in symbols/<abi>/); the script strips the packaged library itself.
 [profile.release]

@@ -168,6 +168,8 @@ public final class LinuxWindowsActivity extends Activity {
     /** A window has been here since the screen opened: the last one closing finishes it. */
     private boolean mHadWindow;
     private long mFocusedId;
+    /** Android's clipboard and the Linux apps', while this screen is in front. */
+    private final LinuxClipboardBridge mClipboard = new LinuxClipboardBridge(this, this::sendClipboardText);
     private int mHostPid;
 
     private final IBinder.DeathRecipient mDeath = () -> mMain.post(this::onHostDied);
@@ -244,6 +246,11 @@ public final class LinuxWindowsActivity extends Activity {
 
         @Override
         public void onXDisplay(String display) {}
+
+        @Override
+        public void onClipboardText(String text) {
+            mMain.post(() -> mClipboard.fromLinux(text));
+        }
     };
 
     /** One toplevel: its tab in the row and its TextureView in the window area. */
@@ -838,6 +845,7 @@ public final class LinuxWindowsActivity extends Activity {
         if (mHostRunning || mHostStarting) mStopped = false;
         switch (state) {
             case ILinuxWindows.STATE_RUNNING:
+                mClipboard.pushCurrent();
                 mStatus.setText("Host pid " + mHostPid + ". " + message);
                 if (mOpeningExtra && !mOpeningExpired) {
                     mMain.removeCallbacks(mOpeningExpiry);
@@ -1134,6 +1142,21 @@ public final class LinuxWindowsActivity extends Activity {
         super.onBackPressed();
     }
 
+    private void sendClipboardText(String text) {
+        ILinuxWindows service = mService;
+        if (service == null) return;
+        try {
+            service.setClipboardText(text);
+        } catch (RemoteException ignored) {
+        }
+    }
+
+    @Override
+    public void onWindowFocusChanged(boolean hasFocus) {
+        super.onWindowFocusChanged(hasFocus);
+        mClipboard.setInFront(hasFocus);
+    }
+
     @Override
     protected void onStart() {
         super.onStart();
@@ -1153,6 +1176,7 @@ public final class LinuxWindowsActivity extends Activity {
         mVisible = false;
         // A modifier latched on the keyboard does not carry over to the next visit.
         mKeyboard.reset();
+        mClipboard.setInFront(false);
         // Keys held as the screen goes must not stay down in the window.
         focus(0);
         super.onStop();

@@ -5,6 +5,7 @@
 //! these calls carry are `crate::protocol`'s, mirrored from `ILinuxWindows.aidl`.
 
 pub mod log;
+mod clipboard;
 mod focus;
 mod host;
 mod java;
@@ -307,6 +308,16 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativePointer<'l>
 ) {
     guarded("nativePointer", (), || {
         send(Command::Pointer { id, action, button, x, y, time: event_time(event_time_ms) })
+    })
+}
+
+/// Android's clipboard text, offered to Linux clients. Null and oversize texts are dropped.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetClipboardText<'l>(mut env: JNIEnv<'l>, _class: JClass<'l>, text: JString<'l>) {
+    guarded("nativeSetClipboardText", (), || {
+        if let Some(text) = java_string(&mut env, &text).filter(|t| t.len() <= crate::clipboard::MAX_TEXT_BYTES) {
+            send(Command::SetClipboardText { text });
+        }
     })
 }
 

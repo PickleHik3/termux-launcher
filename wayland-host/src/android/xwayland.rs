@@ -13,6 +13,7 @@
 //! compositor left behind are removed on the next start.
 
 use std::fs::File;
+use std::os::fd::OwnedFd;
 use std::os::unix::net::UnixStream;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -27,6 +28,7 @@ use smithay::reexports::x11rb::wrapper::ConnectionExt as _;
 use smithay::reexports::x11rb::rust_connection::{DefaultStream, RustConnection};
 use smithay::xwayland::xwm::settings::Value;
 use smithay::utils::{Logical, Rectangle};
+use smithay::wayland::selection::SelectionTarget;
 use smithay::wayland::xwayland_shell::{XWaylandShellHandler, XWaylandShellState};
 use smithay::xwayland::xwm::{Reorder, ResizeEdge, WmWindowProperty, XwmId};
 use smithay::xwayland::{X11Surface, X11Wm, XWayland, XWaylandClientData, XWaylandEvent, XwmHandler};
@@ -58,7 +60,7 @@ pub struct XwaylandState {
     /// Kept until the host stops, even after Xwayland is gone: smithay's window-manager event
     /// source stays registered (its token is not ours) and asks `xwm_state` for it, so dropping
     /// it while the loop runs would panic.
-    wm: Option<X11Wm>,
+    pub(super) wm: Option<X11Wm>,
     /// The XWayland source, which owns the display's lock and sockets; removed when Xwayland
     /// is gone so the display number is free again.
     token: Option<RegistrationToken>,
@@ -220,6 +222,28 @@ impl XwmHandler for State {
         // smithay asks only from its window-manager source, which exists only once start_wm
         // gave us the wm, and the wm is kept until the loop has stopped (see XwaylandState).
         self.xwayland.as_mut().and_then(|x| x.wm.as_mut()).expect("X11 window manager")
+    }
+
+    fn allow_selection_access(&mut self, _xwm: XwmId, selection: SelectionTarget) -> bool {
+        selection == SelectionTarget::Clipboard
+    }
+
+    fn send_selection(&mut self, _xwm: XwmId, selection: SelectionTarget, mime_type: String, fd: OwnedFd) {
+        if selection == SelectionTarget::Clipboard {
+            self.serve_x11_read(mime_type, fd);
+        }
+    }
+
+    fn new_selection(&mut self, _xwm: XwmId, selection: SelectionTarget, mime_types: Vec<String>) {
+        if selection == SelectionTarget::Clipboard {
+            self.x11_selection_set(mime_types);
+        }
+    }
+
+    fn cleared_selection(&mut self, _xwm: XwmId, selection: SelectionTarget) {
+        if selection == SelectionTarget::Clipboard {
+            self.x11_selection_cleared();
+        }
     }
 
     fn new_window(&mut self, _xwm: XwmId, _window: X11Surface) {}

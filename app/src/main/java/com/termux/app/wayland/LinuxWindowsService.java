@@ -138,6 +138,11 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         public void close(long id) {
             if (mRunning) WaylandHost.nativeClose(id);
         }
+
+        @Override
+        public void setClipboardText(String text) {
+            if (mRunning && LinuxClipboardText.acceptable(text)) WaylandHost.nativeSetClipboardText(text);
+        }
     };
 
     private final ILinuxWindowsDebug.Stub mDebugBinder = new ILinuxWindowsDebug.Stub() {
@@ -326,6 +331,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
                     call.run(mCallbacks.getBroadcastItem(i));
                 } catch (RemoteException ignored) {
                     // RemoteCallbackList drops a dead listener on its own.
+                } catch (RuntimeException ignored) {
+                    // A text too big for the binder buffer (TransactionTooLargeException): dropped.
                 }
             }
         } finally {
@@ -368,6 +375,12 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     public void onXDisplay(String display) {
         if (!mRunning) return;
         setXDisplay(display == null ? "" : display);
+    }
+
+    @Override
+    public void onClipboardText(String text) {
+        if (!mRunning || !LinuxClipboardText.acceptable(text)) return;
+        broadcast(cb -> cb.onClipboardText(text));
     }
 
     @Override

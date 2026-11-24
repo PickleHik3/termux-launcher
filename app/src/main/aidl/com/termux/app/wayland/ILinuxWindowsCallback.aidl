@@ -23,4 +23,6 @@ oneway interface ILinuxWindowsCallback {
      * addCallback after onHostState.
      */
     void onXDisplay(String display);
+    /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
+    void onClipboardText(String text);
 }
