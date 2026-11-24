@@ -135,16 +135,14 @@ public final class TerminalSessionBrowser {
         TerminalWorkspaceStore store = new TerminalWorkspaceStore();
         for (TerminalWorkspaceStore.Entry entry : entries) {
             int panes = 0;
-            boolean commands = false;
             try {
                 TerminalWorkspace workspace = store.load(entry.name);
                 panes = workspace.paneCount();
-                commands = workspace.commandCount() > 0;
             } catch (TerminalWorkspace.WorkspaceException ignored) {
                 // Unreadable, but still the user's file and still deletable from the row.
             }
             out.add(new SessionsDrawerView.SavedWorkspace(entry.name, panes,
-                entry.modifiedAtEpochMs, commands));
+                entry.modifiedAtEpochMs));
         }
         return out;
     }
@@ -200,15 +198,14 @@ public final class TerminalSessionBrowser {
             else showActionFailed();
         }
 
-        @Override public void onSaveWorkspace(@NonNull String name, boolean captureCommands) {
-            saveWorkspace(name, false, captureCommands);
+        @Override public void onSaveWorkspace(@NonNull String name) {
+            saveWorkspace(name, false);
         }
 
-        @Override public void onLoadWorkspace(@NonNull String name, boolean replace,
-                                              boolean runCommands) {
+        @Override public void onLoadWorkspace(@NonNull String name, boolean replace) {
             dismiss();
             try {
-                mActivity.loadWorkspace(name, replace, runCommands);
+                mActivity.loadWorkspace(name, replace);
                 AppNotice.show(mActivity, R.drawable.ic_rl_load,
                     mActivity.getString(R.string.workspace_picker_loaded, name), false);
             } catch (TerminalWorkspace.WorkspaceException e) {
@@ -246,10 +243,10 @@ public final class TerminalSessionBrowser {
      * <p>The overwrite question is the one thing here that cannot be a row: the drawer is gone by
      * then, and the answer is about a file rather than about anything the list is showing.
      */
-    private void saveWorkspace(@Nullable String name, boolean overwrite, boolean captureCommands) {
+    private void saveWorkspace(@Nullable String name, boolean overwrite) {
         try {
             TerminalWorkspace workspace = mActivity.saveWorkspace(name == null ? "" : name,
-                overwrite, captureCommands);
+                overwrite);
             AppNotice.show(mActivity, mActivity.getString(
                 R.string.session_browser_workspace_saved, workspace.name), false);
         } catch (TerminalWorkspace.WorkspaceException e) {
@@ -268,7 +265,7 @@ public final class TerminalSessionBrowser {
             TerminalSheetViews.addAction(actions,
                 mActivity.getString(R.string.session_browser_overwrite), () -> {
                     sheet.dismiss();
-                    saveWorkspace(requested, true, captureCommands);
+                    saveWorkspace(requested, true);
                 });
             sheet.show(mActivity.getString(
                 R.string.session_browser_workspace_overwrite_title, requested), body);

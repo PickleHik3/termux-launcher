@@ -571,12 +571,10 @@ public interface TerminalHost extends SoftKeyboardPolicy {
 
     // --- Workspaces ---
 
-    @NonNull TerminalWorkspace saveWorkspace(@NonNull String requestedName, boolean overwrite,
-                                             boolean captureCommands)
+    @NonNull TerminalWorkspace saveWorkspace(@NonNull String requestedName, boolean overwrite)
         throws TerminalWorkspace.WorkspaceException;
 
-    @NonNull TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace,
-                                                        boolean runCommands)
+    @NonNull TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace)
         throws TerminalWorkspace.WorkspaceException;
 
     @NonNull List<TerminalWorkspaceStore.Entry> listWorkspaces()

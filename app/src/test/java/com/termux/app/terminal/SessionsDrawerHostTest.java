@@ -273,10 +273,10 @@ public class SessionsDrawerHostTest {
             events.add("rename:" + id + "=" + name);
         }
         @Override public void onCloseSession(long id) { events.add("close:" + id); }
-        @Override public void onSaveWorkspace(@NonNull String name, boolean capture) {
+        @Override public void onSaveWorkspace(@NonNull String name) {
             events.add("save:" + name);
         }
-        @Override public void onLoadWorkspace(@NonNull String name, boolean replace, boolean run) {
+        @Override public void onLoadWorkspace(@NonNull String name, boolean replace) {
             events.add("load:" + name);
         }
         @Override public void onDeleteWorkspace(@NonNull String name) {

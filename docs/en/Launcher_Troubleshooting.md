@@ -97,16 +97,13 @@ termux-reload-settings
 
 ## A workspace did not resume a program
 
-A workspace is a terminal layout definition, not a process checkpoint. By default it restores
-sessions, windows, panes, titles, and working directories, then starts normal login shells.
+A workspace is a terminal layout definition, not a process checkpoint. Saving keeps the program
+running in each pane, and loading starts it again from the beginning in the pane's saved folder. It
+does not continue from the previous instruction or application state, and scrollback is not kept.
 
-To offer command restart:
-
-1. turn on **Also save what is running** while saving; and
-2. approve running the recorded commands while loading.
-
-Approved commands start again from the beginning. They do not continue from the previous instruction
-or application state. Review hand-edited workspace JSON before running recorded commands.
+If a program is no longer installed, or its folder is gone, that pane opens as a shell with one
+line saying what did not start. Review hand-edited workspace JSON before loading it, since it
+starts the programs it names.
 
 Use **Append** when you want to keep the current hierarchy. Use **Replace** only after saving anything
 important. Deleting a saved workspace removes its JSON definition but does not close running shells.

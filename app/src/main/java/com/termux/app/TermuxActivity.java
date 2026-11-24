@@ -12122,14 +12122,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Rebuilds the autosaved arrangement on a cold start, as Saved sessions' Load does: fresh
-     * shells in the saved working directories — never the saved commands, which a crashed run
-     * must not replay — the row's windows and trees, and the floats on their pages. Start in =
+     * shells in the saved working directories running the saved programs, as a kill took them
+     * (the autosave follows what runs in each pane), the row's windows and trees, and the floats on their pages. Start in =
      * Terminal with no window left in the row also gets one fresh shell. False when it could
      * not be rebuilt; the caller then starts one fresh shell.
      */
     private boolean rebuildArrangement(@NonNull com.termux.app.terminal.TerminalWorkspace arrangement) {
         try {
-            restoreArrangement(arrangement, false, false);
+            restoreArrangement(arrangement, false);
         } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException e) {
             Logger.logWarn(LOG_TAG, "The autosaved arrangement could not be rebuilt: " + e.getMessage());
             return false;
@@ -12182,7 +12182,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Writes the arrangement to the autosave slot now, off the main thread, without commands.
+     * Writes the arrangement to the autosave slot now, off the main thread.
      * Exit is itself the arrangement: the service wrote the empty one, and the windows its dying
      * shells take down on the way out must not overwrite it.
      */
@@ -12191,7 +12191,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!mArrangementAutosaveArmed || mTermuxService == null || mTermuxService.mWantsToStop
             || mPaneController == null) return;
         final com.termux.app.terminal.TerminalWorkspace arrangement = snapshotArrangement(
-            com.termux.app.terminal.TerminalWorkspaceStore.AUTOSAVE_NAME, false);
+            com.termux.app.terminal.TerminalWorkspaceStore.AUTOSAVE_NAME);
         final TermuxService service = mTermuxService;
         ARRANGEMENT_AUTOSAVE_WRITER.execute(() -> {
             // An Exit between the snapshot and the write wins.
@@ -23541,6 +23541,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         refreshTerminalWindowBar();
         refreshSessionsDrawer();
         syncBackgroundProcessStack();
+        // What runs in a pane is part of the arrangement the autosave keeps for a kill.
+        scheduleArrangementAutosave();
     }
 
     /**
@@ -23664,10 +23666,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /** Capture the complete live session/window/pane topology into a durable JSON file. */
     @NonNull
     public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
-            @NonNull String requestedName, boolean overwrite, boolean captureCommands)
+            @NonNull String requestedName, boolean overwrite)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         String name = com.termux.app.terminal.TerminalWorkspaceStore.validateName(requestedName);
-        com.termux.app.terminal.TerminalWorkspace workspace = snapshotArrangement(name, captureCommands);
+        com.termux.app.terminal.TerminalWorkspace workspace = snapshotArrangement(name);
         if (workspace == null) {
             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                 "no_session", "There are no terminal sessions to save");
@@ -23680,12 +23682,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * The live arrangement — every session's row of windows with their trees, then the Home
      * floats — in the Saved sessions model under {@code name}, or null when there is nothing
-     * (no window and no float). Commands are captured only when {@code captureCommands}: the
-     * autosave never keeps one.
+     * (no window and no float). Every pane keeps the program running in it, read from the system
+     * now rather than from the window pills' cache; the autosave keeps them too.
      */
     @Nullable
-    private com.termux.app.terminal.TerminalWorkspace snapshotArrangement(@NonNull String name,
-                                                                         boolean captureCommands) {
+    private com.termux.app.terminal.TerminalWorkspace snapshotArrangement(@NonNull String name) {
         if (mPaneController == null) return null;
         boolean anyWindow = false;
         for (WSession ws : mWSessions) anyWindow |= !ws.windows.isEmpty();
@@ -23695,12 +23696,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.terminal.TerminalPaneController.WorkspacePaneCapture capture = shell -> {
             String cwd = shell.getCwd();
             if (cwd == null) cwd = getProperties().getDefaultWorkingDirectory();
-            java.util.List<String> command = java.util.Collections.emptyList();
-            if (captureCommands && mWindowForegroundResolver != null) {
-                com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
-                    mWindowForegroundResolver.get(shell.getPid());
-                if (info != null && !info.idle) command = info.command;
-            }
+            java.util.List<String> command =
+                com.termux.app.statusbar.WindowForegroundResolver.captureCommand(shell.getPid());
             return new com.termux.app.terminal.TerminalWorkspace.Pane(
                 cwd, shell.mSessionName, command);
         };
@@ -23824,45 +23821,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return "fish".equals(new java.io.File(shellPath).getName());
     }
 
-    /**
-     * Single-quote an argument so a shell reads it back as the one literal word it was.
-     *
-     * <p>The two families disagree inside single quotes. POSIX shells take every character
-     * literally, so a quote has to end the string, be escaped outside it, and start a new one.
-     * Fish instead honours {@code \'} and {@code \\} within the quotes, which means a backslash
-     * must be doubled for fish and must not be for anyone else — and an argument ending in a
-     * backslash would otherwise escape fish's own closing quote and swallow the rest of the line.
-     */
+    /** See {@link com.termux.app.terminal.WorkspaceRestore#shellQuote}. */
     @NonNull
     @androidx.annotation.VisibleForTesting
     static String shellQuote(@NonNull String argument, boolean fishStyle) {
-        if (fishStyle)
-            return "'" + argument.replace("\\", "\\\\").replace("'", "\\'") + "'";
-        return "'" + argument.replace("'", "'\\''") + "'";
+        return com.termux.app.terminal.WorkspaceRestore.shellQuote(argument, fishStyle);
     }
 
     /** Rebuild a shell command line from captured argv, quoting every word. */
     @NonNull
     @androidx.annotation.VisibleForTesting
     static String shellCommandLine(@NonNull java.util.List<String> command, boolean fishStyle) {
-        StringBuilder line = new StringBuilder();
-        for (String argument : command) {
-            if (line.length() > 0) line.append(' ');
-            line.append(shellQuote(argument, fishStyle));
-        }
-        return line.toString();
+        return com.termux.app.terminal.WorkspaceRestore.commandLine(command, fishStyle);
     }
 
-    /**
-     * Recreate a saved workspace. Shell+CWD restore is the default; foreground argv execution is a
-     * separate explicit opt-in because workspace files are user-editable executable input.
-     */
+    /** Recreate a saved workspace: each pane opens in its folder and starts its saved program. */
     @NonNull
-    public com.termux.app.terminal.TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace, boolean runCommands)
+    public com.termux.app.terminal.TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace)
             throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         requireArrangementRestorable();
         return restoreArrangement(new com.termux.app.terminal.TerminalWorkspaceStore()
-            .load(name, homePagesForWorkspace()), replace, runCommands);
+            .load(name, homePagesForWorkspace()), replace);
     }
 
     private void requireArrangementRestorable()
@@ -23878,15 +23857,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Builds {@code workspace}'s arrangement: fresh shells in the saved working directories (and
-     * the saved commands only when {@code runCommands}), the row's windows and trees, the Home
+     * Builds {@code workspace}'s arrangement: fresh shells in the saved working directories
+     * running the saved programs, the row's windows and trees, the Home
      * floats on their pages. Saved sessions' Load and the cold start's rebuild from the autosave
      * both come here.
      */
     @NonNull
     private com.termux.app.terminal.TerminalWorkspace.LoadResult restoreArrangement(
-            @NonNull com.termux.app.terminal.TerminalWorkspace workspace, boolean replace,
-            boolean runCommands) throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
+            @NonNull com.termux.app.terminal.TerminalWorkspace workspace, boolean replace)
+            throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
         requireArrangementRestorable();
         int paneCount = workspace.paneCount();
         int eventualCount = replace ? paneCount : mTermuxService.getTermuxSessionsSize() + paneCount;
@@ -23919,9 +23898,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         panes.add(floating.pane);
                     java.util.List<TerminalSession> shells = new java.util.ArrayList<>();
                     for (com.termux.app.terminal.TerminalWorkspace.Pane pane : panes) {
-                        TerminalSession shell = createCommandShell(
-                            runCommands ? pane.command : java.util.Collections.<String>emptyList(),
-                            pane.cwd, pane.title);
+                        TerminalSession shell = createRestoredShell(pane);
                         if (shell == null) {
                             throw new com.termux.app.terminal.TerminalWorkspace.WorkspaceException(
                                 "session_create_failed", "Could not create every workspace pane");
@@ -24049,8 +24026,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (!restoredFloats.isEmpty()) onHomeFloatsChangedInActivity();
         rebuildDrawerSessions();
         return new com.termux.app.terminal.TerminalWorkspace.LoadResult(restored.size(), windowCount, paneCount,
-            runCommands ? workspace.commandCount() : 0,
-            runCommands ? 0 : workspace.commandCount(), replace);
+            workspace.commandCount(), replace);
     }
 
     /** Whether any window of {@code workspace} was saved as a Home float. */
@@ -32975,6 +32951,50 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
+     * The shell a saved pane comes back as: in its folder, running its saved program, with one
+     * line saying what did not start when the program or the folder is gone
+     * ({@link com.termux.app.terminal.WorkspaceRestore}). Null when {@link #createCommandShell} is.
+     */
+    @Nullable private TerminalSession createRestoredShell(
+            @NonNull com.termux.app.terminal.TerminalWorkspace.Pane pane) {
+        final android.content.res.Resources res = getResources();
+        com.termux.app.terminal.WorkspaceRestore.Notices notices =
+            new com.termux.app.terminal.WorkspaceRestore.Notices() {
+                @NonNull @Override public String programMissing(@NonNull String program) {
+                    return res.getString(R.string.workspace_restore_program_missing, program);
+                }
+
+                @NonNull @Override public String folderMissing(@NonNull String folder,
+                                                               @Nullable String program) {
+                    return program == null
+                        ? res.getString(R.string.workspace_restore_folder_missing, folder)
+                        : res.getString(R.string.workspace_restore_folder_missing_program,
+                            program, folder);
+                }
+            };
+        com.termux.app.terminal.WorkspaceRestore.PanePlan plan =
+            com.termux.app.terminal.WorkspaceRestore.plan(pane,
+                folder -> new java.io.File(folder).isDirectory(),
+                getProperties().getDefaultWorkingDirectory(), notices);
+        String shell = wrapperShellPath();
+        String script = shell == null ? null : com.termux.app.terminal.WorkspaceRestore.script(
+            plan, shell, isFishShell(shell), notices);
+        if (script == null) return createCommandShell(plan.command, plan.cwd, pane.title);
+        if (mTermuxService == null || mTermuxService.getTermuxSessionsSize()
+                >= com.termux.app.terminal.TermuxTerminalSessionActivityClient.MAX_SESSIONS)
+            return null;
+        // Termux's login ends in `exec "$SHELL" -l "$@"`, so it sets the environment up as for a
+        // normal pane; passing arguments also skips its motd.
+        String login = loginProgramPath();
+        String[] arguments = login != null ? new String[] {"-c", script}
+            : new String[] {"-l", "-c", script};
+        com.termux.shared.termux.shell.command.runner.terminal.TermuxSession created =
+            mTermuxService.createTermuxSession(login != null ? login : shell, arguments, null,
+                plan.cwd, false, pane.title == null || pane.title.isEmpty() ? null : pane.title);
+        return created == null ? null : created.getTerminalSession();
+    }
+
+    /**
      * A new top-level window (not a split) running {@code command} through the login shell, for
      * the local API's {@code window.open} — the same full-size window {@link #createNewWindow()}
      * makes for the window strip's +, but seeded with a command and a title and reachable while
@@ -34657,16 +34677,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override @NonNull public com.termux.app.terminal.TerminalWorkspace saveWorkspace(
-                @NonNull String requestedName, boolean overwrite, boolean captureCommands)
+                @NonNull String requestedName, boolean overwrite)
                 throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
-            return TermuxActivity.this.saveWorkspace(requestedName, overwrite, captureCommands);
+            return TermuxActivity.this.saveWorkspace(requestedName, overwrite);
         }
 
         @Override @NonNull
         public com.termux.app.terminal.TerminalWorkspace.LoadResult loadWorkspace(
-                @NonNull String name, boolean replace, boolean runCommands)
+                @NonNull String name, boolean replace)
                 throws com.termux.app.terminal.TerminalWorkspace.WorkspaceException {
-            return TermuxActivity.this.loadWorkspace(name, replace, runCommands);
+            return TermuxActivity.this.loadWorkspace(name, replace);
         }
 
         @Override @NonNull

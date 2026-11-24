@@ -617,8 +617,7 @@ public final class TerminalActionDispatcher {
                 case TOOL_WORKSPACE_SAVE: {
                     if (!arguments.has("name")) return error(400, "bad_request", "Missing 'name'");
                     TerminalWorkspace workspace = host.saveWorkspace(arguments.optString("name", ""),
-                        arguments.optBoolean("overwrite", false),
-                        arguments.optBoolean("captureCommands", false));
+                        arguments.optBoolean("overwrite", false));
                     return ok().put("name", workspace.name)
                         .put("sessions", workspace.sessions.size())
                         .put("panes", workspace.paneCount())
@@ -630,15 +629,13 @@ public final class TerminalActionDispatcher {
                     if (!"append".equals(mode) && !"replace".equals(mode))
                         return error(400, "bad_request", "Invalid 'mode'; expected append or replace");
                     TerminalWorkspace.LoadResult result = host.loadWorkspace(
-                        arguments.optString("name", ""), "replace".equals(mode),
-                        arguments.optBoolean("runCommands", false));
+                        arguments.optString("name", ""), "replace".equals(mode));
                     return ok().put("name", arguments.optString("name", "").trim())
                         .put("mode", mode)
                         .put("sessions", result.sessions)
                         .put("windows", result.windows)
                         .put("panes", result.panes)
-                        .put("commandsRun", result.commandsRun)
-                        .put("commandsSkipped", result.commandsSkipped);
+                        .put("commandsRun", result.commandsRun);
                 }
                 case TOOL_WORKSPACE_LIST: {
                     JSONArray entries = new JSONArray();

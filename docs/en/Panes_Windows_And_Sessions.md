@@ -251,11 +251,9 @@ exists lands it on the last Home page. Sessions saved with only Home floats load
 floats alone, with the Terminal empty.
 
 - **Save**: at the bottom of the **Live** tab tap **Save sessions…**, type a name and save.
-  Tick **Also save what is running** to record the program in each busy pane. Saving over a name
-  asks first. **Save workspace** in the palette opens the same field.
+  Every save records the program in each busy pane. Saving over a name asks first. **Save workspace** in the palette opens the same field.
 - **Load**: on the **Saved sessions** tab tap a name, then **Add to current** or **Replace**. If
-  it recorded programs, **Also start what was running** decides whether they run again. **Load
-  workspace** in the palette opens this tab.
+  **Load workspace** in the palette opens this tab. Each pane starts its recorded program again.
 - **Delete**: tap **⋯** on saved sessions, then **Delete**. Running sessions are not affected.
 
 Loading rebuilds structure, not processes. Each recorded program starts again from the

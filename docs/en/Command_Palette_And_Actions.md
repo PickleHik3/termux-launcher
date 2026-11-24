@@ -235,8 +235,8 @@ These have no palette row at all but can still be bound:
 
 | Id | Arguments | What it does |
 |---|---|---|
-| `workspace.save` | `name` (required); `overwrite`, `captureCommands`: `true` or `false` (default) | Save a workspace without asking |
-| `workspace.load` | `name` (required); `mode`: `append` (default) or `replace`; `runCommands`: `true` or `false` (default) | Load a workspace |
+| `workspace.save` | `name` (required); `overwrite`: `true` or `false` (default) | Save a workspace without asking |
+| `workspace.load` | `name` (required); `mode`: `append` (default) or `replace` | Load a workspace |
 | `workspace.list` | | List saved workspaces |
 | `workspace.delete` | `name` (required) | Delete a saved workspace |
 | `contact.open` | `lookup_key` (required); `contact_id` | Open a contact's card |

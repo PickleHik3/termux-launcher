@@ -60,15 +60,11 @@ public final class SessionsDrawerView extends LinearLayout
         @NonNull public final String name;
         public final int paneCount;
         public final long savedAtEpochMs;
-        /** Whether it captured what was running, which is the only reason to offer to run it. */
-        public final boolean hasCommands;
 
-        public SavedWorkspace(@NonNull String name, int paneCount, long savedAtEpochMs,
-                              boolean hasCommands) {
+        public SavedWorkspace(@NonNull String name, int paneCount, long savedAtEpochMs) {
             this.name = name;
             this.paneCount = paneCount;
             this.savedAtEpochMs = savedAtEpochMs;
-            this.hasCommands = hasCommands;
         }
     }
 
@@ -89,9 +85,9 @@ public final class SessionsDrawerView extends LinearLayout
 
         void onCloseSession(long sessionId);
 
-        void onSaveWorkspace(@NonNull String name, boolean captureCommands);
+        void onSaveWorkspace(@NonNull String name);
 
-        void onLoadWorkspace(@NonNull String name, boolean replace, boolean runCommands);
+        void onLoadWorkspace(@NonNull String name, boolean replace);
 
         void onDeleteWorkspace(@NonNull String name);
 
@@ -148,8 +144,6 @@ public final class SessionsDrawerView extends LinearLayout
     @Nullable private TerminalSheetController.TextField mActiveField;
     /** The draft a field is holding, so a rebind while typing does not throw it away. */
     @NonNull private String mDraft = "";
-    private boolean mCaptureCommands;
-    private boolean mRunCommands;
 
     private final TextView mTitle;
     private final TextView mLiveTab;
@@ -372,7 +366,6 @@ public final class SessionsDrawerView extends LinearLayout
     private void collapseSaved() {
         mActiveSavedName = null;
         mSavedState = SavedState.IDLE;
-        mRunCommands = false;
     }
 
     private void collapseAll() {
@@ -688,26 +681,18 @@ public final class SessionsDrawerView extends LinearLayout
         }
         LinearLayout column = new LinearLayout(getContext());
         column.setOrientation(VERTICAL);
-        // Only offered when the workspace actually carries commands, so the question is never about
-        // something the file cannot do.
-        if (workspace.hasCommands) {
-            column.addView(checkBox(R.string.sessions_drawer_run_commands, mRunCommands,
-                checked -> mRunCommands = checked));
-        }
         LinearLayout actions = actionStrip();
         addAction(actions, getContext().getString(R.string.sessions_drawer_add_to_current), () -> {
             String name = workspace.name;
-            boolean run = mRunCommands;
             collapseAll();
             rebuild();
-            if (mListener != null) mListener.onLoadWorkspace(name, false, run);
+            if (mListener != null) mListener.onLoadWorkspace(name, false);
         });
         addAction(actions, getContext().getString(R.string.workspace_picker_replace), () -> {
             String name = workspace.name;
-            boolean run = mRunCommands;
             collapseAll();
             rebuild();
-            if (mListener != null) mListener.onLoadWorkspace(name, true, run);
+            if (mListener != null) mListener.onLoadWorkspace(name, true);
         });
         column.addView(actions, new LayoutParams(
             LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
@@ -738,13 +723,10 @@ public final class SessionsDrawerView extends LinearLayout
             getContext().getString(R.string.session_browser_workspace_name),
             getContext().getString(R.string.session_browser_save_workspace),
             value -> {
-                boolean capture = mCaptureCommands;
                 collapseAll();
                 rebuild();
-                if (mListener != null) mListener.onSaveWorkspace(value, capture);
+                if (mListener != null) mListener.onSaveWorkspace(value);
             }), new LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT));
-        column.addView(checkBox(R.string.workspace_save_capture_commands, mCaptureCommands,
-            checked -> mCaptureCommands = checked));
         mFooter.addView(column, footerParams());
     }
 

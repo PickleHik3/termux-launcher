@@ -621,16 +621,14 @@ public final class TerminalWorkspace {
         public final int windows;
         public final int panes;
         public final int commandsRun;
-        public final int commandsSkipped;
         public final boolean replaced;
 
         public LoadResult(int sessions, int windows, int panes, int commandsRun,
-                          int commandsSkipped, boolean replaced) {
+                          boolean replaced) {
             this.sessions = sessions;
             this.windows = windows;
             this.panes = panes;
             this.commandsRun = commandsRun;
-            this.commandsSkipped = commandsSkipped;
             this.replaced = replaced;
         }
     }

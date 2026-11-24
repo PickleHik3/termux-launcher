@@ -178,7 +178,7 @@ public class SessionsDrawerViewTest {
         SessionsDrawerView drawer = drawer(listener);
         drawer.setTab(SessionsDrawerView.Tab.SAVED);
         drawer.bindSaved(Collections.singletonList(
-            new SessionsDrawerView.SavedWorkspace("work", 4, 0L, false)));
+            new SessionsDrawerView.SavedWorkspace("work", 4, 0L)));
 
         assertEquals(1, rowCount(drawer));
         drawer.rowsForTest().getChildAt(0).performClick();
@@ -197,7 +197,7 @@ public class SessionsDrawerViewTest {
         SessionsDrawerView drawer = drawer(listener);
         drawer.setTab(SessionsDrawerView.Tab.SAVED);
         drawer.bindSaved(Collections.singletonList(
-            new SessionsDrawerView.SavedWorkspace("work", 4, 0L, false)));
+            new SessionsDrawerView.SavedWorkspace("work", 4, 0L)));
 
         findText(drawer, "⋯").performClick();
         assertEquals(SessionsDrawerView.SavedState.CONFIRM_DELETE, drawer.savedState("work"));
@@ -206,23 +206,6 @@ public class SessionsDrawerViewTest {
 
         findText(drawer, string(R.string.workspace_delete_confirm)).performClick();
         assertEquals(Collections.singletonList("delete:work"), listener.events);
-    }
-
-    /** Running commands again is only offered by a workspace that actually captured some. */
-    @Test
-    public void theRunCommandsBoxAppearsOnlyForAWorkspaceThatCapturedThem() {
-        SessionsDrawerView drawer = drawer(new RecordingListener());
-        drawer.setTab(SessionsDrawerView.Tab.SAVED);
-        drawer.bindSaved(Arrays.asList(
-            new SessionsDrawerView.SavedWorkspace("bare", 2, 0L, false),
-            new SessionsDrawerView.SavedWorkspace("busy", 2, 0L, true)));
-
-        drawer.rowsForTest().getChildAt(0).performClick();
-        assertNull(findText(drawer, string(R.string.sessions_drawer_run_commands)));
-
-        // The bare row is unfolded, so the busy row has moved down past its action strip.
-        drawer.rowsForTest().getChildAt(2).performClick();
-        assertNotNull(findText(drawer, string(R.string.sessions_drawer_run_commands)));
     }
 
     @Test
@@ -366,11 +349,11 @@ public class SessionsDrawerViewTest {
             events.add("rename:" + id + "=" + name);
         }
         @Override public void onCloseSession(long id) { events.add("close:" + id); }
-        @Override public void onSaveWorkspace(@NonNull String name, boolean capture) {
+        @Override public void onSaveWorkspace(@NonNull String name) {
             events.add("save:" + name);
         }
-        @Override public void onLoadWorkspace(@NonNull String name, boolean replace, boolean run) {
-            events.add("load:" + name + (replace ? " replace" : " append") + (run ? " run" : ""));
+        @Override public void onLoadWorkspace(@NonNull String name, boolean replace) {
+            events.add("load:" + name + (replace ? " replace" : " append"));
         }
         @Override public void onDeleteWorkspace(@NonNull String name) {
             events.add("delete:" + name);
