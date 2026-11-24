@@ -22,8 +22,8 @@ public class AssistantOffersPolicyTest {
         return AssistantOffersPolicy.offers(pending, tmpBytes, dPending, dTmp);
     }
 
-    @Test public void unsortedThresholdIsTheDrawerNudgesMinimum() {
-        assertEquals(AppDrawerCategoryNudgePolicy.MIN_PENDING, AssistantOffersPolicy.UNSORTED_THRESHOLD);
+    @Test public void pendingThresholdIsTheDrawerNudgesMinimum() {
+        assertEquals(AppDrawerCategoryNudgePolicy.MIN_PENDING, AssistantOffersPolicy.PENDING_THRESHOLD);
     }
 
     @Test public void nothingBelowTheThresholds() {
@@ -34,10 +34,10 @@ public class AssistantOffersPolicyTest {
         assertTrue(offers(NONE, NONE, NONE, NONE).isEmpty());
     }
 
-    @Test public void unsortedAtTheMinimum() {
+    @Test public void pendingAtTheMinimum() {
         List<Offer> o = offers(6, 0, NONE, NONE);
         assertEquals(1, o.size());
-        assertEquals(Kind.UNSORTED, o.get(0).kind);
+        assertEquals(Kind.PENDING, o.get(0).kind);
         assertEquals(6, o.get(0).value);
     }
 
@@ -50,7 +50,7 @@ public class AssistantOffersPolicyTest {
     @Test public void atMostTwoInAStableOrder() {
         List<Offer> o = offers(40, 9 * GB, NONE, NONE);
         assertEquals(2, o.size());
-        assertEquals(Kind.UNSORTED, o.get(0).kind);
+        assertEquals(Kind.PENDING, o.get(0).kind);
         assertEquals(Kind.TMP, o.get(1).kind);
     }
 

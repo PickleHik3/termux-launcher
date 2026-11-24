@@ -115,7 +115,7 @@ final class AssistantOffersController {
     private void apply() {
         long dismissedPending = prefs.getLong(KEY_DISMISSED_PENDING, AssistantOffersPolicy.NONE);
         long dismissedTmp = prefs.getLong(KEY_DISMISSED_TMP, AssistantOffersPolicy.NONE);
-        if (AssistantOffersPolicy.forgetDismissal(pendingApps, AssistantOffersPolicy.UNSORTED_THRESHOLD, dismissedPending)) {
+        if (AssistantOffersPolicy.forgetDismissal(pendingApps, AssistantOffersPolicy.PENDING_THRESHOLD, dismissedPending)) {
             prefs.edit().remove(KEY_DISMISSED_PENDING).apply();
             dismissedPending = AssistantOffersPolicy.NONE;
         }
@@ -135,11 +135,11 @@ final class AssistantOffersController {
     private AssistantNoticeView.Content contentFor(@NonNull AssistantOffersPolicy.Offer offer) {
         String notNow = context.getString(R.string.assistant_not_now);
         Runnable dismiss = () -> {
-            prefs.edit().putLong(offer.kind == AssistantOffersPolicy.Kind.UNSORTED
+            prefs.edit().putLong(offer.kind == AssistantOffersPolicy.Kind.PENDING
                 ? KEY_DISMISSED_PENDING : KEY_DISMISSED_TMP, offer.value).apply();
             apply();
         };
-        if (offer.kind == AssistantOffersPolicy.Kind.UNSORTED) {
+        if (offer.kind == AssistantOffersPolicy.Kind.PENDING) {
             int n = (int) offer.value;
             return new AssistantNoticeView.Content(
                 context.getResources().getQuantityString(R.plurals.assistant_offer_unsorted, n, n), "", -1, false,

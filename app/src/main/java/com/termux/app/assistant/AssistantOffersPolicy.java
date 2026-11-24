@@ -22,7 +22,7 @@ final class AssistantOffersPolicy {
     static final long NONE = -1L;
 
     /** Apps waiting to be sorted: the drawer nudge's own minimum, and the growth that brings it back. */
-    static final int UNSORTED_THRESHOLD = AppDrawerCategoryNudgePolicy.MIN_PENDING;
+    static final int PENDING_THRESHOLD = AppDrawerCategoryNudgePolicy.MIN_PENDING;
 
     /** A GB of tmp, and the growth that brings the offer back. */
     static final long TMP_THRESHOLD_BYTES = 1024L * 1024L * 1024L;
@@ -33,7 +33,7 @@ final class AssistantOffersPolicy {
     /** Entries untouched this long are the ones Clear old files removes. */
     static final long CLEAR_AGE_MS = 24L * 60L * 60L * 1000L;
 
-    enum Kind { UNSORTED, TMP }
+    enum Kind { PENDING, TMP }
 
     /** One offer and the value it was made for, which Not now stores. */
     static final class Offer {
@@ -57,9 +57,9 @@ final class AssistantOffersPolicy {
     @NonNull
     static List<Offer> offers(long pendingApps, long tmpBytes, long dismissedPending, long dismissedTmpBytes) {
         List<Offer> out = null;
-        if (due(pendingApps, UNSORTED_THRESHOLD, dismissedPending)) {
+        if (due(pendingApps, PENDING_THRESHOLD, dismissedPending)) {
             out = new ArrayList<>(2);
-            out.add(new Offer(Kind.UNSORTED, pendingApps));
+            out.add(new Offer(Kind.PENDING, pendingApps));
         }
         if (due(tmpBytes, TMP_THRESHOLD_BYTES, dismissedTmpBytes)) {
             if (out == null) out = new ArrayList<>(2);
