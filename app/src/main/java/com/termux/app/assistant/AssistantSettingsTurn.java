@@ -287,7 +287,23 @@ final class AssistantSettingsTurn {
                 dropped++;
             }
         }
-        return new Answer(changes, changes.isEmpty() ? question : null, rest.trim(), dropped);
+        return new Answer(changes, changes.isEmpty() ? question : null,
+            titled(shortlist, rest).trim(), dropped);
+    }
+
+    /** Shown model text with a shortlist id, bare or in backticks, said as that setting's title. */
+    @NonNull
+    static String titled(@NonNull Shortlist shortlist, @NonNull String text) {
+        String out = text;
+        List<Candidate> byLength = new ArrayList<>(shortlist.offered);
+        byLength.sort((a, b) -> b.declaration.id.length() - a.declaration.id.length());
+        for (Candidate c : byLength) {
+            String id = Pattern.quote(c.declaration.id);
+            String title = Matcher.quoteReplacement(c.declaration.title);
+            out = out.replaceAll("`" + id + "`", title)
+                .replaceAll("(?<![\\w.])" + id + "(?![\\w]|\\.\\w)", title);
+        }
+        return out;
     }
 
     /** One call's change if it names a setting of the shortlist and a value that setting allows. */
@@ -392,6 +408,8 @@ final class AssistantSettingsTurn {
         }
         rest.append(t.substring(Math.min(from, t.length())));
         if (out.isEmpty()) {
+            String lines = lineCalls(t, out);
+            if (lines != null) return lines;
             String trimmed = t.trim();
             if (trimmed.startsWith("{")) {
                 try {
@@ -408,6 +426,51 @@ final class AssistantSettingsTurn {
             return text;
         }
         return rest.toString();
+    }
+
+    private static final Pattern CALL_LINE = Pattern.compile(
+        "^[ \\t]*(?:[-*][ \\t]+)?(set_setting|ask_user)[ \\t]+(\\S.*?)[ \\t]*$", Pattern.MULTILINE);
+
+    /**
+     * Calls written one to a line, {@code set_setting text.size up} or {@code set_setting motion.animation_speed "off"}
+     * (the value bare or quoted) and {@code ask_user <question>}. Adds them to {@code out}; returns the
+     * text without those lines, or null when no line was a call.
+     */
+    @Nullable
+    private static String lineCalls(@NonNull String t, @NonNull List<Call> out) {
+        Matcher m = CALL_LINE.matcher(t);
+        StringBuilder rest = new StringBuilder();
+        int from = 0;
+        while (m.find()) {
+            Call call = new Call(m.group(1));
+            String body = m.group(2);
+            if (TOOL_ASK.equals(call.name)) {
+                call.args.put("question", unquote(body));
+            } else {
+                String[] parts = body.split("\\s+", 2);
+                if (parts.length < 2) continue;
+                call.args.put("id", unquote(parts[0]));
+                call.args.put("value", unquote(parts[1]));
+            }
+            out.add(call);
+            rest.append(t, from, m.start());
+            from = m.end();
+        }
+        if (out.isEmpty()) return null;
+        rest.append(t.substring(from));
+        return rest.toString();
+    }
+
+    @NonNull
+    private static String unquote(@NonNull String v) {
+        String s = v.trim();
+        while (s.length() >= 2) {
+            char a = s.charAt(0);
+            char b = s.charAt(s.length() - 1);
+            if (a == b && (a == '"' || a == '\'' || a == '`')) s = s.substring(1, s.length() - 1).trim();
+            else break;
+        }
+        return s;
     }
 
     /** The index of the bracket closing the one at {@code open}, skipping quoted text; -1 when none. */
