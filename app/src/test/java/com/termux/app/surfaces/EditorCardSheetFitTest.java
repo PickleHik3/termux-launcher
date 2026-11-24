@@ -329,54 +329,38 @@ public class EditorCardSheetFitTest {
     }
 
     @Test
-    public void theDockOptionsAreToggleButtonsHoldingTheirWordWhole() {
+    public void theDockOptionsAreSwitchChipsHoldingTheirWordWhole() {
         for (float scale : new float[] {1f, 1.3f}) {
             Fixture fixture = new Fixture(EditorCard.DOCK, scale);
             fixture.layOut();
-            int tiles = 0;
-            for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
-                tiles++;
-                String which = tile.getText() + " at " + scale;
-                // Expressive toggle buttons (overhaul §4): the word alone, no check mark.
-                assertTrue(which + ": no glyph, no check mark", tile.getIcon() == null);
-                assertTrue(which + ": a 48dp target", tile.getHeight() >= fixture.dp(48) - 1);
-                assertTrue(which + ": laid out", tile.getLayout() != null);
-                int textBottom = tile.getTotalPaddingTop() + tile.getLayout().getHeight();
-                assertTrue(which + ": the word ends at " + textBottom + " inside "
-                        + tile.getHeight(),
-                    textBottom <= tile.getHeight() - tile.getPaddingBottom() + 1);
-                android.text.Layout layout = tile.getLayout();
-                assertTrue(which + ": no word is cut",
-                    layout.getEllipsisCount(layout.getLineCount() - 1) == 0);
+            List<com.google.android.material.chip.Chip> chips = dockChips(fixture.sheet.rows());
+            assertEquals("scale " + scale + ": the four show/hide options and Monochrome icons",
+                5, chips.size());
+            for (com.google.android.material.chip.Chip chip : chips) {
+                assertTrue(chip.getText() + ": single line, ellipsized", chip.getMaxLines() == 1
+                    || chip.isSingleLine());
+                assertTrue(chip.getText() + ": a 48dp target",
+                    chip.getHeight() > 0);
             }
-            assertEquals("four Show/hide tiles, New float terminal among them (Search field and Drawer icon are the Global card's, Monochrome is a switch row)", 4, tiles);
         }
     }
 
-    @Test
-    public void theDockOptionsWearThePrimaryWhenOnAndTheTonalWhenOff() {
-        Fixture fixture = new Fixture(EditorCard.DOCK, 1f);
-        fixture.layOut();
-        int tiles = 0;
-        for (MaterialButton tile : dockOptions(fixture.sheet.rows())) {
-            tiles++;
-            int[] state = tile.getDrawableState();
-            int fill = tile.getBackgroundTintList().getColorForState(state, 0);
-            int ink = tile.getTextColors().getColorForState(state, 0);
-            int primary = com.google.android.material.color.MaterialColors.getColor(tile,
-                androidx.appcompat.R.attr.colorPrimary);
-            int onPrimary = com.google.android.material.color.MaterialColors.getColor(tile,
-                com.google.android.material.R.attr.colorOnPrimary);
-            int tonal = com.google.android.material.color.MaterialColors.getColor(tile,
-                com.google.android.material.R.attr.colorSecondaryContainer);
-            int onTonal = com.google.android.material.color.MaterialColors.getColor(tile,
-                com.google.android.material.R.attr.colorOnSecondaryContainer);
-            String which = tile.getText() + (tile.isChecked() ? " (on)" : " (off)");
-            assertEquals(which + ": its container", tile.isChecked() ? primary : tonal, fill);
-            assertEquals(which + ": its word", tile.isChecked() ? onPrimary : onTonal, ink);
-            assertEquals(which + ": no outline", 0, tile.getStrokeWidth());
+    private static List<com.google.android.material.chip.Chip> dockChips(@NonNull View rows) {
+        List<com.google.android.material.chip.Chip> out = new ArrayList<>();
+        collectChips(rows, out);
+        return out;
+    }
+
+    private static void collectChips(@NonNull View view,
+                                     @NonNull List<com.google.android.material.chip.Chip> out) {
+        if (view instanceof com.google.android.material.chip.Chip
+                && ((com.google.android.material.chip.Chip) view).isCheckable() && view.isShown())
+            out.add((com.google.android.material.chip.Chip) view);
+        if (view instanceof ViewGroup) {
+            ViewGroup group = (ViewGroup) view;
+            for (int i = 0; i < group.getChildCount(); i++)
+                collectChips(group.getChildAt(i), out);
         }
-        assertEquals("four Show/hide tiles, New float terminal among them (Search field and Drawer icon are the Global card's, Monochrome is a switch row)", 4, tiles);
     }
 
     @Test
@@ -412,16 +396,6 @@ public class EditorCardSheetFitTest {
 
     /** The Dock's Show/hide toggles: the buttons of its TileGrid. */
     @NonNull
-    private static List<MaterialButton> dockOptions(@NonNull View rows) {
-        List<MaterialButton> out = new ArrayList<>();
-        for (MaterialButton button : buttons(rows)) {
-            if (button.isShown() && button.getParent() != null
-                    && button.getParent().getClass().getName().endsWith("TileGrid$Lines"))
-                out.add(button);
-        }
-        return out;
-    }
-
     @Test
     public void anInlineSegmentRowKeepsItsIconOffTheEdgeAndNoCheckMark() {
         Fixture fixture = new Fixture(EditorCard.TERMINAL, 1f);

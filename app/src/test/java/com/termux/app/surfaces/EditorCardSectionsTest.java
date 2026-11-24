@@ -122,22 +122,19 @@ public class EditorCardSectionsTest {
     @Test
     public void statusBar() {
         check(EditorCard.STATUS, expect(
-            CARD, Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
-                Row.STATUS_INDICATORS),
-            "SECTION_CLOCK_WEATHER", Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION,
-                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT),
-            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST),
-            "SECTION_LINKS", Arrays.asList(Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)));
+            // No headings (#347): the clock rows, the glass pair and the links follow in order.
+            CARD, Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS,
+                Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS, Row.STATUS_SECONDS,
+                Row.STATUS_UNIT, Row.OPACITY, Row.FROST, Row.CAMERA_CUTOUT,
+                Row.PINNED_NOTIFICATIONS)));
     }
 
     @Test
     public void dock() {
         check(EditorCard.DOCK, expect(
-            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS),
-            "SECTION_MORE_OPTIONS", Arrays.asList(Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-                Row.DOCK_MONOCHROME),
-            "SECTION_BARS", Arrays.asList(Row.DOCK_BARS),
-            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.FROST, Row.REFLECTION)));
+            CARD, Arrays.asList(Row.DOCK_TYPE, Row.DOCK_APP_ICONS, Row.DOCK_ICON_PACK,
+                Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME, Row.DOCK_BARS, Row.OPACITY, Row.FROST,
+                Row.REFLECTION)));
     }
 
     @Test
@@ -165,10 +162,9 @@ public class EditorCardSectionsTest {
         check(EditorCard.KEYBOARD, expect(
             CARD, Arrays.asList(Row.FORM, Row.KEY_SPACING,
                 Row.KEY_CORNERS, Row.BOTTOM_PADDING, Row.KEYBOARD_WIDTH,
-                Row.KEYBOARD_FLOAT_HEIGHT, Row.KEYBOARD_SPLIT_GAP),
-            "SECTION_APPEARANCE", Arrays.asList(Row.OPACITY, Row.OPACITY_LINK,
-                Row.KEY_OPACITY, Row.FROST),
-            "SECTION_LINKS", Arrays.asList(Row.KEYBOARD_THEME, Row.LINK_LAYOUTS)));
+                Row.KEYBOARD_FLOAT_HEIGHT, Row.KEYBOARD_SPLIT_GAP, Row.OPACITY,
+                Row.OPACITY_LINK, Row.KEY_OPACITY, Row.FROST, Row.KEYBOARD_THEME,
+                Row.LINK_LAYOUTS)));
     }
 
     @Test

@@ -24,7 +24,8 @@ import com.termux.app.surfaces.rows.PreviewTilesRow;
 import com.termux.app.surfaces.rows.ReorderList;
 import com.termux.app.surfaces.rows.SectionHeader;
 import com.termux.app.surfaces.rows.SegmentRow;
-import com.termux.app.surfaces.rows.SwitchRow;
+import com.termux.app.surfaces.rows.FoldChoiceRow;
+import com.termux.app.surfaces.rows.SwitchChipsRow;
 import com.termux.app.surfaces.rows.TileGrid;
 import com.termux.app.terminal.TerminalClockWidget;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
@@ -53,10 +54,10 @@ public final class StatusBarCard {
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
             .tier(1, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
-            .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
-                Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
-            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
-            .tier(3, Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)
+            .tier(2, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS, Row.STATUS_SECONDS,
+                Row.STATUS_UNIT)
+            .pair(3, Row.OPACITY, Row.FROST)
+            .links(3, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS)
             .build();
     }
 
@@ -260,12 +261,14 @@ public final class StatusBarCard {
             case CLOCK_FACE: return clockHeld(context, clockFaces(context, host), host);
             case CLOCK_POSITION:
                 return clockHeld(context, clockPosition(context, widthPx, host), host);
-            case STATUS_SECONDS: return clockHeld(context, seconds(context, host), host);
-            case STATUS_HOURS: return clockHeld(context, hours(context, widthPx, host), host);
-            case STATUS_UNIT: return unit(context, widthPx, host);
+            // Clock format, Seconds and Temperature unit share one row of chips, which the
+            // first of them builds; the other two stand in it.
+            case STATUS_HOURS: return formatChips(context, host);
+            case STATUS_SECONDS:
+            case STATUS_UNIT:
+                return new CardRowView(new android.widget.Space(context), () -> {});
             case STATUS_PAGE_BAR: return pageBar(context, widthPx, host);
             case STATUS_PLACE: return place(context, widthPx, host);
-            case CAMERA_CUTOUT: return cameraCutout(context, host);
             case STATUS_INDICATORS: return indicators(context, widthPx, host);
             default: return null;
         }
@@ -273,34 +276,18 @@ public final class StatusBarCard {
 
     /**
      * A clock row under the Clock tile: while the bar's clock is hidden the row stands disabled
-     * and dimmed, "Clock is hidden" under it; restated with the row.
+     * and dimmed; restated with the row.
      */
     @NonNull
     static CardRowView clockHeld(@NonNull Context context, @NonNull CardRowView row,
                                  @NonNull Host host) {
-        android.widget.LinearLayout column = new android.widget.LinearLayout(context);
-        column.setOrientation(android.widget.LinearLayout.VERTICAL);
-        column.addView(row.view, new android.widget.LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
-        android.widget.TextView note = com.termux.app.surfaces.rows.RowKit.caption(context,
-            context.getString(R.string.editor_st_clock_hidden));
-        int lead = com.termux.app.surfaces.rows.RowKit.dp(context,
-            com.termux.app.surfaces.rows.RowKit.ICON_COLUMN_DP);
-        int edge = com.termux.app.surfaces.rows.RowKit.dp(context,
-            com.termux.app.surfaces.rows.RowKit.EDGE_DP);
-        note.setPadding(lead, 0, edge, edge / 2);
-        column.addView(note, new android.widget.LinearLayout.LayoutParams(
-            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         Runnable hold = () -> {
             boolean shown = host.indicator(INDICATOR_CLOCK);
             setEnabledDeep(row.view, shown);
             row.view.setAlpha(shown ? 1f : 0.5f);
-            int visibility = shown ? View.GONE : View.VISIBLE;
-            if (note.getVisibility() != visibility)
-                note.setVisibility(visibility);
         };
         hold.run();
-        return new CardRowView(column, () -> {
+        return new CardRowView(row.view, () -> {
             row.restate();
             hold.run();
         });
@@ -329,15 +316,15 @@ public final class StatusBarCard {
         return new CardRowView(header.root, () -> {});
     }
 
+    /** Clock face, folded into one line whose list opens in place. */
     @NonNull
     private static CardRowView clockFaces(@NonNull Context context, @NonNull Host host) {
-        List<PreviewTilesRow.Tile> tiles = new ArrayList<>(FACES.length);
-        for (int i = 0; i < FACES.length; i++)
-            tiles.add(new PreviewTilesRow.Tile(context.getString(FACE_NAMES[i]),
-                facePreview(context, FACES[i])));
-        PreviewTilesRow row = PreviewTilesRow.build(context, tiles, host.choice(Row.CLOCK_FACE),
-            index -> host.setChoice(Row.CLOCK_FACE, index));
-        // The Clock & Weather section's heading stands over the faces: no label of their own.
+        List<String> names = new ArrayList<>(FACES.length);
+        for (int name : FACE_NAMES)
+            names.add(context.getString(name));
+        FoldChoiceRow row = FoldChoiceRow.build(context, R.drawable.ic_editor_clock,
+            context.getString(R.string.appearance_row_clock_face), names,
+            host.choice(Row.CLOCK_FACE), index -> host.setChoice(Row.CLOCK_FACE, index));
         return new CardRowView(row.root, () -> row.select(host.choice(Row.CLOCK_FACE)));
     }
 
@@ -375,50 +362,33 @@ public final class StatusBarCard {
         return new CardRowView(row.root, () -> row.select(host.choice(Row.CLOCK_POSITION)));
     }
 
-    /** Show seconds, a switch row bound to the Seconds option. */
-    @NonNull
-    private static CardRowView seconds(@NonNull Context context, @NonNull Host host) {
-        SwitchRow row = SwitchRow.build(context, R.drawable.ic_ms_timer,
-            context.getString(R.string.editor_st_option_seconds), host.option(OPTION_SECONDS),
-            on -> host.setOption(OPTION_SECONDS, on));
-        return new CardRowView(row.root, () -> row.setOn(host.option(OPTION_SECONDS)));
-    }
-
-    /** 12 h · 24 h, a connected group bound to the 12-hour option (12 h is the first). */
-    @NonNull
-    private static CardRowView hours(@NonNull Context context, int widthPx,
-                                     @NonNull Host host) {
-        return pair(context, widthPx, host, R.drawable.ic_ms_schedule, R.string.editor_st_hours,
-            R.string.editor_st_hours_12, R.string.editor_st_hours_24, OPTION_12H, true);
-    }
-
-    /** °C · °F, a connected group bound to the °F option (°F is the second). */
-    @NonNull
-    private static CardRowView unit(@NonNull Context context, int widthPx, @NonNull Host host) {
-        return pair(context, widthPx, host, R.drawable.ic_ms_thermostat, R.string.editor_st_unit,
-            R.string.editor_st_unit_c, R.string.editor_st_unit_f, OPTION_FAHRENHEIT, false);
-    }
-
     /**
-     * Two words bound to one on/off option: the first word is the option on where
-     * {@code firstIsOn}, the second otherwise.
+     * 12 h, Seconds and °F as one row of switch chips, each bound to the option it always wrote
+     * (the 12-hour option, Seconds, Fahrenheit). The two clock chips stand disabled while the
+     * bar's clock is hidden; °F is the weather's and stays.
      */
     @NonNull
-    private static CardRowView pair(@NonNull Context context, int widthPx, @NonNull Host host,
-                                    int glyph, int title, int first, int second, int option,
-                                    boolean firstIsOn) {
-        SegmentRow row = SegmentRow.words(context, glyph, context.getString(title),
-            new CharSequence[] {context.getString(first), context.getString(second)},
-            pairIndex(host.option(option), firstIsOn), widthPx,
-            index -> host.setOption(option, (index == 0) == firstIsOn));
-        return new CardRowView(row.root,
-            () -> row.select(pairIndex(host.option(option), firstIsOn)));
+    private static CardRowView formatChips(@NonNull Context context, @NonNull Host host) {
+        List<SwitchChipsRow.Item> items = Arrays.asList(
+            new SwitchChipsRow.Item(R.drawable.ic_ms_schedule,
+                context.getString(R.string.editor_st_hours_12)),
+            new SwitchChipsRow.Item(R.drawable.ic_ms_timer,
+                context.getString(R.string.editor_st_option_seconds)),
+            new SwitchChipsRow.Item(R.drawable.ic_ms_thermostat,
+                context.getString(R.string.editor_st_unit_f)));
+        SwitchChipsRow row = SwitchChipsRow.build(context, items,
+            (index, on) -> host.setOption(FORMAT_OPTIONS[index], on));
+        return new CardRowView(row.root, () -> {
+            boolean clock = host.indicator(INDICATOR_CLOCK);
+            for (int i = 0; i < FORMAT_OPTIONS.length; i++) {
+                row.setChecked(i, host.option(FORMAT_OPTIONS[i]));
+                row.setEnabled(i, i == 2 || clock);
+            }
+        });
     }
 
-    /** The segment an on/off option reads in a pair whose first word is on where {@code firstIsOn}. */
-    static int pairIndex(boolean on, boolean firstIsOn) {
-        return on == firstIsOn ? 0 : 1;
-    }
+    /** The options the format chips write, in the chips' order. */
+    static final int[] FORMAT_OPTIONS = {OPTION_12H, OPTION_SECONDS, OPTION_FAHRENHEIT};
 
     /** Page bar's segments, in order: the window chips, then the line of marks. */
     public static final int PAGE_BAR_GLYPHS = 0;
@@ -478,17 +448,6 @@ public final class StatusBarCard {
         row.root.setContentDescription(context.getString(R.string.editor_st_place) + ". "
             + context.getString(R.string.editor_st_place_summary));
         return new CardRowView(row.root, () -> row.select(host.choice(Row.STATUS_PLACE)));
-    }
-
-    /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */
-    @NonNull
-    private static CardRowView cameraCutout(@NonNull Context context, @NonNull Host host) {
-        com.termux.app.surfaces.rows.LinkRow row = com.termux.app.surfaces.rows.LinkRow.build(
-            context, R.drawable.ic_ms_crop_free,
-            context.getString(R.string.editor_st_option_camera_gap),
-            context.getString(R.string.editor_link_camera_cutout_summary), true,
-            v -> host.openCameraGap());
-        return new CardRowView(row.root, () -> {});
     }
 
     @NonNull

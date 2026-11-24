@@ -3447,8 +3447,16 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 if (screen != null)
                     return elementsView(screen);
             }
-            if (card == EditorCard.DOCK)
-                return dockCard().view(row, widthPx);
+            if (card == EditorCard.DOCK) {
+                View own = dockCard().view(row, widthPx);
+                if (own != null)
+                    return own;
+            }
+            if (card == EditorCard.STATUS) {
+                View own = statusTerminalRowView(row, widthPx);
+                if (own != null)
+                    return own;
+            }
             if (card == EditorCard.TERMINAL && com.termux.app.surfaces.cards.TerminalCard.owns(row))
                 return statusTerminalRowView(row, widthPx);
             if (card != null && CardBody.redesigned(card))
@@ -3473,8 +3481,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 elements.restate();
                 return;
             }
-            if (card == EditorCard.DOCK)
+            if (card == EditorCard.DOCK) {
                 dockCard().restate(row);
+                CardBody body = mCardBody;
+                if (body != null) body.restate(row, view);
+            } else if (card == EditorCard.STATUS && mOwnRows.get(row) != null)
+                restateStatusTerminalRow(row, view);
             else if (card == EditorCard.TERMINAL && com.termux.app.surfaces.cards.TerminalCard.owns(row))
                 restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
@@ -3909,6 +3921,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case LINK_FONT:
                 openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
+                break;
+            case CAMERA_CUTOUT:
+                mStatusCardHost.openCameraGap();
                 break;
             case PINNED_NOTIFICATIONS:
                 openSettingsPage(com.termux.app.fragments.settings.termux

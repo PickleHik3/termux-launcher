@@ -67,9 +67,9 @@ public class StatusTerminalCardsTest {
     @Test
     public void theStatusBarCardReadsPlaceClockOptionsIndicators() {
         assertEquals(Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
-            Row.STATUS_INDICATORS, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
-            Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
-            Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
+            Row.STATUS_INDICATORS, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS,
+            Row.STATUS_SECONDS, Row.STATUS_UNIT, Row.OPACITY, Row.FROST, Row.CAMERA_CUTOUT,
+            Row.PINNED_NOTIFICATIONS),
             rows(StatusBarCard.rows(ALL)));
         List<Row> rows = rows(StatusBarCard.rows(ALL));
         assertFalse("12 h · 24 h is the card's own pair", rows.contains(Row.CLOCK_12H));
@@ -162,19 +162,38 @@ public class StatusTerminalCardsTest {
     // ----------------------------------------------------------------------- status rows
 
     @Test
-    public void theClockFormatAndUnitStandBesideTheirTitleAtDefaultText() {
-        Fixture f = new Fixture(1f);
-        FakeStatus host = new FakeStatus();
-        for (Row row : new Row[] {Row.STATUS_HOURS, Row.STATUS_UNIT}) {
-            CardRowView built = StatusBarCard.view(f.themed, row, f.width, host);
+    public void theClockFormatSecondsAndUnitShareOneRowOfSwitchChips() {
+        for (float scale : SCALES) {
+            Fixture f = new Fixture(scale);
+            FakeStatus host = new FakeStatus();
+            CardRowView built = StatusBarCard.view(f.themed, Row.STATUS_HOURS, f.width, host);
             f.layOut(built.view);
-            List<MaterialButton> pills = buttons(built.view);
-            StringBuilder said = new StringBuilder();
-            for (MaterialButton b : pills)
-                said.append(b.getText()).append('=').append(b.getWidth()).append(' ');
-            android.view.ViewParent group = pills.get(0).getParent();
-            assertTrue(row + " inline (row " + f.width + "px, " + said + ")",
-                com.termux.app.surfaces.rows.SegmentRow.standsInline((View) group));
+            List<com.google.android.material.chip.Chip> chips = new ArrayList<>();
+            collect(built.view, com.google.android.material.chip.Chip.class, chips);
+            assertEquals("12 h, Seconds and °F at " + scale, 3, chips.size());
+            // Each writes the option it always wrote; nothing is written by a restatement.
+            host.options[StatusBarCard.OPTION_12H] = false;
+            host.options[StatusBarCard.OPTION_SECONDS] = false;
+            host.options[StatusBarCard.OPTION_FAHRENHEIT] = false;
+            built.restate();
+            chips.get(1).performClick();
+            assertTrue("Seconds writes the Seconds option",
+                host.options[StatusBarCard.OPTION_SECONDS]);
+            chips.get(2).performClick();
+            assertTrue("°F writes the Fahrenheit option",
+                host.options[StatusBarCard.OPTION_FAHRENHEIT]);
+            chips.get(0).performClick();
+            assertTrue("12 h writes the 12-hour option", host.options[StatusBarCard.OPTION_12H]);
+            host.options[StatusBarCard.OPTION_SECONDS] = false;
+            built.restate();
+            assertFalse("restated off", chips.get(1).isChecked());
+            // The row's other two entries stand inside it: no chips of their own.
+            for (Row row : new Row[] {Row.STATUS_SECONDS, Row.STATUS_UNIT}) {
+                List<com.google.android.material.chip.Chip> none = new ArrayList<>();
+                collect(StatusBarCard.view(f.themed, row, f.width, host).view,
+                    com.google.android.material.chip.Chip.class, none);
+                assertTrue(row + " is drawn by the format row", none.isEmpty());
+            }
         }
     }
 
@@ -186,7 +205,7 @@ public class StatusTerminalCardsTest {
             String at = "at " + scale;
             for (Row row : new Row[] {Row.GLASS_SECTION, Row.CLOCK_FACE,
                 Row.CLOCK_POSITION, Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT,
-                Row.STATUS_INDICATORS, Row.CAMERA_CUTOUT}) {
+                Row.STATUS_INDICATORS}) {
                 CardRowView built = StatusBarCard.view(f.themed, row, f.width, host);
                 assertNotNull(row + " is the card's own", built);
                 f.layOut(built.view);
@@ -198,7 +217,7 @@ public class StatusTerminalCardsTest {
                     assertInsideGutter(f, button, row + " " + at);
                 }
             }
-            for (Row row : new Row[] {Row.FROST, Row.CORNERS, Row.CLOCK_12H})
+            for (Row row : new Row[] {Row.FROST, Row.CORNERS, Row.CLOCK_12H, Row.CAMERA_CUTOUT})
                 assertNull(row + " is the sheet's", StatusBarCard.view(f.themed, row, f.width, host));
         }
     }
@@ -241,31 +260,11 @@ public class StatusTerminalCardsTest {
 
         CardRowView clock = StatusBarCard.view(f.themed, Row.CLOCK_FACE, f.width, host);
         f.layOut(clock.view);
-        List<View> faces = tiles(clock.view);
-        assertEquals(6, faces.size());
+        List<com.google.android.material.chip.Chip> faces = new ArrayList<>();
+        collect(clock.view, com.google.android.material.chip.Chip.class, faces);
+        assertEquals("the six faces fold into one list", 6, faces.size());
         faces.get(1).performClick();
         assertEquals("LCD", 1, host.face);
-        List<TerminalClockWidget> clocks = new ArrayList<>();
-        collect(clock.view, TerminalClockWidget.class, clocks);
-        assertEquals("every tile draws its face", 6, clocks.size());
-        for (TerminalClockWidget face : clocks) {
-            assertFalse("a tile reads 07:48 with no seconds", face.isShowingSeconds());
-            assertTrue("drawn whole in its tile",
-                face.getWidth() * face.getScaleX() <= ((View) face.getParent()).getWidth() + 1);
-        }
-
-        CardRowView seconds = StatusBarCard.view(f.themed, Row.STATUS_SECONDS, f.width, host);
-        f.layOut(seconds.view);
-        // The clock rows stand in a column with their "Clock is hidden" note under them.
-        ((ViewGroup) seconds.view).getChildAt(0).performClick();
-        assertTrue("Show seconds is a switch row on the Seconds option",
-            host.options[StatusBarCard.OPTION_SECONDS]);
-
-        CardRowView cutout = StatusBarCard.view(f.themed, Row.CAMERA_CUTOUT, f.width, host);
-        f.layOut(cutout.view);
-        cutout.view.performClick();
-        ShadowLooper.idleMainLooper();
-        assertEquals("Camera cutout opens its setting", 1, host.cameraGapOpened);
 
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
@@ -350,39 +349,32 @@ public class StatusTerminalCardsTest {
         FakeStatus host = new FakeStatus();
         CardRowView indicators = StatusBarCard.view(f.themed, Row.STATUS_INDICATORS, f.width, host);
         f.layOut(indicators.view);
-        Row[] clockRows = {Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
-            Row.STATUS_HOURS};
+        Row[] clockRows = {Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS};
         List<CardRowView> held = new ArrayList<>();
         for (Row row : clockRows) {
-            assertTrue(StatusBarCard.clockRow(row));
             CardRowView view = StatusBarCard.view(f.themed, row, f.width, host);
             f.layOut(view.view);
             held.add(view);
-            assertFalse(row + ": no note while the clock shows",
-                hasShownText(view.view, "Clock is hidden"));
         }
+        List<com.google.android.material.chip.Chip> format = new ArrayList<>();
+        collect(held.get(2).view, com.google.android.material.chip.Chip.class, format);
         buttons(indicators.view).get(StatusBarCard.INDICATOR_CLOCK).performClick();
         assertFalse("the Clock tile hides the clock", host.indicators[StatusBarCard.INDICATOR_CLOCK]);
-        for (int i = 0; i < clockRows.length; i++) {
-            CardRowView view = held.get(i);
+        for (CardRowView view : held)
             view.restate();
-            assertTrue(clockRows[i] + " says the clock is hidden",
-                hasShownText(view.view, "Clock is hidden"));
-            for (MaterialButton button : buttons(view.view))
-                assertFalse(clockRows[i] + ": its buttons are out", button.isEnabled());
-        }
-        CardRowView unit = StatusBarCard.view(f.themed, Row.STATUS_UNIT, f.width, host);
-        f.layOut(unit.view);
-        assertFalse("°C · °F is the weather's", StatusBarCard.clockRow(Row.STATUS_UNIT));
-        for (MaterialButton button : buttons(unit.view))
-            assertTrue("°C · °F stays live", button.isEnabled());
+        assertFalse("the face stands out", held.get(0).view.isEnabled());
+        for (MaterialButton button : buttons(held.get(1).view))
+            assertFalse("Clock position's buttons are out", button.isEnabled());
+        assertFalse("12 h is out", format.get(0).isEnabled());
+        assertFalse("Seconds is out", format.get(1).isEnabled());
+        assertTrue("°F is the weather's and stays live", format.get(2).isEnabled());
         host.indicators[StatusBarCard.INDICATOR_CLOCK] = true;
-        for (CardRowView view : held) {
+        for (CardRowView view : held)
             view.restate();
-            assertFalse(hasShownText(view.view, "Clock is hidden"));
-            for (MaterialButton button : buttons(view.view))
-                assertTrue(button.isEnabled());
-        }
+        assertTrue(format.get(0).isEnabled());
+        assertTrue(format.get(1).isEnabled());
+        for (MaterialButton button : buttons(held.get(1).view))
+            assertTrue(button.isEnabled());
     }
 
     private static boolean hasShownText(@NonNull View view, @NonNull String text) {

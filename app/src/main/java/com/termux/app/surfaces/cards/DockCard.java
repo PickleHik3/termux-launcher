@@ -188,11 +188,11 @@ public final class DockCard {
         EditorRows.CardRows rows = new EditorRows.CardRows();
         if (offers.appsRow)
             rows.tier(1, Row.DOCK_TYPE, Row.DOCK_APP_ICONS)
-                .tier(3, Row.SECTION_MORE_OPTIONS, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS,
-                    Row.DOCK_MONOCHROME);
+                .tier(2, Row.DOCK_ICON_PACK, Row.DOCK_OPTIONS, Row.DOCK_MONOCHROME);
         return rows
-            .tier(3, Row.SECTION_BARS, Row.DOCK_BARS)
-            .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST, Row.REFLECTION)
+            .tier(2, Row.DOCK_BARS)
+            .pair(3, Row.OPACITY, Row.FROST)
+            .tier(3, Row.REFLECTION)
             .build();
     }
 
@@ -209,8 +209,7 @@ public final class DockCard {
     @Nullable private PreviewTilesRow mType;
     /** The Strip type's height, under the type tiles; shown while the Strip is the type. */
     @Nullable private StepperRow mStripHeight;
-    @Nullable private TileGrid mOptions;
-    @Nullable private com.termux.app.surfaces.rows.SwitchRow mMonochrome;
+    @Nullable private com.termux.app.surfaces.rows.SwitchChipsRow mOptions;
     @NonNull private final Map<Element, BarViews> mBarViews = new EnumMap<>(Element.class);
     /** A restatement sets the switches; only a touch reports. */
     private boolean mRestating;
@@ -327,17 +326,20 @@ public final class DockCard {
                 return body;
             }
             case DOCK_OPTIONS: {
-                List<TileGrid.Tile> tiles = new ArrayList<>();
-                boolean[] on = new boolean[SHOW_HIDE.size()];
-                for (int i = 0; i < SHOW_HIDE.size(); i++) {
-                    Option option = SHOW_HIDE.get(i);
-                    tiles.add(new TileGrid.Tile(option.glyph, context.getString(option.word),
-                        option.hint == 0 ? null : context.getString(option.hint)));
-                    on[i] = mHost.option(option);
-                }
-                mOptions = TileGrid.build(context, tiles, on, widthPx, (index, checked) ->
-                    mHost.setOption(SHOW_HIDE.get(index), checked));
-                return section(context, R.string.editor_dock_row_options, mOptions.root);
+                // The show/hide options and Monochrome icons share one row of switch chips;
+                // Monochrome's own row stands in it.
+                List<com.termux.app.surfaces.rows.SwitchChipsRow.Item> items = new ArrayList<>();
+                for (Option option : chipOptions())
+                    items.add(new com.termux.app.surfaces.rows.SwitchChipsRow.Item(option.glyph,
+                        context.getString(option.word)));
+                List<Option> options = chipOptions();
+                mOptions = com.termux.app.surfaces.rows.SwitchChipsRow.build(context, items,
+                    (index, checked) -> mHost.setOption(options.get(index), checked));
+                restateOptions();
+                return mOptions.root;
+            }
+            case DOCK_MONOCHROME: {
+                return new android.widget.Space(context);
             }
             case DOCK_APP_ICONS: {
                 mAppIcons = StepperRow.build(context, R.drawable.ic_ms_tag,
@@ -364,13 +366,6 @@ public final class DockCard {
                     v -> mHost.pickIconPack());
                 return mDockIconPack.root;
             }
-            case DOCK_MONOCHROME: {
-                mMonochrome = com.termux.app.surfaces.rows.SwitchRow.build(context,
-                    Option.MONOCHROME.glyph, context.getString(Option.MONOCHROME.word),
-                    mHost.option(Option.MONOCHROME),
-                    on -> mHost.setOption(Option.MONOCHROME, on));
-                return mMonochrome.root;
-            }
             default:
                 return null;
         }
@@ -391,14 +386,10 @@ public final class DockCard {
                 restateType();
                 break;
             case DOCK_OPTIONS:
-                if (mOptions != null) {
-                    for (int i = 0; i < SHOW_HIDE.size(); i++)
-                        mOptions.setOn(i, mHost.option(SHOW_HIDE.get(i)));
-                }
+                restateOptions();
                 break;
             case DOCK_MONOCHROME:
-                if (mMonochrome != null)
-                    mMonochrome.setOn(mHost.option(Option.MONOCHROME));
+                restateOptions();
                 break;
             case DOCK_APP_ICONS:
                 restateAppIcons();
@@ -410,6 +401,23 @@ public final class DockCard {
             default:
                 break;
         }
+    }
+
+    /** The options the chips row holds, in order: the show/hide ones, then Monochrome icons. */
+    @NonNull
+    static List<Option> chipOptions() {
+        List<Option> options = new ArrayList<>(SHOW_HIDE);
+        options.add(Option.MONOCHROME);
+        return options;
+    }
+
+    private void restateOptions() {
+        com.termux.app.surfaces.rows.SwitchChipsRow chips = mOptions;
+        if (chips == null)
+            return;
+        List<Option> options = chipOptions();
+        for (int i = 0; i < options.size(); i++)
+            chips.setChecked(i, mHost.option(options.get(i)));
     }
 
     private void restateType() {

@@ -121,7 +121,7 @@ public final class SliderPairRow {
             cell.reset.setVisibility(visibility);
         cell.reset.setEnabled(own);
         if (spoken != null)
-            cell.root.setStateDescription(own ? spoken : null);
+            androidx.core.view.ViewCompat.setStateDescription(cell.root, own ? spoken : null);
     }
 
     @NonNull
