@@ -98,4 +98,27 @@ public class PaneRowPolicyTest {
         // Headroom is only the clearance the pane already had: it never pays for the row.
         assertEquals(row, PaneShape.topInsetPx(bottomInset, 999, row));
     }
+
+    @Test
+    public void theRowKeepsTheMockUpsSideInsetsOnASquareOrGentlyRoundedPane() {
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        int start = Math.round(PaneRowPolicy.START_INSET_DP * DENSITY);
+        int end = Math.round(PaneRowPolicy.END_INSET_DP * DENSITY);
+        assertEquals(start, PaneRowPolicy.startInsetPx(0f, row, DENSITY));
+        assertEquals(end, PaneRowPolicy.endInsetPx(0f, row, DENSITY));
+        // A 24dp corner bends in about 6dp at the row's middle: the 10dp start already clears it.
+        assertEquals(start, PaneRowPolicy.startInsetPx(24f * DENSITY, row, DENSITY));
+    }
+
+    @Test
+    public void aRoundCornerPushesTheRowInBeyondItsArc() {
+        int row = PaneRowPolicy.rowHeightPx(DENSITY);
+        float radius = 40f * DENSITY;
+        // At the row's middle (8dp down) a 40dp arc stands 40 - sqrt(40² - 32²) = 16dp in.
+        int arc = Math.round(16f * DENSITY);
+        assertEquals(arc, PaneRowPolicy.startInsetPx(radius, row, DENSITY));
+        assertEquals(arc, PaneRowPolicy.endInsetPx(radius, row, DENSITY));
+        assertEquals(arc, PaneRowPolicy.arcInsetPx(radius, row / 2f));
+        assertEquals(0, PaneRowPolicy.arcInsetPx(radius, radius + 1f));
+    }
 }

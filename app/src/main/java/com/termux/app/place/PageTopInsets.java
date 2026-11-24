@@ -39,7 +39,18 @@ public final class PageTopInsets {
      */
     public static boolean canvasReachesUnderBar(@NonNull PageKind committed,
                                                 boolean wallAtRest) {
-        return committed == PageKind.HOME || !wallAtRest;
+        return canvasReachesUnderBar(committed, wallAtRest, false);
+    }
+
+    /**
+     * As {@link #canvasReachesUnderBar(PageKind, boolean)}, where the status bar may stand as the
+     * thin row inside the Terminal's top pane ({@code PaneRowPolicy.rowStands}): then the canvas
+     * reaches up under the bar on every page and at every step, as it does for Home, and the bar's
+     * host lies over the canvas as the row or as Home's strip without either moving a page.
+     */
+    public static boolean canvasReachesUnderBar(@NonNull PageKind committed, boolean wallAtRest,
+                                                boolean paneRowStands) {
+        return paneRowStands || committed == PageKind.HOME || !wallAtRest;
     }
 
     /**
@@ -83,7 +94,21 @@ public final class PageTopInsets {
                                           @NonNull PlaceLayout onScreen,
                                           @NonNull PlaceLayout terminal,
                                           @NonNull EdgeStackPolicy.Metrics metrics) {
-        if (!reaches || !barShown) return 0;
+        return terminalTopInsetPx(reaches, barShown, onScreen, terminal, metrics, false);
+    }
+
+    /**
+     * As {@link #terminalTopInsetPx(boolean, boolean, PlaceLayout, PlaceLayout,
+     * EdgeStackPolicy.Metrics)}; 0 while the bar stands as the thin row inside the top pane: the
+     * Terminal's pages start at the canvas's top and the top pane holds the row itself
+     * ({@code PaneShape.topInsetPx}), so the strip's band comes back to the terminal as rows.
+     */
+    public static int terminalTopInsetPx(boolean reaches, boolean barShown,
+                                          @NonNull PlaceLayout onScreen,
+                                          @NonNull PlaceLayout terminal,
+                                          @NonNull EdgeStackPolicy.Metrics metrics,
+                                          boolean paneRowStands) {
+        if (!reaches || !barShown || paneRowStands) return 0;
         int standing = EdgeStackPolicy.topOverlapPx(onScreen, metrics, true);
         if (standing > 0) return standing;
         return EdgeStackPolicy.topOverlapPx(terminal, metrics, true);
@@ -109,6 +134,16 @@ public final class PageTopInsets {
      * the Terminal — the canvas's reach while the chrome is committed to a window, 0 on Home.
      */
     public static int bodySurfaceTopPx(@NonNull PageKind committed, int canvasReachPx) {
+        return bodySurfaceTopPx(committed, canvasReachPx, false);
+    }
+
+    /**
+     * As {@link #bodySurfaceTopPx(PageKind, int)}; 0 while the bar stands as the thin row inside
+     * the top pane, where the Terminal's page itself starts at the canvas's top.
+     */
+    public static int bodySurfaceTopPx(@NonNull PageKind committed, int canvasReachPx,
+                                       boolean paneRowStands) {
+        if (paneRowStands) return 0;
         return committed == PageKind.HOME ? 0 : Math.max(0, canvasReachPx);
     }
 }

@@ -31,14 +31,41 @@ public final class PaneRowPolicy {
     /** The readings at rest, in sp. */
     public static final float READING_SP = 9f;
 
+    /** The row's content starts this far in from the pane's start edge, in dp (the mock-up's). */
+    public static final float START_INSET_DP = 10f;
+    /** The row's content ends this far in from the pane's end edge, in dp (the mock-up's). */
+    public static final float END_INSET_DP = 16f;
+
     public static int rowHeightPx(float density) {
         return Math.round(REST_HEIGHT_DP * density);
     }
 
     /**
+     * How far a round corner of {@code radiusPx} stands in from the pane's side at {@code yPx}
+     * below its top: 0 below the arc.
+     */
+    public static int arcInsetPx(float radiusPx, float yPx) {
+        if (!(radiusPx > 0f) || yPx >= radiusPx) return 0;
+        float dy = radiusPx - Math.max(0f, yPx);
+        return Math.round(radiusPx - (float) Math.sqrt(radiusPx * radiusPx - dy * dy));
+    }
+
+    /** Where the row's content starts in from the pane's start edge: the mock-up's inset or the arc's. */
+    public static int startInsetPx(float radiusPx, int rowPx, float density) {
+        return Math.max(Math.round(START_INSET_DP * density), arcInsetPx(radiusPx, rowPx / 2f));
+    }
+
+    /** Where the row's content ends in from the pane's end edge: the mock-up's inset or the arc's. */
+    public static int endInsetPx(float radiusPx, int rowPx, float density) {
+        return Math.max(Math.round(END_INSET_DP * density), arcInsetPx(radiusPx, rowPx / 2f));
+    }
+
+    /**
      * Whether the status bar stands as the row on a page: the place is the pane, the bar is shown
      * (a bar hidden on a layout stays hidden) and the page has a pane to hold it. Home has none,
-     * so Home shows the strip.
+     * so Home shows the strip. The caller passes {@code statusShown} only for a bar the page's
+     * layout stands along the top edge: the row takes the top strip's place, and a bar a layout
+     * stands down a side or on the dock's plank keeps it.
      */
     public static boolean rowStands(@NonNull StatusPlace place, @NonNull PageKind page,
                                     boolean statusShown) {
