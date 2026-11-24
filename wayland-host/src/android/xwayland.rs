@@ -21,13 +21,18 @@ use smithay::delegate_xwayland_shell;
 use smithay::reexports::calloop::RegistrationToken;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::Client;
-use smithay::reexports::x11rb::protocol::xproto::Window as X11Window;
+use smithay::reexports::x11rb::connection::Connection;
+use smithay::reexports::x11rb::protocol::xproto::{AtomEnum, PropMode, Window as X11Window};
+use smithay::reexports::x11rb::wrapper::ConnectionExt as _;
+use smithay::reexports::x11rb::rust_connection::{DefaultStream, RustConnection};
+use smithay::xwayland::xwm::settings::Value;
 use smithay::utils::{Logical, Rectangle};
 use smithay::wayland::xwayland_shell::{XWaylandShellHandler, XWaylandShellState};
 use smithay::xwayland::xwm::{Reorder, ResizeEdge, WmWindowProperty, XwmId};
 use smithay::xwayland::{X11Surface, X11Wm, XWayland, XWaylandClientData, XWaylandEvent, XwmHandler};
 
 use crate::xlock::{self, Owner};
+use crate::xscale;
 
 use super::host::{OrWindow, Shell, State};
 use super::log::{lerror, linfo, lwarn};
@@ -83,6 +88,7 @@ pub fn start(state: &mut State, config: XwaylandConfig) {
         }
     };
     let wm_client = client.clone();
+    let socket_dir = tmp_dir.join(".X11-unix");
     let token = state.loop_handle.insert_source(xwayland, move |event, _, state| match event {
         XWaylandEvent::Ready { x11_socket, display_number } => {
             match X11Wm::start_wm(state.loop_handle.clone(), x11_socket, wm_client.clone()) {
@@ -90,6 +96,9 @@ pub fn start(state: &mut State, config: XwaylandConfig) {
                     if let Some(x) = state.xwayland.as_mut() {
                         x.wm = Some(wm);
                     }
+                    let scale = state.output_scale();
+                    set_toolkit_scale(state, scale);
+                    set_resources(socket_dir.join(format!("X{display_number}")), scale);
                     linfo!("Xwayland ready: DISPLAY=:{display_number}");
                     state.events.x_display(&format!(":{display_number}"));
                 }
@@ -104,6 +113,47 @@ pub fn start(state: &mut State, config: XwaylandConfig) {
     match token {
         Ok(token) => state.xwayland = Some(XwaylandState { wm: None, token: Some(token), client }),
         Err(e) => lerror!("cannot watch Xwayland: {e}"),
+    }
+}
+
+/// Tells X toolkits the output scale through XSETTINGS (see `crate::xscale`); GTK and
+/// Chromium follow a change live. Called when Xwayland is ready and when the output scale
+/// changes; nothing to do while no window manager runs.
+pub fn set_toolkit_scale(state: &mut State, scale: f64) {
+    let Some(wm) = state.xwayland.as_mut().and_then(|x| x.wm.as_mut()) else { return };
+    let t = xscale::toolkit_scale(scale);
+    let settings = [
+        ("Xft/DPI".to_string(), Value::Integer(t.xft_dpi_1024)),
+        ("Gdk/WindowScalingFactor".to_string(), Value::Integer(t.window_scale)),
+        ("Gdk/UnscaledDPI".to_string(), Value::Integer(t.unscaled_dpi_1024)),
+    ];
+    match wm.set_xsettings(settings.into_iter()) {
+        Ok(()) => linfo!("X toolkits: scale {scale}, window scale {}, Xft/DPI {}", t.window_scale, t.xft_dpi),
+        Err(e) => lwarn!("cannot set XSETTINGS: {e:?}"),
+    }
+}
+
+/// Writes `Xft.dpi` into the root window's `RESOURCE_MANAGER` (what `xrdb` does), for Xft
+/// clients that do not read XSETTINGS. Once, when Xwayland is ready: a client reads it at start,
+/// and writing it again later would replace whatever a user's `xrdb` added. On its own thread
+/// and its own X connection, so the compositor never waits on Xwayland, which is its client.
+fn set_resources(socket: PathBuf, scale: f64) {
+    let text = xscale::resources(&xscale::toolkit_scale(scale));
+    let spawned = std::thread::Builder::new().name("tl-xresources".into()).spawn(move || {
+        let result = (|| -> Result<(), Box<dyn std::error::Error>> {
+            let (stream, _) = DefaultStream::from_unix_stream(UnixStream::connect(&socket)?)?;
+            let conn = RustConnection::connect_to_stream(stream, 0)?;
+            let root = conn.setup().roots.first().ok_or("no X screen")?.root;
+            conn.change_property8(PropMode::REPLACE, root, AtomEnum::RESOURCE_MANAGER, AtomEnum::STRING, text.as_bytes())?
+                .check()?;
+            Ok(())
+        })();
+        if let Err(e) = result {
+            lwarn!("cannot set X resources on {}: {e}", socket.display());
+        }
+    });
+    if let Err(e) = spawned {
+        lwarn!("cannot start the X resources thread: {e}");
     }
 }
 

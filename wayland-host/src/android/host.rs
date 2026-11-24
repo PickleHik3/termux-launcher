@@ -701,6 +701,11 @@ pub fn now_ms() -> u32 {
 }
 
 impl State {
+    /// The output's current scale: the newest one a toplevel was configured with.
+    pub fn output_scale(&self) -> f64 {
+        self.output_scale
+    }
+
     pub fn insert_client(&mut self, stream: UnixStream) {
         if let Err(e) = self.display_handle.insert_client(stream, Arc::new(ClientState::default())) {
             lwarn!("insert_client: {e}");
@@ -867,6 +872,7 @@ impl State {
         if scale != self.output_scale {
             self.output_scale = scale;
             self.output.change_current_state(None, None, Some(output_scale(scale)), None);
+            super::xwayland::set_toolkit_scale(self, scale);
         }
         if self.toplevels[i].shell.is_x11() {
             return;
@@ -1797,12 +1803,6 @@ fn compose_into(
     }
 }
 
-/// What decides the shown rectangle, copied out of a toplevel so the copy can borrow its window.
-#[derive(Clone, Copy)]
-struct Layout {
-    buffer_scale: i32,
-    viewport_src: Option<RectF>,
-    viewport_dst: Option<(i32, i32)>,
 /// The view a toplevel's post limit is taken from: an X window is drawn in the view's pixels;
 /// a Wayland client may draw it at its integer scale (`integer_scale_view`).
 fn post_view(t: &Toplevel) -> Option<(i32, i32)> {
@@ -1813,6 +1813,12 @@ fn post_view(t: &Toplevel) -> Option<(i32, i32)> {
     }
 }
 
+/// What decides the shown rectangle, copied out of a toplevel so the copy can borrow its window.
+#[derive(Clone, Copy)]
+struct Layout {
+    buffer_scale: i32,
+    viewport_src: Option<RectF>,
+    viewport_dst: Option<(i32, i32)>,
     geometry: Option<Rect>,
     /// `post_view` of the toplevel.
     post_view: Option<(i32, i32)>,

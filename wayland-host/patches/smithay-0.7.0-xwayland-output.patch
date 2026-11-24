@@ -1,0 +1,21 @@
+--- a/src/wayland/output/handlers.rs
++++ b/src/wayland/output/handlers.rs
+@@ -154,6 +154,18 @@
+     ) {
+         data_init.init(resource, ());
+     }
++
++    // Xwayland sizes its X screen from xdg_output's logical size, which a fractional output
++    // scale makes smaller than the pixels its windows are configured in (so the pointer and
++    // RandR stop short of the window). Without xdg_output it takes the wl_output mode: pixels.
++    fn can_view(client: Client, _global_data: &()) -> bool {
++        #[cfg(feature = "xwayland")]
++        if client.get_data::<crate::xwayland::XWaylandClientData>().is_some() {
++            return false;
++        }
++        let _ = client;
++        true
++    }
+ }
+ 
+ impl<D> Dispatch<ZxdgOutputManagerV1, (), D> for OutputManagerState
