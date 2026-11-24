@@ -517,22 +517,25 @@ public final class SettingsBackupIo {
                 SharedPreferences preferences = env.prefs.get(store.getKey());
                 if (preferences == null) continue;
                 Map<String, Object> values = store.getValue();
+                Set<String> refused = new HashSet<>();
                 if (store.getKey() == Store.MAIN) {
                     values = SettingsBackupFormat.withScaledFontSizes(values, staged.manifest.density,
                         env.density, env.fontSizeMin, env.fontSizeMax);
-                    // A declared setting's invalid value is left out (so the key falls back to its
-                    // default below) and reported.
+                    // A declared setting's invalid value is neither written nor removed: the
+                    // device keeps what it holds now. It is reported.
                     List<String> invalid = SettingsBackupFormat.invalidDeclaredKeys(values);
                     if (!invalid.isEmpty()) {
                         values = new LinkedHashMap<>(values);
                         for (String key : invalid) values.remove(key);
+                        refused.addAll(invalid);
                         skipped.addAll(invalid);
                         Logger.logWarn(LOG_TAG, "Skipped values the settings refuse: " + invalid);
                     }
                 }
                 SharedPreferences.Editor editor = preferences.edit();
                 for (String key : preferences.getAll().keySet()) {
-                    if (store.getKey().includes(key) && !values.containsKey(key)) editor.remove(key);
+                    if (store.getKey().includes(key) && !values.containsKey(key)
+                        && !refused.contains(key)) editor.remove(key);
                 }
                 for (Map.Entry<String, Object> value : values.entrySet()) put(editor, value.getKey(), value.getValue());
                 if (store.getKey() == Store.MAIN) applyKeyboardFont(env, editor, keyboardFontPlaced);

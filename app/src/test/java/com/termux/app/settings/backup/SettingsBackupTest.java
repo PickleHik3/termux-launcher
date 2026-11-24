@@ -199,14 +199,16 @@ public class SettingsBackupTest {
         byte[] bundle = export(source);
 
         Install target = new Install("range_target", 2f);
-        target.main().edit().putInt("text_size_percent", 120).commit();
+        target.main().edit().putInt("text_size_percent", 120)
+            .putString("terminal_contrast_level", "harder").commit();
         SettingsBackupIo.ApplyResult result = restore(target, bundle);
 
         assertEquals(0, result.failures);
         assertEquals(new HashSet<>(Arrays.asList("text_size_percent", "terminal_contrast_level")),
             new HashSet<>(result.skipped));
-        assertFalse("the invalid value is not written", target.main().contains("text_size_percent"));
-        assertFalse(target.main().contains("terminal_contrast_level"));
+        assertEquals("a refused value keeps what the device holds", 120,
+            target.main().getInt("text_size_percent", 0));
+        assertEquals("harder", target.main().getString("terminal_contrast_level", null));
         assertTrue(target.main().getBoolean("status_bar_twelve_hour", false));
         assertEquals(7, target.main().getInt("surface_base_blur", 0));
     }
