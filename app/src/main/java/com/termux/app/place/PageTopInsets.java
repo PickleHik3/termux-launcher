@@ -108,10 +108,11 @@ public final class PageTopInsets {
                                           @NonNull PlaceLayout terminal,
                                           @NonNull EdgeStackPolicy.Metrics metrics,
                                           boolean paneRowStands) {
-        if (!reaches || !barShown || paneRowStands) return 0;
+        if (!reaches || !barShown) return 0;
         int standing = EdgeStackPolicy.topOverlapPx(onScreen, metrics, true);
-        if (standing > 0) return standing;
-        return EdgeStackPolicy.topOverlapPx(terminal, metrics, true);
+        int stripPx = standing > 0 ? standing : EdgeStackPolicy.topOverlapPx(terminal, metrics, true);
+        // The one policy for what the strip takes: nothing once the row took its place.
+        return com.termux.app.statusbar.PaneRowPolicy.stripBandPx(paneRowStands, stripPx);
     }
 
     /**

@@ -121,7 +121,11 @@ public final class PaneRowPolicy {
         return place.inPane() && statusShown && page != PageKind.HOME;
     }
 
-    /** The band the strip takes from the top edge: all of it, or none once the row took its place. */
+    /**
+     * The band the strip takes from the top edge: all of it, or none once the row took its place.
+     * With {@link #paneTopInsetPx} it is what the terminal's top gives up for the bar; both the
+     * prediction (the crossing, the keyboard) and the settled layout read these two.
+     */
     public static int stripBandPx(boolean rowStands, int stripPx) {
         return rowStands ? 0 : Math.max(0, stripPx);
     }
@@ -132,30 +136,5 @@ public final class PaneRowPolicy {
      */
     public static int paneTopInsetPx(boolean rowStands, boolean topPane, int rowPx) {
         return rowStands && topPane ? Math.max(0, rowPx) : 0;
-    }
-
-    /** What the terminal's top gives up for the status bar, split the way each place pays it. */
-    public static final class Room {
-        public final int stripBandPx;
-        public final int paneTopInsetPx;
-
-        Room(int stripBandPx, int paneTopInsetPx) {
-            this.stripBandPx = stripBandPx;
-            this.paneTopInsetPx = paneTopInsetPx;
-        }
-
-        /** The whole of it, which the terminal's height loses at its top. */
-        public int totalPx() {
-            return stripBandPx + paneTopInsetPx;
-        }
-    }
-
-    /**
-     * The room for one place: {@code rowStands} as {@link #rowStands} answers it, whether the pane
-     * asked is the top one, and the strip's and the row's own heights.
-     */
-    @NonNull
-    public static Room room(boolean rowStands, boolean topPane, int stripPx, int rowPx) {
-        return new Room(stripBandPx(rowStands, stripPx), paneTopInsetPx(rowStands, topPane, rowPx));
     }
 }

@@ -56,28 +56,33 @@ public class PaneRowPolicyTest {
         assertEquals(0, PaneRowPolicy.paneTopInsetPx(false, true, row));
     }
 
+    private static int totalPx(boolean rowStands, boolean topPane, int stripPx, int rowPx) {
+        return PaneRowPolicy.stripBandPx(rowStands, stripPx)
+            + PaneRowPolicy.paneTopInsetPx(rowStands, topPane, rowPx);
+    }
+
     @Test
     public void theTerminalGetsTheStripsHeightBackAsRowsLessTheRow() {
         int row = PaneRowPolicy.rowHeightPx(DENSITY);
-        PaneRowPolicy.Room strip = PaneRowPolicy.room(false, true, STRIP_PX, row);
-        PaneRowPolicy.Room pane = PaneRowPolicy.room(true, true, STRIP_PX, row);
-        assertEquals(STRIP_PX, strip.totalPx());
-        assertEquals(row, pane.totalPx());
-        assertEquals(STRIP_PX - row, strip.totalPx() - pane.totalPx());
+        int strip = totalPx(false, true, STRIP_PX, row);
+        int pane = totalPx(true, true, STRIP_PX, row);
+        assertEquals(STRIP_PX, strip);
+        assertEquals(row, pane);
+        assertEquals(STRIP_PX - row, strip - pane);
         // A pane under the top one pays nothing for the row, in either place.
-        assertEquals(0, PaneRowPolicy.room(true, false, STRIP_PX, row).paneTopInsetPx);
+        assertEquals(0, PaneRowPolicy.paneTopInsetPx(true, false, row));
     }
 
     @Test
     public void theRowsAreComputedFromOnePolicyOnBothPaths() {
-        // The prediction reads Room.totalPx; the settled layout reads the strip band and the
-        // pane's inset through the same two functions. Both give the same rows at any height.
+        // The terminal's top gives up the strip band and the pane's inset, the two functions
+        // production reads (PageTopInsets, the pane controller); rows follow at any height.
         int row = PaneRowPolicy.rowHeightPx(DENSITY);
         int cell = 41;
         for (boolean inPane : new boolean[] {false, true}) {
-            PaneRowPolicy.Room room = PaneRowPolicy.room(inPane, true, STRIP_PX, row);
+            int total = totalPx(inPane, true, STRIP_PX, row);
             for (int height = 1200; height <= 2400; height += 37) {
-                int predicted = (height - room.totalPx()) / cell;
+                int predicted = (height - total) / cell;
                 int settled = (height - PaneRowPolicy.stripBandPx(inPane, STRIP_PX)
                     - PaneRowPolicy.paneTopInsetPx(inPane, true, row)) / cell;
                 assertEquals(predicted, settled);
@@ -134,11 +139,11 @@ public class PaneRowPolicyTest {
     @Test
     public void enlargingNeverChangesWhatTheTerminalGivesUp() {
         int rest = PaneRowPolicy.rowHeightPx(DENSITY);
-        int before = PaneRowPolicy.room(true, true, STRIP_PX, rest).totalPx();
+        int before = totalPx(true, true, STRIP_PX, rest);
         assertEquals(100 + rest, PaneRowPolicy.rowBottomPx(100, DENSITY, false));
         assertEquals(100 + PaneRowPolicy.enlargedHeightPx(DENSITY),
             PaneRowPolicy.rowBottomPx(100, DENSITY, true));
-        assertEquals(before, PaneRowPolicy.room(true, true, STRIP_PX, rest).totalPx());
+        assertEquals(before, totalPx(true, true, STRIP_PX, rest));
         assertEquals(rest, PaneRowPolicy.paneTopInsetPx(true, true, rest));
     }
 
