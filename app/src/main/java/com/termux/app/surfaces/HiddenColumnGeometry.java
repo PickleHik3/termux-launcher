@@ -17,6 +17,14 @@ final class HiddenColumnGeometry {
      * room (it fills the window at rest). Its width never changes with the pose, so the view moves
      * by translation alone.
      */
+    /**
+     * The height left in the column under its chips ({@code chipCount} of {@code chipPx} with
+     * {@code padPx} around and between), where the hint may grow upward from the foot.
+     */
+    static int hintRoomPx(int columnHeightPx, int chipCount, int chipPx, int padPx) {
+        return Math.max(0, columnHeightPx - (2 * padPx + chipCount * (chipPx + padPx)));
+    }
+
     @NonNull
     static int[] rect(@NonNull int[] frame, int windowWidthPx, int gapPx, int minWidthPx) {
         int left = Math.min(frame[2] + gapPx, windowWidthPx - minWidthPx);

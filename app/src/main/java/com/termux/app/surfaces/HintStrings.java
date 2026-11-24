@@ -16,13 +16,27 @@ final class HintStrings {
 
     private HintStrings() {}
 
+    /** The title line (the selected bar's name), or null for a hint that has none. */
+    @Nullable
+    static String titleOf(@NonNull Context context, @NonNull HintText hint) {
+        return titled(hint.line) && hint.bar != null ? context.getString(nameOf(hint.bar)) : null;
+    }
+
+    /** The sentence under the title. */
     @NonNull
     static String of(@NonNull Context context, @NonNull HintText hint) {
         int line = lineRes(hint.line);
         if (hint.bar == null)
             return context.getString(line);
-        return context.getString(line, context.getString(nameOf(hint.bar)),
-            context.getString(reachOf(hint.scope)));
+        String reach = context.getString(reachOf(hint.scope));
+        if (titled(hint.line))
+            return context.getString(line, reach);
+        return context.getString(line, context.getString(nameOf(hint.bar)), reach);
+    }
+
+    private static boolean titled(@NonNull HintText.Line line) {
+        return line == HintText.Line.SELECTED_MOVABLE || line == HintText.Line.SELECTED_HIDE_ONLY
+            || line == HintText.Line.SELECTED_HIDDEN;
     }
 
     @StringRes

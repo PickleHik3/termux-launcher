@@ -14,6 +14,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.layouteditor.LayoutEditorPlan.TrayItem;
@@ -28,7 +29,8 @@ import java.util.List;
  * and takes no touch of its own; only the chips do. It is placed by translation from the frame's
  * pose ({@link HiddenColumnGeometry}), never laid out again while the card sheet moves.
  *
- * <p>The column's foot is left free ({@link #hintReservePx}) for the editor's one hint (#343).
+ * <p>The editor's one hint (#343) stands at the column's foot and grows upward over the room
+ * the chips leave.
  */
 final class HiddenColumnView extends FrameLayout {
 
@@ -43,7 +45,6 @@ final class HiddenColumnView extends FrameLayout {
 
     static final int WIDTH_DP = 88;
     static final int GAP_DP = 8;
-    static final int HINT_RESERVE_DP = 72;
     private static final int CHIP_DP = 32;
     private static final int PAD_DP = 6;
 
@@ -59,6 +60,10 @@ final class HiddenColumnView extends FrameLayout {
     private final int mOnSurface;
     private final float mRadius;
     @NonNull private final TextView mHint;
+    private static final float HINT_SP = 11f;
+    private final int mPrimary;
+    @Nullable private String mHintTitle;
+    @Nullable private String mHintBody;
     private boolean mTarget;
     private boolean mPlaced;
 
@@ -84,22 +89,60 @@ final class HiddenColumnView extends FrameLayout {
             LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
         mHint = new TextView(context);
         mHint.setTextColor(onSurface);
-        mHint.setGravity(Gravity.CENTER_VERTICAL);
+        mPrimary = primary;
+        mHint.setGravity(Gravity.START | Gravity.BOTTOM);
         mHint.setIncludeFontPadding(false);
         mHint.setPadding(pad, 0, pad, pad);
         mHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
-        mHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, 10f);
-        // Long lines shrink to fit the column's foot rather than overflow it.
-        mHint.setAutoSizeTextTypeUniformWithConfiguration(7, 10, 1, TypedValue.COMPLEX_UNIT_SP);
+        mHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, HINT_SP);
+        mHint.setLineSpacing(0f, 1.35f);
+        mHint.setMaxLines(Integer.MAX_VALUE);
         addView(mHint, new LayoutParams(Math.round(WIDTH_DP * density),
-            Math.round(HINT_RESERVE_DP * density), Gravity.TOP | Gravity.START));
+            LayoutParams.WRAP_CONTENT, Gravity.TOP | Gravity.START));
+        // The hint's height is known once laid out; resting on the foot is a translation only.
+        mHint.addOnLayoutChangeListener((v, l, t, r, b, ol, ot, or, ob) -> anchorHint());
         setVisibility(View.GONE);
     }
 
-    /** The hint at the column's foot; the text is set (and laid out) only when it changed. */
-    void setHint(@NonNull CharSequence text) {
-        if (!text.toString().contentEquals(mHint.getText()))
-            mHint.setText(text);
+    /**
+     * The hint at the column's foot: {@code title} (accent, own line) over {@code body}. The text
+     * is set, and so laid out, only when it changed.
+     */
+    void setHint(@Nullable String title, @NonNull String body) {
+        if (body.equals(mHintBody) && java.util.Objects.equals(title, mHintTitle))
+            return;
+        mHintTitle = title;
+        mHintBody = body;
+        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder();
+        if (title != null) {
+            text.append(title);
+            text.setSpan(new android.text.style.ForegroundColorSpan(mPrimary), 0, title.length(),
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0,
+                title.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.append('\n');
+        }
+        text.append(body);
+        mHint.setText(text);
+    }
+
+    /** Rests the hint's bottom on the column's foot (translation; no layout is requested). */
+    private void anchorHint() {
+        if (!mPlaced)
+            return;
+        mHint.setTranslationX(mRect[0]);
+        mHint.setTranslationY(mRect[3] - mHint.getHeight());
+    }
+
+    /** Lines the hint may take: the room above the foot that the chips leave free. */
+    private void limitHint(int chipCount) {
+        float density = getResources().getDisplayMetrics().density;
+        int room = HiddenColumnGeometry.hintRoomPx(mRect[3] - mRect[1], chipCount,
+            Math.round(CHIP_DP * density), Math.round(PAD_DP * density));
+        int lineHeight = Math.max(1, mHint.getLineHeight());
+        int lines = Math.max(1, room / lineHeight);
+        if (mHint.getMaxLines() != lines)
+            mHint.setMaxLines(lines);
     }
 
     /** The chips for {@code items}, rebuilt only when the list changed. */
@@ -108,6 +151,8 @@ final class HiddenColumnView extends FrameLayout {
             return;
         mItems.clear();
         mItems.addAll(items);
+        if (mPlaced)
+            limitHint(mItems.size());
         mList.removeAllViews();
         float density = getResources().getDisplayMetrics().density;
         for (TrayItem item : mItems) {
@@ -143,8 +188,8 @@ final class HiddenColumnView extends FrameLayout {
         mPlaced = true;
         mList.setTranslationX(rect[0]);
         mList.setTranslationY(rect[1]);
-        mHint.setTranslationX(rect[0]);
-        mHint.setTranslationY(rect[3] - hintReservePx());
+        limitHint(mItems.size());
+        anchorHint();
         if (getVisibility() != View.VISIBLE)
             setVisibility(View.VISIBLE);
         invalidate();
@@ -169,11 +214,6 @@ final class HiddenColumnView extends FrameLayout {
             return;
         mTarget = target;
         invalidate();
-    }
-
-    /** The column's foot kept free for the hint (#343): its height in px. */
-    int hintReservePx() {
-        return Math.round(HINT_RESERVE_DP * getResources().getDisplayMetrics().density);
     }
 
     @Override

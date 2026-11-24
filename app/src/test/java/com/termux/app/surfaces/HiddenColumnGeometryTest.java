@@ -43,4 +43,10 @@ public class HiddenColumnGeometryTest {
         assertEquals(W, column[2]);
         assertEquals(MIN, column[2] - column[0]);
     }
+
+    @Test public void hintRoomIsWhatTheChipsLeave() {
+        // 1000 high; 2 chips of 90 with 10 around and between: 2*10 + 2*100 = 220 used.
+        assertEquals(780, HiddenColumnGeometry.hintRoomPx(1000, 2, 90, 10));
+        assertEquals(0, HiddenColumnGeometry.hintRoomPx(100, 5, 90, 10));
+    }
 }

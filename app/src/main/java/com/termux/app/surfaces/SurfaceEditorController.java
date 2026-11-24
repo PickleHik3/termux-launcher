@@ -4845,7 +4845,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         if (column == null)
             return;
         HintText hint = mDragHint != null ? mDragHint : barPlaces().hint();
-        column.setHint(HintStrings.of(mHost.context(), hint));
+        column.setHint(HintStrings.titleOf(mHost.context(), hint), HintStrings.of(mHost.context(), hint));
     }
 
     /** The column beside the frame as the pose leaves it: translation only. */
