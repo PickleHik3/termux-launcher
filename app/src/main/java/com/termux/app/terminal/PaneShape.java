@@ -133,4 +133,16 @@ public final class PaneShape {
     public static int topInsetPx(int bottomInsetPx, int headroomPx) {
         return Math.max(0, bottomInsetPx - Math.max(0, headroomPx));
     }
+
+    /**
+     * As {@link #topInsetPx(int, int)}, for the top pane while the status bar stands as the thin
+     * row inside it ({@code PaneRowPolicy}): the margin grows by the whole row, so the first row of
+     * text starts a row lower and the row never overlaps it. The headroom is only clearance the
+     * pane already had against its edge; it does not pay for the row.
+     *
+     * @param rowPx the row's height, 0 when no row stands in this pane
+     */
+    public static int topInsetPx(int bottomInsetPx, int headroomPx, int rowPx) {
+        return topInsetPx(bottomInsetPx, headroomPx) + Math.max(0, rowPx);
+    }
 }
