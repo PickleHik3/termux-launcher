@@ -124,7 +124,7 @@ public class EditorCardSectionsTest {
     public void statusBar() {
         check(EditorCard.STATUS, expect(
             // No headings (#347): the clock rows, the glass pair and the links follow in order.
-            CARD, Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS,
+            CARD, Arrays.asList(Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS,
                 Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS, Row.STATUS_SECONDS,
                 Row.STATUS_UNIT, Row.OPACITY, Row.FROST, Row.CAMERA_CUTOUT,
                 Row.PINNED_NOTIFICATIONS)));

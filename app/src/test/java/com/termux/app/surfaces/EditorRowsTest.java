@@ -102,9 +102,8 @@ public class EditorRowsTest {
     }
 
     @Test
-    public void theStatusBarCardOpensOnItsPlaceAndStrip() {
-        assertEquals(Arrays.asList(Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
-            Row.STATUS_INDICATORS),
+    public void theStatusBarCardOpensOnItsPageBar() {
+        assertEquals(Arrays.asList(Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS),
             EditorRows.tier(EditorCard.STATUS, ALL, 1));
         assertEquals(Arrays.asList(Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_HOURS,
             Row.STATUS_SECONDS, Row.STATUS_UNIT), EditorRows.tier(EditorCard.STATUS, ALL, 2));

@@ -54,7 +54,7 @@ public class EditorRowOrderTest {
         // Global).
         assertEquals("the Dock opens on its type", Row.DOCK_TYPE,
             EditorRows.rows(EditorCard.DOCK, OFFERS[0]).get(0).row);
-        assertEquals("the Status bar opens on its place", Row.STATUS_PLACE,
+        assertEquals("the Status bar opens on its Page bar", Row.STATUS_PAGE_BAR,
             EditorRows.rows(EditorCard.STATUS, OFFERS[0]).get(0).row);
         assertFalse(EditorRows.tier(EditorCard.APPEARANCE, OFFERS[0], 3).contains(Row.DOCK_TYPE));
         assertEquals("the Keyboard opens on its Form", Row.FORM,

@@ -6254,9 +6254,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     case STATUS_PAGE_BAR:
                         return com.termux.app.surfaces.cards.StatusBarCard.pageBarIndex(
                             prefs == null ? null : prefs.getPageBarLook());
-                    case STATUS_PLACE:
-                        return com.termux.app.surfaces.cards.StatusBarCard.placeIndex(
-                            prefs == null ? null : prefs.getStatusPlace());
                     default:
                         return 0;
                 }
@@ -6283,14 +6280,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                             return;
                         prefs.setPageBarLook(
                             com.termux.app.surfaces.cards.StatusBarCard.pageBarValue(index));
-                        mHost.refreshTerminalWindowBar();
-                        syncDirty();
-                        return;
-                    case STATUS_PLACE:
-                        if (prefs == null || choice(row) == index)
-                            return;
-                        prefs.setStatusPlace(
-                            com.termux.app.surfaces.cards.StatusBarCard.placeValue(index));
                         mHost.refreshTerminalWindowBar();
                         syncDirty();
                         return;
