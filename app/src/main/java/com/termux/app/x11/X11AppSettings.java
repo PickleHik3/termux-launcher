@@ -6,7 +6,9 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.util.Arrays;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.LinkedHashMap;
@@ -29,9 +31,8 @@ public final class X11AppSettings {
     public static final String TOUCH_TOUCH = "2";
     public static final String TOUCH_DIRECT = "3";
 
-    /** Every scale an app can ask for. */
-    public static final List<String> SCALES = Collections.unmodifiableList(
-        Arrays.asList("1", "1.25", "1.5", "2", "2.5", "3"));
+    /** Every scale an app can ask for: the scale rail's stops ({@link DisplayScaleSteps#STEPS}). */
+    public static final List<String> SCALES = scales();
 
     private static final String KEY_TOUCH_MODE = "touch_mode";
     private static final String KEY_SCALE = "scale";
@@ -55,6 +56,31 @@ public final class X11AppSettings {
 
     public static boolean isScale(@Nullable String value) {
         return value != null && SCALES.contains(value);
+    }
+
+    @NonNull
+    private static List<String> scales() {
+        List<String> out = new ArrayList<>();
+        for (int step : DisplayScaleSteps.STEPS) out.add(DisplayScaleSteps.scaleValue(step));
+        return Collections.unmodifiableList(out);
+    }
+
+    /**
+     * {@code value} as one of {@link #SCALES}: itself, else a stored number off the stops read as
+     * the nearest stop (a "3" kept before the stops were the rail's reads as "2.5"); null for
+     * anything else.
+     */
+    @Nullable
+    static String normalScale(@Nullable String value) {
+        if (value == null || isScale(value)) return value;
+        try {
+            BigDecimal factor = new BigDecimal(value.trim());
+            if (factor.signum() <= 0) return null;
+            int percent = factor.movePointRight(2).setScale(0, RoundingMode.HALF_UP).intValueExact();
+            return DisplayScaleSteps.scaleValue(DisplayScaleSteps.nearest(percent));
+        } catch (NumberFormatException | ArithmeticException e) {
+            return null;
+        }
     }
 
     /**
@@ -88,7 +114,7 @@ public final class X11AppSettings {
                          @Nullable String pasteShortcut) {
             this.pasteShortcut = isPasteShortcut(pasteShortcut) ? pasteShortcut : null;
             this.touchMode = isTouchMode(touchMode) ? touchMode : null;
-            this.scale = isScale(scale) ? scale : null;
+            this.scale = normalScale(scale);
             this.gpu = isGpuProfile(gpu) ? gpu : null;
         }
 
