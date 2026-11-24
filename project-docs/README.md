@@ -51,6 +51,7 @@ Three rules keep this directory from rotting:
 | [`active/release-promotion-heuristics-research.md`](active/release-promotion-heuristics-research.md) | When a pre-release feature is ready for a stable: the sources behind the promotion rules in `docs/agents/releasing.md`. Decided 2026-10-14. |
 | [`active/obtainium-channels-research.md`](active/obtainium-channels-research.md) | How Obtainium picks a release and an APK from our one repo of three editions and two channels, what went wrong in the real history, and the fixes: draft-first publishing with Termux last, and six one-tap import links. Draft-first publishing and the import links adopted 2026-10-14. |
 | [`active/terminal-notifications-2026-11-12.md`](active/terminal-notifications-2026-11-12.md) | Which terminal notices reach Android, on which channels, and the guarded reply. Decided 2026-11-12, not built. |
+| [`active/launcher-screens-host-2026-11-24.md`](active/launcher-screens-host-2026-11-24.md) | One host for the launcher's screens: Back, the home press, unsaved changes and the Home exit; Overview and the layout editor on it; Settings in its own task. Decided 2026-11-24, not built. |
 
 ## Reference: delivered records
 
