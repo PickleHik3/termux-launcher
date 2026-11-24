@@ -28,6 +28,7 @@ import com.termux.R;
 import com.termux.app.page.Page;
 import com.termux.app.page.PageHost;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.fragments.settings.termux.CategorySortNow;
 import com.termux.app.fragments.settings.termux.TaiModelCentreFragment;
 
 import java.text.SimpleDateFormat;
@@ -124,7 +125,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         dictation = new AssistantDictation(app);
         window = new AssistantContextWindow(app);
         offers = new AssistantOffersController(app, chatView.offers(), prefs(), io, new AssistantOffersController.Host() {
-            @Override public void openDrawerSettings() { SettingsActivity.openAppDrawerSettings(context); }
+            @Override public void sortNow() { CategorySortNow.start(context); }
             @Override public void say(@NonNull String message) { Snackbar.make(page, message, Snackbar.LENGTH_SHORT).show(); }
         });
         chatView.setListener(this);

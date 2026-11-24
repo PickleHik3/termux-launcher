@@ -10,6 +10,7 @@ import android.text.format.Formatter;
 import androidx.annotation.NonNull;
 
 import com.termux.R;
+import com.termux.app.launcher.data.LauncherCategorySortService;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.drawer.AppDrawerLayoutConfig;
 import com.termux.app.launcher.drawer.AppDrawerViewType;
@@ -31,8 +32,8 @@ final class AssistantOffersController {
 
     /** What the strip asks of the page around it. */
     interface Host {
-        /** Opens the drawer's settings, the action the drawer's own nudge runs. */
-        void openDrawerSettings();
+        /** Starts the categorization sort, or opens the drawer's settings when no model can run it. */
+        void sortNow();
 
         /** Tells the user plainly what a button did. */
         void say(@NonNull String message);
@@ -89,7 +90,7 @@ final class AssistantOffersController {
         this.clearer = TermuxShellUtils::clearTermuxTMPDIROlderThan;
         this.entries = new Entry[AssistantOffersPolicy.Kind.values().length];
         entries[AssistantOffersPolicy.Kind.PENDING.ordinal()] = new Entry("offer_dismissed_unsorted",
-            AssistantOffersPolicy.PENDING_THRESHOLD, R.string.assistant_offer_unsorted_action, host::openDrawerSettings) {
+            AssistantOffersPolicy.PENDING_THRESHOLD, R.string.assistant_offer_unsorted_action, this::sortNow) {
             @Override long value() { return pendingApps; }
 
             @Override String message(long value) {
@@ -107,6 +108,13 @@ final class AssistantOffersController {
                 return c.getString(R.string.assistant_offer_tmp, Formatter.formatFileSize(c, value));
             }
         };
+    }
+
+    /** Sort now: the offer is handled until the count is read again, and not offered while a sort runs. */
+    private void sortNow() {
+        host.sortNow();
+        pendingApps = AssistantOffersPolicy.NONE;
+        apply();
     }
 
     /** The page is on screen: count the waiting apps and, if an hour has passed, measure tmp. */
@@ -127,7 +135,8 @@ final class AssistantOffersController {
         try {
             LauncherCategoryPendingApps.countWaitingAsync(context,
                 LauncherAppDataProvider.getInstance(context).getAllApps(), waiting -> {
-                    pendingApps = AssistantOffersPolicy.pendingValue(waiting, drawerShowsCategories());
+                    pendingApps = LauncherCategorySortService.isRunning() ? AssistantOffersPolicy.NONE
+                        : AssistantOffersPolicy.pendingValue(waiting, drawerShowsCategories());
                     apply();
                 });
         } catch (RuntimeException ignored) {

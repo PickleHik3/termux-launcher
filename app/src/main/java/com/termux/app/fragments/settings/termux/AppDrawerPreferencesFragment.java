@@ -215,8 +215,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
         appListExecutor.execute(() -> {
             LauncherCategorySortPlan plan = CategorySortDialogs.resolvePlan(context);
             // A model the RAM advises against waits for the chooser: only a tap there may load it.
-            boolean runnable = plan.hasModel() && CategorySortDialogs.unavailableReason(context, plan) == null
-                && (plan.remote || !CategorySortDialogs.ramAdvisesAgainst(context, plan.model));
+            boolean runnable = CategorySortNow.isRunnable(context, plan);
             handler.post(() -> {
                 if (!isAdded()) return;
                 Context current = getContext();
@@ -232,13 +231,7 @@ public final class AppDrawerPreferencesFragment extends MaterialPreferenceFragme
             openChooser(context);
             return;
         }
-        Intent intent = new Intent(context, LauncherCategorySortService.class);
-        intent.setAction(LauncherCategorySortService.ACTION_SORT);
-        intent.putExtra(LauncherCategorySortService.EXTRA_MODEL_ID, plan.model);
-        if (userAsked && !plan.remote) {
-            intent.putExtra(LauncherCategorySortService.EXTRA_USER_ASKED, true);
-            intent.putExtra(LauncherCategorySortService.EXTRA_ACCELERATOR, plan.accelerator);
-        }
+        Intent intent = CategorySortNow.sortIntent(context, plan, userAsked);
         ContextCompat.startForegroundService(context, intent);
         updateRefreshSummary(context);
         handler.removeCallbacks(refreshRunnable);
