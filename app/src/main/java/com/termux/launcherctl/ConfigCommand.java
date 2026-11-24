@@ -1,5 +1,6 @@
 package com.termux.launcherctl;
 
+import com.termux.app.settings.LayoutSettingsAdapter;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
@@ -20,7 +21,7 @@ import org.json.JSONObject;
  * <p>Request: {@code {"op":"get|set|list|export|apply","id":"terminal.contrast","value":"harder"}};
  * {@code export} and {@code apply} are {@link ConfigFileCommand}; {@code list} with {@code "format":"text"} answers {@code id = value} lines in {@link #TEXT}.</p>
  */
-final class ConfigCommand {
+public final class ConfigCommand {
 
     /** The key of a text answer the server sends as text/plain instead of JSON. */
     static final String TEXT = "_text";
@@ -32,7 +33,7 @@ final class ConfigCommand {
      * hop onto the main thread, where the layout store lives, instead of one hop per id.
      */
     @NonNull
-    static JSONObject handleInOneHop(@NonNull SettingsRegistry registry,
+    public static JSONObject handleInOneHop(@NonNull SettingsRegistry registry,
                                      @NonNull SettingsApplier applier, @NonNull JSONObject request,
                                      @NonNull LayoutSettingsAdapter.Main main) throws JSONException {
         String op = request.optString("op", "");

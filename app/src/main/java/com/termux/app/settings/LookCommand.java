@@ -1,4 +1,4 @@
-package com.termux.launcherctl;
+package com.termux.app.settings;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -27,7 +27,7 @@ import java.util.Locale;
  * property and element are optional where the CLI makes them so. The chrome wears one look on
  * every page: a {@code page} or {@code kind} is refused.</p>
  */
-final class LookCommand {
+public final class LookCommand {
 
     /** What a request naming a page or a kind of page is told. */
     static final String NO_PAGE_LOOK =
@@ -73,7 +73,7 @@ final class LookCommand {
     }
 
     /** The Terminal's Background: its own three numbers, never Global's. */
-    enum Setting {
+    public enum Setting {
         OPACITY("opacity", 0, 100, TermuxPreferenceConstants.TERMUX_APP.DEFAULT_TERMINAL_BG_OPACITY),
         /** In dp, what a pane can render. */
         BLUR("blur", 0, TermuxPreferenceConstants.TERMUX_APP.MAX_TERMINAL_BG_BLUR,
@@ -102,7 +102,7 @@ final class LookCommand {
     }
 
     /** Where the Terminal's Background lives: the preferences on a device, a map in tests. */
-    interface TerminalBackground {
+    public interface TerminalBackground {
         int get(@NonNull Setting setting);
 
         void set(@NonNull Setting setting, int value);
@@ -119,7 +119,7 @@ final class LookCommand {
      * {@code reset} that changed at least one value; never for a {@code get} or an error.
      */
     @NonNull
-    static JSONObject handle(@NonNull LookGrid grid, @NonNull TerminalBackground background,
+    public static JSONObject handle(@NonNull LookGrid grid, @NonNull TerminalBackground background,
                              @NonNull JSONObject request, @NonNull Runnable onChanged)
             throws JSONException {
         String op = request.optString("op", "");

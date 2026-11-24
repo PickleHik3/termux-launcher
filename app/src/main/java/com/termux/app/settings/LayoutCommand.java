@@ -1,4 +1,4 @@
-package com.termux.launcherctl;
+package com.termux.app.settings;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;

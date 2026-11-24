@@ -29,6 +29,10 @@ import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.RootSystemCommands;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.app.settings.LauncherSettings;
+import com.termux.app.settings.LauncherSettingsAdapters;
+import com.termux.app.settings.LayoutCommand;
+import com.termux.app.settings.LayoutSettingsAdapter;
+import com.termux.app.settings.LookCommand;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
@@ -121,7 +125,7 @@ final class DeviceControlRoutes {
             case "/v1/layout":
                 return layout(context, arguments);
             case "/v1/config":
-                return ConfigCommand.handleInOneHop(LauncherSettings.registry(context, LauncherCtlAdapters::forDevice),
+                return ConfigCommand.handleInOneHop(LauncherSettings.registry(context, DeviceControlRoutes::adapters),
                     LauncherSettings.applier(), arguments, LayoutSettingsAdapter.DEVICE);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
@@ -303,6 +307,14 @@ final class DeviceControlRoutes {
 
     // ------------------------------------------------------------------------------------- look
 
+    /** The registry's adapters, redressing the live chrome after a save. */
+    @NonNull
+    private static java.util.List<com.termux.shared.termux.settings.registry.SettingAdapter> adapters(
+            @NonNull Context context) {
+        return LauncherSettingsAdapters.forDevice(context,
+            () -> TerminalActionDispatcher.getInstance().redressChrome());
+    }
+
     /**
      * {@code launcherctl look}: the look grid, answered by {@link LookCommand}. A change re-dresses
      * the live chrome on the main thread the way the Appearance editor's Done does; with no
@@ -314,33 +326,8 @@ final class DeviceControlRoutes {
         Context app = context.getApplicationContext() != null ? context.getApplicationContext() : context;
         TermuxAppSharedPreferences preferences = TermuxAppSharedPreferences.build(app, false);
         if (preferences == null) return error(503, "unavailable", "The launcher's settings are not ready");
-        return LookCommand.handle(preferences.lookGrid(), terminalBackground(preferences), arguments,
+        return LookCommand.handle(preferences.lookGrid(), LauncherSettingsAdapters.terminalBackground(preferences), arguments,
             () -> TerminalActionDispatcher.getInstance().redressChrome());
-    }
-
-    /** The Terminal's Background, over its own preferences. */
-    @NonNull
-    static LookCommand.TerminalBackground terminalBackground(
-            @NonNull TermuxAppSharedPreferences preferences) {
-        return new LookCommand.TerminalBackground() {
-            @Override
-            public int get(@NonNull LookCommand.Setting setting) {
-                switch (setting) {
-                    case OPACITY: return preferences.getTerminalBackgroundOpacity();
-                    case BLUR: return preferences.getTerminalGlassBlurRadius();
-                    default: return preferences.getTerminalWallpaperDim();
-                }
-            }
-
-            @Override
-            public void set(@NonNull LookCommand.Setting setting, int value) {
-                switch (setting) {
-                    case OPACITY: preferences.setTerminalBackgroundOpacity(value); break;
-                    case BLUR: preferences.setTerminalGlassBlurRadius(value); break;
-                    default: preferences.setTerminalWallpaperDim(value);
-                }
-            }
-        };
     }
 
     // ----------------------------------------------------------------------------------- layout
