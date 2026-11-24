@@ -26,6 +26,12 @@ upstream is committed here.
     unless `disconnected` already took it, and `disconnected` no longer unwraps a child that is
     gone. A stopping compositor drops its display without dispatching Xwayland's disconnect, so
     the un-waited child would stay a zombie for the life of the process; `xwayland::stop` reaps it.
+- Patch: `patches/smithay-0.7.0-xwayland-output.patch`.
+  - `wayland/output/handlers.rs`: the `zxdg_output_manager_v1` global is hidden from the
+    Xwayland client (`can_view`). Xwayland sizes its X screen from xdg_output's logical size,
+    which an output scale above 1 makes smaller than the pixels X windows are configured in, so
+    the X pointer and RandR would stop short of the window. Without xdg_output it takes the
+    wl_output mode, the screen's pixels. Native Wayland clients still see xdg_output.
 - Refresh: bump the version and sha256 in the script, re-cut the patch against the new tree
   (`diff -u` of the two files, paths `a/` and `b/`), rename it to the new version, run the script
   and `cargo test`. The `.patched` stamp re-applies the patch when its text changes.

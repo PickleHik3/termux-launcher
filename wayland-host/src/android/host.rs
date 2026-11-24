@@ -76,7 +76,7 @@ use smithay::input::keyboard::{FilterResult, Keycode};
 
 use crate::compose::{self, HitLayer};
 use crate::geometry::{
-    clamp_to_limit, content_span, integer_scale, logical_size, post_limit, surface_map, view_to_surface, Rect, RectF,
+    clamp_to_limit, content_span, integer_scale, integer_scale_view, logical_size, post_limit, surface_map, view_to_surface, Rect, RectF,
 };
 use crate::keymap::android_to_evdev;
 use crate::paced::Paced;
@@ -701,6 +701,11 @@ pub fn now_ms() -> u32 {
 }
 
 impl State {
+    /// The output's current scale: the newest one a toplevel was configured with.
+    pub fn output_scale(&self) -> f64 {
+        self.output_scale
+    }
+
     pub fn insert_client(&mut self, stream: UnixStream) {
         if let Err(e) = self.display_handle.insert_client(stream, Arc::new(ClientState::default())) {
             lwarn!("insert_client: {e}");
@@ -867,6 +872,7 @@ impl State {
         if scale != self.output_scale {
             self.output_scale = scale;
             self.output.change_current_state(None, None, Some(output_scale(scale)), None);
+            super::xwayland::set_toolkit_scale(self, scale);
         }
         if self.toplevels[i].shell.is_x11() {
             return;
@@ -1487,7 +1493,7 @@ impl State {
         let tree = compose::bounds(self.scene.iter().filter(|l| !l.overlay).map(|l| (l.origin.0, l.origin.1, l.draw.size.0, l.draw.size.1)))?;
         let content = compose::window_content(t.geometry, tree);
         let full = compose::canvas_size(content, k);
-        let shown = clamp_to_limit((0, 0, full.0, full.1), post_limit(t.view_size, self.output_size));
+        let shown = clamp_to_limit((0, 0, full.0, full.1), post_limit(post_view(t), self.output_size));
         if shown.2 <= 0 || shown.3 <= 0 {
             return None;
         }
@@ -1511,7 +1517,7 @@ impl State {
         }
         if (full.0 > canvas.0 || full.1 > canvas.1) && !t.clamp_logged {
             t.clamp_logged = true;
-            let limit = post_limit(t.view_size, output);
+            let limit = post_limit(post_view(t), output);
             lwarn!("toplevel {id}: view {}x{} is over the limit {}x{}; showing its top-left part", full.0, full.1, limit.0, limit.1);
         }
         t.content = (origin.0, origin.1, canvas.0 as f64 / k.0, canvas.1 as f64 / k.1);
@@ -1797,6 +1803,16 @@ fn compose_into(
     }
 }
 
+/// The view a toplevel's post limit is taken from: an X window is drawn in the view's pixels;
+/// a Wayland client may draw it at its integer scale (`integer_scale_view`).
+fn post_view(t: &Toplevel) -> Option<(i32, i32)> {
+    if t.shell.is_x11() {
+        t.view_size
+    } else {
+        integer_scale_view(t.view_size, t.scale)
+    }
+}
+
 /// What decides the shown rectangle, copied out of a toplevel so the copy can borrow its window.
 #[derive(Clone, Copy)]
 struct Layout {
@@ -1804,7 +1820,8 @@ struct Layout {
     viewport_src: Option<RectF>,
     viewport_dst: Option<(i32, i32)>,
     geometry: Option<Rect>,
-    view_size: Option<(i32, i32)>,
+    /// `post_view` of the toplevel.
+    post_view: Option<(i32, i32)>,
     output: (i32, i32),
 }
 
@@ -1815,7 +1832,7 @@ impl Layout {
             viewport_src: t.viewport_src,
             viewport_dst: t.viewport_dst,
             geometry: t.geometry,
-            view_size: t.view_size,
+            post_view: post_view(t),
             output,
         }
     }
@@ -1832,7 +1849,7 @@ fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
     }
     let map = surface_map(w, h, l.buffer_scale, l.viewport_src, l.viewport_dst);
     let full = map.to_buffer(map.logical_content(l.geometry), w, h);
-    let shown = clamp_to_limit(full, post_limit(l.view_size, l.output));
+    let shown = clamp_to_limit(full, post_limit(l.post_view, l.output));
     Some((shown, full, map.to_logical(shown)))
 }
 
@@ -1881,7 +1898,7 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &m
     }
     if shown != full && !t.clamp_logged {
         t.clamp_logged = true;
-        let limit = post_limit(t.view_size, output);
+        let limit = post_limit(post_view(t), output);
         lwarn!("toplevel {id}: frame {}x{} is over the limit {}x{}; showing its top-left part", full.2, full.3, limit.0, limit.1);
     }
     t.buffer_size = (desc.width, desc.height);

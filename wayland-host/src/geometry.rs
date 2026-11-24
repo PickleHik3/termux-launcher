@@ -161,6 +161,19 @@ pub fn logical_size(px: (i32, i32), scale: f64) -> (i32, i32) {
     (((px.0 as f64) / s).round().max(1.0) as i32, ((px.1 as f64) / s).round().max(1.0) as i32)
 }
 
+/// The size a client that knows only integer scales draws a `view` at: it gets the rounded-up
+/// `integer_scale` and a logical size of view / `scale`, so its buffer is the view times
+/// integer / fractional (1.2 at scale 2.5, 1.6 at 1.25). That is the view the post limit is taken
+/// from, so such a window is shown whole (the view scales it down) rather than cut. A client on
+/// fractional scale draws the view itself and posts within it either way.
+pub fn integer_scale_view(view: Option<(i32, i32)>, scale: f64) -> Option<(i32, i32)> {
+    let (w, h) = view?;
+    let s = if scale.is_finite() && scale > 0.0 { scale } else { 1.0 };
+    let k = (integer_scale(s) as f64 / s).max(1.0);
+    let grow = |v: i32| ((v as f64) * k).ceil().min(i32::MAX as f64) as i32;
+    Some((grow(w), grow(h)))
+}
+
 /// The largest side a posted frame may have, whatever the view: below every GPU's texture limit
 /// the launcher could meet.
 pub const MAX_POST_SIDE: i32 = 4096;
@@ -314,6 +327,32 @@ mod tests {
         let r = clamp_to_limit((0, 0, 8192, 8192), limit);
         assert!(r.2 <= limit.0 && r.3 <= limit.1);
         assert!(limit.0 < 1400 && limit.1 < 1300);
+    }
+
+    #[test]
+    fn an_integer_scale_client_at_a_fractional_scale_is_posted_whole() {
+        // GTK 3 at output scale 2.5 on a 1080x2200 view: logical 432x880, buffer scale 3,
+        // a 1296x2640 window.
+        let view = Some((1080, 2200));
+        let (lw, lh) = logical_size(view.unwrap(), 2.5);
+        let buffer = (lw * integer_scale(2.5), lh * integer_scale(2.5));
+        assert_eq!(buffer, (1296, 2640));
+        // The plain view's limit would cut its right and bottom edges.
+        let plain = post_limit(view, (1080, 2412));
+        assert!(plain.0 < buffer.0 && plain.1 < buffer.1);
+        let limit = post_limit(integer_scale_view(view, 2.5), (1080, 2412));
+        assert_eq!(clamp_to_limit((0, 0, buffer.0, buffer.1), limit), (0, 0, 1296, 2640));
+    }
+
+    #[test]
+    fn whole_scales_and_bad_scales_keep_the_view() {
+        assert_eq!(integer_scale_view(Some((1080, 2200)), 1.0), Some((1080, 2200)));
+        assert_eq!(integer_scale_view(Some((1080, 2200)), 3.0), Some((1080, 2200)));
+        assert_eq!(integer_scale_view(Some((1080, 2200)), f64::NAN), Some((1080, 2200)));
+        assert_eq!(integer_scale_view(None, 2.5), None);
+        // Below one the client still draws at one: never a smaller limit.
+        assert_eq!(integer_scale_view(Some((100, 100)), 0.5), Some((200, 200)));
+        assert_eq!(integer_scale_view(Some((100, 100)), 1.25), Some((160, 160)));
     }
 
     #[test]

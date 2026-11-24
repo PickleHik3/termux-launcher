@@ -486,7 +486,8 @@ public final class WaylandAppRunner {
 
     /**
      * The prefix's keymap data and {@code Xwayland} (each null when missing), and the default
-     * display's real size and refresh period with the Display scale setting ({@link LinuxDisplayScale}).
+     * display's real size and refresh period with the output scale ({@link LinuxDisplayScale}: the
+     * Display scale setting once chosen, else the screen's density).
      */
     @NonNull
     static HostStart hostStart(@NonNull Context context) {

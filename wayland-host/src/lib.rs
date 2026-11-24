@@ -15,6 +15,7 @@ pub mod protocol;
 pub mod teardown;
 pub mod xkbroot;
 pub mod xlock;
+pub mod xscale;
 
 #[cfg(target_os = "android")]
 mod android;
