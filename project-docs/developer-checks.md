@@ -10,6 +10,9 @@ Seen items are **deleted**, never ticked; the commit or a bug is the record. Bef
 cut the developer works this list or accepts what is left (recorded as in
 `docs/agents/releasing.md`, "Cutting a stable release").
 
+## Wayland Display desktops (2026-11-24)
+- 2026-11-24 · v2-redesign 24f7a3bf1 · XFCE's desktop background. Pong's XFCE has no `xfdesktop` (its log says "Unable to launch xfdesktop"), so the desktop under Wayland Display is plain black; set-up installs it for new desktops, pong's install predates that. After `pkg install xfdesktop`, the desktop window shows XFCE's wallpaper and icons; the dock's four identical gear icons are likely a missing icon theme, worth a look at the same time · pong.
+
 ## Sound and display without variables (2026-11-24, feat/wayland-sound)
 - 2026-11-24 · feat/wayland-sound · Sound from an ssh shell with no variables. `ssh termux 'env -u PULSE_SERVER -u PULSE_COOKIE paplay <any .wav>'`, Sound on and the launcher's server running. Passes when it plays and `cat $PREFIX/etc/pulse/client.conf.d/termux-launcher.conf` shows the launcher's header · pong.
 - 2026-11-24 · feat/wayland-sound · Sound from a hand-opened distro login. After a resume of the launcher, `proot-distro login debian -- sh -c 'cat /etc/pulse/client.conf.d/termux-launcher.conf; paplay <any .wav>'` plays; again with `--isolated`, which should still play (TCP on loopback and the cookie's copy live in the rootfs) · pong.

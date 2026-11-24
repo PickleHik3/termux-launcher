@@ -361,7 +361,9 @@ Built on `feat/wayland-display` and checked on pong unless marked otherwise.
   stays; PipeWire waits for a screen-sharing and camera feature); a set-up row offers the add-on.
 
 Not checked on a device: sound from a Linux app; a launcher terminal's variables; the X11
-"share one size" line. Known: Firefox's own new-tab page overflows the window (ordinary pages
+"share one size" line. Known defects are GitHub issues under #384 (#390 Firefox new-tab overflow, #391
+xfconfd left running); what is owed on a device is in `project-docs/device-checks.md` and
+`developer-checks.md` (2026-11-24 Wayland lines). Known: Firefox's own new-tab page overflows the window (ordinary pages
 fit); Herdr's glass mode is opaque (Herdr's side).
 
 ## Open
