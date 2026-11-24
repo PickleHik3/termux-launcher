@@ -49,8 +49,15 @@ public final class SideCardsController {
                                                     @NonNull PageKind rowsPage);
         /** The screen's width, height and density; the window is edge to edge. */
         @NonNull android.util.DisplayMetrics displayMetrics();
-        /** The extra-keys row's measured height. */
-        int measuredExtraKeysRowPx();
+        /**
+         * A row's band as the activity measures it on {@code layout}: the extra-keys row's
+         * height ({@link com.termux.app.place.Element#EXTRA_KEYS}), or the A–Z bar's thickness
+         * off the dock ({@link com.termux.app.place.Element#AZ}: its edge host's height on the
+         * top, width on a side, the one measure the shape model reads; 0 where the bar is on the
+         * dock, a tab, hidden or not laid out yet). 0 for any other element.
+         */
+        int measuredBandPx(@NonNull com.termux.app.place.Element element,
+                           @NonNull PlaceLayout layout);
         /** The keyboard as the stack lays it out while it is down, its foot included. */
         int measuredKeyboardPx();
         /**
@@ -65,14 +72,7 @@ public final class SideCardsController {
         int bottomStatusBandPx(@NonNull PlaceLayout layout);
         /** The navigation band the content keeps clear at the screen's bottom. */
         int keptBandPx();
-        /**
-         * The A–Z bar's thickness off the dock on {@code layout} (its edge host's height on the
-         * top, width on a side), as the activity measures it for the shape model; 0 where the
-         * bar is on the dock, a tab, hidden or not laid out yet.
-         */
-        default int azEdgeThicknessPx(@NonNull PlaceLayout layout) {
-            return 0;
-        }
+
         /** The Terminal's flush padding at its own rest, known or worked out. */
         int terminalRestFlushPaddingPx();
         /** Whether the Terminal lays its dock padding at all (one pane, no IME). */
@@ -474,7 +474,8 @@ public final class SideCardsController {
         StackLayout.Input in = new StackLayout.Input(mHost.dockSnapshot(layout, kind));
         in.toolbarShown = PlaceChromePolicy.dockShown(layout);
         in.extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
-        in.toolbarHeightPx = in.extraKeysRowEnabled ? mHost.measuredExtraKeysRowPx() : 0;
+        in.toolbarHeightPx = in.extraKeysRowEnabled
+            ? mHost.measuredBandPx(com.termux.app.place.Element.EXTRA_KEYS, layout) : 0;
         // The other side's own keyboard, not the front's: toggling the Terminal's keyboard leaves
         // Home's parked rest where it was, and each side is laid out at the rest it lands at.
         int keyboard = mHost.restKeyboardPx(page);
@@ -496,12 +497,14 @@ public final class SideCardsController {
         android.util.DisplayMetrics metrics = mHost.displayMetrics();
         float density = metrics.density;
         RestCards.Rest rest = new RestCards.Rest(pass, page, metrics.widthPixels,
-            metrics.heightPixels, density, mHost.measuredExtraKeysRowPx(),
+            metrics.heightPixels, density,
+            mHost.measuredBandPx(com.termux.app.place.Element.EXTRA_KEYS, pass.dock.arrangement),
             mHost.measuredKeyboardPx(),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, density),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, density));
         rest.keptBandPx = mHost.keptBandPx();
-        rest.azEdgeThicknessPx = mHost.azEdgeThicknessPx(pass.dock.arrangement);
+        rest.azEdgeThicknessPx = mHost.measuredBandPx(com.termux.app.place.Element.AZ,
+            pass.dock.arrangement);
         rest.restFlushPaddingPx = mHost.terminalRestFlushPaddingPx();
         // Each side's own layout: the other side's status bar is not the front's.
         rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy

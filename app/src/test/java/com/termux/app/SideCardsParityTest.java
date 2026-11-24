@@ -142,7 +142,17 @@ public class SideCardsParityTest {
                 return f.snapshot(rows == PageKind.HOME ? PageRef.HOME : PageRef.TERMINAL, floating);
             }
             @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
-            @Override public int measuredExtraKeysRowPx() { return f.extraKeysRowPx; }
+            @Override public int measuredBandPx(@NonNull com.termux.app.place.Element element,
+                                                @NonNull PlaceLayout layout) {
+                if (element == com.termux.app.place.Element.EXTRA_KEYS) return f.extraKeysRowPx;
+                // The A-Z bar off the dock, as the activity measures its edge host.
+                return element == com.termux.app.place.Element.AZ
+                    && com.termux.app.place.PlaceChromePolicy.azRowShown(layout)
+                    && !com.termux.app.place.PlaceChromePolicy.azRowOnDock(layout)
+                    && !com.termux.app.place.PlaceChromePolicy.azTabShown(layout)
+                    ? com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+                        false, false, f.density) : 0;
+            }
             @Override public int measuredKeyboardPx() {
                 return f.keyboardLaidOutPx() > 0 ? f.keyboardLaidOutPx() + foot : 0;
             }
@@ -594,7 +604,8 @@ public class SideCardsParityTest {
                 return base.dockSnapshot(layout, rows);
             }
             @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
-            @Override public int measuredExtraKeysRowPx() { return 0; }
+            @Override public int measuredBandPx(@NonNull com.termux.app.place.Element element,
+                                                @NonNull PlaceLayout layout) { return 0; }
             @Override public int measuredKeyboardPx() { return 0; }
             @Override public int restKeyboardPx(@NonNull PageRef page) {
                 return SideCards.KEYBOARD_DOWN;
