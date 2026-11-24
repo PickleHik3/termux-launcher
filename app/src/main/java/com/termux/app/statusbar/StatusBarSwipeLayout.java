@@ -181,8 +181,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      * activity paused. Safe to call at any time and from any state.
      */
     public void endEnlargement(boolean immediately) {
-        if (mEnlargement != null && mEnlargement.enlarged())
-            MarkTapDiag.logWithCallers("endEnlargement phase=" + mEnlargement.phase());
         if (mEnlargement != null) mEnlargement.end();
         applyEnlargement(immediately);
     }
@@ -205,8 +203,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         long timeout = state == null ? 0L : state.timeoutMs();
         if (timeout > 0L) postDelayed(mEnlargeTimeout, timeout);
         if (enlarged == mRowEnlarged) return;
-        MarkTapDiag.logWithCallers("enlarged " + mRowEnlarged + "->" + enlarged
-            + " timeout=" + timeout);
         mRowEnlarged = enlarged;
         // The marks stay where the finger is while the readings grow: read from the rest layout,
         // so before the enlarged one.
@@ -246,7 +242,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
      */
     public void setRowPresented(boolean row) {
         if (row == mRowPresented) return;
-        MarkTapDiag.logWithCallers("rowPresented " + mRowPresented + "->" + row);
         mRowPresented = row;
         mRowPassThrough = false;
         if (!row) endEnlargement(true);
@@ -272,7 +267,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         if (mRowRect.left == left && mRowRect.top == top && mRowRect.right == right
             && mRowRect.bottom == bottom) return;
         mRowRect.set(left, top, right, bottom);
-        MarkTapDiag.log("rowRect " + mRowRect + " presented=" + mRowPresented);
         if (mRowPresented) requestLayout();
     }
 
@@ -386,17 +380,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 state.down(event.getX(), event.getY());
                 applyEnlargement(false);
             }
-            MarkTapDiag.log("rowTouch DOWN xy=" + event.getX() + "," + event.getY()
-                + " passThrough=" + mRowPassThrough + " phase=" + state.phase());
-        }
-        if (action == MotionEvent.ACTION_DOWN && !mRowPassThrough) {
-            boolean diagTaken = super.dispatchTouchEvent(event);
-            View diagRow = findViewById(R.id.terminal_status_row);
-            MarkTapDiag.log("rowTouch DOWN childTook=" + diagTaken + " row=" + (diagRow == null
-                ? "null" : diagRow.getLeft() + "," + diagRow.getTop() + "-" + diagRow.getRight()
-                + "," + diagRow.getBottom() + " vis=" + diagRow.getVisibility()
-                + " parentIsHost=" + (diagRow.getParent() == this)));
-            return true;
         }
         if (mRowPassThrough) {
             if (action == MotionEvent.ACTION_UP || action == MotionEvent.ACTION_CANCEL)
@@ -408,18 +391,13 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
                 state.move(event.getX(), event.getY());
                 super.dispatchTouchEvent(event);
                 break;
-            case MotionEvent.ACTION_UP: {
-                RowEnlargement.Release diagRelease = state.up();
-                if (diagRelease == RowEnlargement.Release.TAP_ENLARGED_ONLY)
+            case MotionEvent.ACTION_UP:
+                if (state.up() == RowEnlargement.Release.TAP_ENLARGED_ONLY)
                     event.setAction(MotionEvent.ACTION_CANCEL);
-                boolean diagTaken = super.dispatchTouchEvent(event);
-                MarkTapDiag.log("rowTouch UP release=" + diagRelease + " xy=" + event.getX()
-                    + "," + event.getY() + " childTook=" + diagTaken);
+                super.dispatchTouchEvent(event);
                 applyEnlargement(false);
                 break;
-            }
             case MotionEvent.ACTION_CANCEL:
-                MarkTapDiag.log("rowTouch CANCEL");
                 super.dispatchTouchEvent(event);
                 state.cancel();
                 applyEnlargement(false);
@@ -451,15 +429,6 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
         int action = event.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) {
             mWindowRowStream = false;
-            if (mRowPresented) getLocationInWindow(mWindowOrigin);
-            MarkTapDiag.log("windowRow DOWN presented=" + mRowPresented + " rect=" + mRowRect
-                + " shown=" + isShown() + " origin=" + mWindowOrigin[0] + "," + mWindowOrigin[1]
-                + " local=" + (event.getX() - mWindowOrigin[0]) + ","
-                + (event.getY() - mWindowOrigin[1]) + " enlarged=" + mRowEnlarged
-                + " hit=" + PaneRowPolicy.hitsRow(event.getX() - mWindowOrigin[0],
-                    event.getY() - mWindowOrigin[1], mRowRect.left, mRowRect.top,
-                    mRowRect.right, density(), mRowEnlarged)
-                + " phase=" + enlargement().phase());
             if (!mRowPresented || mRowRect.isEmpty() || !isShown()) return false;
             getLocationInWindow(mWindowOrigin);
             if (!PaneRowPolicy.hitsRow(event.getX() - mWindowOrigin[0],

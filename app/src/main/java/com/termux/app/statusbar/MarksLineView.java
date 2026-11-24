@@ -419,10 +419,6 @@ public final class MarksLineView extends View {
             case MotionEvent.ACTION_DOWN: {
                 float pos = along(event.getX(), event.getY());
                 mDown = line.slotAt(pos) >= 0;
-                MarkTapDiag.log("marks DOWN id=" + getId() + " xy=" + event.getX() + ","
-                    + event.getY() + " pos=" + pos + " slot=" + line.slotAt(pos) + " slots="
-                    + line.slotCount() + " len=" + line.contentLengthPx() + " size=" + getWidth()
-                    + "x" + getHeight() + " vis=" + getVisibility() + " nav=" + (mNavigator != null));
                 mDownX = event.getX();
                 mDownY = event.getY();
                 if (mDown) {
@@ -464,7 +460,6 @@ public final class MarksLineView extends View {
                 int focusSlot = slide == null ? -1 : slide.focusSlot();
                 int focusMember = slide == null ? 0 : slide.focusMember();
                 endTouch();
-                MarkTapDiag.log("marks UP wasDown=" + wasDown + " result=" + result + " pos=" + pos);
                 if (!wasDown) return false;
                 if (result == PageBarSlide.Result.TAP) {
                     tapAt(pos);
@@ -680,13 +675,8 @@ public final class MarksLineView extends View {
     void tapAt(float pos) {
         MarksLine line = mLine;
         PageSwitchTargets.Navigator nav = mNavigator;
-        if (line == null || nav == null) {
-            MarkTapDiag.log("marks tapAt line=" + (line != null) + " nav=" + (nav != null));
-            return;
-        }
+        if (line == null || nav == null) return;
         PageBarModel.Target target = line.targetAt(pos);
-        MarkTapDiag.log("marks tapAt pos=" + pos + " target=" + (target == null ? "null"
-            : target.toString()));
         if (target != null) PageSwitchTargets.carryOut(target, nav);
     }
 }
