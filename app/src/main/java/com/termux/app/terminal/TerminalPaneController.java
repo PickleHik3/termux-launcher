@@ -6443,7 +6443,7 @@ public class TerminalPaneController {
             boolean bare = !split && !stacked && !glassShape
                 && border.kind == PaneBorderStyle.Kind.RIM;
             dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
-            frame.setStatusRowPx(leaf == firstLeaf(shownTreeOf(w)) ? mStatusRowPx : 0);
+            frame.setStatusRowPx(leaf == topLeftLeaf(shownTreeOf(w)) ? mStatusRowPx : 0);
         }
     }
 
@@ -6451,8 +6451,8 @@ public class TerminalPaneController {
     private int mStatusRowPx;
 
     /**
-     * Gives the top pane of every window (top-left in a side-by-side split: the first leaf of its
-     * tiled tree, or the maximized or stacked pane alone) the status bar's thin row above its
+     * Gives the top pane of every window (the one on screen at the top-left of its tiled tree, in
+     * either reading direction, or the maximized or stacked pane alone) the status bar's thin row above its
      * content, and every other pane none (PaneRowPolicy.paneTopInsetPx). Floats never hold it.
      * Neighbour windows hold it too, so the window a slide brings in is the window that lands.
      * Only a change re-dresses, so the terminals take their rows once per change of place.
@@ -6476,8 +6476,25 @@ public class TerminalPaneController {
     @Nullable
     public PaneContentFrame statusRowFrame() {
         if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
-        Leaf top = mMaximizedLeaf != null ? mMaximizedLeaf : firstLeaf(shownTreeOf(mActiveWindow));
+        Leaf top = mMaximizedLeaf != null ? mMaximizedLeaf
+            : topLeftLeaf(shownTreeOf(mActiveWindow));
         return top == null ? null : mPaneFrames.get(top.session);
+    }
+
+    /**
+     * The leaf on screen at the top-left of {@code node}: the first child of every split but a
+     * side-by-side one in a right-to-left layout, which lays its first child on the right
+     * ({@link StatusRowPane#takesFirst}).
+     */
+    @Nullable
+    private Leaf topLeftLeaf(@Nullable Node node) {
+        boolean rtl = mHostView.getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
+        while (node instanceof Split) {
+            Split split = (Split) node;
+            node = StatusRowPane.takesFirst(split.orientation == LinearLayout.HORIZONTAL, rtl)
+                ? split.a : split.b;
+        }
+        return (Leaf) node;
     }
 
     @Nullable
