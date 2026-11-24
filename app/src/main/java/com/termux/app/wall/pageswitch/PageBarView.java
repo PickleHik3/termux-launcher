@@ -82,7 +82,8 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
     /** The current page's accent falls to this share of itself while sliding. */
     private static final float SLIDE_ACCENT_KEEP = 0.45f;
 
-    private final PageBarGlyphPainter mPainter;
+    /** How each entry's mark is drawn; asked again when the entries change. */
+    @NonNull private PageMarkLook mMarks;
     private final PaneGlassBackdropView mGlass;
     private final float mDensity;
     private final int mTouchSlop;
@@ -172,7 +173,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
         super(context);
         mDensity = context.getResources().getDisplayMetrics().density;
         mTouchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
-        mPainter = new PageBarGlyphPainter();
+        mMarks = PageMarkLooks.chosen(null);
         setWillNotDraw(false);
         mStroke.setStyle(Paint.Style.STROKE);
         mStroke.setStrokeWidth(mDensity);
@@ -282,6 +283,7 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             return;
         }
         mModel = model;
+        mMarks = PageMarkLooks.chosen(mMarks);
         rebuild();
     }
 
@@ -722,9 +724,11 @@ public final class PageBarView extends ViewGroup implements PageSwitchHitArea {
             int fill = slot.current
                 ? (out > 0f ? ColorUtils.blendARGB(accent, liftAccent, out) : accent) : other;
             if (slot.folded()) {
-                mPainter.drawStack(canvas, slot.kind, slot.number, cx, cy, size, fill, other);
+                mMarks.drawStack(canvas, slot.kind, slot.number, slot.current, out, cx, cy, size,
+                    fill, other);
             } else {
-                mPainter.draw(canvas, slot.kind, slot.number, cx, cy, size, fill);
+                mMarks.draw(canvas, slot.kind, slot.number, slot.current, out, cx, cy, size,
+                    fill);
             }
         }
     }
