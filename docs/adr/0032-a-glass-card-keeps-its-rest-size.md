@@ -127,6 +127,21 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   stack's top and so changes length between rests; and under Docked the foot is worn by Home's
   host and by the Terminal's own host (#304 option A), two cards at one rect where §3 wants one
   shared card. One owner for the foot needs a view of its own for the band.
+- **2026-11-24, the developer's answers to #307's open cases.**
+  - An A–Z bar on a side edge is one card per side, each its own length: Home's is laid out
+    once at Home's rest and slides out with Home, the Terminal's once at its rest and slides in
+    with the Terminal; neither re-sizes. Where both rests draw it at one rect it stays one shared
+    card (§3). Two A–Z cards on screen mid-crossing are accepted.
+  - The foot under the gesture pill becomes a view of its own: one shared card that stays put,
+    with one owner. Home's host and the Terminal's host (`terminal_dock_host`) both stop at the
+    foot's top, and each joins the foot seamlessly (no line, no 1 px gap, the same glass sample).
+    This revises #304's "the foot under the gesture pill included" for the Terminal's host.
+  - One shared keyboard card: with the keyboard up at both ends it is one card at one rect that
+    stays put, built once in the Terminal's look as the crossing begins; up at one end only it
+    rides in with its side. Where the two rests place the keyboard differently, one rest changes
+    to match.
+  - A Docked A–Z column meets the status bar and the dock on a join over its own width only: a
+    card's edge keeps the shape model's runs (`RestCards.Card#kindOver`). Built in #307 round 2.
 
 ## Consequences
 
