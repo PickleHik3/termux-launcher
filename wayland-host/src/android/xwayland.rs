@@ -49,10 +49,10 @@ impl XwaylandConfig {
         XwaylandConfig { binary: binary.into(), runtime_dir: runtime_dir.into() }
     }
 
-    /// The runtime dir is <prefix>/tmp/<name>, so its parent is the prefix's tmp: where the
-    /// X11 sockets and locks go.
+    /// The runtime dir is the prefix's tmp itself (the Wayland socket is `<prefix>/tmp/wayland-0`),
+    /// which is also where the X11 sockets and locks go.
     pub fn tmp_dir(&self) -> Option<PathBuf> {
-        self.runtime_dir.parent().map(Path::to_path_buf)
+        Some(self.runtime_dir.clone())
     }
 }
 
@@ -68,13 +68,13 @@ pub struct XwaylandState {
 }
 
 pub fn start(state: &mut State, config: XwaylandConfig) {
-    let (Some(bin_dir), Some(tmp_dir)) = (config.binary.parent(), config.runtime_dir.parent()) else {
+    let (Some(bin_dir), Some(tmp_dir)) = (config.binary.parent(), Some(config.runtime_dir.as_path())) else {
         lwarn!("Xwayland: bad paths {:?} {:?}", config.binary, config.runtime_dir);
         return;
     };
     let _ = std::fs::create_dir_all(tmp_dir.join(".X11-unix"));
     remove_stale_locks(tmp_dir);
-    let log_path = config.runtime_dir.join("xwayland.log");
+    let log_path = config.runtime_dir.join("tl-xwayland.log");
     let stderr = File::create(&log_path).map(Stdio::from).unwrap_or_else(|_| Stdio::null());
     let envs: Vec<(&str, &Path)> = vec![
         // Command looks the binary up in the child's PATH.

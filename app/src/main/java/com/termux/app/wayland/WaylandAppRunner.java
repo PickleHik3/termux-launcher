@@ -22,6 +22,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.x11.X11DisplayServerState;
 import com.termux.shared.termux.TermuxConstants;
 
 import java.io.File;
@@ -42,8 +43,11 @@ public final class WaylandAppRunner {
 
     private static final String LOG_TAG = "TLWayland";
 
-    /** The clients' runtime directory for the host's socket, under the prefix's tmp. */
-    public static final String SOCKET_DIR = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/tl-wayland";
+    /**
+     * The directory the host's socket is in: the prefix's tmp itself, Termux's usual runtime
+     * directory, beside the X sockets (see {@link LinuxWindowsEnv}).
+     */
+    public static final String SOCKET_DIR = TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH;
     /** The socket the host listens on, in {@link #SOCKET_DIR}. */
     public static final String SOCKET_NAME = "wayland-0";
     /** The service's process, as {@code android:process} names it in the manifest. */
@@ -324,13 +328,27 @@ public final class WaylandAppRunner {
         windowScales.clear();
         xDisplay = null;
         xWaitExpired = false;
+        publishToSessions();
         main.removeCallbacks(idleStop);
         main.removeCallbacks(xWaitTimeout);
+    }
+
+    /**
+     * Tells new terminal sessions where the display is ({@code X11DisplayServerState}): the socket
+     * and Xwayland's display while the host runs, nothing once it stops. A new session starts with
+     * no {@code XDG_RUNTIME_DIR} (one its rc file sets later is not known here), so it gets the
+     * socket's path.
+     */
+    private void publishToSessions() {
+        X11DisplayServerState.setWaylandDisplays(
+            running ? LinuxWindowsEnv.waylandDisplay(SOCKET_DIR, SOCKET_NAME, null) : null,
+            running ? xDisplay : null);
     }
 
     private void xDisplayReported(@Nullable String display) {
         if (service == null) return;
         xDisplay = TextUtils.isEmpty(display) ? null : display;
+        publishToSessions();
         if (xDisplay != null) {
             main.removeCallbacks(xWaitTimeout);
             if (running) dispatchPending();
@@ -351,6 +369,7 @@ public final class WaylandAppRunner {
             case ILinuxWindows.STATE_RUNNING:
                 running = true;
                 startAsked = false;
+                publishToSessions();
                 dispatchPending();
                 break;
             case ILinuxWindows.STATE_STARTING:
@@ -364,6 +383,7 @@ public final class WaylandAppRunner {
                 windowScales.clear();
                 xDisplay = null;
                 xWaitExpired = false;
+                publishToSessions();
                 main.removeCallbacks(idleStop);
                 main.removeCallbacks(xWaitTimeout);
                 if (startAsked && !startingSeen) {

@@ -87,6 +87,22 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
         return sDisplayForNewSessions;
     }
 
+    /** {@code WAYLAND_DISPLAY} for new shells while the launcher's Wayland display runs. */
+    private static volatile String sWaylandDisplayForNewSessions;
+
+    /**
+     * Put {@code WAYLAND_DISPLAY=<display>} into every shell started from now on, or stop doing so
+     * with null; as {@link #setDisplayForNewSessions}, nothing already running is touched.
+     */
+    public static void setWaylandDisplayForNewSessions(@Nullable String display) {
+        sWaylandDisplayForNewSessions = display == null || display.trim().isEmpty() ? null : display.trim();
+    }
+
+    @Nullable
+    public static String getWaylandDisplayForNewSessions() {
+        return sWaylandDisplayForNewSessions;
+    }
+
     /**
      * Get shell environment for Termux.
      */
@@ -97,6 +113,8 @@ public class TermuxShellEnvironment extends AndroidShellEnvironment {
         HashMap<String, String> environment = super.getEnvironment(currentPackageContext, isFailSafe);
         String display = sDisplayForNewSessions;
         if (display != null) environment.put("DISPLAY", display);
+        String waylandDisplay = sWaylandDisplayForNewSessions;
+        if (waylandDisplay != null) environment.put("WAYLAND_DISPLAY", waylandDisplay);
         HashMap<String, String> termuxAppEnvironment = TermuxAppShellEnvironment.getEnvironment(currentPackageContext);
         if (termuxAppEnvironment != null)
             environment.putAll(termuxAppEnvironment);

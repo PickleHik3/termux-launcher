@@ -177,4 +177,28 @@ public class X11DisplayServerStateTest {
         assertTrue(com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants
             .TERMUX_APP.DEFAULT_X11_SET_DISPLAY_ENV);
     }
+
+    /**
+     * While the Wayland host runs, a new terminal finds it the way a Wayland session's shells do:
+     * {@code WAYLAND_DISPLAY} and Xwayland as {@code DISPLAY}. Once it stops, nothing of it is left.
+     */
+    @Test
+    public void theWaylandHostReachesNewShellsWhileItRuns() {
+        X11DisplayServerState.setDisplayEnvWanted(true);
+        X11DisplayServerState.setWaylandDisplays("/p/tmp/wayland-0", null);
+        assertEquals("/p/tmp/wayland-0", TermuxShellEnvironment.getWaylandDisplayForNewSessions());
+        assertNull("no Xwayland yet and no X11 Display", displayForNewSession());
+
+        X11DisplayServerState.setWaylandDisplays("/p/tmp/wayland-0", ":0");
+        assertEquals(":0", displayForNewSession());
+
+        X11DisplayServerState.setDisplayEnvWanted(false);
+        assertNull(TermuxShellEnvironment.getWaylandDisplayForNewSessions());
+        assertNull(displayForNewSession());
+
+        X11DisplayServerState.setDisplayEnvWanted(true);
+        X11DisplayServerState.setWaylandDisplays(null, ":0");
+        assertNull(TermuxShellEnvironment.getWaylandDisplayForNewSessions());
+        assertNull("Xwayland's number goes with the host", displayForNewSession());
+    }
 }

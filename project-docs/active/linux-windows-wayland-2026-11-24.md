@@ -137,10 +137,27 @@ Two independent choices, both made by the launcher.
 - There is no display to start. Tapping a Linux app starts the compositor if needed and the app;
   its window appears when it maps. The compositor stops when the last Linux window closes, after a
   short grace period.
-- Apps find the compositor through `WAYLAND_DISPLAY` (an absolute path under the prefix's tmp, named
-  through `TermuxConstants`) and `DISPLAY` for Xwayland, both set by the launcher for every shell
-  and every launch. `XDG_RUNTIME_DIR` is left alone (changing it broke Herdr's core in the spike).
-- Proot distros reach the same socket through the shared tmp bind.
+- The socket is `wayland-0` in the prefix's tmp (`$TMPDIR`), beside X's `.X11-unix/`:
+  `<prefix>/tmp/wayland-0`, named through `TermuxConstants`. Termux guides already use that
+  directory as the runtime directory (`XDG_RUNTIME_DIR=$TMPDIR`), so there the usual
+  `$XDG_RUNTIME_DIR/$WAYLAND_DISPLAY` finds it.
+- Apps find the compositor through `WAYLAND_DISPLAY` and Xwayland through `DISPLAY=:n`.
+  `WAYLAND_DISPLAY` is `wayland-0` for a client whose `XDG_RUNTIME_DIR` is the prefix's tmp, and
+  the socket's absolute path otherwise; libwayland takes that path as it is (`LinuxWindowsEnv`).
+  Xwayland takes the lowest free display number: `:0` when X11 Display is not running.
+- `XDG_RUNTIME_DIR` is never set or changed. A tool that keeps a socket there works only while all
+  its shells agree: a desktop given its own value made Herdr start a second, empty core
+  (41fb70a16), and shells the launcher does not start (ssh, Termux:Boot) would disagree with a
+  value only the launcher's shells had.
+- Launches get both variables. New terminal sessions get them while the compositor runs and
+  Connect new shells is on (the setting X11 Display's `DISPLAY` already follows); with no
+  compositor running they get what they got before. A client typed in a terminal before any app
+  was launched finds no socket: starting the compositor on the first connection is the next slice.
+- A proot-distro container sees the same absolute path with no bind of ours: a default login binds
+  the whole prefix at its own path. Its `/tmp` is its own (proot-distro 5.x shares the prefix's
+  tmp there only with `--shared-tmp`, whatever its help says), and `--shared-x11` carries the X
+  sockets, so `DISPLAY=:n` works too. A shell opened by hand with `proot-distro login` gets neither
+  variable: the login starts from a clean environment.
 - Xwayland starts on the first X connection, not with the compositor.
 
 ### Build

@@ -17,7 +17,59 @@ import java.util.List;
 
 public class LinuxWindowsEnvTest {
 
-    private static final String SOCKET = "/data/data/pkg/files/usr/tmp/tl-wayland/wayland-0";
+    private static final String TMP = "/data/data/pkg/files/usr/tmp";
+    private static final String SOCKET = TMP + "/wayland-0";
+
+    @Test
+    public void theBareNameOnlyWhenTheRuntimeDirectoryIsTheSocketsOwn() {
+        assertEquals("wayland-0", LinuxWindowsEnv.waylandDisplay(TMP, "wayland-0", TMP));
+        assertEquals("wayland-0", LinuxWindowsEnv.waylandDisplay(TMP + "/", "wayland-0", TMP + "//"));
+        // No runtime directory (Termux's default), or another one: the path, which libwayland
+        // takes without joining it to anything.
+        assertEquals(SOCKET, LinuxWindowsEnv.waylandDisplay(TMP, "wayland-0", null));
+        assertEquals(SOCKET, LinuxWindowsEnv.waylandDisplay(TMP, "wayland-0", ""));
+        assertEquals(SOCKET, LinuxWindowsEnv.waylandDisplay(TMP, "wayland-0", TMP + "/runtime"));
+        assertEquals(SOCKET, LinuxWindowsEnv.waylandDisplay(TMP, "wayland-0", "/tmp"));
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void aRelativeSocketDirIsRefused() {
+        LinuxWindowsEnv.waylandDisplay("tmp", "wayland-0", null);
+    }
+
+    @Test
+    public void aSessionGetsNothingWhenTheSettingIsOff() {
+        assertTrue(LinuxWindowsEnv.forSession(false, ":0", SOCKET, ":1").isEmpty());
+    }
+
+    @Test
+    public void aSessionUnderX11DisplayGetsWhatItAlwaysGot() {
+        assertEquals(java.util.Collections.singletonMap("DISPLAY", ":0"),
+            LinuxWindowsEnv.forSession(true, ":0", null, null));
+        assertTrue(LinuxWindowsEnv.forSession(true, null, null, null).isEmpty());
+        // Xwayland's number without the host means nothing.
+        assertTrue(LinuxWindowsEnv.forSession(true, null, null, ":1").isEmpty());
+    }
+
+    @Test
+    public void aSessionWhileTheWaylandHostRunsGetsItsSocketAndItsXwayland() {
+        java.util.Map<String, String> env = LinuxWindowsEnv.forSession(true, ":0", SOCKET, ":1");
+        assertEquals(SOCKET, env.get("WAYLAND_DISPLAY"));
+        assertEquals(":1", env.get("DISPLAY"));
+        assertEquals(2, env.size());
+        // Xwayland not there yet: X11 Display's server if it runs, else no DISPLAY.
+        assertEquals(":0", LinuxWindowsEnv.forSession(true, ":0", SOCKET, null).get("DISPLAY"));
+        assertEquals(java.util.Collections.singletonMap("WAYLAND_DISPLAY", SOCKET),
+            LinuxWindowsEnv.forSession(true, null, SOCKET, ""));
+    }
+
+    @Test
+    public void aSessionNeverGetsARuntimeDirectoryOrToolkitHints() {
+        java.util.Map<String, String> env = LinuxWindowsEnv.forSession(true, ":0", SOCKET, ":1");
+        assertFalse(env.containsKey("XDG_RUNTIME_DIR"));
+        assertFalse(env.containsKey("GDK_BACKEND"));
+        assertFalse(env.containsKey("QT_QPA_PLATFORM"));
+    }
 
     @Rule
     public TemporaryFolder tmp = new TemporaryFolder();

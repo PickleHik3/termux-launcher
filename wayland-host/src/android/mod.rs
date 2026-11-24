@@ -88,8 +88,8 @@ fn set_env_once(name: &str, value: &Path) {
     }
 }
 
-/// Starts the compositor. `socketDir` is the clients' XDG_RUNTIME_DIR; the socket is
-/// `wayland-0` in it. `xkbConfigRoot` (nullable) becomes XKB_CONFIG_ROOT for the seat's keymap.
+/// Starts the compositor. `socketDir` is the prefix's tmp, the clients' runtime directory; the
+/// socket is `wayland-0` in it and Xwayland's sockets are in its `.X11-unix`. `xkbConfigRoot` (nullable) becomes XKB_CONFIG_ROOT for the seat's keymap.
 /// `xwaylandBinary` (nullable) starts rootless Xwayland when set. `scale` is the display density
 /// and `framePeriodNanos` its refresh period (the frame tick). Returns false when the host could
 /// not start or is already running.

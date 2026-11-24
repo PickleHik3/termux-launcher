@@ -21,15 +21,15 @@ public class X11LinuxAppRunnerWaylandTest {
     }
 
     @Test public void theSocketIsAnAbsolutePathUnderThePrefixTmp() {
-        assertEquals(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/tl-wayland/wayland-0",
+        assertEquals(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH + "/wayland-0",
             WaylandAppRunner.socketPath());
         assertTrue(WaylandAppRunner.socketPath().startsWith("/"));
     }
 
     @Test public void theEnvironmentIsTheWindowsEnvThenTheAppsOwnLines() {
         List<String> appEnv = Arrays.asList("GALLIUM_DRIVER=zink", "GDK_SCALE=2");
-        List<String> env = X11LinuxAppRunner.waylandEnv("/p/tmp/tl-wayland/wayland-0", ":1", null, appEnv);
-        assertEquals(Arrays.asList("WAYLAND_DISPLAY=/p/tmp/tl-wayland/wayland-0", "DISPLAY=:1",
+        List<String> env = X11LinuxAppRunner.waylandEnv("/p/tmp/wayland-0", ":1", null, appEnv);
+        assertEquals(Arrays.asList("WAYLAND_DISPLAY=/p/tmp/wayland-0", "DISPLAY=:1",
             "GDK_BACKEND=wayland,x11", "QT_QPA_PLATFORM=wayland;xcb",
             "GALLIUM_DRIVER=zink", "GDK_SCALE=2"), env);
         // The input list is not touched.
