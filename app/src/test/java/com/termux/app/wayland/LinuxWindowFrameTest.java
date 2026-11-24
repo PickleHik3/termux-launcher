@@ -27,7 +27,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * The Linux windows screen's corner hold: a window that scales gets the rail, opened on its stop,
  * and a stop chosen there reaches the host; an X window gets the shared-size line instead; the
- * window sees a cancel once the hold claims the finger.
+ * window sees nothing of a hold, and a corner tap or drag whole.
  */
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = Build.VERSION_CODES.P, application = Application.class)
@@ -97,9 +97,33 @@ public class LinuxWindowFrameTest {
         assertTrue(frame.isRailShown());
         assertFalse(frame.isSharedLineShown());
         assertEquals(250, frame.railView().step());
-        assertEquals(MotionEvent.ACTION_DOWN, (int) windowActions.get(0));
-        assertTrue("the window was told to forget the touch", windowActions.contains(MotionEvent.ACTION_CANCEL));
-        assertFalse("and never saw the lift", windowActions.contains(MotionEvent.ACTION_UP));
+        assertTrue("the window never saw any of the hold, so it cannot long-press on it", windowActions.isEmpty());
+    }
+
+    /** A tap in a corner is not a hold: the window gets the press and the lift. */
+    @Test
+    public void aTapInACornerReachesTheWindowWhole() {
+        LinuxWindowFrame frame = frame();
+        touch(frame, MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        assertTrue("held back while it may still be a hold", windowActions.isEmpty());
+        touch(frame, MotionEvent.ACTION_UP, WIDTH - 2f, 2f);
+        assertEquals(java.util.Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP), windowActions);
+        ShadowLooper.idleMainLooper(HoldTiming.holdTimeoutMs() + 50L, TimeUnit.MILLISECONDS);
+        assertFalse(frame.isRailShown());
+    }
+
+    /** A drag out of a corner is the window's: the press, then the move, then the rest. */
+    @Test
+    public void aDragFromACornerReachesTheWindow() {
+        LinuxWindowFrame frame = frame();
+        touch(frame, MotionEvent.ACTION_DOWN, WIDTH - 2f, 2f);
+        touch(frame, MotionEvent.ACTION_MOVE, WIDTH - 200f, 200f);
+        touch(frame, MotionEvent.ACTION_MOVE, WIDTH - 250f, 250f);
+        ShadowLooper.idleMainLooper(HoldTiming.holdTimeoutMs() + 50L, TimeUnit.MILLISECONDS);
+        touch(frame, MotionEvent.ACTION_UP, WIDTH - 250f, 250f);
+        assertEquals(java.util.Arrays.asList(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE,
+            MotionEvent.ACTION_MOVE, MotionEvent.ACTION_UP), windowActions);
+        assertFalse(frame.isRailShown());
     }
 
     @Test
