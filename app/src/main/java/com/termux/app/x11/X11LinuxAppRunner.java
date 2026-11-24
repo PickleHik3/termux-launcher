@@ -705,6 +705,9 @@ public final class X11LinuxAppRunner {
         WaylandAppRunner.shared(context).launch(new WaylandAppRunner.Launch() {
             @Override
             public void run(@NonNull String waylandDisplay, @Nullable String xDisplay) {
+                // The app still launches: a Wayland app needs no X server, and the catalogue
+                // cannot say which apps are X11-only.
+                if (xDisplay == null && WaylandAppRunner.xwaylandBinary() == null) noticeXwaylandOnce();
                 if (app.session) launchDesktopOnWayland(app, waylandDisplay, xDisplay);
                 else launchOnWayland(app, waylandDisplay, xDisplay);
             }
@@ -840,6 +843,17 @@ public final class X11LinuxAppRunner {
 
     private static final java.util.Set<com.termux.app.wayland.MesaWaylandOverlay.State> MESA_NOTICED =
         java.util.concurrent.ConcurrentHashMap.newKeySet();
+
+    private static final java.util.concurrent.atomic.AtomicBoolean XWAYLAND_NOTICED =
+        new java.util.concurrent.atomic.AtomicBoolean();
+
+    /** One notice per launcher process when an app or desktop opens under Wayland Display with no Xwayland. */
+    private void noticeXwaylandOnce() {
+        if (!XWAYLAND_NOTICED.compareAndSet(false, true)) return;
+        com.termux.app.notice.AppNotice.show(context, com.termux.app.notice.AppNoticeItem.Kind.INFO,
+            context.getString(com.termux.R.string.linux_xwayland_missing_title),
+            context.getString(com.termux.R.string.linux_xwayland_missing_sub), true);
+    }
 
     /** One notice per launcher process per state when the graphics add-on is missing or out of date. */
     private void noticeMesaOnce(@NonNull com.termux.app.wayland.MesaWaylandOverlay.Answer mesa) {

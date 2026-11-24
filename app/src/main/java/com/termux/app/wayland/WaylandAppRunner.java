@@ -396,6 +396,10 @@ public final class WaylandAppRunner {
         if (wasConnected) failPending();
     }
 
+    /** One notice per launcher process when the keyboard layout data is missing. */
+    private static final java.util.concurrent.atomic.AtomicBoolean KEYMAP_NOTICED =
+        new java.util.concurrent.atomic.AtomicBoolean();
+
     private void startHost() {
         if (service == null) return;
         File dir = new File(SOCKET_DIR);
@@ -412,6 +416,12 @@ public final class WaylandAppRunner {
         startAsked = true;
         startingSeen = false;
         HostStart start = hostStart(context);
+        if (start.xkbConfigRoot == null && KEYMAP_NOTICED.compareAndSet(false, true)) {
+            com.termux.app.notice.AppNotice.show(context,
+                com.termux.app.notice.AppNoticeItem.Kind.INFO,
+                context.getString(com.termux.R.string.linux_keymap_missing_title),
+                context.getString(com.termux.R.string.linux_keymap_missing_sub), true);
+        }
         try {
             service.start(SOCKET_DIR, start.xkbConfigRoot, start.xwaylandBinary, start.width,
                 start.height, start.scale, start.framePeriodNanos);
@@ -599,7 +609,7 @@ public final class WaylandAppRunner {
 
     /** The prefix's Xwayland when it is executable; null otherwise. */
     @Nullable
-    static String xwaylandBinary() {
+    public static String xwaylandBinary() {
         File bin = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/Xwayland");
         return bin.canExecute() ? bin.getAbsolutePath() : null;
     }
