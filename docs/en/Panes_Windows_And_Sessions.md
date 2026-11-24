@@ -257,7 +257,13 @@ floats alone, with the Terminal empty.
 - **Delete**: tap **⋯** on saved sessions, then **Delete**. Running sessions are not affected.
 
 Loading rebuilds structure, not processes. Each recorded program starts again from the
-beginning in your normal shell. **Replace** builds the new terminals before removing the old ones,
+beginning in your normal shell, except an AI coding agent: Claude Code, Codex and OpenCode reopen
+the conversation they were in. If a pane's agent has not been set up for this, the save field says
+"Claude will start a new conversation when restored" with a **Set up resume** button; nothing is
+set up until you tap it. A conversation that is gone, or an agent that never reported one, starts
+a new conversation and the pane says so. Codex asks you to trust its new hook once: open Codex and
+run `/hooks`. Picking an older conversation inside OpenCode is not followed, so a pane restores the
+last one OpenCode started or updated. See [Agent status](Agent_Status.md). **Replace** builds the new terminals before removing the old ones,
 but it still ends the old shells. Review a hand-edited file before letting it start programs.
 
 Saved sessions are files at `~/.termux/workspaces/<name>.json`. A name is up to 64 characters, starts

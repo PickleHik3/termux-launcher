@@ -45,6 +45,7 @@ Panes whose foreground is not a known agent are never read.
 
 ```sh
 launcherctl agent working|blocked|idle|clear [--agent NAME] [--pane ID]
+launcherctl agent session --agent NAME [--id ID]
 launcherctl agent install-hooks
 ```
 
@@ -53,7 +54,7 @@ same pane id the `/v1/panes` routes use) unless `--pane` names another. Over HTT
 `POST /v1/panes/{id}/agent` with `{"agent":"claude","state":"working"}`. See
 [LauncherCtl](LauncherCtl.md).
 
-`launcherctl agent install-hooks` merges four hooks into `~/.claude/settings.json`, creating the
+`launcherctl agent install-hooks` merges five hooks into `~/.claude/settings.json`, creating the
 file if it is missing and leaving every hook already there alone. Run it once; it is safe to run
 again, and nothing installs hooks for you:
 
@@ -63,6 +64,27 @@ again, and nothing installs hooks for you:
 | `Notification` | blocked |
 | `Stop` | idle |
 | `SessionEnd` | clear |
+| `SessionStart` | the conversation id (see below) |
+
+## Resuming a conversation
+
+Saved sessions bring an agent back in the conversation it was in. Each agent tells the launcher its
+conversation id for the pane it runs in, and the launcher saves it with the pane:
+
+| Agent | How the id arrives | Restore runs |
+| --- | --- | --- |
+| Claude Code | the `SessionStart` hook above | `claude --resume <id>` |
+| Codex | a `SessionStart` hook in `~/.codex/hooks.json` | `codex resume <id>` |
+| OpenCode | the plugin `~/.config/opencode/plugins/termux-launcher-session.js` | `opencode --session <id>` |
+
+`launcherctl agent install-hooks` sets up all three; the **Set up resume** button in the save field
+sets up the agents running in your panes. Neither touches a hook or plugin you wrote. Codex skips a
+hook until you trust it once: open Codex and run `/hooks`. OpenCode only reports a conversation it
+starts or updates, so picking an older one inside OpenCode is not followed.
+
+If the conversation no longer exists, the resume fails at once and the pane starts the agent fresh,
+printing one line saying it started a new conversation. Over HTTP the report is
+`POST /v1/panes/{id}/agent-session` with `{"agent":"claude","session_id":"..."}`.
 
 ## Adding a screen rule
 
