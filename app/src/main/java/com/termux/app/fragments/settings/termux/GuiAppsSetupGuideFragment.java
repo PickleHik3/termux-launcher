@@ -458,7 +458,7 @@ public class GuiAppsSetupGuideFragment extends Fragment {
         mBody.addView(copy, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         String command = GuiAppsSetupGuide.command(mPrefs, mEdition, mInstalled,
-            com.termux.app.wayland.LinuxDisplayBackend.current(requireContext()));
+            com.termux.app.wayland.LinuxDisplayBackend.current(context));
         TextView code = new TextView(context);
         code.setText(command == null ? "" : command);
         code.setTypeface(Typeface.MONOSPACE);
@@ -719,7 +719,7 @@ public class GuiAppsSetupGuideFragment extends Fragment {
 
     private void copyCommand(@NonNull Context context) {
         String command = GuiAppsSetupGuide.command(mPrefs, mEdition, mInstalled,
-            com.termux.app.wayland.LinuxDisplayBackend.current(requireContext()));
+            com.termux.app.wayland.LinuxDisplayBackend.current(context));
         if (command == null) return;
         Context appContext = context.getApplicationContext();
         ShareUtils.copyTextToClipboard(appContext,
