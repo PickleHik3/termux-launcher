@@ -56,12 +56,26 @@ public final class LinuxWindowRow {
      * the corner's curve by {@code cornerRadiusPx}) and in the band above the app's pixels.
      */
     public static void tabRect(int widthPx, float cornerRadiusPx, float density, @NonNull Rect out) {
+        tabRect(widthPx, cornerRadiusPx, density, 0, out);
+    }
+
+    /**
+     * As {@link #tabRect(int, float, float, Rect)}, the band standing {@code topInsetPx} below the
+     * window's top: the status row's room, which the Terminal's top pane holds too.
+     */
+    public static void tabRect(int widthPx, float cornerRadiusPx, float density, int topInsetPx,
+                               @NonNull Rect out) {
         int w = Math.round(TAB_WIDTH_DP * density);
         int h = Math.round(TAB_HEIGHT_DP * density);
         int band = bandPx(density);
         int right = widthPx - Math.max(Math.round(cornerRadiusPx), Math.round(4f * density));
-        int top = Math.max(0, (band - h) / 2);
+        int top = Math.max(0, topInsetPx) + Math.max(0, (band - h) / 2);
         out.set(Math.max(0, right - w), top, Math.max(0, right), top + h);
+    }
+
+    /** Where the app's pixels start below the window's top: the status row's room, then the band. */
+    public static int slotTopPx(float density, int topInsetPx) {
+        return Math.max(0, topInsetPx) + bandPx(density);
     }
 
     /** The band above the app's pixels the tab sits in, in px. */

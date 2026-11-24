@@ -61,6 +61,18 @@ public class MarksLookTest {
         }
     }
 
+    @Test public void aLinuxWindowWearsTheScreenMarkNotTheSpark() {
+        for (boolean current : new boolean[] {false, true}) {
+            for (int number : new int[] {0, 2}) {
+                Bitmap linux = render(c -> look.draw(c, PageKind.LINUX, number, current, 0f, 24f, 24f, BOX, INK));
+                Bitmap screen = render(c -> look.draw(c, PageKind.DISPLAY, number, current, 0f, 24f, 24f, BOX, INK));
+                Bitmap spark = render(c -> look.draw(c, PageKind.ASSISTANT, number, current, 0f, 24f, 24f, BOX, INK));
+                assertTrue("current=" + current + " number=" + number, linux.sameAs(screen));
+                if (number == 0) assertFalse(linux.sameAs(spark));
+            }
+        }
+    }
+
     @Test public void homeIsADotSmallerThanTheCurrentDisc() {
         Bitmap dot = render(c -> look.draw(c, PageKind.HOME, 1, false, 0f, 24f, 24f, BOX, INK));
         Bitmap disc = render(c -> look.draw(c, PageKind.HOME, 1, true, 0f, 24f, 24f, BOX, INK));

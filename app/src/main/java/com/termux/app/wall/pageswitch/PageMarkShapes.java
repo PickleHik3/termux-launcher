@@ -69,7 +69,8 @@ public final class PageMarkShapes {
 
     /** Whether {@code kind} has a sign of its own to cut out of its disc when it has no number. */
     public static boolean hasSign(@NonNull PageKind kind) {
-        return kind == PageKind.TERMINAL || kind == PageKind.DISPLAY || kind == PageKind.ASSISTANT;
+        return kind == PageKind.TERMINAL || kind == PageKind.DISPLAY || kind == PageKind.LINUX
+            || kind == PageKind.ASSISTANT;
     }
 
     /**
