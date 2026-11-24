@@ -71,12 +71,7 @@ public final class SettingDeclarations {
 
     /** Whether the {@code group} reset removes {@code key}, a declared key or a font size's. */
     public static boolean resets(@NonNull SettingDeclaration.ResetGroup group, @NonNull String key) {
-        for (SettingDeclaration declaration : ALL) {
-            if (declaration.resetGroup == group
-                && declaration.store == SettingDeclaration.Store.APP_PREFERENCES
-                && declaration.key.equals(key)) return true;
-        }
-        return FontSizeSettingsAdapter.resets(group, key);
+        return resetKeys(group).contains(key) || FontSizeSettingsAdapter.resets(group, key);
     }
 
     /**

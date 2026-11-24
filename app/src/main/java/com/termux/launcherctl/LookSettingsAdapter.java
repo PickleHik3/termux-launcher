@@ -32,7 +32,6 @@ public final class LookSettingsAdapter implements SettingAdapter {
     /** The summary of a property Shine replaced; `config list` keeps it, the settings reference leaves it out. */
     static final String RETIRED = "No longer used; Shine replaced it.";
 
-
     private static final String PREFIX = "look.";
     private static final String BACKGROUND = "background";
     /** What a surface may own; the others are Global's only and so listed there. */

@@ -9,6 +9,7 @@ import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 import com.termux.shared.termux.settings.registry.InMemorySettingStore;
 import com.termux.shared.termux.settings.registry.SettingAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
 import java.util.ArrayList;
@@ -54,7 +55,7 @@ final class SettingsReference {
             }
         }, () -> { }));
         return new SettingsRegistry(which -> store,
-            com.termux.shared.termux.settings.registry.SettingDeclarations.ALL, adapters);
+            SettingDeclarations.ALL, adapters);
     }
 
     /** The page, as it should be checked in. */

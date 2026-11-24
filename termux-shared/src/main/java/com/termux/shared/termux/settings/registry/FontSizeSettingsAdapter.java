@@ -26,6 +26,11 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
     private static final int STEP = 2;
     /** The largest font size in px, on any density. */
     private static final int MAX = 256;
+    /** The default size in dp, made even in px. */
+    private static final int DEFAULT_DP = 12;
+    /** The smallest size is the default divided by this, so a mistaken zoom leaves visible text. */
+    private static final int MIN_DIVISOR = 3;
+    private static final int MIN_DP = DEFAULT_DP / MIN_DIVISOR;
 
     /** A screen's font size limits in px, and its default. */
     public static final class Range {
@@ -46,24 +51,48 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
     }
 
     /**
-     * The limits for a screen of {@code density} (px per dp): the smallest is 4dp so a mistaken
-     * zoom cannot leave invisible text, the default is 12dp made even.
+     * The limits for a screen of {@code density} (px per dp): the smallest is {@code MIN_DP} so a
+     * mistaken zoom cannot leave invisible text, the default is {@code DEFAULT_DP} made even.
      */
     @NonNull
     public static Range range(float density) {
-        int defaultSize = Math.round(12 * density);
+        int defaultSize = Math.round(DEFAULT_DP * density);
         if (defaultSize % 2 == 1) defaultSize--;
-        return new Range((int) (4f * density), MAX, defaultSize);
+        return new Range((int) (MIN_DP * density), MAX, defaultSize);
     }
 
-    /**
-     * The reset group of each id: the terminal and scratchpad sizes go with the appearance reset,
-     * Compact's (a separate, never-reset key) stays.
-     */
-    @NonNull
-    private static SettingDeclaration.ResetGroup resetGroup(@NonNull String id) {
-        return COMPACT_FONT_SIZE.equals(id) ? SettingDeclaration.ResetGroup.NONE
-            : SettingDeclaration.ResetGroup.APPEARANCE;
+    /** The three sizes, each id listed once. */
+    private enum Row {
+        TERMINAL(FONT_SIZE, TERMUX_APP.KEY_FONTSIZE, SettingDeclaration.ResetGroup.APPEARANCE,
+            "Terminal font size", "How large the terminal's text is, in pixels."),
+        // Compact's key is a separate one that no reset touches.
+        COMPACT(COMPACT_FONT_SIZE, TERMUX_APP.KEY_COMPACT_FONTSIZE, SettingDeclaration.ResetGroup.NONE,
+            "Compact font size",
+            "How large text is in Compact windows; until you set one it follows the terminal's."),
+        SCRATCHPAD(SCRATCHPAD_FONT_SIZE, TERMUX_APP.KEY_FONTSIZE + "_scratchpad",
+            SettingDeclaration.ResetGroup.APPEARANCE, "Scratchpad font size",
+            "How large text is in the scratchpad; until you set one it follows the terminal's.");
+
+        final String id;
+        final String baseKey;
+        final SettingDeclaration.ResetGroup resetGroup;
+        final String title;
+        final String summary;
+
+        Row(String id, String baseKey, SettingDeclaration.ResetGroup resetGroup, String title,
+            String summary) {
+            this.id = id;
+            this.baseKey = baseKey;
+            this.resetGroup = resetGroup;
+            this.title = title;
+            this.summary = summary;
+        }
+
+        @Nullable
+        static Row of(@NonNull String id) {
+            for (Row row : values()) if (row.id.equals(id)) return row;
+            return null;
+        }
     }
 
     /**
@@ -71,19 +100,10 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
      * terminal's and the scratchpad's start with {@code fontsize}, Compact's does not.
      */
     public static boolean resets(@NonNull SettingDeclaration.ResetGroup group, @NonNull String key) {
-        for (String id : new String[] {FONT_SIZE, COMPACT_FONT_SIZE, SCRATCHPAD_FONT_SIZE}) {
-            if (resetGroup(id) == group && key.startsWith(baseKey(id))) return true;
+        for (Row row : Row.values()) {
+            if (row.resetGroup == group && key.startsWith(row.baseKey)) return true;
         }
         return false;
-    }
-
-    @NonNull
-    private static String baseKey(@NonNull String id) {
-        switch (id) {
-            case FONT_SIZE: return TERMUX_APP.KEY_FONTSIZE;
-            case COMPACT_FONT_SIZE: return TERMUX_APP.KEY_COMPACT_FONTSIZE;
-            default: return TERMUX_APP.KEY_FONTSIZE + "_scratchpad";
-        }
     }
 
     @NonNull private final SettingStore mStore;
@@ -102,59 +122,51 @@ public final class FontSizeSettingsAdapter implements SettingAdapter {
 
     @NonNull
     private String key(@NonNull String id) {
-        return baseKey(id) + mDisplay;
+        Row row = Row.of(id);
+        return (row == null ? id : row.baseKey) + mDisplay;
     }
 
     private static boolean owns(@NonNull String id) {
-        return FONT_SIZE.equals(id) || COMPACT_FONT_SIZE.equals(id)
-            || SCRATCHPAD_FONT_SIZE.equals(id);
+        return Row.of(id) != null;
     }
 
     @NonNull
-    private SettingDeclaration declare(@NonNull String id) {
+    private SettingDeclaration declare(@NonNull Row row) {
+        String id = row.id;
         return SettingDeclaration.integer(id, SettingDeclaration.Store.APP_PREFERENCES, key(id),
             mRange.min, mRange.max, STEP, mRange.defaultSize, SettingRefresh.FONT_SIZE)
-            .resetBy(resetGroup(id)).described(title(id), summary(id))
+            .resetBy(row.resetGroup).described(row.title, row.summary)
             .shownAs(RANGE_NOTE, DEFAULT_NOTE);
     }
 
     /** The range and default in words: the numbers depend on the screen's density. */
-    public static final String RANGE_NOTE = "From a third of the default size up to 256 px";
-    public static final String DEFAULT_NOTE = "About 12 dp of text, whatever the screen";
+    public static final String RANGE_NOTE =
+        "From " + fraction(MIN_DIVISOR) + " of the default size up to " + MAX + " px";
+    public static final String DEFAULT_NOTE =
+        "About " + DEFAULT_DP + " dp of text, whatever the screen";
 
     @NonNull
-    private static String title(@NonNull String id) {
-        switch (id) {
-            case FONT_SIZE: return "Terminal font size";
-            case COMPACT_FONT_SIZE: return "Compact font size";
-            default: return "Scratchpad font size";
-        }
-    }
-
-    @NonNull
-    private static String summary(@NonNull String id) {
-        switch (id) {
-            case FONT_SIZE: return "How large the terminal's text is, in pixels.";
-            case COMPACT_FONT_SIZE:
-                return "How large text is in Compact windows; until you set one it follows the terminal's.";
-            default:
-                return "How large text is in the scratchpad; until you set one it follows the terminal's.";
+    private static String fraction(int divisor) {
+        switch (divisor) {
+            case 2: return "a half";
+            case 3: return "a third";
+            case 4: return "a quarter";
+            default: return "1/" + divisor;
         }
     }
 
     @Nullable
     @Override
     public SettingDeclaration declaration(@NonNull String id) {
-        return owns(id) ? declare(id) : null;
+        Row row = Row.of(id);
+        return row == null ? null : declare(row);
     }
 
     @NonNull
     @Override
     public List<SettingDeclaration> declarations() {
         List<SettingDeclaration> all = new ArrayList<>();
-        all.add(declare(FONT_SIZE));
-        all.add(declare(COMPACT_FONT_SIZE));
-        all.add(declare(SCRATCHPAD_FONT_SIZE));
+        for (Row row : Row.values()) all.add(declare(row));
         return all;
     }
 
