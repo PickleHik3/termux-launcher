@@ -37,6 +37,7 @@ import android.widget.LinearLayout;
 import android.widget.TextView;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.google.android.material.color.MaterialColors;
 import com.termux.BuildConfig;
@@ -74,6 +75,8 @@ public final class LinuxWindowsActivity extends Activity {
     private static final int MAX_POINTS = ILinuxWindows.MAX_TOUCH_POINTERS;
     /** {@code putExtra(EXTRA_OPENING, true)}: the runner opened the screen with an app just started. */
     static final String EXTRA_OPENING = "opening";
+    /** {@code putExtra(EXTRA_SHOW_WINDOW, id)}: bring the window with this id forward, if it is open. */
+    static final String EXTRA_SHOW_WINDOW = "show_window";
     /** How long "no Linux apps" shows before the screen closes itself. */
     private static final long NO_APPS_CLOSE_MS = 2500;
     /** The developer status wraps to this many lines. */
@@ -128,6 +131,8 @@ public final class LinuxWindowsActivity extends Activity {
     private Button mDumpButton;
     /** The intent asked for a dump; done once the host runs and the windows are replayed. */
     private boolean mDumpPending;
+    /** A window to bring forward once the host replays it (the screen was opened by {@link #EXTRA_SHOW_WINDOW}); -1 none. */
+    private long mShowWindowPending = -1L;
     /** The host reported running and has not since stopped. */
     private boolean mHostRunning;
     private boolean mHostStarting;
@@ -583,6 +588,7 @@ public final class LinuxWindowsActivity extends Activity {
         settle();
         handleStartIntent(getIntent());
         handleDumpIntent(getIntent());
+        handleShowWindowIntent(getIntent());
         connect();
     }
 
@@ -918,6 +924,10 @@ public final class LinuxWindowsActivity extends Activity {
         long before = mTabs.shown();
         mTabs.add(id);
         applyShown(before);
+        if (id == mShowWindowPending) {
+            mShowWindowPending = -1L;
+            showWindow(id);
+        }
     }
 
     private void removePane(long id) {
@@ -1049,6 +1059,17 @@ public final class LinuxWindowsActivity extends Activity {
         }
         handleStartIntent(intent);
         handleDumpIntent(intent);
+        handleShowWindowIntent(intent);
+    }
+
+    /** {@link #EXTRA_SHOW_WINDOW}: selects that window's tab when it exists; nothing otherwise. */
+    private void handleShowWindowIntent(@Nullable Intent intent) {
+        if (intent == null || !intent.hasExtra(EXTRA_SHOW_WINDOW)) return;
+        long id = intent.getLongExtra(EXTRA_SHOW_WINDOW, -1L);
+        intent.removeExtra(EXTRA_SHOW_WINDOW);
+        if (id < 0) return;
+        if (mPanes.get(id) != null) showWindow(id);
+        else mShowWindowPending = id;
     }
 
     /** Asks the host to write every window to files/wayland-dumps/<id>.png (see logcat TLWayland). */

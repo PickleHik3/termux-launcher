@@ -124,6 +124,14 @@ public final class X11LinuxAppRunner {
          */
         boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit);
         /**
+         * {@link #runScript(String, ScriptExitListener)}, also telling {@code onPid} the started
+         * process's pid when it is known (main thread, before this returns).
+         */
+        default boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit,
+                                  @Nullable java.util.function.IntConsumer onPid) {
+            return runScript(script, onExit);
+        }
+        /**
          * Open the display window, or bring it up if it is open: on the row, and the wall on it.
          * The display may not be running yet; {@link #startDisplay} starts it.
          */
@@ -307,13 +315,18 @@ public final class X11LinuxAppRunner {
      * never a tap waiting on an answer.
      */
     private boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit) {
+        return runScript(script, onExit, null);
+    }
+
+    private boolean runScript(@NonNull String script, @NonNull ScriptExitListener onExit,
+                              @Nullable java.util.function.IntConsumer onPid) {
         Host current = host;
         if (current == null) {
             Logger.logInfo(LOG_TAG, "No activity to run a script in; it runs when one comes");
             queued.add(new QueuedScript(script, onExit));
             return true;
         }
-        return current.runScript(script, onExit);
+        return current.runScript(script, onExit, onPid);
     }
 
     /** Tells the user {@code message}, when there is an activity to tell it in. */
@@ -666,6 +679,11 @@ public final class X11LinuxAppRunner {
             public void failed() {
                 notice(context.getString(com.termux.R.string.linux_wayland_start_failed));
             }
+
+            @Override
+            public String key() {
+                return app.id;
+            }
         });
         return true;
     }
@@ -698,7 +716,8 @@ public final class X11LinuxAppRunner {
                 if (gpu.fellBack) {
                     notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
                 }
-                runAndWatch(app, script, noSandbox, display, env);
+                runAndWatch(app, script, noSandbox, display, env, null,
+                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
             });
         });
     }
@@ -777,7 +796,16 @@ public final class X11LinuxAppRunner {
     void runAndWatch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String script, boolean noSandbox,
                       @NonNull String display, @NonNull List<String> env,
                       @Nullable String windowManagerRestart) {
-        new Watch(app, display, env, windowManagerRestart).start(script, noSandbox);
+        runAndWatch(app, script, noSandbox, display, env, windowManagerRestart, null);
+    }
+
+    /** As above, and {@code onPid} hears the pid of every process the launch (and its retry) starts. */
+    @VisibleForTesting
+    void runAndWatch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String script, boolean noSandbox,
+                      @NonNull String display, @NonNull List<String> env,
+                      @Nullable String windowManagerRestart,
+                      @Nullable java.util.function.IntConsumer onPid) {
+        new Watch(app, display, env, windowManagerRestart, onPid).start(script, noSandbox);
         if (app.session && windowManagerRestart != null) {
             handler.postDelayed(() -> windowManagerSafetyNet(app, windowManagerRestart),
                 WM_SAFETY_NET_MS);
@@ -816,12 +844,15 @@ public final class X11LinuxAppRunner {
         private final String display;
         private final List<String> env;
         @Nullable private final String windowManagerRestart;
+        @Nullable private final java.util.function.IntConsumer onPid;
         private final Runnable timeout = () -> resolve(false);
         private boolean noSandbox;
         private boolean decided;
 
         Watch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
-              @NonNull List<String> env, @Nullable String windowManagerRestart) {
+              @NonNull List<String> env, @Nullable String windowManagerRestart,
+              @Nullable java.util.function.IntConsumer onPid) {
+            this.onPid = onPid;
             this.app = app;
             this.display = display;
             this.env = env;
@@ -843,7 +874,7 @@ public final class X11LinuxAppRunner {
                     return;
                 }
                 resolve(isQuickFailure(exitCode));
-            });
+            }, onPid);
             if (started) {
                 if (app.session) setRunningSession(app);
                 handler.postDelayed(timeout, QUICK_FAIL_MS);
@@ -903,7 +934,7 @@ public final class X11LinuxAppRunner {
                 return;
             }
             Logger.logInfo(LOG_TAG, "Retrying " + app.id + " on the display with --no-sandbox");
-            new Watch(app, display, env, null).start(script(app, display, env, true), true);
+            new Watch(app, display, env, null, onPid).start(script(app, display, env, true), true);
         }
     }
 

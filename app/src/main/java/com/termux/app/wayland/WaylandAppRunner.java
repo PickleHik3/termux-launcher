@@ -11,6 +11,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.text.TextUtils;
@@ -64,6 +65,15 @@ public final class WaylandAppRunner {
 
         /** The host did not come up; the app was not started. */
         void failed();
+
+        /**
+         * The app's identity, for telling a second tap on an app whose window is open from a first
+         * (its catalogue id); null for a launch that is never matched to a window.
+         */
+        @Nullable
+        default String key() {
+            return null;
+        }
     }
 
     /** Told, on the main thread, when the launches waiting for the host are no longer waiting. */
@@ -113,6 +123,9 @@ public final class WaylandAppRunner {
     private boolean xWaitExpired;
     /** Live windows, counted from the host's callbacks; reset on every (re)attach. */
     private int windows;
+    /** Which window is which launched app; see {@link LinuxAppWindowMatcher}. Main thread. */
+    @NonNull private final LinuxAppWindowMatcher matcher =
+        new LinuxAppWindowMatcher(WaylandAppRunner::parentPid);
 
     private final Runnable startTimeout = () -> {
         if (!pending.isEmpty()) {
@@ -137,6 +150,8 @@ public final class WaylandAppRunner {
             binder = b;
             service = ILinuxWindows.Stub.asInterface(b);
             windows = 0;
+            // The host replays its live windows next.
+            matcher.clearWindows();
             try {
                 b.linkToDeath(death, 0);
                 service.addCallback(callback);
@@ -177,6 +192,8 @@ public final class WaylandAppRunner {
             main.post(() -> {
                 windows++;
                 main.removeCallbacks(idleStop);
+                matcher.windowCreated(id, clientPid, (flags & ILinuxWindows.WINDOW_X11) != 0,
+                    SystemClock.uptimeMillis());
             });
         }
 
@@ -186,6 +203,7 @@ public final class WaylandAppRunner {
         @Override
         public void onWindowDestroyed(long id) {
             main.post(() -> {
+                matcher.windowDestroyed(id);
                 if (windows > 0) windows--;
                 if (windows == 0) armIdleStop();
             });
@@ -211,6 +229,15 @@ public final class WaylandAppRunner {
      * may wait together; each runs in the order asked.
      */
     public void launch(@NonNull Launch launch) {
+        String key = launch.key();
+        if (key != null && running && service != null) {
+            long window = matcher.windowFor(key);
+            if (window >= 0) {
+                // The app's window is still open: show it, and start nothing.
+                openWindowsScreen(window);
+                return;
+            }
+        }
         pending.add(launch);
         main.removeCallbacks(idleStop);
         main.removeCallbacks(startTimeout);
@@ -286,6 +313,7 @@ public final class WaylandAppRunner {
         startAsked = false;
         stateKnown = false;
         windows = 0;
+        matcher.clear();
         xDisplay = null;
         xWaitExpired = false;
         main.removeCallbacks(idleStop);
@@ -324,6 +352,7 @@ public final class WaylandAppRunner {
             case ILinuxWindows.STATE_DIED:
                 running = false;
                 windows = 0;
+                matcher.clear();
                 xDisplay = null;
                 xWaitExpired = false;
                 main.removeCallbacks(idleStop);
@@ -396,7 +425,11 @@ public final class WaylandAppRunner {
         pending.clear();
         String wayland = socketPath();
         String x = xwaylandDisplay();
-        for (Launch launch : launches) launch.run(wayland, x);
+        for (Launch launch : launches) {
+            String key = launch.key();
+            if (key != null) matcher.launched(key, SystemClock.uptimeMillis());
+            launch.run(wayland, x);
+        }
         openWindowsScreen();
         if (pendingListener != null) pendingListener.onPendingEnded(true);
     }
@@ -441,11 +474,33 @@ public final class WaylandAppRunner {
         return xDisplay;
     }
 
-    private void openWindowsScreen() {
+    /** A launch started process {@code pid} for the app {@code key}; main thread. */
+    public void processStarted(@NonNull String key, int pid) {
+        matcher.started(key, pid);
+    }
+
+    /** The parent of {@code pid} from /proc, or 0 when it is gone or unreadable. */
+    private static int parentPid(int pid) {
         try {
-            context.startActivity(new Intent(context, LinuxWindowsActivity.class)
-                .putExtra(LinuxWindowsActivity.EXTRA_OPENING, true)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+            byte[] bytes = java.nio.file.Files.readAllBytes(java.nio.file.Paths.get("/proc/" + pid + "/stat"));
+            return LinuxAppWindowMatcher.parentFromStat(new String(bytes, java.nio.charset.StandardCharsets.UTF_8));
+        } catch (java.io.IOException | RuntimeException e) {
+            return 0;
+        }
+    }
+
+    private void openWindowsScreen() {
+        openWindowsScreen(-1L);
+    }
+
+    /** Opens the screen; {@code showWindow} 0 or above names the window to bring forward. */
+    private void openWindowsScreen(long showWindow) {
+        try {
+            Intent intent = new Intent(context, LinuxWindowsActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            if (showWindow >= 0) intent.putExtra(LinuxWindowsActivity.EXTRA_SHOW_WINDOW, showWindow);
+            else intent.putExtra(LinuxWindowsActivity.EXTRA_OPENING, true);
+            context.startActivity(intent);
         } catch (RuntimeException e) {
             Log.w(LOG_TAG, "cannot open the Linux windows screen: " + e);
         }
