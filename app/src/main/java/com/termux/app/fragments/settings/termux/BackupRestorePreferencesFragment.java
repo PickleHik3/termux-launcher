@@ -396,7 +396,9 @@ public final class BackupRestorePreferencesFragment extends MaterialPreferenceFr
         WORKER.execute(() -> {
             int failures;
             try {
-                failures = SettingsBackupIo.apply(env, staged).failures
+                // A value a setting refused counts as a part that did not restore.
+                SettingsBackupIo.ApplyResult applied = SettingsBackupIo.apply(env, staged);
+                failures = applied.failures + applied.skipped.size()
                     + SettingsBackupIo.applyWallpapers(app, env, staged);
             } catch (RuntimeException e) {
                 Logger.logStackTraceWithMessage(LOG_TAG, "Restoring the settings failed", e);

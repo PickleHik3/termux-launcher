@@ -34,6 +34,17 @@ public final class SettingDeclaration {
         PROPERTIES
     }
 
+    /**
+     * Which reset removes a setting. A reset reads its keys from the declarations in its group
+     * ({@link SettingDeclarations#resetKeys}), so its list and the declaration cannot drift.
+     */
+    public enum ResetGroup {
+        /** No reset removes it. */
+        NONE,
+        /** The appearance reset on upgrade ({@code AppearanceReset}). */
+        APPEARANCE
+    }
+
     @NonNull public final String id;
     @NonNull public final Kind kind;
     @NonNull public final Store store;
@@ -54,12 +65,44 @@ public final class SettingDeclaration {
     public final boolean ordered;
     /** Whether a settings file carries it; false for secrets and device-bound values. */
     public final boolean exported;
+    @NonNull public final ResetGroup resetGroup;
+
+    /**
+     * What the settings reference page says: a short name and one plain sentence for the user.
+     * Empty until {@link #described}.
+     */
+    @NonNull public final String title;
+    @NonNull public final String summary;
+    /**
+     * The range and default as the reference page words them, for a setting whose range is
+     * not a number pair here (a value only its adapter judges, or one that depends on the
+     * display). Empty to say what {@link #allowed} and {@link #defaultValue} say.
+     */
+    @NonNull public final String rangeNote;
+    @NonNull public final String defaultNote;
 
     private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
                                @NonNull String key, @NonNull SettingRefresh refresh, int min,
                                int max, int step, int defaultInt, @NonNull List<String> choices,
                                @NonNull List<String> storedChoices, int defaultChoice,
-                               boolean ordered, boolean exported) {
+                               boolean ordered, boolean exported,
+                               @NonNull ResetGroup resetGroup) {
+        this(id, kind, store, key, refresh, min, max, step, defaultInt, choices, storedChoices,
+            defaultChoice, ordered, exported, resetGroup, "", "", "", "");
+    }
+
+    private SettingDeclaration(@NonNull String id, @NonNull Kind kind, @NonNull Store store,
+                               @NonNull String key, @NonNull SettingRefresh refresh, int min,
+                               int max, int step, int defaultInt, @NonNull List<String> choices,
+                               @NonNull List<String> storedChoices, int defaultChoice,
+                               boolean ordered, boolean exported,
+                               @NonNull ResetGroup resetGroup, @NonNull String title,
+                               @NonNull String summary, @NonNull String rangeNote,
+                               @NonNull String defaultNote) {
+        this.title = title;
+        this.summary = summary;
+        this.rangeNote = rangeNote;
+        this.defaultNote = defaultNote;
         this.id = id;
         this.kind = kind;
         this.store = store;
@@ -74,13 +117,39 @@ public final class SettingDeclaration {
         mDefaultChoice = defaultChoice;
         this.ordered = ordered;
         this.exported = exported;
+        this.resetGroup = resetGroup;
+    }
+
+    /** This declaration removed by the {@code group} reset. */
+    @NonNull
+    public SettingDeclaration resetBy(@NonNull ResetGroup group) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, group, title, summary,
+            rangeNote, defaultNote);
+    }
+
+    /** This declaration with the name and sentence the settings reference page shows. */
+    @NonNull
+    public SettingDeclaration described(@NonNull String title, @NonNull String summary) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            rangeNote, defaultNote);
+    }
+
+    /** This declaration with the range and default the reference page words in place of numbers. */
+    @NonNull
+    public SettingDeclaration shownAs(@NonNull String range, @NonNull String defaultText) {
+        return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
+            choices, storedChoices, mDefaultChoice, ordered, exported, resetGroup, title, summary,
+            range, defaultText);
     }
 
     /** This declaration kept out of a settings file's export and apply. */
     @NonNull
     public SettingDeclaration notExported() {
         return new SettingDeclaration(id, kind, store, key, refresh, min, max, step, defaultInt,
-            choices, storedChoices, mDefaultChoice, ordered, false);
+            choices, storedChoices, mDefaultChoice, ordered, false, resetGroup, title, summary,
+            rangeNote, defaultNote);
     }
 
     /** A whole number from {@code min} to {@code max}, stepped by {@code step}. */
@@ -91,7 +160,8 @@ public final class SettingDeclaration {
         if (min > max || step <= 0 || defaultValue < min || defaultValue > max)
             throw new IllegalArgumentException(id + ": bad range");
         return new SettingDeclaration(id, Kind.INTEGER, store, key, refresh, min, max, step,
-            defaultValue, Collections.emptyList(), Collections.emptyList(), -1, true, true);
+            defaultValue, Collections.emptyList(), Collections.emptyList(), -1, true, true,
+            ResetGroup.NONE);
     }
 
     /**
@@ -109,7 +179,7 @@ public final class SettingDeclaration {
             throw new IllegalArgumentException(id + ": bad choices");
         return new SettingDeclaration(id, Kind.CHOICE, store, key, refresh, 0, 0, 0, 0,
             Collections.unmodifiableList(names), Collections.unmodifiableList(stored),
-            defaultIndex, ordered, true);
+            defaultIndex, ordered, true, ResetGroup.NONE);
     }
 
     /**
@@ -121,7 +191,7 @@ public final class SettingDeclaration {
                                           @NonNull SettingRefresh refresh) {
         return new SettingDeclaration(id, Kind.TEXT, Store.APP_PREFERENCES, id, refresh, 0, 0, 0,
             0, Collections.singletonList(defaultValue), Collections.singletonList(defaultValue),
-            0, false, true);
+            0, false, true, ResetGroup.NONE);
     }
 
     /** {@code value} held inside this integer's range. */
@@ -144,6 +214,23 @@ public final class SettingDeclaration {
         if (stored == null) return defaultStoredChoice();
         String value = stored.trim().toLowerCase(Locale.ROOT);
         return storedChoices.contains(value) ? value : defaultStoredChoice();
+    }
+
+    /**
+     * Whether a store holding {@code stored} (an Integer or a String, as the store keeps it) would
+     * read it as a value this declaration allows. A backup restore skips a value that fails it.
+     * A text setting's adapter judges its own, so it passes here.
+     */
+    public boolean acceptsStored(@Nullable Object stored) {
+        switch (kind) {
+            case INTEGER:
+                return stored instanceof Integer && (Integer) stored >= min && (Integer) stored <= max;
+            case CHOICE:
+                return stored instanceof String
+                    && storedChoices.contains(((String) stored).trim().toLowerCase(Locale.ROOT));
+            default:
+                return true;
+        }
     }
 
     /** The default, as text. */

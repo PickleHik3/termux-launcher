@@ -1156,6 +1156,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public void applyTextSize() {
             mSurfaceEditor.applyTextSize();
         }
+
+        @Override public void applyFontSizes() {
+            if (mTermuxTerminalViewClient != null) mTermuxTerminalViewClient.applyGlobalFontSize();
+        }
     }
 
     /** The long-press popup on the dock, the status bar and the keyboard (editor-redesign §3). */

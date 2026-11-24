@@ -5,8 +5,10 @@ import android.content.Context;
 import androidx.annotation.NonNull;
 
 import com.termux.app.place.layout.LayoutStore;
+import com.termux.app.settings.LauncherSettings;
 import com.termux.app.terminal.TerminalActionDispatcher;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 import com.termux.shared.termux.settings.registry.SettingAdapter;
 
 import java.util.ArrayList;
@@ -31,6 +33,10 @@ public final class LauncherCtlAdapters {
             adapters.add(new LookSettingsAdapter(preferences.lookGrid(),
                 DeviceControlRoutes.terminalBackground(preferences),
                 () -> TerminalActionDispatcher.getInstance().redressChrome()));
+            // launcherctl config addresses the default display: the bare keys.
+            adapters.add(new FontSizeSettingsAdapter(
+                LauncherSettings.preferencesStore(preferences.getSharedPreferences()),
+                app.getResources().getDisplayMetrics().density, ""));
         }
         adapters.add(new LayoutSettingsAdapter(LayoutStore.shared(app), LayoutSettingsAdapter.DEVICE,
             () -> TerminalActionDispatcher.getInstance().redressChrome()));

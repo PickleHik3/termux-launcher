@@ -18,16 +18,14 @@ import com.termux.shared.logger.Logger;
 import com.termux.shared.data.DataUtils;
 import com.termux.shared.termux.TermuxUtils;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 
 public class TermuxAppSharedPreferences extends AppSharedPreferences {
 
-    private int MIN_FONTSIZE;
-
-    private int MAX_FONTSIZE;
-
-    private int DEFAULT_FONTSIZE;
+    /** This screen's font size limits and default; the adapter owns how they are computed. */
+    private FontSizeSettingsAdapter.Range mFontRange = FontSizeSettingsAdapter.range(1f);
 
     private static final String LOG_TAG = "TermuxAppSharedPreferences";
 
@@ -2985,30 +2983,20 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
                 ? TERMUX_APP.DEFAULT_ESSENTIAL_NOTIFICATION_RULES : value, true);
     }
 
+    /** {default, min, max} font sizes in px for {@code context}'s screen, from the font size adapter. */
     public static int[] getDefaultFontSizes(Context context) {
-        float dipInPixels = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, 1, context.getResources().getDisplayMetrics());
-        int[] sizes = new int[3];
-        // This is a bit arbitrary and sub-optimal. We want to give a sensible default for minimum font size
-        // to prevent invisible text due to zoom be mistake:
-        // min
-        sizes[1] = (int) (4f * dipInPixels);
-        // http://www.google.com/design/spec/style/typography.html#typography-line-height
-        int defaultFontSize = Math.round(12 * dipInPixels);
-        // Make it divisible by 2 since that is the minimal adjustment step:
-        if (defaultFontSize % 2 == 1)
-            defaultFontSize--;
-        // default
-        sizes[0] = defaultFontSize;
-        // max
-        sizes[2] = 256;
-        return sizes;
+        FontSizeSettingsAdapter.Range range = fontRange(context);
+        return new int[]{range.defaultSize, range.min, range.max};
+    }
+
+    /** The font size limits of {@code context}'s screen. */
+    public static FontSizeSettingsAdapter.Range fontRange(Context context) {
+        return FontSizeSettingsAdapter.range(TypedValue.applyDimension(
+            TypedValue.COMPLEX_UNIT_DIP, 1, context.getResources().getDisplayMetrics()));
     }
 
     public void setFontVariables(Context context) {
-        int[] sizes = getDefaultFontSizes(context);
-        DEFAULT_FONTSIZE = sizes[0];
-        MIN_FONTSIZE = sizes[1];
-        MAX_FONTSIZE = sizes[2];
+        mFontRange = fontRange(context);
     }
 
     private String getDisplayIdAsString() {
@@ -3037,8 +3025,8 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     }
 
     public int getFontSize() {
-        int fontSize = SharedPreferenceUtils.getIntStoredAsString(mSharedPreferences, TERMUX_APP.KEY_FONTSIZE + getDisplayIdAsString(), DEFAULT_FONTSIZE);
-        return DataUtils.clamp(fontSize, MIN_FONTSIZE, MAX_FONTSIZE);
+        int fontSize = SharedPreferenceUtils.getIntStoredAsString(mSharedPreferences, TERMUX_APP.KEY_FONTSIZE + getDisplayIdAsString(), mFontRange.defaultSize);
+        return mFontRange.clamp(fontSize);
     }
 
     public void setFontSize(int value) {
@@ -3049,9 +3037,9 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         setFontSize(stepFontSize(getFontSize(), increase));
     }
 
-    public int getMinFontSize() { return MIN_FONTSIZE; }
+    public int getMinFontSize() { return mFontRange.min; }
 
-    public int getMaxFontSize() { return MAX_FONTSIZE; }
+    public int getMaxFontSize() { return mFontRange.max; }
 
     /** The Compact size as stored: 0 while it is derived from the app-wide default. */
     public int getStoredCompactFontSize() {
@@ -3068,7 +3056,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
     /** {@code current} stepped one zoom increment, clamped to this display's font size limits. */
     public int stepFontSize(int current, boolean increase) {
         int fontSize = current + (increase ? 1 : -1) * 2;
-        return Math.max(MIN_FONTSIZE, Math.min(fontSize, MAX_FONTSIZE));
+        return mFontRange.clamp(fontSize);
     }
 
     /**
@@ -3080,14 +3068,14 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         if (!reads().contains(key)) {
             SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key, getFontSize(), false);
         }
-        return DataUtils.clamp(SharedPreferenceUtils.getIntStoredAsString(
-            mSharedPreferences, key, getFontSize()), MIN_FONTSIZE, MAX_FONTSIZE);
+        return mFontRange.clamp(SharedPreferenceUtils.getIntStoredAsString(
+            mSharedPreferences, key, getFontSize()));
     }
 
     public void setScratchpadFontSize(int value) {
         String key = TERMUX_APP.KEY_FONTSIZE + "_scratchpad" + getDisplayIdAsString();
         SharedPreferenceUtils.setIntStoredAsString(mSharedPreferences, key,
-            DataUtils.clamp(value, MIN_FONTSIZE, MAX_FONTSIZE), false);
+            mFontRange.clamp(value), false);
     }
 
     public void changeScratchpadFontSize(boolean increase) {
@@ -4096,7 +4084,7 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         int percent = getTextSizePercent();
         if (percent == TERMUX_APP.DEFAULT_TEXT_SIZE_PERCENT)
             return ownSize;
-        return DataUtils.clamp(Math.round(ownSize * percent / 100f), MIN_FONTSIZE, MAX_FONTSIZE);
+        return mFontRange.clamp(Math.round(ownSize * percent / 100f));
     }
 
     /** A stored enum-like string if it is one of {@code known}, else the default. */

@@ -23,6 +23,7 @@ import com.termux.shared.android.AndroidUtils;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
 
 import org.json.JSONException;
@@ -85,8 +86,7 @@ public final class SettingsBackupIo {
         /** The files directory a stored link target is resolved against. */
         @NonNull final String filesDir;
         final float density;
-        final int fontSizeMin;
-        final int fontSizeMax;
+        @NonNull final FontSizeSettingsAdapter.Range fontSizeRange;
         @NonNull final String versionName;
         @NonNull final String edition;
         @NonNull final File stagingDir;
@@ -95,7 +95,7 @@ public final class SettingsBackupIo {
 
         public Environment(@NonNull Map<Store, SharedPreferences> prefs, @NonNull Map<Root, File> roots,
                            @NonNull List<String> filesDirSpellings, @NonNull String filesDir, float density,
-                           int fontSizeMin, int fontSizeMax, @NonNull String versionName,
+                           @NonNull FontSizeSettingsAdapter.Range fontSizeRange, @NonNull String versionName,
                            @NonNull String edition, @NonNull File stagingDir,
                            @NonNull Set<String> exportedAppFiles) {
             this.prefs = prefs;
@@ -103,8 +103,7 @@ public final class SettingsBackupIo {
             this.filesDirSpellings = filesDirSpellings;
             this.filesDir = filesDir;
             this.density = density;
-            this.fontSizeMin = fontSizeMin;
-            this.fontSizeMax = fontSizeMax;
+            this.fontSizeRange = fontSizeRange;
             this.versionName = versionName;
             this.edition = edition;
             this.stagingDir = stagingDir;
@@ -132,11 +131,10 @@ public final class SettingsBackupIo {
         roots.put(Root.TERMUX, TermuxConstants.TERMUX_DATA_HOME_DIR);
         roots.put(Root.CONFIG, TermuxConstants.TERMUX_CONFIG_HOME_DIR);
         roots.put(Root.APP, app.getFilesDir());
-        int[] fontSizes = TermuxAppSharedPreferences.getDefaultFontSizes(app);
         return new Environment(prefs, roots,
             Arrays.asList(TermuxConstants.TERMUX_FILES_DIR_PATH, app.getFilesDir().getAbsolutePath()),
             TermuxConstants.TERMUX_FILES_DIR_PATH,
-            app.getResources().getDisplayMetrics().density, fontSizes[1], fontSizes[2],
+            app.getResources().getDisplayMetrics().density, TermuxAppSharedPreferences.fontRange(app),
             BuildConfig.VERSION_NAME, AndroidUtils.getEditionForPackageName(app.getPackageName()),
             new File(app.getCacheDir(), "settings-import"),
             forExport ? exportedAppFiles(app) : Collections.emptySet());
@@ -461,8 +459,13 @@ public final class SettingsBackupIo {
     public static final class ApplyResult {
         /** Files, links or stores that could not be written. */
         public final int failures;
+        /** Keys a setting declaration refused the backup's value for; they were not written. */
+        @NonNull public final List<String> skipped;
 
-        ApplyResult(int failures) { this.failures = failures; }
+        ApplyResult(int failures, @NonNull List<String> skipped) {
+            this.failures = failures;
+            this.skipped = skipped;
+        }
     }
 
     /**
@@ -475,6 +478,7 @@ public final class SettingsBackupIo {
     @NonNull
     public static ApplyResult apply(@NonNull Environment env, @NonNull Staged staged) {
         int failures = 0;
+        List<String> skipped = new ArrayList<>();
         boolean keyboardFontPlaced = false;
         try {
             for (Map.Entry<String, File> file : staged.files.entrySet()) {
@@ -511,13 +515,25 @@ public final class SettingsBackupIo {
                 SharedPreferences preferences = env.prefs.get(store.getKey());
                 if (preferences == null) continue;
                 Map<String, Object> values = store.getValue();
+                Set<String> refused = new HashSet<>();
                 if (store.getKey() == Store.MAIN) {
                     values = SettingsBackupFormat.withScaledFontSizes(values, staged.manifest.density,
-                        env.density, env.fontSizeMin, env.fontSizeMax);
+                        env.density, env.fontSizeRange);
+                    // A declared setting's invalid value is neither written nor removed: the
+                    // device keeps what it holds now. It is reported.
+                    List<String> invalid = SettingsBackupFormat.invalidDeclaredKeys(values);
+                    if (!invalid.isEmpty()) {
+                        values = new LinkedHashMap<>(values);
+                        for (String key : invalid) values.remove(key);
+                        refused.addAll(invalid);
+                        skipped.addAll(invalid);
+                        Logger.logWarn(LOG_TAG, "Skipped values the settings refuse: " + invalid);
+                    }
                 }
                 SharedPreferences.Editor editor = preferences.edit();
                 for (String key : preferences.getAll().keySet()) {
-                    if (store.getKey().includes(key) && !values.containsKey(key)) editor.remove(key);
+                    if (store.getKey().includes(key) && !values.containsKey(key)
+                        && !refused.contains(key)) editor.remove(key);
                 }
                 for (Map.Entry<String, Object> value : values.entrySet()) put(editor, value.getKey(), value.getValue());
                 if (store.getKey() == Store.MAIN) applyKeyboardFont(env, editor, keyboardFontPlaced);
@@ -526,7 +542,7 @@ public final class SettingsBackupIo {
         } finally {
             deleteRecursively(staged.dir);
         }
-        return new ApplyResult(failures);
+        return new ApplyResult(failures, skipped);
     }
 
     /**
