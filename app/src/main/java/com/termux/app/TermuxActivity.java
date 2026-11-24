@@ -6572,8 +6572,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * tint at the dock's opacity and grain, its faint containing rim, its side inset and its corner
      * radius, clipped to that card. The same card with the keyboard up, down or switched off, so a
      * keyboard swipe only opens or closes the gap between the dock's rows and it, and the settle
-     * swaps nothing. The frame is sampled where the card is drawn: the stack's travel, plus the
-     * share the card is held back by while the keyboard rises out from over it.
+     * swaps nothing. The frame is sampled where the scene draws the card: the stack's travel,
+     * plus the keyboard column's lift and the share the card is held back by while the keyboard
+     * rises out from over it ({@link StackRenderer#underDrawnY}).
      */
     private void applyUnderKeyboardStackGlass(@NonNull ChromeSpec state) {
         View under = findViewById(R.id.accessory_under_keyboard_stack);
@@ -6607,7 +6608,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     backdrop = new com.termux.app.chrome.SharedFrameDrawable(frame,
                         new Rect(mChrome.blurCache().frameRectRef()), mWallpaperParallax,
                         com.termux.app.chrome.GlassAnchor.layout(under,
-                            () -> mAccessoryStackLift.px() + under.getTranslationY()));
+                            () -> mAccessoryStackLift.px() + mStackRenderer.underDrawnY()));
                     mUnderKeyboardBackdrop = backdrop;
                     mUnderKeyboardBackdropHost = under;
                     mUnderKeyboardBackdropParallax = mWallpaperParallax;

@@ -144,6 +144,34 @@ public class StackRendererApartTest {
         assertEquals(-21f, mRenderer.cardDrawnY(RestCards.StackView.KEYS_CARD), 0f);
     }
 
+    /**
+     * The bands under the keyboard (#306): their glass samples where the scene draws them, the
+     * keyboard column's lift and their own hold together, at both rests and across a crossing,
+     * never their view's translation read back.
+     */
+    @Test public void theUnderBandsPoseIsWhereTheColumnAndTheirHoldDrawThem() {
+        Context context = RuntimeEnvironment.getApplication();
+        FrameLayout column = new FrameLayout(context);
+        FrameLayout under = new FrameLayout(context);
+        column.addView(under);
+        mViews.put(R.id.accessory_keyboard_column, column);
+        mViews.put(R.id.accessory_under_keyboard_stack, under);
+        for (boolean frontHome : new boolean[] {true, false}) {
+            mFrontHome = frontHome;
+            StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);
+            mRenderer.setSidesApart(true, DROP, 21);
+            mRenderer.apply();
+            for (float p : new float[] {0f, 0.25f, 0.75f, 1f}) {
+                mRenderer.setEnds(frontHome, !frontHome, p);
+                String at = (frontHome ? "from Home" : "from the Terminal") + " p=" + p;
+                assertEquals(at, column.getTranslationY() + under.getTranslationY(),
+                    mRenderer.underDrawnY(), 0.01f);
+            }
+            mRenderer.clearEnds();
+        }
+        assertEquals(-21f, mRenderer.underDrawnY(), 0.01f);
+    }
+
     @Test public void apartAtHomesRestTheHostStandsAtHomesDropAndSlideZero() {
         mFrontHome = true;
         StackRendererCards.apart(mRenderer, RestCards.StackView.KEYS_CARD);

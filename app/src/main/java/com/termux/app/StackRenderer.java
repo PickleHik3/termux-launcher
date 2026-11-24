@@ -725,6 +725,15 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         return mFrame.cardTy[view.ordinal()];
     }
 
+    /**
+     * How far below its layout the scene draws the bands under the keyboard on the frame last
+     * written: the keyboard column's lift and the bands' own hold, the two translations this
+     * writer puts between the container and them. Their glass samples the wallpaper there.
+     */
+    public float underDrawnY() {
+        return mFrame.ty[StackScene.V_UNDER] - mColumnLiftPx;
+    }
+
     /** Whether the Terminal's own card (the extra-keys card or its host) is the dock's slab now. */
     public boolean terminalCardStands() {
         return keysCardStands() || terminalHostStands();
