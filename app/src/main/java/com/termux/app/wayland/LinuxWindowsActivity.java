@@ -321,7 +321,8 @@ public final class LinuxWindowsActivity extends Activity {
         }
 
         void updateTab() {
-            String name = LinuxWindowTabs.label(title, appId, getString(R.string.linux_windows_untitled));
+            String name = LinuxWindowTabs.label(WaylandDesktopServer.tabTitle(title), appId,
+                getString(R.string.linux_windows_untitled));
             if (!TextUtils.equals(label.getText(), name)) label.setText(name);
             label.setTypeface(null, shown() ? Typeface.BOLD : Typeface.NORMAL);
             int text = shown() ? mOnSurface : mOnSurfaceVariant;

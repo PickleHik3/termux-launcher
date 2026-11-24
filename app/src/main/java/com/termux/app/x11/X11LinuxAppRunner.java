@@ -11,6 +11,7 @@ import androidx.annotation.VisibleForTesting;
 import com.termux.app.wayland.LinuxDisplayBackend;
 import com.termux.app.wayland.LinuxWindowsEnv;
 import com.termux.app.wayland.WaylandAppRunner;
+import com.termux.app.wayland.WaylandDesktopServer;
 import com.termux.shared.logger.Logger;
 import com.termux.shared.termux.TermuxConstants;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
@@ -552,7 +553,7 @@ public final class X11LinuxAppRunner {
             return;
         }
         if (runningSession == null) {
-            run(app);
+            runOnChosenDisplay(app);
             return;
         }
         Logger.logInfo(LOG_TAG, "Stopping " + runningSession.id + " to make room for " + app.id);
@@ -561,11 +562,16 @@ public final class X11LinuxAppRunner {
             LinuxAppCatalog.LinuxApp next = takeOver;
             takeOver = null;
             setRunningSession(null);
-            if (next != null) run(next);
+            if (next != null) runOnChosenDisplay(next);
         });
         if (started) return;
         takeOver = null;
         notice(context.getString(com.termux.R.string.termux_x11_session_failed));
+    }
+
+    /** {@code app} on the display Settings chooses: Wayland Display's window, else X11 Display. */
+    private void runOnChosenDisplay(@NonNull LinuxAppCatalog.LinuxApp app) {
+        if (!runUnderWayland(app)) run(app);
     }
 
     /**
@@ -577,6 +583,10 @@ public final class X11LinuxAppRunner {
                                  @Nullable String windowManagerRestart) {
         if (runningSession != app) return;
         setRunningSession(null);
+        if (waylandDesktopDisplay != WaylandDesktopServer.NO_DISPLAY) {
+            WaylandDesktopServer.forget(waylandDesktopDisplay);
+            waylandDesktopDisplay = WaylandDesktopServer.NO_DISPLAY;
+        }
         Logger.logInfo(LOG_TAG, "Desktop " + app.id + " ended with " + exitCode);
         // Killed by Android's process limit, most likely, unless a take-over's stop sent it.
         com.termux.app.processlimit.ProcessLimitNotice.get(context).onChildKilled(
@@ -661,18 +671,31 @@ public final class X11LinuxAppRunner {
     /**
      * A drawer tap when Settings chooses Wayland Display: {@code app} opens in its own window on
      * the Linux windows screen, and no Display page or X server is involved. Answers false when the
-     * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} is a
-     * whole desktop session or lives in a proot-distro container, both of which keep using X11
-     * Display for now ({@link LinuxDisplayBackend#forApp}). Main thread.
+     * tap stays with X11 Display ({@link #run}): the choice is X11 Display, or {@code app} lives
+     * in a proot-distro container, which keeps using X11 Display for now
+     * ({@link LinuxDisplayBackend#forApp}). A whole desktop opens as one window in an X server of
+     * its own ({@link #launchDesktopOnWayland}). Main thread.
      */
     public boolean runUnderWayland(@NonNull LinuxAppCatalog.LinuxApp app) {
         LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
             app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
+        // D2 as on X11 Display: one desktop at a time, and a second one asks first. A tap on the
+        // running desktop goes on to the launch below, which shows its window.
+        if (app.session && runningSession != null && !runningSession.id.equals(app.id)) {
+            Host current = host;
+            if (current != null) {
+                current.askBeforeReplacingSession(context.getString(
+                    com.termux.R.string.termux_x11_session_replace, runningSession.name, app.name),
+                    () -> replaceSession(app));
+            }
+            return true;
+        }
         WaylandAppRunner.shared(context).launch(new WaylandAppRunner.Launch() {
             @Override
             public void run(@NonNull String waylandDisplay, @Nullable String xDisplay) {
-                launchOnWayland(app, waylandDisplay, xDisplay);
+                if (app.session) launchDesktopOnWayland(app, waylandDisplay, xDisplay);
+                else launchOnWayland(app, waylandDisplay, xDisplay);
             }
 
             @Override
@@ -721,6 +744,63 @@ public final class X11LinuxAppRunner {
             });
         });
     }
+
+    /**
+     * A whole desktop under Wayland Display, once the host runs: its session script as on X11
+     * Display (environment, bus, pid file, log, the same graphics), with no window manager of
+     * ours to stand down, and its own rootful X server started first ({@link WaylandDesktopServer}).
+     * The desktop is one window; nothing inside it is told about the Wayland socket.
+     */
+    private void launchDesktopOnWayland(@NonNull LinuxAppCatalog.LinuxApp app,
+                                        @NonNull String waylandDisplay, @Nullable String xDisplay) {
+        // Already running: the launch has shown the Linux windows screen, which is all a second
+        // tap asks for.
+        if (runningSession != null && runningSession.id.equals(app.id)) return;
+        com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
+        sound.onNeed();
+        EXECUTOR.execute(() -> {
+            sound.prepareContainer(app.container);
+            String xwayland = WaylandDesktopServer.xwaylandBinary();
+            int number = xwayland == null ? WaylandDesktopServer.NO_DISPLAY
+                : WaylandDesktopServer.pickDisplay(WaylandDesktopServer.takenDisplays(),
+                    LinuxWindowsEnv.displayNumber(xDisplay));
+            if (xwayland == null || number == WaylandDesktopServer.NO_DISPLAY) {
+                Logger.logWarn(LOG_TAG, "No X server for " + app.id + ": "
+                    + (xwayland == null ? "no Xwayland" : "no free display number"));
+                handler.post(() -> notice(context.getString(
+                    com.termux.R.string.linux_wayland_desktop_screen_failed)));
+                return;
+            }
+            GpuChoice gpu = appGraphics(app);
+            List<String> env = appEnv(app, gpu);
+            int[] size = WaylandDesktopServer.startSize(context);
+            String display = ":" + number;
+            String script = gpuServerBlock(gpu.server) + sessionScript(app, display, env, null,
+                WaylandDesktopServer.startBlock(xwayland, waylandDisplay, number, size[0], size[1]));
+            handler.post(() -> {
+                // A desktop that got there first while this one was being prepared keeps the
+                // screen; the tap that lost the race is dropped rather than starting a second.
+                if (runningSession != null) {
+                    Logger.logInfo(LOG_TAG, "Not running " + app.id + ": " + runningSession.id
+                        + " is already running");
+                    return;
+                }
+                Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display as a desktop on "
+                    + display + " at " + size[0] + "x" + size[1]
+                    + " with graphics " + (gpu.profile == null ? "default" : gpu.profile.id));
+                if (gpu.fellBack) {
+                    notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
+                }
+                waylandDesktopDisplay = number;
+                WaylandDesktopServer.named(number, app.name);
+                runAndWatch(app, script, false, display, env, null,
+                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
+            });
+        });
+    }
+
+    /** The display number of the desktop running under Wayland Display, or -1. Main thread. */
+    private int waylandDesktopDisplay = WaylandDesktopServer.NO_DISPLAY;
 
     private static final java.util.Set<com.termux.app.wayland.MesaWaylandOverlay.State> MESA_NOTICED =
         java.util.concurrent.ConcurrentHashMap.newKeySet();
@@ -868,6 +948,12 @@ public final class X11LinuxAppRunner {
                 // A desktop's exit is news whenever it comes, not only inside the window: it is
                 // what says the display is free again and the window manager can come back.
                 if (app.session) onSessionExited(app, exitCode, windowManagerRestart);
+                // A desktop under Wayland Display whose own X server did not come up: said
+                // whenever it comes, since the wait for the server outlasts the quick-fail window.
+                if (app.session && exitCode == WaylandDesktopServer.EXIT_NO_SCREEN) {
+                    noScreen();
+                    return;
+                }
                 // 127 is the shell's "command not found": a flag cannot fix that, so no retry.
                 if (!app.session && exitCode == COMMAND_NOT_FOUND) {
                     commandMissing();
@@ -886,6 +972,13 @@ public final class X11LinuxAppRunner {
             decided = true;
             Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
             notice(failureNotice(app));
+        }
+
+        /** The desktop's X server did not start: settle, and say so even after the window. */
+        private void noScreen() {
+            decided = true;
+            handler.removeCallbacks(timeout);
+            notice(context.getString(com.termux.R.string.linux_wayland_desktop_screen_failed));
         }
 
         /** The command is not installed: settle without retrying or touching the sandbox store. */
@@ -1189,6 +1282,20 @@ public final class X11LinuxAppRunner {
     @NonNull
     static String sessionScript(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                                 @NonNull List<String> env, @Nullable String stopWindowManager) {
+        return sessionScript(app, display, env, stopWindowManager, null);
+    }
+
+    /**
+     * {@link #sessionScript(LinuxAppCatalog.LinuxApp, String, List, String)} with
+     * {@code beforeDesktop} run after the output goes to the session log and the pid is written
+     * down, just before the desktop: the start of a desktop's own X server under Wayland Display
+     * ({@link WaylandDesktopServer#startBlock}), which then logs to the same file and is watched
+     * against that pid. Null adds nothing.
+     */
+    @NonNull
+    static String sessionScript(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
+                                @NonNull List<String> env, @Nullable String stopWindowManager,
+                                @Nullable String beforeDesktop) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
@@ -1208,6 +1315,7 @@ public final class X11LinuxAppRunner {
         script.append("exec > ").append(ProotDistro.singleQuote(SESSION_LOG_PATH)).append(" 2>&1\n");
         script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
+        if (beforeDesktop != null) script.append(beforeDesktop);
         String body = sessionBody(app);
         if (app.container.isPrefix()) script.append(body);
         else script.append("exec ").append(ProotDistro.loginCommand(app.container, body)).append('\n');

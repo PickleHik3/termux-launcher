@@ -568,7 +568,7 @@ public final class WaylandAppRunner {
 
     /** The prefix's Xwayland when it is executable; null otherwise. */
     @Nullable
-    private static String xwaylandBinary() {
+    static String xwaylandBinary() {
         File bin = new File(TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/Xwayland");
         return bin.canExecute() ? bin.getAbsolutePath() : null;
     }
