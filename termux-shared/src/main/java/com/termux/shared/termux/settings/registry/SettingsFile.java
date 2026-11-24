@@ -20,10 +20,13 @@ public final class SettingsFile {
     public static final class Assignment {
         @NonNull public final String id;
         @NonNull public final String value;
+        /** Where it stands in the file, counted from 1, for a failure that shows only on saving. */
+        public final int line;
 
-        Assignment(@NonNull String id, @NonNull String value) {
+        Assignment(@NonNull String id, @NonNull String value, int line) {
             this.id = id;
             this.value = value;
+            this.line = line;
         }
     }
 
@@ -68,7 +71,7 @@ public final class SettingsFile {
             String value = line.substring(equals + 1).trim();
             SettingDeclaration declaration = registry.declaration(id);
             if (declaration == null || !declaration.exported) {
-                errors.add(where + "no setting is called \"" + id + "\"");
+                errors.add(where + SettingsRegistry.unknown(id).reason);
                 continue;
             }
             SettingsRegistry.Refusal refusal = registry.check(id, value);
@@ -76,7 +79,7 @@ public final class SettingsFile {
                 errors.add(where + refusal.reason);
                 continue;
             }
-            assignments.add(new Assignment(id, value));
+            assignments.add(new Assignment(id, value, i + 1));
         }
         return new Result(assignments, errors);
     }

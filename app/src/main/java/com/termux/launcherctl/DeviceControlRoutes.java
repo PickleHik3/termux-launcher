@@ -28,6 +28,7 @@ import com.termux.app.wall.pageswitch.PageBarGlassStyle;
 import com.termux.privileged.PrivilegedBackendManager;
 import com.termux.privileged.RootSystemCommands;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.app.settings.LauncherSettings;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
 
 import org.json.JSONArray;
@@ -120,9 +121,8 @@ final class DeviceControlRoutes {
             case "/v1/layout":
                 return layout(context, arguments);
             case "/v1/config":
-                return ConfigCommand.handle(
-                    com.termux.app.settings.LauncherSettings.registry(context),
-                    com.termux.app.settings.LauncherSettings.applier(), arguments);
+                return ConfigCommand.handleInOneHop(LauncherSettings.registry(context),
+                    LauncherSettings.applier(), arguments, LayoutSettingsAdapter.DEVICE);
             case "/v1/volume":
                 return "GET".equals(method) ? volumeList(context) : volumeSet(context, arguments);
             case "/v1/toast":

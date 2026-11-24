@@ -10,6 +10,9 @@ import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.util.ArrayList;
+import java.util.List;
+
 /**
  * {@code launcherctl config export|apply}: the settings file over the API ({@link SettingsFile}).
  * Export answers the file as text in {@link ConfigCommand#TEXT}. Apply takes the file as
@@ -40,11 +43,22 @@ final class ConfigFileCommand {
                 .put("errors", new JSONArray(result.errors)).put("_statusCode", 400);
         }
         int changed = 0;
+        List<String> failed = new ArrayList<>();
         for (SettingsFile.Assignment each : result.assignments) {
-            SettingsRegistry.Change change = registry.set(each.id, each.value).change();
-            if (change == null) continue;
+            SettingsRegistry.Outcome outcome = registry.set(each.id, each.value);
+            SettingsRegistry.Refusal refusal = outcome.refusal();
+            if (refusal != null) {
+                failed.add("line " + each.line + ": " + refusal.reason);
+                continue;
+            }
+            SettingsRegistry.Change change = outcome.change();
             applier.apply(change);
             if (change.changed()) changed++;
+        }
+        if (!failed.isEmpty()) {
+            return new JSONObject().put("ok", false).put("error", "apply_failed")
+                .put("message", String.join("\n", failed)).put("errors", new JSONArray(failed))
+                .put("changed", changed).put("_statusCode", 409);
         }
         return new JSONObject().put("ok", true).put("lines", result.assignments.size())
             .put("changed", changed);

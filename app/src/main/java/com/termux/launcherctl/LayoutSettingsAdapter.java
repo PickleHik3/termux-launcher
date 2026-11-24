@@ -24,8 +24,10 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * The layout documents as registry ids: {@code layout.<document>.<field>} for a field at the top
@@ -47,16 +49,49 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
         <T> T call(@NonNull Callable<T> work) throws Exception;
     }
 
+    /** How long a caller off the main thread waits for it before telling its caller no. */
+    static final long MAIN_TIMEOUT_SECONDS = 5;
+
+    /** What a caller is told when the main thread did not run its work. */
+    static final String NOT_ANSWERED = "the launcher did not answer; try again";
+
     /** The device's main thread: the work runs in place when already there, else is posted. */
     static final Main DEVICE = new Main() {
+        @Nullable private Handler mHandler;
+
         @Override
         public <T> T call(@NonNull Callable<T> work) throws Exception {
             if (Looper.myLooper() == Looper.getMainLooper()) return work.call();
             FutureTask<T> task = new FutureTask<>(work);
-            new Handler(Looper.getMainLooper()).post(task);
-            return task.get(5, TimeUnit.SECONDS);
+            handler().post(task);
+            return await(task, MAIN_TIMEOUT_SECONDS, TimeUnit.SECONDS);
+        }
+
+        @NonNull
+        private synchronized Handler handler() {
+            if (mHandler == null) mHandler = new Handler(Looper.getMainLooper());
+            return mHandler;
         }
     };
+
+    /**
+     * Waits for a posted task. On a timeout the task is cancelled, so a save the main thread has
+     * not started never lands after the caller was told it failed; a failure inside the work comes
+     * out as the work's own exception, not the wrapper's.
+     */
+    static <T> T await(@NonNull FutureTask<T> task, long timeout, @NonNull TimeUnit unit)
+            throws Exception {
+        try {
+            return task.get(timeout, unit);
+        } catch (TimeoutException e) {
+            task.cancel(false);
+            throw e;
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof Exception) throw (Exception) cause;
+            throw e;
+        }
+    }
 
     @NonNull private final LayoutStore mStore;
     @NonNull private final Main mMain;
@@ -167,13 +202,11 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
     public SettingsRegistry.Outcome set(@NonNull SettingDeclaration declaration,
                                         @NonNull String value) {
         Target target = parse(declaration.id);
-        if (target == null)
-            return new SettingsRegistry.Refusal("no setting is called \"" + declaration.id + "\"",
-                null);
+        if (target == null) return SettingsRegistry.unknown(declaration.id);
         try {
             return mMain.call(() -> save(declaration, target, value.trim()));
         } catch (Exception e) {
-            return new SettingsRegistry.Refusal("the launcher did not answer: " + e, null);
+            return new SettingsRegistry.Refusal(NOT_ANSWERED, null);
         }
     }
 
@@ -182,13 +215,11 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
     public SettingsRegistry.Refusal check(@NonNull SettingDeclaration declaration,
                                           @NonNull String value) {
         Target target = parse(declaration.id);
-        if (target == null)
-            return new SettingsRegistry.Refusal("no setting is called \"" + declaration.id + "\"",
-                null);
+        if (target == null) return SettingsRegistry.unknown(declaration.id);
         try {
             return mMain.call(() -> candidate(target, value.trim()).refusal);
         } catch (Exception e) {
-            return new SettingsRegistry.Refusal("the launcher did not answer: " + e, null);
+            return new SettingsRegistry.Refusal(NOT_ANSWERED, null);
         }
     }
 
@@ -215,8 +246,8 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
                 null, "");
         JSONObject root = new JSONObject(json);
         String[] place = place(target.path);
-        JSONObject section = place[0].isEmpty() ? root : root.optJSONObject(place[0]);
-        Object existing = section == null ? null : section.opt(place[1]);
+        JSONObject section = section(root, place);
+        Object existing = field(section, place);
         if (existing == null && !known(place[1]))
             return new Candidate(new SettingsRegistry.Refusal(target.document + " has no field \""
                 + target.path + "\"; layout get " + target.document + " shows them", null), null, "");
@@ -251,11 +282,21 @@ public final class LayoutSettingsAdapter implements SettingAdapter {
     private String read(@NonNull Target target) throws JSONException {
         String json = LayoutCommand.get(mStore, target.document);
         if (json == null) return null;
-        JSONObject root = new JSONObject(json);
         String[] place = place(target.path);
-        JSONObject section = place[0].isEmpty() ? root : root.optJSONObject(place[0]);
-        Object value = section == null ? null : section.opt(place[1]);
+        Object value = field(section(new JSONObject(json), place), place);
         return value == null ? null : String.valueOf(value);
+    }
+
+    /** The object holding the field {@code place} names: the document, or its orientation. */
+    @Nullable
+    private static JSONObject section(@NonNull JSONObject root, @NonNull String[] place) {
+        return place[0].isEmpty() ? root : root.optJSONObject(place[0]);
+    }
+
+    /** The field {@code place} names inside {@code section}, or null when it is not held. */
+    @Nullable
+    private static Object field(@Nullable JSONObject section, @NonNull String[] place) {
+        return section == null ? null : section.opt(place[1]);
     }
 
     /** {@code portrait.status_bar} as {portrait, status_bar}; {@code search_field} as {"", it}. */
