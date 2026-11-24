@@ -290,7 +290,7 @@ public final class ModelExportService extends Service {
     }
 
     private PendingIntent openBackupRestore() {
-        Intent intent = new Intent(this, SettingsActivity.class)
+        Intent intent = com.termux.app.activities.SettingsDoor.plain(this)
             .putExtra(SettingsActivity.EXTRA_INITIAL_FRAGMENT, BackupRestorePreferencesFragment.class.getName())
             .putExtra(SettingsActivity.EXTRA_INITIAL_TITLE_RES, R.string.settings_destination_backup_restore);
         return PendingIntent.getActivity(this, PROGRESS_ID, intent, PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
