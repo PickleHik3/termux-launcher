@@ -43,6 +43,8 @@ final class EditorBar {
         default void onPageLabel() {}
         /** A bubble of the first row (Global, Home or Workspace) was tapped. */
         default void onBubble(@NonNull EditorBubbles bubble) {}
+        /** The wallpaper button was tapped: the Global card, at its top. */
+        default void onWallpaper() {}
     }
 
     /** The bubble row over the controls: three bubbles, each a full-height target. */
@@ -56,6 +58,10 @@ final class EditorBar {
     private static final int BUBBLE_MIN_SP = 9;
     private static final int BUBBLE_MAX_SP = 14;
     private static final int ITEM_DP = 40;
+    /** The wallpaper button's picture is drawn this far inside the item's body. */
+    private static final int THUMB_DP = 28;
+    /** The card the wallpaper button opens: Global, whose first row is the wallpaper. */
+    static final EditorCard WALLPAPER_CARD = EditorCard.APPEARANCE;
     private static final int PAD_DP = 4;
     /** The bar stands this far above the navigation inset. */
     static final int FOOT_GAP_DP = 8;
@@ -79,6 +85,7 @@ final class EditorBar {
     @NonNull private final MaterialButton mUndo;
     @NonNull private final MaterialButton mDone;
     @NonNull private final MaterialButton mPalette;
+    @NonNull private final MaterialButton mWallpaper;
     @NonNull private final TextView mHint;
     private boolean mHintWanted;
     /**
@@ -146,6 +153,12 @@ final class EditorBar {
             if (mListener != null) mListener.onPalette();
         });
         addItem(mPalette, dp(48));
+
+        mWallpaper = iconButton(R.drawable.ic_symbol_wallpaper, R.string.editor_row_wallpaper);
+        androidx.appcompat.widget.TooltipCompat.setTooltipText(mWallpaper,
+            context.getString(R.string.editor_row_wallpaper));
+        mWallpaper.setOnClickListener(v -> { if (mListener != null) mListener.onWallpaper(); });
+        addItem(mWallpaper, dp(48));
 
         mHint = new TextView(context);
         EditorViews.textAppearance(mHint, com.google.android.material.R.attr.textAppearanceLabelLarge);
@@ -524,6 +537,35 @@ final class EditorBar {
     }
 
     @NonNull
+    /** The pixel size of the wallpaper button's picture at {@code density}. */
+    static int wallpaperThumbPx(float density) {
+        return Math.max(1, Math.round(THUMB_DP * density));
+    }
+
+    /**
+     * Shows {@code thumb} (made at {@link #wallpaperThumbPx}) on the wallpaper button, or the
+     * wallpaper glyph for null. The bar does not own the bitmap.
+     */
+    void setWallpaperThumb(@Nullable android.graphics.Bitmap thumb) {
+        if (thumb == null) {
+            mWallpaper.setIconResource(R.drawable.ic_symbol_wallpaper);
+            mWallpaper.setIconTint(ColorStateList.valueOf(MaterialColors.getColor(mContext,
+                com.google.android.material.R.attr.colorOnSurface, 0)));
+            mWallpaper.setIconSize(dp(24));
+            return;
+        }
+        mWallpaper.setIconTint(null);
+        mWallpaper.setIconSize(thumb.getWidth());
+        mWallpaper.setIcon(new android.graphics.drawable.BitmapDrawable(mContext.getResources(),
+            thumb));
+    }
+
+    /** The wallpaper button, for tests. */
+    @NonNull
+    MaterialButton wallpaperButton() {
+        return mWallpaper;
+    }
+
     private MaterialButton iconButton(int iconRes, int descriptionRes) {
         MaterialButton button = new MaterialButton(mContext, null,
             com.google.android.material.R.attr.materialIconButtonStyle);
