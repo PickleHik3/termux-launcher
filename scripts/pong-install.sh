@@ -37,15 +37,15 @@ done
 head="$(git rev-parse --short=9 HEAD)"
 
 if [ -z "${NO_BUILD:-}" ]; then
-  started="$(date +%s)"
   echo "building staging at $head ($GRADLE_FLAGS); log: $LOG"
   # shellcheck disable=SC2086  # the flags are several words on purpose
   if ! ./gradlew -q :app:assembleStaging $GRADLE_FLAGS >"$LOG" 2>&1; then
     grep -E " error: |FAILED|What went wrong" -A3 "$LOG" | head -30 >&2 || true
     die "the build failed; nothing was installed"
   fi
+  # Gradle's exit status is the check: an unchanged APK after a successful build only means
+  # nothing that goes into it changed.
   [ -f "$APK" ] || die "the build left no $APK"
-  [ "$(stat -c %Y "$APK")" -ge "$started" ] || die "$APK is older than this build; nothing was installed"
 else
   [ -f "$APK" ] || die "no $APK to install"
 fi

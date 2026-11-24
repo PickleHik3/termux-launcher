@@ -36,7 +36,7 @@ keeps only arm64-v8a, signs with the test key every build shares, installs with
 `--no-incremental` and checks the launcher came back up. For pong, where the network link is slow,
 the host's `ad -s pong install <apk>` sends the APK through the device-drops route instead of adb.
 `scripts/pong-install.sh [commit ...]` is the whole pong round in one command: it refuses unless the
-named commits are in HEAD, builds, fails on a build error or a stale APK, installs through `ad`,
+named commits are in HEAD, builds, fails on a build error, installs through `ad`,
 confirms the phone's update time changed and restarts the phone's sshd. Use it instead of a
 hand-written chain.
 
