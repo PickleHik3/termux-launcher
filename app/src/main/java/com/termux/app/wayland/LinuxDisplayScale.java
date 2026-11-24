@@ -11,8 +11,8 @@ import com.termux.app.x11.X11AppSettings;
 /**
  * The scales of Linux windows under Wayland Display.
  *
- * <p>Every window follows the screen's density ({@link #densityScale}), so an app draws its text
- * and controls at about the size Android draws its own. An app's own Scale (the per-app value in
+ * <p>A window's default follows the screen's density ({@link #densityScale}), stepping down
+ * so the window is wide enough for a desktop app ({@link #defaultScale}). An app's own Scale (the per-app value in
  * {@link X11AppSettings}, set from its settings page or from the scale rail on the Linux windows
  * screen) replaces that for its windows. The X11 Display's own scale setting is not read here.
  *
@@ -27,6 +27,14 @@ public final class LinuxDisplayScale {
     /** Density scales are snapped to quarters, which the fractional-scale protocol (120ths) carries exactly. */
     private static final float STEPS_PER_UNIT = 4f;
 
+    /**
+     * A desktop app wants at least this many points of width ({@code widthPx / scale}) to lay out
+     * without running off the edge; the default scale steps down the rail until a window has it.
+     */
+    static final float MIN_COMFORTABLE_WIDTH = 520f;
+    /** The default never draws smaller than this fraction of the screen's density, so text stays readable. */
+    static final float MIN_TEXT_FRACTION = 0.7f;
+
     private LinuxDisplayScale() {}
 
     /**
@@ -34,9 +42,37 @@ public final class LinuxDisplayScale {
      * {@link X11AppSettings#SCALES}) when it has one, else the density scale of a screen at
      * {@code density} ({@code DisplayMetrics.density}). Pure.
      */
-    public static float windowScale(@Nullable String appScale, float density) {
+    public static float windowScale(@Nullable String appScale, float density, int widthPx) {
         int step = DisplayScaleSteps.stepOf(appScale);
-        return step > 0 ? stepScale(step) : densityScale(density);
+        return step > 0 ? stepScale(step) : defaultScale(density, widthPx);
+    }
+
+    /**
+     * The default scale of a window {@code widthPx} wide on a screen at {@code density}: the
+     * largest rail stop that is not above the density scale and leaves the window at least
+     * {@link #MIN_COMFORTABLE_WIDTH} points, but not below {@link #MIN_TEXT_FRACTION} of the
+     * density (snapped up to a stop) and never below 1; the floor wins a conflict. An unknown
+     * width ({@code widthPx <= 0}) uses the density scale alone. Pure.
+     */
+    static float defaultScale(float density, int widthPx) {
+        float dens = densityScale(density);
+        int[] steps = DisplayScaleSteps.STEPS;
+        int cap = steps[0];
+        for (int step : steps) {
+            if (stepScale(step) <= dens) cap = step;
+        }
+        if (widthPx <= 0) return dens;
+        int chosen = steps[0];
+        for (int step : steps) {
+            if (step <= cap && widthPx / stepScale(step) >= MIN_COMFORTABLE_WIDTH) chosen = step;
+        }
+        float raw = density > 0f && !Float.isInfinite(density) ? Math.min(density, MAX_DENSITY_SCALE) : 1f;
+        float floor = Math.max(1f, MIN_TEXT_FRACTION * raw);
+        int floorStep = steps[steps.length - 1];
+        for (int i = steps.length - 1; i >= 0; i--) {
+            if (stepScale(steps[i]) >= floor - 1e-4f) floorStep = steps[i];
+        }
+        return stepScale(Math.max(chosen, floorStep));
     }
 
     /** A rail stop's scale: 150% is 1.5. Pure. */
@@ -63,10 +99,13 @@ public final class LinuxDisplayScale {
     }
 
     /**
-     * The screen's density scale: the host's output scale, the scale X apps under Xwayland are
-     * told, and every window's scale until its app has its own.
+     * The screen's default scale: the host's output scale, the scale X apps under Xwayland are
+     * told, and the desktop's. The width is the screen's shorter side, so it does not change with
+     * rotation (the server-wide scale cannot follow a window). A Wayland window computes its own
+     * default from its own width; this is the first value before it has one.
      */
     public static float current(@NonNull Context context) {
-        return densityScale(context.getResources().getDisplayMetrics().density);
+        android.util.DisplayMetrics m = context.getResources().getDisplayMetrics();
+        return defaultScale(m.density, Math.min(m.widthPixels, m.heightPixels));
     }
 }
