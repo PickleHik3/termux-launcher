@@ -157,7 +157,6 @@ public class SideCardsParityTest {
             @Override public int keptBandPx() { return f.keptBandPx; }
             @Override public int terminalRestFlushPaddingPx() { return flush; }
             @Override public boolean terminalFlushAllowed() { return f.paneCount <= 1; }
-            @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
                 renderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
@@ -223,8 +222,9 @@ public class SideCardsParityTest {
                         // The rule, from the two rests' own margins.
                         int homeMargin = f.settle(PageRef.HOME, up, floating).bottomMarginPx;
                         int terminalMargin = f.settle(PageRef.TERMINAL, up, floating).bottomMarginPx;
-                        boolean apart = SideCards.apart(f.layoutOf(PageRef.HOME),
-                            f.layoutOf(PageRef.TERMINAL), floating, false);
+                        // Every layout stands apart since #305, but a Terminal whose rest
+                        // wears Home's Peek card (RestCards#wearsPeek).
+                        boolean apart = RestCards.of(f.cardsRest(page, up, floating)).apart();
                         assertEquals(label, apart, controller.apart());
                         int frontMargin = page.isHome() ? homeMargin : terminalMargin;
                         assertEquals(label, SideCards.containerMarginPx(homeMargin, terminalMargin,
@@ -330,6 +330,9 @@ public class SideCardsParityTest {
         for (Fixture base : LayoutFixtures.cardFixtures()) {
             for (DockStyle design : DockStyle.CHOICES) {
                 Fixture f = base.withHomeDesign(design);
+                // A Terminal wearing the Peek card at one keyboard state stands together with
+                // Home there (#305), so Home's host is pinned at one state only.
+                if (wearsPeekAtEither(f)) continue;
                 String[] layouts = new String[2];
                 for (boolean up : new boolean[] {false, true}) {
                     StackRenderer renderer = rendererFor(true);
@@ -368,6 +371,8 @@ public class SideCardsParityTest {
     @Test public void homesParkedHostIsHomesOwnRestWhateverTheTerminalsKeyboard() {
         int cases = 0;
         for (Fixture f : LayoutFixtures.cardFixtures()) {
+            // Together where the Terminal's rest wears the Peek card (#305): no parked host.
+            if (wearsPeekAtEither(f)) continue;
             for (boolean homeUp : new boolean[] {false, true}) {
                 SideCardsController atHome = new SideCardsController(hostOf(f, PageRef.HOME,
                     homeUp, false, true, rendererFor(true), null));
@@ -596,12 +601,20 @@ public class SideCardsParityTest {
             @Override public int keptBandPx() { return 0; }
             @Override public int terminalRestFlushPaddingPx() { return 0; }
             @Override public boolean terminalFlushAllowed() { return false; }
-            @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) { }
         });
         controller.update(f.pass(PageRef.HOME, false, true));
         assertFalse(controller.apart());
         assertEquals(7, controller.containerMarginPx(7));
+    }
+
+    /** Whether the Terminal's rest wears the Peek card with its keyboard down or up. */
+    private static boolean wearsPeekAtEither(@NonNull Fixture f) {
+        for (boolean up : new boolean[] {false, true})
+            for (boolean floating : new boolean[] {false, true})
+                if (com.termux.app.place.RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, floating))
+                    .card(com.termux.app.place.RestCards.CardId.PEEK) != null) return true;
+        return false;
     }
 }

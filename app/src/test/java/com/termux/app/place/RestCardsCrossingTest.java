@@ -296,9 +296,9 @@ public class RestCardsCrossingTest {
                 StackScene.homeShare(pair[0].isHome(), pair[1].isHome(), 0f), 0f);
             assertEquals(at + " home share at 1", pair[1].isHome() ? 1f : 0f,
                 StackScene.homeShare(pair[0].isHome(), pair[1].isHome(), 1f), 0f);
-            // A Peek card is Home's.
-            if (a.card(CardId.PEEK) != null) assertTrue(at, pair[0].isHome());
-            if (b.card(CardId.PEEK) != null) assertTrue(at, pair[1].isHome());
+            // A Peek card is Home's: on the Terminal only as Home's own, on the one host (#305).
+            if (a.card(CardId.PEEK) != null) assertTrue(at, pair[0].isHome() || !a.apart());
+            if (b.card(CardId.PEEK) != null) assertTrue(at, pair[1].isHome() || !b.apart());
         }
     }
 

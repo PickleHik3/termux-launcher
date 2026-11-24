@@ -322,15 +322,17 @@ public class RestCardsTest {
                             assertTrue(at + " covered " + card, up.covered().contains(card));
             } else {
                 together++;
+                // Together only where the Terminal's rest wears Home's Peek card (#305).
+                assertNotNull(at, RestCards.of(f.cardsRestOf(PageRef.TERMINAL, false, floating))
+                    .card(CardId.PEEK));
                 assertEquals(at + " top", was.top, now.top, 0f);
                 if (was.bottom != now.bottom)
                     assertTrue(at + " only the foot changes hands", f.keptBandPx > 0);
             }
         }
         assertTrue("some fixtures stand apart", apart > 0);
-        // Since #305 every fixture stands apart (the rows beside the keys included); the
-        // together branch keeps the refusals left honest should a fixture reach one.
-        assertTrue("none stands together", together == 0);
+        // Since #305 every fixture stands apart but a Terminal wearing Home's Peek card.
+        assertTrue("a Terminal wearing the Peek card stands together", together > 0);
     }
 
     private static String hostCards(RestCards cards) {
@@ -371,7 +373,7 @@ public class RestCardsTest {
                     String label = f.name + " " + design + " terminal kb=" + up;
                     RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, false));
                     String want = cardsOn(alone.cards(), StackView.HOST);
-                    assertTrue(label, !want.isEmpty());
+                    // A Terminal with no card at its rest (#305) shows none.
                     assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
                     assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
                     // Parked with the Terminal while Home is in front, at the same rest.
@@ -413,7 +415,6 @@ public class RestCardsTest {
                     String label = f.name + " " + design + " terminal kb=" + up;
                     RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, true));
                     String want = cardsOn(alone.cards(), StackView.HOST);
-                    assertTrue(label, !want.isEmpty());
                     assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
                     assertEquals(label, "", cardsOn(terminal.cards(), StackView.KEYS_CARD));
                     assertEquals(label, null, terminal.laidOut(StackView.KEYS_CARD));
@@ -431,5 +432,62 @@ public class RestCardsTest {
         }
         assertTrue("some Floating rests with rows beside the keys stand apart", cases > 0);
         assertTrue("Home wears the Peek card in some", peeks > 0);
+    }
+
+    /**
+     * The three layouts that still shared the glass host after #305's first round stand apart
+     * too (#305): a Terminal with no keys row, its keys under the keyboard, and its status bar on
+     * the dock's plank. Home's card travels with Home and is Home's rest's; the Terminal's card,
+     * where it has one, is its own host's, the one host's card at the Terminal's rest (box,
+     * corners, edges, pieces), under either Style. A Terminal with no card of its own shows none.
+     * The one case left on the one host: a Terminal whose rest wears the Peek card, which is
+     * Home's card at Home's rect, so it stays put.
+     */
+    @Test public void theLayoutsThatSharedTheHostStandApartEachSideWithItsOwnCard() {
+        int own = 0;
+        int none = 0;
+        int peek = 0;
+        LayoutFixtures.Fixture[] shared = {LayoutFixtures.NO_KEYS_ROW, LayoutFixtures.KEYS_UNDER,
+            LayoutFixtures.STATUS_ON_PLANK};
+        assertTrue(LayoutFixtures.STATUS_ON_PLANK.cardsRestOf(PageRef.TERMINAL, false, false)
+            .statusOnDockPlank);
+        for (LayoutFixtures.Fixture base : shared)
+            for (DockStyle design : DockStyle.CHOICES)
+                for (boolean floating : new boolean[] {false, true})
+                    for (boolean up : new boolean[] {false, true}) {
+            LayoutFixtures.Fixture f = base.withDesign(design);
+            String label = f.name + (floating ? " FLOATING" : " DOCKED") + " kb=" + up;
+            RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false, floating));
+            RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, floating));
+            String want = cardsOn(alone.cards(), StackView.HOST);
+            if (alone.card(CardId.PEEK) != null) {
+                // The Terminal's rest wears the Peek card, Home's at Home's rect: one card both
+                // ends draw in one place, so it stays put on the one host (ADR 0032, 3).
+                assertTrue(label + " together", !terminal.apart());
+                assertEquals(label, want, cardsOn(terminal.cards(), StackView.HOST));
+                RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, floating));
+                assertEquals(label + " Home's card", cardsOn(homeAlone.cards(), StackView.HOST),
+                    want);
+                peek++;
+                continue;
+            }
+            assertTrue(label + " apart", terminal.apart());
+            assertEquals(label, StackView.TERMINAL_HOST, RestCards.terminalCardView(floating,
+                f.window, f.cardsRestOf(PageRef.TERMINAL, up, floating).statusOnDockPlank));
+            assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
+            assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
+            assertNull(label, terminal.laidOut(StackView.KEYS_CARD));
+            RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, floating));
+            assertTrue(label + " apart from Home", home.apart());
+            assertEquals(label + " parked", want, cardsOn(home.parked(), StackView.TERMINAL_HOST));
+            RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, floating));
+            assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
+                cardsOn(home.cards(), StackView.HOST));
+            if (want.isEmpty()) none++;
+            else own++;
+        }
+        assertTrue("some Terminals carry a card of their own", own > 0);
+        assertTrue("some Terminals have none", none > 0);
+        assertTrue("some Terminals wear Home's Peek card", peek > 0);
     }
 }

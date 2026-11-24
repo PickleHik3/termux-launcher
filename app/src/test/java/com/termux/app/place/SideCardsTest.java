@@ -2,14 +2,12 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.place.SideCards.Refusal;
 
 import org.junit.Test;
 
@@ -26,54 +24,15 @@ public class SideCardsTest {
         layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.BOTTOM);
     private static final PlaceLayout HOME = LayoutFixtures.HOME;
 
-    @Test public void aNewInstallsTerminalStandsApart() {
-        assertNull(SideCards.refusal(HOME, DEFAULT_TERMINAL, true, false));
-        assertTrue(SideCards.apart(HOME, DEFAULT_TERMINAL, true, false));
-    }
-
-    @Test public void pongsAppsUnderTheKeyboardStandApart() {
-        assertNull(SideCards.refusal(LayoutFixtures.PONG.home, LayoutFixtures.PONG.window, true,
-            false));
-    }
-
-    /** Docked's slab splits too (ADR 0032, accepted 2026-11-21; #304): the rule reads no Style. */
-    @Test public void dockedStandsApartToo() {
-        assertNull(SideCards.refusal(HOME, DEFAULT_TERMINAL, false, false));
-        assertTrue(SideCards.apart(HOME, DEFAULT_TERMINAL, false, false));
-        assertNull(SideCards.refusal(LayoutFixtures.PONG.home, LayoutFixtures.PONG.window, false,
-            false));
-    }
-
-    @Test public void aTerminalWithoutKeysRefuses() {
-        assertEquals(Refusal.NO_KEYS_ROW, SideCards.refusal(HOME,
-            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN), true, false));
-    }
-
-    @Test public void keysOnASideRefuse() {
-        assertEquals(Refusal.NO_KEYS_ROW, SideCards.refusal(HOME,
-            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.LEFT), true, false));
-    }
-
-    @Test public void keysUnderTheKeyboardRefuse() {
-        PlaceLayout under = DEFAULT_TERMINAL.withSlot(Element.EXTRA_KEYS,
-            new Slot(false, Edge.BOTTOM, 0, true));
-        assertEquals(Refusal.KEYS_NOT_OVER_KEYBOARD, SideCards.refusal(HOME, under, true, false));
-    }
-
-    /** #305: the apps row or A-Z beside the keys no longer keeps the two cards together. */
-    @Test public void anAppsRowBesideTheKeysStandsApartOnTheTerminalsOwnHost() {
-        assertNull(SideCards.refusal(LayoutFixtures.TL16.home, LayoutFixtures.TL16.window, true,
-            false));
+    /** #305: the apps row or A-Z beside the keys is no row of the keys' own card. */
+    @Test public void anAppsRowBesideTheKeysIsNotTheKeysAlone() {
         assertFalse(SideCards.keysAlone(LayoutFixtures.TL16.window));
     }
 
-    @Test public void anAzRowBesideTheKeysStandsApart() {
-        assertNull(SideCards.refusal(LayoutFixtures.AZ_ON_DOCK.home,
-            LayoutFixtures.AZ_ON_DOCK.window, true, false));
+    @Test public void anAzRowBesideTheKeysIsNotTheKeysAlone() {
         assertFalse(SideCards.keysAlone(LayoutFixtures.AZ_ON_DOCK.window));
-        PlaceLayout azBeside = layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM);
-        assertNull(SideCards.refusal(HOME, azBeside, true, false));
-        assertFalse(SideCards.keysAlone(azBeside));
+        assertFalse(SideCards.keysAlone(
+            layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM)));
     }
 
     @Test public void theKeysAloneAreTheKeysRowsOwnCard() {
@@ -81,9 +40,13 @@ public class SideCardsTest {
         assertTrue(SideCards.keysAlone(LayoutFixtures.PONG.window));
     }
 
-    @Test public void aStatusBarOnThePlankRefuses() {
-        assertEquals(Refusal.STATUS_ON_PLANK,
-            SideCards.refusal(HOME, DEFAULT_TERMINAL, true, true));
+    /** #305: no keys row, keys on a side or under the keyboard: no keys card of their own. */
+    @Test public void keysThatAreNotOverTheKeyboardAreNotTheKeysAlone() {
+        assertFalse(SideCards.keysAlone(
+            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN)));
+        assertFalse(SideCards.keysAlone(
+            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.LEFT)));
+        assertFalse(SideCards.keysAlone(LayoutFixtures.KEYS_UNDER.window));
     }
 
     @Test public void theMarginIsTheTerminalsWhileApartAndTheFrontsOtherwise() {

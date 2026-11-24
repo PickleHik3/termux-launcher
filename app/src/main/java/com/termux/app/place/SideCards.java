@@ -1,7 +1,6 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import com.termux.app.page.PageKind;
 
@@ -13,42 +12,17 @@ import com.termux.app.page.PageKind;
  * activity's rest pass and the stack's renderer both read these, so the margin and the drop have
  * one owner.
  *
- * <p>The two cards stand "apart" when the Terminal's card carries the extra-keys row over the
- * keyboard, with or without the apps row and A-Z beside it (#305): it then travels with the
- * Terminal, and Home's card (the Peek card or the apps row's) travels with Home. Every Dock design
- * and both Styles are the same here (the rule reads layouts, never the design or the Style;
- * {@code floating} stays a parameter for the callers). Under Floating with the keys alone the
- * Terminal's card is the extra-keys band ({@link #keysAlone}); otherwise it is a second back host
- * cut by its Style's dock formula ({@code RestCards.StackView#TERMINAL_HOST}), the same card the
- * one host wore at that rest.
+ * <p>The two cards always stand "apart" between Home and the Terminal (#305): the Terminal's
+ * card, if it has one, travels with the Terminal, and Home's card (the Peek card or the apps
+ * row's) travels with Home; nothing shares the glass host. Every layout, Dock design and Style
+ * is the same here. Under Floating with the keys alone the Terminal's card is the extra-keys band
+ * ({@link #keysAlone}); otherwise it is a second back host cut by its Style's dock formula
+ * ({@code RestCards.StackView#TERMINAL_HOST}), the same card the one host wore at that rest, and
+ * a Terminal with no card at its rest shows none.
  */
 public final class SideCards {
 
     private SideCards() {}
-
-    /** Why the two cards do not stand apart; the first reason that holds. */
-    public enum Refusal {
-        /** The Terminal's layout shows no extra-keys row along the bottom. */
-        NO_KEYS_ROW,
-        /** The Terminal's extra-keys row stands under the keyboard, in a view of its own. */
-        KEYS_NOT_OVER_KEYBOARD,
-        /** The Terminal's status bar is a band of the dock's plank, so the card spans it too. */
-        STATUS_ON_PLANK
-    }
-
-    /**
-     * Why Home's card and the Terminal's extra-keys card do not stand apart, null when they do.
-     * {@code home} is a parameter for symmetry and the diag lines; the rule reads the Terminal's.
-     */
-    @Nullable
-    public static Refusal refusal(@NonNull PlaceLayout home, @NonNull PlaceLayout terminal,
-                                  boolean floating, boolean statusOnDockPlank) {
-        if (!PlaceChromePolicy.extraKeysRowShown(terminal)) return Refusal.NO_KEYS_ROW;
-        if (StackLanes.where(terminal, Element.EXTRA_KEYS) != StackLanes.Where.BOTTOM_OVER)
-            return Refusal.KEYS_NOT_OVER_KEYBOARD;
-        if (statusOnDockPlank) return Refusal.STATUS_ON_PLANK;
-        return null;
-    }
 
     /**
      * Whether the Terminal's extra-keys row is its only row over the keyboard: Floating then
@@ -63,12 +37,6 @@ public final class SideCards {
         for (Element element : EdgeStackPolicy.overKeyboard(terminal))
             if (element == Element.APPS || element == Element.AZ) return false;
         return true;
-    }
-
-    /** Whether the two cards stand apart: {@link #refusal} is null. */
-    public static boolean apart(@NonNull PlaceLayout home, @NonNull PlaceLayout terminal,
-                                boolean floating, boolean statusOnDockPlank) {
-        return refusal(home, terminal, floating, statusOnDockPlank) == null;
     }
 
     /**

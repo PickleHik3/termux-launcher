@@ -295,6 +295,10 @@ public final class LayoutFixtures {
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false,
                     density));
             rest.keptBandPx = keptBandPx;
+            // A bottom status bar that is a band of the dock's plank, as the activity reads it
+            // for each side's own layout (the status bar at the bottom is one).
+            rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy
+                .statusOnDockPlank(layoutOf(page));
             rest.restFlushPaddingPx = settle(PageRef.TERMINAL, false, dockFloating).flushPaddingPx;
             if (floatingForm) {
                 rest.floatingKeyboardRoom = floatingKeyboardRoom();
@@ -369,8 +373,33 @@ public final class LayoutFixtures {
             KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), HOME, 1);
 
     /**
-     * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot
-     * and flush padding, a split keyboard and the A–Z bar on the dock, each in every design. Kept
+     * A Terminal with no extra-keys row: its pinned apps along the bottom, the status bar on top
+     * (#305: its card, the apps row's, stands apart on its own host).
+     */
+    public static final Fixture NO_KEYS_ROW = new Fixture("no keys row", 1080, 2412,
+        new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.HIDDEN,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), HOME, 1);
+
+    /**
+     * A new install's Terminal with its extra keys standing under the keyboard, in the bands
+     * under it, and nothing over it (#305: the Terminal has no card of its own over the keyboard).
+     */
+    public static final Fixture KEYS_UNDER = new Fixture("keys under the keyboard", 1080, 2412,
+        DEFAULT_INSTALL.window.withSlot(Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true)),
+        HOME, 1);
+
+    /**
+     * Pong with its status bar along the bottom as the outermost band, a band of the dock's plank
+     * ({@code AccessoryStackLayoutPolicy#statusOnDockPlank}; #305: the Terminal's card spans it).
+     */
+    public static final Fixture STATUS_ON_PLANK = new Fixture("status bar on the plank", 1080,
+        2412, STATUS_BOTTOM.window.withSlot(Element.STATUS, Slot.on(Edge.BOTTOM, 0))
+            .withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 9)), 1);
+
+    /**
+     * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot and flush padding, a split
+     * keyboard, the A–Z bar on the dock, a new install, a Terminal with no keys row, one with
+     * its keys under the keyboard and one with its status bar on the plank, each in every design. Kept
      * apart from {@link #ALL}, whose numbers other tests pin.
      */
     @NonNull
@@ -381,6 +410,9 @@ public final class LayoutFixtures {
         base.add(SPLIT_KEYBOARD);
         base.add(AZ_ON_DOCK);
         base.add(DEFAULT_INSTALL);
+        base.add(NO_KEYS_ROW);
+        base.add(KEYS_UNDER);
+        base.add(STATUS_ON_PLANK);
         List<Fixture> out = new ArrayList<>();
         for (Fixture fixture : base)
             for (DockStyle design : DockStyle.CHOICES) out.add(fixture.withDesign(design));

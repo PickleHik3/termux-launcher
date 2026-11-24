@@ -69,7 +69,6 @@ public final class SideCardsController {
         int terminalRestFlushPaddingPx();
         /** Whether the Terminal lays its dock padding at all (one pane, no IME). */
         boolean terminalFlushAllowed();
-        boolean statusOnDockPlank();
         boolean keyboardGlassShared();
         /** The renderer's side numbers: whether the cards stand apart, Home's drop, the Terminal's lift. */
         void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx);
@@ -480,7 +479,9 @@ public final class SideCardsController {
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, density));
         rest.keptBandPx = mHost.keptBandPx();
         rest.restFlushPaddingPx = mHost.terminalRestFlushPaddingPx();
-        rest.statusOnDockPlank = mHost.statusOnDockPlank();
+        // Each side's own layout: the other side's status bar is not the front's.
+        rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy
+            .statusOnDockPlank(pass.dock.arrangement);
         rest.keyboardGlassShared = mHost.keyboardGlassShared();
         return rest;
     }

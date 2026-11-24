@@ -60,8 +60,8 @@ import java.util.List;
  *       over the pass's ({@link Rest#restFlushPaddingPx}, {@code StackLanes#flushSlackPx}).</li>
  * </ul>
  *
- * <p>Two cards (ADR 0032; #302 under Floating, #304 under Docked): while {@link SideCards#apart}
- * holds, Home's card stays on the glass host and the Terminal's card is its own view
+ * <p>Two cards (ADR 0032; #302 under Floating, #304 under Docked): whenever the rest has the
+ * other side (Home and the Terminal, #305: every layout), Home's card stays on the glass host and the Terminal's card is its own view
  * ({@link #terminalCardView}): under Floating the extra-keys card ({@link StackView#KEYS_CARD}),
  * the keys band alone; under Docked a second back host ({@link StackView#TERMINAL_HOST}) cut by
  * the Docked dock formula, the flush air and the foot included, so it is the one host's card at
@@ -283,11 +283,10 @@ public final class RestCards {
         final boolean frontHome = rest.page.isHome();
         final DockGeometry.Half half = rest.pass.dock.rowsHalf();
         final Rest terminal = frontHome ? other : rest;
-        if (!SideCards.apart(rest.pass.dock.half(PageRef.HOME).layout,
-                rest.pass.dock.half(PageRef.TERMINAL).layout, half.floating,
-                terminal.statusOnDockPlank)) {
-            return new RestCards(rest, 0, false);
-        }
+        // A Terminal whose own rest wears the Peek card (no keys row, its apps row alone with the
+        // keyboard down) wears Home's card at Home's rect: a card both ends draw in one place
+        // stays put on the one host (ADR 0032 §3). The Terminal's own host has no Peek dress.
+        if (wearsPeek(terminal)) return new RestCards(rest, 0, false);
         // Each side's own rest margin, worked out by the one helper; the container keeps the
         // Terminal's at both rests and Home's side is drawn the difference lower.
         final int mine = restMarginPx(rest);
@@ -300,7 +299,8 @@ public final class RestCards {
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome, frontHome);
         RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome, !frontHome);
         answer.adopt(otherCards, frontHome
-            ? terminalCardView(half.floating, terminal.pass.dock.half(PageRef.TERMINAL).layout)
+            ? terminalCardView(half.floating, terminal.pass.dock.half(PageRef.TERMINAL).layout,
+                terminal.statusOnDockPlank)
             : StackView.HOST);
         if (!frontHome) {
             answer.mHostLook = otherCards.mHostLook;
@@ -313,6 +313,11 @@ public final class RestCards {
         // The Terminal's own rest's lift, whichever page is in front.
         answer.mTerminalLiftPx = (frontHome ? otherCards : answer).mTerminalLiftPx;
         return answer;
+    }
+
+    /** Whether {@code side}'s own rest, standing alone, wears the Peek card. */
+    static boolean wearsPeek(@NonNull Rest side) {
+        return new RestCards(side, 0, false).card(CardId.PEEK) != null;
     }
 
     /**
@@ -467,13 +472,16 @@ public final class RestCards {
     /**
      * The view that carries the Terminal's card while the cards stand apart: the extra-keys card
      * under Floating while the keys are the Terminal's only row over the keyboard
-     * ({@link SideCards#keysAlone}), else the Terminal's own back host, under Floating too (#305:
-     * the apps row or A-Z beside the keys is a card the keys row's host cannot hold).
+     * ({@link SideCards#keysAlone}) and no status bar stands on the dock's plank, else the
+     * Terminal's own back host, under Floating too (#305: the apps row or A-Z beside the keys,
+     * or a status band on the plank, is a card the keys row's host cannot hold; with no keys row
+     * over the keyboard its card, if it has one, is the one host's).
      */
     @NonNull
-    public static StackView terminalCardView(boolean floating, @NonNull PlaceLayout terminal) {
-        return floating && SideCards.keysAlone(terminal) ? StackView.KEYS_CARD
-            : StackView.TERMINAL_HOST;
+    public static StackView terminalCardView(boolean floating, @NonNull PlaceLayout terminal,
+                                             boolean statusOnDockPlank) {
+        return floating && !statusOnDockPlank && SideCards.keysAlone(terminal)
+            ? StackView.KEYS_CARD : StackView.TERMINAL_HOST;
     }
 
     /**
@@ -502,8 +510,8 @@ public final class RestCards {
         // formula of its Style on a host of its own, so it looks as the one host did.
         // The layout the stack stands, as StackLayout reads it for the half whose rows stand.
         final PlaceLayout layout = pass.dock.arrangement;
-        final StackView hostView = terminalCard ? terminalCardView(half.floating, layout)
-            : StackView.HOST;
+        final StackView hostView = terminalCard
+            ? terminalCardView(half.floating, layout, rest.statusOnDockPlank) : StackView.HOST;
         final boolean keysCard = hostView == StackView.KEYS_CARD;
         final boolean floating = half.floating;
         final boolean up = pass.keyboardShown;

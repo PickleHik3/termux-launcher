@@ -402,17 +402,18 @@ public class RestCardsParityTest {
         final int w = f.widthPx;
         for (boolean up : new boolean[] {false, true}) {
             String at = f.name + " " + (up ? "kbUp" : "kbDown");
-            boolean apart = SideCards.apart(f.home, f.window, true, statusOnPlank(f.window));
             RestCards homeRest = RestCards.of(restWithOther(PageRef.HOME, up));
             RestCards termRest = RestCards.of(restWithOther(PageRef.TERMINAL, up));
             RestCards homeSolo = RestCards.of(restAlone(PageRef.HOME, up));
             RestCards termSolo = RestCards.of(restAlone(PageRef.TERMINAL, up));
-            if (!apart) {
-                // Not apart: byte for byte the one side alone.
+            assertEquals(at, termRest.apart(), homeRest.apart());
+            if (!termRest.apart()) {
+                // Together only where the Terminal's rest wears Home's Peek card (#305): byte for
+                // byte the one side alone.
+                assertNotNull(at, termSolo.card(CardId.PEEK));
                 for (RestCards[] pair : new RestCards[][] {{homeRest, homeSolo},
                         {termRest, termSolo}}) {
                     assertTrue(at, pair[0].parked().isEmpty());
-                    assertNull(at, pair[0].laidOut(StackView.KEYS_CARD));
                     assertEquals(at, pair[1].cards().size(), pair[0].cards().size());
                     for (int i = 0; i < pair[1].cards().size(); i++)
                         assertSameCard(at, pair[1].cards().get(i), pair[0].cards().get(i));
@@ -424,7 +425,8 @@ public class RestCardsParityTest {
             }
             // (i) Home draws what it drew alone; the Terminal's dock card is the keys card, or
             // with rows beside the keys (#305) its own back host, the one host's card.
-            StackView termView = RestCards.terminalCardView(true, f.window);
+            StackView termView = RestCards.terminalCardView(true, f.window,
+                statusOnPlank(f.window));
             boolean keysCard = termView == StackView.KEYS_CARD;
             assertEquals(at, homeSolo.cards().size(), homeRest.cards().size());
             for (int i = 0; i < homeSolo.cards().size(); i++)
@@ -452,8 +454,11 @@ public class RestCardsParityTest {
                 }
                 assertEquals(at, want.view == StackView.HOST ? termView : want.view, got.view);
             }
-            // Each side parks the other's glass, on screen it draws none of it.
-            assertFalse(at, homeRest.parked().isEmpty());
+            // Each side parks the other's glass, on screen it draws none of it; a Terminal with
+            // no card at its rest (#305) has none to park.
+            boolean termHostCard = false;
+            for (RestCards.Card c : termSolo.cards()) termHostCard |= c.view == StackView.HOST;
+            assertEquals(at, !termHostCard, homeRest.parked().isEmpty());
             assertFalse(at, termRest.parked().isEmpty());
             for (RestCards.Card c : homeRest.parked())
                 assertEquals(at, termView, c.view);
@@ -824,7 +829,10 @@ public class RestCardsParityTest {
                     kb.edge(e).drawsRim());
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.LEFT));
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.RIGHT));
-            assertEquals(at, EdgeKind.JOIN, kb.edge(Edge.TOP));
+            // Joined to the rows over it; a rim with nothing over the keyboard (its keys under
+            // it, #305's fixture).
+            if (!EdgeStackPolicy.overKeyboard(f.layoutOf(page)).isEmpty())
+                assertEquals(at, EdgeKind.JOIN, kb.edge(Edge.TOP));
             // Under the keyboard stand the bands, or the foot the keyboard's card joins (Home's
             // Docked keyboard has a card of its own since #309, and a foot with the kept band).
             assertEquals(at, v.r.bandsUnderKeyboard || !Float.isNaN(footTop)

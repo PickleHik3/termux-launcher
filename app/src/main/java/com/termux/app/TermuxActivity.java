@@ -11187,7 +11187,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 return visiblePaneCount() <= 1 && !(mPaneController != null && mPaneController.isActivePaneFloating())
                     && !isImeVisible();
             }
-            @Override public boolean statusOnDockPlank() { return mStatusBarOnDockPlank; }
             @Override public boolean keyboardGlassShared() { return isInAppKeyboardGlassSurface(); }
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
                 mStackRenderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
@@ -17804,9 +17803,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // Joined bars draw no line between them in either Style (SPEC 3.7). Whether the status
         // bar rides the dock's plank is still the arrangement's answer.
-        List<Element> bottom = EdgeStackPolicy.stack(layout, PlaceLayout.Edge.BOTTOM);
-        mStatusBarOnDockPlank = bottom.contains(Element.STATUS)
-            && !AccessoryStackLayoutPolicy.statusKeepsOwnGlass(bottom);
+        mStatusBarOnDockPlank = AccessoryStackLayoutPolicy.statusOnDockPlank(layout);
         return moved;
     }
 
