@@ -5927,6 +5927,22 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 syncDirty();
             }
 
+            @Override public int place() {
+                TermuxAppSharedPreferences prefs = prefs();
+                return com.termux.app.surfaces.cards.StatusBarCard.placeIndex(
+                    prefs == null ? null : prefs.getStatusPlace());
+            }
+
+            @Override public void setPlace(int index) {
+                TermuxAppSharedPreferences prefs = prefs();
+                if (prefs == null || place() == index)
+                    return;
+                prefs.setStatusPlace(
+                    com.termux.app.surfaces.cards.StatusBarCard.placeValue(index));
+                mHost.refreshTerminalWindowBar();
+                syncDirty();
+            }
+
             @Override public boolean option(int index) {
                 TermuxAppSharedPreferences prefs = prefs();
                 if (prefs == null)

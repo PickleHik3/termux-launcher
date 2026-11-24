@@ -44,6 +44,10 @@
     <string name="editor_st_page_bar_summary">Show your pages as window chips or as a line of marks.</string>
     <string name="editor_st_page_bar_glyphs">Glyphs</string>
     <string name="editor_st_page_bar_marks">Marks</string>
+    <string name="editor_st_place">Place</string>
+    <string name="editor_st_place_summary">Keep the status bar as its own strip, or as a thin row inside the top pane.</string>
+    <string name="editor_st_place_strip">Strip</string>
+    <string name="editor_st_place_pane">In the pane</string>
     <!-- Link rows (overhaul §4): a one-fact line for a card (›), the page's path for Settings (↗). -->
     <string name="editor_link_pages_summary">Add, remove and reorder pages</string>
     <string name="editor_link_pane_borders_summary">Frames, focus and glow around panes</string>

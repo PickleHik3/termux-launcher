@@ -53,7 +53,7 @@ public final class StatusBarCard {
     @NonNull
     public static List<Spec> rows(@NonNull Offers offers) {
         return new EditorRows.CardRows()
-            .tier(1, Row.STATUS_POSITION, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
+            .tier(1, Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR, Row.STATUS_INDICATORS)
             .tier(3, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION,
                 Row.STATUS_SECONDS, Row.STATUS_HOURS, Row.STATUS_UNIT)
             .tier(3, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST)
@@ -251,6 +251,9 @@ public final class StatusBarCard {
         /** Page bar's segment: 0 Glyphs, 1 Marks ({@link #PAGE_BAR_MARKS}). */
         int pageBar();
         void setPageBar(int index);
+        /** Place's segment: 0 Strip, 1 In the pane ({@link #PLACE_PANE}). */
+        int place();
+        void setPlace(int index);
         /** Clock position's segment ({@link #alignmentIndex}). */
         int clockPosition();
         void setClockPosition(int index);
@@ -284,6 +287,7 @@ public final class StatusBarCard {
             case STATUS_HOURS: return clockHeld(context, hours(context, widthPx, host), host);
             case STATUS_UNIT: return unit(context, widthPx, host);
             case STATUS_PAGE_BAR: return pageBar(context, widthPx, host);
+            case STATUS_PLACE: return place(context, widthPx, host);
             case CAMERA_CUTOUT: return cameraCutout(context, host);
             case STATUS_INDICATORS: return indicators(context, widthPx, host);
             default: return null;
@@ -481,6 +485,36 @@ public final class StatusBarCard {
         row.root.setContentDescription(context.getString(R.string.editor_st_page_bar) + ". "
             + context.getString(R.string.editor_st_page_bar_summary));
         return new CardRowView(row.root, () -> row.select(host.pageBar()));
+    }
+
+    /** Place's segments, in order: the status bar's own strip, then the thin row in the pane. */
+    public static final int PLACE_STRIP = 0;
+    public static final int PLACE_PANE = 1;
+
+    /** The Place segment of the stored value; Strip for none or an unknown one. */
+    public static int placeIndex(@Nullable String stored) {
+        return com.termux.app.statusbar.StatusPlace.fromValue(stored).inPane()
+            ? PLACE_PANE : PLACE_STRIP;
+    }
+
+    /** The value Place's segment {@code index} stores. */
+    @NonNull
+    public static String placeValue(int index) {
+        return (index == PLACE_PANE ? com.termux.app.statusbar.StatusPlace.PANE
+            : com.termux.app.statusbar.StatusPlace.STRIP).value;
+    }
+
+    /** Strip · In the pane, a connected group bound to the global Place. */
+    @NonNull
+    private static CardRowView place(@NonNull Context context, int widthPx, @NonNull Host host) {
+        SegmentRow row = SegmentRow.words(context, R.drawable.ic_ms_more_horiz,
+            context.getString(R.string.editor_st_place),
+            new CharSequence[] {context.getString(R.string.editor_st_place_strip),
+                context.getString(R.string.editor_st_place_pane)},
+            host.place(), widthPx, host::setPlace);
+        row.root.setContentDescription(context.getString(R.string.editor_st_place) + ". "
+            + context.getString(R.string.editor_st_place_summary));
+        return new CardRowView(row.root, () -> row.select(host.place()));
     }
 
     /** Camera cutout ↗: the setting the Camera gap tile opened (#163). */

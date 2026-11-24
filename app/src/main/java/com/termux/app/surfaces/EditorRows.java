@@ -196,6 +196,8 @@ public final class EditorRows {
         STATUS_UNIT(Kind.SEGMENTS, R.string.editor_st_unit, R.drawable.ic_ms_thermostat),
         /** Page bar: Glyphs or Marks, how the status bar shows the pages. */
         STATUS_PAGE_BAR(Kind.SEGMENTS, R.string.editor_st_page_bar, R.drawable.ic_ms_more_horiz),
+        /** Place: Strip or In the pane, where the status bar stands. */
+        STATUS_PLACE(Kind.SEGMENTS, R.string.editor_st_place, R.drawable.ic_ms_more_horiz),
         /** Camera cutout ↗: opens the cutout setting the Camera gap tile opened. */
         CAMERA_CUTOUT(Kind.LINK, R.string.editor_st_option_camera_gap, R.drawable.ic_ms_crop_free),
         /** The status bar's Indicators tiles: CPU, RAM, Weather, Notifications, Media. */

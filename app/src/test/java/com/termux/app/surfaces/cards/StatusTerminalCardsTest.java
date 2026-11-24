@@ -66,7 +66,7 @@ public class StatusTerminalCardsTest {
 
     @Test
     public void theStatusBarCardReadsPositionGlassClockOptionsIndicators() {
-        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PAGE_BAR,
+        assertEquals(Arrays.asList(Row.STATUS_POSITION, Row.STATUS_PLACE, Row.STATUS_PAGE_BAR,
             Row.STATUS_INDICATORS, Row.SECTION_CLOCK_WEATHER, Row.CLOCK_FACE, Row.CLOCK_POSITION, Row.STATUS_SECONDS,
             Row.STATUS_HOURS, Row.STATUS_UNIT, Row.SECTION_APPEARANCE, Row.OPACITY, Row.FROST,
             Row.SECTION_LINKS, Row.CAMERA_CUTOUT, Row.PINNED_NOTIFICATIONS),
@@ -246,6 +246,22 @@ public class StatusTerminalCardsTest {
         assertEquals("absent reads Glyphs", StatusBarCard.PAGE_BAR_GLYPHS,
             StatusBarCard.pageBarIndex(null));
         assertEquals("marks", StatusBarCard.pageBarValue(StatusBarCard.PAGE_BAR_MARKS));
+
+        CardRowView place = StatusBarCard.view(f.themed, Row.STATUS_PLACE, f.width, host);
+        f.layOut(place.view);
+        List<MaterialButton> places = buttons(place.view);
+        assertEquals("Strip and In the pane", 2, places.size());
+        assertEquals("Strip", String.valueOf(places.get(0).getText()));
+        assertEquals("In the pane", String.valueOf(places.get(1).getText()));
+        places.get(1).performClick();
+        assertEquals(StatusBarCard.PLACE_PANE, host.place);
+        host.place = StatusBarCard.PLACE_STRIP;
+        place.restate();
+        assertTrue("restated to Strip", places.get(0).isChecked());
+        assertEquals(StatusBarCard.PLACE_PANE, StatusBarCard.placeIndex("pane"));
+        assertEquals("absent reads the strip", StatusBarCard.PLACE_STRIP,
+            StatusBarCard.placeIndex(null));
+        assertEquals("pane", StatusBarCard.placeValue(StatusBarCard.PLACE_PANE));
 
         CardRowView clock = StatusBarCard.view(f.themed, Row.CLOCK_FACE, f.width, host);
         f.layOut(clock.view);
@@ -482,6 +498,7 @@ public class StatusTerminalCardsTest {
         int face = 5;
         int align;
         int pageBar;
+        int place;
         final boolean[] options = {false, false, false, true};
         final boolean[] indicators = {true, true, false, true, true, false, true, false, false};
         int cameraGapOpened;
@@ -492,6 +509,8 @@ public class StatusTerminalCardsTest {
         @Override public void setClockFace(int index) { face = index; }
         @Override public int pageBar() { return pageBar; }
         @Override public void setPageBar(int index) { pageBar = index; }
+        @Override public int place() { return place; }
+        @Override public void setPlace(int index) { place = index; }
         @Override public int clockPosition() { return align; }
         @Override public void setClockPosition(int index) { align = index; }
         @Override public boolean option(int index) { return options[index]; }
