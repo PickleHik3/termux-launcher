@@ -32,6 +32,9 @@ public final class GlassVibrancy {
 
     private GlassVibrancy() {}
 
+    /** The Vibrancy percentage that leaves the colour as it is. */
+    public static final int NO_VIBRANCY = 100;
+
     /** A stored percentage held to the control's range, 70 to 150; 100 is today's frame. */
     public static int clampPercent(int percent) {
         return Math.max(TERMUX_APP.MIN_SURFACE_GLASS_VIBRANCY,
@@ -45,7 +48,7 @@ public final class GlassVibrancy {
 
     /** Whether a frame blurred at {@code blurRadiusDp} under {@code percent} is baked at all. */
     public static boolean bakes(int blurRadiusDp, int percent) {
-        return blurRadiusDp > 0 && clampPercent(percent) != 100;
+        return blurRadiusDp > 0 && clampPercent(percent) != NO_VIBRANCY;
     }
 
     /**
@@ -97,7 +100,7 @@ public final class GlassVibrancy {
     @NonNull
     public static synchronized ColorFilter groundFilter(int opacityPercent, boolean colours,
                                                         int percent, int frameTint) {
-        if (!colours || (clampPercent(percent) == 100 && frameTint == GlassFrameTint.NONE)) {
+        if (!colours || (clampPercent(percent) == NO_VIBRANCY && frameTint == GlassFrameTint.NONE)) {
             return GlassFilters.frost(opacityPercent);
         }
         int frost = GlassFilters.frost(opacityPercent) == GlassFilters.frost() ? 1 : 0;

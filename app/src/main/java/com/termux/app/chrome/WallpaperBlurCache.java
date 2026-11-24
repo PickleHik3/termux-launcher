@@ -230,12 +230,12 @@ public final class WallpaperBlurCache {
     private long mManagedLastModified = -1L;
     private long mManagedLength = -1L;
     /** The Vibrancy the resident frames were baked at. */
-    private int mVibrancy = 100;
+    private int mVibrancy = GlassVibrancy.NO_VIBRANCY;
     /**
      * The glass's colour now ({@link #glassVibrancyPercent}, {@link #glassFrameTint}): the
      * source's, kept as it was while the bakes are held.
      */
-    private int mColourVibrancy = 100;
+    private int mColourVibrancy = GlassVibrancy.NO_VIBRANCY;
     private int mColourTint = GlassFrameTint.NONE;
     /** The frame tint the resident frames were baked with. */
     private int mFrameTint = GlassFrameTint.NONE;
@@ -556,7 +556,8 @@ public final class WallpaperBlurCache {
         // program applies them the frames bake neither.
         refreshColour();
         final boolean onDraw = !mFrameBakesHeld && mSource.glassColourOnDraw();
-        final int vibrancy = mFrameBakesHeld ? mVibrancy : onDraw ? 100 : mColourVibrancy;
+        final int vibrancy = mFrameBakesHeld ? mVibrancy
+            : onDraw ? GlassVibrancy.NO_VIBRANCY : mColourVibrancy;
         final int frameTint = mFrameBakesHeld ? mFrameTint
             : onDraw ? GlassFrameTint.NONE : mColourTint;
         boolean sameSource = sourceStillMatches(frameRect, managedSource, systemWallpaperId,

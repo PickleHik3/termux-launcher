@@ -228,8 +228,6 @@ public final class GlassRefraction {
         public final boolean concave;
         /** Shine, 0..100 ({@link GlassMaterial}); the default is the glass as it ships. */
         public final int shine;
-        /** Vibrancy that leaves the colour as it is. */
-        static final int NO_VIBRANCY = 100;
         /**
          * The glass's colour, Vibrancy (percent) and the frame tint ({@link GlassFrameTint}): not
          * stored with the look, set by {@link #withColour} where Fancier Glass draws the backdrop,
@@ -274,7 +272,7 @@ public final class GlassRefraction {
                      int shine) {
             this(bendDp, edgeWidthDp, edgeLightPercent, specularPercent, dispersionPercent,
                 clarityPercent, faceClarityPercent, dimPercent, sizeLensPercent, concave, shine,
-                NO_VIBRANCY, GlassFrameTint.NONE);
+                GlassVibrancy.NO_VIBRANCY, GlassFrameTint.NONE);
         }
 
         private Look(int bendDp, int edgeWidthDp, int edgeLightPercent, int specularPercent,
@@ -344,7 +342,7 @@ public final class GlassRefraction {
 
         /** True when the look changes the backdrop's colour at all. */
         public boolean coloursBackdrop() {
-            return vibrancyPercent != NO_VIBRANCY || frameTint != GlassFrameTint.NONE;
+            return vibrancyPercent != GlassVibrancy.NO_VIBRANCY || frameTint != GlassFrameTint.NONE;
         }
 
         /**
@@ -1762,7 +1760,7 @@ public final class GlassRefraction {
         private boolean mBackdropContent;
         /** The colour as last written ({@code uColourOn} and its rows); see {@link #syncColour}. */
         private boolean mColourOnWritten;
-        private int mColourVibrancyWritten = Look.NO_VIBRANCY;
+        private int mColourVibrancyWritten = GlassVibrancy.NO_VIBRANCY;
         private int mColourTintWritten = GlassFrameTint.NONE;
         private boolean mTouchOn;
         private float mTouchX, mTouchY, mTouchRadius, mTouchIntensity;

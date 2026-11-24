@@ -3295,7 +3295,7 @@ public final class ChromeInk {
 
     /** The glass's colour matrix as last built, and what it was built for; see {@link #glassColour}. */
     @Nullable private float[] mColourMatrix;
-    private int mColourVibrancy = 100;
+    private int mColourVibrancy = GlassVibrancy.NO_VIBRANCY;
     private int mColourTint = GlassFrameTint.NONE;
 
     /**
