@@ -52,6 +52,21 @@ public final class OverlayRegistry {
          * said.
          */
         default boolean isOpen() { return false; }
+
+        /**
+         * Whether leaving now would lose something the person has not saved: a draft. Default
+         * false, so a surface that has not said is closed without a question, as it always was.
+         */
+        default boolean holdsUnsavedChanges() { return false; }
+
+        /**
+         * Asks the person whether to leave, over this overlay: {@code leave} when they go on
+         * (saved or discarded), {@code stay} when they keep what they were doing. Called only
+         * while {@link #holdsUnsavedChanges()}. Default: no question, {@code leave} at once.
+         */
+        default void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            leave.run();
+        }
     }
 
     /**
@@ -79,6 +94,8 @@ public final class OverlayRegistry {
      * the overlay is closing and would answer no.
      */
     private boolean mClaimedBackDown;
+    /** An unsaved-changes question is up and has not been answered. */
+    private boolean mAsking;
 
     /** Registers the next overlay outward; the first registered is the innermost. */
     public void register(@NonNull Overlay overlay) {
@@ -150,8 +167,45 @@ public final class OverlayRegistry {
         return false;
     }
 
+    /** Whether an open overlay holds unsaved changes. */
+    public boolean anyHoldsUnsavedChanges() {
+        for (Overlay overlay : mOverlays)
+            if (overlay.isOpen() && overlay.holdsUnsavedChanges()) return true;
+        return false;
+    }
+
+    /**
+     * Asks each open overlay that holds unsaved changes, innermost first, one question at a time.
+     * {@code leave} runs when every one let go; {@code stay} runs at the first that did not (the
+     * rest are not asked). A no-op while a question is pending; {@link #closeAll} forgets it, as
+     * a dialog dropped with its surface never answers.
+     */
+    public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+        if (mAsking) return;
+        mAsking = true;
+        askFrom(0, () -> {
+            mAsking = false;
+            leave.run();
+        }, () -> {
+            mAsking = false;
+            stay.run();
+        });
+    }
+
+    private void askFrom(int from, @NonNull Runnable leave, @NonNull Runnable stay) {
+        for (int i = from; i < mOverlays.size(); i++) {
+            final Overlay overlay = mOverlays.get(i);
+            if (!overlay.isOpen() || !overlay.holdsUnsavedChanges()) continue;
+            final int next = i + 1;
+            overlay.askBeforeLeaving(() -> askFrom(next, leave, stay), stay);
+            return;
+        }
+        leave.run();
+    }
+
     /** Drops every overlay for {@code reason}, innermost first. */
     public void closeAll(@NonNull CloseReason reason) {
+        mAsking = false;
         for (Overlay overlay : mOverlays) overlay.closeImmediately(reason);
     }
 

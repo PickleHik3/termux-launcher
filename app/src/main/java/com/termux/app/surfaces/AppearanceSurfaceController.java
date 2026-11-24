@@ -219,11 +219,27 @@ public final class AppearanceSurfaceController {
          */
         void requestLeave(@NonNull Runnable proceed);
 
+        /** {@link #requestLeave(Runnable)}, with {@code keep} run when the answer is Keep editing. */
+        default void requestLeave(@NonNull Runnable proceed, @NonNull Runnable keep) {
+            requestLeave(proceed);
+        }
+
+        /** Whether leaving now would lose edits: the look, the choices or the arrangement. */
+        default boolean isDirty() {
+            return false;
+        }
+
         /**
          * Leaving with the picker's choice pending as well: always asks. Discard puts the editor
          * back and runs {@code onDiscard}; Save keeps everything and runs {@code onSave}.
          */
         void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard);
+
+        /** {@link #confirmLeave(Runnable, Runnable)}, with {@code keep} run on Keep editing. */
+        default void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard,
+                                  @NonNull Runnable keep) {
+            confirmLeave(onSave, onDiscard);
+        }
 
         /** Ends the session. */
         void endSession();
@@ -878,15 +894,45 @@ public final class AppearanceSurfaceController {
         leave(this::closeNow);
     }
 
+    /** Whether leaving now would lose the editor's draft or the picker's pending wallpaper. */
+    public boolean holdsUnsavedChanges() {
+        return mOpen && (hasPendingWallpaper() || mEditor.isDirty());
+    }
+
+    /**
+     * A home press with a draft: the one unsaved-changes question, over the editor. {@code leave}
+     * runs once the answer was Save or Discard; Keep editing runs {@code stay}, nothing else.
+     */
+    public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+        if (!mOpen || mCommitting) {
+            stay.run();
+            return;
+        }
+        rememberWhere();
+        leave(leave, stay);
+    }
+
+    /** A home press whose question is answered: closes at once, never asking again. */
+    public void exitAnswered() {
+        if (!mOpen || mCommitting)
+            return;
+        closeNow();
+    }
+
     /**
      * Leaves for good ({@code then}): through the editor's unsaved question, or the one question
      * for the editor and the pending wallpaper together.
      */
     private void leave(@NonNull Runnable then) {
+        leave(then, () -> {});
+    }
+
+    /** {@link #leave(Runnable)}, with {@code keep} run when the answer is Keep editing. */
+    private void leave(@NonNull Runnable then, @NonNull Runnable keep) {
         if (hasPendingWallpaper())
-            mEditor.confirmLeave(() -> commitThen(then), then);
+            mEditor.confirmLeave(() -> commitThen(then), then, keep);
         else
-            mEditor.requestLeave(then);
+            mEditor.requestLeave(then, keep);
     }
 
     /**

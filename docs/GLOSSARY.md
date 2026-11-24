@@ -185,6 +185,13 @@ cell offers Add widget, Wallpaper and Terminal (a **Home float** here). A Home p
 pinned to it.
 _Avoid_: place, widgets page, desktop
 
+**Home exit**:
+What a home press does with a screen open over a page (ADR 0034). A screen holding unsaved changes
+asks first, over itself; then everything open leaves together and the press stays on the page
+underneath: the wall does not page. With nothing open it is not a Home exit: the home press goes to
+the **home page**, or back to the page left when it returns from another app.
+_Avoid_: Home close, clear on home
+
 **Home float**:
 A **window** of the current session drawn floating over one Home page instead of in the Terminal's
 row: born full-size, moved only by its **titlebar** (a **body swipe** on its terminal pages Home as

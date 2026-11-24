@@ -165,4 +165,128 @@ public class OverlayRegistryTest {
         assertEquals(List.of("a:HOME", "b:HOME", "c:HOME"), log);
         assertFalse(registry.onBackPressed());
     }
+
+    /** An open overlay with a draft; its answer is set by the test. */
+    private static final class Draft extends Pane {
+        boolean leaves;
+        int asked;
+
+        Draft(String name, boolean leaves, List<String> log) {
+            super(name, true, log);
+            this.leaves = leaves;
+        }
+
+        @Override public boolean holdsUnsavedChanges() {
+            return true;
+        }
+
+        @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            asked++;
+            log.add(name + ":ask");
+            if (leaves) leave.run(); else stay.run();
+        }
+    }
+
+    @Test
+    public void anOverlayThatSaidNothingHoldsNoDraftAndAsksNothing() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("a", true, log));
+        assertFalse(registry.anyHoldsUnsavedChanges());
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("leave"), out);
+    }
+
+    @Test
+    public void aClosedOverlayWithADraftIsNotAsked() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Draft draft = new Draft("d", true, log);
+        draft.open = false;
+        registry.register(draft);
+        assertFalse(registry.anyHoldsUnsavedChanges());
+        assertEquals(0, draft.asked);
+    }
+
+    @Test
+    public void continueLetsGoAndStayStopsTheQuestions() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Draft first = new Draft("a", true, log);
+        Draft second = new Draft("b", false, log);
+        Draft third = new Draft("c", true, log);
+        registry.register(first);
+        registry.register(second);
+        registry.register(third);
+        assertTrue(registry.anyHoldsUnsavedChanges());
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("a:ask", "b:ask"), log);
+        assertEquals(List.of("stay"), out);
+        assertEquals(0, third.asked);
+        second.leaves = true;
+        out.clear();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("leave"), out);
+    }
+
+    /** An open draft that keeps its question pending until the test answers. */
+    private static final class Pending extends Pane {
+        Runnable leave;
+        Runnable stay;
+        int asked;
+
+        Pending(List<String> log) {
+            super("p", true, log);
+        }
+
+        @Override public boolean holdsUnsavedChanges() {
+            return true;
+        }
+
+        @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            asked++;
+            this.leave = leave;
+            this.stay = stay;
+        }
+    }
+
+    @Test
+    public void aSecondAskWhilePendingIsIgnored() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(1, pending.asked);
+    }
+
+    @Test
+    public void closeAllWhilePendingLetsTheNextAskThrough() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        registry.closeAll(OverlayRegistry.CloseReason.STOP);
+        pending.open = true;
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(2, pending.asked);
+    }
+
+    @Test
+    public void stayAndLeaveEachClearThePendingQuestion() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        pending.stay.run();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(2, pending.asked);
+        pending.leave.run();
+        assertEquals(List.of("stay", "leave"), out);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(3, pending.asked);
+    }
 }
