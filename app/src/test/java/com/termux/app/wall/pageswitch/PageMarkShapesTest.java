@@ -86,6 +86,9 @@ public class PageMarkShapesTest {
             PageMarkShapes.cutsNumber(PageKind.TERMINAL, 0));
         assertFalse(PageMarkShapes.cutsNumber(PageKind.DISPLAY, 0));
         assertTrue(PageMarkShapes.cutsNumber(PageKind.DISPLAY, 2));
+        assertTrue(PageMarkShapes.hasSign(PageKind.LINUX));
+        assertFalse(PageMarkShapes.cutsNumber(PageKind.LINUX, 0));
+        assertTrue(PageMarkShapes.cutsNumber(PageKind.LINUX, 2));
         assertFalse("the spark is the assistant's sign", PageMarkShapes.cutsNumber(PageKind.ASSISTANT, 0));
         assertFalse(PageMarkShapes.hasSign(PageKind.HOME));
         assertTrue(PageMarkShapes.hasSign(PageKind.ASSISTANT));
