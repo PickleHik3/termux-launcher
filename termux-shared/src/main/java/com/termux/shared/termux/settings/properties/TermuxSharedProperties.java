@@ -8,6 +8,7 @@ import com.termux.shared.data.DataUtils;
 import com.termux.shared.settings.properties.SharedProperties;
 import com.termux.shared.settings.properties.SharedPropertiesParser;
 import com.termux.shared.termux.TermuxConstants;
+import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import java.io.File;
 import java.util.HashMap;
 import java.util.List;
@@ -551,13 +552,14 @@ public abstract class TermuxSharedProperties {
     }
 
     /**
-     * Returns the value itself if it is not {@code null}, otherwise returns {@link TermuxPropertyConstants#DEFAULT_IVALUE_NIGHT_MODE}.
+     * Returns the value itself if it is one of Theme's choices, otherwise its default, as its
+     * declaration ({@link SettingDeclarations#THEME_MODE}) clamps it.
      *
      * @param value {@link String} value to convert.
      * @return Returns the internal value for value.
      */
     public static String getNightModeInternalPropertyValueFromValue(String value) {
-        return (String) SharedProperties.getDefaultIfNotInMap(TermuxPropertyConstants.KEY_NIGHT_MODE, TermuxPropertyConstants.MAP_NIGHT_MODE, SharedProperties.toLowerCase(value), TermuxPropertyConstants.DEFAULT_IVALUE_NIGHT_MODE, true, LOG_TAG);
+        return SettingDeclarations.THEME_MODE.storedChoiceOrDefault(SharedProperties.toLowerCase(value));
     }
 
     /**
