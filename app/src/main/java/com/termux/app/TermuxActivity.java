@@ -12123,9 +12123,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     /**
      * Rebuilds the autosaved arrangement on a cold start, as Saved sessions' Load does: fresh
      * shells in the saved working directories running the saved programs, as a kill took them
-     * (the autosave follows what runs in each pane), the row's windows and trees, and the floats on their pages. Start in =
-     * Terminal with no window left in the row also gets one fresh shell. False when it could
-     * not be rebuilt; the caller then starts one fresh shell.
+     * (the autosave follows what runs in each pane), the row's windows and trees, and the floats
+     * on their pages. When Start in is Terminal and no window is left in the row, it also gets
+     * one fresh shell. False when it could not be rebuilt; the caller then starts one fresh
+     * shell.
      */
     private boolean rebuildArrangement(@NonNull com.termux.app.terminal.TerminalWorkspace arrangement) {
         try {
@@ -23826,20 +23827,6 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return "fish".equals(new java.io.File(shellPath).getName());
     }
 
-    /** See {@link com.termux.app.terminal.WorkspaceRestore#shellQuote}. */
-    @NonNull
-    @androidx.annotation.VisibleForTesting
-    static String shellQuote(@NonNull String argument, boolean fishStyle) {
-        return com.termux.app.terminal.WorkspaceRestore.shellQuote(argument, fishStyle);
-    }
-
-    /** Rebuild a shell command line from captured argv, quoting every word. */
-    @NonNull
-    @androidx.annotation.VisibleForTesting
-    static String shellCommandLine(@NonNull java.util.List<String> command, boolean fishStyle) {
-        return com.termux.app.terminal.WorkspaceRestore.commandLine(command, fishStyle);
-    }
-
     /** Recreate a saved workspace: each pane opens in its folder and starts its saved program. */
     @NonNull
     public com.termux.app.terminal.TerminalWorkspace.LoadResult loadWorkspace(@NonNull String name, boolean replace)
@@ -23863,9 +23850,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     /**
      * Builds {@code workspace}'s arrangement: fresh shells in the saved working directories
-     * running the saved programs, the row's windows and trees, the Home
-     * floats on their pages. Saved sessions' Load and the cold start's rebuild from the autosave
-     * both come here.
+     * running the saved programs, the row's windows and trees, the Home floats on their pages.
+     * Saved sessions' Load and the cold start's rebuild from the autosave both come here.
      */
     @NonNull
     private com.termux.app.terminal.TerminalWorkspace.LoadResult restoreArrangement(
@@ -32987,8 +32973,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 // shell stays behind once it exits so a pane restoring `make` does not vanish with
                 // the build.
                 boolean fishStyle = isFishShell(shell);
-                String script = shellCommandLine(command, fishStyle);
-                if (stayBehind) script += "; exec " + shellQuote(shell, fishStyle) + " -l";
+                String script = com.termux.app.terminal.WorkspaceRestore.commandLine(command, fishStyle);
+                if (stayBehind) script += "; exec " + com.termux.app.terminal.WorkspaceRestore.shellQuote(shell, fishStyle) + " -l";
                 String login = loginProgramPath();
                 if (login != null) {
                     // Termux's login ends in `exec "$SHELL" -l "$@"`, so this runs the same shell

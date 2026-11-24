@@ -3,6 +3,7 @@ package com.termux.launcherctl;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.terminal.AgentStatus;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
 
 import org.json.JSONArray;
@@ -27,10 +28,6 @@ import java.util.Map;
  */
 public final class ClaudeHooksInstaller {
 
-    public static final String AGENT_CLAUDE = "claude";
-    public static final String AGENT_CODEX = "codex";
-    public static final String AGENT_OPENCODE = "opencode";
-
     /** The plugin's own file, so nothing the user wrote in the plugins folder is ever edited. */
     static final String OPENCODE_PLUGIN_FILE = "termux-launcher-session.js";
 
@@ -52,13 +49,13 @@ public final class ClaudeHooksInstaller {
         // The session is over, so the pane stops speaking for an agent at all.
         events.put("SessionEnd", "clear");
         // Start, resume, /clear and compaction each name the conversation the pane is in.
-        events.put("SessionStart", "session --agent " + AGENT_CLAUDE);
+        events.put("SessionStart", "session --agent " + AgentStatus.AGENT_CLAUDE);
         return events;
     }
 
     private static Map<String, String> buildCodexEvents() {
         Map<String, String> events = new LinkedHashMap<>();
-        events.put("SessionStart", "session --agent " + AGENT_CODEX);
+        events.put("SessionStart", "session --agent " + AgentStatus.AGENT_CODEX);
         return events;
     }
 
@@ -136,16 +133,16 @@ public final class ClaudeHooksInstaller {
     /** The agents this can set up, in the order the API reports them. */
     @NonNull
     public static String[] agents() {
-        return new String[] {AGENT_CLAUDE, AGENT_CODEX, AGENT_OPENCODE};
+        return new String[] {AgentStatus.AGENT_CLAUDE, AgentStatus.AGENT_CODEX, AgentStatus.AGENT_OPENCODE};
     }
 
     /** Where {@code agent}'s hook or plugin lives under {@code home}, or null for another agent. */
     @Nullable
     public static File fileFor(@NonNull String agent, @NonNull File home) {
         switch (agent) {
-            case AGENT_CLAUDE: return new File(home, ".claude/settings.json");
-            case AGENT_CODEX: return new File(home, ".codex/hooks.json");
-            case AGENT_OPENCODE: return new File(home, ".config/opencode/plugins/" + OPENCODE_PLUGIN_FILE);
+            case AgentStatus.AGENT_CLAUDE: return new File(home, ".claude/settings.json");
+            case AgentStatus.AGENT_CODEX: return new File(home, ".codex/hooks.json");
+            case AgentStatus.AGENT_OPENCODE: return new File(home, ".config/opencode/plugins/" + OPENCODE_PLUGIN_FILE);
             default: return null;
         }
     }
@@ -158,9 +155,9 @@ public final class ClaudeHooksInstaller {
         try {
             String text = read(file);
             switch (agent) {
-                case AGENT_CLAUDE:
+                case AgentStatus.AGENT_CLAUDE:
                     return installedCount(text, launcherctlPath, EVENT_STATES) == EVENT_STATES.size();
-                case AGENT_CODEX:
+                case AgentStatus.AGENT_CODEX:
                     return installedCount(text, launcherctlPath, CODEX_EVENTS) == CODEX_EVENTS.size();
                 default:
                     return text.equals(openCodePlugin(launcherctlPath));
@@ -182,8 +179,8 @@ public final class ClaudeHooksInstaller {
         File file = fileFor(agent, home);
         if (file == null) throw new IOException("Unknown agent " + agent);
         switch (agent) {
-            case AGENT_CLAUDE: return installJson(file, launcherctlPath, EVENT_STATES);
-            case AGENT_CODEX: return installJson(file, launcherctlPath, CODEX_EVENTS);
+            case AgentStatus.AGENT_CLAUDE: return installJson(file, launcherctlPath, EVENT_STATES);
+            case AgentStatus.AGENT_CODEX: return installJson(file, launcherctlPath, CODEX_EVENTS);
             default: return writeIfChanged(file, openCodePlugin(launcherctlPath));
         }
     }
@@ -206,7 +203,7 @@ public final class ClaudeHooksInstaller {
             try {
                 boolean changed = installForAgent(agent, home, launcherctlPath);
                 result.put("changed", changed);
-                if (changed && AGENT_CODEX.equals(agent)) notices.put(CODEX_TRUST_NOTICE);
+                if (changed && AgentStatus.AGENT_CODEX.equals(agent)) notices.put(CODEX_TRUST_NOTICE);
             } catch (JSONException e) {
                 ok = false;
                 result.put("error", "Not valid JSON, so it was left alone.");
@@ -269,7 +266,7 @@ public final class ClaudeHooksInstaller {
             + "      const id = props.sessionID || (props.info && props.info.id)\n"
             + "      if (!id || id === last) return\n"
             + "      last = id\n"
-            + "      execFile(LAUNCHERCTL, [\"agent\", \"session\", \"--agent\", \"opencode\", \"--id\", id], () => {})\n"
+            + "      execFile(LAUNCHERCTL, [\"agent\", \"session\", \"--agent\", \"" + AgentStatus.AGENT_OPENCODE + "\", \"--id\", id], () => {})\n"
             + "    },\n"
             + "  }\n"
             + "}\n";
