@@ -320,7 +320,7 @@ final class DeviceControlRoutes {
 
     /** The Terminal's Background, over its own preferences. */
     @NonNull
-    private static LookCommand.TerminalBackground terminalBackground(
+    static LookCommand.TerminalBackground terminalBackground(
             @NonNull TermuxAppSharedPreferences preferences) {
         return new LookCommand.TerminalBackground() {
             @Override
