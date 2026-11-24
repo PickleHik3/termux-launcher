@@ -29950,7 +29950,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mDisplayWindowIcons == null) {
             mDisplayWindowIcons = new com.termux.app.x11.X11WindowIconResolver(getResources(),
                 (wmClass, icon, name) -> {
-                    if ((icon == null && name == null) || !isDisplayUp()
+                    // A Linux window's chip dresses as its icon or name resolves, not at the next refresh.
+                    boolean linuxChips = mLinuxWindows != null && !mLinuxWindows.chips().isEmpty();
+                    if ((icon == null && name == null) || !(isDisplayUp() || linuxChips)
                         || !isSplitPanesEnabled()) return;
                     com.termux.app.terminal.TerminalWindowBar bar =
                         findViewById(R.id.terminal_window_bar);

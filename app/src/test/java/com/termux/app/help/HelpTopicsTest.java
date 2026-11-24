@@ -49,7 +49,9 @@ public class HelpTopicsTest {
     private static List<String> targetsOf(PageKind place) {
         switch (place) {
             case TERMINAL: return TERMINAL_TARGETS;
-            case DISPLAY: return DISPLAY_TARGETS;
+            // A Linux window takes the display window's help place (Linux apps).
+            case DISPLAY:
+            case LINUX: return DISPLAY_TARGETS;
             case ASSISTANT: return ASSISTANT_TARGETS;
             default: return WIDGETS_TARGETS;
         }
@@ -166,7 +168,7 @@ public class HelpTopicsTest {
 
     @Test public void theSameControlOnSeveralPlacesIsOneTopic() {
         HelpTopics.Entry status = HelpTopics.entry("status");
-        assertEquals(4, status.places.size());
+        assertEquals(5, status.places.size());
         for (PageKind place : PageKind.values()) {
             assertTrue(place.name(), status.onPlace(place));
             assertEquals(status, HelpTopics.forTarget(place, "status"));
