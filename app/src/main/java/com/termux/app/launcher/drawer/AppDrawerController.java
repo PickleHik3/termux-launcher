@@ -27,6 +27,7 @@ import com.termux.R;
 import com.termux.app.Spring;
 import com.termux.app.SuggestionBarView;
 import com.termux.app.dock.DockLayout;
+import com.termux.app.fragments.settings.termux.CategorySortNow;
 import com.termux.app.launcher.data.LauncherAppDataProvider;
 import com.termux.app.launcher.data.LauncherCategoryPendingApps;
 import com.termux.app.notice.AppNotice;
@@ -1141,7 +1142,7 @@ public final class AppDrawerController implements Choreographer.FrameCallback,
                     context.getResources().getQuantityString(R.plurals.app_drawer_category_pending_notice,
                         waiting, waiting),
                     context.getString(R.string.app_drawer_category_pending_notice_hint), null, false,
-                    mHost::openAppDrawerSettings);
+                    () -> CategorySortNow.start(context));
             });
     }
 

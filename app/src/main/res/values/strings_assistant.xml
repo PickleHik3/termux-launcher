@@ -67,6 +67,15 @@
     <string name="assistant_mic_off_body">Turn it on for Termux Launcher in app settings.</string>
     <string name="assistant_open_settings">Open settings</string>
     <string name="assistant_not_now">Not now</string>
+    <plurals name="assistant_offer_unsorted">
+        <item quantity="one">%1$d new app isn\'t sorted.</item>
+        <item quantity="other">%1$d new apps aren\'t sorted.</item>
+    </plurals>
+    <string name="assistant_offer_unsorted_action">Sort now</string>
+    <string name="assistant_offer_tmp">tmp has grown to %1$s.</string>
+    <string name="assistant_offer_tmp_action">Clear old files</string>
+    <string name="assistant_offer_freed">Freed %1$s</string>
+    <string name="assistant_offer_nothing_to_clear">Nothing old to clear</string>
     <string name="assistant_speech_title">Dictation needs a speech model on this phone.</string>
     <string name="assistant_speech_body">Get one once. It works offline after that.</string>
     <string name="assistant_speech_get">Get speech model</string>

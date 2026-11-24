@@ -123,6 +123,22 @@ public class SettingsActivity extends AppCompatActivity implements
         return intent;
     }
 
+    /**
+     * Opens the app drawer's settings from anywhere: the drawer's own nudge, Home and the Assistant
+     * page all run this one action. A Context that is not an Activity needs a new task.
+     */
+    public static void openAppDrawerSettings(@NonNull Context context) {
+        Intent intent = createFragmentIntent(context,
+            com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
+            com.termux.R.string.settings_app_drawer_view_type_title);
+        if (!(context instanceof android.app.Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+        try {
+            context.startActivity(intent);
+        } catch (RuntimeException ignored) {
+            // Offered from Home and the Assistant page: a settings screen that cannot open must not crash them.
+        }
+    }
+
     /** The same Intent, opened on one place and scrolled to one of its rows. */
     public static Intent createFragmentIntent(@NonNull Context context,
                                               @NonNull Class<? extends Fragment> fragmentClass,

@@ -28,6 +28,7 @@ import com.termux.R;
 import com.termux.app.page.Page;
 import com.termux.app.page.PageHost;
 import com.termux.app.activities.SettingsActivity;
+import com.termux.app.fragments.settings.termux.CategorySortNow;
 import com.termux.app.fragments.settings.termux.TaiModelCentreFragment;
 
 import java.text.SimpleDateFormat;
@@ -72,6 +73,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
     private final AssistantModelStatus status;
     private final AssistantDictation dictation;
     private final AssistantContextWindow window;
+    private final AssistantOffersController offers;
     private final ExecutorService io = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "assistant-page");
         t.setDaemon(true);
@@ -122,6 +124,10 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         status = AssistantModelStatus.getInstance(app);
         dictation = new AssistantDictation(app);
         window = new AssistantContextWindow(app);
+        offers = new AssistantOffersController(app, chatView.offers(), prefs(), io, new AssistantOffersController.Host() {
+            @Override public void sortNow() { CategorySortNow.start(context); }
+            @Override public void say(@NonNull String message) { Snackbar.make(page, message, Snackbar.LENGTH_SHORT).show(); }
+        });
         chatView.setListener(this);
         chatView.composer().setListener(this);
         chatsView.setListener(this);
@@ -149,11 +155,13 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         reload();
         loadRecent();
         render();
+        offers.onShown();
     }
 
     void onHidden() {
         if (!shown) return;
         shown = false;
+        offers.onHidden();
         engine.removeListener(this);
         status.removeObserver(this);
         if (dictation.isActive()) dictation.cancel();

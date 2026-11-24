@@ -7,10 +7,10 @@ package com.termux.app.launcher.drawer;
  * its tongue until the number changes — a run that sorts them resets it, a further install past the
  * threshold raises it again. Below the threshold nothing is ever said.
  */
-final class AppDrawerCategoryNudgePolicy {
+public final class AppDrawerCategoryNudgePolicy {
 
     /** "Above five": the smallest count worth interrupting an open for. */
-    static final int MIN_PENDING = 6;
+    public static final int MIN_PENDING = 6;
 
     private int mLastNudgedCount = -1;
 
