@@ -147,6 +147,7 @@ public class InProcessTaiRuntimeLinkContractTest extends TaiRuntimeLinkContractT
         @NonNull @Override public JSONObject loadHere(@NonNull String body) throws JSONException { return new JSONObject().put("ok", true); }
         @NonNull @Override public JSONObject unloadHere() throws JSONException { return runtime.unload(); }
         @NonNull @Override public JSONObject unloadChatHere(@NonNull String modelId) throws JSONException { return runtime.unloadChatModel(modelId); }
+        @NonNull @Override public JSONObject unloadEmbedderHere() throws JSONException { return runtime.unloadEmbedder(); }
         @NonNull @Override public JSONObject keepWarmHere(@NonNull String body) throws JSONException { return new JSONObject().put("ok", true); }
         @NonNull @Override public JSONObject statusHere() throws JSONException { return new JSONObject().put("ok", true); }
         @NonNull @Override public JSONArray residentsHere() { return new JSONArray(); }

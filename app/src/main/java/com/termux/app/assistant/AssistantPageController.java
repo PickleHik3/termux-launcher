@@ -164,6 +164,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         shown = false;
         offers.onHidden();
         engine.removeListener(this);
+        engine.releaseSettingsLookup();
         status.removeObserver(this);
         if (dictation.isActive()) dictation.cancel();
         if (sheet != null) sheet.dismiss();

@@ -69,6 +69,8 @@ public final class AssistantEngine {
     /** The settings registry, asked for on the first answer; null when settings turns are off. */
     @Nullable private final Supplier<SettingsRegistry> registrySupplier;
     private final AssistantCards cards;
+    /** Settings shortlist by embeddings, keywords as the fallback; null means keywords only. */
+    @Nullable private volatile AssistantSettingsLookup settingsLookup;
     private final CopyOnWriteArrayList<Listener> listeners = new CopyOnWriteArrayList<>();
     private final Object lock = new Object();
     @Nullable private Generation current;
@@ -151,8 +153,22 @@ public final class AssistantEngine {
             sInstance = new AssistantEngine(AssistantChatStore.getInstance(app), new TaiChatTransport(app),
                 new AssistantContextWindow(app), stream, control, main::post, System::currentTimeMillis,
                 () -> deviceRegistry(app), AssistantCards.shared());
+            sInstance.settingsLookup = new AssistantSettingsLookup(new TaiEmbedder(app),
+                () -> SettingsCorpusAsset.read(app),
+                new java.io.File(app.getFilesDir(), "assistant/settings-vectors.bin"));
         }
         return sInstance;
+    }
+
+    /** Uses {@code lookup} for the settings shortlist. Tests pass one over a fake embedder. */
+    void setSettingsLookup(@Nullable AssistantSettingsLookup lookup) {
+        settingsLookup = lookup;
+    }
+
+    /** The Assistant page was left: the settings vectors leave memory (the file stays). */
+    public void releaseSettingsLookup() {
+        AssistantSettingsLookup lookup = settingsLookup;
+        if (lookup != null) lookup.release();
     }
 
     /** The launcher's settings registry, the one every door uses. */
@@ -362,7 +378,9 @@ public final class AssistantEngine {
         if (registrySupplier != null && !request.isEmpty()) {
             try {
                 g.registry = registrySupplier.get();
-                g.shortlist = AssistantSettingsTurn.lookup(g.registry, request);
+                AssistantSettingsLookup lookup = settingsLookup;
+                g.shortlist = lookup != null ? lookup.lookup(g.registry, request)
+                    : AssistantSettingsTurn.lookup(g.registry, request);
             } catch (RuntimeException e) {
                 Log.w(LOG_TAG, "Settings lookup failed: " + e);
                 g.registry = null;
