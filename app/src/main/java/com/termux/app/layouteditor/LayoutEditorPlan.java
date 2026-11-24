@@ -697,14 +697,4 @@ public final class LayoutEditorPlan {
         if (!wrote) return Drop.NONE;
         return liveFollows() ? Drop.LIVE : Drop.MINIATURE;
     }
-
-    /** The Dock card's Bars list for the shown orientation, or null where it never was stored. */
-    @Nullable
-    public String barOrder() {
-        return mPlaces.barOrder(mShownOrientation);
-    }
-
-    public void setBarOrder(@NonNull String order) {
-        mPlaces.setBarOrder(mShownOrientation, order);
-    }
 }

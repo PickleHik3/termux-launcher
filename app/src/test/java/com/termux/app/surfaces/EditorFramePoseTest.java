@@ -1,10 +1,8 @@
 package com.termux.app.surfaces;
 
-import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.place.PlaceLayout;
 
 import org.junit.Test;
 
@@ -185,54 +183,5 @@ public class EditorFramePoseTest {
         assertEquals((int) Math.ceil(26 * DENSITY), EditorFramePose.halfRowPx(DENSITY, 1.3f));
         assertEquals("never under its 16dp", (int) Math.ceil(20 * DENSITY),
             EditorFramePose.halfRowPx(DENSITY, 0.85f));
-    }
-
-    @Test
-    public void aPutAwayRowsGhostStandsAgainstItsSurfacesInnerSide() {
-        int[] azRow = {20, 1700, 980, 1780};
-        int[] bottomBand = EditorFramePose.ghostRect(PlaceLayout.Edge.BOTTOM, 0, 1000, 2000,
-            100, 20);
-        assertArrayEquals("over the A-Z row, where the apps stood", new int[] {20, 1600, 980, 1780},
-            EditorFramePose.ghostBeside(azRow, bottomBand, 2000));
-        int[] topRow = {20, 200, 980, 280};
-        int[] topBand = EditorFramePose.ghostRect(PlaceLayout.Edge.TOP, 0, 1000, 2000, 100, 20);
-        assertArrayEquals(new int[] {20, 200, 980, 380},
-            EditorFramePose.ghostBeside(topRow, topBand, 2000));
-    }
-
-    @Test
-    public void aGhostClearsTheSurfacesStillStandingOnItsEdge() {
-        // The dock put away while its A-Z row stands: its target reaches over the apps' band.
-        int[] azRow = {20, 1700, 980, 1780};
-        int[] dockBand = EditorFramePose.ghostRect(PlaceLayout.Edge.BOTTOM, 0, 1000, 2000,
-            100, 20);
-        int[] dockTarget = EditorFramePose.ghostBeside(azRow, dockBand, 2000);
-        // The keyboard switched off on the same edge: its ghost goes past the dock's target,
-        // the usual gap above it, so a tap on either reaches its own card.
-        int depth = EditorFramePose.depthFrom(PlaceLayout.Edge.BOTTOM, dockTarget, 1000, 2000);
-        assertEquals(400, depth);
-        int[] keyboard = EditorFramePose.shiftInward(dockBand, PlaceLayout.Edge.BOTTOM, depth);
-        assertArrayEquals(new int[] {20, 1480, 980, 1580}, keyboard);
-        assertTrue("no overlap", keyboard[3] <= dockTarget[1]);
-
-        int[] topBar = {20, 0, 980, 150};
-        assertEquals(150, EditorFramePose.depthFrom(PlaceLayout.Edge.TOP, topBar, 1000, 2000));
-        assertArrayEquals(new int[] {20, 170, 980, 270}, EditorFramePose.shiftInward(
-            EditorFramePose.ghostRect(PlaceLayout.Edge.TOP, 0, 1000, 2000, 100, 20),
-            PlaceLayout.Edge.TOP, 150));
-    }
-
-    @Test
-    public void ghostsStandOnTheirEdgeAndStackInwards() {
-        int band = 100;
-        int margin = 20;
-        assertArrayEquals(new int[] {20, 1880, 980, 1980},
-            EditorFramePose.ghostRect(PlaceLayout.Edge.BOTTOM, 0, 1000, 2000, band, margin));
-        assertArrayEquals(new int[] {20, 1780, 980, 1880},
-            EditorFramePose.ghostRect(PlaceLayout.Edge.BOTTOM, 1, 1000, 2000, band, margin));
-        assertArrayEquals(new int[] {20, 20, 980, 120},
-            EditorFramePose.ghostRect(PlaceLayout.Edge.TOP, 0, 1000, 2000, band, margin));
-        assertArrayEquals(new int[] {880, 20, 980, 1980},
-            EditorFramePose.ghostRect(PlaceLayout.Edge.RIGHT, 0, 1000, 2000, band, margin));
     }
 }

@@ -3,7 +3,6 @@ package com.termux.app.surfaces;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.place.PlaceLayout;
 
 /**
  * Where the Appearance editor's frame stands, where the half line under it stands, and how tall
@@ -217,79 +216,5 @@ final class EditorFramePose {
     /** Half and full are one editing detent: neither body holds more than the other. */
     static boolean collapsed(int halfPx, int fullPx) {
         return halfPx >= fullPx;
-    }
-
-    /**
-     * A surface that still stands while one of its rows is put away (the dock showing its A–Z
-     * index with its pinned apps hidden), with the hidden row's ghost {@code band} (as
-     * {@link #ghostRect} gives it) moved against the surface's inner side: the surface's rect
-     * grown by the band's thickness towards the middle of the frame, so the row can be tapped
-     * where it would stand.
-     */
-    @NonNull
-    static int[] ghostBeside(@NonNull int[] surface, @NonNull int[] band, int heightPx) {
-        int thickness = Math.max(0, band[3] - band[1]);
-        boolean bottomEdge = band[1] + band[3] > heightPx;
-        if (bottomEdge)
-            return new int[] {surface[0], Math.max(0, surface[1] - thickness), surface[2],
-                surface[3]};
-        return new int[] {surface[0], surface[1], surface[2],
-            Math.min(heightPx, surface[3] + thickness)};
-    }
-
-    /**
-     * A hidden surface's ghost in the container's own px, {left, top, right, bottom}: a band
-     * {@code bandPx} thick on {@code edge}, {@code marginPx} in from the container's sides, and
-     * {@code stack} bands in from the edge where several ghosts share it.
-     */
-    @NonNull
-    static int[] ghostRect(@NonNull PlaceLayout.Edge edge, int stack, int widthPx, int heightPx,
-                           int bandPx, int marginPx) {
-        int offset = marginPx + Math.max(0, stack) * bandPx;
-        switch (edge) {
-            case TOP:
-                return new int[] {marginPx, offset, widthPx - marginPx, offset + bandPx};
-            case LEFT:
-                return new int[] {offset, marginPx, offset + bandPx, heightPx - marginPx};
-            case RIGHT:
-                return new int[] {widthPx - offset - bandPx, marginPx, widthPx - offset,
-                    heightPx - marginPx};
-            case BOTTOM:
-            default:
-                return new int[] {marginPx, heightPx - offset - bandPx, widthPx - marginPx,
-                    heightPx - offset};
-        }
-    }
-
-    /**
-     * How far {@code rect} reaches in from {@code edge} of a container {@code widthPx} by
-     * {@code heightPx}: the depth a surface standing on that edge takes up, which a ghost on the
-     * same edge has to clear.
-     */
-    static int depthFrom(@NonNull PlaceLayout.Edge edge, @NonNull int[] rect, int widthPx,
-                         int heightPx) {
-        switch (edge) {
-            case TOP: return Math.max(0, rect[3]);
-            case LEFT: return Math.max(0, rect[2]);
-            case RIGHT: return Math.max(0, widthPx - rect[0]);
-            case BOTTOM:
-            default: return Math.max(0, heightPx - rect[1]);
-        }
-    }
-
-    /**
-     * A ghost {@code band} on {@code edge} moved {@code px} further in, past the surfaces still
-     * standing on that edge, so it never lies under another surface's tap target.
-     */
-    @NonNull
-    static int[] shiftInward(@NonNull int[] band, @NonNull PlaceLayout.Edge edge, int px) {
-        int by = Math.max(0, px);
-        switch (edge) {
-            case TOP: return new int[] {band[0], band[1] + by, band[2], band[3] + by};
-            case LEFT: return new int[] {band[0] + by, band[1], band[2] + by, band[3]};
-            case RIGHT: return new int[] {band[0] - by, band[1], band[2] - by, band[3]};
-            case BOTTOM:
-            default: return new int[] {band[0], band[1] - by, band[2], band[3] - by};
-        }
     }
 }

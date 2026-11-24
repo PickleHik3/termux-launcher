@@ -16,7 +16,6 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.dock.DockStyle;
 import com.termux.app.dock.WallStripRowPolicy;
-import com.termux.app.place.Element;
 import com.termux.app.surfaces.EditorRows.Row;
 
 import org.junit.Before;
@@ -250,16 +249,6 @@ public class DockCardStripHeightTest {
         @NonNull @Override public Context context() { return mContext; }
         @Override public boolean floating() { return false; }
         @Override public void setFloating(boolean floating) {}
-        @NonNull @Override public List<Element> barOrder() { return BarOrder.DEFAULT; }
-        @Override public void setBarOrder(@NonNull List<Element> order) {}
-        @Override public boolean offers(@NonNull Element bar) { return true; }
-        @Override public boolean barShown(@NonNull Element bar) { return true; }
-        @Override public void setBarShown(@NonNull Element bar, boolean shown) {}
-        @NonNull @Override public BarOrder.Position position(@NonNull Element bar) {
-            return BarOrder.positionsFor(bar).get(0);
-        }
-        @Override public void setPosition(@NonNull Element bar,
-                                          @NonNull BarOrder.Position position) {}
         int appIcons = 7;
         int mostFitting = 10;
         @Override public int appIcons() { return appIcons; }

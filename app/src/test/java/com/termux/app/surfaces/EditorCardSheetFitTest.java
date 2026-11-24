@@ -964,21 +964,6 @@ public class EditorCardSheetFitTest {
         @NonNull @Override public Context context() { return mContext; }
         @Override public boolean floating() { return false; }
         @Override public void setFloating(boolean floating) {}
-        @NonNull @Override public List<com.termux.app.place.Element> barOrder() {
-            return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
-        }
-        @Override public void setBarOrder(@NonNull List<com.termux.app.place.Element> order) {}
-        @Override public boolean offers(@NonNull com.termux.app.place.Element bar) { return true; }
-        @Override public boolean barShown(@NonNull com.termux.app.place.Element bar) {
-            return bar != com.termux.app.place.Element.EXTRA_KEYS;
-        }
-        @Override public void setBarShown(@NonNull com.termux.app.place.Element bar, boolean shown) {}
-        @NonNull @Override public com.termux.app.surfaces.cards.BarOrder.Position position(
-                @NonNull com.termux.app.place.Element bar) {
-            return com.termux.app.surfaces.cards.BarOrder.positionsFor(bar).get(0);
-        }
-        @Override public void setPosition(@NonNull com.termux.app.place.Element bar,
-                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {}
         @Override public int appIcons() { return 7; }
         @Override public int appIconsFrom() { return 3; }
         @Override public int appIconsTo() { return 10; }

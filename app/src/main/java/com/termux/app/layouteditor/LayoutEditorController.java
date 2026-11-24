@@ -566,15 +566,4 @@ public final class LayoutEditorController {
         if (mPlan != null)
             afterWrite(mPlan.writeSlots(next));
     }
-
-    /** The Dock card's Bars list as stored for the shown orientation, or null. */
-    @Nullable
-    public String barOrder() {
-        return mPlan == null ? null : mPlan.barOrder();
-    }
-
-    public void setBarOrder(@NonNull String order) {
-        if (mPlan != null)
-            mPlan.setBarOrder(order);
-    }
 }

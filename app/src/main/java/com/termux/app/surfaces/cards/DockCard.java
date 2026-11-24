@@ -20,8 +20,6 @@ import com.termux.app.surfaces.EditorRows;
 import com.termux.app.surfaces.EditorRows.Offers;
 import com.termux.app.surfaces.EditorRows.Row;
 import com.termux.app.surfaces.EditorRows.Spec;
-import com.termux.app.surfaces.cards.BarOrder.Position;
-import com.termux.app.surfaces.cards.BarOrder.Setting;
 import com.termux.app.surfaces.rows.ActionRow;
 import com.termux.app.surfaces.rows.ChipsRow;
 import com.termux.app.surfaces.rows.EditorGlyphs;
@@ -111,16 +109,6 @@ public final class DockCard {
 
         boolean floating();
         void setFloating(boolean floating);
-
-        /** The Bars list, top to bottom, as it reads on screen. */
-        @NonNull List<Element> barOrder();
-        void setBarOrder(@NonNull List<Element> order);
-        /** Whether the page being edited wears {@code bar} at all (Home has no extra keys). */
-        boolean offers(@NonNull Element bar);
-        boolean barShown(@NonNull Element bar);
-        void setBarShown(@NonNull Element bar, boolean shown);
-        @NonNull Position position(@NonNull Element bar);
-        void setPosition(@NonNull Element bar, @NonNull Position position);
 
         int appIcons();
         int appIconsFrom();

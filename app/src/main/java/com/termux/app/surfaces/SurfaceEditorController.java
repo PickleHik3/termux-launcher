@@ -6525,19 +6525,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         return prefs == null ? null : prefs.getSharedPreferences();
     }
 
-    /** The bars stacked in {@code order} where they share an edge, written when anything moved. */
-    private void restackBars(@NonNull java.util.List<Element> order) {
-        LayoutEditorController layout = mHost.layoutEditor();
-        PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
-        if (layout == null || arranged == null)
-            return;
-        PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(arranged, order);
-        if (!next.equals(arranged)) {
-            layout.writeSlots(next);
-            positionTargets();
-        }
-    }
-
     private final class DockHost implements com.termux.app.surfaces.cards.DockCard.Host {
         @NonNull @Override public Context context() {
             return mHost.context();
@@ -6555,75 +6542,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             reclampAppIcons(chosenIconSize(), floating);
             // The Height strip's range follows the style.
             if (mSheet != null) mSheet.restate();
-        }
-
-        @NonNull @Override public java.util.List<Element> barOrder() {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return com.termux.app.surfaces.cards.BarOrder.DEFAULT;
-            java.util.List<Element> stored =
-                com.termux.app.surfaces.cards.BarOrder.parse(layout.barOrder());
-            PlaceLayout arranged = layout.arrangedLayout();
-            return arranged == null ? stored
-                : com.termux.app.surfaces.cards.BarOrder.reconcile(stored, arranged);
-        }
-
-        @Override public void setBarOrder(@NonNull java.util.List<Element> order) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return;
-            layout.setBarOrder(com.termux.app.surfaces.cards.BarOrder.format(order));
-            restackBars(order);
-            // The order alone (bars on edges of their own) moves no slot: Undo still holds it.
-            syncDirty();
-        }
-
-        @Override public boolean offers(@NonNull Element bar) {
-            // A bar put away in both orientations keeps its row, switch off.
-            LayoutEditorController layout = mHost.layoutEditor();
-            return layout != null && layout.canWear(bar);
-        }
-
-        @Override public boolean barShown(@NonNull Element bar) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            return layout != null && layout.isShown(bar);
-        }
-
-        @Override public void setBarShown(@NonNull Element bar, boolean shown) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            if (layout == null)
-                return;
-            java.util.List<Element> order = barOrder();
-            layout.setShown(bar, shown);
-            // Back in the list's place among the bars it now shares an edge with.
-            if (shown)
-                restackBars(order);
-            positionTargets();
-        }
-
-        @NonNull @Override
-        public com.termux.app.surfaces.cards.BarOrder.Position position(@NonNull Element bar) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
-            if (arranged == null)
-                return bar == Element.AZ
-                    ? com.termux.app.surfaces.cards.BarOrder.Position.RIDES_APPS_ROW
-                    : com.termux.app.surfaces.cards.BarOrder.Position.ABOVE_KEYBOARD;
-            return com.termux.app.surfaces.cards.BarOrder.positionOf(bar, arranged.slot(bar));
-        }
-
-        @Override public void setPosition(@NonNull Element bar,
-                @NonNull com.termux.app.surfaces.cards.BarOrder.Position position) {
-            LayoutEditorController layout = mHost.layoutEditor();
-            PlaceLayout arranged = layout == null ? null : layout.arrangedLayout();
-            if (layout == null || arranged == null)
-                return;
-            java.util.List<Element> order = barOrder();
-            PlaceLayout next = com.termux.app.surfaces.cards.BarOrder.restack(
-                com.termux.app.surfaces.cards.BarOrder.withPosition(arranged, bar, position),
-                order);
-            layout.writeSlots(next);
-            positionTargets();
         }
 
         @Override public int appIcons() {
