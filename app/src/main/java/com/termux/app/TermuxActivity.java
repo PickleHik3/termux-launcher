@@ -2694,27 +2694,55 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 getWindow().getDecorView(), isAppDrawerOpen());
         }
         if (isLauncherHomeIntent(intent)) {
-            // HOME means the home screen, not the home screen with something still up. HOME while
-            // already home never stops the activity, so this is the one exit these get that is not
-            // a Back press. Before resetTransientVisualState(): that call stomps every dock child's
-            // alpha, scale and translation, so a drawer left open across HOME would strand faded
-            // pinned icons.
-            mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
-            restoreInAppKeyboardTypingClaim();
-            // A home press while the launcher is in front lands on the page Start in names as
-            // Home, from a window or from another Home page; a return from another app finds the
-            // page it left.
-            if (mHomePress.goesHome() && mPaneWallController != null) {
-                mPaneWallController.goHome(isVisible());
-                // Home floats stay on their pages; a focused one gives the keyboard back.
-                if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
-            }
-            if (mSuggestionBarView != null) {
-                mSuggestionBarView.resetTransientVisualState();
-            }
-            mGeometry.request(GeometryScheduler.Reason.HOME, GeometryScheduler.ResizePolicy.NONE);
-            mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
+            handleHomePress();
         }
+    }
+
+    /** A question about unsaved changes is up over a home press; a second press adds none. */
+    private boolean mHomeAsking;
+
+    /**
+     * HOME means the home screen, not the home screen with something still up (ADR 0034). HOME
+     * while already home never stops the activity, so this is the one exit these get that is not
+     * a Back press. {@link com.termux.app.chrome.HomeExitPolicy} picks the step.
+     */
+    private void handleHomePress() {
+        com.termux.app.chrome.HomeExitPolicy.Step step = com.termux.app.chrome.HomeExitPolicy.decide(
+            mOverlays.anyOpen(), mOverlays.anyHoldsUnsavedChanges(), mHomePress.goesHome());
+        if (step == com.termux.app.chrome.HomeExitPolicy.Step.ASK) {
+            if (mHomeAsking) return;
+            mHomeAsking = true;
+            mOverlays.askBeforeLeaving(() -> {
+                mHomeAsking = false;
+                carryOutHomeExit(com.termux.app.chrome.HomeExitPolicy.afterAnswer(true));
+            }, () -> {
+                mHomeAsking = false;
+                carryOutHomeExit(com.termux.app.chrome.HomeExitPolicy.afterAnswer(false));
+            });
+            return;
+        }
+        carryOutHomeExit(step);
+    }
+
+    private void carryOutHomeExit(@NonNull com.termux.app.chrome.HomeExitPolicy.Step step) {
+        if (step == com.termux.app.chrome.HomeExitPolicy.Step.NONE) return;
+        // Before resetTransientVisualState(): that call stomps every dock child's alpha, scale and
+        // translation, so a drawer left open across HOME would strand faded pinned icons.
+        mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.HOME);
+        restoreInAppKeyboardTypingClaim();
+        // A home press while the launcher is in front and nothing was open lands on the page Start
+        // in names as Home, from a window or from another Home page; with something open it stays
+        // on the page underneath; a return from another app finds the page it left.
+        if (step == com.termux.app.chrome.HomeExitPolicy.Step.GO_HOME && mPaneWallController != null) {
+            mPaneWallController.goHome(isVisible());
+            // Home floats stay on their pages; a focused one gives the keyboard back.
+            if (mPaneController != null) mPaneController.releaseHomeFloatFocus();
+        }
+        if (mSuggestionBarView != null) {
+            mSuggestionBarView.resetTransientVisualState();
+        }
+        mGeometry.request(GeometryScheduler.Reason.HOME, GeometryScheduler.ResizePolicy.NONE);
+        mChrome.requestSync(ChromeRenderer.SCOPE_ACCESSORY_RENDER);
     }
 
     @Override
@@ -21175,6 +21203,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public boolean isOpen() {
                 return mAppearance.isOpen();
             }
+            @Override public boolean holdsUnsavedChanges() {
+                return mAppearance.holdsUnsavedChanges();
+            }
+            @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+                mAppearance.askBeforeLeaving(leave, stay);
+            }
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 switch (reason) {
                     case STOP:
@@ -21183,9 +21217,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                         mAppearance.onStop();
                         break;
                     case HOME:
-                        // Back to the home screen means leaving the surface: the editor through
-                        // its own unsaved-changes rule, never by discarding.
-                        mAppearance.requestExit();
+                        // Back to the home screen means leaving the surface; a draft was asked
+                        // about first (askBeforeLeaving), so this closes without asking again.
+                        mAppearance.exitAnswered();
                         break;
                     default:
                         break;

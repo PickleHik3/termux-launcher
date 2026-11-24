@@ -5345,7 +5345,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * changes without the look changing only when a card goes to a Look and back, which shows
      * nothing to save; Undo and a killed session still put it back.
      */
-    private boolean isDirty() {
+    @Override
+    public boolean isDirty() {
         TermuxAppSharedPreferences prefs = prefs();
         boolean look = prefs != null && isLookDirty();
         boolean settings = mEntrySettings != null && mSettingsNow != null
@@ -5424,6 +5425,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     @Override
     public void requestLeave(@NonNull Runnable proceed) {
+        requestLeave(proceed, () -> {});
+    }
+
+    @Override
+    public void requestLeave(@NonNull Runnable proceed, @NonNull Runnable keep) {
         if (!mOpen) {
             proceed.run();
             return;
@@ -5435,24 +5441,33 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         showUnsavedDialog(() -> {
             commitSession();
             proceed.run();
-        }, proceed);
+        }, proceed, keep);
     }
 
     /** Leaving with the picker's choice pending as well: the one question, always. */
     @Override
     public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
+        confirmLeave(onSave, onDiscard, () -> {});
+    }
+
+    @Override
+    public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard,
+                             @NonNull Runnable keep) {
         showUnsavedDialog(() -> {
             if (mOpen)
                 commitSession();
             onSave.run();
-        }, onDiscard);
+        }, onDiscard, keep);
     }
 
-    private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard) {
+    private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard,
+                                   @NonNull Runnable keep) {
         new MaterialAlertDialogBuilder(mHost.context())
             .setTitle(R.string.termux_surface_tuning_unsaved_title)
             .setMessage(R.string.termux_layout_editor_unsaved_message)
-            .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing, null)
+            .setOnCancelListener(dialog -> keep.run())
+            .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing,
+                (dialog, which) -> keep.run())
             .setNegativeButton(R.string.termux_surface_tuning_unsaved_discard,
                 (dialog, which) -> {
                     if (mOpen)

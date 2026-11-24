@@ -165,4 +165,69 @@ public class OverlayRegistryTest {
         assertEquals(List.of("a:HOME", "b:HOME", "c:HOME"), log);
         assertFalse(registry.onBackPressed());
     }
+
+    /** An open overlay with a draft; its answer is set by the test. */
+    private static final class Draft extends Pane {
+        boolean leaves;
+        int asked;
+
+        Draft(String name, boolean leaves, List<String> log) {
+            super(name, true, log);
+            this.leaves = leaves;
+        }
+
+        @Override public boolean holdsUnsavedChanges() {
+            return true;
+        }
+
+        @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            asked++;
+            log.add(name + ":ask");
+            if (leaves) leave.run(); else stay.run();
+        }
+    }
+
+    @Test
+    public void anOverlayThatSaidNothingHoldsNoDraftAndAsksNothing() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("a", true, log));
+        assertFalse(registry.anyHoldsUnsavedChanges());
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("leave"), out);
+    }
+
+    @Test
+    public void aClosedOverlayWithADraftIsNotAsked() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Draft draft = new Draft("d", true, log);
+        draft.open = false;
+        registry.register(draft);
+        assertFalse(registry.anyHoldsUnsavedChanges());
+        assertEquals(0, draft.asked);
+    }
+
+    @Test
+    public void continueLetsGoAndStayStopsTheQuestions() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Draft first = new Draft("a", true, log);
+        Draft second = new Draft("b", false, log);
+        Draft third = new Draft("c", true, log);
+        registry.register(first);
+        registry.register(second);
+        registry.register(third);
+        assertTrue(registry.anyHoldsUnsavedChanges());
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("a:ask", "b:ask"), log);
+        assertEquals(List.of("stay"), out);
+        assertEquals(0, third.asked);
+        second.leaves = true;
+        out.clear();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("leave"), out);
+    }
 }
