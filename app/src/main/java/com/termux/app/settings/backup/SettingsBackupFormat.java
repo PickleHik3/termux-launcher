@@ -7,6 +7,7 @@ import com.termux.ai.TaiRemoteSettings;
 import com.termux.ai.TaiSettings;
 import com.termux.privileged.PrivilegedPolicyStore;
 import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants.TERMUX_APP;
+import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -357,7 +358,8 @@ public final class SettingsBackupFormat {
     static int scaleFontSize(int px, float fromDensity, float toDensity, int min, int max) {
         long scaled = fromDensity > 0f && toDensity > 0f
             ? Math.round((double) px * toDensity / fromDensity) : px;
-        return (int) Math.max(min, Math.min(max, scaled));
+        return new FontSizeSettingsAdapter.Range(min, max, min)
+            .clamp((int) Math.max(Integer.MIN_VALUE, Math.min(Integer.MAX_VALUE, scaled)));
     }
 
     /**
