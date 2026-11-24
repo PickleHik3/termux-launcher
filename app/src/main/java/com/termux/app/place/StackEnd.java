@@ -149,13 +149,7 @@ public final class StackEnd {
 
     /** Whose card {@code view} carries ({@link #viewSide}) while the cards stand {@code apart} or not. */
     public static int sideOf(@NonNull StackView view, boolean apart) {
-        if (!apart) return STACK_SIDE;
-        if (view == StackView.HOST || view == StackView.AZ_EDGE
-            || view == StackView.KEYBOARD_COLUMN) return Side.HOME.ordinal();
-        if (view == StackView.TERMINAL_HOST || view == StackView.KEYS_CARD
-            || view == StackView.TERMINAL_AZ_EDGE || view == StackView.TERMINAL_KEYBOARD)
-            return Side.TERMINAL.ordinal();
-        return STACK_SIDE;
+        return apart && view.side != null ? view.side.ordinal() : STACK_SIDE;
     }
 
     /** Whether {@code o} draws the same card on view {@code v} at the same rect. */

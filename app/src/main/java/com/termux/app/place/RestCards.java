@@ -95,46 +95,61 @@ public final class RestCards {
         /** The A–Z bar standing alone off the dock, on its own edge host and glass sheet (#307). */
         AZ }
 
-    /** The views that carry cards or are laid out around them. */
+    /**
+     * The views that carry cards or are laid out around them, each with the side whose card it
+     * carries while the cards stand apart ({@link #side}).
+     */
     public enum StackView {
-        CONTAINER, HOST,
+        CONTAINER(null),
+        /** The glass host: Home's card while the cards stand apart. */
+        HOST(Side.HOME),
         /**
          * The keyboard's column. While the cards stand apart and the two rests draw the keyboard
          * differently, it is Home's at both rests (#307 round 3): laid out at Home's rest and
          * carrying Home's keyboard card, parked while the Terminal is in front
-         * ({@link #homeKeyboardColumn}); the Terminal's is {@link #TERMINAL_KEYBOARD}. Otherwise
-         * it is the front rest's.
+         * ({@link RestCards#homeKeyboardColumn}); the Terminal's is {@link #TERMINAL_KEYBOARD}.
+         * Otherwise it is the front rest's.
          */
-        KEYBOARD_COLUMN,
-        UNDER, STATUS_BAR, FLOATING_KEYBOARD,
+        KEYBOARD_COLUMN(Side.HOME),
+        UNDER(null), STATUS_BAR(null), FLOATING_KEYBOARD(null),
         /** The Terminal's extra-keys card while it stands apart from Home's under Floating (SideCards). */
-        KEYS_CARD,
+        KEYS_CARD(Side.TERMINAL),
         /**
          * The Terminal's card while it stands apart from Home's under Docked (SideCards, #304): a
          * second back host beside the glass host, laid out with the Docked dock formula (the
          * host's rect at the Terminal's rest, the flush air above the keys and the foot under the
          * gesture pill included) and carried on the Terminal's lane.
          */
-        TERMINAL_HOST,
+        TERMINAL_HOST(Side.TERMINAL),
         /**
          * The A–Z bar's own host off the dock ({@code place_az_bar_host}), in the content
          * column's edge stack on the top or a side, carrying Home's A–Z card while the cards
          * stand apart and the stack's own otherwise (#307).
          */
-        AZ_EDGE,
+        AZ_EDGE(Side.HOME),
         /**
          * The Terminal's own A–Z edge host while the cards stand apart and the two rests draw the
          * bar at different rects ({@code place_terminal_az_bar_host}, #307 round 3): laid out
          * once at the Terminal's rest, it slides in with the Terminal as Home's slides out.
          */
-        TERMINAL_AZ_EDGE,
+        TERMINAL_AZ_EDGE(Side.TERMINAL),
         /**
          * The Terminal's keyboard card while the cards stand apart (#307 round 3): laid out once at
          * the Terminal's rest, over its bands under the keyboard, it travels with the Terminal as
          * Home's, on {@link #KEYBOARD_COLUMN}, travels with Home. One keyboard's keys: the card
          * holds no second keyboard's pixels.
          */
-        TERMINAL_KEYBOARD
+        TERMINAL_KEYBOARD(Side.TERMINAL);
+
+        /**
+         * The side whose card this view carries while the cards stand apart; null for a view
+         * that carries the stack's own card ({@code StackEnd#sideOf}).
+         */
+        @Nullable public final Side side;
+
+        StackView(@Nullable Side side) {
+            this.side = side;
+        }
     }
 
     /** Where the layout stands the A–Z bar (ResolvedArrangement's azRowOnDock, azBarEdge, azTab). */

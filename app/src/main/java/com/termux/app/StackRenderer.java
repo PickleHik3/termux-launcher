@@ -172,11 +172,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private static final int TERMINAL_HOST_VIEW = RestCards.StackView.TERMINAL_HOST.ordinal();
     private static final int KEYS_CARD_VIEW = RestCards.StackView.KEYS_CARD.ordinal();
 
-    /** The Terminal's extra-keys card's slot, after the scene's ({@link StackScene#V_COUNT}). */
-    private static final int SLOT_KEYS_CARD = StackScene.V_COUNT;
-    /** The Terminal's Docked host's slot (#304), after the keys card's. */
-    private static final int SLOT_TERMINAL_HOST = StackScene.V_COUNT + 1;
-    private static final int SLOTS = StackScene.V_COUNT + 2;
+    /**
+     * A card view's own slot, after the scene's ({@link StackScene#V_COUNT}), by its
+     * {@link RestCards.StackView} ordinal: the Terminal's extra-keys card and its own host (#304).
+     */
+    private static final int SLOT_KEYS_CARD = StackScene.V_COUNT + KEYS_CARD_VIEW;
+    private static final int SLOT_TERMINAL_HOST = StackScene.V_COUNT + TERMINAL_HOST_VIEW;
+    private static final int SLOTS = StackScene.V_COUNT + StackEnd.VIEW_COUNT;
     // What was last written, per view slot (StackScene.V_*), and to which view object.
     private final View[] mWrittenView = new View[SLOTS];
     private final float[] mWrittenTy = new float[SLOTS];
