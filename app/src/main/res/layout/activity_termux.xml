@@ -754,6 +754,39 @@
                  what pinned it above the dock whatever order the user gave it. -->
         </com.termux.app.chrome.LiveBackdropLinearLayout>
 
+        <!-- The A–Z bar's other side's card (#307): where Home's rest and the Terminal's draw the
+             bar off the dock at different rects, the other side's bar is laid out here once, at
+             the rest, and slides in with its side while place_az_bar_host slides out with the
+             front. Invisible at a rest; AzEdgeCrossingCard lays it out, StackRenderer moves it. -->
+        <FrameLayout
+            android:id="@+id/place_az_bar_crossing_host"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:importantForAccessibility="no"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/place_az_bar_crossing_host_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/place_az_bar_crossing_host_frost"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/place_az_bar_crossing_host_surface"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </FrameLayout>
+        </FrameLayout>
+
         <!-- The deck look's band behind the system navigation bar (wave 8): from the bottom of the
              accessory stack (the keyboard's foot) to the screen's bottom edge, the keyboard's
              opaque slab while a terminal effect is drawn. Owned by applyDeckBands alone; gone off

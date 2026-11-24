@@ -65,7 +65,9 @@ public final class SurfaceDirtyLedger {
         TERMINAL_SHEET,
         APP_DRAWER,
         OFF_DOCK_PLANK,
-        AZ_BAR_HOST
+        AZ_BAR_HOST,
+        /** The A–Z bar's other side's card while a crossing carries it (#307). */
+        AZ_BAR_CROSSING_HOST
     }
 
     /** Radius groups for the frost crops: surfaces tuned by the same slider share an entry. */

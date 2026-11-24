@@ -10974,6 +10974,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void restCards(@Nullable com.termux.app.place.RestCards home,
                                             @Nullable com.termux.app.place.RestCards terminal) {
                 mStackRenderer.setCards(home, terminal);
+                // The A–Z bar's other side's card, from the front rest's answer (#307).
+                mAzEdgeCrossing.applyAtRest(
+                    mLastWallPage == com.termux.app.page.PageKind.HOME ? home : terminal);
             }
         });
 
@@ -13018,11 +13021,80 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // this side stands *beside* the bar, on the same stack — and compensating for the chrome
         // above and below the canvas, as this used to, cost the bar two thirds of its length.
         // Inside a joined Docked frame the band is the shared width and the bar centres in it.
-        int framedPadPx = dockedFrameSharedBandPx() > 0
+        int framedPadPx = azBarColumnPadPx();
+        updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
+    }
+
+    /** A side bar's air either side of its letters: the margin, or centred in a joined Docked frame. */
+    private int azBarColumnPadPx() {
+        return dockedFrameSharedBandPx() > 0
             ? com.termux.app.place.DockedFrameBands.centringPadPx(azBarHostBandPx(),
                 azBarThicknessPx())
-            : marginPx;
-        updateViewPadding(host, framedPadPx, 0, framedPadPx, 0);
+            : azBarHostMarginPx();
+    }
+
+    /** The A–Z bar's other side's card (#307), laid out at rest, shown while a crossing carries it. */
+    private final com.termux.app.dock.AzEdgeCrossingCard mAzEdgeCrossing =
+        new com.termux.app.dock.AzEdgeCrossingCard(new com.termux.app.dock.AzEdgeCrossingCard.Host() {
+            @Nullable @Override public View view(int id) { return hotView(id); }
+            @NonNull @Override public android.util.DisplayMetrics displayMetrics() {
+                return getResources().getDisplayMetrics();
+            }
+            @Override public void prepareBar(@NonNull FrameLayout host,
+                                             @NonNull PlaceLayout.Edge edge) {
+                prepareAzCrossingBar(host, edge);
+            }
+            @Override public void dressBar(@NonNull FrameLayout host,
+                                           @NonNull PlaceLayout.Edge edge, boolean home) {
+                dressAzCrossingBar(edge, home);
+            }
+            @Override public void releaseBar(@NonNull FrameLayout host) {
+                ImageView frost = findViewById(R.id.place_az_bar_crossing_host_frost);
+                if (frost == null) return;
+                frost.setImageDrawable(null);
+                if (frost.getVisibility() != View.GONE) frost.setVisibility(View.GONE);
+            }
+        });
+    /** The crossing card's own letters: drawn only while a crossing carries it. */
+    @Nullable private AzScrubRowView mAzCrossingRowView;
+    private final com.termux.app.chrome.ChromeShapeOutlineProvider mAzCrossingOutline =
+        new com.termux.app.chrome.ChromeShapeOutlineProvider();
+
+    /**
+     * At rest: the crossing card's letters, air and glass switch as the bar in front wears them,
+     * so the crossing that shows it lays nothing out. It takes no touch: the scrub stays on the
+     * front's bar.
+     */
+    private void prepareAzCrossingBar(@NonNull FrameLayout host, @NonNull PlaceLayout.Edge edge) {
+        AzScrubRowView row = installAzBarRow(host, mAzCrossingRowView);
+        mAzCrossingRowView = row;
+        int pad = edge.isOnSide() ? azBarColumnPadPx()
+            : mDock.appliedDockLayout().horizontalInsetPx;
+        updateViewPadding(host, pad, 0, pad, 0);
+        row.setBarEdge(edge);
+        row.setRestingAlpha(azShowMode().restingAlpha());
+        if (mSuggestionBarView != null)
+            row.setVisibleLetters(new LinkedHashSet<>(mSuggestionBarView.getAvailableAzLetters()));
+        if (mAzScrubRowView != null && mAzScrubRowView != row
+            && row.getCurrentTextColor() != mAzScrubRowView.getCurrentTextColor())
+            row.setTextColor(mAzScrubRowView.getCurrentTextColor());
+        View glass = findViewById(R.id.place_az_bar_crossing_host_glass);
+        int shown = com.termux.app.launcher.az.AzShowMode.ownGlassShown(azGlassBackground(),
+            hasDockedFrameCard()) ? View.VISIBLE : View.INVISIBLE;
+        if (glass != null && glass.getVisibility() != shown) glass.setVisibility(shown);
+    }
+
+    /** A crossing begins carrying the card: its glass, as the arriving side's bar wears it. */
+    private void dressAzCrossingBar(@NonNull PlaceLayout.Edge edge, boolean home) {
+        View glass = findViewById(R.id.place_az_bar_crossing_host_glass);
+        if (glass == null || glass.getVisibility() != View.VISIBLE) return;
+        PlaceLayout layout = home ? homePlaceLayout() : terminalPlaceLayout();
+        if (layout == null) return;
+        mDock.applyOffDockPlankGlass(R.id.place_az_bar_crossing_host_glass,
+            R.id.place_az_bar_crossing_host_frost, R.id.place_az_bar_crossing_host_surface,
+            com.termux.app.chrome.SurfaceDirtyLedger.FrostRect.AZ_BAR_CROSSING_HOST,
+            mAzCrossingOutline, edge, azBarThicknessPx(),
+            Collections.singletonList(com.termux.app.place.ChromeShape.PieceId.AZ), layout);
     }
 
     /** The model's pieces for these elements, in order. */
@@ -14465,6 +14537,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
         // After the arriving host is dressed: the shared foot's frost blends between the two.
         mFootDress.onCrossingBegin(here.isHome(), there.isHome());
+        // The A–Z bar's arriving card shows on its own host, dressed now (#307).
+        mAzEdgeCrossing.onCrossingBegin(here.isHome(), there.isHome());
         beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);

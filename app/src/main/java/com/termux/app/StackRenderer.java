@@ -557,6 +557,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         }
         writeTerminalHost(keysTilt);
         writeFoot();
+        writeAzEdges();
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
         if (layersMoved) invalidateIfShown(R.id.accessory_blur_backdrop);
         // The keyboard's column is the front page's: it carries the Terminal's lift by its share.
@@ -737,6 +738,32 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         if (foot == null) return;
         if (writeTy(SLOT_FOOT, foot, mFrame.cardTy[FOOT_VIEW]))
             invalidateIfShown(R.id.dock_foot_blur_backdrop);
+    }
+
+    private static final int AZ_EDGE_VIEW = RestCards.StackView.AZ_EDGE.ordinal();
+    private static final int TERMINAL_AZ_EDGE_VIEW = RestCards.StackView.TERMINAL_AZ_EDGE.ordinal();
+
+    /**
+     * The A–Z bar's edge hosts across a Home ⇄ Terminal crossing (#307): the edge stack's host is
+     * the leaving side's card and slides out with it, the crossing host the arriving side's and
+     * slides in with it ({@code AzEdgeCrossingCard}), each at the scene's slide of its side's
+     * view. A card both ends draw at one rect, a Home to Home crossing and a rest stand at 0.
+     */
+    private void writeAzEdges() {
+        boolean across = mHasEnds && mFromHome != mToHome;
+        float leaving = across
+            ? mFrame.cardTx[mFromHome ? AZ_EDGE_VIEW : TERMINAL_AZ_EDGE_VIEW] : 0f;
+        float arriving = across
+            ? mFrame.cardTx[mToHome ? AZ_EDGE_VIEW : TERMINAL_AZ_EDGE_VIEW] : 0f;
+        writeTx(mViews.view(R.id.place_az_bar_host), leaving);
+        writeTx(mViews.view(R.id.place_az_bar_crossing_host), arriving);
+    }
+
+    /** {@code view}'s translationX, written only on a change. */
+    private void writeTx(@Nullable View view, float tx) {
+        if (view == null || view.getTranslationX() == tx) return;
+        view.setTranslationX(tx);
+        mWriteCount++;
     }
 
     /**
