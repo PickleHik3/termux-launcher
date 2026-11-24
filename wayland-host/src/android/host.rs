@@ -496,6 +496,7 @@ pub fn spawn(
     let stopping = Arc::new(AtomicBool::new(false));
     let stop_requested = stopping.clone();
     let thread = std::thread::Builder::new().name("tl-wayland".into()).spawn(move || {
+        linfo!("diag-start: compositor thread up, attaching");
         let Some((events, report_end)) = events() else {
             let _ = signal_tx.send(Err("cannot attach to the VM".into()));
             return;
@@ -549,8 +550,10 @@ fn setup(
     channel: Channel<Command>,
     events: Box<dyn HostEvents>,
 ) -> Result<(EventLoop<'static, State>, State), Box<dyn std::error::Error>> {
+    linfo!("diag-start: attached, setup begins");
     let event_loop: EventLoop<'static, State> = EventLoop::try_new()?;
     let loop_handle = event_loop.handle();
+    linfo!("diag-start: event loop");
     let display: Display<State> = Display::new()?;
     let dh = display.handle();
 
@@ -571,6 +574,7 @@ fn setup(
     // Only Xwayland's client sees this global.
     let xwayland_shell_state = XWaylandShellState::new::<State>(&dh);
 
+    linfo!("diag-start: globals");
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
     seat.add_touch();
@@ -589,6 +593,7 @@ fn setup(
             model: "Linux windows".into(),
         },
     );
+    linfo!("diag-start: seat");
     output.create_global::<State>(&dh);
     let output_size = (config.output_width.max(1), config.output_height.max(1));
     let refresh_mhz = (1_000_000_000_000u128 / config.frame_period.as_nanos().max(1)) as i32;
@@ -598,6 +603,7 @@ fn setup(
 
     // bind_absolute takes `<path>.lock` and removes a stale socket left by a dead host; a live
     // host keeps its lock and the bind fails instead of stealing its socket.
+    linfo!("diag-start: output");
     let listener = ListeningSocket::bind_absolute(config.socket_path.clone())?;
     linfo!("listening on {} (scale {}, frame {:?})", config.socket_path.display(), config.scale, config.frame_period);
     let listener_token = loop_handle.insert_source(Generic::new(listener, Interest::READ, Mode::Level), |_, listener, state| {
@@ -629,6 +635,7 @@ fn setup(
         }
     })?;
 
+    linfo!("diag-start: sources");
     let now = Instant::now();
     let mut state = State {
         display_handle: dh,
@@ -678,6 +685,7 @@ fn setup(
     if let Some(xw) = config.xwayland {
         super::xwayland::start(&mut state, xw);
     }
+    linfo!("diag-start: state built, xwayland={}", state.xwayland.is_some());
     Ok((event_loop, state))
 }
 
