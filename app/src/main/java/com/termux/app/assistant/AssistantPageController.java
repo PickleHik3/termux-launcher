@@ -124,7 +124,7 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
         dictation = new AssistantDictation(app);
         window = new AssistantContextWindow(app);
         offers = new AssistantOffersController(app, chatView.offers(), prefs(), io, new AssistantOffersController.Host() {
-            @Override public void openDrawerSettings() { openAppDrawerSettings(); }
+            @Override public void openDrawerSettings() { SettingsActivity.openAppDrawerSettings(context); }
             @Override public void say(@NonNull String message) { Snackbar.make(page, message, Snackbar.LENGTH_SHORT).show(); }
         });
         chatView.setListener(this);
@@ -967,18 +967,6 @@ final class AssistantPageController implements AssistantEngine.Listener, Assista
                 composerNotice = null;
                 updateNotice();
             }, false);
-    }
-
-    /** The drawer nudge's own action: the drawer's settings. */
-    private void openAppDrawerSettings() {
-        Intent intent = SettingsActivity.createFragmentIntent(context,
-            com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
-            R.string.settings_app_drawer_view_type_title);
-        if (!(context instanceof Activity)) intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-        try {
-            context.startActivity(intent);
-        } catch (RuntimeException ignored) {
-        }
     }
 
     private void hideKeyboard() {

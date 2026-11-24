@@ -20887,9 +20887,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void openAppDrawerSettings() {
-            startActivity(SettingsActivity.createFragmentIntent(TermuxActivity.this,
-                com.termux.app.fragments.settings.termux.AppDrawerPreferencesFragment.class,
-                R.string.settings_app_drawer_view_type_title));
+            SettingsActivity.openAppDrawerSettings(TermuxActivity.this);
         }
 
         @Nullable @Override
