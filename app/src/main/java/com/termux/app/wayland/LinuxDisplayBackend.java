@@ -45,14 +45,14 @@ public enum LinuxDisplayBackend {
     /**
      * The backend one launch uses. A whole desktop session ({@code session}) follows the choice:
      * under Wayland Display it runs in a rootful X server of its own, one window
-     * ({@link WaylandDesktopServer}). An app or desktop inside a proot-distro container
-     * ({@code inDistro}) stays on X11 Display for now: its login forwards neither the Wayland
-     * socket nor {@code WAYLAND_DISPLAY} yet.
+     * ({@link WaylandDesktopServer}). An app inside a proot-distro container ({@code inDistro})
+     * opens as a window too, its login carrying the socket ({@link LinuxWindowsProot}); a whole
+     * desktop inside a container stays on X11 Display for now.
      */
     @NonNull
     public static LinuxDisplayBackend forApp(@NonNull LinuxDisplayBackend chosen, boolean session,
                                              boolean inDistro) {
-        if (chosen != WAYLAND || inDistro) return X11;
+        if (chosen != WAYLAND || (inDistro && session)) return X11;
         return WAYLAND;
     }
 }

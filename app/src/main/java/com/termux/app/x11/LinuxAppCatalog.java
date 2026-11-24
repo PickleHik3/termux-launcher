@@ -163,8 +163,14 @@ public final class LinuxAppCatalog {
          */
         @NonNull
         public String commandWith(@NonNull String extraArgs) {
+            return commandWith(extraArgs, null);
+        }
+
+        /** {@link #commandWith(String)} with a container login's Wayland Display {@code extras}. */
+        @NonNull
+        public String commandWith(@NonNull String extraArgs, @Nullable ProotDistro.LoginExtras extras) {
             String command = extraArgs.isEmpty() ? exec : exec + " " + extraArgs;
-            return ProotDistro.loginCommand(container, command);
+            return ProotDistro.loginCommand(container, command, extras);
         }
     }
 

@@ -34,8 +34,8 @@ public class LinuxDisplayBackendTest {
         assertEquals(LinuxDisplayBackend.WAYLAND, LinuxDisplayBackend.forApp(w, false, false));
         // A whole desktop opens as one window in its own X server.
         assertEquals(LinuxDisplayBackend.WAYLAND, LinuxDisplayBackend.forApp(w, true, false));
-        // An app or desktop in a proot-distro container keeps X11 Display for now.
-        assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.forApp(w, false, true));
+        // An app in a proot-distro container opens as a window; its desktop keeps X11 Display.
+        assertEquals(LinuxDisplayBackend.WAYLAND, LinuxDisplayBackend.forApp(w, false, true));
         assertEquals(LinuxDisplayBackend.X11, LinuxDisplayBackend.forApp(w, true, true));
         assertEquals(LinuxDisplayBackend.X11,
             LinuxDisplayBackend.forApp(LinuxDisplayBackend.X11, true, false));
