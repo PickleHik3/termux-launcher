@@ -4,6 +4,7 @@ import android.view.KeyEvent;
 import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -114,6 +115,22 @@ public final class OverlayRegistry {
     private boolean mAsking;
     /** The overlays leaving in the Home exit now. */
     @NonNull private final List<Overlay> mExiting = new ArrayList<>();
+    /** Ends the Home exit at once; its end calls {@link #endExit}. */
+    @Nullable private Runnable mFinishExit;
+
+    /**
+     * Sets what ends a running Home exit at once. Back during the exit does that and is spent
+     * there, as a second home press is: nothing else handles input over a surface that is leaving.
+     */
+    public void setExitFinisher(@Nullable Runnable finishExit) {
+        mFinishExit = finishExit;
+    }
+
+    private boolean finishExitIfRunning() {
+        if (mExiting.isEmpty() || mFinishExit == null) return false;
+        mFinishExit.run();
+        return true;
+    }
 
     /** Registers the next overlay outward; the first registered is the innermost. */
     public void register(@NonNull Overlay overlay) {
@@ -122,6 +139,7 @@ public final class OverlayRegistry {
 
     /** @return true when some overlay spent the press. */
     public boolean onBackPressed() {
+        if (finishExitIfRunning()) return true;
         for (int i = 0; i < mOverlays.size(); i++) {
             if (mOverlays.get(i).onBack()) {
                 // DIAG(back-path): which overlay spent Back; revert before merge.
@@ -140,6 +158,10 @@ public final class OverlayRegistry {
     public boolean consumeKeyDown(int keyCode, @NonNull KeyEvent event) {
         boolean backDown = keyCode == KeyEvent.KEYCODE_BACK
             && event.getAction() == KeyEvent.ACTION_DOWN;
+        if (backDown && finishExitIfRunning()) {
+            mClaimedBackDown = true;
+            return true;
+        }
         for (int i = 0; i < mOverlays.size(); i++) {
             Overlay overlay = mOverlays.get(i);
             if (overlay instanceof TypedOverlay) {

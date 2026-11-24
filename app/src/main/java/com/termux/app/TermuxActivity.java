@@ -21373,6 +21373,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // None: the page tail of the Back chain, nothing is drawn.
             @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
+        registry.setExitFinisher(() -> mHomeExit.finishNow());
         return registry;
     }
 
