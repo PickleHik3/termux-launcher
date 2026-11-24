@@ -962,6 +962,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mBar.setBarShown(true, false);
         mBarUp = true;
         mBar.setPageName(pageName());
+        mBar.setBubbles(EditorBubbles.offered(useAs()), EditorBubbles.markedFor(mCard));
         mBar.setOrientation(layout != null && layout.shownOrientation() == PlaceOrientation.LANDSCAPE);
         mCardTrail.clear();
         if (mSheet == null)
@@ -1177,6 +1178,14 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             raiseFromPeek();
         }
 
+        @Override public void onBubble(@NonNull EditorBubbles bubble) {
+            if (!mOpen)
+                return;
+            // Home and Workspace turn the frame to their side first; Global leaves it.
+            openMainCard(bubble.card);
+            raiseFromPeek();
+        }
+
         @Override public void onPageLabel() {
             if (!mOpen)
                 return;
@@ -1276,6 +1285,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mCard = card;
         mSubcardParent = null;
         mSubcardRow = null;
+        if (mBar != null)
+            mBar.setMarked(EditorBubbles.markedFor(card));
         if (card == EditorCard.APPEARANCE)
             ensureIconsContent();
         sheet.show(card, EditorRows.rows(card, offers()), resetLabel(card), animate, raiseTo);
