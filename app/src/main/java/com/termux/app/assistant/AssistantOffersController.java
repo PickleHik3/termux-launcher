@@ -35,8 +35,29 @@ final class AssistantOffersController {
         void say(@NonNull String message);
     }
 
-    private static final String KEY_DISMISSED_PENDING = "offer_dismissed_unsorted";
-    private static final String KEY_DISMISSED_TMP = "offer_dismissed_tmp";
+    /**
+     * One offer kind in one place: its threshold, where Not now is kept, the value it reads, the
+     * words and the button. Indexed by {@link AssistantOffersPolicy.Kind#ordinal()}; a new kind
+     * adds its entry here and its due rule to the policy.
+     */
+    private abstract class Entry {
+        final String key;
+        final long threshold;
+        final int actionRes;
+        final Runnable action;
+        long dismissed = AssistantOffersPolicy.NONE;
+
+        Entry(String key, long threshold, int actionRes, Runnable action) {
+            this.key = key;
+            this.threshold = threshold;
+            this.actionRes = actionRes;
+            this.action = action;
+        }
+
+        abstract long value();
+
+        abstract String message(long value);
+    }
 
     private final Context context;
     private final AssistantOffersView view;
@@ -45,6 +66,7 @@ final class AssistantOffersController {
     private final Handler main = new Handler(Looper.getMainLooper());
     private final Host host;
     private final AssistantTmpHousekeeping.Clearer clearer;
+    private final Entry[] entries;
     private final List<AssistantNoticeView.Content> contents = new ArrayList<>(AssistantOffersView.MAX_ROWS);
 
     private long pendingApps = AssistantOffersPolicy.NONE;
@@ -62,6 +84,26 @@ final class AssistantOffersController {
         this.io = io;
         this.host = host;
         this.clearer = TermuxShellUtils::clearTermuxTMPDIROlderThan;
+        this.entries = new Entry[AssistantOffersPolicy.Kind.values().length];
+        entries[AssistantOffersPolicy.Kind.PENDING.ordinal()] = new Entry("offer_dismissed_unsorted",
+            AssistantOffersPolicy.PENDING_THRESHOLD, R.string.assistant_offer_unsorted_action, host::openDrawerSettings) {
+            @Override long value() { return pendingApps; }
+
+            @Override String message(long value) {
+                int n = (int) value;
+                return AssistantOffersController.this.context.getResources()
+                    .getQuantityString(R.plurals.assistant_offer_unsorted, n, n);
+            }
+        };
+        entries[AssistantOffersPolicy.Kind.TMP.ordinal()] = new Entry("offer_dismissed_tmp",
+            AssistantOffersPolicy.TMP_THRESHOLD_BYTES, R.string.assistant_offer_tmp_action, this::clearOldFiles) {
+            @Override long value() { return tmpBytes; }
+
+            @Override String message(long value) {
+                Context c = AssistantOffersController.this.context;
+                return c.getString(R.string.assistant_offer_tmp, Formatter.formatFileSize(c, value));
+            }
+        };
     }
 
     /** The page is on screen: count the waiting apps and, if an hour has passed, measure tmp. */
@@ -113,41 +155,35 @@ final class AssistantOffersController {
     // --------------------------------------------------------------------------- strip
 
     private void apply() {
-        long dismissedPending = prefs.getLong(KEY_DISMISSED_PENDING, AssistantOffersPolicy.NONE);
-        long dismissedTmp = prefs.getLong(KEY_DISMISSED_TMP, AssistantOffersPolicy.NONE);
-        if (AssistantOffersPolicy.forgetDismissal(pendingApps, AssistantOffersPolicy.PENDING_THRESHOLD, dismissedPending)) {
-            prefs.edit().remove(KEY_DISMISSED_PENDING).apply();
-            dismissedPending = AssistantOffersPolicy.NONE;
-        }
-        if (AssistantOffersPolicy.forgetDismissal(tmpBytes, AssistantOffersPolicy.TMP_THRESHOLD_BYTES, dismissedTmp)) {
-            prefs.edit().remove(KEY_DISMISSED_TMP).apply();
-            dismissedTmp = AssistantOffersPolicy.NONE;
+        for (Entry e : entries) {
+            long d = prefs.getLong(e.key, AssistantOffersPolicy.NONE);
+            if (AssistantOffersPolicy.forgetDismissal(e.value(), e.threshold, d)) {
+                prefs.edit().remove(e.key).apply();
+                d = AssistantOffersPolicy.NONE;
+            }
+            e.dismissed = d;
         }
         contents.clear();
         for (AssistantOffersPolicy.Offer offer : AssistantOffersPolicy.offers(pendingApps, tmpBytes,
-            dismissedPending, dismissedTmp)) {
-            contents.add(contentFor(offer));
+            entry(AssistantOffersPolicy.Kind.PENDING).dismissed, entry(AssistantOffersPolicy.Kind.TMP).dismissed)) {
+            contents.add(contentFor(entry(offer.kind), offer.value));
         }
         view.show(contents);
     }
 
     @NonNull
-    private AssistantNoticeView.Content contentFor(@NonNull AssistantOffersPolicy.Offer offer) {
-        String notNow = context.getString(R.string.assistant_not_now);
+    private Entry entry(@NonNull AssistantOffersPolicy.Kind kind) {
+        return entries[kind.ordinal()];
+    }
+
+    @NonNull
+    private AssistantNoticeView.Content contentFor(@NonNull Entry e, long value) {
         Runnable dismiss = () -> {
-            prefs.edit().putLong(offer.kind == AssistantOffersPolicy.Kind.PENDING
-                ? KEY_DISMISSED_PENDING : KEY_DISMISSED_TMP, offer.value).apply();
+            prefs.edit().putLong(e.key, value).apply();
             apply();
         };
-        if (offer.kind == AssistantOffersPolicy.Kind.PENDING) {
-            int n = (int) offer.value;
-            return new AssistantNoticeView.Content(
-                context.getResources().getQuantityString(R.plurals.assistant_offer_unsorted, n, n), "", -1, false,
-                notNow, dismiss, context.getString(R.string.assistant_offer_unsorted_action), host::openDrawerSettings, false);
-        }
-        return new AssistantNoticeView.Content(
-            context.getString(R.string.assistant_offer_tmp, Formatter.formatFileSize(context, offer.value)), "", -1, false,
-            notNow, dismiss, context.getString(R.string.assistant_offer_tmp_action), this::clearOldFiles, false);
+        return new AssistantNoticeView.Content(e.message(value), "", -1, false,
+            context.getString(R.string.assistant_not_now), dismiss, context.getString(e.actionRes), e.action, false);
     }
 
     // ----------------------------------------------------------------------- clearing
