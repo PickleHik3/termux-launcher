@@ -165,4 +165,220 @@ public class OverlayRegistryTest {
         assertEquals(List.of("a:HOME", "b:HOME", "c:HOME"), log);
         assertFalse(registry.onBackPressed());
     }
+
+    /** An open overlay with a draft; its answer is set by the test. */
+    private static final class Draft extends Pane {
+        boolean leaves;
+        int asked;
+
+        Draft(String name, boolean leaves, List<String> log) {
+            super(name, true, log);
+            this.leaves = leaves;
+        }
+
+        @Override public boolean holdsUnsavedChanges() {
+            return true;
+        }
+
+        @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            asked++;
+            log.add(name + ":ask");
+            if (leaves) leave.run(); else stay.run();
+        }
+    }
+
+    @Test
+    public void anOverlayThatSaidNothingHoldsNoDraftAndAsksNothing() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("a", true, log));
+        assertFalse(registry.anyHoldsUnsavedChanges());
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("leave"), out);
+    }
+
+    @Test
+    public void aClosedOverlayWithADraftIsNotAsked() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Draft draft = new Draft("d", true, log);
+        draft.open = false;
+        registry.register(draft);
+        assertFalse(registry.anyHoldsUnsavedChanges());
+        assertEquals(0, draft.asked);
+    }
+
+    @Test
+    public void continueLetsGoAndStayStopsTheQuestions() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Draft first = new Draft("a", true, log);
+        Draft second = new Draft("b", false, log);
+        Draft third = new Draft("c", true, log);
+        registry.register(first);
+        registry.register(second);
+        registry.register(third);
+        assertTrue(registry.anyHoldsUnsavedChanges());
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("a:ask", "b:ask"), log);
+        assertEquals(List.of("stay"), out);
+        assertEquals(0, third.asked);
+        second.leaves = true;
+        out.clear();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(List.of("leave"), out);
+    }
+
+    /** An open draft that keeps its question pending until the test answers. */
+    private static final class Pending extends Pane {
+        Runnable leave;
+        Runnable stay;
+        int asked;
+
+        Pending(List<String> log) {
+            super("p", true, log);
+        }
+
+        @Override public boolean holdsUnsavedChanges() {
+            return true;
+        }
+
+        @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            asked++;
+            this.leave = leave;
+            this.stay = stay;
+        }
+    }
+
+    @Test
+    public void aSecondAskWhilePendingIsIgnored() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(1, pending.asked);
+    }
+
+    @Test
+    public void closeAllWhilePendingLetsTheNextAskThrough() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        registry.closeAll(OverlayRegistry.CloseReason.STOP);
+        pending.open = true;
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(2, pending.asked);
+    }
+
+    @Test
+    public void stayAndLeaveEachClearThePendingQuestion() {
+        OverlayRegistry registry = new OverlayRegistry();
+        Pending pending = new Pending(new ArrayList<>());
+        registry.register(pending);
+        List<String> out = new ArrayList<>();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        pending.stay.run();
+        registry.askBeforeLeaving(() -> out.add("leave"), () -> out.add("stay"));
+        assertEquals(2, pending.asked);
+        pending.leave.run();
+        assertEquals(List.of("stay", "leave"), out);
+        registry.askBeforeLeaving(() -> { }, () -> { });
+        assertEquals(3, pending.asked);
+    }
+
+    /** A member: gives a view to the exit. */
+    private static final class Member extends Pane {
+        final android.view.View view = new android.view.View(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext());
+
+        Member(String name, List<String> log) {
+            super(name, true, log);
+        }
+
+        final android.view.View second = new android.view.View(
+            androidx.test.core.app.ApplicationProvider.getApplicationContext());
+
+        /** The editor gives its host, sheet and bar; the drawer gives its host. */
+        @Override public void exitViews(@NonNull List<android.view.View> out) {
+            if (!open) return;
+            out.add(view);
+            out.add(second);
+        }
+    }
+
+    @Test
+    public void anExitClosesNonMembersAtOnceAndMembersAtTheEnd() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("sheet", true, log));
+        registry.register(new Member("drawer", log));
+        List<android.view.View> views = new ArrayList<>();
+        assertEquals(1, registry.beginExit(views));
+        assertEquals(2, views.size());
+        assertEquals(List.of("sheet:HOME"), log);
+        registry.endExit();
+        assertEquals(List.of("sheet:HOME", "drawer:HOME"), log);
+        registry.endExit();
+        assertEquals(2, log.size());
+    }
+
+    @Test
+    public void anExitWithNoMembersClosesEverythingAndReportsZero() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        registry.register(new Pane("a", true, log));
+        assertEquals(0, registry.beginExit(new ArrayList<>()));
+        assertEquals(List.of("a:HOME"), log);
+    }
+
+    /** Back while the Home exit runs ends it at once, and nothing else handles that press. */
+    @Test
+    public void backDuringTheHomeExitFinishesItAndIsSpentThere() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Pane sheet = new Pane("sheet", true, log);
+        registry.register(sheet);
+        registry.setExitFinisher(() -> {
+            log.add("finish");
+            registry.endExit();
+        });
+        List<android.view.View> views = new ArrayList<>();
+        Pane leaving = new Pane("leaving", true, log) {
+            @Override public void exitViews(@NonNull List<android.view.View> out) {
+                out.add(null);
+            }
+        };
+        registry.register(leaving);
+        assertEquals(1, registry.beginExit(views));
+
+        assertTrue(registry.consumeKeyDown(KeyEvent.KEYCODE_BACK, down(KeyEvent.KEYCODE_BACK)));
+        assertTrue("the release is swallowed too", registry.consumeKeyUp(KeyEvent.KEYCODE_BACK));
+        assertEquals(List.of("sheet:HOME", "finish", "leaving:HOME"), log);
+
+        // Not exiting any more: Back goes to the overlays as it always did.
+        assertFalse(registry.onBackPressed());
+    }
+
+    @Test
+    public void backDuringTheHomeExitOnTheButtonRouteFinishesItToo() {
+        List<String> log = new ArrayList<>();
+        OverlayRegistry registry = new OverlayRegistry();
+        Pane leaving = new Pane("leaving", true, log) {
+            @Override public void exitViews(@NonNull List<android.view.View> out) {
+                out.add(null);
+            }
+        };
+        registry.register(leaving);
+        registry.setExitFinisher(() -> {
+            log.add("finish");
+            registry.endExit();
+        });
+        registry.beginExit(new ArrayList<>());
+        assertTrue(registry.onBackPressed());
+        assertEquals(List.of("finish", "leaving:HOME"), log);
+    }
 }

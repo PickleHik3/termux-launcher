@@ -1132,7 +1132,7 @@ public final class TaiRuntimeService extends Service {
     }
 
     private Notification buildNotification(@NonNull String title, @NonNull String text) {
-        Intent settingsIntent = new Intent(this, SettingsActivity.class);
+        Intent settingsIntent = com.termux.app.activities.SettingsDoor.plain(this);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
             0,

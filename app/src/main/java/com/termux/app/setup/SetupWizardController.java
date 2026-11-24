@@ -223,6 +223,25 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
             layout(false);
     }
 
+    /** The sheet layer for the Home exit while the wizard is up, else null. */
+    @Nullable
+    public View exitView() {
+        return isActive() ? mLayer : null;
+    }
+
+    /**
+     * The Home exit starts: the miniature the wizard posed the page in grows back to full size
+     * over the exit, beside the sheet's fade. The end ({@link #closeImmediately}) snaps it to rest.
+     */
+    public void exitStarted(long durationMs) {
+        View root = mRoot;
+        if (!isActive() || root == null)
+            return;
+        root.animate().cancel();
+        root.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
+            .setDuration(durationMs).start();
+    }
+
     /** Drops the wizard with no ceremony: the root back at rest, the wall released. */
     public void closeImmediately() {
         close(false);
@@ -842,7 +861,7 @@ public final class SetupWizardController implements SetupSheetView.Callbacks, Se
 
     @Override
     public void onSettings() {
-        startSafely(new Intent(mHost.context(), SettingsActivity.class));
+        startSafely(com.termux.app.activities.SettingsDoor.plain(mHost.context()));
     }
 
     @Override

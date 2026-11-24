@@ -655,7 +655,7 @@ public final class LauncherCategorySortService extends Service {
 
     @NonNull
     private PendingIntent settingsIntent() {
-        return PendingIntent.getActivity(this, 0, new Intent(this, SettingsActivity.class),
+        return PendingIntent.getActivity(this, 0, com.termux.app.activities.SettingsDoor.plain(this),
             Build.VERSION.SDK_INT >= Build.VERSION_CODES.M ? PendingIntent.FLAG_IMMUTABLE : 0);
     }
 
@@ -668,7 +668,7 @@ public final class LauncherCategorySortService extends Service {
 
     private Notification buildNotification(String text, int percent, boolean indeterminate,
                                            boolean ongoing) {
-        Intent settingsIntent = new Intent(this, SettingsActivity.class);
+        Intent settingsIntent = com.termux.app.activities.SettingsDoor.plain(this);
         PendingIntent pendingIntent = PendingIntent.getActivity(
             this,
             0,

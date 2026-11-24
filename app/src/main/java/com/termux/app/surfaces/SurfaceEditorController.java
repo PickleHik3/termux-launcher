@@ -5345,7 +5345,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      * changes without the look changing only when a card goes to a Look and back, which shows
      * nothing to save; Undo and a killed session still put it back.
      */
-    private boolean isDirty() {
+    @Override
+    public boolean isDirty() {
         TermuxAppSharedPreferences prefs = prefs();
         boolean look = prefs != null && isLookDirty();
         boolean settings = mEntrySettings != null && mSettingsNow != null
@@ -5424,6 +5425,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
      */
     @Override
     public void requestLeave(@NonNull Runnable proceed) {
+        requestLeave(proceed, () -> {});
+    }
+
+    @Override
+    public void requestLeave(@NonNull Runnable proceed, @NonNull Runnable keep) {
         if (!mOpen) {
             proceed.run();
             return;
@@ -5435,32 +5441,47 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         showUnsavedDialog(() -> {
             commitSession();
             proceed.run();
-        }, proceed);
+        }, proceed, keep);
     }
 
     /** Leaving with the picker's choice pending as well: the one question, always. */
     @Override
     public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard) {
+        confirmLeave(onSave, onDiscard, () -> {});
+    }
+
+    @Override
+    public void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard,
+                             @NonNull Runnable keep) {
         showUnsavedDialog(() -> {
             if (mOpen)
                 commitSession();
             onSave.run();
-        }, onDiscard);
+        }, onDiscard, keep);
     }
 
-    private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard) {
+    private void showUnsavedDialog(@NonNull Runnable save, @NonNull Runnable discard,
+                                   @NonNull Runnable keep) {
+        // Every way out answers once: a button, or a dismissal with none (Back, a tap outside, the
+        // surface closing under the dialog), which keeps editing.
+        SingleAnswer question = new SingleAnswer();
+        Runnable keepOnce = question.answer(keep);
+        Runnable discardOnce = question.answer(() -> {
+            if (mOpen)
+                revertToEntry();
+            discard.run();
+        });
+        Runnable saveOnce = question.answer(save);
         new MaterialAlertDialogBuilder(mHost.context())
             .setTitle(R.string.termux_surface_tuning_unsaved_title)
             .setMessage(R.string.termux_layout_editor_unsaved_message)
-            .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing, null)
+            .setOnDismissListener(dialog -> question.dismissed(keep))
+            .setNeutralButton(R.string.termux_surface_tuning_unsaved_keep_editing,
+                (dialog, which) -> keepOnce.run())
             .setNegativeButton(R.string.termux_surface_tuning_unsaved_discard,
-                (dialog, which) -> {
-                    if (mOpen)
-                        revertToEntry();
-                    discard.run();
-                })
+                (dialog, which) -> discardOnce.run())
             .setPositiveButton(R.string.termux_surface_tuning_unsaved_save,
-                (dialog, which) -> save.run())
+                (dialog, which) -> saveOnce.run())
             .show();
     }
 
@@ -5481,6 +5502,32 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             restateOrientation();
             restateCard();
         });
+    }
+
+    private boolean mHomeExit;
+
+    @Override
+    public void setHomeExit(boolean on) {
+        mHomeExit = on;
+    }
+
+    @Override
+    public void startHomeExitSettle(long durationMs) {
+        AppearanceEditorFrame frame = mFrame;
+        if (mOpen && frame != null)
+            frame.hide(true, durationMs, null);
+    }
+
+    @Override
+    public void exitViews(@NonNull List<View> out) {
+        if (!mOpen)
+            return;
+        EditorCardSheet sheet = mSheet;
+        if (sheet != null && sheet.view().getVisibility() == View.VISIBLE)
+            out.add(sheet.view());
+        EditorBar bar = mBar;
+        if (bar != null)
+            bar.exitViews(out);
     }
 
     /** Takes the editor off screen: the card, the bar, then the frame back to size. */
@@ -5526,7 +5573,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mChromeVeiled = false;
         EditorCardSheet sheet = mSheet;
         if (sheet != null) {
-            sheet.hide(true, () -> {
+            sheet.hide(!mHomeExit, () -> {
                 sheet.detach();
                 sheet.setVeiled(false);
             });
@@ -5544,7 +5591,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 onHidden.run();
             return;
         }
-        frame.hide(true, onHidden);
+        // A Home exit grew the frame back already: at its end it is put at rest, not animated.
+        frame.hide(!mHomeExit, onHidden);
     }
 
     /** The targets' outlines taken off, so the launcher wears none after the editor. */

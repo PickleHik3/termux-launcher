@@ -620,6 +620,12 @@ public final class SheetsController {
         }
     }
 
+    /** The drawer's plane for the Home exit, without building a drawer nobody opened. */
+    @Nullable
+    public android.view.View appDrawerExitView() {
+        return mAppDrawerController == null ? null : mAppDrawerController.exitView();
+    }
+
     /** True while the drawer plane is up — what the key-release swallow asks. */
     public boolean isAppDrawerOpen() {
         return mAppDrawerController != null && mAppDrawerController.isOpen();

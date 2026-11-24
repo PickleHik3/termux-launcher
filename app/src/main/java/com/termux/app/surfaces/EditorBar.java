@@ -177,6 +177,12 @@ final class EditorBar {
         return mBar;
     }
 
+    /** Adds the bar's visible views to a Home exit's group. */
+    void exitViews(@NonNull java.util.List<View> out) {
+        if (mBar.getVisibility() == View.VISIBLE) out.add(mBar);
+        if (mHalfRow.getVisibility() == View.VISIBLE) out.add(mHalfRow);
+    }
+
     /** The line naming the page the editor shows (ADR 0015 §6: no halves to switch between). */
     @NonNull
     View halfRow() {

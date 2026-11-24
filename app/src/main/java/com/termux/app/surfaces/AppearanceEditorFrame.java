@@ -254,6 +254,14 @@ final class AppearanceEditorFrame {
 
     /** Back to full size, and the clip taken off once it is there. */
     void hide(boolean animate, @Nullable Runnable onEnd) {
+        hide(animate, EXIT_MS, onEnd);
+    }
+
+    /**
+     * {@link #hide(boolean, Runnable)} over {@code durationMs}: the Home exit grows the frame back
+     * on its own clock, scale and translation and the clip's outline only, never a layout.
+     */
+    void hide(boolean animate, long durationMs, @Nullable Runnable onEnd) {
         mRoot.animate().cancel();
         Runnable finish = () -> {
             mRoot.setScaleX(1f);
@@ -278,7 +286,7 @@ final class AppearanceEditorFrame {
         final float cornerPx = mCornerRadiusPx;
         final android.animation.TimeInterpolator curve = EditorMotion.Use.EDITOR_EXIT.curve(false);
         mRoot.animate().scaleX(1f).scaleY(1f).translationX(0f).translationY(0f)
-            .setDuration(EXIT_MS).setInterpolator(t -> t >= 1f ? 1f : curve.getInterpolation(t))
+            .setDuration(durationMs).setInterpolator(t -> t >= 1f ? 1f : curve.getInterpolation(t))
             .setUpdateListener(a -> {
                 mCornerRadiusPx = exitCornerPx(cornerPx, startScale, mRoot.getScaleX());
                 mRoot.invalidateOutline();

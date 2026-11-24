@@ -322,7 +322,8 @@ public final class PageOverviewView extends FrameLayout {
     private float zoom;
     private boolean closing;
     private boolean closed;
-    private float savedRootAlpha = 1f;
+    private final RootUnderOverview rootUnder = new RootUnderOverview();
+    private final OverviewExitLanding exitLanding = new OverviewExitLanding();
 
     @Nullable private Pending pending;
     /**
@@ -475,6 +476,8 @@ public final class PageOverviewView extends FrameLayout {
         for (Card card : cards) card.place = cards.indexOf(card);
         Card focused = focusedCard();
         liveKey = focused == null || !drawsLive(focused) ? null : focused.key;
+        // The opening focus is the page the overview was opened from.
+        exitLanding.opened(focused == null ? null : positionOf(focused));
     }
 
     // ---- Opening and closing ---------------------------------------------------------------
@@ -490,9 +493,8 @@ public final class PageOverviewView extends FrameLayout {
         if (focused != null && focused.kind == PageOverviewPolicy.Kind.DISPLAY) {
             host.preview(positionOf(focused));
         }
-        savedRootAlpha = root.getAlpha();
         // Hidden, not gone: it keeps drawing its children, which the live card shows.
-        root.setAlpha(0f);
+        rootUnder.hide(root);
         // Neighbours have their text from the first frame; the live page its picture.
         refreshNearbyText();
         captureLive(true);
@@ -515,7 +517,20 @@ public final class PageOverviewView extends FrameLayout {
         if (closed) return;
         commitPending();
         Card card = focusedCard();
-        finish(card == null ? null : positionOf(card), false);
+        finish(exitLanding.landing(card == null ? null : positionOf(card)), false);
+    }
+
+    /**
+     * The Home exit starts: the wall is put on the page the press lands on and shown under the
+     * overview, so the fade reveals that page and not the ground. The wall does not page: that is
+     * the page the overview was opened from, and the landing at the end ({@link
+     * #closeImmediately()}) is the same page.
+     */
+    public void exitStarted() {
+        if (closed) return;
+        WallRow.Position origin = exitLanding.exitStarted();
+        if (origin != null) host.preview(origin);
+        rootUnder.reveal(root);
     }
 
     /** The row or the pages changed under the overview: its cards follow. */
@@ -562,7 +577,7 @@ public final class PageOverviewView extends FrameLayout {
             bar.dismiss();
         }
         if (position != null) host.land(position);
-        root.setAlpha(savedRootAlpha);
+        rootUnder.restore(root);
         root.invalidate();
         ViewGroup parent = (ViewGroup) getParent();
         if (parent != null) parent.removeView(this);

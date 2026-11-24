@@ -1,8 +1,10 @@
 package com.termux.app.chrome;
 
 import android.view.KeyEvent;
+import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -52,6 +54,36 @@ public final class OverlayRegistry {
          * said.
          */
         default boolean isOpen() { return false; }
+
+        /**
+         * Adds the views this overlay gives to the Home exit, while it is open: they fade and
+         * shrink with the other members, and {@code closeImmediately(HOME)} runs at the end. Adds
+         * nothing by default: such an overlay closes at once when the exit starts. Every overlay the
+         * activity registers states it, an empty body saying it has none ({@code
+         * OverlayExitStatedTest}); the surface's own leave animation must not run on a HOME close.
+         */
+        default void exitViews(@NonNull List<View> out) { }
+
+        /**
+         * The Home exit has started with this overlay as a member: anything that settles beside
+         * the fade (the editor's page growing back) starts now, over {@code durationMs}.
+         */
+        default void exitStarted(long durationMs) { }
+
+        /**
+         * Whether leaving now would lose something the person has not saved: a draft. Default
+         * false, so a surface that has not said is closed without a question, as it always was.
+         */
+        default boolean holdsUnsavedChanges() { return false; }
+
+        /**
+         * Asks the person whether to leave, over this overlay: {@code leave} when they go on
+         * (saved or discarded), {@code stay} when they keep what they were doing. Called only
+         * while {@link #holdsUnsavedChanges()}. Default: no question, {@code leave} at once.
+         */
+        default void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+            leave.run();
+        }
     }
 
     /**
@@ -79,6 +111,26 @@ public final class OverlayRegistry {
      * the overlay is closing and would answer no.
      */
     private boolean mClaimedBackDown;
+    /** An unsaved-changes question is up and has not been answered. */
+    private boolean mAsking;
+    /** The overlays leaving in the Home exit now. */
+    @NonNull private final List<Overlay> mExiting = new ArrayList<>();
+    /** Ends the Home exit at once; its end calls {@link #endExit}. */
+    @Nullable private Runnable mFinishExit;
+
+    /**
+     * Sets what ends a running Home exit at once. Back during the exit does that and is spent
+     * there, as a second home press is: nothing else handles input over a surface that is leaving.
+     */
+    public void setExitFinisher(@Nullable Runnable finishExit) {
+        mFinishExit = finishExit;
+    }
+
+    private boolean finishExitIfRunning() {
+        if (mExiting.isEmpty() || mFinishExit == null) return false;
+        mFinishExit.run();
+        return true;
+    }
 
     /** Registers the next overlay outward; the first registered is the innermost. */
     public void register(@NonNull Overlay overlay) {
@@ -87,6 +139,7 @@ public final class OverlayRegistry {
 
     /** @return true when some overlay spent the press. */
     public boolean onBackPressed() {
+        if (finishExitIfRunning()) return true;
         for (int i = 0; i < mOverlays.size(); i++) {
             if (mOverlays.get(i).onBack()) {
                 // DIAG(back-path): which overlay spent Back; revert before merge.
@@ -105,6 +158,10 @@ public final class OverlayRegistry {
     public boolean consumeKeyDown(int keyCode, @NonNull KeyEvent event) {
         boolean backDown = keyCode == KeyEvent.KEYCODE_BACK
             && event.getAction() == KeyEvent.ACTION_DOWN;
+        if (backDown && finishExitIfRunning()) {
+            mClaimedBackDown = true;
+            return true;
+        }
         for (int i = 0; i < mOverlays.size(); i++) {
             Overlay overlay = mOverlays.get(i);
             if (overlay instanceof TypedOverlay) {
@@ -150,8 +207,70 @@ public final class OverlayRegistry {
         return false;
     }
 
+    /**
+     * Starts a Home exit: every overlay that gives views to {@code out} becomes a member and is
+     * left open; every other overlay closes now, as a home press always closed them.
+     *
+     * @return the number of members; 0 means everything is already closed
+     */
+    public int beginExit(@NonNull List<View> out) {
+        mAsking = false;
+        mExiting.clear();
+        for (Overlay overlay : mOverlays) {
+            int before = out.size();
+            overlay.exitViews(out);
+            if (out.size() > before) mExiting.add(overlay);
+            else overlay.closeImmediately(CloseReason.HOME);
+        }
+        for (int i = 0; i < mExiting.size(); i++) mExiting.get(i).exitStarted(HomeExit.DURATION_MS);
+        return mExiting.size();
+    }
+
+    /** The exit's end: each member resets its own views and closes. */
+    public void endExit() {
+        for (int i = 0; i < mExiting.size(); i++) mExiting.get(i).closeImmediately(CloseReason.HOME);
+        mExiting.clear();
+    }
+
+    /** Whether an open overlay holds unsaved changes. */
+    public boolean anyHoldsUnsavedChanges() {
+        for (Overlay overlay : mOverlays)
+            if (overlay.isOpen() && overlay.holdsUnsavedChanges()) return true;
+        return false;
+    }
+
+    /**
+     * Asks each open overlay that holds unsaved changes, innermost first, one question at a time.
+     * {@code leave} runs when every one let go; {@code stay} runs at the first that did not (the
+     * rest are not asked). A no-op while a question is pending; {@link #closeAll} forgets it, as
+     * a dialog dropped with its surface never answers.
+     */
+    public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+        if (mAsking) return;
+        mAsking = true;
+        askFrom(0, () -> {
+            mAsking = false;
+            leave.run();
+        }, () -> {
+            mAsking = false;
+            stay.run();
+        });
+    }
+
+    private void askFrom(int from, @NonNull Runnable leave, @NonNull Runnable stay) {
+        for (int i = from; i < mOverlays.size(); i++) {
+            final Overlay overlay = mOverlays.get(i);
+            if (!overlay.isOpen() || !overlay.holdsUnsavedChanges()) continue;
+            final int next = i + 1;
+            overlay.askBeforeLeaving(() -> askFrom(next, leave, stay), stay);
+            return;
+        }
+        leave.run();
+    }
+
     /** Drops every overlay for {@code reason}, innermost first. */
     public void closeAll(@NonNull CloseReason reason) {
+        mAsking = false;
         for (Overlay overlay : mOverlays) overlay.closeImmediately(reason);
     }
 

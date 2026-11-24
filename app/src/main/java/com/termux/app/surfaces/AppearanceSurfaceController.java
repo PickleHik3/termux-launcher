@@ -219,11 +219,39 @@ public final class AppearanceSurfaceController {
          */
         void requestLeave(@NonNull Runnable proceed);
 
+        /** Adds the editor's own views (card sheet, bar) to a Home exit's group, when up. */
+        default void exitViews(@NonNull java.util.List<View> out) { }
+
+        /**
+         * While on, ending the session moves nothing of its own on the sheet and bar: a Home
+         * exit has already faded them. The frame still grows back, which is the page settling.
+         */
+        default void setHomeExit(boolean on) { }
+
+        /** A Home exit starts: the frame grows back to full size over {@code durationMs}, now. */
+        default void startHomeExitSettle(long durationMs) { }
+
+        /** {@link #requestLeave(Runnable)}, with {@code keep} run when the answer is Keep editing. */
+        default void requestLeave(@NonNull Runnable proceed, @NonNull Runnable keep) {
+            requestLeave(proceed);
+        }
+
+        /** Whether leaving now would lose edits: the look, the choices or the arrangement. */
+        default boolean isDirty() {
+            return false;
+        }
+
         /**
          * Leaving with the picker's choice pending as well: always asks. Discard puts the editor
          * back and runs {@code onDiscard}; Save keeps everything and runs {@code onSave}.
          */
         void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard);
+
+        /** {@link #confirmLeave(Runnable, Runnable)}, with {@code keep} run on Keep editing. */
+        default void confirmLeave(@NonNull Runnable onSave, @NonNull Runnable onDiscard,
+                                  @NonNull Runnable keep) {
+            confirmLeave(onSave, onDiscard);
+        }
 
         /** Ends the session. */
         void endSession();
@@ -360,6 +388,8 @@ public final class AppearanceSurfaceController {
     private int mToken;
     private boolean mLeaveRemembered;
     @Nullable private FrameLayout mView;
+    /** The close is the end of a Home exit. */
+    private boolean mHomeClosing;
     @Nullable private OverviewPage mOverview;
     /** The picker is being built: a second Change waits for it. */
     private boolean mOverviewLoading;
@@ -878,15 +908,65 @@ public final class AppearanceSurfaceController {
         leave(this::closeNow);
     }
 
+    /** The surface's views for the Home exit: its host, and the editor's sheet and bar. */
+    public void exitViews(@NonNull java.util.List<View> out) {
+        if (!mOpen) return;
+        if (mView != null) out.add(mView);
+        mEditor.exitViews(out);
+    }
+
+    /** A Home exit has started with this surface in it: the page settles on the exit's clock. */
+    public void exitStarted(long durationMs) {
+        if (mOpen && mEditor.isPresented())
+            mEditor.startHomeExitSettle(durationMs);
+    }
+
+    /** Whether leaving now would lose the editor's draft or the picker's pending wallpaper. */
+    public boolean holdsUnsavedChanges() {
+        return mOpen && (hasPendingWallpaper() || mEditor.isDirty());
+    }
+
+    /**
+     * A home press with a draft: the one unsaved-changes question, over the editor. {@code leave}
+     * runs once the answer was Save or Discard; Keep editing runs {@code stay}, nothing else.
+     */
+    public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
+        if (!mOpen || mCommitting) {
+            stay.run();
+            return;
+        }
+        rememberWhere();
+        leave(leave, stay);
+    }
+
+    /** A home press whose question is answered: closes at once, never asking again. */
+    public void exitAnswered() {
+        if (!mOpen || mCommitting)
+            return;
+        mEditor.setHomeExit(true);
+        mHomeClosing = true;
+        try {
+            closeNow();
+        } finally {
+            mEditor.setHomeExit(false);
+            mHomeClosing = false;
+        }
+    }
+
     /**
      * Leaves for good ({@code then}): through the editor's unsaved question, or the one question
      * for the editor and the pending wallpaper together.
      */
     private void leave(@NonNull Runnable then) {
+        leave(then, () -> {});
+    }
+
+    /** {@link #leave(Runnable)}, with {@code keep} run when the answer is Keep editing. */
+    private void leave(@NonNull Runnable then, @NonNull Runnable keep) {
         if (hasPendingWallpaper())
-            mEditor.confirmLeave(() -> commitThen(then), then);
+            mEditor.confirmLeave(() -> commitThen(then), then, keep);
         else
-            mEditor.requestLeave(then);
+            mEditor.requestLeave(then, keep);
     }
 
     /**
@@ -1296,7 +1376,8 @@ public final class AppearanceSurfaceController {
         } else {
             letGo.run();
         }
-        boolean editorWasUp = mEditor.isPresented();
+        // A Home exit has grown the frame back already: nothing stays behind it.
+        boolean editorWasUp = mEditor.isPresented() && !mHomeClosing;
         mEditor.setPageListener(null);
         removeScrim(editorWasUp);
         mCommitting = false;
