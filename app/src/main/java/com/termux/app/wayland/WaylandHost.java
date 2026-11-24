@@ -70,7 +70,7 @@ public final class WaylandHost {
 
     public static native boolean nativeStart(String socketDir, @Nullable String xkbConfigRoot,
                                              @Nullable String xwaylandBinary, int outputWidth, int outputHeight,
-                                             float scale, long framePeriodNanos);
+                                             float scale, long framePeriodNanos, int listenFd);
     /** Use {@link #stop()}. */
     private static native void nativeStop();
     public static native void nativeSetSurface(long id, @Nullable Surface surface);

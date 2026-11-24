@@ -176,6 +176,13 @@ public final class LinuxWindowsActivity extends Activity {
     private boolean mDebugBound;
     /** The activity is visible: the shown window is drawn and has focus. */
     private boolean mVisible;
+    /** Started instances of this screen; main thread. */
+    private static int sInFront;
+
+    /** Whether the Linux windows screen is on screen (started); main thread. */
+    static boolean isInFront() {
+        return sInFront > 0;
+    }
     /** A window has been here since the screen opened: the last one closing finishes it. */
     private boolean mHadWindow;
     private long mFocusedId;
@@ -933,7 +940,8 @@ public final class LinuxWindowsActivity extends Activity {
             // The service is started as well as bound, so the host outlives this screen.
             startService(new Intent(this, LinuxWindowsService.class));
             mService.start(WaylandAppRunner.SOCKET_DIR, start.xkbConfigRoot, start.xwaylandBinary,
-                start.width, start.height, start.scale, start.framePeriodNanos);
+                start.width, start.height, start.scale, start.framePeriodNanos,
+                WaylandAppRunner.shared(this).listenSocketForHost());
         } catch (RemoteException | RuntimeException e) {
             Log.w(LOG_TAG, "start: " + e);
         }
@@ -1277,6 +1285,7 @@ public final class LinuxWindowsActivity extends Activity {
     protected void onStart() {
         super.onStart();
         mVisible = true;
+        sInFront++;
         // A Scale changed on an app's settings page while this screen was away.
         for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).reconfigure();
         Pane shown = mPanes.get(mTabs.shown());
@@ -1292,6 +1301,7 @@ public final class LinuxWindowsActivity extends Activity {
         // its Surface and last frame, so it shows again at once.
         for (int i = 0; i < mPanes.size(); i++) mPanes.valueAt(i).setVisible(false);
         mVisible = false;
+        if (sInFront > 0) sInFront--;
         // A modifier latched on the keyboard does not carry over to the next visit.
         mKeyboard.reset();
         mClipboard.setInFront(false);

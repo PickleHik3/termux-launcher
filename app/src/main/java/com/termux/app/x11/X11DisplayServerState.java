@@ -3,13 +3,18 @@ package com.termux.app.x11;
 import android.os.IBinder;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
+import com.termux.app.wayland.LinuxWindowsEnv;
 import com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment;
+
+import java.util.Map;
 
 /**
  * Whether a display server is running, for the whole process, and the {@code DISPLAY} that new
- * shells get from it.
+ * shells get from it, or {@code WAYLAND_DISPLAY} and {@code DISPLAY} while the Wayland host runs
+ * ({@link #setWaylandDisplays}, {@link LinuxWindowsEnv#forSession}).
  *
  * <p>The server outlives every activity, so this does too. It follows the server alone: up when a
  * live server announces itself (whoever takes the announcement, or nobody), down only when that
@@ -29,6 +34,10 @@ public final class X11DisplayServerState {
     private static boolean running;
     /** The user's opt-in: {@code DISPLAY} for new shells while a display runs. */
     private static boolean displayEnvWanted;
+    /** The Wayland host's {@code WAYLAND_DISPLAY} while it runs; null otherwise. */
+    @Nullable private static String waylandDisplay;
+    /** The Wayland host's Xwayland display while it runs and has said it; null otherwise. */
+    @Nullable private static String xwaylandDisplay;
 
     /** A server announced itself with {@code binder}. A dead one changes nothing. */
     static synchronized void onServerAnnounced(@NonNull IBinder binder) {
@@ -58,9 +67,23 @@ public final class X11DisplayServerState {
         applyDisplayEnv();
     }
 
+    /**
+     * The Wayland host's display while it runs, for new shells: {@code waylandDisplay} as their
+     * {@code WAYLAND_DISPLAY} and its Xwayland's {@code xwaylandDisplay} (null until known) as
+     * their {@code DISPLAY}; both null once it stops. {@code WaylandAppRunner} says it.
+     */
+    public static synchronized void setWaylandDisplays(@Nullable String waylandDisplay,
+                                                       @Nullable String xwaylandDisplay) {
+        X11DisplayServerState.waylandDisplay = waylandDisplay;
+        X11DisplayServerState.xwaylandDisplay = waylandDisplay == null ? null : xwaylandDisplay;
+        applyDisplayEnv();
+    }
+
     private static void applyDisplayEnv() {
-        TermuxShellEnvironment.setDisplayForNewSessions(displayEnvWanted && running
-            ? X11DisplayHostController.displayName() : null);
+        Map<String, String> env = LinuxWindowsEnv.forSession(displayEnvWanted,
+            running ? X11DisplayHostController.displayName() : null, waylandDisplay, xwaylandDisplay);
+        TermuxShellEnvironment.setDisplayForNewSessions(env.get("DISPLAY"));
+        TermuxShellEnvironment.setWaylandDisplayForNewSessions(env.get("WAYLAND_DISPLAY"));
     }
 
     @VisibleForTesting
@@ -68,6 +91,9 @@ public final class X11DisplayServerState {
         link.release();
         running = false;
         displayEnvWanted = false;
+        waylandDisplay = null;
+        xwaylandDisplay = null;
         TermuxShellEnvironment.setDisplayForNewSessions(null);
+        TermuxShellEnvironment.setWaylandDisplayForNewSessions(null);
     }
 }

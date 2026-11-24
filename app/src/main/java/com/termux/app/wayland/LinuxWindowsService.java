@@ -83,9 +83,10 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
 
         @Override
         public void start(String socketDir, String xkbConfigRoot, String xwaylandBinary, int outputWidth,
-                          int outputHeight, float scale, long framePeriodNanos) {
+                          int outputHeight, float scale, long framePeriodNanos,
+                          android.os.ParcelFileDescriptor listenSocket) {
             mMain.post(() -> doStart(socketDir, xkbConfigRoot, xwaylandBinary, outputWidth, outputHeight,
-                scale, framePeriodNanos));
+                scale, framePeriodNanos, listenSocket));
         }
 
         @Override
@@ -233,18 +234,23 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     }
 
     private void doStart(String socketDir, String xkbConfigRoot, String xwaylandBinary, int outputWidth,
-                         int outputHeight, float scale, long framePeriodNanos) {
+                         int outputHeight, float scale, long framePeriodNanos,
+                         @Nullable android.os.ParcelFileDescriptor listenSocket) {
         if (!mLoaded) {
+            closeQuietly(listenSocket);
             setState(ILinuxWindows.STATE_UNAVAILABLE, "This build has no Linux windows host.");
             return;
         }
         if (mRunning) {
+            closeQuietly(listenSocket);
             setState(mState, mMessage);
             return;
         }
         setState(ILinuxWindows.STATE_STARTING, "");
+        // Native owns the fd from here and closes it if the start fails.
+        int listenFd = listenSocket == null ? -1 : listenSocket.detachFd();
         if (WaylandHost.nativeStart(socketDir, xkbConfigRoot, xwaylandBinary, outputWidth, outputHeight,
-                scale, framePeriodNanos)) {
+                scale, framePeriodNanos, listenFd)) {
             mRunning = true;
             // The same test as wayland-host/src/xkbroot.rs: without it the host has no keyboard.
             String keymap = keymapMissingAt(xkbConfigRoot);
@@ -253,6 +259,14 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
                 + (keymap != null ? "; no keyboard: keymap data missing at " + keymap : ""));
         } else {
             setState(ILinuxWindows.STATE_STOPPED, "The host did not start; see logcat TLWayland.");
+        }
+    }
+
+    private static void closeQuietly(@Nullable android.os.ParcelFileDescriptor fd) {
+        if (fd == null) return;
+        try {
+            fd.close();
+        } catch (java.io.IOException ignored) {
         }
     }
 

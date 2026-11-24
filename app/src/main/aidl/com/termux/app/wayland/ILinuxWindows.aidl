@@ -1,5 +1,6 @@
 package com.termux.app.wayland;
 
+import android.os.ParcelFileDescriptor;
 import android.view.Surface;
 import com.termux.app.wayland.ILinuxWindowsCallback;
 
@@ -27,7 +28,7 @@ import com.termux.app.wayland.ILinuxWindowsCallback;
  */
 oneway interface ILinuxWindows {
     /** Raised with every change to this interface or its callback. */
-    const int VERSION = 3;
+    const int VERSION = 4;
 
     // Host states, ILinuxWindowsCallback.onHostState.
     /** Asked to start; running or stopped follows. */
@@ -80,9 +81,11 @@ oneway interface ILinuxWindows {
      * XDG_RUNTIME_DIR (the socket is wayland-0 in it). xkbConfigRoot (nullable): the keymap data.
      * xwaylandBinary (nullable): also start rootless Xwayland. output: the display in pixels and its
      * density. framePeriodNanos: the display's refresh period, the host's frame tick (0: 60 Hz).
+     * listenSocket (nullable): a socket the launcher already listens on in socketDir, taken over
+     * by the host and left in place when it stops; null makes the host bind the path itself.
      */
     void start(String socketDir, String xkbConfigRoot, String xwaylandBinary, int outputWidth,
-            int outputHeight, float scale, long framePeriodNanos);
+            int outputHeight, float scale, long framePeriodNanos, in ParcelFileDescriptor listenSocket);
     /** Stops the compositor (clients and Xwayland end); answered by onHostState. */
     void stop();
 

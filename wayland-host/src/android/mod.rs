@@ -88,10 +88,12 @@ fn set_env_once(name: &str, value: &Path) {
     }
 }
 
-/// Starts the compositor. `socketDir` is the clients' XDG_RUNTIME_DIR; the socket is
-/// `wayland-0` in it. `xkbConfigRoot` (nullable) becomes XKB_CONFIG_ROOT for the seat's keymap.
+/// Starts the compositor. `socketDir` is the prefix's tmp, the clients' runtime directory; the
+/// socket is `wayland-0` in it and Xwayland's sockets are in its `.X11-unix`. `xkbConfigRoot` (nullable) becomes XKB_CONFIG_ROOT for the seat's keymap.
 /// `xwaylandBinary` (nullable) starts rootless Xwayland when set. `scale` is the display density
-/// and `framePeriodNanos` its refresh period (the frame tick). Returns false when the host could
+/// and `framePeriodNanos` its refresh period (the frame tick). `listenFd`, when 0 or more, is the
+/// launcher's socket already listening at that path, taken over (and closed here on failure);
+/// below 0 the host binds the path itself. Returns false when the host could
 /// not start or is already running.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
@@ -104,8 +106,12 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
     output_height: jint,
     scale: jfloat,
     frame_period_nanos: jlong,
+    listen_fd: jint,
 ) -> jboolean {
     guarded("nativeStart", JNI_FALSE, || {
+        // Owned from here, so every early return closes it.
+        // SAFETY: Java detached this fd from its ParcelFileDescriptor; nothing else closes it.
+        let listen_fd = (listen_fd >= 0).then(|| unsafe { <std::os::fd::OwnedFd as std::os::fd::FromRawFd>::from_raw_fd(listen_fd) });
         let mut guard = host_lock();
         if let Some(handle) = guard.take() {
             if !handle.thread.is_finished() {
@@ -143,6 +149,7 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeStart<'l>(
             scale: sane_scale(scale),
             frame_period: frame_period(frame_period_nanos),
             xwayland,
+            listen_fd,
         };
         let events = move || {
             callbacks.attach().map(|(events, ended)| {

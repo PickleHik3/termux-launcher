@@ -28406,6 +28406,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncDisplayEnvironment() {
         com.termux.app.x11.X11DisplayServerState.setDisplayEnvWanted(
             mPreferences != null && mPreferences.isX11SetDisplayEnvEnabled());
+        // Wayland Display listens on its socket while it is the chosen display.
+        com.termux.app.wayland.WaylandAppRunner.shared(this).setWaylandChosen(
+            com.termux.app.wayland.LinuxDisplayBackend.current(this)
+                == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND);
     }
 
     /**

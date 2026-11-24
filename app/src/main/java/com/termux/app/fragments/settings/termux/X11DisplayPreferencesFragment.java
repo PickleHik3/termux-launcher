@@ -113,10 +113,14 @@ public class X11DisplayPreferencesFragment extends MaterialPreferenceFragment {
         }
         backend.setOnPreferenceChangeListener((preference, value) -> {
             Context context = getContext();
-            if (context != null && com.termux.app.wayland.LinuxDisplayBackend.resolve(
-                    String.valueOf(value), true) == com.termux.app.wayland.LinuxDisplayBackend.X11) {
-                com.termux.app.wayland.WaylandAppRunner.shared(context).stopHost();
-            }
+            if (context == null) return true;
+            boolean wayland = com.termux.app.wayland.LinuxDisplayBackend.resolve(
+                String.valueOf(value), true) == com.termux.app.wayland.LinuxDisplayBackend.WAYLAND;
+            com.termux.app.wayland.WaylandAppRunner runner =
+                com.termux.app.wayland.WaylandAppRunner.shared(context);
+            if (!wayland) runner.stopHost();
+            // Wayland Display listens on its socket while chosen; X11 Display has none.
+            runner.setWaylandChosen(wayland);
             return true;
         });
     }
