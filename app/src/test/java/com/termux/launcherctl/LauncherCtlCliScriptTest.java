@@ -145,7 +145,10 @@ public class LauncherCtlCliScriptTest {
             {"config", "set", "text.size"},
             {"config", "set", "text.size", "120", "extra"},
             {"config", "list", "--yaml"},
-            {"config", "export"},
+            {"config", "export", "extra"},
+            {"config", "apply"},
+            {"config", "apply", "a", "b"},
+            {"config", "apply", "no-such-file.conf"},
         };
         for (String[] mistake : mistakes) {
             Run result = run(null, mistake);
@@ -256,6 +259,38 @@ public class LauncherCtlCliScriptTest {
         server.answer(200, "application/json", "{\"ok\":true,\"settings\":[]}");
         assertEquals(0, run(null, "config", "list", "--json").code);
         assertEquals("{\"op\":\"list\"}", server.requests.poll().body);
+    }
+
+    @Test
+    public void configExportAndApplyEachSendOneRequest() throws Exception {
+        server.answer(200, "text/plain; charset=utf-8", "# header\ntext.size = 100");
+        Run exported = run(null, "config", "export");
+        assertEquals(exported.err, 0, exported.code);
+        assertEquals("# header\ntext.size = 100\n", exported.out);
+        Request export = server.requests.poll();
+        assertEquals("POST /v1/config", export.line);
+        assertEquals("{\"op\":\"export\"}", export.body);
+
+        File file = new File(work, "setup.conf");
+        java.nio.file.Files.write(file.toPath(),
+            "# mine\ntext.size = \"120\"\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        server.answer(200, "application/json", "{\"ok\":true,\"lines\":1,\"changed\":1}");
+        Run applied = run(null, "config", "apply", file.getAbsolutePath());
+        assertEquals(applied.err, 0, applied.code);
+        Request apply = server.requests.poll();
+        assertEquals("POST /v1/config", apply.line);
+        assertEquals("{\"op\":\"apply\",\"text\":\"# mine\\ntext.size = \\\"120\\\"\"}", apply.body);
+    }
+
+    @Test
+    public void configApplyPrintsTheBadLinesAndExitsOne() throws Exception {
+        String refusal = "{\"ok\":false,\"error\":\"invalid_file\",\"message\":\"line 2: text.size is 80-150\"}";
+        server.answer(400, "application/json", refusal);
+        File file = new File(work, "bad.conf");
+        java.nio.file.Files.write(file.toPath(), "x\ntext.size = 400\n".getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        Run refused = run(null, "config", "apply", file.getAbsolutePath());
+        assertEquals(1, refused.code);
+        assertEquals(refusal + "\n", refused.out);
     }
 
     @Test
