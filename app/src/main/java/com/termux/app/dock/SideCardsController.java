@@ -283,6 +283,7 @@ public final class SideCardsController {
         mTerminalLiftPx = apart ? answer.terminalSideLiftPx() : 0;
         applyKeysCard(answer);
         moved |= applyTerminalHost(answer, margin);
+        moved |= applyFoot(answer, margin);
         boolean frontHome = answer != null && answer.page().isHome();
         mHost.restCards(frontHome ? answer : mOtherAnswer, frontHome ? mOtherAnswer : answer);
         mHost.sidesApart(apart, drop, mTerminalLiftPx);
@@ -359,6 +360,10 @@ public final class SideCardsController {
             foot = mCollectedFootPx;
             mCollectedDock = null;
             mCollectedFootPx = 0;
+            // A foot shared on its own view (#307) is still the band under the host's bottom: the
+            // host's backdrop reaches past that seam as it did while it wore the foot itself.
+            Box shared = answer.laidOut(RestCards.StackView.FOOT);
+            if (foot == 0 && shared != null) foot = Math.round(shared.height());
         }
         boolean on = box != null && dock != null;
         boolean moved = on != mTerminalHostOn || !java.util.Objects.equals(
@@ -397,6 +402,61 @@ public final class SideCardsController {
         }
         if (view.getVisibility() != View.VISIBLE) view.setVisibility(View.VISIBLE);
         return moved;
+    }
+
+    /**
+     * The foot's own view (#307): laid out from the answer while both hosts share the foot (the
+     * cards apart under Docked), pinned to the container's bottom like the Terminal's host, and
+     * gone otherwise. Compares before it writes.
+     *
+     * @return whether its bounds or its standing moved
+     */
+    private boolean applyFoot(@Nullable RestCards answer, int containerMarginPx) {
+        Box box = answer != null && answer.apart() ? answer.laidOut(RestCards.StackView.FOOT)
+            : null;
+        RestCards.Card card = box == null ? null : answer.cardOn(RestCards.StackView.FOOT);
+        boolean on = box != null && card != null;
+        boolean moved = on != (mFootCard != null) || !java.util.Objects.equals(
+            on ? card.box : null, mFootCard == null ? null : mFootCard.box);
+        mFootCard = on ? card : null;
+        View view = mHost.view(R.id.dock_foot_host);
+        if (view == null) return moved;
+        if (!on) {
+            if (view.getVisibility() != View.GONE) view.setVisibility(View.GONE);
+            return moved;
+        }
+        if (view.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) view.getLayoutParams();
+            int left = Math.round(box.left);
+            int right = Math.round(mHost.displayMetrics().widthPixels - box.right);
+            int height = Math.round(box.height());
+            int bottom = Math.max(0, Math.round(mHost.displayMetrics().heightPixels
+                - containerMarginPx - box.bottom));
+            if (params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) != RelativeLayout.TRUE
+                || params.leftMargin != left || params.rightMargin != right
+                || params.bottomMargin != bottom || params.height != height
+                || params.width != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM, RelativeLayout.TRUE);
+                params.leftMargin = left;
+                params.rightMargin = right;
+                params.topMargin = 0;
+                params.bottomMargin = bottom;
+                params.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+                params.height = height;
+                view.setLayoutParams(params);
+                moved = true;
+            }
+        }
+        if (view.getVisibility() != View.VISIBLE) view.setVisibility(View.VISIBLE);
+        return moved;
+    }
+
+    @Nullable private RestCards.Card mFootCard;
+
+    /** The foot shared on its own view at the last rest (screen px); null while none stands. */
+    @Nullable
+    public RestCards.Card footCard() {
+        return mFootCard;
     }
 
     private void collectTerminalHost(@NonNull RestCards.Card card) {

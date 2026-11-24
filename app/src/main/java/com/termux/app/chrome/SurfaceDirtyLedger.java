@@ -47,7 +47,13 @@ public final class SurfaceDirtyLedger {
          * slab's glass on a second back host, so it keeps its own record. Whatever dirties
          * {@link #ACCESSORY} dirties it too.
          */
-        TERMINAL_HOST
+        TERMINAL_HOST,
+        /**
+         * The foot under the gesture pill as a card of its own (ADR 0032, #307): the dock slab's
+         * glass on the band both hosts stop at, so it keeps its own record. Whatever dirties
+         * {@link #ACCESSORY} dirties it too.
+         */
+        FOOT
     }
 
     /** Wallpaper-frost crop targets. */
@@ -104,6 +110,7 @@ public final class SurfaceDirtyLedger {
         if (backdrop == Backdrop.ACCESSORY) {
             entry(Backdrop.KEYS_CARD).dirty = true;
             entry(Backdrop.TERMINAL_HOST).dirty = true;
+            entry(Backdrop.FOOT).dirty = true;
         }
         mDirtyGeneration++;
     }

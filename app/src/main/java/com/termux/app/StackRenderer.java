@@ -178,6 +178,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     private static final int SLOT_KEYS_CARD = StackScene.V_COUNT + KEYS_CARD_VIEW;
     private static final int SLOT_TERMINAL_HOST = StackScene.V_COUNT + TERMINAL_HOST_VIEW;
+    private static final int FOOT_VIEW = RestCards.StackView.FOOT.ordinal();
+    private static final int SLOT_FOOT = StackScene.V_COUNT + FOOT_VIEW;
     private static final int SLOTS = StackScene.V_COUNT + StackEnd.VIEW_COUNT;
     // What was last written, per view slot (StackScene.V_*), and to which view object.
     private final View[] mWrittenView = new View[SLOTS];
@@ -497,6 +499,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             invalidateIfShown(R.id.accessory_blur_backdrop);
             invalidateIfShown(R.id.extra_keys_card_blur_backdrop);
             invalidateIfShown(R.id.terminal_dock_blur_backdrop);
+            invalidateIfShown(R.id.dock_foot_blur_backdrop);
             invalidateIfDressed(R.id.inapp_keyboard_view_host);
             invalidateIfDressed(R.id.accessory_under_keyboard_stack);
         }
@@ -553,6 +556,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             }
         }
         writeTerminalHost(keysTilt);
+        writeFoot();
         // The dock's glass samples the wallpaper where it is drawn; a transform redraws nothing.
         if (layersMoved) invalidateIfShown(R.id.accessory_blur_backdrop);
         // The keyboard's column is the front page's: it carries the Terminal's lift by its share.
@@ -719,6 +723,18 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         writePlank(SLOT_TERMINAL_HOST, host, stands ? PLANK_HOST : PLANK_NONE, tx);
         moved |= host.getTranslationX() != txWas;
         if (moved) invalidateIfShown(R.id.terminal_dock_blur_backdrop);
+    }
+
+    /**
+     * The foot's own view (#307) as the scene poses the shared foot: the host's sheet layer's
+     * translation and the cover's shared drop, never a side's slide, so a crossing leaves it
+     * still. Its glass samples where it is drawn, so a move of it re-aims the picture.
+     */
+    private void writeFoot() {
+        View foot = mViews.view(R.id.dock_foot_host);
+        if (foot == null) return;
+        if (writeTy(SLOT_FOOT, foot, mFrame.cardTy[FOOT_VIEW]))
+            invalidateIfShown(R.id.dock_foot_blur_backdrop);
     }
 
     /**

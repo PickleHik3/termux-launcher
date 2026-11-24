@@ -9999,6 +9999,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             configureAccessoryTopEdgeFx(false, state.barAlpha);
             mKeysCardDress.release();
             mTerminalHostDress.release();
+            mFootDress.release();
             resetAzOverflowAffordanceState();
             if (mDock.dockPlankController() != null) {
                 mDock.dockPlankController().setEnabled(false);
@@ -10044,6 +10045,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         updateAccessoryRenderEffectBackdrop(state);
         mKeysCardDress.update(state);
         mTerminalHostDress.update(state);
+        // After both hosts: the foot wears the frost of the one that stands.
+        mFootDress.update(state);
         // Apart under Docked the unified surface is the Terminal's own host (#304): the keyboard's
         // own coat comes off once that host's crop is up, as it does for the one host.
         if (mSideCards.terminalHostOn()
@@ -11094,6 +11097,36 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean standsDownOnFrame() { return stackStandsDownOnFrame(); }
         @Nullable @Override public com.termux.app.place.RestCards.Card card() {
             return mSideCards.terminalHostCard();
+        }
+    }
+
+    /** The glass element of the foot's own card, one more Live entry while it stands (#307). */
+    private static final String FOOT_GLASS = "dock_foot";
+
+    /**
+     * The foot under the gesture pill as a card of its own while both hosts share it (ADR 0032,
+     * #307): the card source with its own glass entry, measured under its own rect, wearing the
+     * frost of the host that stands ({@link com.termux.app.dock.FootDress#standingHostFrost}).
+     */
+    private final com.termux.app.dock.FootDress mFootDress =
+        new com.termux.app.dock.FootDress(mDock, new FootCardSource());
+
+    /** The foot's source: the shared card source plus what only it answers. */
+    private final class FootCardSource extends CardSource
+            implements com.termux.app.dock.FootDress.Source {
+        FootCardSource() {
+            // The foot is the band itself: nothing under it for its backdrop to reach past.
+            super(FOOT_GLASS, "dock-foot", () -> {
+                com.termux.app.place.RestCards.Card card = mSideCards.footCard();
+                return card == null ? null : card.box;
+            }, () -> 0);
+        }
+        @Nullable @Override public android.graphics.ColorFilter frostFilter(@Nullable View surface) {
+            return mFootDress.standingHostFrost();
+        }
+        @Override public boolean standsDownOnFrame() { return stackStandsDownOnFrame(); }
+        @Nullable @Override public com.termux.app.place.RestCards.Card card() {
+            return mSideCards.footCard();
         }
     }
 
@@ -14403,6 +14436,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mKeysCardDress.onCrossingBegin(spec);
             mTerminalHostDress.onCrossingBegin(spec);
         }
+        // After the arriving host is dressed: the shared foot's frost blends between the two.
+        mFootDress.onCrossingBegin(here.isHome(), there.isHome());
         beginKeyboardLookBlend(there);
         com.termux.app.glass.LegibilityStore store = mGlass.legibility();
         long hereKey = legibilityKey(here);
@@ -14469,6 +14504,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         if (mPromptInkBlendOn && mPromptLineField != null) mPromptLineField.setInkBlend(share);
         if (mKeyboardBlendOn && mInAppKeyboard != null) mInAppKeyboard.setGlassBlend(share);
         if (mDockFilterPlan.step(share)) dockGroundBlend(share);
+        mFootDress.blend(share);
         com.termux.app.chrome.CrossfadeDrawable keyboardBlend = mKeyboardLookBlend;
         if (keyboardBlend != null) {
             // A pass on the way dressed the host again: what it put up is the blend's end on the

@@ -900,6 +900,36 @@
                     android:visibility="gone" />
             </FrameLayout>
 
+            <!-- The foot under the gesture pill as a card of its own (ADR 0032, #307): while the
+                 cards stand apart under Docked and both hosts wear the foot at one rect, the band
+                 is this one shared card, laid out once per rest from the rest's answer
+                 (SideCardsController) and left still by a crossing; both hosts stop at its top.
+                 Before the keyboard's column, so a keyboard wearing its own foot draws over it. -->
+            <FrameLayout
+                android:id="@+id/dock_foot_host"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_alignParentBottom="true"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:importantForAccessibility="no"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/dock_foot_blur_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/dock_foot_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    android:background="?attr/termuxColorSurfacePanelHigh"/>
+            </FrameLayout>
+
             <!-- The whole bottom edge: the pinned apps, the alphabets index, the extra keys and —
                  when the place stands it here — the status bar, in the order
                  EdgeStackPolicy.stack(BOTTOM) gives them. The status bar used to have a stack of
