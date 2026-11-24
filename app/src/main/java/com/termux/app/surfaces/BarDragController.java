@@ -2,7 +2,6 @@ package com.termux.app.surfaces;
 
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.MotionEvent;
@@ -64,6 +63,14 @@ final class BarDragController {
 
         /** The status bar's one place for every page, written through the editor's preferences. */
         default void setStatusPlace(@NonNull StatusPlace place) {}
+
+        /** The layout as the landing policy reads it, with the status bar's place. */
+        @NonNull
+        default FrameState frameState(@NonNull PlaceLayout arranged,
+                                      @NonNull PlaceOrientation orientation,
+                                      @NonNull LayoutKind kind) {
+            return new FrameState(arranged, orientation, kind, statusPlace());
+        }
 
         /** Whether Home's page bar shows (its setting is not "off"). */
         default boolean pageBarShown() {
@@ -237,7 +244,7 @@ final class BarDragController {
         }
         BarDragGeometry.Frame frame = buildFrame(overlay, arranged, kind);
         mFrame = frame;
-        mState = new FrameState(arranged, orientation, kind, mHost.statusPlace());
+        mState = mHost.frameState(arranged, orientation, kind);
         mArmed = false;
         mDragging = true;
         if (mGroup != null && mGroup.getParent() != null)
@@ -432,19 +439,12 @@ final class BarDragController {
         chip.setFocusable(false);
         int pad = Math.round(dpToPx(8));
         chip.setPadding(pad, 0, pad, 0);
-        GradientDrawable back = new GradientDrawable();
-        int surface = mHost.surfaceColor();
-        back.setColor((0xCC << 24) | (surface & 0x00FFFFFF));
-        back.setCornerRadius(dpToPx(CHIP_HEIGHT_DP / 2f));
-        chip.setBackground(back);
+        chip.setBackground(BarChipStyle.pill(mHost.surfaceColor(), 0xCC,
+            dpToPx(CHIP_HEIGHT_DP / 2f)));
 
         TextView label = new TextView(context);
         label.setText(labelOf(BARS[index]));
-        label.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        label.setTextColor(mHost.onSurfaceColor());
-        label.setSingleLine(true);
-        label.setIncludeFontPadding(false);
-        label.setGravity(Gravity.CENTER_VERTICAL);
+        BarChipStyle.styleLabel(label, mHost.onSurfaceColor());
         LinearLayout.LayoutParams labelParams = new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
         chip.addView(label, labelParams);

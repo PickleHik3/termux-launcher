@@ -2,7 +2,6 @@ package com.termux.app.surfaces;
 
 import android.content.Context;
 import android.graphics.drawable.GradientDrawable;
-import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.View;
 import android.view.ViewGroup;
@@ -118,7 +117,7 @@ final class BarPlacesController {
         if (bar == null || arranged == null || orientation == null || kind == null)
             return HintText.atRest(anyHidden);
         BarLandingPolicy.Places places = BarLandingPolicy.places(
-            new FrameState(arranged, orientation, kind, mHost.statusPlace()), bar);
+            mHost.frameState(arranged, orientation, kind), bar);
         return HintText.selected(bar, !shownOn(layout, bar), places.scope, places.hideScope);
     }
 
@@ -136,7 +135,7 @@ final class BarPlacesController {
             mOffers = Collections.emptyList();
             return;
         }
-        FrameState state = new FrameState(arranged, orientation, kind, mHost.statusPlace());
+        FrameState state = mHost.frameState(arranged, orientation, kind);
         mOffers = BarPlaceOffers.of(state, bar, shownOn(layout, bar));
         BarDragGeometry.Frame frame = mDrag.buildFrame(overlay, arranged, kind);
         float scale = Math.max(0.01f, mHost.scale());
@@ -246,10 +245,7 @@ final class BarPlacesController {
             return mButtons.get(index);
         Context context = mHost.context();
         PlaceButton button = new PlaceButton(context);
-        button.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        button.setTextColor(mHost.onSurfaceColor());
-        button.setSingleLine(true);
-        button.setIncludeFontPadding(false);
+        BarChipStyle.styleLabel(button, mHost.onSurfaceColor());
         button.setGravity(Gravity.CENTER);
         int pad = Math.round(dpToPx(12));
         button.setPadding(pad, 0, pad, 0);

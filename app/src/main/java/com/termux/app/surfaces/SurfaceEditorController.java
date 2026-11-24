@@ -80,6 +80,7 @@ import java.util.Arrays;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 
 /**
  * The Appearance editor (appearance-and-settings-rework §2, §3, §7, §8): the launcher itself,
@@ -5006,7 +5007,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         @Override public void onHold(@Nullable BarLandingPolicy.Bar held,
                                      @Nullable BarLandingPolicy.Landing landing) {
             HintText next = held == null ? null : HintText.dragging(held, landing);
-            if (java.util.Objects.equals(next, mDragHint))
+            if (Objects.equals(next, mDragHint))
                 return;
             mDragHint = next;
             updateHint();

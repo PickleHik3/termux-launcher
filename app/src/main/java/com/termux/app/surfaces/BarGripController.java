@@ -232,11 +232,8 @@ final class BarGripController {
         pill.setGravity(Gravity.CENTER_VERTICAL);
         int pad = Math.round(dpToPx(PILL_PAD_DP));
         pill.setPadding(pad, 0, pad, 0);
-        GradientDrawable back = new GradientDrawable();
-        int surface = mHost.surfaceColor();
-        back.setColor((0xE6 << 24) | (surface & 0x00FFFFFF));
-        back.setCornerRadius(dpToPx(PILL_HEIGHT_DP / 2f));
-        pill.setBackground(back);
+        pill.setBackground(BarChipStyle.pill(mHost.surfaceColor(), 0xE6,
+            dpToPx(PILL_HEIGHT_DP / 2f)));
         pill.setClickable(true);
         pill.setFocusable(false);
 
@@ -252,11 +249,7 @@ final class BarGripController {
         pill.addView(dots, dotsParams);
 
         TextView readout = new TextView(context);
-        readout.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-        readout.setTextColor(mHost.onSurfaceColor());
-        readout.setSingleLine(true);
-        readout.setIncludeFontPadding(false);
-        readout.setGravity(Gravity.CENTER_VERTICAL);
+        BarChipStyle.styleLabel(readout, mHost.onSurfaceColor());
         pill.addView(readout, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 

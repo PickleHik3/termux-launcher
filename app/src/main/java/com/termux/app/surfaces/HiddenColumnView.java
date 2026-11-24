@@ -4,6 +4,12 @@ import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Paint;
 import android.graphics.RectF;
+import android.graphics.Typeface;
+import android.text.SpannableStringBuilder;
+import android.text.Spanned;
+import android.text.TextUtils;
+import android.text.style.ForegroundColorSpan;
+import android.text.style.StyleSpan;
 import android.util.TypedValue;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -21,6 +27,7 @@ import com.termux.app.layouteditor.LayoutEditorPlan.TrayItem;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * The Hidden column (#339): beside the frame, at its top and height, holding a chip for each bar
@@ -93,7 +100,7 @@ final class HiddenColumnView extends FrameLayout {
         mHint.setGravity(Gravity.START | Gravity.BOTTOM);
         mHint.setIncludeFontPadding(false);
         mHint.setPadding(pad, 0, pad, pad);
-        mHint.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        mHint.setEllipsize(TextUtils.TruncateAt.END);
         mHint.setTextSize(TypedValue.COMPLEX_UNIT_SP, HINT_SP);
         mHint.setLineSpacing(0f, 1.35f);
         mHint.setMaxLines(Integer.MAX_VALUE);
@@ -109,17 +116,17 @@ final class HiddenColumnView extends FrameLayout {
      * is set, and so laid out, only when it changed.
      */
     void setHint(@Nullable String title, @NonNull String body) {
-        if (body.equals(mHintBody) && java.util.Objects.equals(title, mHintTitle))
+        if (body.equals(mHintBody) && Objects.equals(title, mHintTitle))
             return;
         mHintTitle = title;
         mHintBody = body;
-        android.text.SpannableStringBuilder text = new android.text.SpannableStringBuilder();
+        SpannableStringBuilder text = new SpannableStringBuilder();
         if (title != null) {
             text.append(title);
-            text.setSpan(new android.text.style.ForegroundColorSpan(mPrimary), 0, title.length(),
-                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
-            text.setSpan(new android.text.style.StyleSpan(android.graphics.Typeface.BOLD), 0,
-                title.length(), android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.setSpan(new ForegroundColorSpan(mPrimary), 0, title.length(),
+                Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
+            text.setSpan(new StyleSpan(Typeface.BOLD), 0,
+                title.length(), Spanned.SPAN_EXCLUSIVE_EXCLUSIVE);
             text.append('\n');
         }
         text.append(body);
@@ -158,19 +165,11 @@ final class HiddenColumnView extends FrameLayout {
         for (TrayItem item : mItems) {
             TextView chip = new TextView(getContext());
             chip.setText(labelOf(item));
-            chip.setTextSize(TypedValue.COMPLEX_UNIT_SP, 12f);
-            chip.setTextColor(mOnSurface);
-            chip.setSingleLine(true);
-            chip.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            chip.setGravity(Gravity.CENTER_VERTICAL);
-            chip.setIncludeFontPadding(false);
+            BarChipStyle.styleLabel(chip, mOnSurface);
+            chip.setEllipsize(TextUtils.TruncateAt.END);
             int side = Math.round(PAD_DP * density);
             chip.setPadding(side, 0, side, 0);
-            android.graphics.drawable.GradientDrawable back =
-                new android.graphics.drawable.GradientDrawable();
-            back.setColor((0x33 << 24) | (mOnSurface & 0x00FFFFFF));
-            back.setCornerRadius(CHIP_DP * density / 2f);
-            chip.setBackground(back);
+            chip.setBackground(BarChipStyle.pill(mOnSurface, 0x33, CHIP_DP * density / 2f));
             LinearLayout.LayoutParams params = new LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, Math.round(CHIP_DP * density));
             params.bottomMargin = Math.round(PAD_DP * density);
