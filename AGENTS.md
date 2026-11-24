@@ -100,7 +100,8 @@ Before calling a change done, say which of these applied:
 - Agent docs, read when the task needs them: [building and installing](docs/agents/building.md),
   [testing and device checks](docs/agents/testing.md), [releasing](docs/agents/releasing.md),
   [performance](docs/agents/performance.md), [device map](docs/agents/device-map.md),
-  [tlstore](docs/agents/tlstore.md), [issue tracker](docs/agents/issue-tracker.md).
+  [tlstore](docs/agents/tlstore.md), [issue tracker](docs/agents/issue-tracker.md),
+  [Linux apps](docs/agents/linux-apps.md) (either display, sound for Linux programs, proot-distro).
 
 ## Building and verifying
 
