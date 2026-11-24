@@ -72,12 +72,12 @@ public class X11AppSettingsTest {
         }
     }
 
-    @Test public void aStoredScaleOffTheStopsReadsAsTheNearestStop() {
+    @Test public void aStoredThreeReadsAsTheTopStopAndOtherOddValuesAreDropped() {
         Map<String, X11AppSettings.Overrides> out = X11AppSettings.parse(
             "{\"old\": {\"scale\": \"3\"}, \"tilde\": {\"scale\": \"1.7\"},"
                 + " \"zero\": {\"scale\": \"0\"}, \"words\": {\"scale\": \"big\"}}");
         assertEquals("2.5", out.get("old").scale);
-        assertEquals("1.75", out.get("tilde").scale);
+        assertNull(out.get("tilde"));
         assertNull(out.get("zero"));
         assertNull(out.get("words"));
     }

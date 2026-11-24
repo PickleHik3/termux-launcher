@@ -6,8 +6,6 @@ import androidx.annotation.Nullable;
 import org.json.JSONException;
 import org.json.JSONObject;
 
-import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Iterator;
@@ -65,22 +63,14 @@ public final class X11AppSettings {
         return Collections.unmodifiableList(out);
     }
 
-    /**
-     * {@code value} as one of {@link #SCALES}: itself, else a stored number off the stops read as
-     * the nearest stop (a "3" kept before the stops were the rail's reads as "2.5"); null for
-     * anything else.
-     */
+    /** The one scale the stops no longer have, read as the nearest stop so its choice is kept. */
+    private static final String LEGACY_SCALE_3 = "3";
+
+    /** {@code value} as one of {@link #SCALES}: itself, a stored "3" (before the stops were the rail's) as "2.5", else null. */
     @Nullable
     static String normalScale(@Nullable String value) {
-        if (value == null || isScale(value)) return value;
-        try {
-            BigDecimal factor = new BigDecimal(value.trim());
-            if (factor.signum() <= 0) return null;
-            int percent = factor.movePointRight(2).setScale(0, RoundingMode.HALF_UP).intValueExact();
-            return DisplayScaleSteps.scaleValue(DisplayScaleSteps.nearest(percent));
-        } catch (NumberFormatException | ArithmeticException e) {
-            return null;
-        }
+        if (isScale(value)) return value;
+        return LEGACY_SCALE_3.equals(value) ? DisplayScaleSteps.scaleValue(DisplayScaleSteps.nearest(300)) : null;
     }
 
     /**

@@ -21,9 +21,9 @@ public class X11AppScaleEnvTest {
         check("1", "1", "1", "1");
         check("1.25", "1", "1.25", "1.25");
         check("1.5", "1", "1.5", "1.5");
+        check("1.75", "1", "1.75", "1.75");
         check("2", "2", "1", "2");
         check("2.5", "2", "1.25", "2.5");
-        check("3", "3", "1", "3");
     }
 
     @Test public void neverTouchesTheDisplaysDpi() {
@@ -40,7 +40,7 @@ public class X11AppScaleEnvTest {
     }
 
     @Test public void followAndInvalidAreEmpty() {
-        for (String s : new String[] {null, "", "1.75", "abc", "0"}) {
+        for (String s : new String[] {null, "", "3", "abc", "0"}) {
             assertTrue(X11AppScaleEnv.of(s).env.isEmpty());
         }
     }
