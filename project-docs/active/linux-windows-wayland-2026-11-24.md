@@ -266,8 +266,13 @@ This section supersedes the earlier notes on GPU apps above where they differ.
   the copy path costs 30-57 % of a core in it, most of it the `Surface` post.
 - **Herdr:** runs on the GPU under Wayland Display; its glass canvas stays opaque because its wgpu
   Vulkan path fails to enumerate and it renders through GL. Herdr-side.
-- **Scale:** the Wayland output scale follows the X11 Display scale setting
-  (`LinuxDisplayScale`); X apps under Xwayland are not scaled yet.
+- **Scale:** the Wayland output scale follows the screen's density (to the nearest quarter, ties
+  down: 2.5 on pong) until the user chooses a Display scale stop, which then wins
+  (`LinuxDisplayScale`). X apps under Xwayland keep their pixels and are told the scale the X
+  way: XSETTINGS `Xft/DPI`, `Gdk/WindowScalingFactor`, `Gdk/UnscaledDPI` (GTK, Chromium) and the
+  `Xft.dpi` resource (Xft clients: xterm with an Xft face, Qt's xcb, Emacs); `wayland-host`
+  `xscale.rs`. Xwayland does not see xdg_output, so its screen is the real pixels at any scale.
+  Not scaled: core-font X apps (plain xterm, xclock), Motif, and widgets of Qt 5 on X.
 - **Built since the plan above was written:** the Settings choice (X11 Display / Wayland Display),
   `WaylandAppRunner`, the tabbed Linux windows screen (the stand-in for the in-wall page), X display
   reporting (interface version 2), subsurface and popup compositing. Whole desktops and proot-distro
