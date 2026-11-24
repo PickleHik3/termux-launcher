@@ -26,6 +26,8 @@ public class SettingsDoorTest {
     private static void assertDoorFlags(Intent intent) {
         assertTrue((intent.getFlags() & Intent.FLAG_ACTIVITY_NEW_TASK) != 0);
         assertTrue((intent.getFlags() & Intent.FLAG_ACTIVITY_SINGLE_TOP) != 0);
+        // The open instance gets onNewIntent even with a screen above it in the task.
+        assertTrue((intent.getFlags() & Intent.FLAG_ACTIVITY_CLEAR_TOP) != 0);
         assertEquals(0, intent.getFlags() & Intent.FLAG_ACTIVITY_CLEAR_TASK);
     }
 
