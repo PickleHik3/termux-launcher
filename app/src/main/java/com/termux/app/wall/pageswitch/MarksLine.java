@@ -7,7 +7,7 @@ import java.util.List;
 
 /**
  * The Marks line's layout along its axis, pure: the wall's entries ({@link PageBarModel}) folded
- * into as many slots as the line's length holds ({@link PageBarFold}, {@link PageBarLayout#maxSlots}),
+ * into as many slots as the line's length holds ({@link PageBarFold}, {@link #maxSlots}),
  * each slot a cell of {@link #pitchPx()} along the line, the marks centred in their cells from the
  * line's start. The view draws the answer and routes a tap through {@link #targetAt}; it builds a
  * new one only when the entries, the attention or the length change, never per draw.
@@ -21,6 +21,12 @@ public final class MarksLine {
     public static final float MARK_DP = 20f;
     /** The widest a slot's cell grows, in dp: a short list sits together, not spread over the bar. */
     public static final float MAX_PITCH_DP = 32f;
+    /**
+     * The narrowest a slot's cell may be before runs fold, in dp: one mark's box. The line has no
+     * side inset and its marks need no more room than themselves, so the line folds only when the
+     * marks truly do not fit its length (the page bar's wider slots are for its labels).
+     */
+    public static final float MIN_PITCH_DP = MARK_DP;
 
     @NonNull private final List<PageBarModel.Entry> mEntries;
     @NonNull private final PageBarFold.Result mFold;
@@ -36,11 +42,16 @@ public final class MarksLine {
                      float density, float lengthPx) {
         mEntries = entries;
         mAttention = attention == null ? null : attention.clone();
-        mFold = PageBarFold.fold(entries, PageBarLayout.maxSlots(density, lengthPx));
+        mFold = PageBarFold.fold(entries, maxSlots(density, lengthPx));
         int slots = mFold.slots.size();
         float cap = MAX_PITCH_DP * density;
         mPitch = slots == 0 ? cap : Math.max(0f, Math.min(cap, lengthPx / slots));
         mMark = Math.min(MARK_DP * density, mPitch);
+    }
+
+    /** How many slots a line of {@code lengthPx} holds before runs must fold; at least 1. */
+    public static int maxSlots(float density, float lengthPx) {
+        return Math.max(1, (int) Math.floor(lengthPx / (MIN_PITCH_DP * density)));
     }
 
     /** The folded slots, in order. */

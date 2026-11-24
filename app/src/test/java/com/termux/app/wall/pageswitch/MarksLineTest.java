@@ -54,12 +54,34 @@ public class MarksLineTest {
     @Test public void aShortLineFoldsByTheBarsRule() {
         PageBarModel m = model("HHHHT", 3, 1, -1);
         float length = 200f * DENSITY;
-        int fit = PageBarLayout.maxSlots(DENSITY, length);
+        int fit = MarksLine.maxSlots(DENSITY, length);
         MarksLine line = new MarksLine(m.entries(), null, DENSITY, length);
         PageBarFold.Result want = PageBarFold.fold(m.entries(), fit);
         assertEquals(want.slots.size(), line.slotCount());
         assertTrue(line.slotCount() < m.entries().size());
         assertTrue(line.contentLengthPx() <= length + 1e-3f);
+    }
+
+    @Test public void twoHomesBesideTheOthersStayOpenWhereTheRowHasRoom() {
+        // Home, Home, a window, Assistant: four marks; the thin row's line is about 100dp long.
+        PageBarModel m = model("HHTA", 1, 1, -1);
+        float length = 100f * DENSITY;
+        assertTrue("the page bar's slots would fold the Homes here",
+            PageBarLayout.maxSlots(DENSITY, length) < m.entries().size());
+        MarksLine line = new MarksLine(m.entries(), null, DENSITY, length);
+        assertEquals(m.entries().size(), line.slotCount());
+        for (PageBarFold.Slot slot : line.slots()) assertFalse(slot.folded());
+        assertTrue(line.contentLengthPx() <= length + 1e-3f);
+    }
+
+    @Test public void theLineFoldsOnlyWhenTheMarksTrulyDoNotFit() {
+        PageBarModel m = model("HHTA", 1, 1, -1);
+        int n = m.entries().size();
+        float justFits = n * MarksLine.MIN_PITCH_DP * DENSITY;
+        assertEquals(n, new MarksLine(m.entries(), null, DENSITY, justFits).slotCount());
+        MarksLine tight = new MarksLine(m.entries(), null, DENSITY, justFits - 1f);
+        assertTrue(tight.slotCount() < n);
+        assertTrue(tight.slots().get(0).folded());
     }
 
     @Test public void aTapGoesToThePageItLandsOn() {
