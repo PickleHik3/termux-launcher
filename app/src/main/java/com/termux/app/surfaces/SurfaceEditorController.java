@@ -5506,6 +5506,13 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     }
 
     @Override
+    public void startHomeExitSettle(long durationMs) {
+        AppearanceEditorFrame frame = mFrame;
+        if (mOpen && frame != null)
+            frame.hide(true, durationMs, null);
+    }
+
+    @Override
     public void exitViews(@NonNull List<View> out) {
         if (!mOpen)
             return;
@@ -5578,7 +5585,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 onHidden.run();
             return;
         }
-        frame.hide(true, onHidden);
+        // A Home exit grew the frame back already: at its end it is put at rest, not animated.
+        frame.hide(!mHomeExit, onHidden);
     }
 
     /** The targets' outlines taken off, so the launcher wears none after the editor. */

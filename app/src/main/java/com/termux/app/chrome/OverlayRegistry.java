@@ -62,6 +62,12 @@ public final class OverlayRegistry {
         default void exitViews(@NonNull List<View> out) { }
 
         /**
+         * The Home exit has started with this overlay as a member: anything that settles beside
+         * the fade (the editor's page growing back) starts now, over {@code durationMs}.
+         */
+        default void exitStarted(long durationMs) { }
+
+        /**
          * Whether leaving now would lose something the person has not saved: a draft. Default
          * false, so a surface that has not said is closed without a question, as it always was.
          */
@@ -192,6 +198,7 @@ public final class OverlayRegistry {
             if (out.size() > before) mExiting.add(overlay);
             else overlay.closeImmediately(CloseReason.HOME);
         }
+        for (int i = 0; i < mExiting.size(); i++) mExiting.get(i).exitStarted(HomeExit.DURATION_MS);
         return mExiting.size();
     }
 

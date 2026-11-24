@@ -228,6 +228,9 @@ public final class AppearanceSurfaceController {
          */
         default void setHomeExit(boolean on) { }
 
+        /** A Home exit starts: the frame grows back to full size over {@code durationMs}, now. */
+        default void startHomeExitSettle(long durationMs) { }
+
         /** {@link #requestLeave(Runnable)}, with {@code keep} run when the answer is Keep editing. */
         default void requestLeave(@NonNull Runnable proceed, @NonNull Runnable keep) {
             requestLeave(proceed);
@@ -385,6 +388,8 @@ public final class AppearanceSurfaceController {
     private int mToken;
     private boolean mLeaveRemembered;
     @Nullable private FrameLayout mView;
+    /** The close is the end of a Home exit. */
+    private boolean mHomeClosing;
     @Nullable private OverviewPage mOverview;
     /** The picker is being built: a second Change waits for it. */
     private boolean mOverviewLoading;
@@ -910,6 +915,12 @@ public final class AppearanceSurfaceController {
         mEditor.exitViews(out);
     }
 
+    /** A Home exit has started with this surface in it: the page settles on the exit's clock. */
+    public void exitStarted(long durationMs) {
+        if (mOpen && mEditor.isPresented())
+            mEditor.startHomeExitSettle(durationMs);
+    }
+
     /** Whether leaving now would lose the editor's draft or the picker's pending wallpaper. */
     public boolean holdsUnsavedChanges() {
         return mOpen && (hasPendingWallpaper() || mEditor.isDirty());
@@ -933,10 +944,12 @@ public final class AppearanceSurfaceController {
         if (!mOpen || mCommitting)
             return;
         mEditor.setHomeExit(true);
+        mHomeClosing = true;
         try {
             closeNow();
         } finally {
             mEditor.setHomeExit(false);
+            mHomeClosing = false;
         }
     }
 
@@ -1363,7 +1376,8 @@ public final class AppearanceSurfaceController {
         } else {
             letGo.run();
         }
-        boolean editorWasUp = mEditor.isPresented();
+        // A Home exit has grown the frame back already: nothing stays behind it.
+        boolean editorWasUp = mEditor.isPresented() && !mHomeClosing;
         mEditor.setPageListener(null);
         removeScrim(editorWasUp);
         mCommitting = false;

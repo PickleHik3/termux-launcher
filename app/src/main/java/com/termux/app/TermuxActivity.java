@@ -21239,6 +21239,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void exitViews(@NonNull java.util.List<View> out) {
                 mAppearance.exitViews(out);
             }
+            @Override public void exitStarted(long durationMs) {
+                mAppearance.exitStarted(durationMs);
+            }
             @Override public void askBeforeLeaving(@NonNull Runnable leave, @NonNull Runnable stay) {
                 mAppearance.askBeforeLeaving(leave, stay);
             }
