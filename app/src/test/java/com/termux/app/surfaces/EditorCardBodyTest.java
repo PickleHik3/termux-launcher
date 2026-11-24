@@ -160,7 +160,9 @@ public class EditorCardBodyTest {
         // Edge and Depth stay on the card; the glass-material hint row is gone.
         assertFalse(globalTexts.contains(global.themed.getString(
             R.string.editor_hint_glass_material)));
-        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
+        // #346: Global keeps one heading, Fine-tune; the Colours heading is gone.
+        assertTrue(globalTexts.contains(global.themed.getString(R.string.editor_section_fine_tune)));
+        assertFalse(globalTexts.contains(global.themed.getString(R.string.editor_section_colours)));
         assertFalse("Home has no Appearance section",
             texts.contains(home.themed.getString(R.string.editor_section_appearance)));
     }

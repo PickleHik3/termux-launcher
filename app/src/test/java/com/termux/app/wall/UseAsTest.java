@@ -102,7 +102,7 @@ public class UseAsTest {
             new EditorRows.Offers(true, true, true));
         List<EditorRows.Spec> terminal = EditorRows.rows(EditorCard.TERMINAL,
             new EditorRows.Offers(true, true, false));
-        assertEquals(home.size() + 2, terminal.size());
+        assertEquals(home.size() + 1, terminal.size());
         assertEquals(EditorRows.Row.LINK_PAGES, terminal.get(terminal.size() - 1).row);
     }
 

@@ -126,9 +126,11 @@ public class ElementRowsTest {
         for (EditorCard card : new EditorCard[] {EditorCard.TERMINAL}) {
             List<Row> rows = rowsOf(card);
             int list = rows.indexOf(Row.ELEMENTS);
-            // Overhaul §2: the list is the Layout section's, and no link repeats it.
-            assertEquals(card + ": the list is under Layout", Row.SECTION_LAYOUT,
-                rows.get(list - 1));
+            // #346: no headings; the list follows the switches (Minimal layout among them) and
+            // the link chips close the card.
+            assertTrue(card + ": the list follows the switches",
+                rows.indexOf(Row.MINIMAL) < list);
+            assertTrue(card + ": the links follow the list", list < rows.indexOf(Row.LINK_FONT));
         }
     }
 

@@ -77,15 +77,13 @@ public class StatusTerminalCardsTest {
     }
 
     @Test
-    public void theTerminalCardReadsBackgroundContrastTrailEffectAndFont() {
-        assertEquals(Arrays.asList(Row.SECTION_TEXT, Row.FONT_SIZE, Row.CONTRAST, Row.ADAPTIVE_LEGIBILITY,
-            Row.LINK_FONT,
-            Row.SECTION_BACKGROUND, Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
-            Row.SECTION_PANES,
-            Row.PANE_BORDERS, Row.SPLIT_GAP, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
-            Row.SECTION_EFFECTS, Row.CURSOR_TRAIL, Row.EFFECT, Row.SCREEN_EVENTS,
-            Row.COMPOSITE_SIGNAL, Row.SECTION_LAYOUT, Row.ELEMENTS,
-            Row.MINIMAL),
+    public void theTerminalCardListsItsKnobsInTheCondensedKinds() {
+        assertEquals(Arrays.asList(Row.FONT_SIZE, Row.SPLIT_GAP,
+            Row.TERMINAL_OPACITY, Row.TERMINAL_BLUR, Row.WALLPAPER_DIM,
+            Row.CONTRAST, Row.CURSOR_TRAIL, Row.EFFECT,
+            Row.ADAPTIVE_LEGIBILITY, Row.MULTIPLEXER, Row.AUTO_TILING, Row.FOCUS_GROWS,
+            Row.SCREEN_EVENTS, Row.COMPOSITE_SIGNAL, Row.MINIMAL, Row.ELEMENTS,
+            Row.LINK_FONT, Row.PANE_BORDERS),
             rows(TerminalCard.rows(ALL)));
         assertFalse("no Screen effect where its shader does not run",
             rows(TerminalCard.rows(NONE)).contains(Row.EFFECT));
@@ -431,19 +429,17 @@ public class StatusTerminalCardsTest {
             Fixture f = new Fixture(scale);
             FakeTerminal host = new FakeTerminal();
             String at = "at " + scale;
-            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL,
-                Row.EFFECT, Row.LINK_FONT}) {
-                CardRowView built = TerminalCard.view(f.themed, row, f.width, host);
-                assertNotNull(row + " is the card's own", built);
-                f.layOut(built.view);
-                for (MaterialButton button : buttons(built.view)) {
-                    assertNotCut(button, row + " " + at);
-                    assertTrue(row + " " + at + ": a 48dp target",
-                        button.getHeight() >= f.dp(48) - 1);
-                    assertInsideGutter(f, button, row + " " + at);
-                }
+            CardRowView built = TerminalCard.view(f.themed, Row.EFFECT, f.width, host);
+            assertNotNull("Screen effect is the card's own", built);
+            f.layOut(built.view);
+            for (MaterialButton button : buttons(built.view)) {
+                assertNotCut(button, "effect " + at);
+                assertInsideGutter(f, button, "effect " + at);
             }
-            assertNull(TerminalCard.view(f.themed, Row.TEXT_SIZE, f.width, host));
+            // The rest is the body's (CardBody, #346).
+            for (Row row : new Row[] {Row.CONTRAST, Row.CURSOR_TRAIL, Row.LINK_FONT,
+                    Row.TEXT_SIZE})
+                assertNull(row + " is the body's", TerminalCard.view(f.themed, row, f.width, host));
         }
     }
 
@@ -451,23 +447,6 @@ public class StatusTerminalCardsTest {
     public void theTerminalRowsWriteThroughTheHost() {
         Fixture f = new Fixture(1f);
         FakeTerminal host = new FakeTerminal();
-        CardRowView contrast = TerminalCard.view(f.themed, Row.CONTRAST, f.width, host);
-        f.layOut(contrast.view);
-        List<MaterialButton> words = buttons(contrast.view);
-        assertEquals(Arrays.asList("Softer", "Default", "Harder"), Arrays.asList(
-            words.get(0).getText().toString(), words.get(1).getText().toString(),
-            words.get(2).getText().toString()));
-        assertTrue("Default at open", words.get(1).isChecked());
-        words.get(2).performClick();
-        assertEquals(2, host.contrast);
-
-        CardRowView trails = TerminalCard.view(f.themed, Row.CURSOR_TRAIL, f.width, host);
-        f.layOut(trails.view);
-        List<View> trailTiles = tiles(trails.view);
-        assertEquals(7, trailTiles.size());
-        trailTiles.get(6).performClick();
-        assertEquals("Comet", 6, host.trail);
-
         CardRowView effects = TerminalCard.view(f.themed, Row.EFFECT, f.width, host);
         f.layOut(effects.view);
         List<View> effectTiles = tiles(effects.view);
@@ -478,17 +457,6 @@ public class StatusTerminalCardsTest {
         host.effect = 0;
         effects.restate();
         assertTrue(effectTiles.get(0).isSelected());
-
-        CardRowView more = TerminalCard.view(f.themed, Row.LINK_FONT, f.width, host);
-        f.layOut(more.view);
-        // Font ↗ is a list row naming the page it opens (overhaul §4); the row is the target.
-        List<android.widget.TextView> fontWords = new ArrayList<>();
-        collect(more.view, android.widget.TextView.class, fontWords);
-        assertEquals("Font", fontWords.get(0).getText().toString());
-        assertEquals(f.themed.getString(com.termux.R.string.editor_link_font_summary),
-            fontWords.get(1).getText().toString());
-        more.view.performClick();
-        assertEquals(1, host.fontOpened);
     }
 
     // ------------------------------------------------------------------------------ fakes
@@ -534,18 +502,10 @@ public class StatusTerminalCardsTest {
     }
 
     private static final class FakeTerminal implements TerminalCard.Host {
-        int contrast = 1;
-        int trail = 1;
         int effect;
-        int fontOpened;
 
-        @Override public int contrast() { return contrast; }
-        @Override public void setContrast(int index) { contrast = index; }
-        @Override public int trail() { return trail; }
-        @Override public void setTrail(int index) { trail = index; }
         @Override public int effect() { return effect; }
         @Override public void setEffect(int index) { effect = index; }
-        @Override public void openFont() { fontOpened++; }
     }
 
     // ---------------------------------------------------------------------------- helpers

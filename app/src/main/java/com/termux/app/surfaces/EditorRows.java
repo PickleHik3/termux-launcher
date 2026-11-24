@@ -540,6 +540,9 @@ public final class EditorRows {
     public static Group groupOf(@NonNull Row row) {
         if (isStructural(row))
             return Group.LOOK;
+        // The wallpaper is what Global is first: Wallpaper, Show wallpaper, then the Look.
+        if (row == Row.WALLPAPER || row == Row.SHOW_WALLPAPER)
+            return Group.LOOK;
         if (row == Row.OPACITY_LINK)
             return Group.SLIDERS;
         if (row == Row.TINT_HUE)

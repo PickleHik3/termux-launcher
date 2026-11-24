@@ -3086,6 +3086,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                     return Control.TEXT_SIZE.clamp(Math.round(prefs.getTextSizePercent()
                         / (float) Control.TEXT_SIZE.step) * Control.TEXT_SIZE.step);
                 case CONTRAST: return AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
+                case CURSOR_TRAIL:
+                    return com.termux.app.surfaces.cards.TerminalCard.trailIndex(
+                        prefs.isTerminalCursorTrailEnabled(), prefs.getTerminalCursorTrailStyle());
                 case ADAPTIVE_LEGIBILITY: return prefs.isAdaptiveLegibility() ? 1 : 0;
                 case SPLIT_GAP: return Control.SPLIT_GAP.clamp(prefs.getTerminalPaneGap());
                 case LABEL_SIZE:
@@ -3353,6 +3356,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 case CONTRAST:
                     return strings(R.string.appearance_contrast_softer,
                         R.string.appearance_contrast_default, R.string.appearance_contrast_harder);
+                case CURSOR_TRAIL: return strings(com.termux.app.surfaces.cards.TerminalCard.TRAIL_NAMES);
                 case LABEL_SIZE:
                     return strings(R.string.appearance_size_small, R.string.appearance_size_medium,
                         R.string.appearance_size_large);
@@ -3474,7 +3478,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             // Every link is one list row (overhaul §4); Font and Camera cutout are drawn by
             // their cards, which own what the tap opens.
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
-                    && row != Row.CAMERA_CUTOUT)
+                    && row != Row.CAMERA_CUTOUT && !linkChip(card, row))
                 return linkRow(row).root;
             if (row == Row.ELEMENTS && card != null) {
                 // A page card's Layout lists the rows that page shows.
@@ -3484,6 +3488,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             }
             if (card == EditorCard.DOCK)
                 return dockCard().view(row, widthPx);
+            if (card == EditorCard.TERMINAL && com.termux.app.surfaces.cards.TerminalCard.owns(row))
+                return statusTerminalRowView(row, widthPx);
             if (card != null && CardBody.redesigned(card))
                 return cardBody(card).rowView(row, widthPx);
             return statusTerminalRowView(row, widthPx);
@@ -3494,7 +3500,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             if (row == Row.ICON_PACK_PAGE)
                 return;
             if (row.kind == EditorRows.Kind.LINK && row != Row.LINK_FONT
-                    && row != Row.CAMERA_CUTOUT)
+                    && row != Row.CAMERA_CUTOUT && !linkChip(card, row))
                 return;
             if (row == Row.TINT_HUE) {
                 com.termux.app.surfaces.rows.SegmentRow hue = mTintHueRow;
@@ -3508,6 +3514,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             }
             if (card == EditorCard.DOCK)
                 dockCard().restate(row);
+            else if (card == EditorCard.TERMINAL && com.termux.app.surfaces.cards.TerminalCard.owns(row))
+                restateStatusTerminalRow(row, view);
             else if (card != null && CardBody.redesigned(card)) {
                 CardBody body = mCardBody;
                 if (body != null) body.restate(row, view);
@@ -3790,6 +3798,12 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case DEPTH: writeGlassDepth(value); break;
             case TEXT_SIZE: writeTextSize(value); break;
             case CONTRAST: writeLegibility(value); break;
+            case CURSOR_TRAIL: {
+                List<String> trails = com.termux.app.surfaces.cards.TerminalCard.TRAILS;
+                if (value >= 0 && value < trails.size())
+                    writeTrailStyle(trails.get(value));
+                break;
+            }
             case ADAPTIVE_LEGIBILITY: writeAdaptiveLegibility(value != 0); break;
             case SPLIT_GAP: writeSplitGap(value); break;
             case LABEL_SIZE:
@@ -3942,6 +3956,9 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 break;
             case LINK_LAYOUTS:
                 openSettingsPage(KeyboardLayoutsFragment.class, R.string.appearance_row_layouts);
+                break;
+            case LINK_FONT:
+                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
                 break;
             case PINNED_NOTIFICATIONS:
                 openSettingsPage(com.termux.app.fragments.settings.termux
@@ -6108,6 +6125,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @NonNull private final java.util.Map<Row, com.termux.app.surfaces.cards.CardRowView> mOwnRows =
         new java.util.EnumMap<>(Row.class);
 
+    /** Whether {@code card} draws the link {@code row} as a chip of its Links row. */
+    private boolean linkChip(@Nullable EditorCard card, @NonNull Row row) {
+        return card != null && CardBody.redesigned(card) && cardBody(card).drawsAsLinkChip(row);
+    }
+
     /**
      * The Status bar or Terminal card's own row for {@code row} ({@link
      * EditorCardSheet.Model#rowView}), or null for a row the sheet draws.
@@ -6382,31 +6404,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** The Terminal card's reads and writes, through the paths its old rows and Settings take. */
     @NonNull private final com.termux.app.surfaces.cards.TerminalCard.Host mTerminalCardHost =
         new com.termux.app.surfaces.cards.TerminalCard.Host() {
-            @Override public int contrast() {
-                TermuxAppSharedPreferences prefs = prefs();
-                return prefs == null ? 1
-                    : AppearanceLooks.legibilityIndex(prefs.getTerminalContrastLevel());
-            }
-
-            @Override public void setContrast(int index) {
-                // The old Contrast row's write: the palette rebuilds at the new level.
-                mModel.onValue(Row.CONTRAST, index, false);
-                syncDirty();
-            }
-
-            @Override public int trail() {
-                TermuxAppSharedPreferences prefs = prefs();
-                return prefs == null ? 1
-                    : com.termux.app.surfaces.cards.TerminalCard.trailIndex(
-                        prefs.isTerminalCursorTrailEnabled(), prefs.getTerminalCursorTrailStyle());
-            }
-
-            @Override public void setTrail(int index) {
-                List<String> trails = com.termux.app.surfaces.cards.TerminalCard.TRAILS;
-                if (index >= 0 && index < trails.size())
-                    writeTrailStyle(trails.get(index));
-            }
-
             @Override public int effect() {
                 TermuxAppSharedPreferences prefs = prefs();
                 return prefs == null ? 0
@@ -6418,11 +6415,6 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 List<String> effects = com.termux.app.surfaces.cards.TerminalCard.EFFECTS;
                 if (index >= 0 && index < effects.size())
                     writeRetroEffect(effects.get(index));
-            }
-
-            @Override public void openFont() {
-                // The old Font link's page.
-                openSettingsPage(TermuxFontsPreferencesFragment.class, R.string.appearance_row_font);
             }
         };
 

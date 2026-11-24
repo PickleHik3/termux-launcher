@@ -65,7 +65,13 @@ final class CardBody {
     /** Whether {@code card} is drawn with these rows. */
     static boolean redesigned(@NonNull EditorCard card) {
         return card == EditorCard.KEYBOARD || card == EditorCard.HOME
-            || card == EditorCard.APPEARANCE;
+            || card == EditorCard.APPEARANCE || card == EditorCard.TERMINAL;
+    }
+
+    /** Whether the card lists {@code row} as a chip of its Links row ({@link Form#LINKS}). */
+    boolean drawsAsLinkChip(@NonNull Row row) {
+        Group group = mGroups.get(row);
+        return group != null && group.form == Form.LINKS;
     }
 
     /**
