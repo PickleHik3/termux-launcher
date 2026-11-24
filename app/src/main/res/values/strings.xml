@@ -3331,7 +3331,7 @@
     <string name="help_topic_appearance_title">Appearance editor</string>
     <string name="help_topic_appearance_summary">The Appearance editor changes how the launcher looks, with one Look for the whole of it.</string>
     <string name="help_topic_appearance_action">Hold a corner, tap Appearance, then Look.</string>
-    <string name="help_topic_appearance_step1">Slide between Clear, Frosted, Tinted, Solid and Liquid. The last stop, Custom, sets Blur, Opacity and Grain for everything; tap anything in the frame to tune it on its own.</string>
+    <string name="help_topic_appearance_step1">Slide between Clear, Frosted, Tinted, Solid and Liquid. The last stop, Custom, sets Frost, Opacity, Depth and Shine for everything; tap anything in the frame to tune it on its own.</string>
     <string name="help_topic_appearance_step2">Changes preview as you make them.</string>
     <string name="help_topic_appearance_back">Undo returns to how it was; Done keeps it.</string>
     <string name="help_topic_appearance_aliases">appearance, look, clear, frosted, tinted, solid, liquid, custom, glass, blur, colours, colors, editor</string>
