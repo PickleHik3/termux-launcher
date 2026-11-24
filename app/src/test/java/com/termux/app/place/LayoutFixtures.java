@@ -295,6 +295,11 @@ public final class LayoutFixtures {
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false,
                     density));
             rest.keptBandPx = keptBandPx;
+            // The A-Z bar off the dock, as the activity measures its edge host: the letter band.
+            rest.azEdgeThicknessPx = RestCards.azPlacementOf(layoutOf(page))
+                == RestCards.AzPlacement.EDGE
+                ? com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+                    false, false, density) : 0;
             // A bottom status bar that is a band of the dock's plank, as the activity reads it
             // for each side's own layout (the status bar at the bottom is one).
             rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy

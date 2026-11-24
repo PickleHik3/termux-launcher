@@ -147,8 +147,8 @@ public final class RestCards {
         public int restFlushPaddingPx = 0;
         /**
          * The A–Z bar's thickness off the dock (its edge host's height on the top, width on a
-         * side), as the activity measures it; 0 takes the letter band the policy gives the bar
-         * ({@code AccessoryStackLayoutPolicy#computeAzRowHeightPx}).
+         * side), as the activity measures it for the shape model ({@code chromeThicknessPx});
+         * 0 while it is not laid out, when the bar has no card.
          */
         public int azEdgeThicknessPx = 0;
         /** The user's chin under the keyboard's keys (Settings), px. */
@@ -242,6 +242,12 @@ public final class RestCards {
         @NonNull public final Corners corners;
         @NonNull public final List<PieceId> pieces;
         @NonNull private final EdgeKind[] mEdges;
+        /**
+         * The stretches of its edges where the kind changes along them, as the shape model cuts
+         * them (a Docked A–Z column joins the status bar's bottom over its own width only); empty
+         * where each edge is one kind.
+         */
+        @NonNull private List<ChromeShape.EdgeRun> mRuns = Collections.emptyList();
 
         Card(@NonNull CardId id, @NonNull StackView view, @NonNull Box box,
              @NonNull Corners corners, @NonNull EdgeKind top, @NonNull EdgeKind bottom,
@@ -261,6 +267,45 @@ public final class RestCards {
         @NonNull
         public EdgeKind edge(@NonNull Edge edge) {
             return mEdges[edge.ordinal()];
+        }
+
+        /**
+         * The kind of {@code edge} over the stretch {@code from}..{@code to} along it (x on the
+         * top and bottom, y on the sides, screen px): the one that matters most among the runs
+         * that cross it, as {@link ChromeShape.Piece#kind} ranks them; the edge's one kind where
+         * no run does.
+         */
+        @NonNull
+        public EdgeKind kindOver(@NonNull Edge edge, float from, float to) {
+            EdgeKind best = null;
+            for (ChromeShape.EdgeRun run : mRuns) {
+                if (run.edge != edge || Math.min(run.to, to) - Math.max(run.from, from) <= 0f)
+                    continue;
+                if (best == null || rank(run.kind) > rank(best)) best = run.kind;
+            }
+            return best == null ? edge(edge) : best;
+        }
+
+        /** The runs along its edges ({@link #kindOver}); empty where each edge is one kind. */
+        @NonNull
+        public List<ChromeShape.EdgeRun> runs() {
+            return mRuns;
+        }
+
+        @NonNull
+        Card withRuns(@NonNull List<ChromeShape.EdgeRun> runs) {
+            mRuns = runs.isEmpty() ? Collections.<ChromeShape.EdgeRun>emptyList()
+                : Collections.unmodifiableList(new ArrayList<>(runs));
+            return this;
+        }
+
+        private static int rank(@NonNull EdgeKind kind) {
+            switch (kind) {
+                case RIM: return 3;
+                case SCREEN:
+                case GUTTER: return 1;
+                default: return 0;
+            }
         }
 
         @NonNull @Override public String toString() {
@@ -809,9 +854,12 @@ public final class RestCards {
     @NonNull
     private static Card movedBy(@NonNull Card card, float dy) {
         if (dy == 0f) return card;
+        List<ChromeShape.EdgeRun> runs = new ArrayList<>(card.runs().size());
+        for (ChromeShape.EdgeRun run : card.runs()) runs.add(run.edge.isOnSide()
+            ? new ChromeShape.EdgeRun(run.edge, run.from + dy, run.to + dy, run.kind) : run);
         return new Card(card.id, card.view, movedBy(card.box, dy), card.corners,
             card.edge(Edge.TOP), card.edge(Edge.BOTTOM), card.edge(Edge.LEFT),
-            card.edge(Edge.RIGHT), card.pieces);
+            card.edge(Edge.RIGHT), card.pieces).withRuns(runs);
     }
 
     private static boolean overlaps(@NonNull Box a, @NonNull Box b) {
@@ -847,7 +895,8 @@ public final class RestCards {
         mLaidOut[StackView.STATUS_BAR.ordinal()] = box;
         mCards.add(new Card(CardId.STATUS, StackView.STATUS_BAR, box, piece.corners,
             piece.kind(Edge.TOP), piece.kind(Edge.BOTTOM), piece.kind(Edge.LEFT),
-            piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.STATUS)));
+            piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.STATUS))
+            .withRuns(piece.runs()));
     }
 
     /**
@@ -860,7 +909,7 @@ public final class RestCards {
         mLaidOut[StackView.AZ_EDGE.ordinal()] = piece.box;
         mCards.add(new Card(CardId.AZ, StackView.AZ_EDGE, piece.box, piece.corners,
             piece.kind(Edge.TOP), piece.kind(Edge.BOTTOM), piece.kind(Edge.LEFT),
-            piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.AZ)));
+            piece.kind(Edge.RIGHT), Collections.singletonList(PieceId.AZ)).withRuns(piece.runs()));
     }
 
     private void addFloatingDock(@NonNull StackView view, @NonNull PlaceLayout layout, @NonNull StackLayout.Input pass,
@@ -886,7 +935,8 @@ public final class RestCards {
         mCards.add(new Card(CardId.DOCK, view, box, corners,
             outerKind(shape, ids, Edge.TOP),
             footBelow ? EdgeKind.JOIN : outerKind(shape, ids, Edge.BOTTOM),
-            outerKind(shape, ids, Edge.LEFT), outerKind(shape, ids, Edge.RIGHT), ids));
+            outerKind(shape, ids, Edge.LEFT), outerKind(shape, ids, Edge.RIGHT), ids)
+            .withRuns(outerRuns(shape, ids, Edge.TOP, shift)));
     }
 
     /**
@@ -1077,6 +1127,31 @@ public final class RestCards {
         return outer == null ? EdgeKind.JOIN : outer.kind(edge);
     }
 
+    /**
+     * The runs the shape model cuts along {@code edge} of the pieces of {@code ids} standing on
+     * its outermost line, moved by the card's draw shift where they run along y.
+     */
+    @NonNull
+    private static List<ChromeShape.EdgeRun> outerRuns(@Nullable ChromeShape shape,
+                                                       @NonNull List<PieceId> ids,
+                                                       @NonNull Edge edge, float shift) {
+        if (shape == null) return Collections.emptyList();
+        ChromeShape.Piece outer = null;
+        for (PieceId id : ids) {
+            ChromeShape.Piece piece = shape.piece(id);
+            if (piece != null && (outer == null || isOuter(piece, outer, edge))) outer = piece;
+        }
+        if (outer == null) return Collections.emptyList();
+        List<ChromeShape.EdgeRun> runs = new ArrayList<>(4);
+        for (PieceId id : ids) {
+            ChromeShape.Piece piece = shape.piece(id);
+            if (piece == null || isOuter(outer, piece, edge)) continue;
+            for (ChromeShape.EdgeRun run : piece.runs(edge)) runs.add(edge.isOnSide()
+                ? new ChromeShape.EdgeRun(edge, run.from + shift, run.to + shift, run.kind) : run);
+        }
+        return runs;
+    }
+
     private static boolean isOuter(@NonNull ChromeShape.Piece piece,
                                    @NonNull ChromeShape.Piece than, @NonNull Edge edge) {
         switch (edge) {
@@ -1098,7 +1173,7 @@ public final class RestCards {
         float status = rest.statusThicknessPx(floating);
         float apps = bandPx(Element.APPS, dock, pass);
         float az = PlaceChromePolicy.azRowOnDock(layout) ? bandPx(Element.AZ, dock, pass)
-            : azEdgeThicknessPx(rest);
+            : Math.max(0, rest.azEdgeThicknessPx);
         float keys = bandPx(Element.EXTRA_KEYS, dock, pass);
         float keyboard = pass.keyboardShown ? pass.keyboardHeightPx : 0f;
         ChromeShapeModel.Thickness thickness = ChromeShapeModel.Thickness.of(status, status,
@@ -1110,13 +1185,6 @@ public final class RestCards {
     }
 
     // ---- Numbers ---------------------------------------------------------------------------
-
-    /** The A–Z bar's thickness off the dock: the measured one, else the policy's letter band. */
-    private static float azEdgeThicknessPx(@NonNull Rest rest) {
-        if (rest.azEdgeThicknessPx > 0) return rest.azEdgeThicknessPx;
-        return com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
-            false, false, rest.density);
-    }
 
     /** The band an element stands in on the dock: its row, with what the Style adds to it. */
     static int bandPx(@NonNull Element element, @NonNull DockLayout dock,

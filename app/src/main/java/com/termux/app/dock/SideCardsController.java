@@ -65,6 +65,14 @@ public final class SideCardsController {
         int bottomStatusBandPx(@NonNull PlaceLayout layout);
         /** The navigation band the content keeps clear at the screen's bottom. */
         int keptBandPx();
+        /**
+         * The A–Z bar's thickness off the dock on {@code layout} (its edge host's height on the
+         * top, width on a side), as the activity measures it for the shape model; 0 where the
+         * bar is on the dock, a tab, hidden or not laid out yet.
+         */
+        default int azEdgeThicknessPx(@NonNull PlaceLayout layout) {
+            return 0;
+        }
         /** The Terminal's flush padding at its own rest, known or worked out. */
         int terminalRestFlushPaddingPx();
         /** Whether the Terminal lays its dock padding at all (one pane, no IME). */
@@ -493,6 +501,7 @@ public final class SideCardsController {
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, density),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, density));
         rest.keptBandPx = mHost.keptBandPx();
+        rest.azEdgeThicknessPx = mHost.azEdgeThicknessPx(pass.dock.arrangement);
         rest.restFlushPaddingPx = mHost.terminalRestFlushPaddingPx();
         // Each side's own layout: the other side's status bar is not the front's.
         rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy

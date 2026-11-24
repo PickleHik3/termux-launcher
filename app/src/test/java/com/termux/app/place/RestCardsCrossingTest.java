@@ -184,337 +184,145 @@ public class RestCardsCrossingTest {
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP TERMINAL->HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED GLASS_TRAY TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED GLASS_TRAY TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED LENS_BEADS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED LENS_BEADS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED PEEK_GLASS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED PEEK_GLASS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED WALL_STRIP TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) AZ/DOCK EDGES DOCKED WALL_STRIP TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED GLASS_TRAY HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED GLASS_TRAY HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED GLASS_TRAY TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED GLASS_TRAY TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED LENS_BEADS HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED LENS_BEADS HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED LENS_BEADS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED LENS_BEADS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED PEEK_GLASS HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED PEEK_GLASS HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED PEEK_GLASS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED PEEK_GLASS TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED WALL_STRIP HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED WALL_STRIP HOME",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED WALL_STRIP TERMINAL",
-        // Docked joins the A-Z column into the frame, but a card carries one kind per edge: the status bar's bottom and the dock's top are the gutter over most of their run, while the column meets them on a join (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(c) STATUS/AZ EDGES DOCKED WALL_STRIP TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED LENS_BEADS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED LENS_BEADS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED WALL_STRIP HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED WALL_STRIP HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED WALL_STRIP HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED WALL_STRIP HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED WALL_STRIP TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED WALL_STRIP TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING LENS_BEADS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING LENS_BEADS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING LENS_BEADS HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING LENS_BEADS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING LENS_BEADS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING LENS_BEADS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->HOME",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->TERMINAL",
         // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->TERMINAL",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE FLOATING WALL_STRIP TERMINAL->HOME",
-        // The A-Z bar on a side edge runs from under the status bar down to the stack's top, so its edge host is laid out a different length on each rest (keyboard up or down, Home's stack or the Terminal's) and re-sizes at the landing (#307). Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING WALL_STRIP TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED GLASS_TRAY HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED GLASS_TRAY HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED GLASS_TRAY TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED GLASS_TRAY TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED LENS_BEADS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED LENS_BEADS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED LENS_BEADS TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED LENS_BEADS TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED PEEK_GLASS HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED PEEK_GLASS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED WALL_STRIP HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED WALL_STRIP HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN DOCKED WALL_STRIP TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN DOCKED WALL_STRIP TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING GLASS_TRAY HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING GLASS_TRAY HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING GLASS_TRAY TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING GLASS_TRAY TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING LENS_BEADS HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING LENS_BEADS HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING LENS_BEADS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING LENS_BEADS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING PEEK_GLASS HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING PEEK_GLASS HOME->TERMINAL",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING PEEK_GLASS TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING PEEK_GLASS TERMINAL->HOME",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING WALL_STRIP HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING WALL_STRIP HOME->TERMINAL",
-        // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
-        "(e) MORPH KEYBOARD_COLUMN FLOATING WALL_STRIP TERMINAL->HOME",
         // The keyboard's column draws Home's keyboard card (over the rows, wearing the foot) and the Terminal's (above the bands under the keyboard) at different rects: one view, two cards (#307; the (b) KEYBOARD_COLUMN entries are the same case). Fixtures: pong, split keyboard, split pane, status bar at the bottom, pong with a foot.
         "(e) MORPH KEYBOARD_COLUMN FLOATING WALL_STRIP TERMINAL->HOME",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED GLASS_TRAY HOME->TERMINAL",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED GLASS_TRAY HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED LENS_BEADS HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED LENS_BEADS HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED WALL_STRIP HOME->TERMINAL",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED WALL_STRIP HOME->TERMINAL",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS KEYBOARD_COLUMN/TERMINAL_HOST DOCKED PEEK_GLASS HOME->TERMINAL",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS KEYBOARD_COLUMN/TERMINAL_HOST DOCKED PEEK_GLASS HOME->TERMINAL",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED GLASS_TRAY TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED GLASS_TRAY TERMINAL->HOME",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED LENS_BEADS TERMINAL->HOME",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED LENS_BEADS TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED WALL_STRIP TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED WALL_STRIP TERMINAL->HOME",
-        // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
-        "(g) FOOT OWNERS TERMINAL_HOST/KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME",
         // Under Docked Home's host and the Terminal's own host (#304 option A) each wear the foot at the same rect, so it is two cards sliding with their sides, not one shared card (ADR 0032 section 3); one owner needs a foot view of its own (#307). Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
         "(g) FOOT OWNERS TERMINAL_HOST/KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME"));
 
@@ -749,8 +557,12 @@ public class RestCardsCrossingTest {
                     - Math.max(upper.box.left, lower.box.left);
                 if (across <= 0f) continue;
                 float gap = lower.box.top - upper.box.bottom;
-                EdgeKind a = upper.edge(Edge.BOTTOM);
-                EdgeKind b = lower.edge(Edge.TOP);
+                // The kinds over the stretch the two share: a card's edge has runs (a Docked
+                // A-Z column joins the status bar's bottom over its own width only, #307).
+                float from = Math.max(upper.box.left, lower.box.left);
+                float to = Math.min(upper.box.right, lower.box.right);
+                EdgeKind a = upper.kindOver(Edge.BOTTOM, from, to);
+                EdgeKind b = lower.kindOver(Edge.TOP, from, to);
                 String kind = null;
                 if (gap > 0f && gap < 2f * f.density) kind = "HAIRLINE";
                 else if (gap <= 0f && (a == EdgeKind.JOIN) != (b == EdgeKind.JOIN)) kind = "EDGES";

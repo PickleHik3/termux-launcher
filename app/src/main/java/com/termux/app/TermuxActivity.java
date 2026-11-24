@@ -11026,6 +11026,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     .contains(com.termux.app.place.Element.STATUS) ? mStatusBar.bottomStatusBandPx() : 0;
             }
             @Override public int keptBandPx() { return mBottomKeptPx; }
+            @Override public int azEdgeThicknessPx(@NonNull PlaceLayout layout) {
+                // The one measure the shape model reads (chromeThicknessPx), off the dock only.
+                return com.termux.app.place.PlaceChromePolicy.azRowShown(layout)
+                    && !com.termux.app.place.PlaceChromePolicy.azRowOnDock(layout)
+                    && !com.termux.app.place.PlaceChromePolicy.azTabShown(layout)
+                    ? Math.round(chromeThicknessPx(Element.AZ, layout)) : 0;
+            }
             @Override public int terminalRestFlushPaddingPx() { return terminalRestFlushPx(mLastWallPage == com.termux.app.page.PageKind.HOME); }
             @Override public boolean terminalFlushAllowed() {
                 return visiblePaneCount() <= 1 && !(mPaneController != null && mPaneController.isActivePaneFloating())
