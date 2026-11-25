@@ -21178,6 +21178,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
                 if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
             }
+            // The lifted picture is a drawing over the wall, not a card: nothing exits with it.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
         });
         // The key's page bar popup stands over the wall and nothing else: Back puts it away first.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
