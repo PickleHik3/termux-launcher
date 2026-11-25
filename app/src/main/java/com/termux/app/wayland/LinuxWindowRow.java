@@ -173,4 +173,14 @@ public final class LinuxWindowRow {
         out[3] = Math.max(0, h);
         return scale;
     }
+
+    /**
+     * Whether a window of {@code drawnW} x {@code drawnH} is bigger than its slot of {@code slotW} x
+     * {@code slotH} on either axis, so it is shown whole ({@link #fixedFrame}) instead of filling
+     * the slot. A window that has not drawn yet (0) or a slot not laid out fits.
+     */
+    public static boolean overflowsSlot(int slotW, int slotH, int drawnW, int drawnH) {
+        if (slotW <= 0 || slotH <= 0 || drawnW <= 0 || drawnH <= 0) return false;
+        return drawnW > slotW || drawnH > slotH;
+    }
 }

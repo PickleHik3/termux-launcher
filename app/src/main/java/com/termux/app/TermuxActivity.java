@@ -2081,6 +2081,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.USER_EVENT);
                 return true;
             }
+            @Override public boolean leaveLinuxFullscreen() {
+                return mLinuxWindows != null && mLinuxWindows.leaveFullscreen();
+            }
         }, mTerminalGlass);
     /** The dock's element in the glass registry. */
     private static final String DOCK_GLASS = "dock";

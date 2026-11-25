@@ -28,4 +28,10 @@ public interface TerminalPageHost {
 
     /** Lowers the in-app keyboard when it is up; false when it was not. */
     boolean lowerKeyboard();
+
+    /**
+     * A Linux window stands in front of the Terminal's row and is full screen: Back leaves full
+     * screen and stays on it. False when none is, so the chain goes on.
+     */
+    default boolean leaveLinuxFullscreen() { return false; }
 }

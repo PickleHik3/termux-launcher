@@ -23,12 +23,20 @@ public class TerminalPageBackTest {
         boolean escape;
         boolean keyboardUp;
         int lowered;
+        boolean linuxFullscreen;
+        int left;
         @Nullable TerminalPaneController.Window active;
         @Nullable @Override public TerminalPaneController.Window activeWindow() { return active; }
         @NonNull @Override public View paneHost() { throw new UnsupportedOperationException(); }
         @Override public boolean activePaneHoldsKeys() { return true; }
         @Override public boolean handKeysToTerminal() { return true; }
         @Override public boolean backIsEscape() { return escape; }
+        @Override public boolean leaveLinuxFullscreen() {
+            if (!linuxFullscreen) return false;
+            linuxFullscreen = false;
+            left++;
+            return true;
+        }
         @Override public boolean lowerKeyboard() {
             if (!keyboardUp) return false;
             keyboardUp = false;
@@ -84,6 +92,30 @@ public class TerminalPageBackTest {
         assertTrue(pages.onBack());
         assertEquals(1, homes);
         assertEquals(1, host.lowered);
+    }
+
+    /** Mousepad full screen on pong: Back lowers the keyboard, then leaves full screen, then goes Home. */
+    @Test
+    public void backLowersTheKeyboardThenLeavesLinuxFullscreenThenGoesHome() {
+        host.keyboardUp = true;
+        host.linuxFullscreen = true;
+        assertTrue(pages.onBack());
+        assertEquals(1, host.lowered);
+        assertTrue(host.linuxFullscreen);
+        assertTrue(pages.onBack());
+        assertEquals(1, host.left);
+        assertEquals(0, homes);
+        assertTrue(pages.onBack());
+        assertEquals(1, homes);
+        assertEquals(1, host.left);
+    }
+
+    @Test
+    public void backMappedToEscapeLeavesLinuxFullscreenAlone() {
+        host.escape = true;
+        host.linuxFullscreen = true;
+        assertTrue(page.onBack());
+        assertEquals(0, host.left);
     }
 
     /**
