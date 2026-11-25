@@ -464,6 +464,7 @@ public class SideCardsParityTest {
             for (boolean homeUp : new boolean[] {false, true}) {
                 Float wantHome = null;
                 Float wantParked = null;
+                Float wantTaken = null;
                 for (boolean terminalUp : new boolean[] {false, true}) {
                     RestCards atHome = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, terminalUp,
                         true));
@@ -475,10 +476,29 @@ public class SideCardsParityTest {
                     Float home = homeRowsBottom(atHome, 0f);
                     Float parked = homeRowsBottom(atTerminal, 1f);
                     if (home == null || parked == null) continue;
-                    if (wantHome == null) wantHome = home;
-                    if (wantParked == null) wantParked = parked;
-                    assertEquals(label + " Home in front", wantHome, home, 0f);
-                    assertEquals(label + " Terminal in front", wantParked, parked, 0f);
+                    // With the keyboard up at both rests Home takes the Terminal's column
+                    // (#307, 2026-11-25), so its rows stand on that column: its own rest only
+                    // where Home keeps its own column.
+                    com.termux.app.place.ChromeShape.Box homeColumn =
+                        atHome.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
+                    boolean taken = homeUp && terminalUp && homeColumn != null
+                        && homeColumn.equals(
+                            atTerminal.laidOut(RestCards.StackView.KEYBOARD_COLUMN));
+                    if (taken) {
+                        if (wantTaken == null) wantTaken = home;
+                        assertEquals(label + " Home takes the Terminal's column", wantTaken,
+                            home, 0f);
+                    } else {
+                        if (wantHome == null) wantHome = home;
+                        assertEquals(label + " Home in front", wantHome, home, 0f);
+                    }
+                    if (taken) {
+                        assertEquals(label + " Terminal in front, on its own column", home,
+                            parked, 0f);
+                    } else {
+                        if (wantParked == null) wantParked = parked;
+                        assertEquals(label + " Terminal in front", wantParked, parked, 0f);
+                    }
                     if (columnHeight(atHome) == columnHeight(atTerminal)) {
                         assertEquals(label + " across the landing", home, parked, 0f);
                         across++;
@@ -690,14 +710,31 @@ public class SideCardsParityTest {
                     Math.round(card.box.width()));
                 assertTrue(label + " the foot has a band", footParams.height > 0);
                 // Home's pinned host stands on the foot's top, measured from the container's bottom.
-                if (controller.hostPinned()) {
+                // Where the foot is the keyboard's column's (Home takes the Terminal's column,
+                // #307, 2026-11-25), Home's host is held under the keyboard's cover instead and
+                // stands at Home's own rest, not on the foot.
+                RestCards answer = RestCards.of(f.cardsRest(front, up, up, false));
+                boolean columnFoot = answer.columnFoot() != null
+                    && answer.cardOn(RestCards.StackView.FOOT) == null;
+                if (columnFoot) {
+                    // Home's own cards are the front's only while Home is in front; the Terminal
+                    // in front parks them behind its own page.
+                    if (front.isHome()) {
+                        boolean dockCovered = false;
+                        for (RestCards.Card c : answer.covered())
+                            dockCovered |= c.id == RestCards.CardId.DOCK;
+                        assertTrue(label + " Home's dock is under the cover", dockCovered);
+                    }
+                } else if (controller.hostPinned()) {
                     android.widget.RelativeLayout.LayoutParams host =
                         new android.widget.RelativeLayout.LayoutParams(0, 0);
                     controller.layOutHost(host, 0);
                     assertEquals(label + " Home's host stops at the foot's top", footTop,
                         host.bottomMargin, 1);
                 }
-                if (terminalHost.getVisibility() == View.VISIBLE) {
+                // The column's foot sits under the keyboard's bands: the Terminal's host stands
+                // above the keys, not on it.
+                if (!columnFoot && terminalHost.getVisibility() == View.VISIBLE) {
                     android.widget.RelativeLayout.LayoutParams host =
                         (android.widget.RelativeLayout.LayoutParams) terminalHost.getLayoutParams();
                     assertEquals(label + " the Terminal's host stops at the foot's top", footTop,
