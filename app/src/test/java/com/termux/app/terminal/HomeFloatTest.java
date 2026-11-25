@@ -500,7 +500,88 @@ public class HomeFloatTest {
         mController.openHomeFloat(terminal(), 0);
         mLayer.onHomePageShown(1);
         assertNull(mController.focusedHomeFloat());
+        // The regression (pong, 11-25): the turn closed the keyboard at the pager's commit, so the
+        // keyboard never rode out with its page and the page was recorded as left with it down.
+        // The turn is not a release that closes it: the pager's rest decides the keyboard.
+        assertEquals("the turn leaves the keyboard to the pager's rest", 0, mHost.focusReleased);
+        assertEquals(1, mHost.turnedAway);
+    }
+
+    @Test
+    public void theFloatTakesFocusBackWhenItsPageIsInFrontAgain() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        mLayer.onHomePageShown(1);
+        assertNull(mController.focusedHomeFloat());
+        mLayer.onHomePageShown(0);
+        assertSame("the page comes back as it was left", window, mController.focusedHomeFloat());
+        assertSame(mController.windowActiveSession(window), mController.getActiveSession());
+    }
+
+    @Test
+    public void aFloatLeftUnfocusedOnItsPageStaysUnfocusedOnTheReturn() {
+        mController.openHomeFloat(terminal(), 0);
+        press(mLayer, 300, ROOM_TOP / 2f);
+        mLayer.onHomePageShown(1);
+        mLayer.onHomePageShown(0);
+        assertNull(mController.focusedHomeFloat());
+        assertEquals(0, mHost.turnedAway);
+    }
+
+    @Test
+    public void aSwipeStartingBesideTheFloatsKeepsTheFocusedFloat() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        long now = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 300, ROOM_TOP / 2f, 0);
+        mLayer.dispatchTouchEvent(down);
+        down.recycle();
+        // The regression (pong, 11-25): the press's down gave focus back and closed the keyboard
+        // on the first frame of Home's page swipe, before the keyboard could ride with its page.
+        assertSame("a press is not a tap until it lifts", window, mController.focusedHomeFloat());
+        assertEquals(0, mHost.focusReleased);
+        // The pane hands the rest of the gesture on: the finger travels, the wall takes it.
+        MotionEvent move = MotionEvent.obtain(now, now + 16, MotionEvent.ACTION_MOVE, 100,
+            ROOM_TOP / 2f, 0);
+        mLayer.onPaneTouch(move);
+        move.recycle();
+        MotionEvent up = MotionEvent.obtain(now, now + 32, MotionEvent.ACTION_UP, 60, ROOM_TOP / 2f, 0);
+        mLayer.onPaneTouch(up);
+        up.recycle();
+        assertSame("a swipe is no tap", window, mController.focusedHomeFloat());
+        assertEquals(0, mHost.focusReleased);
+        assertEquals(0, mHost.tapsBeside);
+    }
+
+    @Test
+    public void aPressBesideTheFloatsTheWallTakesIsNoTap() {
+        TerminalPaneController.Window window = mController.openHomeFloat(terminal(), 0);
+        long now = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 300, ROOM_TOP / 2f, 0);
+        mLayer.dispatchTouchEvent(down);
+        down.recycle();
+        MotionEvent cancel = MotionEvent.obtain(now, now + 16, MotionEvent.ACTION_CANCEL, 300,
+            ROOM_TOP / 2f, 0);
+        mLayer.onPaneTouch(cancel);
+        cancel.recycle();
+        MotionEvent up = MotionEvent.obtain(now, now + 32, MotionEvent.ACTION_UP, 300, ROOM_TOP / 2f, 0);
+        mLayer.onPaneTouch(up);
+        up.recycle();
+        assertSame(window, mController.focusedHomeFloat());
+        assertEquals(0, mHost.tapsBeside);
+    }
+
+    @Test
+    public void aTapBesideTheFloatsLiftedThroughThePaneGivesFocusBack() {
+        mController.openHomeFloat(terminal(), 0);
+        long now = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(now, now, MotionEvent.ACTION_DOWN, 300, ROOM_TOP / 2f, 0);
+        mLayer.dispatchTouchEvent(down);
+        down.recycle();
+        MotionEvent up = MotionEvent.obtain(now, now + 32, MotionEvent.ACTION_UP, 300, ROOM_TOP / 2f, 0);
+        mLayer.onPaneTouch(up);
+        up.recycle();
+        assertNull(mController.focusedHomeFloat());
         assertEquals(1, mHost.focusReleased);
+        assertEquals("the host puts the page's keyboard away", 1, mHost.tapsBeside);
     }
 
     @Test
@@ -1279,6 +1360,8 @@ public class HomeFloatTest {
     private static final class RecordingHost implements TerminalPaneController.Host {
         int floatsChanged;
         int focusReleased;
+        int turnedAway;
+        int tapsBeside;
         @Nullable TerminalPaneController.Window docked;
         @Nullable TerminalPaneController.Window floatedOntoHome;
         boolean takesFloatedWindows;
@@ -1291,6 +1374,8 @@ public class HomeFloatTest {
         @Override public String defaultCwd() { return "/"; }
         @Override public void onHomeFloatsChanged() { floatsChanged++; }
         @Override public void onHomeFloatFocusReleased() { focusReleased++; }
+        @Override public void onHomeFloatTurnedAway() { turnedAway++; }
+        @Override public void onTapBesideHomeFloats() { tapsBeside++; }
         @Override public void onHomeFloatDocked(@NonNull TerminalPaneController.Window window) {
             docked = window;
         }
