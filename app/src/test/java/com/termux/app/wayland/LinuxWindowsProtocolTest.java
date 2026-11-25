@@ -27,7 +27,7 @@ public class LinuxWindowsProtocolTest {
 
     /** Constants with these prefixes are read by the host and must be mirrored. */
     private static final String[] MIRRORED_PREFIXES = {"TOUCH_", "POINTER_", "BTN_", "WINDOW_", "MAX_"};
-    private static final Pattern RUST_CONST = Pattern.compile("^pub const ([A-Z0-9_]+): i32 = (-?\\d+);", Pattern.MULTILINE);
+    private static final Pattern RUST_CONST = Pattern.compile("^pub const ([A-Z0-9_]+): i32 = (-?(?:0x[0-9A-Fa-f]+|\\d+));", Pattern.MULTILINE);
 
     @Test
     public void everyRustConstantMatchesTheInterface() throws Exception {
@@ -70,7 +70,7 @@ public class LinuxWindowsProtocolTest {
         String text = new String(Files.readAllBytes(protocolSource()), StandardCharsets.UTF_8);
         Map<String, Integer> out = new LinkedHashMap<>();
         Matcher m = RUST_CONST.matcher(text);
-        while (m.find()) out.put(m.group(1), Integer.parseInt(m.group(2)));
+        while (m.find()) out.put(m.group(1), Integer.decode(m.group(2)));
         return out;
     }
 
