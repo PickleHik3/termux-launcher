@@ -210,7 +210,8 @@ public class PrivilegedBackendManager {
         shizukuBackend = new ShizukuBackend(shizukuCallback);
         boolean initialized = shizukuBackend.initialize(context).join();
         if (!initialized || !shizukuBackend.isAvailable()) {
-            shizukuBackend.cleanup();
+            // Keep its listeners: a Shizuku that starts later reaches handleShizukuBinderReceived.
+            shizukuBackend.standDown();
             updateState(BackendState.SERVICE_NOT_RUNNING, StatusReason.SERVICE_NOT_RUNNING,
                 "Shizuku service not running");
             return false;

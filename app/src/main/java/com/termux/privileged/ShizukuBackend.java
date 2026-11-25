@@ -374,7 +374,23 @@ public class ShizukuBackend implements PrivilegedBackend {
         }
     }
     
-    private void registerListeners() {
+    /**
+     * Marks the backend unusable for now but keeps listening: a Shizuku that starts after the
+     * launcher announces its binder to the listeners {@link #cleanup} would remove, and that
+     * announcement is the only way a later Shizuku is noticed without a UI nudge.
+     */
+    public void standDown() {
+        isAvailable = false;
+        binderReceived = false;
+        hasPermission = false;
+        Log.i(TAG, "Shizuku backend standing by for the binder");
+    }
+
+    boolean areListenersRegistered() {
+        return listenersRegistered;
+    }
+
+    void registerListeners() {
         if (listenersRegistered) {
             return;
         }
