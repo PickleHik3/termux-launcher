@@ -430,6 +430,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onActivationRequest(long id) {
+            // An app asked for its window (a second `firefox URL`, a file opened in a running
+            // app): the same as a tap on its chip.
+            main.post(() -> showWindow(id));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }

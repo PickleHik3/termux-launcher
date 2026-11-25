@@ -45,6 +45,12 @@ oneway interface ILinuxWindowsCallback {
      * focus (setFocus) has a field; X11 apps never report one.
      */
     void onTextInput(long id, boolean active, int contentHint, int contentPurpose);
+    /**
+     * An app asked for the window to come in front (xdg_activation_v1) with a token the host
+     * honours: one made by an app the user was just using (since VERSION 8). The launcher shows
+     * the window as a tap on its chip does.
+     */
+    void onActivationRequest(long id);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }

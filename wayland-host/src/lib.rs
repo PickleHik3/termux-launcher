@@ -4,6 +4,7 @@
 //! `Surface` per toplevel over binder and the compositor copies the client's wl_shm buffer into
 //! it, at most once per frame tick.
 
+pub mod activation;
 pub mod clipboard;
 pub mod compose;
 pub mod geometry;

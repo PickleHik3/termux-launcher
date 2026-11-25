@@ -27,6 +27,7 @@ use smithay::delegate_output;
 use smithay::delegate_seat;
 use smithay::delegate_shm;
 use smithay::delegate_viewporter;
+use smithay::delegate_xdg_activation;
 use smithay::delegate_xdg_decoration;
 use smithay::delegate_xdg_shell;
 use smithay::input::keyboard::XkbConfig;
@@ -71,6 +72,7 @@ use smithay::wayland::shell::xdg::{
 };
 use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
+use smithay::wayland::xdg_activation::XdgActivationState;
 use smithay::wayland::xwayland_shell::XWaylandShellState;
 use smithay::xwayland::xwm::WmWindowType;
 use smithay::xwayland::{X11Surface, XWaylandClientData};
@@ -591,6 +593,10 @@ pub struct State {
     pub clip: super::clipboard::ClipState,
     /// The apps' text fields (`zwp_text_input_v3`).
     pub text_inputs: super::text_input::TextInputs,
+    /// `xdg_activation_v1`: the tokens clients made.
+    pub activation_state: XdgActivationState,
+    /// The clients that last had focus or input, which decides whose activation tokens count.
+    pub recent: crate::activation::Recent<ClientId>,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
     teardown: crate::teardown::Teardown,
 }
@@ -679,6 +685,7 @@ fn setup(
     // Only Xwayland's client sees this global.
     let xwayland_shell_state = XWaylandShellState::new::<State>(&dh);
     super::text_input::create_global(&dh);
+    let activation_state = XdgActivationState::new::<State>(&dh);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -803,6 +810,8 @@ fn setup(
         xwayland: None,
         clip: super::clipboard::ClipState::new(clip_tx),
         text_inputs: Default::default(),
+        activation_state,
+        recent: Default::default(),
         teardown: Default::default(),
     };
     // Last in, first out: the listening socket goes (and its files with it), then the display.
@@ -1107,6 +1116,8 @@ impl State {
         }
         self.release_all_keys();
         let old = std::mem::replace(&mut self.focused, new);
+        self.note_active(old);
+        self.note_active(new);
         if let Some(i) = old.and_then(|id| self.toplevel_index(id)) {
             self.toplevels[i].shell.set_activated(false);
             // A grab ends when its window loses the keyboard.
@@ -1141,6 +1152,9 @@ impl State {
         }
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(touch) = self.seat.get_touch() else { return };
+        if action == TOUCH_DOWN {
+            self.note_active(Some(id));
+        }
         if action == TOUCH_CANCEL {
             self.toplevels[i].swallow_touch = false;
             touch.cancel(self);
@@ -1192,6 +1206,9 @@ impl State {
         }
         let Some(evdev) = android_to_evdev(android_keycode) else { return };
         let Some(keyboard) = self.seat.get_keyboard() else { return };
+        if down {
+            self.note_active(Some(id));
+        }
         let state = if down { KeyState::Pressed } else { KeyState::Released };
         // xkb key codes are evdev codes + 8.
         keyboard.input::<(), _>(self, Keycode::new(evdev + 8), state, SERIAL_COUNTER.next_serial(), time, |_, _, _| {
@@ -1226,6 +1243,7 @@ impl State {
                 // Outside a grabbing popup a press only dismisses the popups, and its release
                 // goes nowhere either.
                 if action == POINTER_BUTTON_DOWN {
+                    self.note_active(Some(id));
                     let at = self.toplevels[i].pointer_at;
                     if self.press_dismisses(i, at) {
                         self.toplevels[i].swallow_button = true;
@@ -2015,7 +2033,7 @@ fn toplevel_names(surface: &ToplevelSurface) -> (String, String) {
 }
 
 /// The root of `surface`'s subsurface tree; None for a gone surface.
-fn root_of(surface: &WlSurface) -> Option<WlSurface> {
+pub(super) fn root_of(surface: &WlSurface) -> Option<WlSurface> {
     let mut root = surface.clone();
     for _ in 0..1024 {
         if !root.is_alive() {
@@ -2583,3 +2601,4 @@ delegate_data_device!(State);
 delegate_fractional_scale!(State);
 delegate_viewporter!(State);
 delegate_dmabuf!(State);
+delegate_xdg_activation!(State);
