@@ -107,6 +107,17 @@ final class LinuxFullscreenPolicy {
         return lastActivityMs + REVEAL_MS;
     }
 
+    /**
+     * The full-screen window's height in its layer, as adjustResize would make it: the whole
+     * layer, or the part above the keyboard while a text field in the window holds a keyboard
+     * that is up. {@code keyboardTop}: the top of the keyboard (the launcher's with the rows over
+     * it, or the phone's) in the layer's pixels; 0 or past the layer for none.
+     */
+    static int windowHeight(int layerHeight, boolean fieldHoldsKeyboard, int keyboardTop) {
+        if (!fieldHoldsKeyboard || keyboardTop <= 0 || keyboardTop >= layerHeight) return layerHeight;
+        return keyboardTop;
+    }
+
     /** Whether a finger down at {@code downY} on a view {@code heightPx} high starts at the bottom edge. */
     static boolean startsAtBottomEdge(float downY, float heightPx, float density) {
         return heightPx > 0f && downY >= heightPx - EDGE_DP * density;

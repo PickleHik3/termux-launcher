@@ -21,6 +21,9 @@ import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
+import android.view.inputmethod.InputMethodManager;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -261,7 +264,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     };
     private final View.OnLayoutChangeListener slotWatcher = (v, l, t, r, b, ol, ot, or, ob) -> {
         if (r - l == or - ol && b - t == ob - ot) return;
-        if (v == LinuxWindowsController.this.page.slot()) sendPageSize();
+        if (v == LinuxWindowsController.this.page.slot()) {
+            sendPageSize();
+            if (LinuxWindowsController.this.fullscreen.isFullscreen()) postFullscreenSize();
+        }
         // Posted: a layout pass must not ask for another.
         if (!replacePosted) {
             replacePosted = true;
@@ -289,6 +295,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** Which window's text field has focus, and whether a field raised the keyboard. */
     private final LinuxTextFieldPolicy textFields = new LinuxTextFieldPolicy();
     private final Runnable lowerDue = this::lowerKeyboardIfDue;
+    private final Runnable fullscreenSize = this::syncFullscreenSize;
+    /** The focused field's content hint and purpose, for the phone keyboard's input type. */
+    private int fieldHint;
+    private int fieldPurpose;
+    /** The view serving the phone keyboard's connection to the focused field; null for none. */
+    @Nullable private View phoneView;
+    /** The full-screen window hears the phone keyboard's insets: its size follows them. */
+    private final View.OnApplyWindowInsetsListener fullscreenInsets = (view, insets) -> {
+        postFullscreenSize();
+        return insets;
+    };
 
     private final LinuxWindowKeys.Sink keySink = (keyCode, down) -> sendKey(keyCode, down);
     private final TerminalKeyEventHandler.KeyValueInterceptor keys =
@@ -409,7 +426,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override
         public void onTextInput(long id, boolean active, int contentHint, int contentPurpose) {
-            main.post(() -> textFieldChanged(id, active));
+            main.post(() -> textFieldChanged(id, active, contentHint, contentPurpose));
         }
 
         @Override
@@ -1119,6 +1136,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return keys;
     }
 
+    @Nullable
+    @Override
+    public InputConnection textInput(@NonNull View view, @NonNull EditorInfo out) {
+        return textInputFor(view, out);
+    }
+
     @Override
     public int currentScaleStep() {
         return scaleStepOf(shownWindow());
@@ -1177,6 +1200,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         @Override public void onScaleStepChosen(int step) { chooseScale(w, step); }
         @Override public void onScaleRailUsed() {
             if (w.paneFrame != null) w.paneFrame.dismissRail();
+        }
+        @Nullable @Override public InputConnection textInput(@NonNull View view, @NonNull EditorInfo out) {
+            return textInputFor(view, out);
         }
     }
 
@@ -1369,13 +1395,16 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         if (v.getScaleX() != 1f) v.setScaleX(1f);
         if (v.getScaleY() != 1f) v.setScaleY(1f);
+        v.setOnApplyWindowInsetsListener(fullscreenInsets);
         page.dismissRail();
+        postFullscreenSize();
     }
 
     /** {@code w} gave the screen back: its view returns to its slot when it still shows there. */
     private void leftFullscreen(@NonNull Win w) {
         hideReveal();
         edgeSwipe = false;
+        if (w.view != null) w.view.setOnApplyWindowInsetsListener(null);
         removeView(w.view);
         if (w.inRow && w.id == boundId && nearFront || w.inPane) attachViews(w);
     }
@@ -1531,8 +1560,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     /** The host told that window {@code id}'s text field took focus or lost it. */
-    private void textFieldChanged(long id, boolean active) {
+    private void textFieldChanged(long id, boolean active, int hint, int purpose) {
         if (windows.get(id) == null) return;
+        if (active) {
+            fieldHint = hint;
+            fieldPurpose = purpose;
+        }
         if (!active) {
             applyTextField(textFields.left(id));
             return;
@@ -1558,6 +1591,16 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
                 main.removeCallbacks(lowerDue);
                 host.pageHost().fieldFocusChanged(page, true);
                 break;
+            case RAISE_PHONE: {
+                main.removeCallbacks(lowerDue);
+                View v = takePhoneFocus();
+                if (v != null) host.pageHost().showPhoneKeyboard(v);
+                break;
+            }
+            case FOCUS_PHONE:
+                main.removeCallbacks(lowerDue);
+                takePhoneFocus();
+                break;
             case LOWER_SOON:
                 main.removeCallbacks(lowerDue);
                 main.post(lowerDue);
@@ -1565,9 +1608,136 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             case LOWER:
                 host.pageHost().lowerKeyboard();
                 break;
+            case LOWER_PHONE:
+                if (phoneView != null) host.pageHost().hidePhoneKeyboard(phoneView);
+                releasePhoneFocus();
+                break;
+            case RELEASE_PHONE:
+                releasePhoneFocus();
+                break;
             default:
                 break;
         }
+        postFullscreenSize();
+    }
+
+    /**
+     * The view that serves the phone keyboard's connection to the focused window's field takes
+     * focus: the window's pane frame, else the Linux page. Already focused, its input restarts so
+     * the keyboard reads the field's new content type. Null when that view is not on screen.
+     */
+    @Nullable
+    private View takePhoneFocus() {
+        Win w = focusedId == 0 ? null : windows.get(focusedId);
+        if (w == null) return null;
+        View v = w.inPane && w.paneFrame != null ? w.paneFrame : page;
+        if (!v.isAttachedToWindow()) return null;
+        if (phoneView != null && phoneView != v) releasePhoneFocus();
+        phoneView = v;
+        if (!v.isFocusable()) {
+            v.setFocusable(true);
+            v.setFocusableInTouchMode(true);
+        }
+        if (v.hasFocus()) {
+            InputMethodManager imm = (InputMethodManager) context.getSystemService(Context.INPUT_METHOD_SERVICE);
+            if (imm != null) imm.restartInput(v);
+        } else {
+            v.requestFocus();
+        }
+        return v;
+    }
+
+    /** The phone keyboard's connection goes back: the view gives up focus and stops being an editor. */
+    private void releasePhoneFocus() {
+        View v = phoneView;
+        phoneView = null;
+        if (v == null) return;
+        v.clearFocus();
+        v.setFocusableInTouchMode(false);
+        v.setFocusable(false);
+    }
+
+    /** The phone keyboard's connection to the focused window's field, for {@code view}; null when it serves none. */
+    @Nullable
+    private InputConnection textInputFor(@NonNull View view, @NonNull EditorInfo out) {
+        if (view != phoneView || !textFields.servesPhone(focusedId)) return null;
+        out.inputType = LinuxTextFieldPolicy.inputType(fieldHint, fieldPurpose);
+        out.imeOptions = LinuxTextFieldPolicy.imeOptions();
+        return new LinuxTextInputConnection(view, phoneSink);
+    }
+
+    /** Where the phone keyboard's edits go: the focused window's field, its keys as today's keys. */
+    private final LinuxTextInputConnection.Sink phoneSink = new LinuxTextInputConnection.Sink() {
+        @Override public void commit(@NonNull String text) { sendText(text); }
+
+        @Override public void preedit(@NonNull String text, int cursor) {
+            if (service == null || focusedId == 0) return;
+            try {
+                service.setPreeditText(focusedId, text, cursor);
+            } catch (RemoteException ignored) {
+            }
+        }
+
+        @Override public void delete(int before, int after) {
+            if (service == null || focusedId == 0) return;
+            try {
+                service.deleteSurroundingText(focusedId, before, after);
+            } catch (RemoteException ignored) {
+            }
+        }
+
+        @Override public void key(int keyCode, boolean down) { sendKey(keyCode, down); }
+    };
+
+    private void postFullscreenSize() {
+        main.removeCallbacks(fullscreenSize);
+        main.post(fullscreenSize);
+    }
+
+    /**
+     * Sizes the full-screen window as adjustResize would: the area above the keyboard while its
+     * text field holds one that is up, else the whole layer. Its new size reaches the app as a
+     * configure through the TextureView's size change.
+     */
+    private void syncFullscreenSize() {
+        Win w = windows.get(fullscreen.fullscreenId());
+        TextureView v = w == null ? null : w.view;
+        if (v == null || !(v.getParent() instanceof FrameLayout)) return;
+        View layer = (View) v.getParent();
+        PageHost pages = host.pageHost();
+        boolean holds = w.id == focusedId && textFields.typesText(w.id) && pages.keyboardUp();
+        int layerHeight = layer.getHeight();
+        int h = LinuxFullscreenPolicy.windowHeight(layerHeight, holds,
+            holds ? keyboardTopIn(layer, pages.launcherKeyboard()) : 0);
+        int target = h >= layerHeight ? FrameLayout.LayoutParams.MATCH_PARENT : h;
+        ViewGroup.LayoutParams lp = v.getLayoutParams();
+        if (lp == null || lp.height == target) return;
+        lp.height = target;
+        if (lp instanceof FrameLayout.LayoutParams) ((FrameLayout.LayoutParams) lp).gravity = Gravity.TOP;
+        v.setLayoutParams(lp);
+    }
+
+    /**
+     * The keyboard's top in {@code layer}'s pixels: for the launcher's keyboard the Linux page's
+     * bottom (the page stands above the keyboard and the rows over it), for the phone's the top of
+     * its inset.
+     */
+    private int keyboardTopIn(@NonNull View layer, boolean launcherKeyboard) {
+        layer.getLocationInWindow(revealAt);
+        int layerTop = revealAt[1];
+        if (launcherKeyboard) {
+            page.getLocationInWindow(revealAt);
+            return revealAt[1] + page.getHeight() - layerTop;
+        }
+        android.view.WindowInsets raw = layer.getRootWindowInsets();
+        if (raw == null) return 0;
+        androidx.core.view.WindowInsetsCompat insets =
+            androidx.core.view.WindowInsetsCompat.toWindowInsetsCompat(raw, layer);
+        int type = androidx.core.view.WindowInsetsCompat.Type.ime();
+        if (!insets.isVisible(type)) return 0;
+        int imeBottom = insets.getInsets(type).bottom;
+        if (imeBottom <= 0) return 0;
+        return layer.getRootView().getHeight() - imeBottom - layerTop;
     }
 
     private void sendClipboardText(String text) {

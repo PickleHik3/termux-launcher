@@ -1801,9 +1801,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             return true;
         }
         @Override public boolean keyboardUp() {
-            return mInAppKeyboard != null && mInAppKeyboard.isVisible();
+            return mInAppKeyboard != null && mInAppKeyboard.isVisible() || mLastDispatchedImeBottomPx > 0;
         }
         @Override public boolean launcherKeyboard() { return isInAppKeyboardEnabled(); }
+        @Override public void showPhoneKeyboard(@NonNull View view) {
+            onSystemImeRequested();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, view);
+        }
+        @Override public void hidePhoneKeyboard(@NonNull View view) {
+            KeyboardUtils.hideSoftKeyboard(TermuxActivity.this, view);
+        }
     };
 
     /**
