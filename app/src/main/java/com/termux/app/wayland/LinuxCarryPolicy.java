@@ -1,6 +1,9 @@
 package com.termux.app.wayland;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.termux.app.terminal.DwindleTilingPolicy;
 
 /**
  * Where a carried Linux window lands (spec #384, "Carry"): the one drop decision. A drop in the
@@ -27,22 +30,30 @@ public final class LinuxCarryPolicy {
         /** The window goes back to where it was lifted from. */
         RETURN,
         /** The window becomes its own window at {@link Drop#to}, between two windows. */
-        BETWEEN
+        BETWEEN,
+        /** The window becomes a pane beside the pane under the finger, on {@link Drop#side}. */
+        SPLIT
     }
+
+    /** The carried window is a pane of a split, not a row window: there is no row place to leave. */
+    public static final int FROM_PANE = -2;
 
     /** A drop's decision. */
     public static final class Drop {
         @NonNull public final Kind kind;
         /** For {@link Kind#BETWEEN}: the row place the window takes once lifted out; else -1. */
         public final int to;
+        /** For {@link Kind#SPLIT}: the half of the pane the window takes, a {@code DwindleTilingPolicy.SIDE_*}; else -1. */
+        public final int side;
 
-        Drop(@NonNull Kind kind, int to) {
+        Drop(@NonNull Kind kind, int to, int side) {
             this.kind = kind;
             this.to = to;
+            this.side = side;
         }
     }
 
-    private static final Drop RETURN = new Drop(Kind.RETURN, -1);
+    private static final Drop RETURN = new Drop(Kind.RETURN, -1, -1);
 
     /**
      * The side strip the finger at {@code x} is in over the window spanning {@code left..right}:
@@ -67,6 +78,7 @@ public final class LinuxCarryPolicy {
      * {@code gap}; -1 where that is where it already stands or the gap is not in the row.
      */
     public static int placeForGap(int gap, int carried, int count) {
+        if (carried == FROM_PANE) return gap < 0 || gap > count ? -1 : gap;
         if (gap < 0 || gap > count || carried < 0 || carried >= count) return -1;
         int to = gap > carried ? gap - 1 : gap;
         return to == carried ? -1 : to;
@@ -81,11 +93,57 @@ public final class LinuxCarryPolicy {
     @NonNull
     public static Drop decide(float x, float left, float right, float stripPx, int front,
                               int count, int carried) {
-        if (front < 0 || front >= count) return RETURN;
-        int edge = edgeAt(x, left, right, stripPx);
-        if (edge == 0) return RETURN;
-        int to = placeForGap(gapOf(edge, front), carried, count);
-        return to < 0 ? RETURN : new Drop(Kind.BETWEEN, to);
+        return decide(x, 0f, left, right, stripPx, front, count, carried, null);
+    }
+
+    /**
+     * {@link #decide(float, float, float, float, int, int, int)} with split drops: past the edge
+     * strips a finger over a pane ({@code pane}: left, top, right, bottom of the pane under it,
+     * null when none) splits it on the half the finger is over. {@code carried} may be
+     * {@link #FROM_PANE}. A pane splits only while a window is in front ({@code front >= 0}).
+     */
+    @NonNull
+    public static Drop decide(float x, float y, float left, float right, float stripPx, int front,
+                              int count, int carried, @Nullable float[] pane) {
+        if (front < 0) return RETURN;
+        int edge = front >= count ? 0 : edgeAt(x, left, right, stripPx);
+        if (edge != 0) {
+            int to = placeForGap(gapOf(edge, front), carried, count);
+            return to < 0 ? RETURN : new Drop(Kind.BETWEEN, to, -1);
+        }
+        if (pane == null || !contains(pane, x, y)) return RETURN;
+        return new Drop(Kind.SPLIT, -1, sideAt(x, y, pane));
+    }
+
+    private static boolean contains(@NonNull float[] pane, float x, float y) {
+        return x >= pane[0] && x <= pane[2] && y >= pane[1] && y <= pane[3];
+    }
+
+    /**
+     * The half of {@code pane} (left, top, right, bottom) the finger at ({@code x}, {@code y}) is
+     * over: the axis follows the pane's longer side as every pane drop does
+     * ({@link DwindleTilingPolicy#splitOrientationFor}), the half the side of its midline.
+     */
+    public static int sideAt(float x, float y, @NonNull float[] pane) {
+        float w = pane[2] - pane[0];
+        float h = pane[3] - pane[1];
+        if (DwindleTilingPolicy.splitOrientationFor(w, h) == android.widget.LinearLayout.HORIZONTAL) {
+            return x < pane[0] + w / 2f ? DwindleTilingPolicy.SIDE_LEFT : DwindleTilingPolicy.SIDE_RIGHT;
+        }
+        return y < pane[1] + h / 2f ? DwindleTilingPolicy.SIDE_TOP : DwindleTilingPolicy.SIDE_BOTTOM;
+    }
+
+    /** The half of {@code pane} that a drop on {@code side} takes, into {@code out} (l, t, r, b). */
+    @NonNull
+    public static float[] halfOf(@NonNull float[] pane, int side, @NonNull float[] out) {
+        System.arraycopy(pane, 0, out, 0, 4);
+        switch (side) {
+            case DwindleTilingPolicy.SIDE_LEFT: out[2] = (pane[0] + pane[2]) / 2f; break;
+            case DwindleTilingPolicy.SIDE_RIGHT: out[0] = (pane[0] + pane[2]) / 2f; break;
+            case DwindleTilingPolicy.SIDE_TOP: out[3] = (pane[1] + pane[3]) / 2f; break;
+            default: out[1] = (pane[1] + pane[3]) / 2f; break;
+        }
+        return out;
     }
 
     /**
