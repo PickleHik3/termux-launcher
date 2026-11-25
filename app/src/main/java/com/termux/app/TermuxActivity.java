@@ -12262,6 +12262,13 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         finishActivityIfNotFinishing();
     }
 
+    /** A binding that died never hears the service again; it ends the same way a disconnect does. */
+    @Override
+    public void onBindingDied(ComponentName name) {
+        Logger.logWarn(LOG_TAG, "onBindingDied");
+        onServiceDisconnected(name);
+    }
+
     private void reloadProperties() {
         mProperties.loadTermuxPropertiesFromDisk();
         mHomePill.reload();
