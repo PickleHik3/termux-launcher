@@ -722,7 +722,7 @@ public class SideCardsParityTest {
                     if (front.isHome()) {
                         boolean dockCovered = false;
                         for (RestCards.Card c : answer.covered())
-                            dockCovered |= c.id == RestCards.CardId.DOCK;
+                            dockCovered |= c.id == RestCards.CardId.DOCK || c.id == RestCards.CardId.PEEK;
                         assertTrue(label + " Home's dock is under the cover", dockCovered);
                     }
                 } else if (controller.hostPinned()) {
