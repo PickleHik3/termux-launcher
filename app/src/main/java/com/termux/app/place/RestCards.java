@@ -578,6 +578,27 @@ public final class RestCards {
         }
         // The Terminal's keys on its own host (the unified Docked glass): no keyboard card to share.
         if (!keys) return;
+        // The shared foot (#307, 2026-11-25): where the column stops above the kept band (bands
+        // under the keys wear no foot), one foot stands under the bands for both rests, so
+        // neither leaves the strip under the gesture pill bare with the keyboard up.
+        // Docked only: Floating keeps its air under the keyboard's capsule.
+        Card columnFoot = pass.dock.rowsHalf().floating ? null : columnFootOf(adopted, w,
+            terminal.screenHeightPx, Math.max(0, terminal.keptBandPx));
+        if (columnFoot != null) {
+            // The card above the foot joins it, in both rests' lists.
+            for (int i = 0; i < adopted.size(); i++) {
+                Card above = adopted.get(i);
+                if (above.box.bottom != columnFoot.box.top) continue;
+                Card joined = joinedBelow(above);
+                adopted.set(i, joined);
+                int at = up.mCards.indexOf(above);
+                if (at >= 0) up.mCards.set(at, joined);
+            }
+            adopted.add(columnFoot);
+            up.mCards.add(columnFoot);
+            up.mColumnFoot = columnFoot;
+            homeCards.mColumnFoot = columnFoot;
+        }
         final int column = StackView.KEYBOARD_COLUMN.ordinal();
         final int under = StackView.UNDER.ordinal();
         for (int i = homeCards.mCards.size() - 1; i >= 0; i--) {
@@ -598,6 +619,40 @@ public final class RestCards {
         }
     }
 
+    /**
+     * The foot under the keyboard's column that both rests share (#307, 2026-11-25): the kept
+     * band under the lowest card the column draws, across the screen, carried on the column
+     * (the stack's own, kept at its rest by the scene) and drawn by the foot's own view
+     * ({@link #columnFoot}); null where the column already reaches the screen's bottom or
+     * already draws a foot, or no band is kept.
+     */
+    @Nullable
+    private static Card columnFootOf(@NonNull List<Card> column, float w, int h, int kept) {
+        if (kept <= 0) return null;
+        float bottom = 0f;
+        for (Card card : column) {
+            if (card.id == CardId.FOOT) return null;
+            bottom = Math.max(bottom, card.box.bottom);
+        }
+        if (bottom <= 0f || bottom >= h) return null;
+        Card foot = new Card(CardId.FOOT, StackView.KEYBOARD_COLUMN, new Box(0f, bottom, w, h),
+            Corners.SQUARE, EdgeKind.JOIN, EdgeKind.SCREEN, EdgeKind.SCREEN, EdgeKind.SCREEN,
+            Collections.<PieceId>emptyList());
+        return foot;
+    }
+
+    /**
+     * The foot under the keyboard's column shared by both rests while Home takes the Terminal's
+     * column (#307, 2026-11-25): a {@link CardId#FOOT} card the column carries below its laid-out
+     * bottom, which the foot's own view draws; null otherwise.
+     */
+    @Nullable
+    public Card columnFoot() {
+        return mColumnFoot;
+    }
+
+    @Nullable private Card mColumnFoot;
+
     /** Whether both rests lay the keyboard's column out alike and draw the same cards on it. */
     private static boolean sameKeyboard(@NonNull RestCards a, @NonNull RestCards b) {
         final int column = StackView.KEYBOARD_COLUMN.ordinal();
@@ -607,6 +662,15 @@ public final class RestCards {
         for (Card card : a.mCards) if (card.view == StackView.KEYBOARD_COLUMN) mine.add(card.box);
         for (Card card : b.mCards) if (card.view == StackView.KEYBOARD_COLUMN) theirs.add(card.box);
         return !mine.isEmpty() && mine.equals(theirs);
+    }
+
+    /** {@code card} with its bottom edge a join and its bottom corners square: a foot stands under it. */
+    @NonNull
+    private static Card joinedBelow(@NonNull Card card) {
+        Corners c = card.corners;
+        return new Card(card.id, card.view, card.box,
+            new Corners(c.topLeft, c.topRight, 0f, 0f), card.edge(Edge.TOP), EdgeKind.JOIN,
+            card.edge(Edge.LEFT), card.edge(Edge.RIGHT), card.pieces).withRuns(card.runs());
     }
 
     /** {@code card} carried by {@code view}. */

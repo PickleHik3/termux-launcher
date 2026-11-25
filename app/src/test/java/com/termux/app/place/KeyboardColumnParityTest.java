@@ -93,6 +93,30 @@ public class KeyboardColumnParityTest {
         assertTrue(home.covered().contains(home.card(CardId.DOCK)));
     }
 
+    /**
+     * The shared foot (#307, 2026-11-25): pong with a kept band, Docked Peek, keyboard up at both
+     * rests: one foot under the bands, the same card at both rests, from the bands' bottom to the
+     * screen's, so neither rest leaves the strip under the gesture pill bare.
+     */
+    @Test public void oneFootUnderTheBandsAtBothRests() {
+        LayoutFixtures.Fixture f = LayoutFixtures.PONG.withFoot(LayoutFixtures.KEPT_BAND_PX,
+            LayoutFixtures.FLUSH_PX);
+        for (DockStyle design : DockStyle.CHOICES) {
+            LayoutFixtures.Fixture d = f.withDesign(design);
+            RestCards home = rest(d, PageRef.HOME, false);
+            RestCards terminal = rest(d, PageRef.TERMINAL, false);
+            String at = d.name;
+            Card foot = terminal.columnFoot();
+            assertNotNull(at, foot);
+            assertEquals(at, foot.box, home.columnFoot().box);
+            assertEquals(at, (float) d.heightPx, foot.box.bottom, 0f);
+            assertEquals(at, terminal.laidOut(StackView.KEYBOARD_COLUMN).bottom, foot.box.top, 0f);
+            assertEquals(at, StackView.KEYBOARD_COLUMN, foot.view);
+            // Floating keeps its air under the capsule: no foot there.
+            assertEquals(at + " Floating", null, rest(d, PageRef.TERMINAL, true).columnFoot());
+        }
+    }
+
     /** With Home's keyboard down its column is its own, whatever the Terminal's keyboard does. */
     @Test public void homesKeyboardDownColumnIsItsOwn() {
         LayoutFixtures.Fixture f = LayoutFixtures.PONG.withDesign(DockStyle.GLASS_TRAY);

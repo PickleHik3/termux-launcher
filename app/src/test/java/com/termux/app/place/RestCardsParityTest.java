@@ -450,10 +450,14 @@ public class RestCardsParityTest {
             assertEquals(at, homeWant.size(), homeGot.size());
             for (int i = 0; i < homeWant.size(); i++)
                 assertSameCard(at + " home", homeWant.get(i), homeGot.get(i));
-            assertEquals(at, termSolo.cards().size(), termRest.cards().size());
-            for (int i = 0; i < termSolo.cards().size(); i++) {
-                RestCards.Card want = termSolo.cards().get(i);
-                RestCards.Card got = termRest.cards().get(i);
+            // The Terminal's column with Home's up beside it gains the shared foot under its
+            // bands (#307, 2026-11-25), held by KeyboardColumnParityTest; the rest is its own.
+            List<RestCards.Card> termWant = up ? besideColumn(termSolo) : termSolo.cards();
+            List<RestCards.Card> termGot = up ? besideColumn(termRest) : termRest.cards();
+            assertEquals(at, termWant.size(), termGot.size());
+            for (int i = 0; i < termWant.size(); i++) {
+                RestCards.Card want = termWant.get(i);
+                RestCards.Card got = termGot.get(i);
                 if (want.id == CardId.DOCK && !up && keysCard) {
                     // The keys card is the keys band only (ADR 0032, the developer's 2026-11-21
                     // decision): with the keyboard down the capsule alone stands the flush
