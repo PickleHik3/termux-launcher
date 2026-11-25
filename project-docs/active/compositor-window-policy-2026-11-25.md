@@ -1,6 +1,7 @@
 # Compositor window policy: windows the size Linux programs expect (2026-11-25)
 
-Status: **proposed**; the decisions marked "for the developer" are open. Builds on
+Status: **decided 2026-11-25**: the developer chose A for parentless dialogs and the swipe-up for
+full screen; the other two were left to the agent (see Decided, at the end). Builds on
 [linux-windows-wayland-2026-11-24.md](linux-windows-wayland-2026-11-24.md) (the window contract) and
 changes none of its decided points: an app's main window still opens full screen in the row, and
 dialogs with a parent still draw over their parent.
@@ -72,12 +73,12 @@ more room, and the row never grows a page wider than the screen.
 - `_NET_WORKAREA` on the shared Xwayland's root is set to the pane size, so X apps that size their
   first window from the work area pick one that fits.
 
-### 3. Parentless dialogs (for the developer)
+### 3. Parentless dialogs (decided: A)
 
 GTK and Qt apps open some dialogs with no parent (file pickers launched from a shell, `zenity`,
 password prompts, "Save changes?" from a closing app whose main window is gone). Two options:
 
-- **A. Over the current page (recommended).** Drawn at its own size, centred over whatever page is in
+- **A. Over the current page (chosen).** Drawn at its own size, centred over whatever page is in
   front, with a chip while it is open; leaving the page hides it and its chip brings it back. Gain:
   a `zenity` prompt from a terminal shows over that terminal, where the user is looking. Loss: a
   dialog can sit over a page of another app.
@@ -87,7 +88,9 @@ password prompts, "Save changes?" from a closing app whose main window is gone).
 ### 4. States and requests the host answers
 
 - **Full screen** (`set_fullscreen`, `_NET_WM_STATE_FULLSCREEN`): the window takes the whole screen,
-  status bar, extra-keys row and rim hidden, Back leaves full screen. A video in mpv, a game.
+  status bar, extra-keys row and rim hidden. A swipe up from the bottom edge shows the extra-keys
+  row over the window for a moment (keys still reach the app; it hides again after a few seconds
+  without a press); Back leaves full screen. A video in mpv, a game.
 - **Maximise / unmaximise**: a Main window already fills its pane; the request is acknowledged with
   the pane size and nothing changes. **Minimise**: the launcher's Minimise (its chip stays).
 - **Move** (`xdg_toplevel.move`, `_NET_WM_MOVERESIZE` move from a GTK 4 / libadwaita header bar):
@@ -158,12 +161,21 @@ Each slice ships with its unit tests and a device-checks entry; pong rounds as u
   text area brings up the launcher keyboard.
 - XFCE from the drawer's xfce-session: lays out at the Scale stop, and a new stop reaches it without a restart.
 
-## Open (for the developer)
+## Window class on the wire
 
-- Parentless dialogs: A or B (section 3).
-- Full screen: should the extra-keys row stay reachable (a swipe up from the bottom edge), or does
-  Back alone leave full screen?
-- Layer-shell: is a `wofi`/`mako`-style overlay worth having at all, or should every layer-shell
-  surface be refused?
-- A Fixed window larger than the pane (a 1024×768 X game on a phone): scaled down to fit (sharp
-  text lost) or shown 1:1 and panned?
+The host tells the launcher a window's class in `window_created`'s flags, beside `WINDOW_X11`
+(`ILinuxWindows.aidl`): bits 4–7 hold the class, `WINDOW_CLASS_SHIFT = 4`, `WINDOW_CLASS_MASK = 0xF0`;
+0 Main, 1 Dialog, 2 Fixed, 3 Transient. A window's natural size reaches the launcher the way its
+size does today (the reported size after its first commit). Old hosts send 0, which reads as Main:
+today's behaviour.
+
+## Decided
+
+- Parentless dialogs: **A**, over the current page (the developer).
+- Full screen: **swipe up from the bottom edge** shows the extra-keys row for a moment; Back leaves
+  (the developer).
+- Layer-shell: **only the overlay and top layers** (launchers such as wofi, notifications such as
+  mako), each drawn as a Transient over the current page; background and bottom layers are refused
+  (the agent: panels and wallpapers would fight the launcher, which is the shell).
+- A Fixed window bigger than the pane: **scaled down to fit**, whole window visible; the rim tab's
+  Scale shows it larger (the agent: panning a window on a touch screen fights the page swipe).
