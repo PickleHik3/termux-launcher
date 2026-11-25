@@ -1,0 +1,456 @@
+# Device checks pruned, 2026-11-25
+
+`project-docs/device-checks.md` held 433 items (about 300 dated lines back to 10-22) against its own
+limit of twenty. Each was re-judged, oldest first. This file keeps every item that left, so nothing is
+lost; the line is the item's date, a short name, the verdict and the proof.
+
+Proof rules used, per the developer (2026-11-25: later work that moved the tickets forward counts when
+there is no other proof): the feature was merged before the `v2.0.0-pre.7` tag (11-22) or sits in an
+earlier tag, the developer's pong has run the pre.7 release build since, and no bug has been filed against
+it (open bugs are only #296, #390, #391; the first is kept, the other two are in the kept list); or a
+2026-11-25 pong report (`~/.cache/glass-cards/pong-1125b/report.md`) says it passed; or a later decision
+replaced the behaviour.
+
+Counts: 343 done, 19 superseded, 71 merged into the kept lines (their content lives on there).
+
+## Done
+
+- 2026-11-25 · A Linux app opened after the host ended on its own still gets a page · done · pong-1125b relink: pass (relink-log.txt, 13-gtk-second.jpg, 11-25)
+- 2026-11-23 · Seen on pong 10:06–10:30: launch clean, no shader failure; the upgrade kept Clea · done · seen on pong 11-23 (its own text); its findings were fixed (the gap by #316, the RenderThread crash by fix/home-swap-cycle, 160 pong rounds, no restart) and the glass items kept above carry the rest
+- 2026-11-23 · The glass first half and the slab together, as the developer meets them · done · seen on pong 11-23 and again in the 11-25 night pong round (bfeb13676); every clause is a per-ticket item kept above
+- 2026-11-22 · A glass recording never holds a SurfaceView · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · CPU and GPU stats that need Shizuku or root stand greyed in place · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The status row in the user's order · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Shizuku and root: one Use row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Send to AI from a photo shader · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Send to AI's Edit, body tap, Undo and image failure · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Categories closes the keyboard · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · GPU, clocks and temperatures · done · #233 closed 11-23, "Shipped in pre.7", no reopen
+- 2026-11-22 · Root app and process actions · done · #233 closed 11-23, shipped in pre.7, no reopen
+- 2026-11-22 · Root shell, restart and launcherctl root routes · done · #233 closed 11-23, shipped in pre.7, no reopen
+- 2026-11-22 · The privileged lane through root · done · #233 closed 11-23, shipped in pre.7, no reopen
+- 2026-11-22 · Root without Shizuku keeps every privileged reading · done · #233 closed 11-23, shipped in pre.7, no reopen
+- 2026-11-22 · One su shell for every root command · done · #233 closed 11-23, shipped in pre.7, no reopen
+- 2026-11-22 · The slider-row off note sits in its row (the Look tiles passed on pong 11-22) · done · shipped in pre.7 (ee4a28c3f); pong ran the pre.7 build; no bug filed against it
+- 2026-11-21 · The Default drawer · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · The in-app keyboard in a text field acts as in the terminal · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · The Default drawer · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · The chrome wears one look on every page and the crossing blends no look · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · The Appearance editor has six cards · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Rows moved to the card where their effect is · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · The reset arrow · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · `launcherctl look` · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Settings keeps one home per setting · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · The Terminal's Background: Opacity, Blur and its own Wallpaper dim (provisional  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · The keyboard under an open drawer is part of the drawer's sheet (an exception to · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-20 · The dock and keyboard glass no longer flash at a Home ⇄ Terminal landing (the la · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-20 · The keyboard under the open drawer now stands on the drawer's dim as well as its · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-20 · A Home widget's ink is measured on Home's ground, not on the Terminal's dim it l · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Home's long-press menu, the terminal's menu (and its More entry) and the app dra · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · The stack's glass reaches the physical bottom edge and the decor strip is gone · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · With two Workspace windows, a keyboard toggle on the Terminal resizes both windo · done · shipped in pre.6 (ea54a6a23); pong ran the pre.7 build; no bug filed against it
+- 2026-11-18 · Turning transitions keep the frozen pages layer · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The bottom band stands at the union of both sides' rests · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Live glass keeps one picture: with Live blur on, a float open on Home and a glas · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Live blur's policy events · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Live glass at rest costs nothing · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Emulator sweep after the chrome commit moved into the frame pipeline (no draw ca · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Page bar at rest · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Tap and slide · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Folding · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Dock capsules · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Keyboard and room · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · The page switcher key · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Looks and text · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Memory · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Page marks on every ground · done · shipped in pre.6 (09ef9a875); pong ran the pre.7 build; no bug filed against it
+- 2026-11-21 · Keyboard theme and Layouts previews · done · shipped in pre.6 (fa42beebe, f6c069f4a, 74a535878); pong ran the pre.7 build; no bug filed against it
+- 2026-11-21 · A layout removed from the cycle · done · shipped in pre.6 (de8f8697b); pong ran the pre.7 build; no bug filed against it
+- 2026-11-21 · Export logs → Save to file · done · shipped in pre.6 (b2e719271); pong ran the pre.7 build; no bug filed against it
+- 2026-11-19 · Photo shader editor at font scale 1.3 and 360 dp · done · shipped in pre.6 (7f5395bda); pong ran the pre.7 build; no bug filed against it
+- 2026-11-19 · From a photo round trip · done · shipped in pre.6 (7f5395bda); pong ran the pre.7 build; no bug filed against it
+- 2026-11-19 · Generate depth, the rest · done · shipped in pre.6 (7f5395bda); pong ran the pre.7 build; no bug filed against it
+- 2026-11-19 · A photo shader moves · done · shipped in pre.6 (7f5395bda); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Shader wallpapers move on the restructured window · done · #312 closed 11-22 ("Fixed in pre.7"), no reopen
+- 2026-11-19 · Deleting the Model Centre's Wallpaper depth row (the row itself was seen on pong · done · shipped in pre.6 (7f5395bda); pong ran the pre.7 build; no bug filed against it
+- 2026-11-19 · Cold start with a photo shader (with depth) as the wallpaper: force-stop and rel · done · shipped in pre.6 (7f5395bda); pong ran the pre.7 build; no bug filed against it
+- 2026-11-16 · Home glyph row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · Home glyph row contents · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · Terminal only · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · Tap a glyph · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · Slide along the glyph row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · The extra-keys key · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · The key's cap · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · Setup card on an updating install · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Appearance reset on upgrade · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-14 · Extra keys on a side column and along the top edge (Appearance › layout) · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-14 · CTRL armed on Page 2, then typing `c` in the terminal sends Ctrl+C (a running `s · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-14 · A text input page reached by a sideways swipe still opens the keyboard and sends · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-14 · Key sets per place · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, look and spot · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, picking it up · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, saved spot · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, keys and holds · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, hidden under other things · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, flights between pages · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill and the keyboard · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, the editor's switch · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Home pill, switch off · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Inner gap drives the gap between split panes · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Edit pages shows the Terminal page as one card · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-13 · A desktop's end is always noticed · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-13 · Android stopped your Linux apps · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-13 · Display rows below the display · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Paste shortcut per app · done · shipped in pre.6 (85c0b37fb); pong ran the pre.7 build; no bug filed against it
+- 2026-11-12 · Pictures paste into Linux apps · done · shipped in pre.6 (4e0ec755a); pong ran the pre.7 build; no bug filed against it
+- 2026-11-12 · Window chip tap from Home · done · shipped in pre.6 (fdd5d3138); pong ran the pre.7 build; no bug filed against it
+- 2026-11-12 · Pill shows the program's name · done · shipped in pre.6 (f000fa045); pong ran the pre.7 build; no bug filed against it
+- 2026-11-12 · Display holds its size until the stand-in covers it · done · shipped in pre.6 (a6a175a3f); pong ran the pre.7 build; no bug filed against it
+- 2026-11-12 · Per-app Scale and Graphics reach the app · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Per-app Linux app settings · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Terminal events as Android notifications · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Display leaves without a bare frame · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Fast engine, clipboard read · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Fast engine, OSC 7501 · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-12 · Fast engine, library key encoders over adb · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-11 · GPU probe runs in :tai_runtime · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-11 · Choose a key opens on its grid · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-11 · Keyboard & extra keys section · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · A Display page with no display takes plain swipes · done · fix a1fac567a shipped in pre.6; the emulator re-check passed 11-11 and no later report
+- 2026-11-11 · Drawer keeps its icons while the catalogue reloads · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · Live dock reorder and drawer-to-dock pins · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · One resolver for what the stored wallpaper plays · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · GIF import converts to video · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · Terminal engine: Fast · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · Pick previews, Done keeps · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · Frame-rate versions of the stored video · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · Scene cold start · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · Shader and video wallpapers · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Live blur plans once per swipe · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-? · CRT screen events (#225) · done · #225 closed 11-23; the reporter retested on pre.5
+- 2026-11-08 · Keyboard rises in its landing inks · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · No keyboard under the pill after landing · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Peek reflection never sharp · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Backdrop layers, no pop · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Backdrop layers, soft edges and glass on glass · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Backdrop layers, scene and transitions · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · See through · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Backdrop layers, the cost · done · shipped in pre.5 (5169acb0f); pong ran the pre.7 build; no bug filed against it
+- 2026-11-07 · Live glass during a page swipe, the look · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Live glass during a page swipe, the cost · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Float titlebar wears Live glass · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Drawer category cards stay glass in a dark theme over a bright wallpaper · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Toolbar text input built when idle · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Landing dresses the dock once · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Page-swipe stalls: landing layout once, frost skip, keyboard pre-measure · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Camera hole, wave 4: Settings rows, migration, live outline · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Camera hole, wave 3: the pane top round the camera · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Camera hole, wave 2: the Floating bar splits round the camera · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Camera hole, wave 1 (feat/camera-hole) · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Peek reflection through the A–Z row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · Peek glass with the A–Z row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · Peek glass with the A–Z row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Peek glass polish · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · Wallpaper flow, round two · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · Assistant page with a real model · done · shipped in pre.5 (41019af0b); pong ran the pre.7 build; no bug filed against it
+- 2026-11-06 · Assistant page dictation · done · shipped in pre.5 (41019af0b); pong ran the pre.7 build; no bug filed against it
+- 2026-11-06 · Assistant page theme and font · done · shipped in pre.5 (41019af0b); pong ran the pre.7 build; no bug filed against it
+- 2026-11-05 · Voice models in the Benchmark · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Dock tiles lift on a held press · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · MNN 3.6.2 runtime · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · AI runtimes updated · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Keyboard frosts the display · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Crossings turn by the Page transition · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Home page arrives live · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Drawer pages fill the page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Pane corner panel: More · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Home press lands on the page set as home · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Full screen pane under the camera: keyboard up/down slide lands without a jump · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Display Start with · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Drawer pages swipe closes the keyboard · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Edit pages: a Home page vanished once · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Edit pages fixes · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Remove and bring back the Terminal page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Edit pages under Terminal only · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Edit pages card menu and Display picker · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · Blank Device ring after deep sleep: diagnose · done · shipped in pre.3 (854a10047, 74fcf5a98); pong ran the pre.7 build; no bug filed against it
+- 2026-11-04 · Temporary Display page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-03 · Live glass wave 4 owed · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-03 · Live blur floats · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-03 · Live blur on the dock · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-03 · Battery & performance at the root · done · shipped in pre.3 (a38b183c3); pong ran the pre.7 build; no bug filed against it
+- 2026-11-03 · Dock glass after the GlassEffects move · done · shipped in pre.3 (5559211a5); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · Home key with Start in on the Terminal · done · shipped in pre.3 (1d7506c51); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · One icon size · done · shipped in pre.3 (a6f81e3c3); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · Home in landscape · done · shipped in pre.3 (a364a4624); pong ran the pre.7 build; no bug filed against it
+- 2026-11-03 · Glass controls reach + dark sections · done · shipped in pre.3 (509b634db); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · Removing a Display card · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-02 · CRT wave 1 on pong · done · shipped in pre.3 (41b6a6036); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · Trail halo + decays on pong · done · shipped in pre.3 (963e8329e); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · CRT screen events on pong · done · shipped in pre.3 (2b7484ebd); pong ran the pre.7 build; no bug filed against it
+- 2026-11-02 · Idle animations + dim on pong · done · shipped in pre.3 (88e25065e); pong ran the pre.7 build; no bug filed against it
+- 2026-11-03 · Solid CRT bezel on pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-03 · Deck keyboard on pong · done · shipped in pre.3 (2734fdf36); pong ran the pre.7 build; no bug filed against it
+- 2026-11-03 · Deck window bar + extra keys on pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-03 · Deck bands + single frame on pong · done · shipped in pre.3 (e29a3379f); pong ran the pre.7 build; no bug filed against it
+- 2026-11-01 · Live windows while swiping · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-01 · Home → Terminal, one pane, keyboard closed: no bottom snap · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-01 · emulator-verified 2026-11-01 with pong's prefs (Home 2 → Terminal, keyboard clos · done · shipped in pre.3 (3c4454300, 1a21b62f8, e9b879382, 7268296); pong ran the pre.7 build; no bug filed against it
+- 2026-10-31 · pong, Terminal page, keyboard up and down, Floating and Docked status and dock,  · done · shipped in pre.3 (a6d1fa3d5); pong ran the pre.7 build; no bug filed against it
+- 2026-10-31 · pong: the Media card, at its size and after a few seconds of playback (a progres · done · shipped in pre.3 (2e476b3dd); pong ran the pre.7 build; no bug filed against it
+- 2026-10-31 · seen on pong 19:30: the seam loop reads +2.5 / +3.4 / +2.4 at opacity 34 / 0 / 1 · done · shipped in pre.3 (2801c1f14); pong ran the pre.7 build; no bug filed against it
+- 2026-10-30 · emulator at font 1.0 and 1.3, light, dark and scheme chrome, then pong: installe · done · shipped in pre.3 (5672889bc, 732a34e39, ef0f80ede, fb44e0f); pong ran the pre.7 build; no bug filed against it
+- 2026-10-31 · an App menu on an app with many shortcuts shows four, then More shortcuts; the W · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-10-30 · on pong: Appearance › Global › Change wallpaper › Choose photo › crop › Done sho · done · shipped in pre.3 (b324fb00f, 418a2d7ef, 47f2e0316); pong ran the pre.7 build; no bug filed against it
+- 2026-10-30 · pong, with Home, a Terminal window and a Display page: from the Display page its · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-10-29 · on pong: copy a URL in the terminal before the display starts, start Firefox, ta · done · shipped in pre.3 (a11264eec); pong ran the pre.7 build; no bug filed against it
+- 2026-10-29 · on pong with the blue wallpaper and herdr open: Appearance › Terminal › Contrast · done · shipped in pre.3 (c496185e3); pong ran the pre.7 build; no bug filed against it
+- 2026-10-29 · on pong: in Edit pages the terminal card's home button makes Start in read Termi · done · shipped in pre.3 (93c35220f, 6a688dc92, 0ab0ea5f4, 1504e53); pong ran the pre.7 build; no bug filed against it
+- 2026-10-28 · Exit in the notification with `pacat --raw /dev/zero &` playing, open a new pane · done · shipped in pre.2 (3e6eb6b52, 4a5918b59); pong ran the pre.7 build; no bug filed against it
+- 2026-10-22 · upgrade the shipped stable (1.0.6 / 1.1.0 release APK, from the GitHub release)  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-01 · on pong (11.5 GB MemTotal), with the launcher in front, `tai status` then `POST  · done · shipped in pre.3 (1ac2f4ef6); pong ran the pre.7 build; no bug filed against it
+- 2026-11-01 · on pong: a crimson custom border on a single Terminal-page pane and on a split ( · done · shipped in pre.3 (9a8e5683c); pong ran the pre.7 build; no bug filed against it
+- 2026-11-01 · Docked style: the divider edges take the border colour and no glow is drawn roun · done · shipped in pre.3 (9a8e5683c); pong ran the pre.7 build; no bug filed against it
+- 2026-11-04 · After `pm install -r` over a running build, with the launcher not opened, `curl  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · emulator: install Debian by hand with `proot-distro install debian`, then open S · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · emulator, #177: pick a full Linux, tick Desktop on the Apps step (off by default · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong or emulator · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · pong · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-04 · One-line slider rows · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-05 · Volume keys on the Display page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-05 · Home Wallpaper dim · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-05 · Display page after its display stops · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-05 · Key combos in the extra keys picker · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-05 · Terminal extra keys guide · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · No flash when the display closes itself · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · Whisper Base on the GPU · done · shipped in pre.5 (aadab9db7, b6ff781a3); pong ran the pre.7 build; no bug filed against it
+- 2026-11-07 · CRT signal (wave 9), on pong: (1) default CRT text is no softer than before; (2) · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-06 · Dictation cleanup rows on Voice input · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Keyboard glass kept across chrome applies · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Keyboard palette built once per set of inputs · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Home swipe up follows the finger · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Show wallpaper off reaches every surface · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-07 · Travel keyboard dressed by the frame's apply, IME handed over after the landing · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Top-pane frost cut with the frame's commit · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · A finger on the focused pane leaves the bar alone · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-08 · Swipe landing and Peek travel (perf/swipe-stalls) · done · shipped in pre.5 (96f3c94ae, 30270fe41); pong ran the pre.7 build; no bug filed against it
+- 2026-11-08 · A dock icon let go at the screen's edge goes back · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-09 · Video import shows progress (feat/video-progress) · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · The crossing's views adapter left the activity · done · shipped in pre.6 (d117e1d31); pong ran the pre.7 build; no bug filed against it
+- 2026-11-10 · Edit pages reads its rules from one place · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · The dock's code left the activity · done · shipped in pre.6 (f17339e85, c1db54f54); pong ran the pre.7 build; no bug filed against it
+- 2026-11-10 · The status bar's code left the activity · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · The sheets' code left the activity · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · The crossing's driver left the activity · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · Reproduce the user report first on the old build: with sound running, `echo $(pi · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-10 · The widget picker and Home's long-press sheet slide up and down in 267 ms with 2 · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-11 · Long-press an app in the drawer that is in no folder, the menu has "Add to folde · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-13 · Set up Linux apps on the Termux route: the Pick your apps card has an XFCE row,  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-14 · Download an APK, tap the download notification and install it with the installer · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · The status row keeps one whole chip when its readings are wider than the row · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · First-run setup on a fresh install · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · The extra-keys bar text field never takes focus while a key page shows · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-15 · Settings root starts at the top · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-16 · In-app keyboard edge reach · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The Appearance editor's draft over the store · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The arrangement and the widgets' glass on the editor's draft · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The window is ordered by layer (ground, pages, chrome, sheets, editor, notices) · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The waits became named Holds, the guards and the counter table run while the mot · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Legibility corrections are kept per page and band; the dock's legends drift with · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The bottom stack's transforms have one writer, a step of the frame table, on the · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · (1) Pane slabs: slide Home ⇄ Workspace and Home ⇄ Home slowly and by fling, tilt · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · The landing guard over rows · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Elevation orders nothing but the A-Z row and the edge stacks; the rest stands by · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · In a Home ⇄ Workspace crossing the keyboard, the dock and the status bar now mov · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-17 · Motion log on, `launcherctl motion-log clear`; Docked, then Floating, keyboard u · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Start a display from the Display page, stop it from the place bar's confirm, sta · done · shipped in pre.6 (3830ac704, 8e16d358b); pong ran the pre.7 build; no bug filed against it
+- 2026-11-18 · Turn Glass widgets on in the Home card with a built-in widget on Home, then chan · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Open the command palette on a terminal with the in-app keyboard up, then down, D · done · shipped in pre.6 (3830ac704); pong ran the pre.7 build; no bug filed against it
+- 2026-11-18 · Open the Appearance editor on a Terminal with the in-app keyboard shown, Layout  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Back is one chain: raised surfaces, then the front page, then Home page 1 · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Home's leave work runs at the commit, shown work at the landing's front step · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Back on Home now goes through the page, after everything raised over it · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Terminal only, not the phone's home app: open the app, Ctrl+D the only shell, op · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · One pong round, `scripts/pong-round.sh <dir>` on the logging build (apks/55-l5-d · done · shipped in pre.6 (48fef9e64, cb783f30a, e4cb9b95c); pong ran the pre.7 build; no bug filed against it
+- 2026-11-18 · On Home ⇄ Terminal with carousel, the glass over the terminal pane, the dock and · done · shipped in pre.6 (48fef9e64); pong ran the pre.7 build; no bug filed against it
+- 2026-11-18 · Raise the in-app keyboard on Home, go to the Terminal and back: Home comes back  · done · shipped in pre.6 (48fef9e64); pong ran the pre.7 build; no bug filed against it
+- 2026-11-18 · With an X11 app on pong, motion log on: land on a Display page from Terminal and · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Back on a Display page runs through its page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Home ⇄ Terminal, slow and by fling, with the status bar at the top edge and agai · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Window 1 → window 2 by swipe and by chip, one pane and several, then type: the k · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Motion log on · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Back on Home page 2 goes to Home page 1 and the Home glyph row reads "1" at once · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Docked and Floating, keyboard up and down: drag a dock icon and reorder it (the  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-18 · Motion log on, `launcherctl motion-log clear`, Home ⇄ Terminal slow and by fling · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Motion log on · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Motion log on · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Menus and dialogs wear Global's glass with a floor on opacity (provisional 60%,  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Set a Live scene wallpaper, open a Display page with a running X app and leave i · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-19 · Home's status bar shows a chip per float on the Home page shown · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-20 · In Docked the app drawer is always its own inset glass card (Margin from the sid · done · shipped in pre.6 (8729a3b12); pong ran the pre.7 build; no bug filed against it
+- 2026-11-20 · One legibility measurement for the whole wallpaper; Adaptive legibility (Global  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Under Floating the extra-keys bar's own glass card · done · shipped in pre.6 (96b670b4c); pong ran the pre.7 build; no bug filed against it
+- 2026-11-21 · The dock's card for a place with no apps row · done · shipped in pre.6 (8023c4d12); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · On Home the keyboard comes up over the dock · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Home floats · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The compact page bar and its lift · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The compact page bar on Home is a well pressed into the page, its glyphs in 30 d · done · shipped in pre.6 (2cbd1f45e); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Sliding a finger along the page bar · done · shipped in pre.6 (cf47f3eee); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · The page switcher key's pop-up above the extra-keys bar · done · shipped in pre.6 (9507c585d); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Status bar icons are the app's own · done · shipped in pre.6 (b393d36a7); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Extra-keys bar icons · done · shipped in pre.6 (2ec3a5edc, 6b7268975); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Notice icons · done · shipped in pre.6 (b766fb3a4); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · In-app keyboard symbols are the app's icons · done · shipped in pre.6 (aa5161b1c); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · With a hardware keyboard and 'hide the keyboard while an external keyboard is co · done · shipped in pre.6 (a7e441959); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Keys after a window switch, hardware keyboard · done · shipped in pre.6 (f2b9c0c55, 9c26562b5); pong ran the pre.7 build; no bug filed against it
+- 2026-11-22 · Drawer search highlight bead · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · In-app keyboard symbols, the rest · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Page bar glyphs are Roundline outlines with the number inside · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Page bar glyphs are Roundline outlines with the number inside · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The status bar battery is a Roundline outline · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Home widget icons are Roundline · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Window and editor chrome icons are Roundline · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Notices · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Weather icons are the app's two-colour icons · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Long-press Home, then Appearance · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The drawer shows only its own folders · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Vertical, Pages and Default's Apps section, Docked and Floating, keyboard up and · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Edit mode keeps every lift in the drawer, outlines show, the tab's buttons stand · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Categories and Default's Categories section, Docked and Floating, keyboard up an · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Hold a corner of the open drawer card, then of a terminal pane, in turn; light,  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Hide on a Linux app's App menu in the drawer · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The drawer's search bar folds into a round button · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Copy a picture on the phone, paste it into an X program (e.g · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-21 · Have a program raise a terminal notification with a reply action · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Each of these shows the top pill, not a bottom toast: Add to Home from the drawe · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Settings > Keyboard > Extra keys > "+", the App actions list in the key picker · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Home's page bar is concave glass, sunk into the page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · After an upgrade from a build without it, the "Page indicator is now a key" card · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Vertical, Default (Apps and Categories), Pages and the other types; search bar a · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The capsule's Live slot · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The drawer card wears the layered Live glass Home's dock and floats wear · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · While the drawer card rests open over Home, the card and the capsule are Live an · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The search bar stays the full bar until a drag has scrolled the list down one fu · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The palette wears the layered Live glass the dock wears, at the top glass's blur · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The terminal sheet plane (workspace picker, rename, delete confirmation) wears t · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Popup menus keep their picture of what is beneath, now named as menu entries in  · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · The Compact font toggle as a status bar pill and the font toggle tool · done · #275 closed 11-23, shipped in pre.7, no reopen
+- 2026-11-22 · With a shader wallpaper, a space-bar window switch keeps the leaving pane's wall · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Drawer cells survive open and close (perf/drawer): the drawer opens and closes w · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Home page swipes start and land without a hitch · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · With a shader wallpaper on Home at rest, the page capture runs only after a page · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Home <-> Terminal landing no longer re-dresses the panes · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Settings › Home › Gestures, swipe up: set it to the palette, go back to Home and · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Show and hide the in-app keyboard a few times on the Terminal and on Home, Docke · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · With a shader wallpaper and glass on, Fancier Glass on and off, Docked and Float · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Space-bar next and previous and a window-bar chip tap, with 2 and 4 windows, wra · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-22 · Bottom-border swipe up to raise the keyboard on the Terminal, on Home and on a D · done · merged before the pre.7 tag (11-22) and shipped in it; pong ran pre.7; no bug filed against it
+- 2026-11-25 · The page bar's stack disc is clean · done · pong-1125b stack disc: pass (82-stack-crop.png, 11-25)
+- 2026-11-25 · Build with `-Pwayland=true`, three Linux windows open in one row (A, B, C) · done · pong-1125b carry: pass (40-carry.mp4, 44-carry-sheet.jpg, 45-after-back.jpg, 11-25)
+- 2026-11-25 · With C lifted, hold the finger still on the left strip about 1.5 s: the row page · done · pong-1125b carry: pass (40-carry.mp4 and 45-after-back.jpg, 11-25); carry paging rode on the same hold
+
+## Superseded
+
+- 2026-11-24 · Whether 12dp marks read at arm's length · superseded · the marks row is parked for the developer's redesign (status-row-and-marks-2026-11-23.md, "Parked", 11-25): no work on its touch rules or layout until then
+- 2026-11-24 · The thin row at rest and across crossings, Place set to In the pane · superseded · the marks row is parked for the developer's redesign (status-row-and-marks-2026-11-23.md, "Parked", 11-25); the first-tap-enlarges rule it checks is the one being replaced
+- 2026-11-19 · The prototype: the status bar's and the dock's glass draw the ground (wallpaper  · superseded · a prototype; replaced by the one-look model (ADR 0031, #281/#282, closed 11-19), which dropped per-page looks
+- 2026-11-18 · The system keyboard rides its own animation · superseded · needs an API 28 or 29 device (none available; pong is API 36); the keyboard number it rode on is now owned by the crossing path (Stay, Glide or Ride, 11-25), and #263 stays open for the frame-by-frame check kept above
+- 2026-11-18 · Home 2 → Terminal with a float open on Home 2 (named in ADR 0030) · superseded · the keyboard-with-the-seam rule it checks was replaced by the crossing path (Stay, Glide or Ride, rule C, 11-25): the keyboard now rides with its page, covered by the kept crossing-rule items
+- 2026-11-10 · Card looks survive a relaunch and a kill mid-edit · superseded · the per-card Custom look and its Undo were replaced by the six-card, one-look editor (ADR 0031, #284-#285) and the AppearanceReset that deletes per-kind looks
+- 2026-11-08 · One status bar and dock look for every page · superseded · per-page chrome looks were deleted by ADR 0031 (one look, AppearanceReset number 1)
+- 2026-11-08 · One Margin for every page · superseded · per-page Margins were replaced by the one-look model (ADR 0031; #286 moved Margin to Global)
+- 2026-11-04 · No hitch at a look-only landing · superseded · per-page dock opacity that differed by page no longer exists (ADR 0031 one look; #282 dropped the crossing blends)
+- 2026-11-04 · Dock opacity blends across a crossing · superseded · the crossing no longer blends two looks (#282, ADR 0031)
+- 2026-11-04 · Terminal pane stays sharp after a crossing · superseded · the Home-vs-Workspace Margin apart no longer exists (ADR 0031 one look)
+- 2026-11-04 · Bar across a Margin apart · superseded · a Margin apart between pages no longer exists (ADR 0031 one look)
+- 2026-11-04 · Last change wins on the Global and Workspace sliders · superseded · the Applies to row and last-change-wins sliders were replaced by the six-card editor with reset arrows (#284, #285)
+- 2026-11-04 · Rows in group order · superseded · the card sections were rebuilt (six cards #284, then the condensed cards #345-#347)
+- 2026-11-04 · Home card sliders reset what is beneath them · superseded · Home-card sliders that reset what is beneath were replaced by the one-look cards (#284, #285)
+- 2026-11-04 · Margin per page kind · superseded · Margin per page kind was replaced by one look (ADR 0031, #286)
+- 2026-11-06 · New Home page wears the page in front's look · superseded · per-page looks were deleted by ADR 0031; a new Home page follows Global by construction
+- 2026-11-07 · Custom Look is kept · superseded · the Custom look and Solid/Custom tiles were replaced by the Frost, Depth and Shine controls and the new presets (#319, #320)
+- 2026-11-24 · The thin row enlarges on touch, Place set to In the pane · superseded · the marks row is parked for the developer's redesign (status-row-and-marks-2026-11-23.md, "Parked", 11-25); the enlarge-on-touch rule is replaced by one touch-and-slide gesture
+
+## Merged into a kept line (not removed)
+
+- 2026-11-25 · Overview opens from the session chip · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Overview right after a theme or font change · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · The bands-under apps row glides · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · The keyboard rides with its page · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Closing an XFCE desktop ends everything it started · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Go to Terminal from a Linux window's page · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Layout by hand in the Appearance editor · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · A Linux window on the page bar and the Wall strip, and where it comes back · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · A Linux window stands among the terminal windows · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Linux windows in the Terminal's row · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · What Wayland Display has never shown on a device · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Housekeeping offers strip on the Assistant page, with no model installed · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Agent sessions resume by id · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Save keeps what runs in each pane · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Settings in its own task · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · The rim's width · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · The rim on every glass surface · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · The baseline holds through a turn · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · Tune the rim with the developer · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · A card keeps its frost at the screen edge · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · A turned live card keeps its frost to its outline · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · The edge reads sharp on the stored route · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · No new memory for the sharp edge · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Live and stored glass take one colour · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Stored, scene and live glass through one source; no look change · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · The gap of a turning switch is frosted · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · Everything else stays as it was · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · The lens zone bends on every glass surface · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Glass refraction off is flat · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · No glass frame over 11 ms · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Tune the slab with the developer · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Glass answers the page's pose, not its speed · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Living glass is gone from Settings · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Tune the turn response with the developer · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · The glass is lit by the wallpaper around it · kept (merged or trimmed in device-checks.md)
+- 2026-11-18 · The dock and rows rise and sink with the system keyboard frame by frame, with no · kept (merged or trimmed in device-checks.md)
+- 2026-11-18 · The keyboard shows on the frame it is asked for · kept (merged or trimmed in device-checks.md)
+- 2026-11-12 · Gboard on the Display: typing a word in herdr-gui shows no cursor stepping back  · kept (merged or trimmed in device-checks.md)
+- 2026-11-12 · After a long lock, unlocking onto Home shows no "1…" flash in the weather row be · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · Mesh gradient, Water and Fluted glass join the Shader wallpaper examples · kept (merged or trimmed in device-checks.md)
+- 2026-11-22 · Built-in widgets (battery, media, calendar, weather, notifications) on Home with · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Space-bar switch (next and previous) in Carousel and Stack, glass on, Light, Dar · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Frost, Depth and Shine · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · With live glass on and widget cards on Home 1 and Home 2, Carousel, swipe Home 1 · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Back closes Home's keyboard · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · The drawer's search keyboard is the drawer's own · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · A drawer-raised keyboard is not Home's memory · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Start a GUI app on the X11 Display (herdr or any), open it as a Workspace window · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · The in-app keyboard's box is its own on every page · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · The extra-keys bar keeps one key width on every page · kept (merged or trimmed in device-checks.md)
+- 2026-11-23 · Swipe between pages in Slide, Stack, Depth, Carousel and Fade, Docked and Floati · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Full screen on, CPU, RAM, battery and weather on, a phone with a centre camera a · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Home exit ask and stay · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · The Home exit · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Every surface in the Home exit · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · A home press caught mid-animation and Edit pages landing · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Settings rows through the registry · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · The Assistant's settings card, on the phone's own Default model over ssh (no tap · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · The Assistant settings lookup by meaning · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · A settings card keeps its state · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · The Appearance editor saves through the Settings registry · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Docked, the Terminal's card on a host of its own · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · Home's card and the Terminal's card apart with the apps row or A–Z beside the ex · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · The last layouts that shared the dock's glass host, and the Peek blend gone · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · The stack's scene and renderer on cards; every dock glass samples where its card · kept (merged or trimmed in device-checks.md)
+- 2026-11-24 · The A–Z bar off the dock is a card of its own in the per-rest answer, the keyboa · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Under Docked the foot under the gesture pill is its own glass card (`dock_foot_h · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · The A–Z bar on a side edge is one card per side: where Home's rest and the Termi · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · Home's cover counted the keyboard's foot under the gesture pill as keyboard, so  · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · With the keyboard up on Home and on the Terminal, Home stands the Terminal's ban · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · On a terminal window, a Linux window and the Wayland display window: hold a stil · kept (merged or trimmed in device-checks.md)
