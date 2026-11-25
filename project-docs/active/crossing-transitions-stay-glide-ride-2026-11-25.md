@@ -230,3 +230,21 @@ No transform of one view can do it without the clip that 0032 rejects. That case
    per-page app list? If so, approve a second content layer laid out at rest.
 6. **The keyboard up on one side:** confirm RIDE (sideways with its page) everywhere,
    Terminal ⇄ Terminal included, replacing today's vertical sink in a crossing.
+
+## 6. Decisions (the developer, 2026-11-25)
+
+- **Rule:** C, Stay, Glide or Ride, as recommended.
+- **Home ⇄ Home (Q1):** on Home the keyboard is an overlay owned by one page. It covers the dock and
+  whatever stands under it; the other elements keep their rest, so the keyboard never changes
+  another element's rest on Home (the A–Z bar keeps its length under it). Keyboard state is saved
+  per Home page, and only a page with a floating or widget terminal ever keeps it up (until Back or a
+  tap outside the terminal). So Home ⇄ Home is: the keyboard RIDES with its page, everything else
+  STAYS. No second Home instance, no clip.
+- **Order swaps (Q2):** RIDE (recommended default, not asked).
+- **Edge changes (Q3):** RIDE (recommended default, not asked).
+- **Glide's curve (Q4):** the material curve, `SeamFade.share` (recommended default, not asked).
+- **Per-page apps list (Q5):** planned. Build the apps row's content crossfade now: a second content
+  layer laid out at rest, only while the two ends' lists differ, inside the icon budget
+  (`LauncherIconStore`).
+- **Keyboard up on one side (Q6):** RIDE everywhere, Terminal ⇄ Terminal included; today's vertical
+  sink goes.
