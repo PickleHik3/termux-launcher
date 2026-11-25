@@ -43,8 +43,10 @@ import java.util.List;
  * and the host repaints their last frame when they return.
  *
  * <p>It binds the host without creating it (the runner's launch does), so a launcher that opens
- * no Linux app never starts the host's process. When the host dies its windows leave the row with a
- * notice; shells are untouched. Main thread only.
+ * no Linux app never starts the host's process. A host that ends on its own (idle, stopped) kills
+ * that binding for good ({@link ServiceConnection#onBindingDied}), so the controller then binds
+ * afresh and hears the next host the runner starts. When the host dies its windows leave the row
+ * with a notice; shells are untouched. Main thread only.
  */
 public final class LinuxWindowsController implements WallLinux, LinuxWindowPageView.Host {
 
@@ -191,7 +193,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private final LongSparseArray<Win> windows = new LongSparseArray<>();
     @Nullable private ILinuxWindows service;
     @Nullable private IBinder binder;
-    private boolean bound;
+    /** The live binding to the host; null when not listening. A dead one is replaced, never reused. */
+    @Nullable private HostConnection connection;
     private long attachedAt;
     /** The window the view is bound to; 0 for none. */
     private long boundId;
@@ -224,12 +227,21 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private final IBinder.DeathRecipient death = () -> main.post(this::hostGone);
 
-    private final ServiceConnection connection = new ServiceConnection() {
+    /**
+     * One binding to the host. Android delivers a host that is created again to a binding only
+     * while that binding lives; a host destroyed in the ordinary way (stopped, then unbound by the
+     * runner) ends it with {@link #onBindingDied}, so each binding gets its own object and a late
+     * call from a dead one is ignored.
+     */
+    private final class HostConnection implements ServiceConnection {
         @Override
         public void onServiceConnected(ComponentName name, IBinder b) {
+            if (this != connection || b == null) return;
+            unlink();
             binder = b;
             service = ILinuxWindows.Stub.asInterface(b);
             attachedAt = SystemClock.uptimeMillis();
+            Log.i(LOG_TAG, "launcher attached to the Linux windows host");
             try {
                 b.linkToDeath(death, 0);
                 service.addCallback(callback);
@@ -240,9 +252,19 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
+            if (this != connection) return;
             hostGone();
         }
-    };
+
+        @Override
+        public void onBindingDied(ComponentName name) {
+            if (this != connection) return;
+            Log.i(LOG_TAG, "the Linux windows host ended; listening for the next one");
+            if (service != null) hostGone();
+            unbind();
+            bind();
+        }
+    }
 
     /** Host events arrive on binder threads; everything is handled on the main thread. */
     private final ILinuxWindowsCallback.Stub callback = new ILinuxWindowsCallback.Stub() {
@@ -306,12 +328,37 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
      */
     public void start() {
         host.removeAllWindows();
-        if (bound) return;
+        if (connection != null) return;
+        bind();
+    }
+
+    /** Binds the host without creating it (flags 0): the binding waits for the runner to start one. */
+    private void bind() {
+        HostConnection c = new HostConnection();
+        connection = c;
+        boolean bound;
         try {
-            bound = context.bindService(new Intent(context, LinuxWindowsService.class), connection, 0);
+            bound = context.bindService(new Intent(context, LinuxWindowsService.class), c, 0);
         } catch (RuntimeException e) {
             Log.w(LOG_TAG, "cannot reach the Linux windows host: " + e);
             bound = false;
+        }
+        if (!bound) {
+            connection = null;
+            unbindQuietly(c);
+        }
+    }
+
+    private void unbind() {
+        HostConnection c = connection;
+        connection = null;
+        if (c != null) unbindQuietly(c);
+    }
+
+    private void unbindQuietly(@NonNull ServiceConnection c) {
+        try {
+            context.unbindService(c);
+        } catch (IllegalArgumentException ignored) {
         }
     }
 
@@ -325,13 +372,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             }
         }
         unlink();
-        if (bound) {
-            try {
-                context.unbindService(connection);
-            } catch (IllegalArgumentException ignored) {
-            }
-            bound = false;
-        }
+        unbind();
         service = null;
         clipboard.setInFront(false);
         windows.clear();
@@ -429,6 +470,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         boolean replayed = SystemClock.uptimeMillis() - attachedAt < REPLAY_MS;
         w.inRow = true;
         rebuildChips();
+        Log.i(LOG_TAG, "Linux window " + id + " (" + w.appId + ") joins the row" + (replayed ? ", replayed" : ""));
         host.addWindow(w.id, !replayed);
     }
 
