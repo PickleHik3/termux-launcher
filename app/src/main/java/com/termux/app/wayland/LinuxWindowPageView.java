@@ -231,6 +231,11 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         menu.show(host.windowScales());
     }
 
+    /** Opens the rim tab's menu, as a tap on the tab does; the app asked for its window menu. */
+    void openMenu() {
+        if (!menu.isOpen()) showMenu();
+    }
+
     private boolean isOnTab(float x, float y) {
         return x >= tab.getLeft() && x <= tab.getRight() && y >= tab.getTop() && y <= tab.getBottom();
     }

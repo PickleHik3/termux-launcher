@@ -47,7 +47,7 @@ use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, ListeningSocket, Resource};
-use smithay::utils::{Logical, Rectangle, Serial, Transform, SERIAL_COUNTER};
+use smithay::utils::{Logical, Point, Rectangle, Serial, Transform, SERIAL_COUNTER};
 use smithay::backend::allocator::dmabuf::Dmabuf;
 use smithay::wayland::buffer::BufferHandler;
 use smithay::wayland::dmabuf::{DmabufGlobal, DmabufHandler, DmabufState, ImportNotifier};
@@ -1888,7 +1888,11 @@ impl State {
             x.with_pending_state(|s| {
                 s.size = size.map(Into::into);
                 s.bounds = Some(pane.into());
-                s.capabilities.replace([xdg_toplevel::WmCapabilities::Fullscreen, xdg_toplevel::WmCapabilities::Minimize]);
+                s.capabilities.replace([
+                    xdg_toplevel::WmCapabilities::Fullscreen,
+                    xdg_toplevel::WmCapabilities::Minimize,
+                    xdg_toplevel::WmCapabilities::WindowMenu,
+                ]);
             });
         }
         t.shell.send_configure();
@@ -2455,6 +2459,17 @@ impl XdgShellHandler for State {
     fn move_request(&mut self, surface: ToplevelSurface, _seat: WlSeat, _serial: Serial) {
         if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
             self.request_move(i);
+        }
+    }
+
+    /// A right-click on the app's own title bar: the launcher opens the rim tab's menu.
+    fn show_window_menu(&mut self, surface: ToplevelSurface, _seat: WlSeat, _serial: Serial, _location: Point<i32, Logical>) {
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            let t = &self.toplevels[i];
+            if t.announced {
+                let id = t.id;
+                self.events.window_menu_request(id);
+            }
         }
     }
 

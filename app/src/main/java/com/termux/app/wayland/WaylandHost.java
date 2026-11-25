@@ -34,6 +34,8 @@ public final class WaylandHost {
         void onFullscreenRequest(long id, boolean fullscreen);
         /** The window asked to be moved (a drag on its own title bar). */
         void onMoveRequest(long id);
+        /** The window asked for its window menu. */
+        void onWindowMenuRequest(long id);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -162,6 +164,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onMoveRequest(id);
+        });
+    }
+
+    @Keep
+    static void onWindowMenuRequest(long id) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onWindowMenuRequest(id);
         });
     }
 

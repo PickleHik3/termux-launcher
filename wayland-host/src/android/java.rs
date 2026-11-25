@@ -24,6 +24,7 @@ struct Methods {
     clipboard: JStaticMethodID,
     fullscreen: JStaticMethodID,
     move_request: JStaticMethodID,
+    window_menu: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -46,6 +47,8 @@ pub trait HostEvents {
     fn fullscreen_request(&mut self, id: i64, on: bool);
     /// The window asked to be moved (a drag on its own title bar).
     fn move_request(&mut self, id: i64);
+    /// The window asked for its window menu (a right-click on its own title bar).
+    fn window_menu_request(&mut self, id: i64);
 }
 
 impl JavaCallbacks {
@@ -61,6 +64,7 @@ impl JavaCallbacks {
             clipboard: env.get_static_method_id(&local, "onClipboardText", "(Ljava/lang/String;)V")?,
             fullscreen: env.get_static_method_id(&local, "onFullscreenRequest", "(JZ)V")?,
             move_request: env.get_static_method_id(&local, "onMoveRequest", "(J)V")?,
+            window_menu: env.get_static_method_id(&local, "onWindowMenuRequest", "(J)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -159,6 +163,11 @@ impl HostEvents for AttachedCallbacks {
 
     fn move_request(&mut self, id: i64) {
         let m = self.methods.move_request;
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
+    }
+
+    fn window_menu_request(&mut self, id: i64) {
+        let m = self.methods.window_menu;
         call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
     }
 }

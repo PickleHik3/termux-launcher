@@ -389,6 +389,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onWindowMenuRequest(long id) {
+            main.post(() -> windowMenuRequested(id));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -1263,6 +1268,18 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             Win w = windows.valueAt(i);
             if (w.paneFrame != null) w.paneFrame.applyStyle(style);
         }
+    }
+
+    /**
+     * The app asked for its window menu (a right-click on its own title bar): the rim tab's menu
+     * opens for that window, on its page or its pane. A window with no rim tab (a dialog, a window
+     * over the page, one full screen) gets none.
+     */
+    private void windowMenuRequested(long id) {
+        Win w = windows.get(id);
+        if (w == null || id == fullscreen.fullscreenId()) return;
+        if (w.inRow && w.id == boundId && front) page.openMenu();
+        else if (w.inPane && terminalShown && w.paneFrame != null) w.paneFrame.openMenu();
     }
 
     // ---- full screen ----------------------------------------------------------------------------

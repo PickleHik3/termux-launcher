@@ -36,6 +36,8 @@ oneway interface ILinuxWindowsCallback {
      * title bar) while a finger or button is down on it. Resize requests are not passed on.
      */
     void onMoveRequest(long id);
+    /** The window asked for its window menu (xdg show_window_menu: a right-click on its title bar). */
+    void onWindowMenuRequest(long id);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }
