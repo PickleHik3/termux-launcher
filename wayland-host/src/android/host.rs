@@ -395,6 +395,10 @@ pub struct Toplevel {
     pointer_at: (f64, f64),
     stats: CopyStats,
     last_log: Instant,
+    /// STALE296 diag: the last root commit (buffer protocol id, when).
+    diag_commit: Option<(u32, Instant)>,
+    /// STALE296 diag: the last copy (buffer protocol id, content hash, when, rechecks left).
+    diag_copy: Option<(u32, u64, Instant, u8)>,
 }
 
 impl Toplevel {
@@ -1198,22 +1202,30 @@ impl State {
         let mut releases = std::mem::take(&mut self.tick_releases);
         let mut frames = std::mem::take(&mut self.tick_frames);
         let mut copied = false;
+        let mut diag_pending = false;
         for i in 0..self.toplevels.len() {
             let shown = self.toplevels[i].is_shown();
             if let Some(buffer) = self.toplevels[i].paced.tick(shown, keepalive, &mut releases, &mut frames) {
                 self.copy(i, &buffer);
                 copied = true;
+                self.diag_after_copy(i, &buffer);
+                diag_pending = true;
+            } else if shown {
+                diag_pending |= self.diag_recheck(i);
             }
         }
         releases.append(&mut self.loose_releases);
         frames.append(&mut self.loose_frames);
         // A client answered now usually commits again within the period: keep the timer armed
         // for one more tick, so a running animation re-arms instead of inserting a timer per frame.
-        let worked = copied || !releases.is_empty() || !frames.is_empty();
+        let worked = copied || diag_pending || !releases.is_empty() || !frames.is_empty();
         for b in releases.drain(..) {
             // A buffer another toplevel still shows is released when that one lets it go.
             if b.is_alive() && !self.toplevels.iter().any(|t| t.holds(&b)) {
                 b.release();
+                linfo!("STALE296 release up={} buf={}", now_ms(), b.id().protocol_id());
+            } else if b.is_alive() {
+                linfo!("STALE296 release-skipped-held up={} buf={}", now_ms(), b.id().protocol_id());
             }
         }
         let time = now_ms();
@@ -1229,6 +1241,61 @@ impl State {
         } else {
             self.next_deadline()
         }
+    }
+
+    /// STALE296 diag: logs the copy just made (buffer, content hash, time since its commit) and
+    /// arms rechecks of the held buffer on the next ticks.
+    fn diag_after_copy(&mut self, i: usize, buffer: &WlBuffer) {
+        let output = self.output_size;
+        let pid = buffer.id().protocol_id();
+        let hash = diag_hash(&self.toplevels[i], buffer, output, &mut self.maps);
+        let t = &mut self.toplevels[i];
+        let since = match t.diag_commit {
+            Some((p, at)) if p == pid => at.elapsed().as_micros() as i64,
+            _ => -1,
+        };
+        linfo!(
+            "STALE296 present up={} toplevel={} buf={} upload=full parts={} hash={:016x} us_since_commit={}",
+            now_ms(),
+            t.id,
+            pid,
+            t.parts.len(),
+            hash.unwrap_or(0),
+            since
+        );
+        t.diag_copy = hash.map(|h| (pid, h, Instant::now(), DIAG_RECHECKS));
+    }
+
+    /// STALE296 diag: re-reads the buffer last copied, while still held and not replaced; logs
+    /// when its pixels changed after the copy (the client's GPU finished late, or the client
+    /// wrote into a buffer we hold). True while rechecks remain.
+    fn diag_recheck(&mut self, i: usize) -> bool {
+        let Some((pid, old, at, left)) = self.toplevels[i].diag_copy else { return false };
+        let Some(buffer) = self.toplevels[i].paced.current().cloned() else {
+            self.toplevels[i].diag_copy = None;
+            return false;
+        };
+        if buffer.id().protocol_id() != pid || !buffer.is_alive() {
+            self.toplevels[i].diag_copy = None;
+            return false;
+        }
+        let output = self.output_size;
+        let now = diag_hash(&self.toplevels[i], &buffer, output, &mut self.maps).unwrap_or(old);
+        let t = &mut self.toplevels[i];
+        if now != old {
+            linfo!(
+                "STALE296 CHANGED-AFTER-COPY up={} toplevel={} buf={} us_after_copy={} old={:016x} new={:016x}",
+                now_ms(),
+                t.id,
+                pid,
+                at.elapsed().as_micros(),
+                old,
+                now
+            );
+        }
+        let left = left.saturating_sub(1);
+        t.diag_copy = if left == 0 { None } else { Some((pid, now, at, left)) };
+        left > 0
     }
 
     /// Copies `buffer` into toplevel `i`'s window and reports a new shown size. A window whose
@@ -1728,6 +1795,8 @@ impl State {
             swallow_button: false,
             pointer_at: (0.0, 0.0),
             stats: CopyStats::default(),
+            diag_commit: None,
+            diag_copy: None,
             last_log: Instant::now(),
         });
     }
@@ -1946,6 +2015,31 @@ fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
     Some((shown, full, map.to_logical(shown)))
 }
 
+/// STALE296 diag: ticks after a copy on which the held buffer is read again.
+const DIAG_RECHECKS: u8 = 12;
+
+/// STALE296 diag: a hash of the part of `buffer` a copy shows.
+fn diag_hash(t: &Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &mut DmabufMaps) -> Option<u64> {
+    let layout = Layout::of(t, output);
+    source::with_pixels(buffer, maps, |ptr, len, desc| {
+        let (shown, _, _) = shown_rect(layout, desc)?;
+        let stride = desc.stride as usize;
+        let (start, bytes) = content_span(usize::try_from(desc.offset).ok()?, stride, shown, len)?;
+        // SAFETY: as in post_buffer: the mapping lives for this closure, the range is checked.
+        let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
+        let row = shown.2 as usize * 4;
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for y in 0..shown.3 as usize {
+            for c in src[y * stride..y * stride + row].chunks_exact(8) {
+                h = (h ^ u64::from_ne_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]])).wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        Some(h)
+    })
+    .ok()
+    .flatten()
+}
+
 /// Copies the shown part of `buffer` (shm or dmabuf) into the toplevel's window. Err with the
 /// platform's code when the post failed; Ok also when the buffer could not be read (logged,
 /// nothing posted, the window keeps its previous frame).
@@ -2059,11 +2153,24 @@ impl CompositorHandler for State {
         }
 
         let mut frames = std::mem::take(&mut self.scratch_frames);
+        let mut diag_damage = (0usize, i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         let (assignment, scale, viewport) = with_states(surface, |states| {
             let (assignment, scale) = {
                 let mut guard = states.cached_state.get::<SurfaceAttributes>();
                 let attrs = guard.current();
                 frames.append(&mut attrs.frame_callbacks);
+                for d in &attrs.damage {
+                    let (b, r) = match d {
+                        smithay::wayland::compositor::Damage::Surface(r) => (0, (r.loc.x, r.loc.y, r.size.w, r.size.h)),
+                        smithay::wayland::compositor::Damage::Buffer(r) => (1, (r.loc.x, r.loc.y, r.size.w, r.size.h)),
+                    };
+                    let _ = b;
+                    diag_damage.0 += 1;
+                    diag_damage.1 = diag_damage.1.min(r.0);
+                    diag_damage.2 = diag_damage.2.min(r.1);
+                    diag_damage.3 = diag_damage.3.max(r.0.saturating_add(r.2));
+                    diag_damage.4 = diag_damage.4.max(r.1.saturating_add(r.3));
+                }
                 (attrs.buffer.take(), attrs.buffer_scale)
             };
             let mut guard = states.cached_state.get::<ViewportCachedState>();
@@ -2072,7 +2179,41 @@ impl CompositorHandler for State {
             (assignment, scale, viewport)
         });
 
+        {
+            let (buf, kind) = match &assignment {
+                Some(BufferAssignment::NewBuffer(b)) => {
+                    (b.id().protocol_id() as i64, if smithay::wayland::dmabuf::get_dmabuf(b).is_ok() { "dmabuf" } else { "shm" })
+                }
+                Some(BufferAssignment::Removed) => (-1, "removed"),
+                None => (0, "none"),
+            };
+            let role = if root_index.is_some() && root == *surface { "root" } else { "other" };
+            let (mut held, mut waits) = (false, false);
+            if let (Some(i), Some(BufferAssignment::NewBuffer(b))) = (root_index, &assignment) {
+                held = self.toplevels[i].paced.current() == Some(b);
+                waits = self.toplevels[i].paced.waits_release(b);
+            }
+            let d = diag_damage;
+            linfo!(
+                "STALE296 commit up={} surf={} role={} buf={} kind={} dmg_n={} dmg={},{},{},{} recommit_held={} reuse_before_release={}",
+                now_ms(),
+                surface.id().protocol_id(),
+                role,
+                buf,
+                kind,
+                d.0,
+                d.1,
+                d.2,
+                d.3,
+                d.4,
+                held,
+                waits
+            );
+        }
         if let Some(i) = root_index.filter(|_| root == *surface) {
+            if let Some(BufferAssignment::NewBuffer(b)) = &assignment {
+                self.toplevels[i].diag_commit = Some((b.id().protocol_id(), Instant::now()));
+            }
             self.commit_root(i, assignment, scale, viewport, &mut frames);
         } else if let Some(i) = self.owner_of(surface) {
             self.commit_part(i, surface, assignment, scale, viewport, &mut frames);
