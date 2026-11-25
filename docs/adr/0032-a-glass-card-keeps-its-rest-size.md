@@ -179,6 +179,12 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   bands-under layout with Home's keyboard down the apps row is one view: it does not slide, and
   its content crossfades between the two pages' rows over the crossing.
 
+- **2026-11-25, round 3: the keyboard per Home page.** Home's keyboard memory is kept per Home
+  page, and only a page holding a floating or widget terminal keeps it up (always on keeps it on
+  every page). Home's pager drives the stack's two Home ends, so between two Home pages that
+  differ in it the keyboard rides with its page and everything else stays; the landing draws the
+  keyboard as the landed page has it until its show or hide is laid out.
+
 ## Consequences
 
 - The Floating crossing machinery goes once the extra-keys bar has its own card:
