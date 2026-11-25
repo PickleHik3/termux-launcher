@@ -1764,6 +1764,11 @@ public final class PaneWallLayout extends ViewGroup
         return true;
     }
 
+    /** Whether {@link #pageOnce} has a page to land on {@code steps} away. */
+    public boolean canPage(int steps) {
+        return steps != 0 && canStep(steps);
+    }
+
     /** Whether a drag {@code steps} away from the current page has a page to land on. */
     private boolean canStep(int steps) {
         return hasInnerPage(steps) || neighbourId(steps) != NO_PAGE;

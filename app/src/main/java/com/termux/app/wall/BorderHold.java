@@ -69,6 +69,11 @@ public final class BorderHold {
         return mSide != BorderDrag.Border.NONE && !mFired;
     }
 
+    /** When the hold in progress began, in the owner's clock; a restart moves it. */
+    public long startMs() {
+        return mStartMs;
+    }
+
     @NonNull
     public BorderDrag.Border side() {
         return mSide;

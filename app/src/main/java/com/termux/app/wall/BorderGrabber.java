@@ -245,7 +245,7 @@ public final class BorderGrabber {
      * The rim's accent the border's marks are drawn in, the grabbers and the hold's glow
      * ({@link BorderGlow}) alike: the theme's primary, which follows light, dark and the scheme.
      */
-    static int accent(@NonNull Context context) {
+    public static int accent(@NonNull Context context) {
         return MaterialColors.getColor(context, androidx.appcompat.R.attr.colorPrimary,
             ContextCompat.getColor(context, com.termux.R.color.termux_primary));
     }
