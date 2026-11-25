@@ -96,6 +96,11 @@ impl State {
 
     /// Tells the launcher when the focused window's field appears, changes or goes.
     fn text_input_changed(&mut self) {
+        self.text_input_changed_with(false);
+    }
+
+    /// As [`Self::text_input_changed`]; `renewed`: the app enabled its text input again.
+    fn text_input_changed_with(&mut self, renewed: bool) {
         let now = match (self.text_inputs.active(), self.focused) {
             (Some(i), Some(window)) => {
                 let s = &self.text_inputs.instances[i].state;
@@ -103,7 +108,7 @@ impl State {
             }
             _ => None,
         };
-        let (left, focused) = self.text_inputs.tracker.update(now);
+        let (left, focused) = self.text_inputs.tracker.update(now, renewed);
         if let Some(window) = left {
             self.events.text_input(window, false, 0, 0);
         }
@@ -230,8 +235,9 @@ impl Dispatch<ZwpTextInputV3, ()> for State {
                 let pending = std::mem::take(&mut inst.pending);
                 // Requests between leave and the next enter are ignored, as the protocol says.
                 if inst.entered {
+                    let renewed = pending.enable == Some(true);
                     inst.state.apply(pending);
-                    state.text_input_changed();
+                    state.text_input_changed_with(renewed);
                 }
             }
             // Text change cause and cursor rectangle: the launcher's keyboard has no use for them.
