@@ -389,7 +389,6 @@ mod tests {
         p.commit_buffer_at(1, t0);
         p.commit_buffer_at(2, t0);
         // The GPU starts late: the copy and two more reads see the old picture, then the new one.
-        let content = |_b: u32| 0;
         assert_eq!(tick(&mut p, true, false).0, Some(2));
         assert!(p.first_read(Some(100)));
         let mut shown = Vec::new();
