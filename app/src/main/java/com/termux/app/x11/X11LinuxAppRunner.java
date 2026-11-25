@@ -856,7 +856,7 @@ public final class X11LinuxAppRunner {
                 appSettings.scale(app.id), metrics.density,
                 Math.min(metrics.widthPixels, metrics.heightPixels));
             List<String> env = new java.util.ArrayList<>(appEnv(app, gpu));
-            env.addAll(WaylandDesktopServer.scaleEnv(scale));
+            env.addAll(WaylandDesktopServer.scaleEnv(scale, scaleKind(app)));
             int[] size = WaylandDesktopServer.startSize(context, scale);
             String display = ":" + number;
             String script = gpuServerBlock(gpu.server) + sessionScript(app, display, env, null,

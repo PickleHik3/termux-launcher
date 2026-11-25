@@ -192,4 +192,13 @@ public class WaylandDesktopServerTest {
         assertTrue(s.contains("-p /Xft/DPI -s 192 "));
         assertEquals("", WaylandDesktopServer.liveScaleScript(null, 2f, 4));
     }
+
+    @Test
+    public void anXfceDesktopTakesItsScaleFromXfconfNotTheExports() {
+        // GTK would take GDK_SCALE and the xfconf DPI both: text twice too big (pong, 2026-11-25).
+        assertEquals(java.util.Arrays.asList("XCURSOR_SIZE=60"),
+            WaylandDesktopServer.scaleEnv(2.5f, WaylandDesktopServer.KIND_XFCE));
+        assertEquals(WaylandDesktopServer.scaleEnv(2.5f), WaylandDesktopServer.scaleEnv(2.5f, "mate"));
+        assertTrue(WaylandDesktopServer.scaleEnv(2.5f, null).contains("GDK_SCALE=2"));
+    }
 }
