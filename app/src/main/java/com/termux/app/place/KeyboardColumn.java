@@ -35,6 +35,21 @@ public final class KeyboardColumn {
     }
 
     /**
+     * Whether Home, in front, stands the Terminal's bands under its keyboard (#307, 2026-11-25):
+     * Home takes the Terminal's column ({@link #homeTakesTerminals}) and the Terminal's own rest
+     * has its keyboard up too. The one answer the per-rest cards ({@code RestCards}) and the
+     * views (the under-keyboard stack's hosts, so the column's margin and the keyboard's foot
+     * follow) both read; when Home's keyboard goes down the stack goes back to Home's own.
+     */
+    public static boolean homeStandsTerminalsBands(boolean homeFront, boolean homeKeyboardUp,
+                                                   boolean homeLiftsRows,
+                                                   @NonNull KeyboardForm form,
+                                                   boolean terminalKeyboardUp) {
+        return homeFront && terminalKeyboardUp
+            && homeTakesTerminals(homeKeyboardUp, homeLiftsRows, form);
+    }
+
+    /**
      * Whether the keyboard leaves with the leaving page: up at the leaving rest, down at the
      * arriving one (the arriving page has nothing to type into).
      */

@@ -560,8 +560,8 @@ public final class RestCards {
         final PlaceLayout terminalLayout = terminal.pass.dock.half(PageRef.TERMINAL).layout;
         final boolean lifts = HomeKeyboardCover.liftsRows(pass.dock.rows.kind,
             pass.homeKeyboardAlwaysOn);
-        if (!terminal.pass.keyboardShown || !KeyboardColumn.homeTakesTerminals(
-                pass.keyboardShown, lifts, terminalLayout.keyboardForm)) return;
+        if (!KeyboardColumn.homeStandsTerminalsBands(true, pass.keyboardShown, lifts,
+                terminalLayout.keyboardForm, terminal.pass.keyboardShown)) return;
         final RestCards up = terminalCards;
         final float w = home.screenWidthPx;
         final List<Card> adopted = new ArrayList<>(3);
