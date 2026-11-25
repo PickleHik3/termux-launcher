@@ -2909,6 +2909,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
+            // A Linux window lifted with Move owns every finger until it is set down (#386).
+            if (mLinuxWindows != null && mLinuxWindows.carryTouch(ev)) return true;
             // A hold on the Home pill picks it up: the surface long-press never sees that stream.
             int pillAction = ev.getActionMasked();
             if (pillAction == MotionEvent.ACTION_DOWN) mHomePillStream = homePillClaimsDown(ev);
@@ -3475,6 +3477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
+        if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
         mStatusRow.endStatusRowEnlargement();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
@@ -21162,6 +21165,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
+        // A lifted Linux window goes back first: Back or a home press is a cancelled carry.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                if (mLinuxWindows == null || !mLinuxWindows.isCarrying()) return false;
+                mLinuxWindows.cancelCarry();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mLinuxWindows != null && mLinuxWindows.isCarrying();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
+            }
+        });
         // The key's page bar popup stands over the wall and nothing else: Back puts it away first.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -31163,11 +31180,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
+                @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
+                    return linuxCarryHost();
+                }
             });
         mLinuxWindows.page().setTopInsetPx(mStatusRowRoomPx);
         mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows, this::syncLinuxFront);
         com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
         mLinuxWindows.start();
+    }
+
+    /** Scratch for the carry's wall span: a move reads it, so it allocates nothing. */
+    private final int[] mCarryWallAt = new int[2];
+
+    /** What a carried Linux window asks of the wall and the row (#386). */
+    @NonNull
+    private com.termux.app.wayland.LinuxCarry.Host linuxCarryHost() {
+        return new com.termux.app.wayland.LinuxCarry.Host() {
+            @NonNull @Override public android.view.ViewGroup overlay() {
+                return com.termux.app.window.WindowLayers.host(TermuxActivity.this,
+                    com.termux.app.window.WindowLayer.NOTICES);
+            }
+            @Override public int frontPlace() {
+                return mPaneWallController != null
+                    && mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL
+                    ? rowCurrentIndex() : -1;
+            }
+            @Override public int placeCount() { return rowWindowCount(); }
+            @Override public int placeOf(long id) {
+                WSession ws = mCurrentWSession;
+                return ws == null ? -1 : ws.row.indexOfLinux(ws.windows, id);
+            }
+            @Override public void wallSpan(@NonNull float[] out) {
+                if (mPaneWallController == null) {
+                    out[0] = 0f;
+                    out[1] = 0f;
+                    return;
+                }
+                com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+                wall.getLocationInWindow(mCarryWallAt);
+                out[0] = mCarryWallAt[0];
+                out[1] = mCarryWallAt[0] + wall.getWidth();
+            }
+            @Override public boolean canPage(int steps) {
+                return mPaneWallController != null && mPaneWallController.wall().canPage(steps);
+            }
+            @Override public void page(int steps) {
+                if (mPaneWallController != null) mPaneWallController.wall().pageOnce(steps);
+            }
+            @Override public void drop(long id, int from, int to) {
+                moveWindow(from, to);
+                goToLinuxWindow(id);
+            }
+            @Override public void putBack(long id) {
+                goToLinuxWindow(id);
+            }
+        };
     }
 
     /** The room the Terminal's top pane holds for the status row; a Linux window's page holds the same. */

@@ -10,7 +10,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
-import android.widget.PopupMenu;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -51,6 +50,11 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         /** The page came in front, or left it. */
         void frontChanged(boolean front);
         @NonNull TerminalKeyEventHandler.KeyValueInterceptor keys();
+        /**
+         * Move was held: lift the shown window, the finger at ({@code x}, {@code y}) in the
+         * window's coordinates; false when it cannot be carried.
+         */
+        default boolean beginCarry(float x, float y, int pointerId) { return false; }
     }
 
     private final PaneGlassBackdropView glass;
@@ -59,6 +63,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     private final FrameLayout slot;
     private final ImageView tab;
     private final GradientDrawable tabFill = new GradientDrawable();
+    private final LinuxWindowMenuView menu;
     private final DisplayScaleRailView railView;
     private final DisplayScaleRail rail;
     private final Rect tabRect = new Rect();
@@ -91,6 +96,18 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         tab.setBackground(tabFill);
         tab.setOnClickListener(v -> showMenu());
         addView(tab, new LayoutParams(0, 0));
+        menu = new LinuxWindowMenuView(context, new LinuxWindowMenuView.Listener() {
+            @Override public void close() { host.closeWindow(); }
+            @Override public void minimise() { host.minimiseWindow(); }
+            @Override public void scale() { rail.show(); }
+            @Override public boolean lift(float x, float y, int pointerId) {
+                return host.beginCarry(x, y, pointerId);
+            }
+        });
+        LayoutParams menuParams = new LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT);
+        menuParams.gravity = Gravity.TOP | Gravity.END;
+        addView(menu, menuParams);
         railView = new DisplayScaleRailView(context);
         rail = new DisplayScaleRail(railView, host);
         addView(railView, new LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
@@ -144,8 +161,10 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         // The tab is glass over the rim band: the panel colour, see-through, with the rim's glyph colour.
         tabFill.setColor((surface & 0x00FFFFFF) | 0xB3000000);
         tabFill.setCornerRadius(LinuxWindowRow.TAB_HEIGHT_DP * density / 2f);
-        tab.setImageTintList(ColorStateList.valueOf(MaterialColors.getColor(this,
-            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFFFFFFF)));
+        int ink = MaterialColors.getColor(this,
+            com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFFFFFFF);
+        tab.setImageTintList(ColorStateList.valueOf(ink));
+        menu.dress((surface & 0x00FFFFFF) | 0xF2000000, ink, 14f * density);
         placeTab();
     }
 
@@ -172,32 +191,42 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         post(() -> tab.setLayoutParams(lp));
     }
 
-    /** The rim tab's menu: Close, Minimise, Scale. Move comes with carry (#386) and goes here. */
+    /** The rim tab's menu: Close, Minimise, Move (held, not tapped) and Scale. */
     private void showMenu() {
         if (!host.hasWindow()) return;
-        PopupMenu menu = new PopupMenu(getContext(), tab, Gravity.END);
-        menu.getMenu().add(0, 1, 0, R.string.linux_windows_close);
-        menu.getMenu().add(0, 2, 1, R.string.linux_window_minimise);
-        menu.getMenu().add(0, 3, 2, R.string.linux_window_scale).setEnabled(host.windowScales());
-        menu.setOnMenuItemClickListener(item -> {
-            switch (item.getItemId()) {
-                case 1: host.closeWindow(); return true;
-                case 2: host.minimiseWindow(); return true;
-                case 3: rail.show(); return true;
-                default: return false;
-            }
-        });
-        menu.show();
+        if (menu.isOpen()) {
+            menu.dismiss();
+            return;
+        }
+        LayoutParams lp = (LayoutParams) menu.getLayoutParams();
+        int top = tabRect.bottom + Math.round(4f * getResources().getDisplayMetrics().density);
+        int end = Math.max(0, getWidth() - tabRect.right);
+        if (lp.topMargin != top || lp.rightMargin != end) {
+            lp.topMargin = top;
+            lp.rightMargin = end;
+            menu.setLayoutParams(lp);
+        }
+        menu.show(host.windowScales());
+    }
+
+    private boolean isOnTab(float x, float y) {
+        return x >= tab.getLeft() && x <= tab.getRight() && y >= tab.getTop() && y <= tab.getBottom();
     }
 
     /** Puts the rail away: the window behind it changed or went. */
     void dismissRail() {
+        menu.dismiss();
         rail.dismiss();
     }
 
     @Override
     public boolean onInterceptTouchEvent(@Nullable MotionEvent event) {
         if (event == null || event.getActionMasked() != MotionEvent.ACTION_DOWN) return false;
+        // A touch outside the open menu puts it away, and still reaches what it landed on.
+        if (menu.isOpen() && !menu.contains(event.getX(), event.getY())
+            && !isOnTab(event.getX(), event.getY())) {
+            menu.dismiss();
+        }
         if (rail.down(event.getX(), event.getY())) return true;
         if (rail.isShown()) rail.dismiss();
         return false;
@@ -233,11 +262,16 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @Override public void onFront() { host.frontChanged(true); }
 
     @Override public void offFront() {
+        menu.dismiss();
         rail.dismiss();
         host.frontChanged(false);
     }
 
     @Override public boolean onBack() {
+        if (menu.isOpen()) {
+            menu.dismiss();
+            return true;
+        }
         if (!rail.isShown()) return false;
         rail.dismiss();
         return true;

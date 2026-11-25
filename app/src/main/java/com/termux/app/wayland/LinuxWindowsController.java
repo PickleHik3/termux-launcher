@@ -80,6 +80,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void chipsChanged();
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
+        /** What a carry of a window asks of the wall and the row; null where none can be carried. */
+        @Nullable default LinuxCarry.Host carryHost() { return null; }
     }
 
     /** One Linux window chip, in row order then the minimised ones. */
@@ -364,6 +366,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     /** Stops listening; the apps keep running in the host. */
     public void stop() {
+        cancelCarry();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         if (service != null) {
             try {
@@ -643,6 +646,36 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Override
     public boolean hasWindow() {
         return shownWindow() != null;
+    }
+
+    /** The one carry under way, null between carries; see {@link #isCarrying}. */
+    @Nullable private LinuxCarry carry;
+
+    @Override
+    public boolean beginCarry(float x, float y, int pointerId) {
+        Win w = shownWindow();
+        LinuxCarry.Host carryHost = host.carryHost();
+        if (w == null || carryHost == null || isCarrying()) return false;
+        carry = new LinuxCarry(context, carryHost, w.id, departurePicture());
+        carry.begin(x, y, pointerId);
+        return true;
+    }
+
+    /** Whether a window is lifted now: the activity routes every touch to {@link #carryTouch}. */
+    public boolean isCarrying() {
+        if (carry != null && !carry.isActive()) carry = null;
+        return carry != null;
+    }
+
+    /** One touch of the window during a carry; false when none is under way. */
+    public boolean carryTouch(@NonNull MotionEvent ev) {
+        return isCarrying() && carry.onTouch(ev);
+    }
+
+    /** Back or a home press took the carry: the window goes back where it was. */
+    public void cancelCarry() {
+        if (carry != null) carry.cancel();
+        carry = null;
     }
 
     @Override
