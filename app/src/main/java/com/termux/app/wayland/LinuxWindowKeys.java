@@ -15,8 +15,9 @@ import juloo.keyboard2.KeyValue;
  * (wayland-host/src/keymap.rs). A printable character goes on the US key that types it, Shift
  * held where the character needs it ({@link X11AsciiKeys}); Ctrl, Alt, Meta and Shift from the
  * keyboard are pressed around the key and released after it, so a window is never left with a
- * modifier down. A character with no US key (emoji, accented letters, other scripts) is dropped:
- * this screen sends keys only, no text.
+ * modifier down. A character with no US key (emoji, accented letters, other scripts) is dropped
+ * here; while the app has a text field focused the controller sends characters as text instead
+ * ({@link #typedText}).
  */
 public final class LinuxWindowKeys {
 
@@ -75,6 +76,32 @@ public final class LinuxWindowKeys {
                 return;
             default:
                 // Modifier presses are tracked by the keyboard and arrive with the next value.
+        }
+    }
+
+    /**
+     * The text {@code value} types into a Linux app's text field (zwp_text_input_v3), or null
+     * when it is a key rather than text: a chord (Ctrl or Alt held), a control character, an
+     * edit key, an arrow. Any character counts, with or without a US key, so accented letters,
+     * other scripts and emoji reach the field.
+     */
+    @Nullable
+    public static String typedText(@Nullable KeyValue value, boolean ctrl, boolean alt) {
+        if (value == null || ctrl || alt) return null;
+        switch (value.getKind()) {
+            case Char: {
+                char c = value.getChar();
+                return Character.isISOControl(c) ? null : String.valueOf(c);
+            }
+            case String: {
+                String text = value.getString();
+                if (text == null || text.isEmpty()) return null;
+                for (int i = 0; i < text.length(); i++)
+                    if (Character.isISOControl(text.charAt(i))) return null;
+                return text;
+            }
+            default:
+                return null;
         }
     }
 

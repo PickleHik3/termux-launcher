@@ -25,6 +25,7 @@ struct Methods {
     fullscreen: JStaticMethodID,
     move_request: JStaticMethodID,
     window_menu: JStaticMethodID,
+    text_input: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -49,6 +50,9 @@ pub trait HostEvents {
     fn move_request(&mut self, id: i64);
     /// The window asked for its window menu (a right-click on its own title bar).
     fn window_menu_request(&mut self, id: i64);
+    /// The window's text field took focus (`active`, with the zwp_text_input_v3 content hint
+    /// bits and purpose) or lost it (`active` false, hint and purpose 0).
+    fn text_input(&mut self, id: i64, active: bool, hint: i32, purpose: i32);
 }
 
 impl JavaCallbacks {
@@ -65,6 +69,7 @@ impl JavaCallbacks {
             fullscreen: env.get_static_method_id(&local, "onFullscreenRequest", "(JZ)V")?,
             move_request: env.get_static_method_id(&local, "onMoveRequest", "(J)V")?,
             window_menu: env.get_static_method_id(&local, "onWindowMenuRequest", "(J)V")?,
+            text_input: env.get_static_method_id(&local, "onTextInput", "(JZII)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -169,6 +174,12 @@ impl HostEvents for AttachedCallbacks {
     fn window_menu_request(&mut self, id: i64) {
         let m = self.methods.window_menu;
         call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
+    }
+
+    fn text_input(&mut self, id: i64, active: bool, hint: i32, purpose: i32) {
+        let m = self.methods.text_input;
+        let flag = if active { JNI_TRUE } else { JNI_FALSE };
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }, jvalue { z: flag }, jvalue { i: hint }, jvalue { i: purpose }]));
     }
 }
 

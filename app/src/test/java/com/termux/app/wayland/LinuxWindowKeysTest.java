@@ -170,4 +170,23 @@ public class LinuxWindowKeysTest {
         assertFalse(LinuxWindowKeys.isForwarded(KeyEvent.KEYCODE_BACK));
         assertFalse(LinuxWindowKeys.isForwarded(KeyEvent.KEYCODE_VOLUME_UP));
     }
+
+    @Test
+    public void inATextFieldCharactersAreText() {
+        assertEquals("a", LinuxWindowKeys.typedText(KeyValue.makeCharKey('a'), false, false));
+        assertEquals("é", LinuxWindowKeys.typedText(KeyValue.makeCharKey('é'), false, false));
+        assertEquals("😀", LinuxWindowKeys.typedText(KeyValue.makeStringKey("😀"), false, false));
+        assertEquals("ls", LinuxWindowKeys.typedText(KeyValue.makeStringKey("ls"), false, false));
+    }
+
+    @Test
+    public void inATextFieldChordsAndKeysStayKeys() {
+        assertEquals(null, LinuxWindowKeys.typedText(KeyValue.makeCharKey('c'), true, false));
+        assertEquals(null, LinuxWindowKeys.typedText(KeyValue.makeCharKey('f'), false, true));
+        assertEquals(null, LinuxWindowKeys.typedText(KeyValue.getKeyByName("backspace"), false, false));
+        assertEquals(null, LinuxWindowKeys.typedText(KeyValue.getKeyByName("enter"), false, false));
+        assertEquals(null, LinuxWindowKeys.typedText(KeyValue.getKeyByName("left"), false, false));
+        assertEquals(null, LinuxWindowKeys.typedText(KeyValue.makeCharKey('\t'), false, false));
+        assertEquals(null, LinuxWindowKeys.typedText(null, false, false));
+    }
 }

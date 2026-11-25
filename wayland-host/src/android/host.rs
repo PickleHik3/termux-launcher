@@ -33,6 +33,7 @@ use smithay::input::keyboard::XkbConfig;
 use smithay::input::pointer::{AxisFrame, ButtonEvent, MotionEvent as PointerMotion};
 use smithay::input::touch::{DownEvent, MotionEvent as TouchMotion, UpEvent};
 use smithay::input::{Seat, SeatHandler, SeatState};
+use smithay::wayland::seat::WaylandFocus;
 use smithay::output::{Mode as OutputMode, Output, PhysicalProperties, Scale, Subpixel};
 use smithay::reexports::calloop::channel::{self, Channel, Sender};
 use smithay::reexports::calloop::generic::Generic;
@@ -139,6 +140,12 @@ pub enum Command {
     Close { id: i64 },
     /// Android's clipboard text, for Linux clients.
     SetClipboardText { text: String },
+    /// Typed text for the focused window's text field (`zwp_text_input_v3.commit_string`).
+    CommitText { id: i64, text: String },
+    /// Composing text for the focused window's text field; `cursor` is a UTF-16 index, -1 none.
+    SetPreedit { id: i64, text: String, cursor: i32 },
+    /// UTF-16 code units to delete around the cursor of the focused window's text field.
+    DeleteSurrounding { id: i64, before: i32, after: i32 },
     /// Debug: write the window's shown pixels as a PNG to `path` (checked by the service).
     Dump { id: i64, path: String },
 }
@@ -582,6 +589,8 @@ pub struct State {
     pub events: Box<dyn HostEvents>,
     pub xwayland: Option<super::xwayland::XwaylandState>,
     pub clip: super::clipboard::ClipState,
+    /// The apps' text fields (`zwp_text_input_v3`).
+    pub text_inputs: super::text_input::TextInputs,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
     teardown: crate::teardown::Teardown,
 }
@@ -669,6 +678,7 @@ fn setup(
     let decoration_state = XdgDecorationState::new::<State>(&dh);
     // Only Xwayland's client sees this global.
     let xwayland_shell_state = XWaylandShellState::new::<State>(&dh);
+    super::text_input::create_global(&dh);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -792,6 +802,7 @@ fn setup(
         events,
         xwayland: None,
         clip: super::clipboard::ClipState::new(clip_tx),
+        text_inputs: Default::default(),
         teardown: Default::default(),
     };
     // Last in, first out: the listening socket goes (and its files with it), then the display.
@@ -950,6 +961,9 @@ impl State {
             Command::Key { id, android_keycode, down, time } => self.key(id, android_keycode, down, time),
             Command::Close { id } => self.close(id),
             Command::SetClipboardText { text } => self.set_android_text(text),
+            Command::CommitText { id, text } => self.commit_text(id, text),
+            Command::SetPreedit { id, text, cursor } => self.set_preedit(id, text, cursor),
+            Command::DeleteSurrounding { id, before, after } => self.delete_surrounding(id, before, after),
             Command::Dump { id, path } => self.dump(id, &path),
         }
     }
@@ -2530,6 +2544,7 @@ impl SeatHandler for State {
 
     fn focus_changed(&mut self, seat: &Seat<State>, focused: Option<&KeyboardFocus>) {
         self.focus_data_device(seat, focused);
+        self.text_input_focus(focused.and_then(|f| f.wl_surface().map(|s| s.into_owned())));
     }
 }
 

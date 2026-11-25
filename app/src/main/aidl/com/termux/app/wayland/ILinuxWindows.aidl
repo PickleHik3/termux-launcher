@@ -28,7 +28,7 @@ import com.termux.app.wayland.ILinuxWindowsCallback;
  */
 oneway interface ILinuxWindows {
     /** Raised with every change to this interface or its callback. */
-    const int VERSION = 6;
+    const int VERSION = 7;
 
     // Host states, ILinuxWindowsCallback.onHostState.
     /** Asked to start; running or stopped follows. */
@@ -134,4 +134,15 @@ oneway interface ILinuxWindows {
      * than the host takes (see LinuxClipboardText) and null are dropped.
      */
     void setClipboardText(String text);
+
+    /**
+     * Typed text for the window's focused text field (zwp_text_input_v3 commit_string), inserted
+     * in place of any composing text; dropped unless the window has a field enabled, as
+     * onTextInput told (since VERSION 7). Keys still go through key().
+     */
+    void commitText(long id, String text);
+    /** Composing text shown in the field (empty clears it); cursor: a UTF-16 index into it, -1 none. */
+    void setPreeditText(long id, String text, int cursor);
+    /** Deletes UTF-16 code units before and after the field's cursor. */
+    void deleteSurroundingText(long id, int beforeLength, int afterLength);
 }

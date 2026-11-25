@@ -38,6 +38,13 @@ oneway interface ILinuxWindowsCallback {
     void onMoveRequest(long id);
     /** The window asked for its window menu (xdg show_window_menu: a right-click on its title bar). */
     void onWindowMenuRequest(long id);
+    /**
+     * A text field in the window took keyboard focus (active: the app enabled zwp_text_input_v3)
+     * or lost it. contentHint and contentPurpose: the protocol's content_hint bits and
+     * content_purpose value, 0 when not active (since VERSION 7). Only the window with keyboard
+     * focus (setFocus) has a field; X11 apps never report one.
+     */
+    void onTextInput(long id, boolean active, int contentHint, int contentPurpose);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }

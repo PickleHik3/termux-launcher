@@ -1800,6 +1800,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard.HideReason.USER_EVENT);
             return true;
         }
+        @Override public boolean keyboardUp() {
+            return mInAppKeyboard != null && mInAppKeyboard.isVisible();
+        }
+        @Override public boolean launcherKeyboard() { return isInAppKeyboardEnabled(); }
     };
 
     /**
@@ -31360,6 +31364,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
                     return linuxCarryHost();
                 }
+                @NonNull @Override public com.termux.app.page.PageHost pageHost() { return mPageHost; }
             });
         if (mPaneController != null) {
             mPaneController.setLinuxPanes(new com.termux.app.terminal.TerminalPaneController.LinuxPanes() {
