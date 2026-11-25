@@ -100,6 +100,11 @@ public final class StackEnd {
      */
     public float homeDropPx;
     public int terminalLiftPx;
+    /**
+     * This rest's bottom rows as the crossing rule reads them ({@link CrossingPath}), copied from
+     * the rest's answer by {@link #readCards}; none shown without one.
+     */
+    @NonNull public final CrossingPath.Rows rows = new CrossingPath.Rows();
 
     public StackEnd(@NonNull PageRef page) {
         this.page = page;
@@ -141,7 +146,12 @@ public final class StackEnd {
      */
     public void readCards(@Nullable RestCards cards) {
         clearCards();
+        rows.clear();
+        keyboardCarried = false;
         if (cards == null) return;
+        rows.set(cards.rows());
+        keyboardCarried = cards.carrierOf(ChromeShape.PieceId.KEYBOARD) != null
+            || cards.carrierOf(ChromeShape.PieceId.KEYBOARD_LEFT) != null;
         boolean apart = cards.apart();
         for (Card card : cards.cards()) setCard(card.view, card.id, sideOf(card.view, apart), true, card.box);
         for (Card card : cards.parked()) setCard(card.view, card.id, sideOf(card.view, apart), false, card.box);
@@ -168,6 +178,25 @@ public final class StackEnd {
         if (side == Side.HOME.ordinal()) return homeDropPx;
         if (side == Side.TERMINAL.ordinal()) return -Math.max(0, terminalLiftPx);
         return 0f;
+    }
+
+    private static final int KEYBOARD_CARD = CardId.KEYBOARD.ordinal();
+    /** A card of this rest carries the keyboard's keys (the unified Docked glass, the split halves). */
+    public boolean keyboardCarried;
+
+    /**
+     * Whether this rest has the keyboard up: it has the keyboard's region, or a view draws the
+     * keyboard's card (the column's, the Terminal's own or the floating frame).
+     */
+    public boolean keyboardUp() {
+        if (has(KEYBOARD) || keyboardCarried) return true;
+        for (int v = 0; v < VIEW_COUNT; v++) if (cardOn[v] == KEYBOARD_CARD) return true;
+        return false;
+    }
+
+    /** Whether this rest's keyboard is the floating-form frame's ({@link StackView#FLOATING_KEYBOARD}). */
+    public boolean keyboardFloats() {
+        return cardOn[StackView.FLOATING_KEYBOARD.ordinal()] == KEYBOARD_CARD;
     }
 
     /** Whether this end has {@code region}. */

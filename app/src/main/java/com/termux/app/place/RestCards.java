@@ -578,6 +578,13 @@ public final class RestCards {
         }
         // The Terminal's keys on its own host (the unified Docked glass): no keyboard card to share.
         if (!keys) return;
+        // Home stands the Terminal's bands under the keys: the rows under the keyboard are the
+        // Terminal's at both rests, so the crossing rule finds them where they are (STAY).
+        for (int i = 0; i < CrossingPath.ROW_COUNT; i++) {
+            if (homeCards.mRows.where[i] == CrossingPath.UNDER) homeCards.mRows.where[i] = CrossingPath.NOWHERE;
+            if (up.mRows.where[i] == CrossingPath.UNDER)
+                homeCards.mRows.set(i, CrossingPath.UNDER, up.mRows.topInBandPx[i], up.mRows.heightPx[i]);
+        }
         // The shared foot (#307, 2026-11-25): where the column stops above the kept band (bands
         // under the keys wear no foot), one foot stands under the bands for both rests, so
         // neither leaves the strip under the gesture pill bare with the keyboard up.
@@ -713,6 +720,19 @@ public final class RestCards {
     public int terminalSideLiftPx() {
         return mTerminalLiftPx;
     }
+
+    /**
+     * The bottom rows at this rest as the crossing rule reads them ({@link CrossingPath.Rows}):
+     * each row's band (over or under the keyboard), its top above that band's bottom and its
+     * height. Every content key is 0: the apps row's list is global today, so both ends show the
+     * same content. Read-only; {@link StackEnd#readCards} copies it.
+     */
+    @NonNull
+    public CrossingPath.Rows rows() {
+        return mRows;
+    }
+
+    private final CrossingPath.Rows mRows = new CrossingPath.Rows();
 
     /**
      * How the glass host is dressed at Home's rest: Home's own answer, whichever page is in
@@ -1021,6 +1041,12 @@ public final class RestCards {
             && pass.toolbarShown;
         if (underLaidOut)
             mLaidOut[StackView.UNDER.ordinal()] = new Box(0f, underTop, w, underBottom);
+        // The bottom rows' rests for the crossing rule (CrossingPath): each row's band and its
+        // top above that band's bottom, outermost (lowest) first in both bands.
+        if (containerLaidOut && pass.toolbarShown) {
+            recordRows(EdgeStackPolicy.overKeyboard(layout), CrossingPath.OVER, dock, pass);
+            if (r.bandsUnderKeyboard) recordRows(under, CrossingPath.UNDER, dock, pass);
+        }
 
         final LayoutStyle style = floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED;
         final boolean statusOnTop = EdgeStackPolicy.stack(layout, Edge.TOP)
@@ -1344,6 +1370,18 @@ public final class RestCards {
             new Corners(card.radiusPx, card.radiusPx, 0f, 0f), EdgeKind.RIM, EdgeKind.SCREEN,
             EdgeKind.RIM, EdgeKind.RIM, pieces));
         return card;
+    }
+
+    /** Stands {@code rows} (outermost, the lowest, first) in {@code band} of {@link #mRows}. */
+    private void recordRows(@NonNull List<Element> rows, int band, @NonNull DockLayout dock,
+                            @NonNull StackLayout.Input pass) {
+        float below = 0f;
+        for (Element e : rows) {
+            int i = CrossingPath.rowOf(e);
+            int height = bandPx(e, dock, pass);
+            if (i >= 0 && height > 0) mRows.set(i, band, -(below + height), height);
+            below += height;
+        }
     }
 
     private void addUnder(@NonNull List<Element> under, @NonNull DockLayout dock, float top,

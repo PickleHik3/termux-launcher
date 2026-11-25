@@ -237,6 +237,27 @@ public final class StackScene {
         public float coverHomePx;
         public float coverSharedPx;
 
+        /**
+         * Each bottom row's verb across this crossing ({@link CrossingPath#verb}, a
+         * {@link CrossingPath.Verb} ordinal, by {@link CrossingPath#APPS} ..), how far down from
+         * its layout (the leaving rest's) a gliding row is drawn ({@link CrossingPath#glideTyPx}),
+         * and whether it crossfades two contents. {@code NONE}, 0 and false for a frame without ends
+         * and at rest.
+         */
+        public final int[] rowVerb = new int[CrossingPath.ROW_COUNT];
+        public final float[] rowGlideTyPx = new float[CrossingPath.ROW_COUNT];
+        public final boolean[] rowCrossfades = new boolean[CrossingPath.ROW_COUNT];
+        /**
+         * The keyboard's verb ({@link CrossingPath#keyboard}, an ordinal), how far across it is
+         * drawn while it rides with its page ({@link CrossingPath#keyboardTxPx}), how far it is
+         * held up against the stack's travel so it rides at its rest height and never sinks
+         * (the docked column's keyboard only), and whether it is the floating-form frame.
+         */
+        public int keyboardVerb;
+        public float keyboardTxPx;
+        public float keyboardHoldPx;
+        public boolean keyboardFloats;
+
         public Frame() {
             for (int i = 0; i < StackEnd.REGION_COUNT; i++) look[i] = new RegionLook();
         }
@@ -280,6 +301,9 @@ public final class StackScene {
                 if (sideTx[s] != o.sideTx[s] || sideTy[s] != o.sideTy[s]) return false;
             }
             if (slabView != o.slabView) return false;
+            if (keyboardTxPx != o.keyboardTxPx || keyboardHoldPx != o.keyboardHoldPx) return false;
+            for (int i = 0; i < CrossingPath.ROW_COUNT; i++)
+                if (rowGlideTyPx[i] != o.rowGlideTyPx[i]) return false;
             for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
                 if (cardSide[v] != o.cardSide[v] || cardTx[v] != o.cardTx[v]
                     || cardTy[v] != o.cardTy[v]) return false;
@@ -318,6 +342,55 @@ public final class StackScene {
         sides(from, to, p, live, out);
         shape(from, to, materialShare(p), out);
         cards(from, to, p, motion, live, out);
+        paths(from, to, p, motion, live, out);
+    }
+
+    // ---- Stay, Glide or Ride ---------------------------------------------------------------
+
+    private static final int NONE = CrossingPath.Verb.NONE.ordinal();
+
+    /**
+     * The crossing rule's verbs for the bottom rows and the keyboard ({@link CrossingPath}), read
+     * from the two ends' rests: a gliding row's offset from its layout, and the keyboard riding
+     * with the page that has it up, sideways at its rest height (the developer's Q6: no vertical
+     * sink). Both ends one rest (a rest, or one side's two pages while per-page keyboard state is
+     * not kept) give STAY or NONE, so a rest writes nothing new. Pure in {@code p}.
+     */
+    private static void paths(@Nullable StackEnd from, @Nullable StackEnd to, float p,
+                              @NonNull Motion m, @NonNull StackGeometry g, @NonNull Frame out) {
+        for (int i = 0; i < CrossingPath.ROW_COUNT; i++) {
+            out.rowVerb[i] = NONE;
+            out.rowGlideTyPx[i] = 0f;
+            out.rowCrossfades[i] = false;
+        }
+        out.keyboardVerb = NONE;
+        out.keyboardTxPx = 0f;
+        out.keyboardHoldPx = 0f;
+        out.keyboardFloats = false;
+        if (from == null || to == null) return;
+        for (int i = 0; i < CrossingPath.ROW_COUNT; i++) {
+            out.rowVerb[i] = CrossingPath.verb(from.rows, to.rows, i).ordinal();
+            out.rowGlideTyPx[i] = CrossingPath.glideTyPx(from.rows, to.rows, i, p);
+            out.rowCrossfades[i] = CrossingPath.crossfades(from.rows, to.rows, i);
+        }
+        boolean fromUp = from.keyboardUp();
+        boolean toUp = to.keyboardUp();
+        CrossingPath.Verb keyboard = CrossingPath.keyboard(fromUp, toUp);
+        out.keyboardVerb = keyboard.ordinal();
+        out.keyboardFloats = (fromUp ? from : to).keyboardFloats();
+        // At p = 0 and p = 1 the frame is the rest's (the keyboard down there is cut whole); just
+        // inside, the end that has it down holds it a whole wall off, so nothing shows the switch.
+        if (keyboard != CrossingPath.Verb.RIDE || p <= 0f || p >= 1f) return;
+        int direction = CrossingPath.leavesDirection(m.leavesDirection, from.page.isHome(),
+            to.page.isHome());
+        out.keyboardTxPx = CrossingPath.keyboardTxPx(fromUp, toUp, direction, p,
+            g.containerWidthPx);
+        if (!out.keyboardFloats && g.keyboardPresent && g.keyboardInColumn
+                && direction != KeyboardColumn.LEAVES_UNKNOWN) {
+            // Held up by the share the travel sinks it by, and never cut: it rides at its height.
+            out.keyboardHoldPx = -Math.max(0f, m.keyboardSharePx);
+            out.clipped[V_KEYBOARD] = false;
+        }
     }
 
     // ---- Cards -----------------------------------------------------------------------------
