@@ -615,4 +615,104 @@ public class RestCardsCrossingTest {
         }
         assertKnown("(rows)", found);
     }
+
+    // ---- Stay, Glide or Ride -----------------------------------------------------------
+
+    private static final float[] SAMPLES = {0f, 0.125f, 0.25f, 0.375f, 0.5f, 0.625f, 0.75f,
+        0.875f, 1f};
+
+    /**
+     * (path) The crossing rule (CrossingPath) over every pair of rests: the frames at p = 0 and
+     * p = 1 are the rests' (a gliding row at the leaving rest's slot, then the arriving rest's;
+     * the keyboard on screen at the end that has it up and a whole wall off at the other); a row
+     * glides only at one size; no two gliding rows overlap at any sampled p; frames sampled
+     * forward and backward agree; and a rest ({@code at(end, end, 0)}) moves nothing.
+     */
+    @Test public void everyElementTakesOnePathThatLandsOnItsRests() {
+        Found found = new Found();
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : BOOLS)
+                for (PageRef[] pair : PAIRS)
+                    for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
+            String at = f.name + " " + style(floating) + " " + name(pair[0]) + "->"
+                + name(pair[1]) + " up=" + fromUp + "/" + toUp;
+            String tail = " " + style(floating) + " " + f.homeDesign + " " + name(pair[0]) + "->"
+                + name(pair[1]);
+            RestCards a = end(f, pair[0], fromUp, pair[1], toUp, floating);
+            RestCards b = end(f, pair[1], toUp, pair[0], fromUp, floating);
+            StackEnd from = endOf(f, pair[0], fromUp, floating, a);
+            StackEnd to = endOf(f, pair[1], toUp, floating, b);
+            StackScene.Motion motion = new StackScene.Motion();
+            // Home to Home knows its way only from the wall: give it one.
+            motion.leavesDirection = pair[0].isHome() && pair[1].isHome()
+                ? KeyboardColumn.LEAVES_LEFT : KeyboardColumn.LEAVES_UNKNOWN;
+            StackScene.Frame frame = new StackScene.Frame();
+            int w = f.widthPx;
+            CrossingPath.Rows ra = from.rows;
+            CrossingPath.Rows rb = to.rows;
+            float[][] forward = new float[SAMPLES.length][CrossingPath.ROW_COUNT + 1];
+            for (int k = 0; k < SAMPLES.length; k++) {
+                float p = SAMPLES[k];
+                StackScene.at(from, to, p, motion, from.rest, frame);
+                for (int i = 0; i < CrossingPath.ROW_COUNT; i++) forward[k][i] = frame.rowGlideTyPx[i];
+                forward[k][CrossingPath.ROW_COUNT] = frame.keyboardTxPx;
+                for (int i = 0; i < CrossingPath.ROW_COUNT; i++) {
+                    CrossingPath.Verb verb = CrossingPath.of(frame.rowVerb[i]);
+                    String row = " " + StackLanes.ROWS[i];
+                    if (verb == CrossingPath.Verb.GLIDE && ra.heightPx[i] != rb.heightPx[i])
+                        found.add("(path) GLIDE SIZE" + row + tail, at);
+                    float want = p == 1f && verb == CrossingPath.Verb.GLIDE
+                        ? rb.topInBandPx[i] - ra.topInBandPx[i] : 0f;
+                    if ((p == 0f || p == 1f) && frame.rowGlideTyPx[i] != want)
+                        found.add("(path) ROW REST" + row + tail, at + " p=" + p);
+                    for (int j = i + 1; j < CrossingPath.ROW_COUNT; j++) {
+                        if (verb != CrossingPath.Verb.GLIDE
+                            || CrossingPath.of(frame.rowVerb[j]) != CrossingPath.Verb.GLIDE
+                            || ra.where[i] != ra.where[j]) continue;
+                        float ti = ra.topInBandPx[i] + frame.rowGlideTyPx[i];
+                        float tj = ra.topInBandPx[j] + frame.rowGlideTyPx[j];
+                        if (ti < tj + ra.heightPx[j] - 0.5f && tj < ti + ra.heightPx[i] - 0.5f)
+                            found.add("(path) GLIDE OVERLAP" + row + "/" + StackLanes.ROWS[j]
+                                + tail, at + " p=" + p);
+                    }
+                }
+                boolean leftUp = from.keyboardUp();
+                boolean arrivesUp = to.keyboardUp();
+                CrossingPath.Verb keyboard = CrossingPath.of(frame.keyboardVerb);
+                if (keyboard != CrossingPath.keyboard(leftUp, arrivesUp))
+                    found.add("(path) KEYBOARD VERB" + tail, at);
+                if ((p == 0f || p == 1f)
+                        && (frame.keyboardTxPx != 0f || frame.keyboardHoldPx != 0f))
+                    found.add("(path) KEYBOARD REST" + tail, at + " p=" + p);
+                if (keyboard == CrossingPath.Verb.STAY && frame.keyboardTxPx != 0f)
+                    found.add("(path) KEYBOARD MOVED" + tail, at + " p=" + p);
+            }
+            // Just inside each end the keyboard stands where that end has it: on screen where it
+            // is up, a whole wall off where it is down, so the rest's cut takes over unseen.
+            if (CrossingPath.keyboard(from.keyboardUp(), to.keyboardUp()) == CrossingPath.Verb.RIDE) {
+                for (float p : new float[] {1e-4f, 1f - 1e-4f}) {
+                    StackScene.at(from, to, p, motion, from.rest, frame);
+                    boolean upHere = p < 0.5f ? from.keyboardUp() : to.keyboardUp();
+                    float tx = Math.abs(frame.keyboardTxPx);
+                    if (upHere ? tx > 0.01f * w : tx < 0.99f * w)
+                        found.add("(path) KEYBOARD END" + tail, at + " p=" + p + " tx=" + tx);
+                }
+            }
+            for (int k = SAMPLES.length - 1; k >= 0; k--) {
+                StackScene.at(from, to, SAMPLES[k], motion, from.rest, frame);
+                boolean same = frame.keyboardTxPx == forward[k][CrossingPath.ROW_COUNT];
+                for (int i = 0; i < CrossingPath.ROW_COUNT; i++)
+                    same &= frame.rowGlideTyPx[i] == forward[k][i];
+                if (!same) found.add("(path) BACKWARD" + tail, at + " p=" + SAMPLES[k]);
+            }
+            for (StackEnd end : new StackEnd[] {from, to}) {
+                StackScene.Motion rest = new StackScene.Motion();
+                StackScene.rest(end, 0f, rest, frame);
+                boolean still = frame.keyboardTxPx == 0f && frame.keyboardHoldPx == 0f;
+                for (int i = 0; i < CrossingPath.ROW_COUNT; i++) still &= frame.rowGlideTyPx[i] == 0f;
+                if (!still) found.add("(path) REST MOVES" + tail, at);
+            }
+        }
+        assertKnown("(path)", found);
+    }
 }
