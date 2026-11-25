@@ -52,3 +52,19 @@ slide and bubble stay as they are. What changes is the look, the place, and the 
 - The expanded status pane has no place in the thin row yet.
 
 The dp figures come from the mock-ups, not from a device.
+
+## Parked: the marks row redesign (the developer, 2026-11-25)
+
+The marks row is parked as built; the developer will revisit it. What they have in mind, so the next
+round starts from it:
+
+- **Condensed and left-aligned.** The marks sit packed at the row's start instead of spread across it.
+- **One gesture.** A touch enlarges the row at once and the finger slides along it to the page it
+  wants; lifting goes there. No separate "first tap enlarges, second tap acts" (today's thin-row rule,
+  which made single taps on Terminal and Linux pages look dead on pong, 2026-11-25).
+- **The same on Home.** By default Home pages hide the status bar, and the page switcher (in the marks
+  look) stands above the app dock again, as in earlier builds, with the same touch-and-slide gesture.
+- **The dock's page indicator gets redesigned.** Where it sits now it reads as Home's page dots (the
+  Android norm), not as the dock's own pages.
+
+Until then: no work on the marks row's touch rules, its layout or the dock's page indicator.
