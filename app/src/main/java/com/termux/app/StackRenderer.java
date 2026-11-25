@@ -592,6 +592,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             if (under.getBackground() != null) under.invalidate();
         }
         View keyboard = mViews.view(R.id.inapp_keyboard_container);
+        writeKeyboardRide(keyboard);
         if (keyboard != null) {
             writeClip(StackScene.V_KEYBOARD, keyboard);
             // A down keyboard takes no touch: its translation leaves a strip of it on the screen.
@@ -642,11 +643,17 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         View rowStack = mViews.view(R.id.accessory_row_stack);
         if (!(rowStack instanceof EdgeStackView)) return;
         EdgeStackView stack = (EdgeStackView) rowStack;
+        View underStack = mViews.view(R.id.accessory_under_keyboard_stack);
         for (int i = 0; i < LANE_HOST_IDS.length; i++) {
             View host = mViews.view(LANE_HOST_IDS[i]);
             if (host == null) continue;
             float want = 0f;
             float wantTy = 0f;
+            // The bands under the keyboard: a row both ends stand there at one size GLIDEs from
+            // the leaving rest's slot to the arriving rest's (CrossingPath; the bands-under apps
+            // row), and the landing's layout finds it there. LANE_HOST_IDS is CrossingPath's order.
+            float glideTy = underStack != null && host.getParent() == underStack
+                ? mFrame.rowGlideTyPx[i] : 0f;
             if (host.getParent() == stack) {
                 int lane = stack.getLane(host);
                 // Home's lane its drop, the Terminal's its lift, both whichever page is in front.
@@ -662,10 +669,11 @@ public final class StackRenderer implements DockPlankController.SlabSink {
                 mWrittenLaneTx[i] = Float.NaN;
                 mWrittenLaneTy[i] = Float.NaN;
             }
-            if (mWrittenLaneTy[i] != wantTy) {
-                mWrittenLaneTy[i] = wantTy;
-                if (host.getTranslationY() != wantTy) {
-                    host.setTranslationY(wantTy);
+            float drawnTy = wantTy + glideTy;
+            if (mWrittenLaneTy[i] != drawnTy) {
+                mWrittenLaneTy[i] = drawnTy;
+                if (host.getTranslationY() != drawnTy) {
+                    host.setTranslationY(drawnTy);
                     mWriteCount++;
                     mViews.laneMoved(host);
                 }
@@ -678,6 +686,31 @@ public final class StackRenderer implements DockPlankController.SlabSink {
             mWriteCount++;
             mViews.laneMoved(host);
         }
+    }
+
+    /**
+     * The keyboard riding with its page (CrossingPath, the developer's Q6): the one writer of the
+     * docked keyboard's translationX and of its hold against the stack's travel, and of the
+     * floating-form keyboard's host's translationX. Up at one end only, it slides out with the
+     * leaving page or in with the arriving one at its rest height; up at both it stays; at rest
+     * every number is 0. Written only on a change.
+     */
+    private void writeKeyboardRide(@Nullable View keyboard) {
+        boolean floats = mFrame.keyboardFloats;
+        float tx = mFrame.keyboardTxPx;
+        if (keyboard != null) {
+            float columnTx = floats ? 0f : tx;
+            if (keyboard.getTranslationX() != columnTx) {
+                keyboard.setTranslationX(columnTx);
+                mWriteCount++;
+            }
+            float hold = floats ? 0f : mFrame.keyboardHoldPx;
+            if (keyboard.getTranslationY() != hold) {
+                keyboard.setTranslationY(hold);
+                mWriteCount++;
+            }
+        }
+        writeTx(mViews.view(R.id.floating_keyboard_host), floats ? tx : 0f);
     }
 
     private static int lane(@NonNull EdgeStackView stack, @NonNull View host) {
