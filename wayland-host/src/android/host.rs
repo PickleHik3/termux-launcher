@@ -1189,8 +1189,36 @@ impl State {
         if !matches!(action, TOUCH_DOWN | TOUCH_UP | TOUCH_MOVE | TOUCH_CANCEL | TOUCH_POINTER_DOWN | TOUCH_POINTER_UP) {
             return;
         }
+        // DLG392 diag: where a down or up for a window goes.
+        if matches!(action, TOUCH_DOWN | TOUCH_UP) {
+            match self.toplevel_index(id) {
+                Some(i) => {
+                    let t = &self.toplevels[i];
+                    let first = points.points.first().map(|p| (p.1, p.2)).unwrap_or((0.0, 0.0));
+                    let at = Self::surface_point(t, first.0, first.1);
+                    linfo!(
+                        "DLG392 touch id={id} action={action} view={:?} content={:?} at={:?} surface_at={:?} class={:?} x11={} visible={} window={} swallow={} grab={} caught_up={}",
+                        t.view_size,
+                        t.content,
+                        first,
+                        at,
+                        t.class,
+                        t.shell.is_x11(),
+                        t.visible,
+                        t.window.is_some(),
+                        t.swallow_touch,
+                        self.has_grab(i),
+                        t.shell.caught_up()
+                    );
+                }
+                None => linfo!("DLG392 touch id={id} action={action}: no announced toplevel; ids={:?}", self.toplevels.iter().map(|t| (t.id, t.announced)).collect::<Vec<_>>()),
+            }
+        }
         let Some(i) = self.toplevel_index(id) else { return };
-        let Some(touch) = self.seat.get_touch() else { return };
+        let Some(touch) = self.seat.get_touch() else {
+            linfo!("DLG392 touch id={id}: the seat has no touch");
+            return;
+        };
         if action == TOUCH_CANCEL {
             self.toplevels[i].swallow_touch = false;
             touch.cancel(self);
@@ -1205,6 +1233,9 @@ impl State {
             }
         }
         if self.toplevels[i].swallow_touch {
+            if matches!(action, TOUCH_DOWN | TOUCH_UP) {
+                linfo!("DLG392 touch id={id} action={action}: swallowed (a tap outside a grabbing popup)");
+            }
             if action == TOUCH_UP {
                 self.toplevels[i].swallow_touch = false;
             }
@@ -1219,7 +1250,11 @@ impl State {
             let acting = k as i32 == action_index;
             match action {
                 TOUCH_DOWN | TOUCH_POINTER_DOWN if acting => {
-                    let Some((surface, origin)) = self.input_target(i, (sx, sy)) else { continue };
+                    let Some((surface, origin)) = self.input_target(i, (sx, sy)) else {
+                        linfo!("DLG392 touch id={id}: no surface under ({sx:.1},{sy:.1})");
+                        continue;
+                    };
+                    linfo!("DLG392 touch id={id}: down on {:?} origin={origin:?} at=({sx:.1},{sy:.1}) root={}", surface.id(), self.toplevels[i].shell.is(&surface));
                     let serial = SERIAL_COUNTER.next_serial();
                     touch.down(self, Some((surface, origin.into())), &DownEvent { slot, location: (sx, sy).into(), serial, time });
                 }
