@@ -161,6 +161,15 @@ public final class PreferenceDraft implements SharedPreferences {
         return out;
     }
 
+    /**
+     * The keys whose held value differs from the store's now: what {@link #commit} would change.
+     * A copy; empty when nothing held differs.
+     */
+    @NonNull
+    public Set<String> changedKeys() {
+        return heldDifferences();
+    }
+
     /** Whether this draft is the open one. */
     public boolean isOpen() {
         return !mEnded;
