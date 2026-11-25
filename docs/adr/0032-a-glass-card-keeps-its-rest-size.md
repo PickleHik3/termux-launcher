@@ -244,3 +244,12 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   row and the shared row's ease GLIDE, and the keyboard up at one end only RIDEs sideways with its
   page instead of sinking (up at both ends it stays, #307's shared column). Pairing by element, the
   status bar and side-to-crossing-end come next (the proposal's steps 4–6).
+- **2026-11-25, round 2: cards by element, the status bar's verb, two Home ends, Home's keyboard
+  an overlay.** The glass cards take their verb from `CrossingPath.card`, paired by element (a
+  view one rest hands two elements still keeps the stack's pose and is named by the test); the
+  status bar stays or rides by `CrossingPath.status` in both `SeamCrossing` and `TopStackScene`; a
+  Home to Home crossing has two ends, which differ only in their page's keyboard. On Home the
+  keyboard covers the dock and changes no other element's rest, so a side A–Z bar keeps its length
+  under it (`HomeKeyboardCover.sideRailKeyboardPx`), which removes the 16 A–Z Home to Home entries:
+  `RestCardsCrossingTest.KNOWN_FAILURES` holds 36. #307's shared column for a keyboard up at both
+  ends stays: it is the keyboard's own column, not another element's rest.

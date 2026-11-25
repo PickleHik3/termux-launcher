@@ -192,4 +192,67 @@ public class CrossingPathTest {
                 0f);
         }
     }
+
+    // ---- Cards (step 4) and the status bar (step 5) -----------------------------------------
+
+    private static final int DOCK = RestCards.CardId.DOCK.ordinal();
+    private static final int PEEK = RestCards.CardId.PEEK.ordinal();
+    private static final int NO = StackEnd.NO_CARD;
+    private static final int HOME = com.termux.app.page.Side.HOME.ordinal();
+    private static final int TERM = com.termux.app.page.Side.TERMINAL.ordinal();
+    private static final int STACK = StackEnd.STACK_SIDE;
+    private static final int NO_SIDE = StackEnd.NO_SIDE;
+
+    private static Verb card(int fromCard, int toCard, int fromSide, int toSide, boolean same) {
+        Verb ab = CrossingPath.card(fromCard, toCard, fromSide, toSide, same);
+        assertEquals("card symmetric", ab, CrossingPath.card(toCard, fromCard, toSide, fromSide,
+            same));
+        return ab;
+    }
+
+    @Test public void aCardIsPairedByElementOneElementAtOneRectStays() {
+        assertEquals(Verb.STAY, card(PEEK, PEEK, STACK, STACK, true));
+        assertEquals(Verb.STAY, card(DOCK, DOCK, HOME, HOME, true));
+    }
+
+    @Test public void aSidesCardRidesWithItsPage() {
+        assertEquals(Verb.RIDE, card(DOCK, NO, HOME, HOME, false));
+        assertEquals(Verb.RIDE, card(NO, DOCK, TERM, TERM, false));
+    }
+
+    @Test public void theStacksOwnCardStaysAndNoCardIsNone() {
+        assertEquals(Verb.STAY, card(DOCK, NO, STACK, STACK, false));
+        assertEquals(Verb.NONE, card(NO, NO, NO_SIDE, NO_SIDE, false));
+    }
+
+    @Test public void aViewHandedTwoCardsKeepsItsPoseAndIsNamed() {
+        assertEquals(Verb.STAY, card(DOCK, PEEK, STACK, STACK, false));
+        assertTrue(CrossingPath.morphs(DOCK, PEEK, STACK, STACK, false));
+        assertTrue(CrossingPath.morphs(DOCK, DOCK, HOME, HOME, false));
+        assertTrue(CrossingPath.morphs(NO, NO, HOME, TERM, false));
+        assertFalse(CrossingPath.morphs(DOCK, DOCK, HOME, HOME, true));
+    }
+
+    private static Verb status(boolean a, boolean b, boolean place, boolean outline) {
+        Verb ab = CrossingPath.status(a, b, place, outline);
+        assertEquals("status symmetric", ab, CrossingPath.status(b, a, place, outline));
+        return ab;
+    }
+
+    @Test public void theStatusBarStaysOnOneEdgeInOneOutlineElseRides() {
+        assertEquals(Verb.STAY, status(true, true, true, true));
+        // C4: an edge change rides (Q3).
+        assertEquals(Verb.RIDE, status(true, true, false, true));
+        assertEquals(Verb.RIDE, status(true, true, true, false));
+        // C5: one end only rides with the page that wears it.
+        assertEquals(Verb.RIDE, status(true, false, false, true));
+        assertEquals(Verb.NONE, status(false, false, true, true));
+    }
+
+    @Test public void aStayingBarCrossfadesOnlyWhatDiffers() {
+        assertTrue(CrossingPath.statusCrossfades(Verb.STAY, 1, 2, true, true));
+        assertTrue(CrossingPath.statusCrossfades(Verb.STAY, 1, 1, true, false));
+        assertFalse(CrossingPath.statusCrossfades(Verb.STAY, 1, 1, true, true));
+        assertFalse(CrossingPath.statusCrossfades(Verb.RIDE, 1, 2, true, false));
+    }
 }

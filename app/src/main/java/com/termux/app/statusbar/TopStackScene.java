@@ -4,6 +4,7 @@ import androidx.annotation.NonNull;
 
 import com.termux.app.chrome.StackMaterial;
 import com.termux.app.page.Side;
+import com.termux.app.place.CrossingPath;
 import com.termux.app.place.PlaceLayout;
 import com.termux.app.place.SeamFade;
 import com.termux.app.place.StackScene;
@@ -94,6 +95,13 @@ public final class TopStackScene {
         public float lookShare;
         /** The blended inks. */
         public final int[] inks = new int[INK_COUNT];
+        /**
+         * The bar's verb ({@link #verb}, an ordinal) and whether a bar that stays crossfades its
+         * content ({@link CrossingPath#statusCrossfades}): its look and inks then blend on
+         * {@link #lookShare}, the material curve, and the chips of both ends show while it runs.
+         */
+        public int verb;
+        public boolean crossfades;
 
         /** The look the bar wears whole, or {@link #MIXED} while it is between two. */
         public int wornLookId() {
@@ -118,18 +126,32 @@ public final class TopStackScene {
             fromLookId = o.fromLookId;
             toLookId = o.toLookId;
             lookShare = o.lookShare;
+            verb = o.verb;
+            crossfades = o.crossfades;
             System.arraycopy(o.inks, 0, inks, 0, INK_COUNT);
         }
     }
 
     /** Whether the two ends are one slab: both show the bar, on one edge, in one outline. */
     public static boolean shared(@NonNull End a, @NonNull End b) {
-        return a.barShown && b.barShown && a.edge == b.edge && a.outlineKey == b.outlineKey;
+        return verb(a, b) == CrossingPath.Verb.STAY;
+    }
+
+    /**
+     * The bar's verb across the crossing ({@link CrossingPath#status}): STAY on one edge in one
+     * outline at both ends, RIDE with its page on an edge change or where one end wears none.
+     */
+    @NonNull
+    public static CrossingPath.Verb verb(@NonNull End a, @NonNull End b) {
+        return CrossingPath.status(a.barShown, b.barShown, a.edge == b.edge,
+            a.outlineKey == b.outlineKey);
     }
 
     /** The frame at rest on {@code end}. */
     public static void rest(@NonNull End end, int widthPx, @NonNull Frame out) {
         out.shared = true;
+        out.verb = (end.barShown ? CrossingPath.Verb.STAY : CrossingPath.Verb.NONE).ordinal();
+        out.crossfades = false;
         out.slabTx = 0f;
         out.stripTx = 0f;
         out.chipsTx = StackScene.sideSlide(Side.TERMINAL, end.side, end.side, 0f, widthPx);
@@ -162,7 +184,11 @@ public final class TopStackScene {
      */
     public static void at(@NonNull End from, @NonNull End to, float p, float slide, int widthPx,
                           float rideXPx, boolean rideWearsTo, float inkShare, @NonNull Frame out) {
-        boolean one = shared(from, to);
+        CrossingPath.Verb verb = verb(from, to);
+        boolean one = verb == CrossingPath.Verb.STAY;
+        out.verb = verb.ordinal();
+        out.crossfades = CrossingPath.statusCrossfades(verb, from.lookId, to.lookId,
+            from.chipsShown, to.chipsShown);
         float chipsTx = StackScene.sideSlide(Side.TERMINAL, from.side, to.side, slide, widthPx);
         float homeChipsTx = StackScene.sideSlide(Side.HOME, from.side, to.side, slide, widthPx);
         if (!one && !Float.isNaN(rideXPx)) {

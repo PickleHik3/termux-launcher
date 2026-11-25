@@ -478,8 +478,13 @@ public final class SeamCrossing {
         // apart only insets it, and the bar eases from one inset to the other with the wall
         // (Answers#barMarginShare), so the landing's re-dress finds it already drawn there;
         // riding for it took the bar off a crossing toward Home, with nothing to bring Home's in.
-        mRun.barStill = here.slot(Element.STATUS).equals(there.slot(Element.STATUS))
-            && committed.stack.shape.sameOutline(other.stack.shape);
+        // The verb is the crossing rule's (CrossingPath#status): STAY, or NONE for a bar neither
+        // half wears, stands still; RIDE (another edge, slot or outline, or one half only) rides.
+        Slot hereBar = here.slot(Element.STATUS);
+        Slot thereBar = there.slot(Element.STATUS);
+        mRun.barStill = CrossingPath.status(!hereBar.hidden, !thereBar.hidden,
+            hereBar.equals(thereBar), committed.stack.shape.sameOutline(other.stack.shape))
+            != CrossingPath.Verb.RIDE;
         // A still bar between two Margins eases from one to the other with the wall's offset.
         mRun.committedMarginDp = committed.stack.shape.marginDp;
         mRun.otherMarginDp = other.stack.shape.marginDp;

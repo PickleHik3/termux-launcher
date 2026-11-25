@@ -162,6 +162,27 @@ public final class StackEnd {
         return apart && view.side != null ? view.side.ordinal() : STACK_SIDE;
     }
 
+    /**
+     * The view this rest draws card {@code cardId} ({@link CardId} ordinal) on, or -1 where it
+     * draws none: the crossing pairs the two rests' cards by element through it.
+     */
+    public int viewOf(int cardId) {
+        if (cardId == NO_CARD) return -1;
+        for (int v = 0; v < VIEW_COUNT; v++) if (cardOn[v] == cardId) return v;
+        return -1;
+    }
+
+    /**
+     * Whether the element this rest draws on view {@code v} is drawn by {@code o} on that same
+     * view at the same rect: one card, paired by element ({@link CrossingPath#card}).
+     */
+    boolean sameElementAt(@NonNull StackEnd o, int v) {
+        int id = cardOn[v];
+        if (id == NO_CARD) return false;
+        int there = o.cardOn[v] == id ? v : o.viewOf(id);
+        return there == v && sameCard(o, v);
+    }
+
     /** Whether {@code o} draws the same card on view {@code v} at the same rect. */
     boolean sameCard(@NonNull StackEnd o, int v) {
         return cardOn[v] != NO_CARD && cardOn[v] == o.cardOn[v]
@@ -184,11 +205,28 @@ public final class StackEnd {
     /** A card of this rest carries the keyboard's keys (the unified Docked glass, the split halves). */
     public boolean keyboardCarried;
 
+    /** {@link #pageKeyboard}: the keyboard is as this rest's cards draw it. */
+    public static final int PAGE_KEYBOARD_REST = 0;
+    /** {@link #pageKeyboard}: this end's page has its keyboard up, whatever the side's cards say. */
+    public static final int PAGE_KEYBOARD_UP = 1;
+    /** {@link #pageKeyboard}: this end's page has its keyboard down. */
+    public static final int PAGE_KEYBOARD_DOWN = 2;
+
     /**
-     * Whether this rest has the keyboard up: it has the keyboard's region, or a view draws the
-     * keyboard's card (the column's, the Terminal's own or the floating frame).
+     * The keyboard state of this end's own page where it is not its side's rest: on Home the
+     * keyboard is an overlay owned by one page and kept per page (the crossing rule's Q1), so two
+     * Home ends of one crossing may differ in it alone while every other element stays. Set by the
+     * stack's writer per crossing; {@link #PAGE_KEYBOARD_REST} reads the cards.
+     */
+    public int pageKeyboard = PAGE_KEYBOARD_REST;
+
+    /**
+     * Whether this rest has the keyboard up: its own page's state where one is set
+     * ({@link #pageKeyboard}), else it has the keyboard's region, or a view draws the keyboard's
+     * card (the column's, the Terminal's own or the floating frame).
      */
     public boolean keyboardUp() {
+        if (pageKeyboard != PAGE_KEYBOARD_REST) return pageKeyboard == PAGE_KEYBOARD_UP;
         if (has(KEYBOARD) || keyboardCarried) return true;
         for (int v = 0; v < VIEW_COUNT; v++) if (cardOn[v] == KEYBOARD_CARD) return true;
         return false;

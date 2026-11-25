@@ -172,6 +172,80 @@ public final class CrossingPath {
         return a * (1f - s) + b * s;
     }
 
+    // ---- The glass cards (step 4) -----------------------------------------------------------
+
+    /**
+     * A glass card's verb, paired by element ({@link RestCards.CardId}: the card a rest draws), not
+     * by the view that carries it: {@code fromCard} and {@code toCard} are the elements each end
+     * draws on one view ({@link StackEnd#NO_CARD} for none), {@code fromSide} and {@code toSide}
+     * whose card the view carries at each end ({@link StackEnd#viewSide}), and {@code sameRect}
+     * whether both ends draw the one element there at one rect.
+     *
+     * <ul>
+     *   <li>{@link Verb#STAY}: the same element at the same rect (ADR 0032 section 3), the stack's
+     *       own card (the foot, the keyboard's column, the floating frame), or a view one rest hands
+     *       two elements, which keeps the stack's pose (no card changes on one view, ADR 0032
+     *       section 1; the property test names those).</li>
+     *   <li>{@link Verb#RIDE}: a side's card, which slides with its side's page.</li>
+     *   <li>{@link Verb#NONE}: neither end carries a card on the view.</li>
+     * </ul>
+     * No card GLIDEs: a glass card at another rect is another layout of its glass. Symmetric.
+     */
+    @NonNull
+    public static Verb card(int fromCard, int toCard, int fromSide, int toSide, boolean sameRect) {
+        if (fromCard != StackEnd.NO_CARD && fromCard == toCard && sameRect) return Verb.STAY;
+        if (morphs(fromCard, toCard, fromSide, toSide, sameRect)) return Verb.STAY;
+        boolean fromIsSide = isSide(fromSide);
+        boolean toIsSide = isSide(toSide);
+        if (!fromIsSide && !toIsSide) {
+            return fromSide == StackEnd.NO_SIDE && toSide == StackEnd.NO_SIDE ? Verb.NONE
+                : Verb.STAY;
+        }
+        return Verb.RIDE;
+    }
+
+    /**
+     * Whether one view is handed two different cards across the crossing: both ends draw a card on
+     * it and they are not one element at one rect, or it carries one side's card at one end and
+     * the other side's at the other. It keeps the stack's pose ({@link #card}).
+     */
+    public static boolean morphs(int fromCard, int toCard, int fromSide, int toSide,
+                                 boolean sameRect) {
+        boolean both = fromCard != StackEnd.NO_CARD && toCard != StackEnd.NO_CARD;
+        if (both && (fromCard != toCard || !sameRect)) return true;
+        return isSide(fromSide) && isSide(toSide) && fromSide != toSide;
+    }
+
+    private static boolean isSide(int side) {
+        return side >= 0 && side < com.termux.app.page.Side.COUNT;
+    }
+
+    // ---- The status bar (step 5) -----------------------------------------------------------
+
+    /**
+     * The status bar's verb: shown at both ends on one edge, in one place on it, in one outline,
+     * it STAYs (one slab, its content crossfading where the two ends' content differs,
+     * {@link #statusCrossfades}); shown at one end only, or on another edge or slot, or in another
+     * outline, it RIDEs with the page that wears it (decision Q3); shown at neither, NONE. The one
+     * answer {@code SeamCrossing} (whether the bar stands still) and {@code TopStackScene} (whether
+     * the slab is shared) both read. Symmetric.
+     */
+    @NonNull
+    public static Verb status(boolean fromShown, boolean toShown, boolean samePlace,
+                              boolean sameOutline) {
+        if (!fromShown && !toShown) return Verb.NONE;
+        return fromShown && toShown && samePlace && sameOutline ? Verb.STAY : Verb.RIDE;
+    }
+
+    /**
+     * Whether a bar that STAYs crossfades its content: the two ends draw it in different looks or
+     * with different chips. Equal content shows no fade.
+     */
+    public static boolean statusCrossfades(@NonNull Verb verb, int fromLookId, int toLookId,
+                                           boolean fromChips, boolean toChips) {
+        return verb == Verb.STAY && (fromLookId != toLookId || fromChips != toChips);
+    }
+
     // ---- The keyboard ----------------------------------------------------------------------
 
     /**

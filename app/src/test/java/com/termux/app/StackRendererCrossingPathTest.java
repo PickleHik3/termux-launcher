@@ -1,6 +1,7 @@
 package com.termux.app;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import android.app.Application;
 import android.content.Context;
@@ -152,5 +153,24 @@ public class StackRendererCrossingPathTest {
         assertEquals(0f, mKeyboard.getTranslationX(), 0f);
         mRenderer.setEnds(false, true, 1f);
         assertEquals(0f, mFloatingHost.getTranslationX(), 0f);
+    }
+
+    @Test public void homeToHomeHasTwoEndsAndTheKeyboardRidesWithItsPage() {
+        keyboardUpOnTheTerminal(StackView.KEYBOARD_COLUMN);
+        mFrontHome = true;
+        // Both Home pages as Home's rest: one keyboard state, nothing moves.
+        mRenderer.setEnds(true, true, 0.5f, com.termux.app.place.KeyboardColumn.LEAVES_LEFT);
+        assertEquals(0f, mKeyboard.getTranslationX(), 0f);
+        // The leaving page has its keyboard up, the arriving one down: it leaves with its page.
+        mRenderer.setHomePageKeyboards(StackEnd.PAGE_KEYBOARD_UP, StackEnd.PAGE_KEYBOARD_DOWN);
+        assertEquals(-WIDTH / 2f, mKeyboard.getTranslationX(), 0f);
+        assertTrue("two distinct ends", mRenderer.end(true) != mRenderer.arrivingEnd(true, true));
+        // The other way: it arrives with the arriving page, from the right.
+        mRenderer.setHomePageKeyboards(StackEnd.PAGE_KEYBOARD_DOWN, StackEnd.PAGE_KEYBOARD_UP);
+        mRenderer.setEnds(true, true, 0.75f, com.termux.app.place.KeyboardColumn.LEAVES_LEFT);
+        assertEquals(WIDTH / 4f, mKeyboard.getTranslationX(), 0f);
+        mRenderer.onLanding();
+        assertEquals("the landing's rest moves nothing", 0f, mKeyboard.getTranslationX(), 0f);
+        assertEquals(StackEnd.PAGE_KEYBOARD_REST, mRenderer.end(true).pageKeyboard);
     }
 }

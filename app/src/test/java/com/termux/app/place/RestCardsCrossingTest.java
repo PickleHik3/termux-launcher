@@ -133,38 +133,6 @@ public class RestCardsCrossingTest {
         "(rows) BAND PEEK_GLASS front HOME",
         // The rows view with the A-Z row on both sides' docks lays Home's apps and A-Z rows (219, its apps band the page ticks taller) under the Terminal's extra keys in their lane: 317, taller than either side's own rows (Home 219, the Terminal 291). Fixtures: a-z on the dock. e.g. a-z on the dock (WALL_STRIP) front HOME band 317 home 219 terminal 291
         "(rows) BAND WALL_STRIP front HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE DOCKED WALL_STRIP HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING LENS_BEADS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->HOME",
-        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
-        "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->HOME",
         // Where the Terminal's keyboard is up on the Terminal's host (the unified Docked glass) the host wears the foot with the container undrawn, while Home's keyboard-down host wears it with the container drawn the keyboard's height lower: one foot view would be laid out at two rects (tl16 1667..1730 vs 2337..2400) and a crossing between them moves the container under it, so each host keeps its own foot there (#307). Fixtures: tl16 with a foot, Terminal keyboard up.
         "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED GLASS_TRAY HOME->TERMINAL",
         // As above: the Terminal's unified keyboard-up host and Home's keyboard-down host lay a foot out at two rects. Fixtures: tl16 with a foot, Terminal keyboard up.
@@ -705,6 +673,57 @@ public class RestCardsCrossingTest {
                     same &= frame.rowGlideTyPx[i] == forward[k][i];
                 if (!same) found.add("(path) BACKWARD" + tail, at + " p=" + SAMPLES[k]);
             }
+            // Step 4: each card view's verb, its cards paired by element, is symmetric; a card
+            // that stays never slides, one that rides stands at its rest at both ends.
+            StackScene.Frame back = new StackScene.Frame();
+            for (float p : SAMPLES) {
+                StackScene.at(from, to, p, motion, from.rest, frame);
+                StackScene.at(to, from, 1f - p, motion, to.rest, back);
+                for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                    CrossingPath.Verb verb = CrossingPath.of(frame.cardVerb[v]);
+                    String view = " " + StackEnd.VIEWS[v];
+                    if (verb != CrossingPath.of(back.cardVerb[v]))
+                        found.add("(path) CARD ASYMMETRIC" + view + tail, at);
+                    if (verb == CrossingPath.Verb.STAY && frame.cardTx[v] != 0f)
+                        found.add("(path) CARD STAY MOVED" + view + tail, at + " p=" + p);
+                    if (verb == CrossingPath.Verb.STAY && from.sameElementAt(to, v)
+                        && from.viewOf(from.cardOn[v]) != v)
+                        found.add("(path) CARD PAIRED BY VIEW" + view + tail, at);
+                }
+            }
+            // Step 6 and Q1: between two Home pages only the keyboard may move; every other
+            // card and row STAYs (the keyboard is an overlay owned by one page).
+            if (pair[0].isHome() && pair[1].isHome()) {
+                StackScene.at(from, to, 0.5f, motion, from.rest, frame);
+                for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                    StackView view = StackEnd.VIEWS[v];
+                    if (view == StackView.KEYBOARD_COLUMN || view == StackView.TERMINAL_KEYBOARD
+                        || view == StackView.FLOATING_KEYBOARD) continue;
+                    // The Terminal's cards parked off screen with its side stay off it.
+                    if (from.cardOn[v] == StackEnd.NO_CARD && to.cardOn[v] == StackEnd.NO_CARD)
+                        continue;
+                    CrossingPath.Verb verb = CrossingPath.of(frame.cardVerb[v]);
+                    if (verb == CrossingPath.Verb.RIDE || frame.cardMorphs[v])
+                        found.add("(path) HOME HOME MOVES " + view + tail, at);
+                }
+                for (int i = 0; i < CrossingPath.ROW_COUNT; i++) {
+                    CrossingPath.Verb verb = CrossingPath.of(frame.rowVerb[i]);
+                    if (verb == CrossingPath.Verb.RIDE || verb == CrossingPath.Verb.GLIDE)
+                        found.add("(path) HOME HOME MOVES " + StackLanes.ROWS[i] + tail, at);
+                }
+            }
+            // Step 5: the status bar's verb is symmetric and STAYs only at one rect.
+            Card barA = a.card(CardId.STATUS);
+            Card barB = b.card(CardId.STATUS);
+            boolean samePlace = barA != null && barB != null && barA.box.top == barB.box.top
+                && barA.box.bottom == barB.box.bottom && barA.box.left == barB.box.left
+                && barA.box.right == barB.box.right;
+            CrossingPath.Verb bar = CrossingPath.status(barA != null, barB != null, samePlace,
+                true);
+            if (bar != CrossingPath.status(barB != null, barA != null, samePlace, true))
+                found.add("(path) STATUS ASYMMETRIC" + tail, at);
+            if (bar == CrossingPath.Verb.STAY && !samePlace)
+                found.add("(path) STATUS STAY MOVED" + tail, at);
             for (StackEnd end : new StackEnd[] {from, to}) {
                 StackScene.Motion rest = new StackScene.Motion();
                 StackScene.rest(end, 0f, rest, frame);
