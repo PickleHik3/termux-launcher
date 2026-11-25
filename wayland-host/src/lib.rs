@@ -14,6 +14,7 @@ pub mod keymap;
 pub mod paced;
 pub mod pixels;
 pub mod png;
+pub mod presentation;
 pub mod protocol;
 pub mod teardown;
 pub mod text_field;

@@ -25,6 +25,7 @@ use smithay::delegate_dmabuf;
 use smithay::delegate_fractional_scale;
 use smithay::delegate_idle_inhibit;
 use smithay::delegate_output;
+use smithay::delegate_presentation;
 use smithay::delegate_seat;
 use smithay::delegate_shm;
 use smithay::delegate_viewporter;
@@ -62,6 +63,10 @@ use smithay::wayland::compositor::{
 use smithay::wayland::idle_inhibit::IdleInhibitManagerState;
 use smithay::wayland::fractional_scale::{with_fractional_scale, FractionalScaleHandler, FractionalScaleManagerState};
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
+use smithay::reexports::wayland_protocols::wp::presentation_time::server::wp_presentation_feedback::Kind as FeedbackKind;
+use smithay::wayland::presentation::{
+    PresentationFeedbackCachedState, PresentationFeedbackCallback, PresentationState, Refresh,
+};
 use smithay::wayland::selection::data_device::{
     ClientDndGrabHandler, DataDeviceHandler, DataDeviceState, ServerDndGrabHandler,
 };
@@ -399,6 +404,9 @@ pub struct Toplevel {
     announced: bool,
     /// The launcher was told this window holds an idle inhibitor (`State::refresh_inhibit`).
     pub inhibiting: bool,
+    /// Presentation feedback of the frames committed and not yet posted, with the surface each
+    /// belongs to: answered when the toplevel next posts, discarded when that never comes.
+    feedback: Vec<(WlSurface, PresentationFeedbackCallback)>,
     window: Option<NativeWindow>,
     /// The launcher's setVisible; drawn only while visible and with a window.
     visible: bool,
@@ -601,9 +609,16 @@ pub struct State {
     pub activation_state: XdgActivationState,
     /// The clients that last had focus or input, which decides whose activation tokens count.
     pub recent: crate::activation::Recent<ClientId>,
-    /// `zwp_idle_inhibit_v1`: the inhibitors apps hold, one per inhibitor.
-    pub idle_inhibit_state: IdleInhibitManagerState,
+    /// `zwp_idle_inhibit_v1`, held only to keep its global alive.
+    #[allow(dead_code)]
+    idle_inhibit_state: IdleInhibitManagerState,
+    /// The inhibitors apps hold, one per inhibitor.
     pub inhibitors: crate::idle::Inhibitors<WlSurface>,
+    /// `wp_presentation`, held only to keep its global alive.
+    #[allow(dead_code)]
+    presentation_state: PresentationState,
+    /// Reused by every commit that carries presentation feedback.
+    scratch_feedback: Vec<PresentationFeedbackCallback>,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
     teardown: crate::teardown::Teardown,
 }
@@ -694,6 +709,8 @@ fn setup(
     super::text_input::create_global(&dh);
     let activation_state = XdgActivationState::new::<State>(&dh);
     let idle_inhibit_state = IdleInhibitManagerState::new::<State>(&dh);
+    // Clock 1 is CLOCK_MONOTONIC, the one `now_ms` and the post times read.
+    let presentation_state = PresentationState::new::<State>(&dh, libc::CLOCK_MONOTONIC as u32);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -822,6 +839,8 @@ fn setup(
         recent: Default::default(),
         idle_inhibit_state,
         inhibitors: Default::default(),
+        presentation_state,
+        scratch_feedback: Vec::new(),
         teardown: Default::default(),
     };
     // Last in, first out: the listening socket goes (and its files with it), then the display.
@@ -1355,6 +1374,11 @@ impl State {
         let mut copied = false;
         for i in 0..self.toplevels.len() {
             let shown = self.toplevels[i].is_shown();
+            // A window that stays hidden shows nothing: feedback waiting for it is let go with
+            // its other waiting state, on the slow keep-alive.
+            if keepalive && !shown {
+                self.discard_feedback(i);
+            }
             if let Some(buffer) = self.toplevels[i].paced.tick(shown, keepalive, &mut releases, &mut frames) {
                 // The hash is taken before the copy: a write landing in between shows as a change
                 // on the next read, never as a missed one.
@@ -1428,6 +1452,12 @@ impl State {
         } else {
             self.post_tree(i)
         };
+        // The frames waiting for feedback were posted just now, or never will be.
+        if posted.is_ok() {
+            self.present_feedback(i);
+        } else {
+            self.discard_feedback(i);
+        }
         let t = &mut self.toplevels[i];
         if let Err(rc) = posted {
             lwarn!("toplevel {}: post failed ({rc}); the Surface is dropped until a new one comes", t.id);
@@ -1439,6 +1469,56 @@ impl State {
             let (title, app_id) = t.shell.names();
             let id = t.id;
             self.events.window_changed(id, &title, &app_id, size.0, size.1);
+        }
+    }
+
+    /// Takes the presentation feedback of a commit on `surface`: kept for toplevel `owner`'s next
+    /// post, replacing the feedback of an earlier commit of the same surface that was never
+    /// posted (a newer frame superseded it). With no owner, the feedback is discarded.
+    fn hold_feedback(&mut self, owner: Option<usize>, surface: &WlSurface, incoming: &mut Vec<PresentationFeedbackCallback>) {
+        if incoming.is_empty() {
+            return;
+        }
+        let Some(i) = owner else {
+            incoming.drain(..).for_each(PresentationFeedbackCallback::discarded);
+            return;
+        };
+        let held = &mut self.toplevels[i].feedback;
+        let mut k = 0;
+        while k < held.len() {
+            if held[k].0 == *surface {
+                held.swap_remove(k).1.discarded();
+            } else {
+                k += 1;
+            }
+        }
+        held.extend(incoming.drain(..).map(|cb| (surface.clone(), cb)));
+    }
+
+    /// Toplevel `i` just posted: its waiting feedback gets the post's time and the display's
+    /// refresh interval (0, unknown, when the launcher told none). A post is a copy handed to the
+    /// compositor, not a vsync, so it carries no flags.
+    fn present_feedback(&mut self, i: usize) {
+        if self.toplevels[i].feedback.is_empty() {
+            return;
+        }
+        let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+        // SAFETY: a valid out pointer to a timespec on this stack.
+        unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+        let time = Duration::new(ts.tv_sec.max(0) as u64, ts.tv_nsec.clamp(0, 999_999_999) as u32);
+        let refresh = match crate::presentation::refresh_interval(self.frame_period) {
+            Some(period) => Refresh::Fixed(period),
+            None => Refresh::Unknown,
+        };
+        for (_, cb) in self.toplevels[i].feedback.drain(..) {
+            cb.presented(&self.output, time, refresh, 0, FeedbackKind::empty());
+        }
+    }
+
+    /// Toplevel `i`'s waiting frames will not be posted: their feedback is discarded.
+    fn discard_feedback(&mut self, i: usize) {
+        for (_, cb) in self.toplevels[i].feedback.drain(..) {
+            cb.discarded();
         }
     }
 
@@ -1963,6 +2043,7 @@ impl State {
             shell,
             announced: false,
             inhibiting: false,
+            feedback: Vec::new(),
             window: None,
             visible: true,
             view_size: None,
@@ -1997,6 +2078,7 @@ impl State {
     /// toplevel itself may stay (an unmapped xdg_toplevel maps again with a new id).
     fn withdraw(&mut self, i: usize) {
         self.dismiss_popups(i);
+        self.discard_feedback(i);
         let t = &mut self.toplevels[i];
         let id = t.id;
         let was_announced = t.announced;
@@ -2348,7 +2430,9 @@ impl CompositorHandler for State {
         }
 
         let mut frames = std::mem::take(&mut self.scratch_frames);
+        let mut feedback = std::mem::take(&mut self.scratch_feedback);
         let (assignment, scale, viewport) = with_states(surface, |states| {
+            feedback.append(&mut states.cached_state.get::<PresentationFeedbackCachedState>().current().callbacks);
             let (assignment, scale) = {
                 let mut guard = states.cached_state.get::<SurfaceAttributes>();
                 let attrs = guard.current();
@@ -2361,17 +2445,25 @@ impl CompositorHandler for State {
             (assignment, scale, viewport)
         });
 
-        if let Some(i) = root_index.filter(|_| root == *surface) {
+        let new_buffer = matches!(assignment, Some(BufferAssignment::NewBuffer(_)));
+        let owner = if let Some(i) = root_index.filter(|_| root == *surface) {
             self.commit_root(i, assignment, scale, viewport, &mut frames);
+            Some(i)
         } else if let Some(i) = self.owner_of(surface) {
             self.commit_part(i, surface, assignment, scale, viewport, &mut frames);
+            Some(i)
         } else {
             // Cursors, drag icons and surfaces of no window: acknowledged on the tick.
             if let Some(BufferAssignment::NewBuffer(b)) = assignment {
                 self.loose_releases.push(b);
             }
             self.loose_frames.append(&mut frames);
-        }
+            None
+        };
+        // Feedback is for a frame that gets posted: one whose commit shows nothing new, or that no
+        // window shows, is answered with discarded.
+        self.hold_feedback(owner.filter(|_| new_buffer), surface, &mut feedback);
+        self.scratch_feedback = feedback;
         self.scratch_frames = frames;
         self.schedule();
     }
@@ -2622,3 +2714,4 @@ delegate_viewporter!(State);
 delegate_dmabuf!(State);
 delegate_xdg_activation!(State);
 delegate_idle_inhibit!(State);
+delegate_presentation!(State);
