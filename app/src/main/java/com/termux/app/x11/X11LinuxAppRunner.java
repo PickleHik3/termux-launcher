@@ -98,8 +98,23 @@ public final class X11LinuxAppRunner {
     /** The directory a session is given as {@code XDG_RUNTIME_DIR}, under its own world's tmp. */
     private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
 
-    /** What starts a session bus for a desktop that has none, and takes it down again after. */
-    private static final String BUS_WRAPPER = "dbus-launch --exit-with-session";
+    /**
+     * Starts a session bus the script owns and ends it with the session. The desktop is exec'd, so
+     * {@code $$} is the desktop's pid; a watcher waits for it to go, then ends the bus's children
+     * (xfconfd and the other services it activated, which outlive a dead bus), then the bus. Only
+     * the shell is used, so it runs the same in the prefix and in a container.
+     */
+    @VisibleForTesting
+    static final String OWN_BUS_BLOCK =
+        "eval \"$(dbus-launch --sh-syntax)\"\n"
+        + "export DBUS_SESSION_BUS_ADDRESS\n"
+        + "tl_bus=$DBUS_SESSION_BUS_PID\n"
+        + "(while kill -0 $$ 2>/dev/null; do sleep 1; done\n"
+        + "for d in /proc/[0-9]*; do while read -r k v; do\n"
+        + "[ \"$k\" = PPid: ] && [ \"$v\" = \"$tl_bus\" ] && kill \"${d#/proc/}\"\n"
+        + "done < \"$d/status\"; done 2>/dev/null\n"
+        + "kill \"$tl_bus\" 2>/dev/null) &\n"
+        + "unset tl_bus\n";
 
     /**
      * The desktops known to start no session bus of their own, by the program their {@code Exec}
@@ -1444,7 +1459,7 @@ public final class X11LinuxAppRunner {
         if (needsOwnBus(app)) {
             body.append("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]")
                 .append(" && command -v dbus-launch > /dev/null 2>&1; then\n");
-            body.append("exec ").append(BUS_WRAPPER).append(' ').append(app.exec).append('\n');
+            body.append(OWN_BUS_BLOCK);
             body.append("fi\n");
         }
         body.append("exec ").append(app.exec).append('\n');
