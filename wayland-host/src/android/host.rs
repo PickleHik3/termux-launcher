@@ -89,7 +89,7 @@ use smithay::input::keyboard::{FilterResult, Keycode};
 
 use crate::compose::{self, HitLayer};
 use crate::geometry::{
-    clamp_to_limit, content_span, integer_scale, integer_scale_view, logical_size, post_limit, surface_map, view_to_surface, Rect, RectF,
+    clamp_to_limit, content_span, integer_scale, frame_limit, integer_scale_view, logical_size, reported_size, surface_map, view_to_surface, Rect, RectF,
 };
 use crate::keymap::android_to_evdev;
 use crate::paced::Paced;
@@ -278,6 +278,21 @@ impl Shell {
 
     fn is_x11(&self) -> bool {
         matches!(self, Shell::X11(_))
+    }
+
+    /// Its committed state answers the size of the latest configure, so a frame bigger than the
+    /// view is the client's own minimum, not a frame of an older, larger configure. X windows
+    /// are resized by the X server at once.
+    fn caught_up(&self) -> bool {
+        match self {
+            Shell::Xdg(t) => with_states(t.wl_surface(), |states| {
+                let Some(data) = states.data_map.get::<XdgToplevelSurfaceData>() else { return true };
+                let Ok(a) = data.lock() else { return true };
+                let asked = a.server_pending.as_ref().unwrap_or_else(|| a.current_server_state()).size;
+                asked == a.current.size
+            }),
+            Shell::X11(_) => true,
+        }
     }
 
     fn names(&self) -> (String, String) {
@@ -1451,7 +1466,13 @@ impl State {
             lwarn!("toplevel {}: post failed ({rc}); the Surface is dropped until a new one comes", t.id);
             t.window = None;
         }
-        let size = (t.shown.2, t.shown.3);
+        // A frame of an older configure is not reported: the launcher would lay the view out for
+        // a size the client is about to leave.
+        if !t.shell.caught_up() {
+            return;
+        }
+        let scale = if t.shell.is_x11() { 1.0 } else { t.scale };
+        let size = reported_size(t.content, scale, t.view_size);
         if size != t.reported_size && t.announced {
             t.reported_size = size;
             let (title, app_id) = t.shell.names();
@@ -1819,7 +1840,7 @@ impl State {
         let tree = compose::bounds(self.scene.iter().filter(|l| !l.overlay).map(|l| (l.origin.0, l.origin.1, l.draw.size.0, l.draw.size.1)))?;
         let content = compose::window_content(t.geometry, tree);
         let full = compose::canvas_size(content, k);
-        let shown = clamp_to_limit((0, 0, full.0, full.1), post_limit(post_view(t), self.output_size));
+        let shown = clamp_to_limit((0, 0, full.0, full.1), frame_limit_of(t, self.output_size));
         if shown.2 <= 0 || shown.3 <= 0 {
             return None;
         }
@@ -1843,7 +1864,7 @@ impl State {
         }
         if (full.0 > canvas.0 || full.1 > canvas.1) && !t.clamp_logged {
             t.clamp_logged = true;
-            let limit = post_limit(post_view(t), output);
+            let limit = frame_limit_of(t, output);
             lwarn!("toplevel {id}: view {}x{} is over the limit {}x{}; showing its top-left part", full.0, full.1, limit.0, limit.1);
         }
         t.content = (origin.0, origin.1, canvas.0 as f64 / k.0, canvas.1 as f64 / k.1);
@@ -2239,6 +2260,12 @@ fn post_view(t: &Toplevel) -> Option<(i32, i32)> {
     }
 }
 
+/// The largest frame posted into a toplevel's window (`frame_limit`): past its view only once
+/// the client has answered the latest configure.
+fn frame_limit_of(t: &Toplevel, output: (i32, i32)) -> (i32, i32) {
+    frame_limit(post_view(t), output, t.shell.caught_up())
+}
+
 /// What decides the shown rectangle, copied out of a toplevel so the copy can borrow its window.
 #[derive(Clone, Copy)]
 struct Layout {
@@ -2246,9 +2273,8 @@ struct Layout {
     viewport_src: Option<RectF>,
     viewport_dst: Option<(i32, i32)>,
     geometry: Option<Rect>,
-    /// `post_view` of the toplevel.
-    post_view: Option<(i32, i32)>,
-    output: (i32, i32),
+    /// `frame_limit_of` the toplevel.
+    limit: (i32, i32),
 }
 
 impl Layout {
@@ -2258,8 +2284,7 @@ impl Layout {
             viewport_src: t.viewport_src,
             viewport_dst: t.viewport_dst,
             geometry: t.geometry,
-            post_view: post_view(t),
-            output,
+            limit: frame_limit_of(t, output),
         }
     }
 }
@@ -2275,7 +2300,7 @@ fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
     }
     let map = surface_map(w, h, l.buffer_scale, l.viewport_src, l.viewport_dst);
     let full = map.to_buffer(map.logical_content(l.geometry), w, h);
-    let shown = clamp_to_limit(full, post_limit(l.post_view, l.output));
+    let shown = clamp_to_limit(full, l.limit);
     Some((shown, full, map.to_logical(shown)))
 }
 
@@ -2350,7 +2375,7 @@ fn post_buffer(t: &mut Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &m
     }
     if shown != full && !t.clamp_logged {
         t.clamp_logged = true;
-        let limit = post_limit(post_view(t), output);
+        let limit = layout.limit;
         lwarn!("toplevel {id}: frame {}x{} is over the limit {}x{}; showing its top-left part", full.2, full.3, limit.0, limit.1);
     }
     t.buffer_size = (desc.width, desc.height);
