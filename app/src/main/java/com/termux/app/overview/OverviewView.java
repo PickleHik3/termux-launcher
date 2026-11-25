@@ -24,6 +24,7 @@ import com.termux.app.page.PageKind;
 import com.termux.app.wall.pageswitch.PageGlyphPainter;
 
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Overview's screen: a title, a close button and the wall as one strip of cards that scrolls
@@ -33,32 +34,28 @@ import java.util.List;
  */
 final class OverviewView extends FrameLayout {
 
-    /** What the view reads from the launcher and asks of it. */
-    interface Host {
-        /** The sheet's material: Global's glass at the sheets' floor (ADR 0031). */
-        @NonNull android.graphics.drawable.Drawable background();
-        int onSurface();
-        int onSurfaceVariant();
-        int accent();
-        /** A card was tapped: Overview has closed, and the wall goes to its page. */
-        void onCardChosen(@NonNull OverviewModel.Card card);
-        /** The close button. */
-        void onClose();
-    }
-
-    @NonNull private final Host mHost;
+    @NonNull private final OverviewLook mLook;
+    /** A card was tapped: Overview closes, and the wall goes to its page. */
+    @NonNull private final Consumer<OverviewModel.Card> mOnCard;
+    /** The close button. */
+    @NonNull private final Runnable mOnClose;
+    private final int mGutter;
     @NonNull private final PageGlyphPainter mGlyphs = new PageGlyphPainter();
     @NonNull private final LinearLayout mStrip;
     @NonNull private final HorizontalScrollView mScroll;
     @NonNull private final LinearLayout mContent;
     private int mOriginIndex = -1;
 
-    OverviewView(@NonNull Context context, @NonNull Host host) {
+    OverviewView(@NonNull Context context, @NonNull OverviewLook look,
+                 @NonNull Consumer<OverviewModel.Card> onCard, @NonNull Runnable onClose) {
         super(context);
-        mHost = host;
+        mLook = look;
+        mOnCard = onCard;
+        mOnClose = onClose;
+        mGutter = res(R.dimen.overview_gutter);
         setClickable(true);
         setFocusable(true);
-        setBackground(host.background());
+        setBackground(look.ground);
 
         mContent = new LinearLayout(context);
         mContent.setOrientation(LinearLayout.VERTICAL);
@@ -72,8 +69,7 @@ final class OverviewView extends FrameLayout {
         mScroll.setHorizontalScrollBarEnabled(false);
         mScroll.setOverScrollMode(OVER_SCROLL_NEVER);
         mScroll.setClipToPadding(false);
-        int gutter = res(R.dimen.overview_gutter);
-        mScroll.setPadding(gutter, 0, gutter, 0);
+        mScroll.setPadding(mGutter, 0, mGutter, 0);
         mStrip = new LinearLayout(context);
         mStrip.setOrientation(LinearLayout.HORIZONTAL);
         mScroll.addView(mStrip, new FrameLayout.LayoutParams(
@@ -85,7 +81,10 @@ final class OverviewView extends FrameLayout {
         ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                 | WindowInsetsCompat.Type.displayCutout());
-            mContent.setPadding(bars.left, bars.top, bars.right, 0);
+            // Compared first: an equal padding would still ask for a layout.
+            if (mContent.getPaddingLeft() != bars.left || mContent.getPaddingTop() != bars.top
+                    || mContent.getPaddingRight() != bars.right || mContent.getPaddingBottom() != 0)
+                mContent.setPadding(bars.left, bars.top, bars.right, 0);
             return insets;
         });
     }
@@ -95,13 +94,12 @@ final class OverviewView extends FrameLayout {
         LinearLayout header = new LinearLayout(context);
         header.setOrientation(LinearLayout.HORIZONTAL);
         header.setGravity(Gravity.CENTER_VERTICAL);
-        int gutter = res(R.dimen.overview_gutter);
-        header.setPadding(gutter, res(R.dimen.overview_header_pad_top), gutter,
+        header.setPadding(mGutter, res(R.dimen.overview_header_pad_top), mGutter,
             res(R.dimen.overview_header_pad_bottom));
 
         TextView title = new TextView(context);
         title.setText(R.string.overview_title);
-        title.setTextColor(mHost.onSurface());
+        title.setTextColor(mLook.onSurface);
         title.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_title_text));
         title.setTypeface(title.getTypeface(), android.graphics.Typeface.BOLD);
         title.setSingleLine(true);
@@ -111,10 +109,10 @@ final class OverviewView extends FrameLayout {
 
         ImageView close = new ImageView(context);
         close.setImageResource(R.drawable.ic_rl_close);
-        close.setColorFilter(mHost.onSurface());
+        close.setColorFilter(mLook.onSurface);
         close.setScaleType(ImageView.ScaleType.CENTER);
         close.setContentDescription(context.getString(R.string.overview_close));
-        close.setOnClickListener(v -> mHost.onClose());
+        close.setOnClickListener(v -> mOnClose.run());
         int target = res(R.dimen.overview_close_target);
         header.addView(close, new LinearLayout.LayoutParams(target, target));
         return header;
@@ -152,13 +150,13 @@ final class OverviewView extends FrameLayout {
         item.setClickable(true);
         item.setFocusable(true);
         item.setContentDescription(card.label);
-        item.setOnClickListener(v -> mHost.onCardChosen(card));
+        item.setOnClickListener(v -> mOnCard.accept(card));
 
         View block = new View(context);
         GradientDrawable face = new GradientDrawable();
         face.setCornerRadius(resF(R.dimen.overview_card_corner));
-        face.setColor((mHost.onSurface() & 0x00FFFFFF) | (0x24 << 24));
-        if (card.origin) face.setStroke(res(R.dimen.overview_ring), mHost.accent());
+        face.setColor(OverviewLook.cardFace(mLook.onSurface));
+        if (card.origin) face.setStroke(res(R.dimen.overview_ring), mLook.accent);
         block.setBackground(face);
         item.addView(block, new LinearLayout.LayoutParams(res(R.dimen.overview_card_width),
             res(R.dimen.overview_card_height)));
@@ -167,12 +165,12 @@ final class OverviewView extends FrameLayout {
         caption.setOrientation(LinearLayout.HORIZONTAL);
         caption.setGravity(Gravity.CENTER_VERTICAL);
         int glyph = res(R.dimen.overview_glyph);
-        int tint = card.origin ? mHost.accent() : mHost.onSurfaceVariant();
+        int tint = card.origin ? mLook.accent : mLook.onSurfaceVariant;
         caption.addView(new GlyphView(context, card.kind, tint),
             new LinearLayout.LayoutParams(glyph, glyph));
         TextView name = new TextView(context);
         name.setText(card.label);
-        name.setTextColor(card.origin ? mHost.accent() : mHost.onSurface());
+        name.setTextColor(card.origin ? mLook.accent : mLook.onSurface);
         name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
         name.setSingleLine(true);
         name.setEllipsize(android.text.TextUtils.TruncateAt.END);

@@ -32640,28 +32640,17 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     public com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator navigator() {
                         return pageSwitchNavigator();
                     }
-                    @Override @NonNull public Drawable background() {
+                    @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
-                        com.termux.app.chrome.ElementGlass sheets =
-                            com.termux.app.chrome.SheetGlass.of(mPreferences);
-                        float alpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
-                        int grain = mPreferences != null ? sheets.grainPercent
-                            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
-                        return mChrome.glass().forElement(sheets).surface(alpha, 0f, 1f, false,
-                            grain, 0f, false, null, sheets.tintPercent);
-                    }
-                    @Override public int onSurface() {
-                        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
-                            R.color.termux_on_surface);
-                    }
-                    @Override public int onSurfaceVariant() {
-                        return getTermuxThemeColor(
-                            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
-                            R.color.termux_on_surface_variant);
-                    }
-                    @Override public int accent() {
-                        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
-                            R.color.termux_primary);
+                        return new com.termux.app.overview.OverviewLook(
+                            com.termux.app.chrome.SheetGlass.surface(mChrome.glass(), mPreferences,
+                                0f, false),
+                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                                R.color.termux_on_surface),
+                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                                R.color.termux_on_surface_variant),
+                            getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                                R.color.termux_primary));
                     }
                 });
         }

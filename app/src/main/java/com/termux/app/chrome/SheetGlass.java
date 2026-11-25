@@ -1,10 +1,13 @@
 package com.termux.app.chrome;
 
+import android.graphics.drawable.Drawable;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.shared.termux.settings.preferences.LookGrid;
 import com.termux.shared.termux.settings.preferences.TermuxAppSharedPreferences;
+import com.termux.shared.termux.settings.preferences.TermuxPreferenceConstants;
 
 /**
  * The glass the sheets wear (ADR 0031): the app drawer, folders, anchored and long-press menus,
@@ -52,5 +55,22 @@ public final class SheetGlass {
     @NonNull
     public static ElementGlass of(@Nullable TermuxAppSharedPreferences preferences) {
         return global(preferences).withOpacityFloor(OPACITY_FLOOR_PERCENT);
+    }
+
+    /**
+     * A sheet's whole-surface material from {@code glass}: {@link #of} at its tint opacity and grain,
+     * {@code cornerRadiusPx} and the rim when {@code rim} and Global keeps one. A screen that covers
+     * the window (Overview) passes 0 and false. With no store it wears the floor and the shipped grain.
+     */
+    @NonNull
+    public static Drawable surface(@NonNull GlassSurfaceFactory glass,
+                                   @Nullable TermuxAppSharedPreferences preferences,
+                                   float cornerRadiusPx, boolean rim) {
+        ElementGlass sheets = of(preferences);
+        float alpha = preferences != null ? sheets.tintAlpha() : OPACITY_FLOOR_PERCENT / 100f;
+        int grain = preferences != null ? sheets.grainPercent
+            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+        return glass.forElement(sheets).surface(alpha, 0f, 1f, false, grain, cornerRadiusPx,
+            rim && !sheets.rimOff(), null, sheets.tintPercent);
     }
 }
