@@ -1021,6 +1021,16 @@ impl State {
         self.events.fullscreen_request(id, on);
     }
 
+    /// A client asked to be moved (a drag on its own title bar): told to the launcher, which
+    /// lifts the window under the finger.
+    pub fn request_move(&mut self, i: usize) {
+        let t = &self.toplevels[i];
+        if t.announced {
+            let id = t.id;
+            self.events.move_request(id);
+        }
+    }
+
     fn configure(&mut self, id: i64, width: i32, height: i32, scale: f64) {
         let Some(i) = self.toplevel_index(id) else { return };
         if width <= 0 || height <= 0 {
@@ -2437,6 +2447,14 @@ impl XdgShellHandler for State {
         }
         if surface.is_initial_configure_sent() {
             surface.send_configure();
+        }
+    }
+
+    /// A drag on the app's own title bar: the launcher lifts the window as a carry. Resize
+    /// requests are left to the default (ignored): the pane decides the size.
+    fn move_request(&mut self, surface: ToplevelSurface, _seat: WlSeat, _serial: Serial) {
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.request_move(i);
         }
     }
 

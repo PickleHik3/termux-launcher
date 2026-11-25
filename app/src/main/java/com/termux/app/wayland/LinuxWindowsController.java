@@ -384,6 +384,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onMoveRequest(long id) {
+            main.post(() -> moveRequested(id));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -947,9 +952,73 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return carry != null;
     }
 
-    /** One touch of the window during a carry; false when none is under way. */
+    /**
+     * Every touch of the activity, first: during a carry it is the carry's (true); otherwise the
+     * first finger is followed, so an app's own move request can lift its window from where that
+     * finger is now (false: the touch goes on as usual).
+     */
     public boolean carryTouch(@NonNull MotionEvent ev) {
-        return isCarrying() && carry.onTouch(ev);
+        if (isCarrying()) return carry.onTouch(ev);
+        followFinger(ev);
+        return false;
+    }
+
+    /** The first finger down, in window coordinates; {@link #fingerDown} while it stays down. */
+    private boolean fingerDown;
+    private boolean fingerIsMouse;
+    private int fingerId;
+    private float fingerX;
+    private float fingerY;
+
+    private void followFinger(@NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                fingerDown = true;
+                fingerIsMouse = ev.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE;
+                fingerId = ev.getPointerId(0);
+                fingerX = ev.getX();
+                fingerY = ev.getY();
+                break;
+            case MotionEvent.ACTION_MOVE: {
+                int i = fingerDown ? ev.findPointerIndex(fingerId) : -1;
+                if (i >= 0) {
+                    fingerX = ev.getX(i);
+                    fingerY = ev.getY(i);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_POINTER_UP:
+                if (ev.getPointerId(ev.getActionIndex()) == fingerId) fingerDown = false;
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                fingerDown = false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * The app asked to move window {@code id} (a drag on its own title bar): the same carry as
+     * holding Move on the rim tab, from the finger as it is now. The app's touch, or button, ends
+     * there; the carry takes the rest of the stream. Only a window shown in its row or pane, and
+     * not full screen, is lifted; with no finger down nothing happens.
+     */
+    private void moveRequested(long id) {
+        Win w = windows.get(id);
+        if (w == null || !fingerDown || id == fullscreen.fullscreenId()) return;
+        boolean shown = w.inRow && w.id == boundId && front || w.inPane && terminalShown;
+        if (!shown || !beginCarryOf(w, fingerX, fingerY, fingerId)) return;
+        long now = SystemClock.uptimeMillis();
+        if (fingerIsMouse) {
+            sendPointer(w, ILinuxWindows.POINTER_BUTTON_UP, w.mouseButton, 0f, 0f, now);
+        } else if (service != null) {
+            try {
+                service.touch(w.id, ILinuxWindows.TOUCH_CANCEL, 0, now, 0, w.slots, w.xs, w.ys);
+            } catch (RemoteException ignored) {
+            }
+        }
     }
 
     /** Back or a home press took the carry: the window goes back where it was. */

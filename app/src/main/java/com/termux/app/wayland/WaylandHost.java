@@ -32,6 +32,8 @@ public final class WaylandHost {
         void onClipboardText(String text);
         /** The window asked to be full screen, or to leave it. */
         void onFullscreenRequest(long id, boolean fullscreen);
+        /** The window asked to be moved (a drag on its own title bar). */
+        void onMoveRequest(long id);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -151,6 +153,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onFullscreenRequest(id, fullscreen);
+        });
+    }
+
+    @Keep
+    static void onMoveRequest(long id) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onMoveRequest(id);
         });
     }
 

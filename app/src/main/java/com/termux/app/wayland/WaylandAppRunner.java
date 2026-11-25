@@ -217,6 +217,9 @@ public final class WaylandAppRunner {
         public void onFullscreenRequest(long id, boolean fullscreen) {}
 
         @Override
+        public void onMoveRequest(long id) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;

@@ -31,6 +31,11 @@ oneway interface ILinuxWindowsCallback {
      * it was announced is heard right after onWindowCreated.
      */
     void onFullscreenRequest(long id, boolean fullscreen);
+    /**
+     * The window asked to be moved (xdg_toplevel.move, _NET_WM_MOVERESIZE move: a drag on its own
+     * title bar) while a finger or button is down on it. Resize requests are not passed on.
+     */
+    void onMoveRequest(long id);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }
