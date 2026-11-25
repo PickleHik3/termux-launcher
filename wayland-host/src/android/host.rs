@@ -23,6 +23,7 @@ use smithay::delegate_compositor;
 use smithay::delegate_data_device;
 use smithay::delegate_dmabuf;
 use smithay::delegate_fractional_scale;
+use smithay::delegate_idle_inhibit;
 use smithay::delegate_output;
 use smithay::delegate_seat;
 use smithay::delegate_shm;
@@ -58,6 +59,7 @@ use smithay::wayland::compositor::{
     CompositorClientState, CompositorHandler, CompositorState, RectangleKind, SubsurfaceCachedState, SurfaceAttributes,
     SurfaceData, TraversalAction,
 };
+use smithay::wayland::idle_inhibit::IdleInhibitManagerState;
 use smithay::wayland::fractional_scale::{with_fractional_scale, FractionalScaleHandler, FractionalScaleManagerState};
 use smithay::wayland::output::{OutputHandler, OutputManagerState};
 use smithay::wayland::selection::data_device::{
@@ -395,6 +397,8 @@ pub struct Toplevel {
     pub id: i64,
     pub shell: Shell,
     announced: bool,
+    /// The launcher was told this window holds an idle inhibitor (`State::refresh_inhibit`).
+    pub inhibiting: bool,
     window: Option<NativeWindow>,
     /// The launcher's setVisible; drawn only while visible and with a window.
     visible: bool,
@@ -597,6 +601,9 @@ pub struct State {
     pub activation_state: XdgActivationState,
     /// The clients that last had focus or input, which decides whose activation tokens count.
     pub recent: crate::activation::Recent<ClientId>,
+    /// `zwp_idle_inhibit_v1`: the inhibitors apps hold, one per inhibitor.
+    pub idle_inhibit_state: IdleInhibitManagerState,
+    pub inhibitors: crate::idle::Inhibitors<WlSurface>,
     /// Removes the listening socket and the display from the loop at stop (see `Teardown`).
     teardown: crate::teardown::Teardown,
 }
@@ -686,6 +693,7 @@ fn setup(
     let xwayland_shell_state = XWaylandShellState::new::<State>(&dh);
     super::text_input::create_global(&dh);
     let activation_state = XdgActivationState::new::<State>(&dh);
+    let idle_inhibit_state = IdleInhibitManagerState::new::<State>(&dh);
 
     let mut seat = seat_state.new_wl_seat(&dh, "seat0");
     seat.add_pointer();
@@ -812,6 +820,8 @@ fn setup(
         text_inputs: Default::default(),
         activation_state,
         recent: Default::default(),
+        idle_inhibit_state,
+        inhibitors: Default::default(),
         teardown: Default::default(),
     };
     // Last in, first out: the listening socket goes (and its files with it), then the display.
@@ -1529,7 +1539,7 @@ impl State {
 
     /// The toplevel whose view shows `surface`: its own tree, a popup's (through the popup's
     /// parents) or an override-redirect X window's. A dismissed popup is in no view.
-    fn owner_of(&self, surface: &WlSurface) -> Option<usize> {
+    pub(super) fn owner_of(&self, surface: &WlSurface) -> Option<usize> {
         let mut root = root_of(surface)?;
         for _ in 0..=self.popups.len() {
             if let Some(i) = self.toplevel_index_for(&root) {
@@ -1858,6 +1868,8 @@ impl State {
         if std::mem::take(&mut self.toplevels[i].asked_fullscreen) {
             self.events.fullscreen_request(id, true);
         }
+        // An inhibitor made before the window was announced counts from now.
+        self.refresh_inhibit();
     }
 
     /// The pane toplevel `i` is shown in, in the units its client is configured in: the view
@@ -1950,6 +1962,7 @@ impl State {
             id: 0,
             shell,
             announced: false,
+            inhibiting: false,
             window: None,
             visible: true,
             view_size: None,
@@ -1988,6 +2001,7 @@ impl State {
         let id = t.id;
         let was_announced = t.announced;
         t.announced = false;
+        t.inhibiting = false;
         t.id = 0;
         t.window = None;
         t.visible = true;
@@ -2363,6 +2377,11 @@ impl CompositorHandler for State {
     }
 
     fn destroyed(&mut self, surface: &WlSurface) {
+        // A client that goes away takes its inhibitors with it, without destroying them.
+        if !self.inhibitors.is_empty() {
+            self.inhibitors.remove_all(surface);
+            self.refresh_inhibit();
+        }
         for t in &mut self.toplevels {
             if let Some(k) = t.parts.iter().position(|p| p.surface == *surface) {
                 let p = t.parts.swap_remove(k);
@@ -2602,3 +2621,4 @@ delegate_fractional_scale!(State);
 delegate_viewporter!(State);
 delegate_dmabuf!(State);
 delegate_xdg_activation!(State);
+delegate_idle_inhibit!(State);

@@ -40,6 +40,8 @@ public final class WaylandHost {
         void onTextInput(long id, boolean active, int contentHint, int contentPurpose);
         /** An app asked for the window to come in front, with a token the host honours. */
         void onActivationRequest(long id);
+        /** The window holds an idle inhibitor, or no longer does. */
+        void onIdleInhibit(long id, boolean inhibited);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -198,6 +200,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onActivationRequest(id);
+        });
+    }
+
+    @Keep
+    static void onIdleInhibit(long id, boolean inhibited) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onIdleInhibit(id, inhibited);
         });
     }
 

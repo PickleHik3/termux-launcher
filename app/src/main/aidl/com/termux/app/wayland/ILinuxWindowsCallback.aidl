@@ -51,6 +51,12 @@ oneway interface ILinuxWindowsCallback {
      * the window as a tap on its chip does.
      */
     void onActivationRequest(long id);
+    /**
+     * The window holds an idle inhibitor (zwp_idle_inhibit_v1) on any of its surfaces, or no
+     * longer does (since VERSION 9). The launcher keeps the screen on while an inhibiting window
+     * is in front.
+     */
+    void onIdleInhibit(long id, boolean inhibited);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }

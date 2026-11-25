@@ -100,6 +100,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
          * does for any page's field: a Linux app's field focused in the window in front raises it.
          */
         @NonNull default PageHost pageHost() { return PageHost.NONE; }
+        /**
+         * The activity window keeps the screen on ({@code on}) while a Linux window in front holds
+         * an idle inhibitor (a video playing), and lets it sleep again.
+         */
+        default void keepScreenOn(boolean on) {}
     }
 
     /** One Linux window chip, in row order then the minimised ones. */
@@ -246,6 +251,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private long focusedId;
     @Nullable private com.termux.app.x11.X11AppSettingsStore appSettings;
     private final LinuxClipboardBridge clipboard;
+    /** The screen stays on while a window that holds an idle inhibitor is in front. */
+    private final LinuxIdleInhibit idle;
     private final int[] dialogFrame = new int[4];
     private final int[] fixedFrame = new int[4];
     /** The page in front, as the wall last told ({@link #setFrontPage}). */
@@ -437,6 +444,15 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onIdleInhibit(long id, boolean inhibited) {
+            main.post(() -> {
+                if (windows.get(id) == null) return;
+                idle.inhibit(id, inhibited);
+                syncIdle();
+            });
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -448,6 +464,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         this.page = new LinuxWindowPageView(context, this);
         page.slot().addOnLayoutChangeListener(slotWatcher);
         this.clipboard = new LinuxClipboardBridge(context, this::sendClipboardText);
+        this.idle = new LinuxIdleInhibit(on -> host.keepScreenOn(on));
     }
 
     /** The one view every Linux page shows; also the page registered for them. */
@@ -501,6 +518,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         cancelCarry();
         if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
         applyTextField(textFields.dropped());
+        idle.clear();
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         if (service != null) {
@@ -581,7 +599,27 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
     }
 
+    /**
+     * The screen stays on while a window with an idle inhibitor is shown in front. Asked wherever
+     * what is in front may change (every chip rebuild), so a window leaving the front, closing or
+     * being minimised lets go; nothing is touched unless the answer changed.
+     */
+    private void syncIdle() {
+        if (!idle.any() && !idle.isOn()) return;
+        idle.update(this::inFrontNow);
+    }
+
+    /** Window {@code id} is on the page in front: bound or in a pane, or a dialog over one. */
+    private boolean inFrontNow(long id) {
+        Win w = windows.get(id);
+        if (w == null || !front) return false;
+        if (w.inPane) return true;
+        if (w.inRow) return w.id == boundId;
+        return w.floating ? w.overShown : isDialogOfBound(w);
+    }
+
     private void rebuildChips() {
+        syncIdle();
         chips.clear();
         String fallback = context.getString(R.string.linux_window_app);
         for (int pass = 0; pass < 2; pass++) {
@@ -653,6 +691,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (fullscreen.gone(id)) hideReveal();
         detachViews(w);
         windows.remove(id);
+        idle.forget(id);
         applyTextField(textFields.left(id));
         if (focusedId == id) focusedId = 0;
         if (boundId == id) boundId = 0;
@@ -684,6 +723,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         boolean had = windows.size() > 0;
         if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
         applyTextField(textFields.dropped());
+        idle.clear();
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();

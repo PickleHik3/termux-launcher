@@ -904,14 +904,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private boolean mVoiceSpeechWarming;
     private final Runnable mVoicePillAutoClose = this::closeVoicePill;
     /**
+     * The window's one keep-screen-on flag, shared by the dictation pill and a Linux window that
+     * holds an idle inhibitor: it stays set while either wants it.
+     */
+    private final com.termux.app.window.ScreenOnReasons mScreenOnReasons =
+        new com.termux.app.window.ScreenOnReasons(on -> {
+            if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+            else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        });
+    /**
      * The keep-screen-on rule while the pill is up ({@link VoiceScreenHold}): the window flag,
      * never the terminal's own keep-screen-on setting, which is a view flag and untouched by it.
      */
     private final VoiceScreenHold mVoiceScreenHold = new VoiceScreenHold(
-        on -> {
-            if (on) getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-            else getWindow().clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        },
+        on -> mScreenOnReasons.set(com.termux.app.window.ScreenOnReasons.VOICE, on),
         new VoiceScreenHold.Timer() {
             @Override
             public void schedule(@NonNull Runnable task, long delayMs) {
@@ -31372,6 +31378,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return linuxCarryHost();
                 }
                 @NonNull @Override public com.termux.app.page.PageHost pageHost() { return mPageHost; }
+                @Override public void keepScreenOn(boolean on) {
+                    mScreenOnReasons.set(com.termux.app.window.ScreenOnReasons.LINUX_WINDOW, on);
+                }
             });
         if (mPaneController != null) {
             mPaneController.setLinuxPanes(new com.termux.app.terminal.TerminalPaneController.LinuxPanes() {

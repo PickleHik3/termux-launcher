@@ -1,14 +1,17 @@
 //! What apps tell the launcher about their windows beyond drawing them: `xdg_activation_v1`
-//! (bring this window in front), and the later slices' idle inhibit and presentation feedback.
+//! (bring this window in front), `zwp_idle_inhibit_v1` (keep the screen on) and presentation
+//! feedback.
 //!
-//! The policy (whose tokens count, when) is in `crate::activation`; this file reads the focus
-//! and the clock for it and reports to Java through `HostEvents`.
+//! The policy (whose tokens count, when; which window holds an inhibitor) is in
+//! `crate::activation` and `crate::idle`; this file reads the focus and the clock for it and
+//! reports to Java through `HostEvents`.
 
 use std::time::Instant;
 
 use smithay::reexports::wayland_server::backend::ClientId;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::Resource;
+use smithay::wayland::idle_inhibit::IdleInhibitHandler;
 use smithay::wayland::xdg_activation::{XdgActivationHandler, XdgActivationState, XdgActivationToken, XdgActivationTokenData};
 
 use crate::activation;
@@ -64,5 +67,35 @@ impl XdgActivationHandler for State {
         }
         linfo!("activation requested for window {id}");
         self.events.activation_request(id);
+    }
+}
+
+impl State {
+    /// Tells the launcher which windows hold an idle inhibitor now: any inhibitor on one of the
+    /// window's surfaces (its subsurfaces and popups too) counts. Only a change is sent.
+    pub fn refresh_inhibit(&mut self) {
+        for i in 0..self.toplevels.len() {
+            let id = self.toplevels[i].id;
+            if id <= 0 {
+                continue;
+            }
+            let holds = self.inhibitors.any(|s| s.is_alive() && self.owner_of(s) == Some(i));
+            if holds != self.toplevels[i].inhibiting {
+                self.toplevels[i].inhibiting = holds;
+                self.events.idle_inhibit(id, holds);
+            }
+        }
+    }
+}
+
+impl IdleInhibitHandler for State {
+    fn inhibit(&mut self, surface: WlSurface) {
+        self.inhibitors.add(surface);
+        self.refresh_inhibit();
+    }
+
+    fn uninhibit(&mut self, surface: WlSurface) {
+        self.inhibitors.remove_one(&surface);
+        self.refresh_inhibit();
     }
 }

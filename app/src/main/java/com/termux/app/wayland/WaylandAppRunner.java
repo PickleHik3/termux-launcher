@@ -229,6 +229,9 @@ public final class WaylandAppRunner {
         public void onActivationRequest(long id) {}
 
         @Override
+        public void onIdleInhibit(long id, boolean inhibited) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;

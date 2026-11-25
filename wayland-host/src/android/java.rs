@@ -27,6 +27,7 @@ struct Methods {
     window_menu: JStaticMethodID,
     text_input: JStaticMethodID,
     activation: JStaticMethodID,
+    idle_inhibit: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -56,6 +57,8 @@ pub trait HostEvents {
     fn text_input(&mut self, id: i64, active: bool, hint: i32, purpose: i32);
     /// An app asked, with a token the host honours, for the window to come in front.
     fn activation_request(&mut self, id: i64);
+    /// The window holds an idle inhibitor on any of its surfaces (`inhibited`), or no longer does.
+    fn idle_inhibit(&mut self, id: i64, inhibited: bool);
 }
 
 impl JavaCallbacks {
@@ -74,6 +77,7 @@ impl JavaCallbacks {
             window_menu: env.get_static_method_id(&local, "onWindowMenuRequest", "(J)V")?,
             text_input: env.get_static_method_id(&local, "onTextInput", "(JZII)V")?,
             activation: env.get_static_method_id(&local, "onActivationRequest", "(J)V")?,
+            idle_inhibit: env.get_static_method_id(&local, "onIdleInhibit", "(JZ)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -189,6 +193,12 @@ impl HostEvents for AttachedCallbacks {
     fn activation_request(&mut self, id: i64) {
         let m = self.methods.activation;
         call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
+    }
+
+    fn idle_inhibit(&mut self, id: i64, inhibited: bool) {
+        let m = self.methods.idle_inhibit;
+        let flag = if inhibited { JNI_TRUE } else { JNI_FALSE };
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }, jvalue { z: flag }]));
     }
 }
 

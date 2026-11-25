@@ -9,6 +9,7 @@ pub mod clipboard;
 pub mod compose;
 pub mod geometry;
 pub mod held;
+pub mod idle;
 pub mod keymap;
 pub mod paced;
 pub mod pixels;

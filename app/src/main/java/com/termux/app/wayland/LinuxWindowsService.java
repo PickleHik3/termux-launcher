@@ -462,6 +462,12 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     }
 
     @Override
+    public void onIdleInhibit(long id, boolean inhibited) {
+        if (!mRunning || mWindows.get(id) == null) return;
+        broadcast(cb -> cb.onIdleInhibit(id, inhibited));
+    }
+
+    @Override
     public void onHostEnded(boolean crashed) {
         if (!mRunning) return;
         Log.e(LOG_TAG, "the compositor ended without being asked" + (crashed ? " (panic)" : ""));
