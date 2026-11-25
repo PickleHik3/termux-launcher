@@ -150,6 +150,13 @@ public class RestCardsCrossingTest {
         // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->HOME",
         // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        // With the keyboard up at both rests Home's column is the Terminal's (#307, 2026-11-25):
+        // under Docked Peek with a kept band the Terminal's keyboard wears no foot over its bands
+        // and its host stops above the keys, so its rest leaves the band under the pill bare, and
+        // Home's now does the same where Home alone had its keyboard wear the foot. The Terminal's
+        // own bare band is not new; one foot under the bands for both is the foot's own view's.
+        // Fixtures: pong with a foot.
+        "(d) BOTTOM DOCKED PEEK_GLASS HOME",
         "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->HOME",
         // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
         "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->HOME",
@@ -392,7 +399,9 @@ public class RestCardsCrossingTest {
     }
 
     private static boolean drawsOver(Card over, RestCards cards, Card under) {
-        boolean keyboards = over.id == CardId.KEYBOARD
+        // On Home the keyboard's column is the Terminal's (#307, 2026-11-25): the bands under the
+        // keys draw over Home's held rows too.
+        boolean keyboards = over.id == CardId.KEYBOARD || over.id == CardId.UNDER
             || over.id == CardId.FOOT && over.view == StackView.KEYBOARD_COLUMN;
         return keyboards && cards.covered().contains(under);
     }
