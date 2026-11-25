@@ -57,8 +57,18 @@ import java.util.concurrent.ConcurrentHashMap;
  *       settings daemon writes its own value there later.</li>
  *   <li>{@code XCURSOR_SIZE}, so the pointer is not a speck.</li>
  * </ul>
+ * <ul>
+ *   <li>XFCE's own settings: its settings daemon (xfsettingsd) owns XSETTINGS and writes
+ *       {@code Xft/DPI} from xfconf ({@code xsettings /Xft/DPI}, 96 unless set) over the root
+ *       window's, so the desktop's start sets {@code /Xft/DPI} and {@code /Gdk/WindowScalingFactor}
+ *       there ({@link #desktopScaleBlock}), once its session bus is up. A new Scale stop writes the
+ *       same two values into the running desktop ({@link #liveScaleScript}) through the bus
+ *       address the start recorded ({@link #busFile}); xfsettingsd then hands them to every client.
+ *       MATE and LXQt are not set this way: their bus and settings come up inside their own
+ *       session, after the start block could write them.</li>
+ * </ul>
  * The scale is the desktop app's Scale (the rail's stop) or the screen's density; a new stop
- * reaches the desktop the next time it starts. {@code -geometry} starts the server at the
+ * reaches an XFCE desktop at once, and any other the next time it starts. {@code -geometry} starts the server at the
  * screen's logical size so the first configure is a small step.
  */
 public final class WaylandDesktopServer {
@@ -184,6 +194,65 @@ public final class WaylandDesktopServer {
     /** {@code scale} when usable, else 1. */
     private static float sane(float scale) {
         return scale > 0f && !Float.isNaN(scale) && !Float.isInfinite(scale) ? scale : 1f;
+    }
+
+    /** The session kinds whose settings daemon is written to ({@link #desktopScaleBlock}). */
+    public static final String KIND_XFCE = "xfce";
+
+    /**
+     * The shell path, in the desktop's own world, of the file holding its session bus address:
+     * {@code $TMPDIR} is the prefix's tmp, or the container's own. Written at start, read by a
+     * later Scale stop.
+     */
+    @NonNull
+    static String busFile(int display) {
+        return "\"${TMPDIR:-/tmp}/tl-desktop-x" + display + ".bus\"";
+    }
+
+    /**
+     * The xfconf writes that make XFCE's settings daemon carry {@code scale}: {@code /Xft/DPI}
+     * (96 x scale) and {@code /Gdk/WindowScalingFactor} (the whole part), both ints, created when
+     * missing ({@code -n}), so running it again changes nothing. Nothing at all without
+     * {@code xfconf-query}. Pure.
+     */
+    @NonNull
+    static String xfconfWrites(float scale) {
+        String q = "xfconf-query -c xsettings -n -t int";
+        return "if command -v xfconf-query >/dev/null 2>&1; then\n"
+            + q + " -p /Xft/DPI -s " + xftDpi(scale) + " 2>/dev/null\n"
+            + q + " -p /Gdk/WindowScalingFactor -s " + windowScale(scale) + " 2>/dev/null\n"
+            + "fi\n";
+    }
+
+    /**
+     * For a desktop of {@code kind} ({@link #KIND_XFCE}), the lines for the session body right
+     * after its bus is up and before the desktop starts: record the bus address
+     * ({@link #busFile}) and write the scale into the settings daemon's store
+     * ({@link #xfconfWrites}), which xfconfd, started on that bus, serves to xfsettingsd when it
+     * starts. Empty for any other kind, and when there is no bus. Pure.
+     */
+    @NonNull
+    public static String desktopScaleBlock(@Nullable String kind, float scale, int display) {
+        if (!KIND_XFCE.equals(kind)) return "";
+        return "if [ -n \"$DBUS_SESSION_BUS_ADDRESS\" ]; then\n"
+            + "echo \"$DBUS_SESSION_BUS_ADDRESS\" > " + busFile(display) + "\n"
+            + xfconfWrites(scale)
+            + "fi\n";
+    }
+
+    /**
+     * A new Scale for a desktop already running on {@code display}: the same writes, on the bus
+     * the start recorded. Exits quietly when the desktop is not one of {@code kind} or recorded
+     * none. Run in the desktop's world. Pure.
+     */
+    @NonNull
+    public static String liveScaleScript(@Nullable String kind, float scale, int display) {
+        if (!KIND_XFCE.equals(kind)) return "";
+        return "tl_bus=$(cat " + busFile(display) + " 2>/dev/null)\n"
+            + "[ -n \"$tl_bus\" ] || exit 0\n"
+            + "export DBUS_SESSION_BUS_ADDRESS=\"$tl_bus\"\n"
+            + xfconfWrites(scale)
+            + "exit 0\n";
     }
 
     /** {@code GDK_SCALE}: the whole part of {@code scale}, at least 1. Pure. */

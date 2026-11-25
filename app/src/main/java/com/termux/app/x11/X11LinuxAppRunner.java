@@ -632,6 +632,7 @@ public final class X11LinuxAppRunner {
             WaylandDesktopServer.forget(waylandDesktopDisplay);
             waylandDesktopDisplay = WaylandDesktopServer.NO_DISPLAY;
         }
+        if (X11AppSettingsStore.sScaleListener == scaleListener) X11AppSettingsStore.sScaleListener = null;
         Logger.logInfo(LOG_TAG, "Desktop " + app.id + " ended with " + exitCode);
         // Killed by Android's process limit, most likely, unless a take-over's stop sent it.
         com.termux.app.processlimit.ProcessLimitNotice.get(context).onChildKilled(
@@ -860,7 +861,7 @@ public final class X11LinuxAppRunner {
             String display = ":" + number;
             String script = gpuServerBlock(gpu.server) + sessionScript(app, display, env, null,
                 WaylandDesktopServer.startBlock(xwayland, waylandDisplay, number, size[0], size[1],
-                    scale));
+                    scale), scale);
             handler.post(() -> {
                 // A desktop that got there first while this one was being prepared keeps the
                 // screen; the tap that lost the race is dropped rather than starting a second.
@@ -876,11 +877,36 @@ public final class X11LinuxAppRunner {
                     notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
                 }
                 waylandDesktopDisplay = number;
+                X11AppSettingsStore.sScaleListener = scaleListener;
                 WaylandDesktopServer.named(number, app.name);
                 runAndWatch(app, script, false, display, env, null,
                     pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
             });
         });
+    }
+
+    /** Reaches the running desktop when its app's Scale changes; set while a desktop runs. */
+    private final java.util.function.Consumer<String> scaleListener =
+        appId -> handler.post(() -> applyScaleToRunningDesktop(appId));
+
+    /**
+     * The desktop's Scale was read once, at its start; a new stop reaches an XFCE desktop already
+     * running by writing the same settings into it ({@link WaylandDesktopServer#liveScaleScript}),
+     * in the desktop's own world. Anything else keeps its scale until it starts again. Main thread.
+     */
+    private void applyScaleToRunningDesktop(@NonNull String appId) {
+        LinuxAppCatalog.LinuxApp app = runningSession;
+        Host current = host;
+        if (app == null || current == null || !app.id.equals(appId)
+            || waylandDesktopDisplay == WaylandDesktopServer.NO_DISPLAY) return;
+        android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
+        float scale = com.termux.app.wayland.LinuxDisplayScale.windowScale(
+            appSettings.scale(app.id), metrics.density,
+            Math.min(metrics.widthPixels, metrics.heightPixels));
+        String script = WaylandDesktopServer.liveScaleScript(scaleKind(app), scale, waylandDesktopDisplay);
+        if (script.isEmpty()) return;
+        Logger.logInfo(LOG_TAG, "Scale " + scale + " to the running " + app.id);
+        current.runScript(ProotDistro.loginCommand(app.container, script), exitCode -> { });
     }
 
     /** The display number of the desktop running under Wayland Display, or -1. Main thread. */
@@ -1417,6 +1443,18 @@ public final class X11LinuxAppRunner {
     static String sessionScript(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
                                 @NonNull List<String> env, @Nullable String stopWindowManager,
                                 @Nullable String beforeDesktop) {
+        return sessionScript(app, display, env, stopWindowManager, beforeDesktop, null);
+    }
+
+    /**
+     * {@link #sessionScript(LinuxAppCatalog.LinuxApp, String, List, String, String)} with the
+     * desktop's {@code scale}, which an XFCE desktop's session body writes into its settings once
+     * its bus is up ({@link WaylandDesktopServer#desktopScaleBlock}). Null writes nothing.
+     */
+    @NonNull
+    static String sessionScript(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
+                                @NonNull List<String> env, @Nullable String stopWindowManager,
+                                @Nullable String beforeDesktop, @Nullable Float scale) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
@@ -1438,7 +1476,7 @@ public final class X11LinuxAppRunner {
         script.append("export ").append(SESSION_MARKER_VAR).append("=$$\n");
         script.append("echo $$ > ").append(ProotDistro.singleQuote(SESSION_PID_PATH)).append('\n');
         if (beforeDesktop != null) script.append(beforeDesktop);
-        String body = sessionBody(app);
+        String body = sessionBody(app, scale, xDisplayNumber(display));
         if (app.container.isPrefix()) script.append(body);
         else script.append("exec ").append(ProotDistro.loginCommand(app.container, body)).append('\n');
         return script.toString();
@@ -1476,6 +1514,45 @@ public final class X11LinuxAppRunner {
      */
     @NonNull
     static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app) {
+        return sessionBody(app, null, -1);
+    }
+
+    /** The number in a display name such as {@code :3}, or -1. */
+    private static int xDisplayNumber(@NonNull String display) {
+        try {
+            return Integer.parseInt(display.substring(display.indexOf(':') + 1));
+        } catch (RuntimeException e) {
+            return -1;
+        }
+    }
+
+    /**
+     * The settings daemon family a desktop belongs to, for its scale
+     * ({@link WaylandDesktopServer#KIND_XFCE}), or null: by the program its {@code Exec} names,
+     * else by the {@code DesktopNames} its session file gave.
+     */
+    @Nullable
+    static String scaleKind(@NonNull LinuxAppCatalog.LinuxApp app) {
+        if (!app.session) return null;
+        String binary = LinuxAppCatalog.execBinary(app.exec);
+        binary = binary.substring(binary.lastIndexOf('/') + 1);
+        if (binary.equals("startxfce4") || binary.equals("xfce4-session")) {
+            return WaylandDesktopServer.KIND_XFCE;
+        }
+        for (String name : app.desktopNames.split("[:;]")) {
+            if (name.equalsIgnoreCase("XFCE")) return WaylandDesktopServer.KIND_XFCE;
+        }
+        return null;
+    }
+
+    /**
+     * {@link #sessionBody(LinuxAppCatalog.LinuxApp)} with the desktop's {@code scale} and X
+     * display number: after the bus is up, an XFCE desktop's settings get the scale and the bus
+     * address is recorded for a later Scale stop ({@link WaylandDesktopServer#desktopScaleBlock}).
+     */
+    @NonNull
+    static String sessionBody(@NonNull LinuxAppCatalog.LinuxApp app, @Nullable Float scale,
+                              int xDisplay) {
         StringBuilder body = new StringBuilder();
         // A prefix desktop keeps the runtime directory its shells have (none, in Termux): tools
         // that keep a socket there, such as herdr-core, then find the same one inside the
@@ -1496,6 +1573,9 @@ public final class X11LinuxAppRunner {
                 .append(" && command -v dbus-launch > /dev/null 2>&1; then\n");
             body.append(OWN_BUS_BLOCK);
             body.append("fi\n");
+        }
+        if (scale != null && xDisplay >= 0) {
+            body.append(WaylandDesktopServer.desktopScaleBlock(scaleKind(app), scale, xDisplay));
         }
         body.append("exec ").append(app.exec).append('\n');
         return body.toString();
