@@ -52,6 +52,21 @@ public final class LinuxWindowRow {
     }
 
     /**
+     * The row place of the terminal window nearest {@code front}, for a "Go to Terminal" from a
+     * Linux window's page ({@code linux[place]} is true for a Linux window); the earlier place
+     * wins a tie. -1 when the row holds no terminal window.
+     */
+    public static int nearestTerminalPlace(int front, @NonNull boolean[] linux) {
+        for (int d = 0; d < linux.length; d++) {
+            int before = front - d;
+            int after = front + d;
+            if (before >= 0 && before < linux.length && !linux[before]) return before;
+            if (after >= 0 && after < linux.length && !linux[after]) return after;
+        }
+        return -1;
+    }
+
+    /**
      * The rim tab in the window's own coordinates: at the top-right, inside the outline (clear of
      * the corner's curve by {@code cornerRadiusPx}) and in the band above the app's pixels.
      */

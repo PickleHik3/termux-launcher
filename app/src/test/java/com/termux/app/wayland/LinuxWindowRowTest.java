@@ -74,6 +74,17 @@ public class LinuxWindowRowTest {
     }
 
     @Test
+    public void goToTerminalFromALinuxPageFindsTheNearestTerminalWindow() {
+        // [t1] [gtk] [t2]: the earlier one wins the tie.
+        assertEquals(0, LinuxWindowRow.nearestTerminalPlace(1, new boolean[] {false, true, false}));
+        // [gtk] [gtk] [t1]
+        assertEquals(2, LinuxWindowRow.nearestTerminalPlace(0, new boolean[] {true, true, false}));
+        // Only Linux windows: nothing to go to.
+        assertEquals(-1, LinuxWindowRow.nearestTerminalPlace(0, new boolean[] {true, true}));
+        assertEquals(-1, LinuxWindowRow.nearestTerminalPlace(0, new boolean[0]));
+    }
+
+    @Test
     public void aDialogIsCentredOverItsParentAndNeverLarger() {
         int[] out = new int[4];
         LinuxWindowRow.dialogFrame(1000, 2000, 600, 400, out);

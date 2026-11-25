@@ -28159,7 +28159,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * window gets a fresh shell, whose window then takes the front. Nothing otherwise.
      */
     private void bringTerminalWindowInFront() {
-        if (!isDisplayWindowInFront() || mPaneWallController == null) return;
+        if (mPaneWallController == null) return;
+        if (linuxWindowInFront() != 0L) {
+            // A Linux window's page is the Terminal page's place (#392): Go to Terminal there
+            // brings the nearest terminal window in front, as it does from the display.
+            int places = rowWindowCount();
+            boolean[] linux = new boolean[places];
+            for (int i = 0; i < places; i++) linux[i] = terminalAtPlace(i) < 0;
+            int place = com.termux.app.wayland.LinuxWindowRow.nearestTerminalPlace(
+                rowCurrentIndex(), linux);
+            if (place >= 0) showRowWindow(place);
+            return;
+        }
+        if (!isDisplayWindowInFront()) return;
         // The Terminal page beside it, its first shell started when it has none.
         mPaneWallController.goToTerminal(isVisible() && !isReducedMotionEnabled());
     }
