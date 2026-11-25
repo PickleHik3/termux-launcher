@@ -317,6 +317,15 @@ _Avoid_: toast, pill (that is the dictation card), banner, chip
 Portrait or landscape. The shared layout has one version per orientation (and per layout variant,
 see Minimal mode); appearance is never per orientation.
 
+**Overview**:
+The screen that shows every page of the **wall** as one sideways strip of cards in wall order and
+goes to any of them: a tap on a card lands on its page, and the card of the page it was opened
+from wears the accent ring. Opened from the status bar's session number; Back and its ✕ return to
+that page. A sheet: it wears **Global**'s glass at the sheets' floor over the wallpaper. It is to
+replace the sessions manager and **Edit pages**. Spec: `project-docs/active/overview-2026-11-24.md`.
+Code: `com.termux.app.overview`.
+_Avoid_: page overview (that is Edit pages, `PageOverviewView`), switcher, recents, sessions manager
+
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**, each with a **page kind**, a **side**, a **rest** and its own **front** and **back** handling. Appearance is one look for
 every page. One layout dresses both halves, minimal only for windows; a Home page wears its own
@@ -917,7 +926,7 @@ _Avoid_: Layout page, Layout tab, Layout mode, Layout (as the name of a door; th
 **Layout canvas**:
 Retired 2026-10-26 with Layout mode: the scaled model of a page's layout (`LayoutCanvasView`,
 once called the miniature) that elements were dragged around on. Nothing draws it now.
-_Avoid_: miniature, preview, thumbnail, overview
+_Avoid_: miniature, preview, thumbnail (and not overview: **Overview** is the wall's screen)
 
 **Restore tray**:
 Retired with the layout canvas. Hidden bars now wait as cards in the stack beside the editor's
