@@ -290,9 +290,10 @@ public class HostedFloatTest {
     // --- helpers ---
 
     /**
-     * A press goes down on the float layer over {@code target}, at a point inside it. The layer
-     * holds no float, so it reports the press as beside them, by its raw point: the event is made
-     * at the screen point, which is what a fresh event reports as raw.
+     * A tap on the float layer over {@code target}, at a point inside it: the press goes down on
+     * the layer and its lift reaches it through the pane. The layer holds no float, so it reports
+     * the tap as beside them, by its raw point: the event is made at the screen point, which is
+     * what a fresh event reports as raw.
      */
     private void pressLayerAt(@NonNull View target, int dx, int dy) {
         int[] at = new int[2];
@@ -302,6 +303,10 @@ public class HostedFloatTest {
             at[0] + dx, at[1] + dy, 0);
         mLayer.dispatchTouchEvent(down);
         down.recycle();
+        MotionEvent up = MotionEvent.obtain(now, now + 10, MotionEvent.ACTION_UP,
+            at[0] + dx, at[1] + dy, 0);
+        mLayer.onPaneTouch(up);
+        up.recycle();
     }
 
     private static int onScreen(@NonNull View view) {

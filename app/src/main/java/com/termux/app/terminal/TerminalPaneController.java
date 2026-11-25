@@ -280,6 +280,17 @@ public class TerminalPaneController {
          * beside it. The keyboard it raised closes with it.
          */
         default void onHomeFloatFocusReleased() {}
+        /**
+         * Home's page turned away from the focused Home float, which gave focus back to Home. Its
+         * keyboard is not closed here: it rides out with its page, and the pager's rest records it
+         * for that page and gives the page in front its own.
+         */
+        default void onHomeFloatTurnedAway() {}
+        /**
+         * A tap on Home beside every float (not a swipe that started there): the keyboard goes
+         * away and the page in front is left with it down, unless Home holds it up.
+         */
+        default void onTapBesideHomeFloats() {}
         /** Where {@code window}'s chip is on screen, for Minimise's flight; false when none is. */
         default boolean homeFloatChipOnScreen(@NonNull Window window, @NonNull Rect out) {
             return false;
@@ -561,6 +572,11 @@ public class TerminalPaneController {
      * the Terminal's row, which the host keeps.
      */
     private final List<Window> mHomeFloats = new ArrayList<>();
+    /**
+     * The float each Home page had focused when the page turned away from it, by page id: it takes
+     * focus back when its page is in front again. A float gone since is skipped.
+     */
+    private final java.util.Map<Integer, Window> mTurnedAwayFloats = new java.util.HashMap<>();
     /** Each Home float's container in the float layer; never touched by {@link #render()}. */
     private final Map<Leaf, FloatingPaneContainer> mHomeFloatContainers = new HashMap<>();
     /**
@@ -3978,10 +3994,11 @@ public class TerminalPaneController {
             }
 
             @Override public void onPressBesideFloats(float rawX, float rawY) {
-                // A widget's terminal sits under the layer, in the grid: a press on the focused
-                // one is a press on it, not beside it.
+                // A widget's terminal sits under the layer, in the grid: a tap on the focused
+                // one is a tap on it, not beside it.
                 if (pressIsOnFocusedHostedFloat(rawX, rawY)) return;
                 releaseHomeFloatFocus();
+                mHost.onTapBesideHomeFloats();
             }
 
             @Override public boolean floatYieldsSideways(@NonNull View child, float x, float y) {
@@ -4118,12 +4135,22 @@ public class TerminalPaneController {
      * the page turned away, the wall gone to the Terminal. The host closes the keyboard it raised.
      */
     public void releaseHomeFloatFocus() {
+        releaseHomeFloatFocus(false);
+    }
+
+    /**
+     * {@link #releaseHomeFloatFocus()}; {@code turnedAway} when Home's page turned away from the
+     * float, which the host hears as a turn (its keyboard rides with the page) rather than as a
+     * release that closes the keyboard.
+     */
+    private void releaseHomeFloatFocus(boolean turnedAway) {
         if (mFocusedHomeFloat == null) return;
         mFocusedHomeFloat = null;
         applyHomeFloatLift();
         updateActiveBorders();
         activePaneChanged();
-        mHost.onHomeFloatFocusReleased();
+        if (turnedAway) mHost.onHomeFloatTurnedAway();
+        else mHost.onHomeFloatFocusReleased();
     }
 
     /** Tucks {@code w} into its chip; its shell keeps running, and Home has the focus again. */
@@ -4385,19 +4412,28 @@ public class TerminalPaneController {
         HomeFloatLayer layer = mHomeFloatLayer;
         if (layer == null) return;
         int page = homePageIdAt(layer.page());
-        boolean focusedHidden = false;
+        Window focusedHidden = null;
         for (Window w : mHomeFloats) {
             FloatingPaneContainer container = w.active == null ? null : mHomeFloatContainers.get(w.active);
             if (container == null) continue;
             boolean shown = HomeFloatPolicy.shownOn(w.homePageId, w.minimised, page);
             int visibility = shown ? View.VISIBLE : View.GONE;
             if (container.getVisibility() != visibility) container.setVisibility(visibility);
-            if (!shown && w == mFocusedHomeFloat) focusedHidden = true;
+            if (!shown && w == mFocusedHomeFloat) focusedHidden = w;
         }
         // The page's floats meet a keyboard already up; the last page's give their shape back.
         applyHomeFloatLift();
-        // The page turned away from the focused float: Home has the focus again.
-        if (focusedHidden) releaseHomeFloatFocus();
+        // The page turned away from the focused float: Home has the focus again, and the float
+        // takes it back when its page is in front again, as the page was left.
+        if (focusedHidden != null) {
+            mTurnedAwayFloats.put(focusedHidden.homePageId, focusedHidden);
+            releaseHomeFloatFocus(true);
+        }
+        if (mFocusedHomeFloat != null || mTurnedAwayFloats.isEmpty()) return;
+        Window back = mTurnedAwayFloats.remove(page);
+        if (back != null && mHomeFloats.contains(back) && back.homePageId == page
+            && HomeFloatPolicy.shownOn(back.homePageId, back.minimised, page))
+            focusHomeFloat(back);
     }
 
     private void relayHomeFloats() {

@@ -26954,6 +26954,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mHomeKeyboardPageId >= 0 ? mHomeKeyboardPageId : mHomeSeam.pageInFront();
     }
 
+    /**
+     * Home's page turned with no slide for the pager's rest to follow: the page in front takes
+     * its own keyboard now. A slide under way lands through the pager's rest instead.
+     */
+    private final Runnable mHomeTurnWithoutSlide = () -> {
+        if (mWidgetPaneController == null || mWidgetPaneController.isHomePageSettling()
+            || mWidgetPaneController.homePageShiftFraction() != 0f) return;
+        onHomePageAtRest();
+    };
+
     /** Whether Home page {@code pageId} holds a floating or widget terminal to type into. */
     private boolean homePageHoldsTerminal(int pageId) {
         if (pageId == mHomeTerminalPageId) return mHomeTerminalPageHolds;
@@ -26991,6 +27001,10 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         if (store == null || mInAppKeyboard == null || pageId < 0)
             return com.termux.app.place.StackEnd.PAGE_KEYBOARD_REST;
+        // The page that owns the keyboard is fixed for the whole step: read after the pager's
+        // commit, the page in front is already the arriving one.
+        if (mHomeKeyboardPageId < 0 && mLastWallPage == com.termux.app.page.PageKind.HOME)
+            mHomeKeyboardPageId = mHomeSeam.pageInFront();
         if (pageId == homeKeyboardPageId())
             return com.termux.app.place.PlaceKeyboard.pageKeyboard(committedKeyboardVisible());
         return com.termux.app.place.PlaceKeyboard.pageKeyboard(
@@ -35131,7 +35145,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
         @Override public void onHomeFloatFocusReleased() {
             refreshExtraKeySet(true);
-            // A press on Home beside the floats, or the focused float minimised or closed: the
+            // A tap on Home beside the floats, or the focused float minimised or closed: the
             // keyboard it raised goes with it, unless Home keeps one always on.
             if (mLastWallPage == com.termux.app.page.PageKind.HOME && mInAppKeyboard != null
                 && mInAppKeyboard.isVisible()
@@ -35139,6 +35153,29 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
                     .HideReason.USER_EVENT);
             }
+        }
+
+        @Override public void onHomeFloatTurnedAway() {
+            refreshExtraKeySet(true);
+            // The keyboard rides out with the page it belongs to; the pager's rest records it for
+            // that page and gives the page in front its own (onHomePageAtRest). A turn with no
+            // slide to rest from (the page bar, a page added or removed) lands on the next frame.
+            View root = com.termux.app.window.WindowLayers.windowRoot(TermuxActivity.this);
+            if (root != null) {
+                root.removeCallbacks(mHomeTurnWithoutSlide);
+                root.post(mHomeTurnWithoutSlide);
+            }
+        }
+
+        @Override public void onTapBesideHomeFloats() {
+            // Only Back or a tap outside the terminal puts Home's keyboard away (the crossing
+            // rule's Q1): the page in front is left with it down.
+            if (mLastWallPage != com.termux.app.page.PageKind.HOME || homeHoldsKeyboardUp()) return;
+            if (mInAppKeyboard != null && mInAppKeyboard.isVisible()) {
+                mInAppKeyboard.hide(com.termux.app.terminal.inappkeyboard.TermuxInAppKeyboard
+                    .HideReason.USER_EVENT);
+            }
+            rememberHomePageKeyboard(homeKeyboardPageId(), false);
         }
 
         @Override public void onPanesRendered() {

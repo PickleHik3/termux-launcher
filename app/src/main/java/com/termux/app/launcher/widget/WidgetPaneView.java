@@ -174,6 +174,11 @@ public final class WidgetPaneView extends FrameLayout
         default boolean yieldsSidewaysSwipe(float x, float y) { return false; }
         /** Whether anything of the page in view is drawn on the layer now (a float that is up). */
         default boolean showsAnything() { return false; }
+        /**
+         * Every event of a gesture on the pane after its press, before anything below sees it:
+         * the layer saw the press go down, but takes no touch, so the rest only reaches it here.
+         */
+        default void onPaneTouch(@NonNull MotionEvent event) {}
     }
 
     /**
@@ -785,6 +790,8 @@ public final class WidgetPaneView extends FrameLayout
      */
     @Override public boolean dispatchTouchEvent(@NonNull MotionEvent event) {
         int action = event.getActionMasked();
+        if (action != MotionEvent.ACTION_DOWN && pinnedLayer instanceof PagePinnedLayer)
+            ((PagePinnedLayer) pinnedLayer).onPaneTouch(event);
         if (action == MotionEvent.ACTION_DOWN) endDragSwipe();
         if (action == MotionEvent.ACTION_CANCEL) {
             endDragSwipe();

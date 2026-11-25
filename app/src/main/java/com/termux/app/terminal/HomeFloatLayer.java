@@ -3,6 +3,7 @@ package com.termux.app.terminal;
 import android.content.Context;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
@@ -17,7 +18,9 @@ import com.termux.app.launcher.widget.WidgetPaneView;
  * tells it which Home page is on screen and the controller shows that page's floats only.
  *
  * <p>The layer itself takes no touch: a press that lands on no float goes on to the grid, and the
- * layer reports it first, since a tap on Home beside the floats gives focus back to Home.
+ * layer reports it when it lifts as a tap ({@link BesideTap}), since a tap on Home beside the
+ * floats gives focus back to Home. The rest of such a gesture never reaches the layer, so the pane
+ * hands it over ({@link #onPaneTouch}); a swipe that started beside the floats is no tap.
  */
 public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.PagePinnedLayer,
         com.termux.app.chrome.LiveBackdrop.Container {
@@ -26,7 +29,7 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
     public interface Listener {
         /** Home page {@code page} is on screen: its floats show, every other page's hide. */
         void onHomePageShown(int page);
-        /** A press went down on Home beside every float, at this point on screen. */
+        /** A tap on Home beside every float, lifted at this point on screen. */
         void onPressBesideFloats(float rawX, float rawY);
         /**
          * Whether a press on {@code child}, the float under the finger, at ({@code x}, {@code y})
@@ -40,9 +43,11 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
 
     @Nullable private Listener mListener;
     private int mPage;
+    private final BesideTap mBesideTap;
 
     public HomeFloatLayer(@NonNull Context context) {
         super(context);
+        mBesideTap = new BesideTap(ViewConfiguration.get(context).getScaledTouchSlop());
         setClipChildren(false);
         setClipToPadding(false);
         setFocusable(false);
@@ -108,12 +113,40 @@ public final class HomeFloatLayer extends FrameLayout implements WidgetPaneView.
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent event) {
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && mListener != null
-            && !holdsPoint(event.getX() + getLeft() + getTranslationX(),
-                event.getY() + getTop() + getTranslationY())) {
-            mListener.onPressBesideFloats(event.getRawX(), event.getRawY());
-        }
+        watch(event);
         return super.dispatchTouchEvent(event);
+    }
+
+    /**
+     * The rest of a gesture whose press the layer saw go down: a press beside the floats has no
+     * target here, so its moves, lift or cancel reach the pane only, which hands them on.
+     */
+    @Override
+    public void onPaneTouch(@NonNull MotionEvent event) {
+        if (event.getActionMasked() != MotionEvent.ACTION_DOWN) watch(event);
+    }
+
+    private void watch(@NonNull MotionEvent event) {
+        switch (event.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                mBesideTap.down(event.getRawX(), event.getRawY(), mListener != null
+                    && !holdsPoint(event.getX() + getLeft() + getTranslationX(),
+                        event.getY() + getTop() + getTranslationY()));
+                break;
+            case MotionEvent.ACTION_MOVE:
+                mBesideTap.move(event.getRawX(), event.getRawY());
+                break;
+            case MotionEvent.ACTION_UP:
+                if (mBesideTap.up(event.getRawX(), event.getRawY()) && mListener != null)
+                    mListener.onPressBesideFloats(event.getRawX(), event.getRawY());
+                break;
+            case MotionEvent.ACTION_POINTER_DOWN:
+            case MotionEvent.ACTION_CANCEL:
+                mBesideTap.cancel();
+                break;
+            default:
+                break;
+        }
     }
 
     /** Live blur records what draws beneath a float's glass through this container. */
