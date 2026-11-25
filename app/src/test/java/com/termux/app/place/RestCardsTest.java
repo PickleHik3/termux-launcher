@@ -443,6 +443,38 @@ public class RestCardsTest {
     }
 
     /**
+     * With the status bar on the dock's plank the rows above it are recorded above its band, as
+     * the stack lays them out (pong 2026-11-25: the apps row glided onto the extra keys and
+     * jumped about 180 px up at the landing): each row's top in the band is the heights of
+     * everything below it, the status band included.
+     */
+    @Test public void rowsOverThePlanksStatusBandAreRecordedAboveIt() {
+        int checked = 0;
+        for (boolean floating : new boolean[] {false, true})
+            for (boolean up : new boolean[] {false, true}) {
+            LayoutFixtures.Fixture f = LayoutFixtures.STATUS_ON_PLANK;
+            RestCards.Rest rest = f.cardsRest(PageRef.TERMINAL, up, false, floating);
+            RestCards cards = RestCards.of(rest);
+            com.termux.app.place.CrossingPath.Rows rows = cards.rows();
+            if (rest.pass.statusBandPx <= 0) continue;
+            float below = 0f;
+            for (com.termux.app.place.Element e
+                    : EdgeStackPolicy.overKeyboard(f.layoutOf(PageRef.TERMINAL))) {
+                int i = CrossingPath.rowOf(e);
+                float h = e == com.termux.app.place.Element.STATUS ? rest.pass.statusBandPx
+                    : i >= 0 && rows.where[i] == CrossingPath.OVER ? rows.heightPx[i] : 0f;
+                if (i >= 0 && h > 0 && rows.where[i] == CrossingPath.OVER) {
+                    assertEquals(f.name + " kb=" + up + " floating=" + floating + " " + e,
+                        -(below + h), rows.topInBandPx[i], 0.5f);
+                    if (below >= rest.pass.statusBandPx) checked++;
+                }
+                below += h;
+            }
+        }
+        assertTrue("a row stands above the plank's status band", checked > 0);
+    }
+
+    /**
      * The three layouts that still shared the glass host after #305's first round stand apart
      * too (#305): a Terminal with no keys row, its keys under the keyboard, and its status bar on
      * the dock's plank. Home's card travels with Home and is Home's rest's; the Terminal's card,
