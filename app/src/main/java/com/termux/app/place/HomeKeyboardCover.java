@@ -51,6 +51,19 @@ public final class HomeKeyboardCover {
     }
 
     /**
+     * {@link #rowsDropPx(boolean, int, float)} for a keyboard laid out with its foot under the
+     * keys ({@code keyboardFootPx}): only the keys count ({@link BottomInsets#keyboardKeysPx}),
+     * since a down keyboard sinks the container by its keys alone and the rest's answer drops
+     * Home's rows by the keys ({@code RestCards#rowsDropPx}). With the keyboard down the drop is
+     * 0, so nothing of Home's rows or host is cut at the keyboard's top.
+     */
+    public static float rowsDropPx(boolean lifts, int keyboardLaidOutPx, int keyboardFootPx,
+                                   float keyboardSharePx) {
+        return rowsDropPx(lifts, BottomInsets.keyboardKeysPx(keyboardLaidOutPx, keyboardFootPx),
+            keyboardSharePx);
+    }
+
+    /**
      * The drop for rows both sides share: Home's {@code homeShare} of the scene (0 on the
      * Terminal, 1 on Home) of Home's {@code homeDropPx}, so they blend through a crossing.
      */

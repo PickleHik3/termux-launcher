@@ -474,11 +474,14 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         // Home's cover (#309): the rows stand at their keyboard-down rect whatever the keyboard
         // does, and the system keyboard does not raise Home's stack.
         final boolean covered = mHomeCovered;
-        final int keyboardPx = mGeometry.keyboardPresent && mGeometry.keyboardInColumn
-            ? mGeometry.keyboardHeightPx : 0;
+        // The keys alone cover (the foot under them is no cover): a down keyboard's share is its
+        // keys', so with it down Home's rows drop and are cut by nothing.
+        final boolean keyboardInColumn = mGeometry.keyboardPresent && mGeometry.keyboardInColumn;
+        final int keyboardPx = keyboardInColumn ? com.termux.app.place.BottomInsets.keyboardKeysPx(
+            mGeometry.keyboardHeightPx, mGeometry.keyboardFootPx) : 0;
         final float coverShare = mEffective.keyboardSharePx;
-        mEffective.homeCoverPx = covered
-            ? HomeKeyboardCover.rowsDropPx(false, keyboardPx, coverShare) : 0f;
+        mEffective.homeCoverPx = covered && keyboardInColumn ? HomeKeyboardCover.rowsDropPx(false,
+            mGeometry.keyboardHeightPx, mGeometry.keyboardFootPx, coverShare) : 0f;
         StackScene.at(from, to, p, mEffective, mGeometry, mFrame);
         mPlankTarget = plankTarget();
         mFrameTerminalHost = mViews.view(R.id.terminal_dock_host);
