@@ -152,11 +152,6 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
         post
     }
 
-    /// SETTLE296 diagnostics: ms since the held buffer's commit.
-    pub fn ms_since_commit(&self, now: Instant) -> u64 {
-        self.committed.map_or(0, |c| now.saturating_duration_since(c).as_millis() as u64)
-    }
-
     /// The buffer on screen (or to be put there), held until the client replaces it.
     pub fn current(&self) -> Option<&B> {
         self.held.current()
