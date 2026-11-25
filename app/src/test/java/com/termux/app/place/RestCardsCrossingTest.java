@@ -691,6 +691,27 @@ public class RestCardsCrossingTest {
                         found.add("(path) CARD PAIRED BY VIEW" + view + tail, at);
                 }
             }
+            // Step 6 and Q1: between two Home pages only the keyboard may move; every other
+            // card and row STAYs (the keyboard is an overlay owned by one page).
+            if (pair[0].isHome() && pair[1].isHome()) {
+                StackScene.at(from, to, 0.5f, motion, from.rest, frame);
+                for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                    StackView view = StackEnd.VIEWS[v];
+                    if (view == StackView.KEYBOARD_COLUMN || view == StackView.TERMINAL_KEYBOARD
+                        || view == StackView.FLOATING_KEYBOARD) continue;
+                    // The Terminal's cards parked off screen with its side stay off it.
+                    if (from.cardOn[v] == StackEnd.NO_CARD && to.cardOn[v] == StackEnd.NO_CARD)
+                        continue;
+                    CrossingPath.Verb verb = CrossingPath.of(frame.cardVerb[v]);
+                    if (verb == CrossingPath.Verb.RIDE || frame.cardMorphs[v])
+                        found.add("(path) HOME HOME MOVES " + view + tail, at);
+                }
+                for (int i = 0; i < CrossingPath.ROW_COUNT; i++) {
+                    CrossingPath.Verb verb = CrossingPath.of(frame.rowVerb[i]);
+                    if (verb == CrossingPath.Verb.RIDE || verb == CrossingPath.Verb.GLIDE)
+                        found.add("(path) HOME HOME MOVES " + StackLanes.ROWS[i] + tail, at);
+                }
+            }
             // Step 5: the status bar's verb is symmetric and STAYs only at one rect.
             Card barA = a.card(CardId.STATUS);
             Card barB = b.card(CardId.STATUS);

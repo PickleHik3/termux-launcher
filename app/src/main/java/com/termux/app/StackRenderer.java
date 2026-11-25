@@ -130,6 +130,12 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     private final StackEnd mEndHome = new StackEnd(PageRef.HOME);
     private final StackEnd mEndTerminal = new StackEnd(PageRef.TERMINAL);
+    /**
+     * The arriving end of a Home to Home crossing: Home's rest again, a second end so the two Home
+     * pages are two ends of the scene (the crossing rule's step 6), apart only in what a Home page
+     * keeps of its own (its keyboard, {@link StackEnd#pageKeyboard}).
+     */
+    private final StackEnd mEndHomeArriving = new StackEnd(PageRef.HOME);
     private boolean mHasEnds;
     /** The cards stand apart, and Home's drop while they do ({@link #setSidesApart}). */
     private boolean mApart;
@@ -274,6 +280,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     public void onLanding() {
         mHasEnds = false;
+        restHomePageKeyboards();
         mLandingPending = true;
         requestApply();
     }
@@ -359,8 +366,9 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         mHomeDropPx = drop;
         mTerminalLiftPx = lift;
         // Each side's card stands its rest's own offset (StackScene's cards): the same numbers.
-        mEndHome.homeDropPx = mEndTerminal.homeDropPx = drop;
+        mEndHome.homeDropPx = mEndTerminal.homeDropPx = mEndHomeArriving.homeDropPx = drop;
         mEndHome.terminalLiftPx = mEndTerminal.terminalLiftPx = lift;
+        mEndHomeArriving.terminalLiftPx = lift;
         requestApply();
     }
 
@@ -371,14 +379,43 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      */
     public void setCards(@Nullable RestCards home, @Nullable RestCards terminal) {
         mEndHome.readCards(home);
+        mEndHomeArriving.readCards(home);
         mEndTerminal.readCards(terminal);
         requestApply();
+    }
+
+    /**
+     * The keyboard of each Home page of a Home to Home crossing ({@link StackEnd#pageKeyboard}):
+     * the leaving page's and the arriving page's, each a {@code StackEnd.PAGE_KEYBOARD_*}. Where
+     * they differ the keyboard rides with the page that has it up and everything else stays
+     * (CrossingPath). Set as the crossing begins; the landing and {@link #clearEnds} put both back
+     * to the rest's.
+     */
+    public void setHomePageKeyboards(int leaving, int arriving) {
+        if (mEndHome.pageKeyboard == leaving && mEndHomeArriving.pageKeyboard == arriving) return;
+        mEndHome.pageKeyboard = leaving;
+        mEndHomeArriving.pageKeyboard = arriving;
+        requestApply();
+    }
+
+    private void restHomePageKeyboards() {
+        mEndHome.pageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+        mEndHomeArriving.pageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
     }
 
     /** {@code home}'s side's end of the scene; a test fills its card table ({@link StackEnd#setCard}). */
     @NonNull
     StackEnd end(boolean home) {
         return home ? mEndHome : mEndTerminal;
+    }
+
+    /**
+     * The crossing's arriving end: the arriving side's, or Home's second end when both ends are
+     * Home pages, so Home to Home has two distinct ends (step 6 of the crossing rule).
+     */
+    @NonNull
+    StackEnd arrivingEnd(boolean fromHome, boolean toHome) {
+        return fromHome && toHome ? mEndHomeArriving : end(toHome);
     }
 
     /** The Terminal side's lift while apart ({@link #setSidesApart(boolean, float, int)}). */
@@ -396,6 +433,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     public void setRooms(int homePx, int terminalPx) {
         if (mApplied && mEndHome.roomPx == homePx && mEndTerminal.roomPx == terminalPx) return;
         mEndHome.roomPx = homePx;
+        mEndHomeArriving.roomPx = homePx;
         mEndTerminal.roomPx = terminalPx;
         requestApply();
     }
@@ -405,6 +443,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     private int mLeavesDirection = com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
 
     public void clearEnds() {
+        restHomePageKeyboards();
         if (!mHasEnds) return;
         mHasEnds = false;
         mLeavesDirection = com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
@@ -470,7 +509,7 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         final float p;
         if (mHasEnds) {
             from = end(mFromHome);
-            to = end(mToHome);
+            to = arrivingEnd(mFromHome, mToHome);
             p = mEndsProgress;
         } else {
             from = to = end(mViews.frontIsHome());
