@@ -542,6 +542,7 @@
     <string name="linux_window_menu">Window options</string>
     <string name="linux_window_minimise">Minimise</string>
     <string name="linux_window_scale">Scale</string>
+    <string name="linux_window_move">Hold to move</string>
     <string name="linux_window_app">Linux app</string>
     <string name="linux_windows_scale_shared">X11 apps share one size, set by your screen.</string>
     <string name="linux_windows_scale_desktop">The desktop takes the new size the next time it opens.</string>

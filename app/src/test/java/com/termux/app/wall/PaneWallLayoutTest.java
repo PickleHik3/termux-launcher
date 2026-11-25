@@ -728,7 +728,7 @@ public class PaneWallLayoutTest {
         // the finger stands on the seam between the two.
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
         letTheHoldElapse();
-        letTheMotionSettle();
+        letTheSinkSettle();
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 304f, HEIGHT / 2f,
             3000L));
         assertEquals(300f, terminal.getTranslationX(), EPS);
@@ -1342,6 +1342,52 @@ public class PaneWallLayoutTest {
 
     // ---- The sink ------------------------------------------------------------------------------
 
+    /** Lets the sink's spring run out while the finger is still short of the border hold's page. */
+    private static void letTheSinkSettle() {
+        org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
+            .idleFor(java.time.Duration.ofMillis(500L));
+    }
+
+    @Test
+    public void aStillFingerOnASideBorderPagesTheRowOnceAfterTheBorderHold() {
+        buildWithContent();
+        layOutEveryPage();
+        wall.setReducedMotion(false);
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
+        idle(BorderHold.HOLD_MS - 100L);
+        assertEquals("not yet", PageKind.TERMINAL, wall.currentPage());
+        idle(200L);
+        assertEquals("the hold paged toward the left neighbour", PageKind.HOME,
+            wall.currentPage());
+        letTheMotionSettle();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, HEIGHT / 2f,
+            5000L));
+        letTheMotionSettle();
+        assertEquals("once per hold", PageKind.HOME, wall.currentPage());
+        assertFalse(wall.isMoving());
+    }
+
+    @Test
+    public void aFingerThatMovesBeforeTheBorderHoldIsABorderDragNotAPage() {
+        buildWithContent();
+        layOutEveryPage();
+        wall.setReducedMotion(false);
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, 4f, HEIGHT / 2f, 0L));
+        letTheHoldElapse();
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 64f, HEIGHT / 2f,
+            400L));
+        idle(BorderHold.HOLD_MS + 200L);
+        assertEquals("the drag is held at the finger, not paged", PageKind.TERMINAL,
+            wall.currentPage());
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_MOVE, 4f, HEIGHT / 2f,
+            3000L));
+        wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_UP, 4f, HEIGHT / 2f,
+            3010L));
+        letTheMotionSettle();
+        assertEquals(PageKind.TERMINAL, wall.currentPage());
+    }
+
     /** Lets every spring and slide run out. */
     private static void letTheMotionSettle() {
         org.robolectric.Shadows.shadowOf(android.os.Looper.getMainLooper())
@@ -1399,7 +1445,7 @@ public class PaneWallLayoutTest {
         wall.dispatchTouchEvent(touch(android.view.MotionEvent.ACTION_DOWN, WIDTH - 4f,
             HEIGHT / 2f, 0L));
         letTheHoldElapse();
-        letTheMotionSettle();
+        letTheSinkSettle();
         assertTrue(wall.tiltPages().contains(terminal));
         assertEquals(PlankTilt.HOLD_TILT_DEG, terminal.getRotationY(), EPS);
         assertTrue("the right edge goes in", terminal.getRotationY() > 0f);
