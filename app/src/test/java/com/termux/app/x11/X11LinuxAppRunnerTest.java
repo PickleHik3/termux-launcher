@@ -561,4 +561,17 @@ public class X11LinuxAppRunnerTest {
         assertTrue("before it writes the pid file", script.indexOf(
             "export " + X11LinuxAppRunner.SESSION_MARKER_VAR) < script.indexOf("echo $$ >"));
     }
+
+    @Test public void anXfceDesktopWritesItsScaleAfterItsBusAndBeforeStarting() {
+        String body = X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE"), 2f, 3);
+        int bus = body.indexOf(X11LinuxAppRunner.OWN_BUS_BLOCK);
+        int write = body.indexOf("xfconf-query -c xsettings");
+        assertTrue(bus >= 0 && write > bus);
+        assertTrue(write < body.indexOf("exec startxfce4"));
+        assertTrue(body.contains("tl-desktop-x3.bus"));
+        // No scale (X11 Display), or a desktop that is not XFCE: nothing is written.
+        assertFalse(X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE")).contains("xfconf"));
+        assertFalse(X11LinuxAppRunner.sessionBody(session("lxqt", "startlxqt", "LXQt"), 2f, 3)
+            .contains("xfconf"));
+    }
 }

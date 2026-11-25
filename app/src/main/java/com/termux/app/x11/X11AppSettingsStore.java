@@ -68,7 +68,16 @@ public final class X11AppSettingsStore {
         X11AppSettings.Overrides old = all.get(appId);
         put(all, appId, new X11AppSettings.Overrides(old == null ? null : old.touchMode, scale,
             old == null ? null : old.gpu, old == null ? null : old.pasteShortcut));
+        java.util.function.Consumer<String> l = sScaleListener;
+        if (l != null) l.accept(appId);
     }
+
+    /**
+     * Told the app id after every {@link #setScale}: the runner of a running desktop sets it to
+     * reach that desktop (its scale was read once, at start). Null when no desktop runs.
+     */
+    @Nullable
+    public static volatile java.util.function.Consumer<String> sScaleListener;
 
     /** The app's own GPU profile id (never software, see {@link #drawsInSoftware}), or null to follow. */
     @Nullable
