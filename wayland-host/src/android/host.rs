@@ -1207,9 +1207,7 @@ impl State {
                 // A dmabuf still holding what it last posted has not been written yet: it is not
                 // posted, the window keeps the previous frame and the settle posts the change.
                 // Its release and the frame callbacks below still go out on this tick.
-                let post = self.toplevels[i].paced.first_read(hash);
-                linfo!("SETTLE296 first buf={} held={}", buffer.id().protocol_id(), yn(!post));
-                if post {
+                if self.toplevels[i].paced.first_read(hash) {
                     self.copy(i, &buffer);
                     copied = true;
                 }
@@ -1217,10 +1215,7 @@ impl State {
                 // The dmabuf copy may have run before the client's GPU finished (no fence on
                 // KGSL): copy again only when its pixels changed since.
                 let hash = self.settle_hash(i, &buffer);
-                let ms = self.toplevels[i].paced.ms_since_commit(now);
-                let changed = self.toplevels[i].paced.settled(hash);
-                linfo!("SETTLE296 read ms={ms} changed={} reposted={} buf={}", yn(changed), yn(changed), buffer.id().protocol_id());
-                if changed {
+                if self.toplevels[i].paced.settled(hash) {
                     self.copy(i, &buffer);
                     copied = true;
                 }
@@ -1319,7 +1314,6 @@ impl State {
                 t.viewport_src = viewport.0;
                 t.viewport_dst = viewport.1;
                 t.root_draw = DrawState::of(&buffer, scale, viewport);
-                linfo!("SETTLE296 commit buf={}", buffer.id().protocol_id());
                 t.paced.commit_buffer(buffer);
                 if !t.announced {
                     self.announce(i);
@@ -1977,11 +1971,6 @@ fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
     let full = map.to_buffer(map.logical_content(l.geometry), w, h);
     let shown = clamp_to_limit(full, post_limit(l.post_view, l.output));
     Some((shown, full, map.to_logical(shown)))
-}
-
-/// SETTLE296 diagnostics.
-fn yn(b: bool) -> &'static str {
-    if b { "y" } else { "n" }
 }
 
 /// A hash of the part of a dmabuf `buffer` a copy shows (about 1 ms for a full frame); None for
