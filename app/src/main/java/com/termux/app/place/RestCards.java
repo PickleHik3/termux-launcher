@@ -406,6 +406,8 @@ public final class RestCards {
         // its host keeps its keyboard-down rect at both keyboard states.
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome, frontHome);
         RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome, !frontHome);
+        takeTerminalsColumn(frontHome ? answer : otherCards, home, terminal,
+            frontHome ? otherCards : answer);
         shareFoot(answer, otherCards);
         answer.adopt(otherCards, frontHome
             ? terminalCardView(half.floating, terminal.pass.dock.half(PageRef.TERMINAL).layout,
@@ -541,6 +543,116 @@ public final class RestCards {
         }
     }
 
+    /**
+     * Home's keyboard-up column is the Terminal's (#307, 2026-11-25, {@link KeyboardColumn}): with
+     * the keyboard up at both rests and Home's under its cover, Home's rest lays the column out,
+     * and draws the keyboard's card, the bands under it and the foot under them, exactly as the
+     * Terminal's rest does. The column is then one shared card ({@link #splitKeyboard}) and a
+     * crossing moves no key. Home's held rows stay under the cover; whatever of them the column
+     * now draws over is covered. With the Terminal's keyboard down Home keeps its own column: the
+     * keyboard then leaves with Home, and one bands view laid out at two rects would step at the
+     * landing.
+     */
+    private static void takeTerminalsColumn(@NonNull RestCards homeCards, @NonNull Rest home,
+                                            @NonNull Rest terminal,
+                                            @NonNull RestCards terminalCards) {
+        final StackLayout.Input pass = home.pass;
+        final PlaceLayout terminalLayout = terminal.pass.dock.half(PageRef.TERMINAL).layout;
+        final boolean lifts = HomeKeyboardCover.liftsRows(pass.dock.rows.kind,
+            pass.homeKeyboardAlwaysOn);
+        if (!KeyboardColumn.homeStandsTerminalsBands(true, pass.keyboardShown, lifts,
+                terminalLayout.keyboardForm, terminal.pass.keyboardShown)) return;
+        final RestCards up = terminalCards;
+        final float w = home.screenWidthPx;
+        final List<Card> adopted = new ArrayList<>(3);
+        boolean keys = false;
+        for (Card card : up.mCards) {
+            // The foot the Terminal draws under its column across the screen, worn by its host or
+            // the keyboard, is the column's on Home: Home's own host is held under the cover.
+            boolean foot = card.id == CardId.FOOT && card.view != StackView.KEYBOARD_COLUMN
+                && card.box.left == 0f && card.box.right == w;
+            if (card.view != StackView.KEYBOARD_COLUMN && card.view != StackView.UNDER && !foot)
+                continue;
+            adopted.add(foot ? onView(card, StackView.KEYBOARD_COLUMN) : card);
+            keys |= card.id == CardId.KEYBOARD;
+        }
+        // The Terminal's keys on its own host (the unified Docked glass): no keyboard card to share.
+        if (!keys) return;
+        // The shared foot (#307, 2026-11-25): where the column stops above the kept band (bands
+        // under the keys wear no foot), one foot stands under the bands for both rests, so
+        // neither leaves the strip under the gesture pill bare with the keyboard up.
+        // Docked only: Floating keeps its air under the keyboard's capsule.
+        Card columnFoot = pass.dock.rowsHalf().floating ? null : columnFootOf(adopted, w,
+            terminal.screenHeightPx, Math.max(0, terminal.keptBandPx));
+        if (columnFoot != null) {
+            // The card above the foot joins it, in both rests' lists.
+            for (int i = 0; i < adopted.size(); i++) {
+                Card above = adopted.get(i);
+                if (above.box.bottom != columnFoot.box.top) continue;
+                Card joined = joinedBelow(above);
+                adopted.set(i, joined);
+                int at = up.mCards.indexOf(above);
+                if (at >= 0) up.mCards.set(at, joined);
+            }
+            adopted.add(columnFoot);
+            up.mCards.add(columnFoot);
+            up.mColumnFoot = columnFoot;
+            homeCards.mColumnFoot = columnFoot;
+        }
+        final int column = StackView.KEYBOARD_COLUMN.ordinal();
+        final int under = StackView.UNDER.ordinal();
+        for (int i = homeCards.mCards.size() - 1; i >= 0; i--) {
+            Card card = homeCards.mCards.get(i);
+            if (card.view != StackView.KEYBOARD_COLUMN && card.view != StackView.UNDER) continue;
+            homeCards.mCards.remove(i);
+            homeCards.mCovered.remove(card);
+        }
+        homeCards.mCards.addAll(adopted);
+        homeCards.mLaidOut[column] = up.mLaidOut[column];
+        homeCards.mLaidOut[under] = up.mLaidOut[under];
+        for (Card card : homeCards.mCards) {
+            if (adopted.contains(card) || card.id == CardId.STATUS
+                || homeCards.mCovered.contains(card)) continue;
+            boolean drawnOver = card.id == CardId.DOCK || card.id == CardId.PEEK;
+            for (Card over : adopted) drawnOver |= overlaps(card.box, over.box);
+            if (drawnOver) homeCards.mCovered.add(card);
+        }
+    }
+
+    /**
+     * The foot under the keyboard's column that both rests share (#307, 2026-11-25): the kept
+     * band under the lowest card the column draws, across the screen, carried on the column
+     * (the stack's own, kept at its rest by the scene) and drawn by the foot's own view
+     * ({@link #columnFoot}); null where the column already reaches the screen's bottom or
+     * already draws a foot, or no band is kept.
+     */
+    @Nullable
+    private static Card columnFootOf(@NonNull List<Card> column, float w, int h, int kept) {
+        if (kept <= 0) return null;
+        float bottom = 0f;
+        for (Card card : column) {
+            if (card.id == CardId.FOOT) return null;
+            bottom = Math.max(bottom, card.box.bottom);
+        }
+        if (bottom <= 0f || bottom >= h) return null;
+        Card foot = new Card(CardId.FOOT, StackView.KEYBOARD_COLUMN, new Box(0f, bottom, w, h),
+            Corners.SQUARE, EdgeKind.JOIN, EdgeKind.SCREEN, EdgeKind.SCREEN, EdgeKind.SCREEN,
+            Collections.<PieceId>emptyList());
+        return foot;
+    }
+
+    /**
+     * The foot under the keyboard's column shared by both rests while Home takes the Terminal's
+     * column (#307, 2026-11-25): a {@link CardId#FOOT} card the column carries below its laid-out
+     * bottom, which the foot's own view draws; null otherwise.
+     */
+    @Nullable
+    public Card columnFoot() {
+        return mColumnFoot;
+    }
+
+    @Nullable private Card mColumnFoot;
+
     /** Whether both rests lay the keyboard's column out alike and draw the same cards on it. */
     private static boolean sameKeyboard(@NonNull RestCards a, @NonNull RestCards b) {
         final int column = StackView.KEYBOARD_COLUMN.ordinal();
@@ -550,6 +662,15 @@ public final class RestCards {
         for (Card card : a.mCards) if (card.view == StackView.KEYBOARD_COLUMN) mine.add(card.box);
         for (Card card : b.mCards) if (card.view == StackView.KEYBOARD_COLUMN) theirs.add(card.box);
         return !mine.isEmpty() && mine.equals(theirs);
+    }
+
+    /** {@code card} with its bottom edge a join and its bottom corners square: a foot stands under it. */
+    @NonNull
+    private static Card joinedBelow(@NonNull Card card) {
+        Corners c = card.corners;
+        return new Card(card.id, card.view, card.box,
+            new Corners(c.topLeft, c.topRight, 0f, 0f), card.edge(Edge.TOP), EdgeKind.JOIN,
+            card.edge(Edge.LEFT), card.edge(Edge.RIGHT), card.pieces).withRuns(card.runs());
     }
 
     /** {@code card} carried by {@code view}. */

@@ -407,8 +407,8 @@ public final class SideCardsController {
 
     /**
      * The foot's own view (#307): laid out from the answer while both hosts share the foot (the
-     * cards apart under Docked), pinned to the container's bottom like the Terminal's host, and
-     * gone otherwise. Compares before it writes.
+     * cards apart under Docked) or both rests share the foot under the keyboard's bands, pinned
+     * to the container's bottom like the Terminal's host, and gone otherwise. Compares before it writes.
      *
      * @return whether its bounds or its standing moved
      */
@@ -416,6 +416,13 @@ public final class SideCardsController {
         Box box = answer != null && answer.apart() ? answer.laidOut(RestCards.StackView.FOOT)
             : null;
         RestCards.Card card = box == null ? null : answer.cardOn(RestCards.StackView.FOOT);
+        // The foot under the keyboard's bands both rests share while Home takes the Terminal's
+        // column (#307, 2026-11-25): the column carries it, so it is laid out where it is drawn.
+        RestCards.Card columnFoot = answer != null && answer.apart() ? answer.columnFoot() : null;
+        if (card == null && columnFoot != null) {
+            card = columnFoot;
+            box = columnFoot.box;
+        }
         boolean on = box != null && card != null;
         boolean moved = on != (mFootCard != null) || !java.util.Objects.equals(
             on ? card.box : null, mFootCard == null ? null : mFootCard.box);
