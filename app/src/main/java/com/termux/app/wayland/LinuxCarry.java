@@ -52,6 +52,17 @@ public final class LinuxCarry {
         void drop(long id, int from, int to);
         /** Brings window {@code id} back in front where it was. */
         void putBack(long id);
+        /** Whether window {@code id} is a pane of a split (it has no row place). */
+        default boolean inPane(long id) { return false; }
+        /**
+         * The pane of the window in front under the finger at ({@code x}, {@code y}) other than
+         * window {@code id}'s own: its bounds (left, top, right, bottom) into {@code out}; false when none.
+         */
+        default boolean paneAt(long id, float x, float y, @NonNull float[] out) { return false; }
+        /** Window {@code id} becomes a pane beside the pane at ({@code x}, {@code y}), on {@code side}. */
+        default void dropSplit(long id, float x, float y, int side) { putBack(id); }
+        /** The pane of window {@code id} becomes its own window at row place {@code to}. */
+        default void dropFromPane(long id, int to) { putBack(id); }
     }
 
     /** The picture's size against the half-size bitmap it is made from. */
@@ -84,6 +95,10 @@ public final class LinuxCarry {
     /** The gap the preview marks, -1 for none, and where it stands. */
     private int mPreviewGap = -1;
     private float mPreviewX;
+    /** The pane half the preview marks (l, t, r, b), valid while {@link #mPreviewHalfOn}. */
+    private final float[] mPane = new float[4];
+    private final float[] mHalf = new float[4];
+    private boolean mPreviewHalfOn;
 
     LinuxCarry(@NonNull Context context, @NonNull Host host, long id, @Nullable Bitmap picture) {
         mHost = host;
@@ -178,9 +193,17 @@ public final class LinuxCarry {
         mHost.wallSpan(mSpan);
         int front = mHost.frontPlace();
         int count = mHost.placeCount();
-        int carried = mHost.placeOf(mId);
+        int carried = carriedPlace();
         mPreviewGap = LinuxCarryPolicy.previewGap(x, mSpan[0], mSpan[1], mStripPx, front, count,
             carried);
+        // A pane under the finger, past the strips: the half a drop would take shows while it hovers.
+        mPreviewHalfOn = false;
+        if (mPreviewGap < 0 && front >= 0
+            && LinuxCarryPolicy.edgeAt(x, mSpan[0], mSpan[1], mStripPx) == 0
+            && mHost.paneAt(mId, x, y, mPane)) {
+            LinuxCarryPolicy.halfOf(mPane, LinuxCarryPolicy.sideAt(x, y, mPane), mHalf);
+            mPreviewHalfOn = true;
+        }
         mPreviewX = mPreviewGap < 0 ? 0f : mPreviewGap == front ? mSpan[0] : mSpan[1];
         // The border hold lives on the same strips the drop does; a finger on one keeps its hold
         // while it stays within the slop and begins another where it settles.
@@ -208,6 +231,11 @@ public final class LinuxCarry {
         mView.invalidate();
     }
 
+    /** The carried window's row place, {@link LinuxCarryPolicy#FROM_PANE} for a pane, -1 when it is gone. */
+    private int carriedPlace() {
+        return mHost.inPane(mId) ? LinuxCarryPolicy.FROM_PANE : mHost.placeOf(mId);
+    }
+
     private void onHoldElapsed() {
         if (!mActive) return;
         int steps = BorderHold.steps(mHold.side());
@@ -223,20 +251,25 @@ public final class LinuxCarry {
         mHandler.removeCallbacks(mFire);
         mHold.end();
         LinuxCarryPolicy.Drop drop = null;
-        int from = mHost.placeOf(mId);
+        int from = carriedPlace();
+        boolean pane = from == LinuxCarryPolicy.FROM_PANE;
+        mPreviewHalfOn = false;
         if (lifted) {
             mHost.wallSpan(mSpan);
-            drop = LinuxCarryPolicy.decide(mX, mSpan[0], mSpan[1], mStripPx, mHost.frontPlace(),
-                mHost.placeCount(), from);
+            boolean over = mHost.paneAt(mId, mX, mY, mPane);
+            drop = LinuxCarryPolicy.decide(mX, mY, mSpan[0], mSpan[1], mStripPx, mHost.frontPlace(),
+                mHost.placeCount(), from, over ? mPane : null);
         }
         ViewGroup parent = (ViewGroup) mView.getParent();
         if (parent != null) parent.removeView(mView);
         Bitmap picture = mPicture;
         mPicture = null;
         if (picture != null) picture.recycle();
-        if (from < 0) return;
-        if (drop != null && drop.kind == LinuxCarryPolicy.Kind.BETWEEN) {
-            mHost.drop(mId, from, drop.to);
+        if (from < 0 && !pane) return;
+        if (drop != null && drop.kind == LinuxCarryPolicy.Kind.SPLIT) {
+            mHost.dropSplit(mId, mX, mY, drop.side);
+        } else if (drop != null && drop.kind == LinuxCarryPolicy.Kind.BETWEEN) {
+            if (pane) mHost.dropFromPane(mId, drop.to); else mHost.drop(mId, from, drop.to);
         } else {
             mHost.putBack(mId);
         }
@@ -278,6 +311,14 @@ public final class LinuxCarry {
                 mRect.set(px - w / 2f, 12f * density, px + w / 2f, getHeight() - 12f * density);
                 mBar.setAlpha(230);
                 canvas.drawRoundRect(mRect, w / 2f, w / 2f, mBar);
+            }
+            if (mPreviewHalfOn) {
+                mRect.set(mHalf[0] - mOrigin[0], mHalf[1] - mOrigin[1], mHalf[2] - mOrigin[0],
+                    mHalf[3] - mOrigin[1]);
+                mFill.setAlpha(56);
+                canvas.drawRect(mRect, mFill);
+                mStroke.setStrokeWidth(3f * density);
+                canvas.drawRect(mRect, mStroke);
             }
             Bitmap picture = mPicture;
             float w = picture != null ? picture.getWidth() * GHOST_SCALE

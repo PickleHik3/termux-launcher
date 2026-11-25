@@ -80,6 +80,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void chipsChanged();
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
+        /** Pane window {@code id} was destroyed or taken out: its pane leaves the split, which collapses. */
+        default void removePane(long id) {}
+        /** The pane of window {@code id} took the finger: the split's focus moves to it. */
+        default void paneTouched(long id) {}
         /** What a carry of a window asks of the wall and the row; null where none can be carried. */
         @Nullable default LinuxCarry.Host carryHost() { return null; }
     }
@@ -114,6 +118,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         /** It stands in a row (a dialog with a parent and a minimised window do not). */
         boolean inRow;
         boolean minimised;
+        /** It is a pane of a terminal window's split (#387), shown in {@link #paneFrame}. */
+        boolean inPane;
+        @Nullable LinuxWindowPageView paneFrame;
         /** Where it stood when it was minimised ({@link Host#placeOf}); null for none. */
         @Nullable Object placeWhenMinimised;
         @Nullable TextureView view;
@@ -155,7 +162,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             try {
                 sendConfigure(this, w, h);
                 service.setSurface(id, surface);
-                service.setVisible(id, front);
+                service.setVisible(id, inPane ? terminalShown : front);
             } catch (RemoteException ignored) {
             }
         }
@@ -201,6 +208,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The window the view is bound to; 0 for none. */
     private long boundId;
     private boolean nearFront;
+    /** The Terminal page is on screen: its panes' Linux windows draw. */
+    private boolean terminalShown;
+    @Nullable private PaneSurfaceStyle paneStyle;
     /** The Linux view is the page in front. */
     private boolean front;
     private long focusedId;
@@ -215,7 +225,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             @Override
             public boolean interceptKeyValue(@NonNull juloo.keyboard2.KeyValue value, boolean ctrl,
                                              boolean alt, boolean shift) {
-                if (shownWindow() == null) return false;
+                if (shownWindow() == null && !focusedIsPane()) return false;
                 LinuxWindowKeys.send(value, ctrl, alt, shift, false, keySink);
                 return true;
             }
@@ -367,6 +377,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** Stops listening; the apps keep running in the host. */
     public void stop() {
         cancelCarry();
+        dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         if (service != null) {
             try {
@@ -406,7 +417,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
      */
     @Nullable
     public Bitmap departurePicture() {
-        Win w = shownWindow();
+        return pictureOf(shownWindow());
+    }
+
+    @Nullable
+    private Bitmap pictureOf(@Nullable Win w) {
         TextureView v = w == null ? null : w.view;
         if (v == null || !v.isAvailable() || v.getWidth() <= 0 || v.getHeight() <= 0) return null;
         try {
@@ -467,7 +482,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (!LinuxWindowRow.ownsPage(parentId, windows.get(parentId) != null)) {
             // A dialog: drawn over its parent's window, which shows it when bound.
             Win parent = windows.get(parentId);
-            if (parent != null && parent.id == boundId && nearFront) attachViews(parent);
+            if (parent != null && (parent.inPane || parent.id == boundId && nearFront)) attachViews(parent);
             return;
         }
         boolean replayed = SystemClock.uptimeMillis() - attachedAt < REPLAY_MS;
@@ -498,6 +513,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (focusedId == id) focusedId = 0;
         if (boundId == id) boundId = 0;
         if (w.inRow) host.removeWindow(id);
+        if (w.inPane) {
+            w.inPane = false;
+            w.paneFrame = null;
+            host.removePane(id);
+        }
         // A parent's dialogs lose their parent: each gets a place of its own.
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
@@ -513,6 +533,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The host stopped or died: its windows leave the row, with a notice when it died. */
     private void dropWindows(boolean died) {
         boolean had = windows.size() > 0;
+        dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();
         focusedId = 0;
@@ -520,6 +541,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         host.removeAllWindows();
         rebuildChips();
         if (died && had) host.notice(context.getString(R.string.linux_windows_stopped));
+    }
+
+    /** Every pane's window is going: its pane leaves its split, which collapses. */
+    private void dropPanes() {
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (!w.inPane) continue;
+            w.inPane = false;
+            w.paneFrame = null;
+            host.removePane(w.id);
+        }
     }
 
     private void hostGone() {
@@ -580,13 +612,15 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Override
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         page.applyStyle(style);
+        paneStyle = style;
+        applyPaneStyle(style);
     }
 
     // ---- views ----------------------------------------------------------------------------------
 
     /** Puts {@code w}'s view, then its dialogs' centred over it, in the page's slot. */
     private void attachViews(@NonNull Win w) {
-        FrameLayout slot = page.slot();
+        FrameLayout slot = slotOf(w);
         TextureView v = w.view();
         if (v.getParent() != slot) {
             slot.addView(v, 0, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
@@ -618,8 +652,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** Sizes a dialog's view from {@link LinuxWindowRow#dialogFrame}; compares first. */
     private void placeDialog(@NonNull Win d) {
         TextureView v = d.view;
-        if (v == null || v.getParent() != page.slot()) return;
-        FrameLayout slot = page.slot();
+        Win parent = windows.get(d.parentId);
+        FrameLayout slot = parent == null ? page.slot() : slotOf(parent);
+        if (v == null || v.getParent() != slot) return;
         LinuxWindowRow.dialogFrame(slot.getWidth(), slot.getHeight(), d.width, d.height, dialogFrame);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
         if (lp.width == dialogFrame[2] && lp.height == dialogFrame[3]) return;
@@ -631,7 +666,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private boolean isDialogOfBound(@NonNull Win w) {
         Win parent = w.parentId == 0 ? null : windows.get(w.parentId);
-        return parent != null && parent.inRow && parent.id == boundId;
+        return parent != null && (parent.inRow && parent.id == boundId || parent.inPane);
+    }
+
+    /** Where {@code w}'s views go: its pane's slot, else the one page's. */
+    @NonNull
+    private FrameLayout slotOf(@NonNull Win w) {
+        return w.inPane && w.paneFrame != null ? w.paneFrame.slot() : page.slot();
     }
 
     @Nullable
@@ -653,10 +694,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     @Override
     public boolean beginCarry(float x, float y, int pointerId) {
-        Win w = shownWindow();
+        return beginCarryOf(shownWindow(), x, y, pointerId);
+    }
+
+    private boolean beginCarryOf(@Nullable Win w, float x, float y, int pointerId) {
         LinuxCarry.Host carryHost = host.carryHost();
         if (w == null || carryHost == null || isCarrying()) return false;
-        carry = new LinuxCarry(context, carryHost, w.id, departurePicture());
+        carry = new LinuxCarry(context, carryHost, w.id, pictureOf(w));
         carry.begin(x, y, pointerId);
         return true;
     }
@@ -686,7 +730,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     @Override
     public void closeWindow() {
-        Win w = shownWindow();
+        closeWin(shownWindow());
+    }
+
+    private void closeWin(@Nullable Win w) {
         if (w == null || service == null) return;
         try {
             service.close(w.id);
@@ -736,13 +783,19 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     @Override
     public int currentScaleStep() {
-        Win w = shownWindow();
+        return scaleStepOf(shownWindow());
+    }
+
+    private int scaleStepOf(@Nullable Win w) {
         return w == null || w.view == null ? 0 : LinuxDisplayScale.railStep(scale(w, w.view.getWidth()));
     }
 
     @Override
     public void onScaleStepChosen(int step) {
-        Win w = shownWindow();
+        chooseScale(shownWindow(), step);
+    }
+
+    private void chooseScale(@Nullable Win w, int step) {
         if (w == null || !w.scales()) return;
         String app = WaylandAppRunner.shared(context).appFor(w.id);
         if (app == null) {
@@ -761,6 +814,139 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Override
     public void onScaleRailUsed() {
         page.dismissRail();
+    }
+
+    // ---- panes of a split (#387) ------------------------------------------------------------------
+
+    /** What a pane's rim tab asks, for one window: the page's own Host, bound to {@code w}. */
+    private final class PaneHost implements LinuxWindowPageView.Host {
+        final Win w;
+
+        PaneHost(@NonNull Win w) {
+            this.w = w;
+        }
+
+        @Override public boolean hasWindow() { return w.inPane && windows.get(w.id) == w; }
+        @Override public boolean windowScales() { return w.scales(); }
+        @Override public void closeWindow() { closeWin(w); }
+        @Override public void minimiseWindow() { minimisePane(w); }
+        @Override public void frontChanged(boolean isFront) {}
+        @NonNull @Override public TerminalKeyEventHandler.KeyValueInterceptor keys() { return keys; }
+        @Override public boolean beginCarry(float x, float y, int pointerId) {
+            return beginCarryOf(w, x, y, pointerId);
+        }
+        @Override public int currentScaleStep() { return scaleStepOf(w); }
+        @Override public void onScaleStepChosen(int step) { chooseScale(w, step); }
+        @Override public void onScaleRailUsed() {
+            if (w.paneFrame != null) w.paneFrame.dismissRail();
+        }
+    }
+
+    /**
+     * Window {@code id}, in a row or already a pane, becomes a pane: it leaves its row, and the
+     * frame its split shows is returned (one per window, kept until {@link #releasePane}). Null
+     * when the window is gone or minimised.
+     */
+    @Nullable
+    public LinuxWindowPageView takeIntoPane(long id) {
+        Win w = windows.get(id);
+        if (w == null || w.minimised) return null;
+        if (w.inPane && w.paneFrame != null) return w.paneFrame;
+        boolean wasRow = w.inRow;
+        detachViews(w);
+        if (boundId == id) boundId = 0;
+        w.inRow = false;
+        w.inPane = true;
+        LinuxWindowPageView frame = new LinuxWindowPageView(context, new PaneHost(w));
+        frame.setEmbedded(true);
+        frame.applyStyle(paneStyle);
+        w.paneFrame = frame;
+        attachViews(w);
+        setVisible(w, terminalShown);
+        if (wasRow) host.removeWindow(id);
+        rebuildChips();
+        return frame;
+    }
+
+    /** Window {@code id}'s pane left its split: it stands in the row again, after the window in front. */
+    public void releasePane(long id, boolean toRow) {
+        Win w = windows.get(id);
+        if (w == null || !w.inPane) return;
+        detachViews(w);
+        w.inPane = false;
+        w.paneFrame = null;
+        if (focusedId == id) focus(0);
+        if (toRow) {
+            w.inRow = true;
+            host.addWindow(id, false);
+        }
+        rebuildChips();
+    }
+
+    /** The Terminal page came on screen or left it: the panes' windows draw only while it is. */
+    public void setTerminalShown(boolean shown) {
+        if (shown == terminalShown) return;
+        terminalShown = shown;
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (w.inPane) setVisible(w, shown);
+        }
+    }
+
+    /**
+     * The split's focus is on pane {@code id} (0: on a terminal): the app takes the keys, or gives
+     * them up. True when the key owner changed.
+     */
+    public boolean setPaneFocus(long id) {
+        if (id != 0) {
+            Win w = windows.get(id);
+            if (w == null || !w.inPane || focusedId == id) return false;
+        } else if (!focusedIsPane()) {
+            return false;
+        }
+        focus(id);
+        return true;
+    }
+
+    /** Whether the app that holds the keys is a pane of a split. */
+    private boolean focusedIsPane() {
+        Win w = focusedId == 0 ? null : windows.get(focusedId);
+        return w != null && w.inPane;
+    }
+
+    /** A finger went down on {@code w}: its app takes the focus, and the split's moves to its pane. */
+    private void tapped(@NonNull Win w) {
+        focus(w.id);
+        if (w.inPane) host.paneTouched(w.id);
+    }
+
+    /** Minimise on a pane: it leaves the split and waits as a chip. */
+    private void minimisePane(@NonNull Win w) {
+        if (!w.inPane) return;
+        detachViews(w);
+        setVisible(w, false);
+        w.inPane = false;
+        w.paneFrame = null;
+        w.minimised = true;
+        w.placeWhenMinimised = null;
+        if (focusedId == w.id) focus(0);
+        host.removePane(w.id);
+        rebuildChips();
+    }
+
+    /** The frame of pane window {@code id}, for the split to hold; null when it is none. */
+    @Nullable
+    public LinuxWindowPageView paneFrame(long id) {
+        Win w = windows.get(id);
+        return w != null && w.inPane ? w.paneFrame : null;
+    }
+
+    /** Dresses every pane frame as the surface style says; run with the page's own style. */
+    public void applyPaneStyle(@Nullable PaneSurfaceStyle style) {
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (w.paneFrame != null) w.paneFrame.applyStyle(style);
+        }
     }
 
     // ---- to the host --------------------------------------------------------------------------
@@ -851,7 +1037,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private boolean onTouch(@NonNull Win w, @NonNull MotionEvent e) {
         if (e.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) return onMouse(w, e);
         int action = e.getActionMasked();
-        if (action == MotionEvent.ACTION_DOWN) focus(w.id);
+        if (action == MotionEvent.ACTION_DOWN) tapped(w);
         int n = Math.min(e.getPointerCount(), MAX_POINTS);
         for (int i = 0; i < n; i++) {
             w.slots[i] = e.getPointerId(i);
@@ -869,7 +1055,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private boolean onMouse(@NonNull Win w, @NonNull MotionEvent e) {
         switch (e.getActionMasked()) {
             case MotionEvent.ACTION_DOWN:
-                focus(w.id);
+                tapped(w);
                 w.mouseButton = linuxButton(e.getButtonState());
                 sendPointer(w, ILinuxWindows.POINTER_MOTION, 0, e.getX(), e.getY(), e.getEventTime());
                 sendPointer(w, ILinuxWindows.POINTER_BUTTON_DOWN, w.mouseButton, e.getX(), e.getY(), e.getEventTime());

@@ -349,7 +349,92 @@ public class TerminalPaneController {
         int compactReturn = FontCompactPolicy.NOT_COMPACT;
         /** This float's size and spot in each orientation, while the process lives. */
         @Nullable HomeFloatPolicy.ShapeMemory shapeMemory;
+        /**
+         * The Linux window this leaf holds (#387), 0 for a terminal leaf: such a leaf has no
+         * {@link #session}; its frame is the window's own page ({@link LinuxPanes}). Floats are
+         * leaves too, so a Linux float (#388) is this leaf in {@link Window#floating}.
+         */
+        long linuxWindowId;
         Leaf(TerminalSession session) { this.session = session; }
+
+        /** A leaf holding Linux window {@code id}. */
+        static Leaf linux(long id) {
+            Leaf leaf = new Leaf(null);
+            leaf.linuxWindowId = id;
+            return leaf;
+        }
+
+        boolean isLinux() { return linuxWindowId != 0L; }
+    }
+
+    /**
+     * The Linux windows' side of a split (#387): the frame a Linux leaf shows, and what the split
+     * tells the app. Implemented by the Linux windows' controller; none where Wayland is off.
+     */
+    public interface LinuxPanes {
+        /** The page window {@code id}'s pane shows, or null when the window is gone. */
+        @Nullable PaneContentFrame frameOf(long windowId);
+        /** The split's focus is on Linux window {@code id}'s pane, or on a terminal (0). */
+        void focused(long windowId);
+        /** Window {@code id} has no split left to stand in: it stands in the row again. */
+        void orphaned(long windowId);
+        /** Close window {@code id}'s app. */
+        void close(long windowId);
+    }
+
+    @Nullable private LinuxPanes mLinuxPanes;
+
+    public void setLinuxPanes(@Nullable LinuxPanes panes) {
+        mLinuxPanes = panes;
+    }
+
+    /** The frame {@code leaf} shows: a terminal's pane frame, or the Linux window's page. */
+    @Nullable
+    private PaneContentFrame frameOf(@NonNull Leaf leaf) {
+        if (!leaf.isLinux()) return mPaneFrames.get(leaf.session);
+        return mLinuxPanes == null ? null : mLinuxPanes.frameOf(leaf.linuxWindowId);
+    }
+
+    /** The tree without its Linux leaves (siblings take their places): what is saved. Null when none is left. */
+    @Nullable
+    static Node withoutLinux(@Nullable Node node) {
+        if (node == null) return null;
+        if (node instanceof Leaf) return ((Leaf) node).isLinux() ? null : node;
+        Split split = (Split) node;
+        Node a = withoutLinux(split.a);
+        Node b = withoutLinux(split.b);
+        if (a == split.a && b == split.b) return split;
+        if (a == null) return b;
+        if (b == null) return a;
+        Split copy = new Split();
+        copy.orientation = split.orientation;
+        copy.weightA = split.weightA;
+        copy.weightB = split.weightB;
+        copy.a = a;
+        copy.b = b;
+        return copy;
+    }
+
+    /** The window's focused terminal pane: its active leaf, or its first terminal while a Linux pane is focused. */
+    @Nullable
+    static Leaf activeTerminalLeaf(@NonNull Window w) {
+        if (w.active != null && !w.active.isLinux()) return w.active;
+        Node tree = withoutLinux(w.root);
+        if (tree == null) return null;
+        Leaf first = tree instanceof Leaf ? (Leaf) tree : null;
+        while (first == null) {
+            Split split = (Split) tree;
+            tree = split.a;
+            if (tree instanceof Leaf) first = (Leaf) tree;
+        }
+        return first;
+    }
+
+    @Nullable
+    private static TerminalSession activeSessionOf(@Nullable Window w) {
+        if (w == null || w.active == null) return null;
+        Leaf leaf = activeTerminalLeaf(w);
+        return leaf == null ? null : leaf.session;
     }
 
     static final class Split extends Node {
@@ -457,7 +542,7 @@ public class TerminalPaneController {
     private final Map<TerminalSession, TerminalView> mPaneViews = new HashMap<>();
     /** Live border drawable + focus state per pane, so a focus flip can crossfade and a
      *  redundant re-render can leave a mid-flight crossfade untouched instead of snapping it. */
-    private final Map<TerminalSession, PaneRim> mBorderStates = new HashMap<>();
+    private final Map<Object, PaneRim> mBorderStates = new HashMap<>();
     /** Which panes are asking for the user; the border reads it (updateActiveBorders). */
     private final PaneAttention mPaneAttention = new PaneAttention();
     private boolean mUpdatingBorders;
@@ -1016,8 +1101,9 @@ public class TerminalPaneController {
                 window.name, new TerminalWorkspace.HomeFloat(window.homePageId, window.minimised,
                     savedShape(shapes[0]), savedShape(shapes[1])));
         }
-        List<Leaf> panes = allLeavesOf(window);
-        int active = Math.max(0, panes.indexOf(window.active));
+        List<Leaf> panes = new ArrayList<>();
+        for (Leaf leaf : allLeavesOf(window)) if (!leaf.isLinux()) panes.add(leaf);
+        int active = Math.max(0, panes.indexOf(activeTerminalLeaf(window)));
         List<TerminalWorkspace.FloatingPane> floats = new ArrayList<>();
         for (Leaf leaf : window.floating) {
             RectF frac = leaf.floatFrac != null ? leaf.floatFrac : defaultFloatFrac(0);
@@ -1025,7 +1111,7 @@ public class TerminalPaneController {
                 frac.left, frac.top, frac.width(), frac.height()));
         }
         return new TerminalWorkspace.Window(active,
-            snapshotWorkspaceNode(window.root, capture), floats, window.name);
+            snapshotWorkspaceNode(withoutLinux(window.root), capture), floats, window.name);
     }
 
     /**
@@ -1150,7 +1236,7 @@ public class TerminalPaneController {
     @NonNull
     public Bundle saveWindow(@NonNull Window window) {
         Bundle state = new Bundle();
-        state.putBundle(STATE_WINDOW_ROOT, saveNode(window.root));
+        state.putBundle(STATE_WINDOW_ROOT, saveNode(withoutLinux(window.root)));
         TerminalSession active = windowActiveSession(window);
         if (active != null) state.putString(STATE_WINDOW_ACTIVE, active.mHandle);
         if (window.layoutPolicy != null) state.putString(STATE_WINDOW_LAYOUT, window.layoutPolicy);
@@ -1646,7 +1732,7 @@ public class TerminalPaneController {
         for (Leaf leaf : leavesOf(node)) {
             TerminalView view = mPaneViews.get(leaf.session);
             if (view != null && mHostSurfaceResizeDepth > 0) view.setTerminalSizeUpdatesPaused(true, false);
-            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            PaneContentFrame frame = frameOf(leaf);
             if (frame != null) frame.setTravelBottomInsetPx(0);
         }
         if (built != existing) {
@@ -1784,7 +1870,7 @@ public class TerminalPaneController {
         if (mActiveWindow == null) return false;
         List<RectF> frames = new ArrayList<>();
         for (Leaf leaf : leavesOf(mActiveWindow.root)) {
-            View frame = mPaneFrames.get(leaf.session);
+            View frame = frameOf(leaf);
             if (frame == null || frame.getWidth() <= 0 || frame.getHeight() <= 0) continue;
             float left = frame.getLeft();
             float top = frame.getTop();
@@ -1804,13 +1890,13 @@ public class TerminalPaneController {
     /** All shells of {@code w}: tiled leaves first, then floating panes. */
     public List<TerminalSession> shellsOf(Window w) {
         List<TerminalSession> out = new ArrayList<>();
-        if (w != null) for (Leaf leaf : allLeavesOf(w)) out.add(leaf.session);
+        if (w != null) for (Leaf leaf : allLeavesOf(w)) if (!leaf.isLinux()) out.add(leaf.session);
         return out;
     }
 
     /** The focused shell of {@code w} (its representative for the drawer). */
     @Nullable public TerminalSession windowActiveSession(@Nullable Window w) {
-        return w == null || w.active == null ? null : w.active.session;
+        return activeSessionOf(w);
     }
 
     /** Remove a whole window (all panes, floating included). Returns its shells to kill. */
@@ -1818,6 +1904,10 @@ public class TerminalPaneController {
         List<TerminalSession> sessions = new ArrayList<>();
         if (w == null) return sessions;
         for (Leaf leaf : allLeavesOf(w)) {
+            if (leaf.isLinux()) {
+                if (mLinuxPanes != null) mLinuxPanes.orphaned(leaf.linuxWindowId);
+                continue;
+            }
             sessions.add(leaf.session);
             removeFloatContainer(leaf);
             detachPaneView(leaf.session);
@@ -1854,7 +1944,7 @@ public class TerminalPaneController {
         // A focused Home float takes the keyboard: it is the pane typing reaches.
         Window focusedFloat = mFocusedHomeFloat;
         if (focusedFloat != null && focusedFloat.active != null) return focusedFloat.active.session;
-        return mActiveWindow != null && mActiveWindow.active != null ? mActiveWindow.active.session : null;
+        return activeSessionOf(mActiveWindow);
     }
 
     /** Whether every pane treats touch as the mouse; see {@link TerminalView#setTouchMouseMode}. */
@@ -2283,11 +2373,11 @@ public class TerminalPaneController {
         if (mActiveWindow == null) return;
         int hostHeight = mHostView.getHeight();
         if (mMaximizedLeaf != null) {
-            coverPaneFrame(mPaneFrames.get(mMaximizedLeaf.session), hostHeight, cover);
+            coverPaneFrame(frameOf(mMaximizedLeaf), hostHeight, cover);
             return;
         }
         for (Leaf leaf : leavesOf(mActiveWindow.root))
-            coverPaneFrame(mPaneFrames.get(leaf.session), hostHeight, cover);
+            coverPaneFrame(frameOf(leaf), hostHeight, cover);
     }
 
     private void coverPaneFrame(@Nullable PaneContentFrame frame, int hostHeight, int coverPx) {
@@ -2349,6 +2439,151 @@ public class TerminalPaneController {
         }
     }
 
+    // --- Linux panes (#387) ---
+
+    /** The Linux window whose pane is focused in the window on screen, 0 when a terminal is. */
+    public long activeLinuxPaneId() {
+        Leaf active = mActiveWindow == null ? null : mActiveWindow.active;
+        return active != null && active.isLinux() ? active.linuxWindowId : 0L;
+    }
+
+    /** The focused pane's page while it is a Linux window's, for the keys to follow; else null. */
+    @Nullable
+    public PaneContentFrame activeLinuxPaneFrame() {
+        Leaf active = mActiveWindow == null ? null : mActiveWindow.active;
+        return active != null && active.isLinux() ? frameOf(active) : null;
+    }
+
+    /** Whether Linux window {@code id} is a pane of some window's split. */
+    public boolean hasLinuxPane(long id) {
+        return findLinuxLeaf(id) != null;
+    }
+
+    @Nullable
+    private Leaf findLinuxLeaf(long id) {
+        for (Window w : mWindows) {
+            for (Leaf leaf : allLeavesOf(w)) if (leaf.linuxWindowId == id && id != 0L) return leaf;
+        }
+        return null;
+    }
+
+    private final int[] mLinuxPaneAt = new int[2];
+
+    /** The tiled pane of the window on screen under window point ({@code x}, {@code y}), not Linux window {@code except}'s own. */
+    @Nullable
+    private Leaf paneAtWindowPoint(long except, float x, float y, @Nullable float[] out) {
+        if (mActiveWindow == null || mActiveWindow.root == null) return null;
+        for (Leaf leaf : leavesOf(mMaximizedLeaf != null ? mMaximizedLeaf : mActiveWindow.root)) {
+            if (leaf.isLinux() && leaf.linuxWindowId == except) continue;
+            PaneContentFrame frame = frameOf(leaf);
+            if (frame == null || !frame.isShown() || frame.getWidth() <= 0) continue;
+            frame.getLocationInWindow(mLinuxPaneAt);
+            float l = mLinuxPaneAt[0];
+            float t = mLinuxPaneAt[1];
+            if (x < l || x > l + frame.getWidth() || y < t || y > t + frame.getHeight()) continue;
+            if (out != null) {
+                out[0] = l;
+                out[1] = t;
+                out[2] = l + frame.getWidth();
+                out[3] = t + frame.getHeight();
+            }
+            return leaf;
+        }
+        return null;
+    }
+
+    /** The bounds in window coordinates (left, top, right, bottom) of the pane under the point, into {@code out}. */
+    public boolean paneBoundsAt(long except, float x, float y, @NonNull float[] out) {
+        return paneAtWindowPoint(except, x, y, out) != null;
+    }
+
+    /**
+     * Linux window {@code id} takes the {@code side} half (a {@code DwindleTilingPolicy.SIDE_*})
+     * of the pane under the window point ({@code x}, {@code y}) in the window on screen, as a new
+     * pane, or moves there when it is already a pane of a split. The window's page must exist
+     * ({@link LinuxPanes#frameOf}). False, changing nothing, when no pane is under the point.
+     */
+    public boolean dropLinuxPane(long id, float x, float y, int side) {
+        Window window = mActiveWindow;
+        Leaf target = paneAtWindowPoint(id, x, y, null);
+        if (window == null || target == null || window.floating.contains(target)
+            || mLinuxPanes == null || mLinuxPanes.frameOf(id) == null) return false;
+        Leaf own = findLinuxLeaf(id);
+        if (own != null) {
+            Window from = windowHolding(own);
+            if (own.parent == null || from == null) return false;
+            detachLeaf(from, own);
+            if (from.active == own) from.active = firstLeaf(from.root);
+            if (mMaximizedLeaf == own) mMaximizedLeaf = null;
+        }
+        Leaf added = own != null ? own : Leaf.linux(id);
+        mMaximizedLeaf = null;
+        if (window.layoutPolicy != null && !isDwindleManaged(window)) clearLayoutPolicy(window);
+        Split split = new Split();
+        split.orientation = DwindleTilingPolicy.orientationForSide(side);
+        boolean addedFirst = DwindleTilingPolicy.droppedFirst(side);
+        split.a = addedFirst ? added : target;
+        split.b = addedFirst ? target : added;
+        split.parent = target.parent;
+        if (split.parent == null) {
+            window.root = split;
+        } else if (split.parent.a == target) {
+            split.parent.a = split;
+        } else {
+            split.parent.b = split;
+        }
+        added.parent = split;
+        target.parent = split;
+        window.active = added;
+        render();
+        activePaneChanged();
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    @Nullable
+    private Window windowHolding(@NonNull Leaf leaf) {
+        for (Window w : mWindows) if (allLeavesOf(w).contains(leaf)) return w;
+        return null;
+    }
+
+    /**
+     * Linux window {@code id}'s pane leaves its split, which collapses as a closed pane's does.
+     * False when it is in none.
+     */
+    public boolean removeLinuxPane(long id) {
+        Leaf leaf = findLinuxLeaf(id);
+        Window owner = leaf == null ? null : windowHolding(leaf);
+        if (leaf == null || owner == null || leaf.parent == null) return false;
+        if (mMaximizedLeaf == leaf) mMaximizedLeaf = null;
+        detachLeaf(owner, leaf);
+        mBorderStates.remove(leaf);
+        if (owner.active == leaf) owner.active = firstLeaf(owner.root);
+        reapplyLayoutPolicy(owner);
+        if (owner == mActiveWindow) {
+            render();
+            activePaneChanged();
+        }
+        mHost.onTreesChanged();
+        return true;
+    }
+
+    /** The focus moves to Linux window {@code id}'s pane in the window on screen (a finger landed on it). */
+    public void focusLinuxPane(long id) {
+        if (mActiveWindow == null) return;
+        Leaf leaf = findLinuxLeaf(id);
+        if (leaf == null || !allLeavesOf(mActiveWindow).contains(leaf) || mActiveWindow.active == leaf) return;
+        boolean floatReleased = mFocusedHomeFloat != null;
+        if (floatReleased) {
+            mFocusedHomeFloat = null;
+            applyHomeFloatLift();
+        }
+        mActiveWindow.active = leaf;
+        if (mMaximizedLeaf != null) mMaximizedLeaf = leaf;
+        updateActiveBorders();
+        activePaneChanged();
+    }
+
     /** Collapse every window back to its focused single pane, returning dropped shells to kill.
      *  Used when compatibility mode turns split panes off. */
     public List<TerminalSession> collapseAll() {
@@ -2357,8 +2592,16 @@ public class TerminalPaneController {
         for (Window w : mWindows) {
             // A Home float is one pane already, and floats where it is.
             if (w.isHomeFloat()) continue;
-            TerminalSession keep = w.active != null ? w.active.session : firstLeaf(w.root).session;
+            TerminalSession keep = activeSessionOf(w);
+            if (keep == null) {
+                Leaf any = activeTerminalLeaf(w);
+                keep = any == null ? null : any.session;
+            }
             for (Leaf leaf : allLeavesOf(w)) {
+                if (leaf.isLinux()) {
+                    if (mLinuxPanes != null) mLinuxPanes.orphaned(leaf.linuxWindowId);
+                    continue;
+                }
                 if (leaf.session == keep) continue;
                 dropped.add(leaf.session);
                 removeFloatContainer(leaf);
@@ -2677,6 +2920,11 @@ public class TerminalPaneController {
         mMaximizedLeaf = null;
         Leaf oldLeaf = window.active;
         if (window.floating.contains(oldLeaf)) oldLeaf = firstLeaf(window.root);
+        if (oldLeaf.isLinux()) {
+            // A Linux pane has no shell to copy a directory from or to split off: the window's own shell does.
+            Leaf terminal = activeTerminalLeaf(window);
+            if (terminal != null) oldLeaf = terminal;
+        }
         return oldLeaf;
     }
 
@@ -2731,7 +2979,7 @@ public class TerminalPaneController {
             Trace.endSection();
         }
         Rect revealOrigin = revealSnapshot != null
-            ? boundsInHost(mPaneFrames.get(oldLeaf.session)) : null;
+            ? boundsInHost(frameOf(oldLeaf)) : null;
         // A managed window re-tiles around the new pane instead of keeping the binary split that
         // insertion just produced. This is what makes the layout a policy rather than a one-shot.
         reapplyLayoutPolicy(window);
@@ -2788,6 +3036,7 @@ public class TerminalPaneController {
         mFocusEventWindow = window;
         mFocusEventView = getActivePaneView();
         refreshPaneDims();
+        if (mLinuxPanes != null) mLinuxPanes.focused(activeLinuxPaneId());
         if (notice == PaneFocusNotice.Kind.PANE) mHost.onActivePaneMoved();
         else mHost.onActivePaneChanged();
     }
@@ -2801,7 +3050,7 @@ public class TerminalPaneController {
         List<TerminalSession> leaves = new ArrayList<>();
         TerminalSession active = null;
         if (window != null) {
-            for (Leaf leaf : allLeavesOf(window)) leaves.add(leaf.session);
+            for (Leaf leaf : allLeavesOf(window)) if (!leaf.isLinux()) leaves.add(leaf.session);
             if (window.active != null) active = window.active.session;
         }
         Set<TerminalSession> dimmed = PaneDimPolicy.dimmed(active, leaves);
@@ -2906,6 +3155,19 @@ public class TerminalPaneController {
         }
         detachPaneView(session);
         if (owner.active == owningLeaf) owner.active = firstLeaf(sibling);
+        if (owner.floating.isEmpty() && withoutLinux(owner.root) == null) {
+            // Only Linux panes are left: the window has no shell, so each pane stands in the row again.
+            List<Leaf> rest = leavesOf(owner.root);
+            mWindows.remove(owner);
+            if (mActiveWindow == owner) setActiveWindow(null);
+            if (mLinuxPanes != null) {
+                final LinuxPanes panes = mLinuxPanes;
+                final List<Long> ids = new ArrayList<>();
+                for (Leaf leaf : rest) ids.add(leaf.linuxWindowId);
+                mHostView.post(() -> { for (long id : ids) panes.orphaned(id); });
+            }
+            return FINISHED_WINDOW;
+        }
         // Re-tile the survivors. Runs for background windows too, so a window that was managed when
         // it lost a pane is still correctly tiled the next time it is shown.
         reapplyLayoutPolicy(owner);
@@ -3000,7 +3262,7 @@ public class TerminalPaneController {
      */
     @Nullable
     private RectF tiledPaneRect(@NonNull Leaf leaf) {
-        FrameLayout frame = mPaneFrames.get(leaf.session);
+        FrameLayout frame = frameOf(leaf);
         if (frame == null || frame.getWidth() <= 0 || frame.getHeight() <= 0) return null;
         float left = frame.getLeft();
         float top = frame.getTop();
@@ -3020,6 +3282,9 @@ public class TerminalPaneController {
      * slides from its old cell to its new one. The moved shell keeps focus.
      */
     private void swapSessions(@NonNull Leaf source, @NonNull Leaf target) {
+        long movedWindow = source.linuxWindowId;
+        source.linuxWindowId = target.linuxWindowId;
+        target.linuxWindowId = movedWindow;
         TerminalSession moved = source.session;
         source.session = target.session;
         target.session = moved;
@@ -4315,7 +4580,7 @@ public class TerminalPaneController {
             Leaf leaf = w.active;
             if (leaf == null) continue;
             FloatingPaneContainer container = mHomeFloatContainers.get(leaf);
-            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            PaneContentFrame frame = frameOf(leaf);
             if (container == null || frame == null) continue;
             boolean focused = w == mFocusedHomeFloat;
             // Counted as a split, as a window's floats are: a float is never a lone bare pane.
@@ -4932,7 +5197,7 @@ public class TerminalPaneController {
         // The frost is positioned in screen space and a float moves by its container's params, so
         // the pane frame's own layout coordinates never change — nothing would tell its glass that
         // it is now sampling a different part of the wallpaper.
-        FrameLayout movedFrame = mPaneFrames.get(leaf.session);
+        FrameLayout movedFrame = frameOf(leaf);
         PaneGlassBackdropView movedGlass = movedFrame == null
             ? null : movedFrame.findViewById(R.id.terminal_pane_glass);
         if (movedGlass != null) movedGlass.invalidateGlassPosition();
@@ -5034,7 +5299,7 @@ public class TerminalPaneController {
      * host's when the pane has no frame yet (a freshly restored window before its first layout).
      */
     private int dwindleOrientationFor(@NonNull Leaf leaf) {
-        Rect bounds = boundsInHost(mPaneFrames.get(leaf.session));
+        Rect bounds = boundsInHost(frameOf(leaf));
         if (bounds == null || bounds.isEmpty()) {
             return DwindleTilingPolicy.splitOrientationFor(mHostView.getWidth(), mHostView.getHeight());
         }
@@ -5917,7 +6182,7 @@ public class TerminalPaneController {
         if (leaving == null) return false;
         List<Leaf> leaves = leavesOf(shownTreeOf(leaving));
         List<TerminalSession> sessions = new ArrayList<>(leaves.size());
-        for (Leaf leaf : leaves) sessions.add(leaf.session);
+        for (Leaf leaf : leaves) if (!leaf.isLinux()) sessions.add(leaf.session);
         return DepartureCard.draw(canvas, origin, framesOf(sessions, mPaneFrames), paneRadiusPx(), ground);
     }
 
@@ -6025,6 +6290,14 @@ public class TerminalPaneController {
      * (2026-09-09), for panes that had not moved — and each re-attach cost the view its layout.
      */
     private View reconcile(@Nullable View existing, @NonNull Node node) {
+        if (node instanceof Leaf && ((Leaf) node).isLinux()) {
+            PaneContentFrame linux = frameOf((Leaf) node);
+            if (linux == null) return new FrameLayout(mHostView.getContext());
+            if (linux != existing && linux.getParent() instanceof ViewGroup)
+                ((ViewGroup) linux.getParent()).removeView(linux);
+            resetFrameTransform(linux);
+            return linux;
+        }
         if (node instanceof Leaf) {
             TerminalSession session = ((Leaf) node).session;
             PaneContentFrame frame = mPaneFrames.get(session);
@@ -6367,6 +6640,11 @@ public class TerminalPaneController {
                 }
             }
         }
+        if (mActiveWindow != null) {
+            boolean glassShape = paneGlassActive();
+            dressLinuxLeaves(leavesOf(mMaximizedLeaf != null ? mMaximizedLeaf : mActiveWindow.root),
+                mActiveWindow.active, paneCount, glassShape, palette, density);
+        }
         applyCursorOwnership();
         // A glow made while the page is parked off screen starts held, not pulsing unseen.
         applyAttentionHold();
@@ -6376,13 +6654,30 @@ public class TerminalPaneController {
     }
 
     /**
+     * The Linux panes among {@code leaves} wear the shape and rim a terminal pane does: only the
+     * focused one the active colour, every other the shared rim.
+     */
+    private void dressLinuxLeaves(@NonNull List<Leaf> leaves, @Nullable Leaf active, int paneCount,
+                                  boolean glassShape, @NonNull PaneBorderStyle.Palette palette,
+                                  float density) {
+        for (Leaf leaf : leaves) {
+            if (!leaf.isLinux()) continue;
+            PaneContentFrame frame = frameOf(leaf);
+            if (frame == null) continue;
+            PaneBorderStyle.Decision border = PaneBorderStyle.decide(paneCount, leaf == active,
+                false, palette);
+            dressPaneFrame(frame, leaf, border, false, glassShape, density);
+        }
+    }
+
+    /**
      * One tiled pane's shape and rim, as {@link PaneBorderStyle} decided them. {@code bare}: a
      * lone plain pane wearing the shared rim carries no border and no clip of its own — the
      * terminal host draws the same rim around this one frame and rounds the corners, and pads the
      * arc's clearance itself (TermuxActivity.applyPaneHostCornerPadding). So the frame is told it
      * is square; handing it the radius as well made the terminal pay that clearance twice.
      */
-    private void dressPaneFrame(@NonNull PaneContentFrame frame, @NonNull TerminalSession session,
+    private void dressPaneFrame(@NonNull PaneContentFrame frame, @NonNull Object session,
                                 @NonNull PaneBorderStyle.Decision border, boolean bare,
                                 boolean glassShape, float density) {
         // Otherwise the pane's shape, and with it the clearance the terminal is laid out
@@ -6436,7 +6731,8 @@ public class TerminalPaneController {
         float density = mHostView.getResources().getDisplayMetrics().density;
         boolean glassShape = paneGlassActive();
         for (Leaf leaf : stacked ? java.util.Collections.singletonList(w.active) : tiled) {
-            PaneContentFrame frame = mPaneFrames.get(leaf.session);
+            if (leaf.isLinux()) continue;
+            PaneContentFrame frame = frameOf(leaf);
             if (frame == null) continue;
             PaneBorderStyle.Decision border = PaneBorderStyle.decide(paneCount, leaf == w.active,
                 mPaneAttention.isSet(leaf.session.getPid()), palette);
@@ -6445,6 +6741,7 @@ public class TerminalPaneController {
             dressPaneFrame(frame, leaf.session, border, bare, glassShape, density);
             frame.setStatusRowPx(leaf == topLeftLeaf(shownTreeOf(w)) ? mStatusRowPx : 0);
         }
+        dressLinuxLeaves(tiled, w.active, paneCount, glassShape, palette, density);
     }
 
     /** The status bar's thin row the top pane of every window holds ({@link #setStatusRowPx}). */
@@ -6478,7 +6775,7 @@ public class TerminalPaneController {
         if (mStatusRowPx <= 0 || mActiveWindow == null) return null;
         Leaf top = mMaximizedLeaf != null ? mMaximizedLeaf
             : topLeftLeaf(shownTreeOf(mActiveWindow));
-        return top == null ? null : mPaneFrames.get(top.session);
+        return top == null ? null : frameOf(top);
     }
 
     /**
@@ -7264,7 +7561,11 @@ public class TerminalPaneController {
                 activePaneChanged();
             } else if (action == ACTION_CLOSE) {
                 dismissControls();
-                leaf.session.finishIfRunning();
+                if (leaf.isLinux()) {
+                    if (mLinuxPanes != null) mLinuxPanes.close(leaf.linuxWindowId);
+                } else {
+                    leaf.session.finishIfRunning();
+                }
             } else if (action == ACTION_MINIMAL) {
                 // The whole place re-lays out around the pane, so the tab goes first; opened again
                 // it shows the glyph for the way back.
@@ -7601,7 +7902,7 @@ public class TerminalPaneController {
          */
         @Nullable
         private RectF paneRect(@NonNull Leaf leaf, @NonNull RectF out) {
-            FrameLayout frame = mPaneFrames.get(leaf.session);
+            FrameLayout frame = frameOf(leaf);
             if (frame == null || !isOnHost(frame)) return null;
             return laidOutRect(frame, out);
         }

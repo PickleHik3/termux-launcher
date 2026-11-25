@@ -70,6 +70,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @NonNull private final Host host;
     @Nullable private PaneSurfaceStyle style;
     private float radiusPx;
+    /** The page is a pane of a split: the pane controller shapes and rims it, as it does a terminal's. */
+    private boolean embedded;
     /** The status row's room at the top, as the Terminal's top pane holds it. */
     private int topInsetPx;
 
@@ -116,6 +118,16 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     }
 
     /**
+     * Makes this page a pane of a split (#387): the pane controller gives it its shape and its
+     * rim like any pane, and the page keeps its glass, rim tab and menu. Set once, before it shows.
+     */
+    public void setEmbedded(boolean embedded) {
+        if (this.embedded == embedded) return;
+        this.embedded = embedded;
+        applyStyle(style);
+    }
+
+    /**
      * Holds the band, the tab and the app's slot {@code px} below the top, where the status bar
      * stands as the row in the pane (the room the Terminal's top pane holds: PaneRowPolicy
      * .paneTopInsetPx); 0 gives it back. Compares first; lays out only on a change.
@@ -155,16 +167,18 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
             fill.setCornerRadius(radiusPx);
             setBackground(fill);
         }
-        setPaneShape(radiusPx, true);
-        if (slab || PaneRim.plainBorderWanted(style)) rim.apply(this, slab, radiusPx, PaneBorderStyle.lone(), style);
-        else rim.clear(this);
+        if (!embedded) {
+            setPaneShape(radiusPx, true);
+            if (slab || PaneRim.plainBorderWanted(style)) rim.apply(this, slab, radiusPx, PaneBorderStyle.lone(), style);
+            else rim.clear(this);
+        }
         // The tab is glass over the rim band: the panel colour, see-through, with the rim's glyph colour.
         tabFill.setColor((surface & 0x00FFFFFF) | 0xB3000000);
         tabFill.setCornerRadius(LinuxWindowRow.TAB_HEIGHT_DP * density / 2f);
         int ink = MaterialColors.getColor(this,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFFFFFFF);
         tab.setImageTintList(ColorStateList.valueOf(ink));
-        menu.dress((surface & 0x00FFFFFF) | 0xF2000000, ink, 14f * density);
+        menu.dress();
         placeTab();
     }
 

@@ -22922,6 +22922,14 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 && mLinuxWindows != null && linuxWindowInFront() != 0L) {
             return mLinuxWindows.page();
         }
+        // A Linux pane in focus in the Terminal's split takes the keys as a terminal pane would.
+        if (front != null && front.kind() == com.termux.app.page.PageKind.TERMINAL
+                && mPaneController != null) {
+            com.termux.app.terminal.PaneContentFrame pane = mPaneController.activeLinuxPaneFrame();
+            if (pane instanceof com.termux.app.terminal.inappkeyboard.TypingPage) {
+                return (com.termux.app.terminal.inappkeyboard.TypingPage) pane;
+            }
+        }
         return front instanceof com.termux.app.terminal.inappkeyboard.TypingPage
             ? (com.termux.app.terminal.inappkeyboard.TypingPage) front : null;
     }
@@ -31219,6 +31227,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 @Override public void goToWindow(long id) {
                     goToLinuxWindow(id);
                 }
+                @Override public void removePane(long id) {
+                    if (mPaneController != null) mPaneController.removeLinuxPane(id);
+                }
+                @Override public void paneTouched(long id) {
+                    if (mPaneController != null) mPaneController.focusLinuxPane(id);
+                }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
                 @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
                 @Nullable @Override public String appName(@NonNull String appId) {
@@ -31229,6 +31243,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     return linuxCarryHost();
                 }
             });
+        if (mPaneController != null) {
+            mPaneController.setLinuxPanes(new com.termux.app.terminal.TerminalPaneController.LinuxPanes() {
+                @Nullable @Override public com.termux.app.terminal.PaneContentFrame frameOf(long windowId) {
+                    return mLinuxWindows == null ? null : mLinuxWindows.paneFrame(windowId);
+                }
+                @Override public void focused(long windowId) {
+                    if (mLinuxWindows == null) return;
+                    mLinuxWindows.setPaneFocus(windowId);
+                    // The launcher's keyboard types into the focused pane, whatever its kind.
+                    restoreInAppKeyboardTypingClaim();
+                }
+                @Override public void orphaned(long windowId) {
+                    if (mLinuxWindows != null) mLinuxWindows.releasePane(windowId, true);
+                }
+                @Override public void close(long windowId) {
+                    if (mLinuxWindows != null) mLinuxWindows.closeChip(windowId);
+                }
+            });
+        }
         mLinuxWindows.page().setTopInsetPx(mStatusRowRoomPx);
         mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows, this::syncLinuxFront);
         com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
@@ -31278,6 +31311,37 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 goToLinuxWindow(id);
             }
             @Override public void putBack(long id) {
+                // A pane never left its split: nothing to bring back.
+                if (mPaneController != null && mPaneController.hasLinuxPane(id)) return;
+                goToLinuxWindow(id);
+            }
+            @Override public boolean inPane(long id) {
+                return mPaneController != null && mPaneController.hasLinuxPane(id);
+            }
+            @Override public boolean paneAt(long id, float x, float y, @NonNull float[] out) {
+                // Only the Terminal's own window in front has panes to split; a Linux window's page does not.
+                return mPaneController != null && mLinuxWindows != null && linuxWindowInFront() == 0L
+                    && mPaneWallController != null
+                    && mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL
+                    && mPaneController.paneBoundsAt(id, x, y, out);
+            }
+            @Override public void dropSplit(long id, float x, float y, int side) {
+                if (mPaneController == null || mLinuxWindows == null
+                    || mLinuxWindows.takeIntoPane(id) == null) {
+                    return;
+                }
+                if (!mPaneController.dropLinuxPane(id, x, y, side)
+                    && !mPaneController.hasLinuxPane(id)) {
+                    mLinuxWindows.releasePane(id, true);
+                }
+            }
+            @Override public void dropFromPane(long id, int to) {
+                if (mPaneController == null || mLinuxWindows == null) return;
+                mPaneController.removeLinuxPane(id);
+                mLinuxWindows.releasePane(id, true);
+                WSession ws = mCurrentWSession;
+                int from = ws == null ? -1 : ws.row.indexOfLinux(ws.windows, id);
+                if (from >= 0) moveWindow(from, to);
                 goToLinuxWindow(id);
             }
         };
@@ -31316,6 +31380,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean terminalPage = mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL;
         mPaneWallController.setLinuxInFront(front != 0L);
         mLinuxWindows.bind(bound);
+        mLinuxWindows.setTerminalShown(terminalPage);
         mLinuxWindows.setNearFront(terminalPage
             && com.termux.app.wayland.LinuxWindowRow.holdsSurface(bound != 0L, boundPlace, frontPlace));
         mLinuxWindows.setInFront(terminalPage && front != 0L);

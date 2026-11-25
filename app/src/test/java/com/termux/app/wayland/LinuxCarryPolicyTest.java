@@ -85,4 +85,70 @@ public final class LinuxCarryPolicyTest {
         assertEquals(-1, LinuxCarryPolicy.pageSteps(80f, 72f));
         assertEquals(0, LinuxCarryPolicy.pageSteps(40f, 72f));
     }
+
+    // ---- split drops (#387) ----
+
+    private static final float[] PANE = {0f, 0f, 400f, 800f};
+
+    private static LinuxCarryPolicy.Drop over(float x, float y, int carried) {
+        return LinuxCarryPolicy.decide(x, y, 0f, 400f, STRIP, 0, 1, carried, PANE);
+    }
+
+    @Test
+    public void aTallPaneSplitsOnTheHalfAboveOrBelowTheFinger() {
+        LinuxCarryPolicy.Drop top = over(200f, 100f, 0);
+        assertEquals(LinuxCarryPolicy.Kind.SPLIT, top.kind);
+        assertEquals(com.termux.app.terminal.DwindleTilingPolicy.SIDE_TOP, top.side);
+        assertEquals(com.termux.app.terminal.DwindleTilingPolicy.SIDE_BOTTOM, over(200f, 700f, 0).side);
+    }
+
+    @Test
+    public void aWidePaneSplitsOnTheLeftOrRightHalf() {
+        float[] wide = {0f, 0f, 800f, 400f};
+        LinuxCarryPolicy.Drop right = LinuxCarryPolicy.decide(600f, 200f, 0f, 800f, STRIP, 0, 1,
+            LinuxCarryPolicy.FROM_PANE, wide);
+        assertEquals(LinuxCarryPolicy.Kind.SPLIT, right.kind);
+        assertEquals(com.termux.app.terminal.DwindleTilingPolicy.SIDE_RIGHT, right.side);
+        assertEquals(com.termux.app.terminal.DwindleTilingPolicy.SIDE_LEFT,
+            LinuxCarryPolicy.sideAt(100f, 200f, wide));
+    }
+
+    @Test
+    public void theEdgeStripsStayTheGapsBetweenWindows() {
+        // Row [A B C], C carried over B's left strip: still the gap, though a pane is under it.
+        LinuxCarryPolicy.Drop drop = LinuxCarryPolicy.decide(10f, 300f, 0f, 400f, STRIP, 1, 3, 2, PANE);
+        assertEquals(LinuxCarryPolicy.Kind.BETWEEN, drop.kind);
+        assertEquals(1, drop.to);
+    }
+
+    @Test
+    public void noPaneOrAFingerOffItReturnsTheWindow() {
+        assertEquals(LinuxCarryPolicy.Kind.RETURN,
+            LinuxCarryPolicy.decide(200f, 300f, 0f, 400f, STRIP, 0, 1, 0, null).kind);
+        assertEquals(LinuxCarryPolicy.Kind.RETURN, over(200f, 900f, 0).kind);
+        // Nothing is in front (Home, the display): nothing to split.
+        assertEquals(LinuxCarryPolicy.Kind.RETURN,
+            LinuxCarryPolicy.decide(200f, 300f, 0f, 400f, STRIP, -1, 1, 0, PANE).kind);
+    }
+
+    @Test
+    public void aPaneCarriedOutTakesTheGapItselfAsItsPlace() {
+        // A pane is in no row place: gap g is the place g, in a row of three (gaps 0..3).
+        LinuxCarryPolicy.Drop drop = LinuxCarryPolicy.decide(395f, 300f, 0f, 400f, STRIP, 1, 3,
+            LinuxCarryPolicy.FROM_PANE, PANE);
+        assertEquals(LinuxCarryPolicy.Kind.BETWEEN, drop.kind);
+        assertEquals(2, drop.to);
+        assertEquals(-1, LinuxCarryPolicy.placeForGap(4, LinuxCarryPolicy.FROM_PANE, 3));
+    }
+
+    @Test
+    public void theHalfTheDropTakesIsTheOneUnderTheFinger() {
+        float[] out = new float[4];
+        LinuxCarryPolicy.halfOf(PANE, com.termux.app.terminal.DwindleTilingPolicy.SIDE_BOTTOM, out);
+        assertEquals(400f, out[1], 0f);
+        assertEquals(800f, out[3], 0f);
+        LinuxCarryPolicy.halfOf(PANE, com.termux.app.terminal.DwindleTilingPolicy.SIDE_LEFT, out);
+        assertEquals(200f, out[2], 0f);
+        assertEquals(0f, out[0], 0f);
+    }
 }
