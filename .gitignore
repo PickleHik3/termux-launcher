@@ -107,3 +107,6 @@ project-docs/reference/layout-editor-v2/layout-editor-v2.zip
 # Output of a skills installer (local, never committed)
 .agents/
 skills-lock.json
+
+# The developer's own todo list (local, never committed)
+/todo.md
