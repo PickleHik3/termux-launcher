@@ -1,5 +1,6 @@
 package com.termux.privileged.lane;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
@@ -48,6 +49,32 @@ public class PrivilegedLaneBindingTest {
         assertFalse(binding.isBinding());
 
         assertNotNull("the next attempt may bind afresh", binding.beginAttempt());
+    }
+
+    private static java.util.List<Boolean> record(PrivilegedLaneBinding binding) {
+        java.util.List<Boolean> removes = new java.util.ArrayList<>();
+        binding.unbinder = (c, remove) -> removes.add(remove);
+        return removes;
+    }
+
+    @Test
+    public void onlyTheTimeoutStopsTheServiceProcess() throws Exception {
+        PrivilegedLaneBinding binding = fresh();
+        java.util.List<Boolean> removes = record(binding);
+        binding.beginAttempt();
+        advance(PrivilegedLaneBinding.BIND_TIMEOUT_MS);
+        assertEquals(java.util.Collections.singletonList(true), removes);
+    }
+
+    @Test
+    public void lossesAndStaleConnectionsOnlyDropOurConnection() throws Exception {
+        PrivilegedLaneBinding binding = fresh();
+        java.util.List<Boolean> removes = record(binding);
+        ComponentName n = new ComponentName("p", "c");
+        binding.beginAttempt().onBindingDied(n);
+        binding.beginAttempt().onNullBinding(n);
+        binding.beginAttempt().onServiceDisconnected(n);
+        assertEquals(java.util.Arrays.asList(false, false, false), removes);
     }
 
     @Test

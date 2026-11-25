@@ -18,6 +18,8 @@ import com.termux.privileged.PrivilegedAvailabilitySignal;
 import com.termux.privileged.PrivilegedChoice;
 import com.termux.privileged.PrivilegedPolicyStore;
 
+import java.util.function.BiConsumer;
+
 import rikka.shizuku.Shizuku;
 
 /**
@@ -31,7 +33,7 @@ public final class PrivilegedLaneBinding {
     private static final String TAG = "PrivilegedLaneBinding";
     private static final long REBIND_DELAY_MS = 2_000L;
     /** A bind that has not connected by now is given up and tried again. */
-    static final long BIND_TIMEOUT_MS = 10_000L;
+    static final long BIND_TIMEOUT_MS = 30_000L;
 
     /** What the settings screen shows. */
     public enum State { OFF, NO_SHIZUKU, NO_PERMISSION, NO_ROOT, BINDING, RUNNING, ROOT }
@@ -99,17 +101,17 @@ public final class PrivilegedLaneBinding {
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            lost(this, "Lane service gone");
+            lost(this, "Lane service gone", false);
         }
 
         @Override
         public void onBindingDied(ComponentName name) {
-            lost(this, "Lane service binding died");
+            lost(this, "Lane service binding died", false);
         }
 
         @Override
         public void onNullBinding(ComponentName name) {
-            lost(this, "Lane service gave no binder");
+            lost(this, "Lane service gave no binder", false);
         }
     }
 
@@ -120,7 +122,7 @@ public final class PrivilegedLaneBinding {
     }
 
     /** A binding ended or never connected: forget it, let it go and bind afresh shortly. */
-    private void lost(@NonNull LaneConnection c, @NonNull String why) {
+    private void lost(@NonNull LaneConnection c, @NonNull String why, boolean remove) {
         synchronized (lock) {
             if (connection != c) return;
             connection = null;
@@ -132,7 +134,7 @@ public final class PrivilegedLaneBinding {
             lock.notifyAll();
         }
         mainHandler.removeCallbacks(bindTimeout);
-        unbindQuietly(c);
+        unbindQuietly(c, remove);
         Log.i(TAG, why + "; rebinding shortly");
         mainHandler.postDelayed(this::bindIfPossible, REBIND_DELAY_MS);
     }
@@ -144,22 +146,32 @@ public final class PrivilegedLaneBinding {
             c = connection;
             if (!binding || c == null) return;
         }
-        lost(c, "Lane service did not connect within " + (BIND_TIMEOUT_MS / 1000) + "s");
+        lost(c, "Lane service did not connect within " + (BIND_TIMEOUT_MS / 1000) + "s", true);
     }
 
-    private void unbindQuietly(@NonNull LaneConnection c) {
+    /**
+     * Lets one binding go. {@code remove} also stops the service process; only a bind that never
+     * connected asks for it (its daemon may be half started), and the explicit {@link #unbind}.
+     * Every other loss just drops our connection.
+     */
+    private void unbindQuietly(@NonNull LaneConnection c, boolean remove) {
+        unbinder.accept(c, remove);
+    }
+
+    /** What unbinds one connection from Shizuku; replaced by tests. */
+    @NonNull
+    BiConsumer<LaneConnection, Boolean> unbinder = (c, remove) -> {
         Shizuku.UserServiceArgs serviceArgs;
         synchronized (lock) {
             serviceArgs = args;
         }
         if (serviceArgs == null) return;
         try {
-            // remove=true: Shizuku kills the service process rather than keeping it around.
-            Shizuku.unbindUserService(serviceArgs, c, true);
+            Shizuku.unbindUserService(serviceArgs, c, remove);
         } catch (Exception e) {
             Log.w(TAG, "unbindUserService failed", e);
         }
-    }
+    };
 
     private final Shizuku.OnBinderReceivedListener binderReceived = this::bindIfPossible;
     private final Shizuku.OnBinderDeadListener binderDead = () -> {
@@ -419,7 +431,7 @@ public final class PrivilegedLaneBinding {
             c = new LaneConnection();
             connection = c;
         }
-        if (stale != null) unbindQuietly(stale);
+        if (stale != null) unbindQuietly(stale, false);
         mainHandler.removeCallbacks(bindTimeout);
         mainHandler.postDelayed(bindTimeout, BIND_TIMEOUT_MS);
         return c;
@@ -444,7 +456,7 @@ public final class PrivilegedLaneBinding {
         mainHandler.removeCallbacks(bindTimeout);
         dropRootLane();
         if (c == null || !shizukuAlive()) return;
-        unbindQuietly(c);
+        unbindQuietly(c, true);
         Log.i(TAG, "Unbound the lane service");
     }
 
