@@ -454,3 +454,4 @@ Counts: 343 done, 19 superseded, 71 merged into the kept lines (their content li
 - 2026-11-25 · Home's cover counted the keyboard's foot under the gesture pill as keyboard, so  · kept (merged or trimmed in device-checks.md)
 - 2026-11-25 · With the keyboard up on Home and on the Terminal, Home stands the Terminal's ban · kept (merged or trimmed in device-checks.md)
 - 2026-11-25 · On a terminal window, a Linux window and the Wayland display window: hold a stil · kept (merged or trimmed in device-checks.md)
+- 2026-11-25 · fix/linux-page-taps (#392) · The page bar's marks from a Linux window's page · superseded: the extra-keys Go to Terminal passed on pong-1125b; single taps on the thin row's marks only enlarge it by design, and the marks row is parked for a redesign (status-row-and-marks-2026-11-23.md, "Parked").
