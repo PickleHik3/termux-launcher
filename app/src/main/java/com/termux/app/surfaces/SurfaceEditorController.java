@@ -312,6 +312,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mDraft = carried && open != null && open.isOpen() && open.store() == store ? open
             : PreferenceDraft.begin(store);
         mDraftPrefs = prefs.overDraft(mDraft);
+        mRegistry = new EditorRegistry(mDraft, store, density(), prefs.getDisplaySuffix());
         // The arrangement's draft lives in the process's one layouts store, so a relaunch carries
         // it on as it carries the preferences' draft.
         mLayoutDraft = com.termux.app.place.layout.LayoutStore.shared(mHost.context());
@@ -324,6 +325,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         PreferenceDraft draft = mDraft;
         mDraft = null;
         mDraftPrefs = null;
+        mRegistry = null;
         if (draft != null)
             draft.discard();
         com.termux.app.place.layout.LayoutStore layouts = mLayoutDraft;
@@ -412,6 +414,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     @Nullable private PreferenceDraft mDraft;
     /** The activity's preferences writing into {@link #mDraft}: what {@link #prefs} hands out. */
     @Nullable private TermuxAppSharedPreferences mDraftPrefs;
+    /** The Settings registry over the draft, for the settings it declares; null with no draft. */
+    @Nullable private EditorRegistry mRegistry;
     /**
      * The layouts store holding the session's arrangement draft (the layout session's writes and
      * the icon size), or null while closed.
@@ -2664,10 +2668,17 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
     /** Done: the draft is written into the store, once, and the session's writes are the store's. */
     private void commitDraft() {
         PreferenceDraft draft = mDraft;
+        EditorRegistry registry = mRegistry;
         mDraft = null;
         mDraftPrefs = null;
-        if (draft != null)
-            draft.commit();
+        mRegistry = null;
+        if (draft != null) {
+            // The applier refreshes what the draft changed that the registry declares.
+            if (registry != null)
+                registry.commit(draft, com.termux.app.settings.LauncherSettings.applier());
+            else
+                draft.commit();
+        }
         com.termux.app.place.layout.LayoutStore layouts = mLayoutDraft;
         mLayoutDraft = null;
         if (layouts != null)
@@ -6843,7 +6854,7 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
             case TINT_HUE:
                 return indexOf(tintHueValues(), prefs.getSurfaceGlassTintHue(), 0);
             case FONT_SIZE:
-                return clamp(Math.round(prefs.getFontSize() / density()), cardRowFrom(row),
+                return clamp(Math.round(fontSizePx() / density()), cardRowFrom(row),
                     cardRowTo(row));
             case SCREEN_EVENTS:
                 return prefs.isTerminalScreenEventsEnabled() ? 1 : 0;
@@ -6860,11 +6871,36 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         }
     }
 
-    /** The terminal's font size range in dp: {@code getDefaultFontSizes}' min and max. */
+    /**
+     * The Settings registry over the draft (or over the store with no draft), which holds the
+     * ranges of the settings it declares.
+     */
+    @NonNull
+    private EditorRegistry registry() {
+        EditorRegistry registry = mRegistry;
+        if (registry != null)
+            return registry;
+        TermuxAppSharedPreferences prefs = prefs();
+        SharedPreferences store = prefs == null ? null : prefs.getSharedPreferences();
+        return new EditorRegistry(store, store, density(),
+            prefs == null ? "" : prefs.getDisplaySuffix());
+    }
+
+    /** The terminal's font size in px, as the registry holds it. */
+    private int fontSizePx() {
+        return registry().getInt(
+            com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE, 0);
+    }
+
+    /** The terminal's font size range in dp, from its declaration. */
     private int[] fontSizeRangeDp() {
-        int[] bounds = TermuxAppSharedPreferences.getDefaultFontSizes(mHost.context());
-        int min = Math.max(1, Math.round(bounds[1] / density()));
-        return new int[] {min, Math.max(min, Math.round(bounds[2] / density()))};
+        com.termux.shared.termux.settings.registry.SettingDeclaration declaration = registry()
+            .declaration(
+                com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE);
+        int minPx = declaration == null ? 0 : declaration.min;
+        int maxPx = declaration == null ? 0 : declaration.max;
+        int min = Math.max(1, Math.round(minPx / density()));
+        return new int[] {min, Math.max(min, Math.round(maxPx / density()))};
     }
 
     private int cardRowFrom(@NonNull Row row) {
@@ -7116,11 +7152,11 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
                 settingsWritten();
                 break;
             case FONT_SIZE: {
-                int px = Math.round(clamp(value, cardRowFrom(row), cardRowTo(row)) * density());
-                if (prefs.getFontSize() != px) {
-                    prefs.setFontSize(px);
+                // The declaration refuses and clamps: a dp value rounding past the range is held in.
+                if (registry().setClamped(
+                        com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter.FONT_SIZE,
+                        Math.round(value * density())))
                     requestPreview(SurfaceEditorProperties.PREVIEW_TEXT_TERMINAL);
-                }
                 syncDirty();
                 break;
             }

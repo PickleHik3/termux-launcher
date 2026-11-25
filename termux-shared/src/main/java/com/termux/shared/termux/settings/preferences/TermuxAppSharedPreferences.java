@@ -2999,6 +2999,12 @@ public class TermuxAppSharedPreferences extends AppSharedPreferences {
         mFontRange = fontRange(context);
     }
 
+    /** The display's key suffix for the per-display settings: "" for the default display. */
+    @NonNull
+    public String getDisplaySuffix() {
+        return mDisplayIdSuffix;
+    }
+
     private String getDisplayIdAsString() {
         return mDisplayIdSuffix;
     }
