@@ -21224,6 +21224,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 if (help != null) out.add(help);
             }
         });
+        // Overview: Back and the close button return to the page it was opened from.
+        registry.register(overview());
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             // The page overview covers the whole launcher: Back zooms into the focused card.
             @Override public boolean onBack() {
@@ -31493,9 +31495,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         com.termux.app.statusbar.SessionsIndicatorView sessionsIndicator =
             findViewById(R.id.terminal_sessions_indicator);
         if (sessionsIndicator != null) {
-            // The chip owns the fork's sessions panel. The native drawer stays reachable by its
-            // edge swipe and by the app.open_drawer action, but no longer by this tap.
-            sessionsIndicator.setOnClickListener(v -> toggleSessionsPanel());
+            // The chip opens Overview (the wall as one strip of cards). The sessions panel stays
+            // behind session.panel and the sessions key; the native drawer by its edge swipe.
+            sessionsIndicator.setOnClickListener(v -> toggleOverview());
         }
         View statusBarHost = findViewById(R.id.terminal_window_bar_host);
         if (statusBarHost instanceof com.termux.app.statusbar.StatusBarSwipeLayout) {
@@ -32617,6 +32619,53 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     void toggleSessionsPanel() {
         com.termux.app.terminal.TerminalSessionBrowser.toggle(this);
+    }
+
+    /** Overview: opened by the status bar's session chip, closed by the same tap. */
+    void toggleOverview() {
+        overview().toggle();
+    }
+
+    @Nullable private com.termux.app.overview.OverviewController mOverview;
+
+    @NonNull
+    private com.termux.app.overview.OverviewController overview() {
+        if (mOverview == null) {
+            mOverview = new com.termux.app.overview.OverviewController(this,
+                new com.termux.app.overview.OverviewController.Host() {
+                    @Override @NonNull public com.termux.app.wall.pageswitch.PageBarModel wall() {
+                        return pageBarModel();
+                    }
+                    @Override @NonNull
+                    public com.termux.app.wall.pageswitch.PageSwitchTargets.Navigator navigator() {
+                        return pageSwitchNavigator();
+                    }
+                    @Override @NonNull public Drawable background() {
+                        // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
+                        com.termux.app.chrome.ElementGlass sheets =
+                            com.termux.app.chrome.SheetGlass.of(mPreferences);
+                        float alpha = mPreferences != null ? sheets.tintAlpha() : 0.5f;
+                        int grain = mPreferences != null ? sheets.grainPercent
+                            : TermuxPreferenceConstants.TERMUX_APP.DEFAULT_VALUE_DOCK_GLASS_GRAIN;
+                        return mChrome.glass().forElement(sheets).surface(alpha, 0f, 1f, false,
+                            grain, 0f, false, null, sheets.tintPercent);
+                    }
+                    @Override public int onSurface() {
+                        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorOnSurface,
+                            R.color.termux_on_surface);
+                    }
+                    @Override public int onSurfaceVariant() {
+                        return getTermuxThemeColor(
+                            com.termux.shared.R.attr.termuxColorOnSurfaceVariant,
+                            R.color.termux_on_surface_variant);
+                    }
+                    @Override public int accent() {
+                        return getTermuxThemeColor(com.termux.shared.R.attr.termuxColorPrimary,
+                            R.color.termux_primary);
+                    }
+                });
+        }
+        return mOverview;
     }
 
     /** Whether the sessions drawer is the surface currently on screen. */

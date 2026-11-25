@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Overview's strip: a card is larger than a thumbnail, smaller than the page, so two cards and
+         part of a third show on a phone. -->
+    <dimen name="overview_card_width">150dp</dimen>
+    <dimen name="overview_card_height">290dp</dimen>
+    <dimen name="overview_card_corner">16dp</dimen>
+    <dimen name="overview_card_gap">12dp</dimen>
+    <dimen name="overview_ring">3dp</dimen>
+    <dimen name="overview_gutter">16dp</dimen>
+    <dimen name="overview_header_pad_top">8dp</dimen>
+    <dimen name="overview_header_pad_bottom">12dp</dimen>
+    <dimen name="overview_close_target">48dp</dimen>
+    <dimen name="overview_glyph">20dp</dimen>
+    <dimen name="overview_glyph_gap">6dp</dimen>
+    <dimen name="overview_caption_gap">8dp</dimen>
+    <dimen name="overview_title_text">22sp</dimen>
+    <dimen name="overview_label_text">13sp</dimen>
+</resources>
