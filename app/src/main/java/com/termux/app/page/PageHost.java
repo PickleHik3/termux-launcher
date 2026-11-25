@@ -11,6 +11,12 @@ public interface PageHost {
     /** Lowers the launcher's keyboard when it is up; false when it was not. A page's Back asks it. */
     default boolean lowerKeyboard() { return false; }
 
+    /** Whether the launcher's keyboard is up. A page asks before raising it, to know whether it did. */
+    default boolean keyboardUp() { return false; }
+
+    /** Whether the launcher's own keyboard is the user's keyboard, rather than the phone's. */
+    default boolean launcherKeyboard() { return false; }
+
     /** A host that does nothing. */
     PageHost NONE = (page, focused) -> { };
 }

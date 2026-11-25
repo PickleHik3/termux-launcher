@@ -14,6 +14,7 @@ pub mod pixels;
 pub mod png;
 pub mod protocol;
 pub mod teardown;
+pub mod text_field;
 pub mod xkbroot;
 pub mod xlock;
 pub mod window_class;

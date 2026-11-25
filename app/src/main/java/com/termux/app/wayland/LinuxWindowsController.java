@@ -27,6 +27,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.page.PageHost;
 import com.termux.app.page.PageKind;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
@@ -91,6 +92,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         default void paneTouched(long id) {}
         /** What a carry of a window asks of the wall and the row; null where none can be carried. */
         @Nullable default LinuxCarry.Host carryHost() { return null; }
+        /**
+         * The page host that raises and lowers the launcher's keyboard for a text field, as it
+         * does for any page's field: a Linux app's field focused in the window in front raises it.
+         */
+        @NonNull default PageHost pageHost() { return PageHost.NONE; }
     }
 
     /** One Linux window chip, in row order then the minimised ones. */
@@ -280,6 +286,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private int sentPageHeight;
     private float sentPageScale;
 
+    /** Which window's text field has focus, and whether a field raised the keyboard. */
+    private final LinuxTextFieldPolicy textFields = new LinuxTextFieldPolicy();
+    private final Runnable lowerDue = this::lowerKeyboardIfDue;
+
     private final LinuxWindowKeys.Sink keySink = (keyCode, down) -> sendKey(keyCode, down);
     private final TerminalKeyEventHandler.KeyValueInterceptor keys =
         new TerminalKeyEventHandler.KeyValueInterceptor() {
@@ -287,7 +297,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             public boolean interceptKeyValue(@NonNull juloo.keyboard2.KeyValue value, boolean ctrl,
                                              boolean alt, boolean shift) {
                 if (shownWindow() == null && !focusedIsPane() && !focusedIsFloating()) return false;
-                LinuxWindowKeys.send(value, ctrl, alt, shift, false, keySink);
+                // In a text field typed text goes as text, so any character reaches it; keys and
+                // chords stay key presses.
+                String text = textFields.typesText(focusedId) ? LinuxWindowKeys.typedText(value, ctrl, alt) : null;
+                if (text != null) sendText(text);
+                else LinuxWindowKeys.send(value, ctrl, alt, shift, false, keySink);
                 return true;
             }
 
@@ -394,6 +408,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
 
         @Override
+        public void onTextInput(long id, boolean active, int contentHint, int contentPurpose) {
+            main.post(() -> textFieldChanged(id, active));
+        }
+
+        @Override
         public void onClipboardText(String text) {
             main.post(() -> clipboard.fromLinux(text));
         }
@@ -457,6 +476,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     public void stop() {
         cancelCarry();
         if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
+        applyTextField(textFields.dropped());
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         if (service != null) {
@@ -609,6 +629,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (fullscreen.gone(id)) hideReveal();
         detachViews(w);
         windows.remove(id);
+        applyTextField(textFields.left(id));
         if (focusedId == id) focusedId = 0;
         if (boundId == id) boundId = 0;
         if (w.inRow) host.removeWindow(id);
@@ -638,6 +659,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private void dropWindows(boolean died) {
         boolean had = windows.size() > 0;
         if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
+        applyTextField(textFields.dropped());
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();
@@ -1492,6 +1514,59 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         try {
             service.key(focusedId, keyCode, down, SystemClock.uptimeMillis());
         } catch (RemoteException ignored) {
+        }
+    }
+
+    /** Typed text for the focused window's text field. */
+    private void sendText(@NonNull String text) {
+        if (revealed) {
+            main.removeCallbacks(hideReveal);
+            main.postDelayed(hideReveal, LinuxFullscreenPolicy.REVEAL_MS);
+        }
+        if (service == null || focusedId == 0 || windows.get(focusedId) == null) return;
+        try {
+            service.commitText(focusedId, text);
+        } catch (RemoteException ignored) {
+        }
+    }
+
+    /** The host told that window {@code id}'s text field took focus or lost it. */
+    private void textFieldChanged(long id, boolean active) {
+        if (windows.get(id) == null) return;
+        if (!active) {
+            applyTextField(textFields.left(id));
+            return;
+        }
+        PageHost pages = host.pageHost();
+        applyTextField(textFields.focused(id, holdsKeys(id), pages.launcherKeyboard(), pages.keyboardUp()));
+    }
+
+    /** Whether window {@code id} takes the launcher's keys now: the interceptor's own test. */
+    private boolean holdsKeys(long id) {
+        if (id == 0 || id != focusedId) return false;
+        Win shown = shownWindow();
+        return front && shown != null && shown.id == id || focusedIsPane() || focusedIsFloating();
+    }
+
+    private void lowerKeyboardIfDue() {
+        applyTextField(textFields.lowerDue(host.pageHost().keyboardUp()));
+    }
+
+    private void applyTextField(@NonNull LinuxTextFieldPolicy.Action action) {
+        switch (action) {
+            case RAISE:
+                main.removeCallbacks(lowerDue);
+                host.pageHost().fieldFocusChanged(page, true);
+                break;
+            case LOWER_SOON:
+                main.removeCallbacks(lowerDue);
+                main.post(lowerDue);
+                break;
+            case LOWER:
+                host.pageHost().lowerKeyboard();
+                break;
+            default:
+                break;
         }
     }
 

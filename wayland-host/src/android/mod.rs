@@ -11,6 +11,7 @@ mod host;
 mod java;
 mod probe;
 mod source;
+mod text_input;
 mod window;
 mod xwayland;
 
@@ -350,6 +351,46 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetClipboar
             send(Command::SetClipboardText { text });
         }
     })
+}
+
+/// Typed text for window `id`'s focused text field; dropped when it has none enabled.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeCommitText<'l>(mut env: JNIEnv<'l>, _class: JClass<'l>, id: jlong, text: JString<'l>) {
+    guarded("nativeCommitText", (), || {
+        if let Some(text) = java_string(&mut env, &text).filter(|t| !t.is_empty() && t.len() <= crate::text_field::MAX_TEXT_BYTES) {
+            send(Command::CommitText { id, text });
+        }
+    })
+}
+
+/// Composing text for window `id`'s focused text field; empty clears it. `cursor`: a UTF-16
+/// index into the text, -1 for none.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetPreeditText<'l>(
+    mut env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    id: jlong,
+    text: JString<'l>,
+    cursor: jint,
+) {
+    guarded("nativeSetPreeditText", (), || {
+        let text = java_string(&mut env, &text).unwrap_or_default();
+        if text.len() <= crate::text_field::MAX_TEXT_BYTES {
+            send(Command::SetPreedit { id, text, cursor });
+        }
+    })
+}
+
+/// Deletes UTF-16 code units before and after the cursor of window `id`'s focused text field.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeDeleteSurroundingText<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    id: jlong,
+    before: jint,
+    after: jint,
+) {
+    guarded("nativeDeleteSurroundingText", (), || send(Command::DeleteSurrounding { id, before, after }))
 }
 
 /// Debug: kills this process with abort(), to check that the launcher survives it.

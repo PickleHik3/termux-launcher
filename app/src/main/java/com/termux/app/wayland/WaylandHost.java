@@ -36,6 +36,8 @@ public final class WaylandHost {
         void onMoveRequest(long id);
         /** The window asked for its window menu. */
         void onWindowMenuRequest(long id);
+        /** The window's text field took focus ({@code active}) or lost it. */
+        void onTextInput(long id, boolean active, int contentHint, int contentPurpose);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -93,6 +95,9 @@ public final class WaylandHost {
     public static native void nativeClose(long id);
     /** Android's clipboard text, for Linux apps. */
     public static native void nativeSetClipboardText(String text);
+    public static native void nativeCommitText(long id, String text);
+    public static native void nativeSetPreeditText(long id, String text, int cursor);
+    public static native void nativeDeleteSurroundingText(long id, int beforeLength, int afterLength);
     /** Debug: abort() this process. */
     public static native void nativeAbort();
     /** Debug: log what the GPU drivers offer, on a thread of its own. */
@@ -173,6 +178,15 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onWindowMenuRequest(id);
+        });
+    }
+
+    @Keep
+    static void onTextInput(long id, boolean active, int contentHint, int contentPurpose) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onTextInput(id, active, contentHint, contentPurpose);
         });
     }
 

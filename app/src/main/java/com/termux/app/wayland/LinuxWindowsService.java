@@ -157,6 +157,21 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         public void setClipboardText(String text) {
             if (mRunning && LinuxClipboardText.acceptable(text)) WaylandHost.nativeSetClipboardText(text);
         }
+
+        @Override
+        public void commitText(long id, String text) {
+            if (mRunning && text != null && !text.isEmpty()) WaylandHost.nativeCommitText(id, text);
+        }
+
+        @Override
+        public void setPreeditText(long id, String text, int cursor) {
+            if (mRunning) WaylandHost.nativeSetPreeditText(id, text == null ? "" : text, cursor);
+        }
+
+        @Override
+        public void deleteSurroundingText(long id, int beforeLength, int afterLength) {
+            if (mRunning) WaylandHost.nativeDeleteSurroundingText(id, beforeLength, afterLength);
+        }
     };
 
     private final ILinuxWindowsDebug.Stub mDebugBinder = new ILinuxWindowsDebug.Stub() {
@@ -432,6 +447,12 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     public void onWindowMenuRequest(long id) {
         if (!mRunning || mWindows.get(id) == null) return;
         broadcast(cb -> cb.onWindowMenuRequest(id));
+    }
+
+    @Override
+    public void onTextInput(long id, boolean active, int contentHint, int contentPurpose) {
+        if (!mRunning || mWindows.get(id) == null) return;
+        broadcast(cb -> cb.onTextInput(id, active, contentHint, contentPurpose));
     }
 
     @Override

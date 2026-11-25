@@ -223,6 +223,9 @@ public final class WaylandAppRunner {
         public void onWindowMenuRequest(long id) {}
 
         @Override
+        public void onTextInput(long id, boolean active, int contentHint, int contentPurpose) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;
