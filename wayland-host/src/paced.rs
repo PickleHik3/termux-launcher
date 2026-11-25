@@ -11,7 +11,7 @@
 //! Generic over the buffer and callback types so the rules are testable without a Wayland
 //! connection.
 
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use crate::held::Held;
 
@@ -35,52 +35,69 @@ pub struct Paced<B, F> {
     releases: Vec<B>,
     frames: Vec<F>,
     settle: Settle,
+    /// When the held buffer was committed: the start of its settle window.
+    committed: Option<Instant>,
 }
 
-/// Ticks after a dmabuf copy on which the held buffer is read again: the client's GPU may not
-/// have finished writing it when the copy ran (no fence on KGSL), and it commits nothing more.
-pub const SETTLE_TICKS: u8 = 3;
+/// How long after its commit the held dmabuf is read again: the client's GPU may still be
+/// writing it when the copy runs (no fence on KGSL), and it commits nothing more. Measured
+/// late writes land up to about 30 ms after the commit.
+pub const SETTLE_WINDOW: Duration = Duration::from_millis(60);
 
-/// A dmabuf copy that may still change: the checks left and the content hash of the last read.
+/// A dmabuf copy that may still change: the content hash of the last read that was posted.
 struct Settle {
-    left: u8,
+    active: bool,
     hash: u64,
 }
 
 impl<B: PartialEq + Clone, F> Paced<B, F> {
     pub fn new() -> Paced<B, F> {
-        Paced { held: Held::new(), dirty: false, releases: Vec::new(), frames: Vec::new(), settle: Settle { left: 0, hash: 0 } }
+        Paced {
+            held: Held::new(),
+            dirty: false,
+            releases: Vec::new(),
+            frames: Vec::new(),
+            settle: Settle { active: false, hash: 0 },
+            committed: None,
+        }
     }
 
     /// The held buffer was just copied. `hash` is the content hash taken before the copy for a
-    /// dmabuf, None for shm (complete at commit): a dmabuf is read again on the next ticks.
+    /// dmabuf, None for shm (complete at commit): a dmabuf is read again on every tick until
+    /// `SETTLE_WINDOW` after its commit.
     pub fn copied(&mut self, hash: Option<u64>) {
         self.settle = match hash {
-            Some(hash) => Settle { left: SETTLE_TICKS, hash },
-            None => Settle { left: 0, hash: 0 },
+            Some(hash) => Settle { active: true, hash },
+            None => Settle { active: false, hash: 0 },
         };
     }
 
-    /// The held buffer to read again now: a shown window whose last copy may still change and
-    /// has no newer commit waiting. Uses up one of the checks.
-    pub fn settle_due(&mut self, shown: bool) -> Option<B> {
-        if !shown || self.dirty || self.settle.left == 0 {
+    /// The held buffer to read again now: a shown window whose last copy may still change, has no
+    /// newer commit waiting and is within `SETTLE_WINDOW` of its commit. Past the window the
+    /// settle is over.
+    pub fn settle_due(&mut self, shown: bool, now: Instant) -> Option<B> {
+        if !shown || self.dirty || !self.settle.active {
             return None;
         }
-        self.settle.left -= 1;
+        let within = self.committed.is_some_and(|c| now.saturating_duration_since(c) < SETTLE_WINDOW);
+        if !within {
+            self.settle.active = false;
+            return None;
+        }
         self.held.current().cloned()
     }
 
     /// The content hash of the buffer read by `settle_due`. True when it differs from the last
-    /// copy: copy it again. An unchanged read ends the settle.
+    /// posted one: copy it again. An unchanged read changes nothing: the write may still come.
     pub fn settled(&mut self, hash: Option<u64>) -> bool {
         match hash {
             Some(hash) if hash != self.settle.hash => {
                 self.settle.hash = hash;
                 true
             }
-            _ => {
-                self.settle.left = 0;
+            Some(_) => false,
+            None => {
+                self.settle.active = false;
                 false
             }
         }
@@ -97,7 +114,7 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
 
     /// Something waits for a tick.
     pub fn has_work(&self) -> bool {
-        self.dirty || self.settle.left > 0 || !self.releases.is_empty() || !self.frames.is_empty()
+        self.dirty || self.settle.active || !self.releases.is_empty() || !self.frames.is_empty()
     }
 
     /// Buffers or frame callbacks wait to be let go (a hidden window needs a keep-alive).
@@ -107,11 +124,17 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
 
     /// The client committed `buffer`: hold it, and let the one it replaces wait for the tick.
     pub fn commit_buffer(&mut self, buffer: B) {
+        self.commit_buffer_at(buffer, Instant::now());
+    }
+
+    /// `commit_buffer` with the commit's time.
+    pub fn commit_buffer_at(&mut self, buffer: B, now: Instant) {
+        self.committed = Some(now);
         if let Some(old) = self.held.attach(buffer) {
             self.releases.push(old);
         }
         self.dirty = true;
-        self.settle.left = 0;
+        self.settle.active = false;
     }
 
     /// The client attached no buffer: the window is unmapped. The held buffer waits for the tick.
@@ -120,7 +143,7 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
             self.releases.push(old);
         }
         self.dirty = false;
-        self.settle.left = 0;
+        self.settle.active = false;
     }
 
     /// A buffer another surface of this window let go (a subsurface or popup replaced or
@@ -147,7 +170,7 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
         self.releases.retain(|b| b != buffer);
         if self.held.current().is_none() {
             self.dirty = false;
-            self.settle.left = 0;
+            self.settle.active = false;
         }
     }
 
@@ -176,7 +199,7 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
         releases.append(&mut self.releases);
         frames.append(&mut self.frames);
         self.dirty = false;
-        self.settle.left = 0;
+        self.settle.active = false;
     }
 }
 
@@ -290,47 +313,64 @@ mod tests {
         assert_eq!(tick(&mut p, false, true), (None, vec![8], vec![]));
     }
 
-    /// The host's tick for a dmabuf window: `content` is what the buffer holds when read.
-    /// Returns what was copied this tick.
-    fn dmabuf_tick(p: &mut Paced<u32, u32>, content: impl Fn(u32) -> u64) -> Option<(u32, u64)> {
+    /// The host's tick for a dmabuf window at `now`: `content` is what the buffer holds when
+    /// read. Returns what was copied this tick.
+    fn dmabuf_tick(p: &mut Paced<u32, u32>, now: Instant, content: impl Fn(u32) -> u64) -> Option<(u32, u64)> {
         if let Some(b) = tick(p, true, false).0 {
             let h = content(b);
             p.copied(Some(h));
             return Some((b, h));
         }
-        let b = p.settle_due(true)?;
+        let b = p.settle_due(true, now)?;
         let h = content(b);
         if p.settled(Some(h)) { Some((b, h)) } else { None }
     }
 
-    #[test]
-    fn a_dmabuf_that_changes_after_the_copy_is_copied_again_until_it_settles() {
-        let mut p: Paced<u32, u32> = Paced::new();
-        p.commit_buffer(1);
-        p.commit_buffer(2);
-        // Buffer 2's GPU work finishes late: the first read is the old picture, then the new one.
-        let reads = std::cell::Cell::new(0u64);
-        let content = |_b: u32| {
-            reads.set(reads.get() + 1);
-            if reads.get() == 1 { 100 } else { 200 }
-        };
-        let mut shown = Vec::new();
-        for _ in 0..6 {
-            if let Some(c) = dmabuf_tick(&mut p, &content) {
-                shown.push(c);
-            }
-        }
-        assert_eq!(shown, vec![(2, 100), (2, 200)]);
-        assert!(!p.has_work());
+    fn ms(t0: Instant, n: u64) -> Instant {
+        t0 + Duration::from_millis(n)
     }
 
     #[test]
-    fn a_dmabuf_that_does_not_change_is_copied_exactly_once() {
+    fn a_dmabuf_that_changes_after_an_unchanged_read_is_copied_again() {
+        let t0 = Instant::now();
         let mut p: Paced<u32, u32> = Paced::new();
-        p.commit_buffer(1);
+        p.commit_buffer_at(1, t0);
+        p.commit_buffer_at(2, t0);
+        // The GPU starts late: the copy and two more reads see the old picture, then the new one.
+        let content = |_b: u32| 0;
+        assert_eq!(tick(&mut p, true, false).0, Some(2));
+        p.copied(Some(100));
+        let mut shown = Vec::new();
+        for (t, h) in [(17u64, 100u64), (33, 100), (50, 200), (58, 200)] {
+            if let Some(c) = dmabuf_tick(&mut p, ms(t0, t), |_| h) {
+                shown.push(c);
+            }
+        }
+        assert_eq!(shown, vec![(2, 200)]);
+    }
+
+    #[test]
+    fn a_change_after_the_window_is_not_copied_and_idle_stays_idle() {
+        let t0 = Instant::now();
+        let mut p: Paced<u32, u32> = Paced::new();
+        p.commit_buffer_at(1, t0);
+        assert_eq!(dmabuf_tick(&mut p, t0, |_| 7), Some((1, 7)));
+        assert!(p.has_work());
+        assert_eq!(dmabuf_tick(&mut p, ms(t0, 20), |_| 7), None);
+        assert!(p.has_work());
+        assert_eq!(dmabuf_tick(&mut p, t0 + SETTLE_WINDOW, |_| 8), None);
+        assert!(!p.has_work());
+        assert_eq!(dmabuf_tick(&mut p, ms(t0, 80), |_| 9), None);
+    }
+
+    #[test]
+    fn a_buffer_that_does_not_change_is_copied_exactly_once() {
+        let t0 = Instant::now();
+        let mut p: Paced<u32, u32> = Paced::new();
+        p.commit_buffer_at(1, t0);
         let mut copies = 0;
-        for _ in 0..6 {
-            if dmabuf_tick(&mut p, |_| 7).is_some() {
+        for n in 0..8 {
+            if dmabuf_tick(&mut p, ms(t0, n * 10), |_| 7).is_some() {
                 copies += 1;
             }
         }
@@ -340,24 +380,28 @@ mod tests {
 
     #[test]
     fn a_newer_commit_ends_the_settle_of_the_old_buffer() {
+        let t0 = Instant::now();
         let mut p: Paced<u32, u32> = Paced::new();
-        p.commit_buffer(1);
-        assert_eq!(dmabuf_tick(&mut p, |_| 1), Some((1, 1)));
+        p.commit_buffer_at(1, t0);
+        assert_eq!(dmabuf_tick(&mut p, t0, |_| 1), Some((1, 1)));
         assert!(p.has_work());
-        p.commit_buffer(2);
+        p.commit_buffer_at(2, ms(t0, 10));
         // The old buffer is not read again: the next tick copies the new one.
-        assert_eq!(p.settle_due(true), None);
-        assert_eq!(dmabuf_tick(&mut p, |b| b as u64 * 10), Some((2, 20)));
+        assert_eq!(p.settle_due(true, ms(t0, 10)), None);
+        assert_eq!(dmabuf_tick(&mut p, ms(t0, 17), |b| b as u64 * 10), Some((2, 20)));
+        // The window now runs from the newer commit.
+        assert_eq!(dmabuf_tick(&mut p, ms(t0, 65), |_| 21), Some((2, 21)));
     }
 
     #[test]
-    fn a_buffer_that_keeps_changing_is_copied_a_bounded_number_of_times() {
+    fn a_buffer_that_keeps_changing_stops_at_the_window() {
+        let t0 = Instant::now();
         let mut p: Paced<u32, u32> = Paced::new();
-        p.commit_buffer(1);
+        p.commit_buffer_at(1, t0);
         let n = std::cell::Cell::new(0u64);
         let mut copies = 0;
-        for _ in 0..20 {
-            if dmabuf_tick(&mut p, |_| {
+        for k in 0..20 {
+            if dmabuf_tick(&mut p, ms(t0, k * 10), |_| {
                 n.set(n.get() + 1);
                 n.get()
             })
@@ -366,7 +410,8 @@ mod tests {
                 copies += 1;
             }
         }
-        assert_eq!(copies, 1 + SETTLE_TICKS as usize);
+        // The copy at 0 ms and a read each 10 ms up to 50 ms.
+        assert_eq!(copies, 6);
         assert!(!p.has_work());
     }
 
@@ -376,10 +421,10 @@ mod tests {
         p.commit_buffer(1);
         tick(&mut p, true, false);
         p.copied(None);
-        assert_eq!(p.settle_due(true), None);
+        assert_eq!(p.settle_due(true, Instant::now()), None);
         assert!(!p.has_work());
         p.copied(Some(5));
-        assert_eq!(p.settle_due(false), None);
+        assert_eq!(p.settle_due(false, Instant::now()), None);
     }
 
     #[test]

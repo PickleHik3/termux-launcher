@@ -1207,7 +1207,7 @@ impl State {
                 self.copy(i, &buffer);
                 self.toplevels[i].paced.copied(hash);
                 copied = true;
-            } else if let Some(buffer) = self.toplevels[i].paced.settle_due(shown) {
+            } else if let Some(buffer) = self.toplevels[i].paced.settle_due(shown, now) {
                 // The dmabuf copy may have run before the client's GPU finished (no fence on
                 // KGSL): copy again only when its pixels changed since.
                 let hash = self.settle_hash(i, &buffer);
