@@ -126,6 +126,38 @@ public class MarksLookTest {
         assertTrue(inkPixels(stack) > 0);
     }
 
+    @Test public void aCurrentStackStaysInsideItsBoxForEveryKind() {
+        int ground = Color.argb(160, 255, 255, 255);
+        for (PageKind kind : PageKind.values()) {
+            for (boolean current : new boolean[] {true, false}) {
+                Bitmap stack = render(c ->
+                    look.drawStack(c, kind, 3, current, 0f, 24f, 24f, BOX, INK, ground));
+                int max = -1;
+                for (int y = 0; y < SIZE; y++) {
+                    for (int x = 0; x < SIZE; x++) {
+                        if (alphaAt(stack, x, y) > 0) max = Math.max(max, Math.max(x - 24, 24 - y));
+                    }
+                }
+                assertTrue(kind + " current=" + current + " reaches " + max, max <= BOX / 2f);
+            }
+        }
+    }
+
+    @Test public void aCurrentStacksBackCardIsADiscSoNoGlyphPokesOutBesideIt() {
+        Bitmap stack = render(c ->
+            look.drawStack(c, PageKind.TERMINAL, 3, true, 0f, 24f, 24f, BOX, INK,
+                Color.argb(160, 255, 255, 255)));
+        float shift = BOX * MarksLook.STACK_SHIFT;
+        float reach = shift + PageMarkShapes.discRadius(BOX * MarksLook.STACK_SCALE);
+        for (int y = 0; y < SIZE; y++) {
+            for (int x = 0; x < SIZE; x++) {
+                if (alphaAt(stack, x, y) == 0) continue;
+                float dx = x + 0.5f - 24f, dy = y + 0.5f - 24f;
+                assertTrue("ink at " + x + "," + y, dx <= reach + 1f && -dy <= reach + 1f);
+            }
+        }
+    }
+
     @Test public void theSettingPicksTheLookAndKeepsItWhileItHolds() {
         PageMarkLook glyphs = PageMarkLooks.chosen(PageBarLook.GLYPHS, null);
         assertTrue(glyphs instanceof PageBarGlyphPainter);
