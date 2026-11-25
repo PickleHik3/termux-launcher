@@ -164,7 +164,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         int ink = MaterialColors.getColor(this,
             com.termux.shared.R.attr.termuxColorOnSurfaceVariant, 0xFFFFFFFF);
         tab.setImageTintList(ColorStateList.valueOf(ink));
-        menu.dress((surface & 0x00FFFFFF) | 0xF2000000, ink, 14f * density);
+        menu.dress();
         placeTab();
     }
 

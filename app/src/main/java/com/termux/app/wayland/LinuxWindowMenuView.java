@@ -1,7 +1,7 @@
 package com.termux.app.wayland;
 
 import android.content.Context;
-import android.graphics.drawable.GradientDrawable;
+import android.content.res.ColorStateList;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.TypedValue;
@@ -14,11 +14,14 @@ import android.widget.TextView;
 
 import androidx.annotation.NonNull;
 
+import com.google.android.material.shape.MaterialShapeDrawable;
 import com.termux.R;
+import com.termux.app.chrome.ChromeShade;
+import com.termux.app.material.M3;
 import com.termux.view.HoldTiming;
 
 /**
- * The rim tab's menu (spec #384): Close, Minimise, Move and Scale in a small glass card under the
+ * The rim tab's menu (spec #384): Close, Minimise, Move and Scale in a small menu-surface card under the
  * tab. Move is a handle, not an action: a tap does nothing and holding it lifts the window
  * ({@link Listener#lift}); the card then goes away and the carry takes the finger. Drawn inside the
  * Linux window's page so it moves with it. Long presses are used nowhere else here.
@@ -85,12 +88,22 @@ final class LinuxWindowMenuView extends LinearLayout {
         return row;
     }
 
-    /** Dresses the card: {@code fill} behind the rows, {@code ink} for their text. */
-    void dress(int fill, int ink, float radiusPx) {
-        GradientDrawable bg = new GradientDrawable();
-        bg.setColor(fill);
-        bg.setCornerRadius(radiusPx);
-        setBackground(bg);
+    /**
+     * Dresses the card in the launcher's menu surface: the theme's opaque container colour on a
+     * medium corner with the menu's outline, ink from the same theme, so labels read over any
+     * window and the card follows the theme and the scheme chrome like every other menu.
+     */
+    void dress() {
+        android.content.Context context = getContext();
+        MaterialShapeDrawable plate = M3.surface(context,
+            com.google.android.material.R.attr.shapeAppearanceCornerMedium,
+            M3.surfaceContainer(context));
+        plate.setStroke(getResources().getDimension(
+                com.google.android.material.R.dimen.m3_comp_outlined_card_outline_width),
+            ColorStateList.valueOf(ChromeShade.rim(M3.stateLayer(M3.onSurface(context),
+                M3.STATE_DRAGGED))));
+        setBackground(plate);
+        int ink = M3.onSurface(context);
         for (int i = 0; i < getChildCount(); i++) ((TextView) getChildAt(i)).setTextColor(ink);
     }
 
