@@ -111,13 +111,33 @@ public class WaylandDesktopServerTest {
         assertTrue(block.contains("kill -0 \"$tl_desktop_x\" 2>/dev/null && [ \"$tl_desktop_n\" -lt "
             + WaylandDesktopServer.READY_STEPS + " ]"));
         assertTrue(block.contains("exit " + WaylandDesktopServer.EXIT_NO_SCREEN + "\n"));
-        // The watcher ends the server once the session (which the script becomes) is gone.
-        assertTrue(block.contains("(while kill -0 $$ 2>/dev/null && kill -0 \"$tl_desktop_x\" 2>/dev/null; do sleep "
-            + WaylandDesktopServer.WATCH_PERIOD_S + "; done; kill \"$tl_desktop_x\" 2>/dev/null) &\n"));
-        // The watcher starts only after the server answered, and the desktop sees no Wayland.
+        // The watcher ends the server once the session (which the script becomes) is gone, and
+        // the session once the server is gone: closing the desktop's window ends Xwayland, which
+        // the desktop never reaps, so a zombie counts as gone (#391).
+        assertTrue(block, block.contains("tl_live() { { read -r tl_s < \"/proc/$1/stat\"; } 2>/dev/null || return 1;"
+            + " case \"$tl_s\" in *') Z '*) return 1;; esac; }\n"));
+        assertTrue(block, block.contains("(while tl_live $$ && tl_live \"$tl_desktop_x\"; do sleep "
+            + WaylandDesktopServer.WATCH_PERIOD_S + "; done\n"
+            + "kill \"$tl_desktop_x\" 2>/dev/null\n"
+            + "if tl_live $$; then\n"
+            + "kill $$ 2>/dev/null\n"));
+        assertTrue("insisted on after a bounded wait", block.contains("kill -9 $$ 2>/dev/null\n"));
+        // The watcher starts only after the server answered.
         assertTrue(block.indexOf("exit " + WaylandDesktopServer.EXIT_NO_SCREEN) < block.indexOf("(while"));
-        assertTrue(block.endsWith("unset WAYLAND_DISPLAY GDK_BACKEND QT_QPA_PLATFORM tl_desktop_ready tl_desktop_n\n"));
-        assertFalse(block.contains("export WAYLAND_DISPLAY"));
+        assertFalse(block.contains("export WAYLAND_DISPLAY='"));
+    }
+
+    @Test public void insideTheDesktopEveryToolkitDrawsOnItsXServer() {
+        // #391: with WAYLAND_DISPLAY merely unset, GTK found $XDG_RUNTIME_DIR/wayland-0 and the
+        // panel and notifyd opened as Linux windows in the row. GTK and Qt are pinned to X11, and
+        // WAYLAND_DISPLAY names a socket that does not exist, so no Wayland client inside the
+        // desktop can fall back to wayland-0 (XDG_RUNTIME_DIR stays the shells' own).
+        String block = WaylandDesktopServer.startBlock("/p/bin/Xwayland", "/p/tmp/wayland-0", 3, 432, 965, 2f);
+        assertTrue(block, block.endsWith("export GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb WAYLAND_DISPLAY="
+            + WaylandDesktopServer.NO_WAYLAND_DISPLAY + "\n"
+            + "unset tl_desktop_ready tl_desktop_n\n"));
+        assertFalse(WaylandDesktopServer.NO_WAYLAND_DISPLAY.startsWith("wayland-"));
+        assertFalse(block.contains("XDG_RUNTIME_DIR"));
     }
 
     @Test public void theServersWindowIsNamedAfterItsDesktop() {
