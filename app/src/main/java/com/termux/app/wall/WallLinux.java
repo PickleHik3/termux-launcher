@@ -32,6 +32,12 @@ public interface WallLinux {
      */
     default void setFrontPage(@NonNull PageKind kind, int pageId) { }
 
+    /**
+     * The size, in px, the view gets in the Terminal page's place (the Terminal page's own),
+     * told whenever it changes, so a new Linux window can be told it before its first frame.
+     */
+    default void setPageSize(int width, int height) { }
+
     /** Dress the view from the surface style, as the panes beside it are. */
     default void applyStyle(@Nullable PaneSurfaceStyle style) { }
 

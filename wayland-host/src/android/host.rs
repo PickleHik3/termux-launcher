@@ -123,6 +123,9 @@ pub struct TouchPoints {
 pub enum Command {
     SetWindow { id: i64, window: Option<NativeWindow> },
     Configure { id: i64, width: i32, height: i32, scale: f64 },
+    /// The size, in px, and scale a new full-page window gets: its first configure uses it
+    /// while it has no view yet.
+    PageSize { width: i32, height: i32, scale: f64 },
     SetVisible { id: i64, visible: bool },
     SetFocus { id: i64 },
     Touch { id: i64, action: i32, action_index: i32, time: u32, points: TouchPoints },
@@ -540,6 +543,8 @@ pub struct State {
     pub output: Output,
     output_size: (i32, i32),
     output_scale: f64,
+    /// The launcher's page slot (px) and the scale a new window there gets; None until told.
+    page: Option<((i32, i32), f64)>,
     /// The scale X apps are told (XSETTINGS, `Xft.dpi`): the start scale, the screen's density.
     /// One X server serves every X app, so no window's own scale moves it.
     toolkit_scale: f64,
@@ -757,6 +762,7 @@ fn setup(
         seat,
         output,
         output_size,
+        page: None,
         output_scale: config.scale,
         toolkit_scale: config.scale,
         toplevels: Vec::new(),
@@ -925,6 +931,9 @@ impl State {
         match cmd {
             Command::SetWindow { id, window } => self.set_window(id, window),
             Command::Configure { id, width, height, scale } => self.configure(id, width, height, scale),
+            Command::PageSize { width, height, scale } => {
+                self.page = (width > 0 && height > 0).then_some(((width, height), scale));
+            }
             Command::SetVisible { id, visible } => self.set_visible(id, visible),
             Command::SetFocus { id } => self.set_focus(id),
             Command::Touch { id, action, action_index, time, points } => self.touch(id, action, action_index, time, &points),
@@ -1758,13 +1767,16 @@ impl State {
     }
 
     /// The pane toplevel `i` is shown in, in the units its client is configured in: the view
-    /// (logical for xdg, px for X11), or the output when no view size is known yet.
+    /// (logical for xdg, px for X11), else the page a new window gets, else the output when
+    /// nothing is known yet.
     fn pane_of(&self, i: usize) -> (i32, i32) {
         let t = &self.toplevels[i];
-        match t.view_size {
-            Some(v) if t.shell.is_x11() => v,
-            Some(v) => logical_size(v, t.scale),
-            None => self.output_size,
+        match (t.view_size, self.page) {
+            (Some(v), _) if t.shell.is_x11() => v,
+            (Some(v), _) => logical_size(v, t.scale),
+            (None, Some((p, _))) if t.shell.is_x11() => p,
+            (None, Some((p, scale))) => logical_size(p, scale),
+            (None, None) => self.output_size,
         }
     }
 
@@ -1796,14 +1808,21 @@ impl State {
         self.toplevels[i].class = self.classify(i);
     }
 
-    /// The first xdg configure: classifies, then tells Main the pane (when a view size is known)
-    /// and every class the pane as bounds; Dialog, Fixed and Transient pick their own size.
+    /// The first xdg configure: classifies, then tells Main the pane (the view's, else the page
+    /// a new window gets) and every class the pane as bounds; Dialog, Fixed and Transient pick
+    /// their own size. A window sized from the page takes the page's scale with it.
     fn send_first_configure(&mut self, i: usize) {
         self.set_class(i);
         let pane = self.pane_of(i);
+        if self.toplevels[i].view_size.is_none() {
+            if let Some((_, scale)) = self.page {
+                self.toplevels[i].scale = scale;
+            }
+        }
+        let known = self.toplevels[i].view_size.is_some() || self.page.is_some();
         let t = &self.toplevels[i];
         if let Shell::Xdg(x) = &t.shell {
-            let size = if t.class == WindowClass::Main { t.view_size.map(|_| pane) } else { None };
+            let size = if t.class == WindowClass::Main && known { Some(pane) } else { None };
             x.with_pending_state(|s| {
                 s.size = size.map(Into::into);
                 s.bounds = Some(pane.into());

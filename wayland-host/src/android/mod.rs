@@ -225,6 +225,19 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeConfigure<'
     guarded("nativeConfigure", (), || send(Command::Configure { id, width, height, scale: sane_scale(scale) }))
 }
 
+/// The size, in pixels, of the page slot a new full-page window gets, and the scale it would
+/// use; told whenever it changes.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetPageSize<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    width: jint,
+    height: jint,
+    scale: jfloat,
+) {
+    guarded("nativeSetPageSize", (), || send(Command::PageSize { width, height, scale: sane_scale(scale) }))
+}
+
 /// Whether window `id`'s view is on screen.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetVisible<'l>(

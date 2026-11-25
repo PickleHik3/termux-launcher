@@ -75,6 +75,8 @@ public final class WaylandHost {
     private static native void nativeStop();
     public static native void nativeSetSurface(long id, @Nullable Surface surface);
     public static native void nativeConfigure(long id, int width, int height, float scale);
+    /** The page slot a new full-page window gets, and its scale. */
+    public static native void nativeSetPageSize(int width, int height, float scale);
     public static native void nativeSetVisible(long id, boolean visible);
     public static native void nativeSetFocus(long id);
     public static native void nativeTouch(long id, int action, int actionIndex, long eventTimeMs, int count,

@@ -110,6 +110,11 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         }
 
         @Override
+        public void setPageSize(int width, int height, float scale) {
+            if (mRunning) WaylandHost.nativeSetPageSize(width, height, scale);
+        }
+
+        @Override
         public void setVisible(long id, boolean visible) {
             if (mRunning) WaylandHost.nativeSetVisible(id, visible);
         }

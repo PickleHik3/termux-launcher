@@ -145,6 +145,12 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         placeTab();
     }
 
+    /** The slot's height on a page {@code pageHeight} px high: below the band and the status row's room. */
+    int slotHeightFor(int pageHeight) {
+        return Math.max(0, pageHeight - LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
+            topInsetPx));
+    }
+
     /** Where the controller puts the bound window's views. */
     @NonNull
     FrameLayout slot() {

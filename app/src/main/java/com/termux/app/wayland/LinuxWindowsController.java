@@ -255,6 +255,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     };
     private final View.OnLayoutChangeListener slotWatcher = (v, l, t, r, b, ol, ot, or, ob) -> {
         if (r - l == or - ol && b - t == ob - ot) return;
+        if (v == LinuxWindowsController.this.page.slot()) sendPageSize();
         // Posted: a layout pass must not ask for another.
         if (!replacePosted) {
             replacePosted = true;
@@ -262,6 +263,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
     };
     private final List<Chip> chips = new ArrayList<>();
+    /** The Terminal page's size as the wall last told ({@link #setPageSize}); 0 before. */
+    private int pageWidth;
+    private int pageHeight;
+    /** The page size last sent to the host; reset on every attach. */
+    private int sentPageWidth;
+    private int sentPageHeight;
+    private float sentPageScale;
 
     private final LinuxWindowKeys.Sink keySink = (keyCode, down) -> sendKey(keyCode, down);
     private final TerminalKeyEventHandler.KeyValueInterceptor keys =
@@ -300,6 +308,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             Log.i(LOG_TAG, "launcher attached to the Linux windows host");
             try {
                 b.linkToDeath(death, 0);
+                sentPageWidth = 0;
+                sendPageSize();
                 service.addCallback(callback);
             } catch (RemoteException e) {
                 hostGone();
@@ -674,6 +684,38 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (isFront == front) return;
         if (!isFront) page.dismissRail();
         frontChanged(isFront);
+    }
+
+    @Override
+    public void setPageSize(int width, int height) {
+        pageWidth = width;
+        pageHeight = height;
+        sendPageSize();
+    }
+
+    /**
+     * Tells the host the slot a new full-page window gets, with the scale it would draw at: the
+     * slot's own size once it is laid out, else the one the Terminal page's size gives it.
+     * Compares first.
+     */
+    private void sendPageSize() {
+        ILinuxWindows s = service;
+        if (s == null) return;
+        FrameLayout slot = page.slot();
+        boolean laidOut = slot.getWidth() > 0 && slot.getHeight() > 0;
+        int width = laidOut ? slot.getWidth() : pageWidth;
+        int height = laidOut ? slot.getHeight() : page.slotHeightFor(pageHeight);
+        if (width <= 0 || height <= 0) return;
+        float scale = LinuxDisplayScale.windowScale(null, context.getResources().getDisplayMetrics().density, width);
+        if (width == sentPageWidth && height == sentPageHeight && scale == sentPageScale) return;
+        try {
+            s.setPageSize(width, height, scale);
+        } catch (RemoteException e) {
+            return;
+        }
+        sentPageWidth = width;
+        sentPageHeight = height;
+        sentPageScale = scale;
     }
 
     @Override
