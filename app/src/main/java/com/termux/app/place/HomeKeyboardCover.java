@@ -41,6 +41,18 @@ public final class HomeKeyboardCover {
     }
 
     /**
+     * How much of a keyboard {@code keyboardPx} tall the rails on Home's side edges end above: all
+     * of it where the keyboard lifts the rows, none where it covers them. On Home the keyboard is
+     * an overlay owned by its page (the 2026-11-25 decision on the crossing rule's Q1): it covers
+     * the dock and what stands under it and changes no other element's rest, so a side A–Z bar
+     * keeps its length under it. The geometry pass ({@code StackLayout}'s side reach) and the rest's
+     * cards ({@code RestCards}' A–Z card) both read it.
+     */
+    public static int sideRailKeyboardPx(boolean lifts, int keyboardPx) {
+        return lifts ? Math.max(0, keyboardPx) : 0;
+    }
+
+    /**
      * How far below the container a side's rows and glass are drawn so they stand at their
      * keyboard-down rect: the keyboard's laid-out height less the share the container already
      * sits lower by. 0 for a side whose rows the keyboard lifts.

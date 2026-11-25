@@ -1065,7 +1065,12 @@ public final class RestCards {
         // STATUS: the bar along the top edge.
         if (statusOnTop) addStatus(rest, shape, floating, w, h, density);
         // AZ: the A–Z bar off the dock, a card of its own on its edge host (#307).
-        if (azAlone) addAzEdge(shape);
+        // Under Home's keyboard cover the A–Z bar keeps its keyboard-down length: the keyboard is
+        // an overlay there and changes no other element's rest (HomeKeyboardCover).
+        final boolean railCovered = up && pass.keyboardHeightPx > 0
+            && HomeKeyboardCover.sideRailKeyboardPx(liftsRows, pass.keyboardHeightPx) == 0;
+        if (azAlone) addAzEdge(railCovered
+            ? shapeOf(rest, r, dock, half, layout, style, cornersPx, false) : shape);
         // DOCK or PEEK: the host's glass.
         PeekGlassGeometry.Card peekCut = null;
         Box hostDrawn = null;
@@ -1544,6 +1549,15 @@ public final class RestCards {
                                        @NonNull DockLayout dock, @NonNull DockGeometry.Half half,
                                        @NonNull PlaceLayout layout, @NonNull LayoutStyle style,
                                        float cornersPx) {
+        return shapeOf(rest, r, dock, half, layout, style, cornersPx, rest.pass.keyboardShown);
+    }
+
+    /** {@link #shapeOf} with the keyboard counted as shown or not ({@code keyboardShown}). */
+    @NonNull
+    private static ChromeShape shapeOf(@NonNull Rest rest, @NonNull StackLayout.Result r,
+                                       @NonNull DockLayout dock, @NonNull DockGeometry.Half half,
+                                       @NonNull PlaceLayout layout, @NonNull LayoutStyle style,
+                                       float cornersPx, boolean keyboardShown) {
         StackLayout.Input pass = rest.pass;
         boolean floating = style == LayoutStyle.FLOATING;
         float status = rest.statusThicknessPx(floating);
@@ -1551,11 +1565,11 @@ public final class RestCards {
         float az = PlaceChromePolicy.azRowOnDock(layout) ? bandPx(Element.AZ, dock, pass)
             : Math.max(0, rest.azEdgeThicknessPx);
         float keys = bandPx(Element.EXTRA_KEYS, dock, pass);
-        float keyboard = pass.keyboardShown ? pass.keyboardHeightPx : 0f;
+        float keyboard = keyboardShown ? pass.keyboardHeightPx : 0f;
         ChromeShapeModel.Thickness thickness = ChromeShapeModel.Thickness.of(status, status,
             apps, apps, az, az, keys, keys, keyboard);
         return ChromeShapeModel.shape(ChromeShapeModel.input(
-                layout.withKeyboardShown(pass.keyboardShown), style, rest.screenWidthPx,
+                layout.withKeyboardShown(keyboardShown), style, rest.screenWidthPx,
                 rest.screenHeightPx, thickness)
             .corners(cornersPx).margin(marginPx(half, rest.density)).build());
     }

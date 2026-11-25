@@ -181,7 +181,13 @@ public final class StackLayout {
             int imeReachPx = in.dockOverlays ? in.systemImeTakePx : 0;
             int overlapPx = KeyboardOverlayPolicy.overlapPx(in.dockOverlays, stackHeightPx,
                 base.marginPx, keyboardOverlapPx, imeReachPx);
-            sideStackOverlapPx = KeyboardOverlayPolicy.overlapPx(true, stackHeightPx,
+            // A side rail on Home ends above the stack as the keyboard leaves it: a keyboard
+            // that covers Home's rows covers the rail's end too, and the rail keeps its length.
+            int railKeyboardPx = Math.max(0, in.keyboardHeightPx);
+            int railStackPx = stackHeightPx - railKeyboardPx + HomeKeyboardCover.sideRailKeyboardPx(
+                HomeKeyboardCover.liftsRows(in.dock.rows.kind, in.homeKeyboardAlwaysOn),
+                railKeyboardPx);
+            sideStackOverlapPx = KeyboardOverlayPolicy.overlapPx(true, railStackPx,
                 base.marginPx, 0, imeReachPx);
             // While the wall travels with chrome pre-rolled, the content keeps exactly the room it
             // was committed with: whatever the stack grew by for the slide, the content reaches
