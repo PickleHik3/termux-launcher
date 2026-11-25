@@ -49,24 +49,21 @@ public class SessionsDrawerRoutingTest {
         assertFalse(TerminalSessionBrowser.isOpen(activity));
     }
 
-    /** The status chip's old panel and the browser are the same surface now. */
+    /** session.panel, session.browser and the DRAWER key open Overview, not the sessions manager. */
     @Test
-    public void theChipAndTheBrowserSeamOpenAndCloseOneDrawer() {
+    public void theOldSessionsDoorsOpenOverview() {
         TermuxActivity activity = laidOutActivity();
 
         ReflectionHelpers.callInstanceMethod(activity, "toggleSessionsPanel");
-        assertTrue("session.panel and the chip land on the drawer",
-            TerminalSessionBrowser.isOpen(activity));
-        assertEquals("and on exactly one card, not a panel over a browser",
-            1, activity.getTerminalSheetController().depth());
-        assertEquals(Boolean.TRUE,
+        assertEquals("session.panel opens Overview", Boolean.TRUE,
             ReflectionHelpers.callInstanceMethod(activity, "isSessionsPanelShowing"));
+        assertFalse("and not the sessions manager", TerminalSessionBrowser.isOpen(activity));
 
-        // session.browser's seam, aimed at the drawer the chip already opened.
-        TerminalSessionBrowser.show(activity);
-        assertFalse("the second trigger closed it rather than stacking a second one",
-            TerminalSessionBrowser.isOpen(activity));
-        assertEquals(0, activity.getTerminalSheetController().depth());
+        // The same door again closes it.
+        ReflectionHelpers.callInstanceMethod(activity, "toggleSessionsPanel");
+        assertEquals(Boolean.FALSE,
+            ReflectionHelpers.callInstanceMethod(activity, "isSessionsPanelShowing"));
+        assertFalse(TerminalSessionBrowser.isOpen(activity));
     }
 
     @Test

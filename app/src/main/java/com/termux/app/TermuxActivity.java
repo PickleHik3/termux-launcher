@@ -32724,16 +32724,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Seam for {@code session.panel} and for the status-row session chip. The chip used to drop a
-     * sessions list of its own beneath itself, a second front end to the same sessions the browser
-     * showed; both are the drawer now, and the chip is one more way to pull it out.
+     * Seam for {@code session.panel}, {@code session.browser}, {@code app.open_drawer} and the
+     * extra-keys DRAWER key: each opens Overview now, as the session chip does. The sessions
+     * manager is reachable from none of them until it is retired (#360).
      */
     void toggleSessionsPanel() {
-        com.termux.app.terminal.TerminalSessionBrowser.toggle(this);
+        toggleOverview();
     }
 
-    /** Overview: opened by the status bar's session chip, closed by the same tap. */
-    void toggleOverview() {
+    /** Overview: opened by the status bar's session chip and the old sessions doors, closed by the same tap. */
+    public void toggleOverview() {
         overview().toggle();
     }
 
@@ -32768,9 +32768,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         return mOverview;
     }
 
-    /** Whether the sessions drawer is the surface currently on screen. */
+    /** Whether Overview, which the old sessions doors open now, is on screen. */
     boolean isSessionsPanelShowing() {
-        return com.termux.app.terminal.TerminalSessionBrowser.isOpen(this);
+        return mOverview != null && mOverview.isOpen();
     }
 
     /** Named-session prompt with the fail-safe alternative, offered by the drawer's +. */
@@ -35520,7 +35520,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         }
 
         @Override public void showSessionBrowser() {
-            com.termux.app.terminal.TerminalSessionBrowser.toggle(TermuxActivity.this);
+            TermuxActivity.this.toggleOverview();
         }
 
         @Override public void toggleSessionsPanel() {
