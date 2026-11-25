@@ -35,8 +35,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *   <li>It dies with the host: it is the host's Wayland client, and Xwayland exits when its
  *       compositor connection goes. It dies with the desktop: a watcher started beside it ends it
  *       within {@link #WATCH_PERIOD_S} seconds of the desktop's process going. The window's close
- *       ends it too (Xwayland exits when its toplevel is closed), and the desktop then loses its
- *       display and ends.</li>
+ *       ends it too (Xwayland exits when its toplevel is closed), and the same watcher then ends
+ *       the desktop, whose own sweep ends everything it left ({@link #startBlock}).</li>
  * </ul>
  *
  * <p>Size and scale: the server runs with {@code -hidpi}. Xwayland 24.1 then takes the host's
@@ -76,8 +76,19 @@ public final class WaylandDesktopServer {
     /** The readiness wait: this many steps of {@link #READY_STEP_S} seconds (10 s). */
     static final int READY_STEPS = 100;
     static final String READY_STEP_S = "0.1";
+    /** How long the session is given to end after its server went: steps of {@link #READY_STEP_S} (10 s). */
+    static final int END_STEPS = 100;
     /** How often the watcher looks whether the desktop is still there, in seconds. */
     static final int WATCH_PERIOD_S = 2;
+
+    /**
+     * The {@code WAYLAND_DISPLAY} a desktop is given: a socket that never exists. libwayland falls
+     * back to {@code wayland-0} in {@code XDG_RUNTIME_DIR} only when the variable is unset, and
+     * there it found the host's socket (#391); naming none makes every Wayland connect inside the
+     * desktop fail, so its clients take the X server, without changing {@code XDG_RUNTIME_DIR},
+     * which stays the shells' own (41fb70a16).
+     */
+    public static final String NO_WAYLAND_DISPLAY = "tl-desktop-no-wayland";
 
     /** The title Xwayland 24.1 gives its rootful window, followed by the display number. */
     static final String ROOTFUL_TITLE_PREFIX = "Xwayland on :";
@@ -243,11 +254,16 @@ public final class WaylandDesktopServer {
      *   <li>the bounded wait for that file, ending at once if the server exits; on no answer, the
      *       server is ended and the script exits with {@link #EXIT_NO_SCREEN};</li>
      *   <li>the watcher, which ends the server once the session's process ({@code $$}, which the
-     *       script becomes) is gone;</li>
+     *       script becomes) is gone, and the session once the server is gone: closing the window
+     *       ends Xwayland, and the desktop, which never reaps it, would otherwise run on (#391).
+     *       A zombie counts as gone. The session is asked to end, then killed after
+     *       {@link #END_STEPS} x {@link #READY_STEP_S} seconds; its own sweep then ends the rest
+     *       ({@code X11LinuxAppRunner.SESSION_END_BLOCK});</li>
      *   <li>{@code Xft.dpi} for {@code scale} merged into the server's resources, when {@code xrdb}
      *       is installed;</li>
-     *   <li>{@code WAYLAND_DISPLAY} and the toolkit hints taken out of the desktop's environment,
-     *       so an app opened inside the desktop opens on its screen, not as a window of its own.</li>
+     *   <li>GTK and Qt pinned to X11 and {@code WAYLAND_DISPLAY} naming no socket
+     *       ({@link #NO_WAYLAND_DISPLAY}), so an app opened inside the desktop, and the desktop's
+     *       own panel, open on its screen, not as windows of their own.</li>
      * </ul>
      * Pure.
      */
@@ -276,13 +292,27 @@ public final class WaylandDesktopServer {
         b.append("exit ").append(EXIT_NO_SCREEN).append('\n');
         b.append("fi\n");
         b.append("rm -f \"$tl_desktop_ready\"\n");
-        b.append("(while kill -0 $$ 2>/dev/null && kill -0 \"$tl_desktop_x\" 2>/dev/null; do sleep ")
-            .append(WATCH_PERIOD_S).append("; done; kill \"$tl_desktop_x\" 2>/dev/null) &\n");
+        b.append("tl_live() { { read -r tl_s < \"/proc/$1/stat\"; } 2>/dev/null || return 1;")
+            .append(" case \"$tl_s\" in *') Z '*) return 1;; esac; }\n");
+        b.append("(while tl_live $$ && tl_live \"$tl_desktop_x\"; do sleep ").append(WATCH_PERIOD_S)
+            .append("; done\n");
+        b.append("kill \"$tl_desktop_x\" 2>/dev/null\n");
+        b.append("if tl_live $$; then\n");
+        b.append("kill $$ 2>/dev/null\n");
+        b.append("tl_desktop_n=0\n");
+        b.append("while tl_live $$ && [ \"$tl_desktop_n\" -lt ").append(END_STEPS).append(" ]; do\n");
+        b.append("sleep ").append(READY_STEP_S).append('\n');
+        b.append("tl_desktop_n=$((tl_desktop_n+1))\n");
+        b.append("done\n");
+        b.append("tl_live $$ && kill -9 $$ 2>/dev/null\n");
+        b.append("fi) &\n");
         b.append("if command -v xrdb >/dev/null 2>&1; then\n");
         b.append("echo 'Xft.dpi: ").append(xftDpi(scale)).append("' | DISPLAY=:").append(display)
             .append(" xrdb -nocpp -merge\n");
         b.append("fi\n");
-        b.append("unset WAYLAND_DISPLAY GDK_BACKEND QT_QPA_PLATFORM tl_desktop_ready tl_desktop_n\n");
+        b.append("export GDK_BACKEND=x11 QT_QPA_PLATFORM=xcb WAYLAND_DISPLAY=")
+            .append(NO_WAYLAND_DISPLAY).append('\n');
+        b.append("unset tl_desktop_ready tl_desktop_n\n");
         return b.toString();
     }
 

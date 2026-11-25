@@ -99,22 +99,52 @@ public final class X11LinuxAppRunner {
     private static final String RUNTIME_DIR_NAME = "termux-x11-runtime";
 
     /**
-     * Starts a session bus the script owns and ends it with the session. The desktop is exec'd, so
-     * {@code $$} is the desktop's pid; a watcher waits for it to go, then ends the bus's children
-     * (xfconfd and the other services it activated, which outlive a dead bus), then the bus. Only
-     * the shell is used, so it runs the same in the prefix and in a container.
+     * Starts a session bus for the desktop, without {@code --exit-with-session}: nobody owned that
+     * one, and the services it activated outlived the desktop (#391). It is started after
+     * {@link #SESSION_END_BLOCK} exported the session's marker, so the bus carries it, and so does
+     * every service it activates (dbus-daemon hands its own environment on), including xfconfd,
+     * which daemonises to init: the sweep ends them all with the session.
      */
     @VisibleForTesting
     static final String OWN_BUS_BLOCK =
         "eval \"$(dbus-launch --sh-syntax)\"\n"
-        + "export DBUS_SESSION_BUS_ADDRESS\n"
-        + "tl_bus=$DBUS_SESSION_BUS_PID\n"
-        + "(while kill -0 $$ 2>/dev/null; do sleep 1; done\n"
-        + "for d in /proc/[0-9]*; do while read -r k v; do\n"
-        + "[ \"$k\" = PPid: ] && [ \"$v\" = \"$tl_bus\" ] && kill \"${d#/proc/}\"\n"
-        + "done < \"$d/status\"; done 2>/dev/null\n"
-        + "kill \"$tl_bus\" 2>/dev/null) &\n"
-        + "unset tl_bus\n";
+        + "export DBUS_SESSION_BUS_ADDRESS\n";
+
+    /**
+     * Ends everything a desktop leaves behind once the desktop itself is gone, in the desktop's own
+     * world (the prefix, or inside a container's login, where {@code $$} is the shell the desktop
+     * replaces). It exports the session's marker as that shell's pid, so every process of the
+     * session carries it (on the prefix path it is already that value); a watcher waits for the
+     * desktop to go and then ends every process whose environment holds the marker, wherever it
+     * was reparented: the panel, xfconfd, the session's bus. Asked first, killed two seconds later.
+     * The watcher skips itself by its own pid ({@code $PPID} of a shell it execs). {@code 2>/dev/null}
+     * comes before the {@code environ} redirection, so another user's unreadable entry does not
+     * write a line to the session log. Shell, {@code tr} and {@code grep} only, so it runs the same
+     * in a container.
+     */
+    @VisibleForTesting
+    static final String SESSION_END_BLOCK =
+        "export " + SESSION_MARKER_VAR + "=$$\n"
+        + "(tl_me=$(exec sh -c 'echo \"$PPID\"')\n"
+        + "while kill -0 $$ 2>/dev/null; do sleep 1; done\n"
+        + "for tl_sig in TERM KILL; do\n"
+        + "for d in /proc/[0-9]*; do\n"
+        + "[ \"${d#/proc/}\" = \"$tl_me\" ] && continue\n"
+        + "tr '\\0' '\\n' 2>/dev/null < \"$d/environ\" | grep -qx \"" + SESSION_MARKER_VAR
+        + "=$$\" && kill -\"$tl_sig\" \"${d#/proc/}\" 2>/dev/null\n"
+        + "done\n"
+        + "[ \"$tl_sig\" = KILL ] || sleep 2\n"
+        + "done) &\n";
+
+    /**
+     * The inherited session bus a desktop drops first (#391): the launcher's own, handed to every
+     * shell and app for media controls, which a desktop must not activate its services on, and
+     * the variable that hands it to a container's login. The display's fcitx5 bus may still be
+     * given afterwards ({@link #inputMethodBlock}); otherwise the desktop starts its own.
+     */
+    @VisibleForTesting
+    static final String DROP_INHERITED_BUS = "unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID"
+        + " DBUS_SESSION_BUS_WINDOWID " + com.termux.app.sound.LauncherSound.DISTRO_BUS_VARIABLE + "\n";
 
     /**
      * The desktops known to start no session bus of their own, by the program their {@code Exec}
@@ -1391,6 +1421,7 @@ public final class X11LinuxAppRunner {
         script.append("export DISPLAY=").append(display).append('\n');
         for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
         for (String line : env) script.append("export ").append(line).append('\n');
+        script.append(DROP_INHERITED_BUS);
         // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
         // focused text field opens the Android keyboard. A container has neither it nor its modules.
         if (app.container.isPrefix()) {
@@ -1434,10 +1465,13 @@ public final class X11LinuxAppRunner {
      *       with its shells' value, so their sockets (herdr-core's) are found from both.</li>
      *   <li>{@code XDG_SESSION_TYPE}, and {@code XDG_CURRENT_DESKTOP} from the session file's own
      *       {@code DesktopNames} when it named any — which is what the key is for.</li>
+     *   <li>the session's marker and the watcher that ends everything carrying it once the
+     *       desktop is gone ({@link #SESSION_END_BLOCK}).</li>
      *   <li>a session bus, but only for a desktop that starts none itself
-     *       ({@link #NO_BUS_OF_THEIR_OWN}), only when there is not one already, and only when
-     *       {@code dbus-launch} is actually installed: it lives in Termux's main repository, not
-     *       in x11, so it can be missing even where the desktop is not.</li>
+     *       ({@link #NO_BUS_OF_THEIR_OWN}), only when there is not one already (the inherited one
+     *       was dropped, {@link #DROP_INHERITED_BUS}; the display's fcitx5 bus counts), and only
+     *       when {@code dbus-launch} is actually installed: it lives in Termux's main repository,
+     *       not in x11, so it can be missing even where the desktop is not.</li>
      * </ul>
      */
     @NonNull
@@ -1456,6 +1490,7 @@ public final class X11LinuxAppRunner {
             body.append("export XDG_CURRENT_DESKTOP=")
                 .append(ProotDistro.singleQuote(app.desktopNames)).append('\n');
         }
+        body.append(SESSION_END_BLOCK);
         if (needsOwnBus(app)) {
             body.append("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]")
                 .append(" && command -v dbus-launch > /dev/null 2>&1; then\n");
