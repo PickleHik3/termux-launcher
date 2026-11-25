@@ -163,6 +163,22 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   entries wait on a decision, not a view: both ends are Home's side. The others are layout and
   shape-model cases no #307 view removes.
 
+- **2026-11-25, the keyboard is one card (replaces the 2026-11-24 "two keyboard cards" line).**
+  The developer's decision on #307: no second drawing of the keys. With the keyboard up, Home
+  lays its keyboard's column out the way the Terminal does: the Terminal's bands under the keys,
+  at the Terminal's height, and Home's dock hidden under the keyboard's cover, so Home ⇄ Terminal
+  moves no key, as Terminal ⇄ Terminal does. Home takes the Terminal's column only while the
+  Terminal's own rest has its keyboard up too (`KeyboardColumn.homeStandsTerminalsBands`, read by
+  `RestCards` and by the views that stand the under-keyboard stack); when Home's keyboard goes
+  down Home's own bands come back. Under Docked one foot stands under the bands at both rests
+  (the column carries it, drawn by `dock_foot_host`), so neither rest leaves the strip under the
+  gesture pill bare with the keyboard up; Floating keeps its air. A keyboard up at the leaving
+  rest and down at the arriving one (the arriving page has nothing to type into) leaves with its
+  page, never vanishing on the landing frame; the wall's slide direction reaches the stack's
+  scene for that (`StackScene.Motion#leavesDirection`), Home to Home included. In the
+  bands-under layout with Home's keyboard down the apps row is one view: it does not slide, and
+  its content crossfades between the two pages' rows over the crossing.
+
 ## Consequences
 
 - The Floating crossing machinery goes once the extra-keys bar has its own card:

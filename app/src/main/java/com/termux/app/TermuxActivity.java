@@ -17736,6 +17736,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean frontHome = frontSide == com.termux.app.page.Side.HOME;
         mAppsRowNextToCanvas = com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout,
             frontHome ? laneFront : other, frontHome ? other : laneFront);
+        // The bands under the keyboard, Home's own or, with the keyboard up at both rests, the
+        // Terminal's (#307): a host they take is not stood over the keyboard as well.
+        List<Element> underKeyboard = underKeyboardElements(layout, other, frontHome);
         PlaceLayout.Edge plankEdge = mDock.offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
@@ -17755,6 +17758,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : EdgeStackPolicy.stack(layout, edge)) {
                 View host = edgeStackHost(element, edge);
                 if (host == null || stack == null) continue;
+                if (edge == PlaceLayout.Edge.BOTTOM && underKeyboard.contains(element)) continue;
                 if (onPlank.contains(element)) {
                     // The plank stands where its outermost bar would have, and the bars it holds
                     // are its children instead of the stack's.
@@ -17770,7 +17774,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (stack != null) moved |= stack.setStack(bars);
         }
-        moved |= applyUnderKeyboardStack(layout, other);
+        moved |= applyUnderKeyboardStack(underKeyboard);
         moved |= applyStackLanes(laneFront, other, frontSide);
         // A joined Docked frame is one continuous sheet of glass: no hairline between its bands.
         if (hasDockedFrameCard()) {
@@ -17806,14 +17810,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return whether anything moved
      */
-    private boolean applyUnderKeyboardStack(@NonNull PlaceLayout layout,
-                                            @NonNull PlaceLayout other) {
+    private boolean applyUnderKeyboardStack(@NonNull List<Element> elements) {
         com.termux.app.place.EdgeStackView under =
             findViewById(R.id.accessory_under_keyboard_stack);
         com.termux.app.place.EdgeStackView rows = findViewById(R.id.accessory_row_stack);
         if (under == null || rows == null) return false;
-        List<Element> elements = com.termux.app.place.StackLanes.hostsOn(layout, other,
-            com.termux.app.place.StackLanes.Where.BOTTOM_UNDER);
         List<View> hosts = new ArrayList<>(elements.size());
         for (Element element : elements) {
             View host = edgeStackHost(element, PlaceLayout.Edge.BOTTOM);
@@ -17830,6 +17831,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Shown only while it holds a band: Dock rows writes it and announces it.
         moved |= mDockRows.setUnderKeyboardBands(!hosts.isEmpty());
         return moved;
+    }
+
+    /** Whether the under-keyboard stack last stood the Terminal's bands on Home. */
+    private boolean mUnderKeyboardTakesTerminals;
+
+    /**
+     * Whether Home's rest, in front, stands the Terminal's bands under its keyboard now: the
+     * shared answer ({@link com.termux.app.place.KeyboardColumn#homeStandsTerminalsBands}) from
+     * both sides' rest keyboards.
+     */
+    private boolean underKeyboardTakesTerminals() {
+        PlaceLayout terminal = terminalPlaceLayout();
+        return terminal != null && com.termux.app.place.KeyboardColumn.homeStandsTerminalsBands(
+            mLastWallPage == com.termux.app.page.PageKind.HOME,
+            sideRestKeyboardUp(com.termux.app.page.PageKind.HOME), !homeRowsCovered(),
+            terminal.keyboardForm, sideRestKeyboardUp(com.termux.app.page.PageKind.TERMINAL));
+    }
+
+    /**
+     * The bands the stack stands under the keyboard, outermost first: the front layout's own, or,
+     * while Home in front takes the Terminal's keyboard column with the keyboard up at both rests
+     * ({@link com.termux.app.place.KeyboardColumn#homeStandsTerminalsBands}), the Terminal's, so
+     * the keys stand where the Terminal's do and a crossing between the two moves no key. Read at
+     * rest from the committed keyboard states; Home's keyboard going down gives Home its own back.
+     */
+    @NonNull
+    private List<Element> underKeyboardElements(@NonNull PlaceLayout layout,
+                                                @NonNull PlaceLayout other, boolean frontHome) {
+        boolean terminals = frontHome && underKeyboardTakesTerminals();
+        mUnderKeyboardTakesTerminals = terminals;
+        return terminals
+            ? com.termux.app.place.StackLanes.hostsOn(other, layout,
+                com.termux.app.place.StackLanes.Where.BOTTOM_UNDER)
+            : com.termux.app.place.StackLanes.hostsOn(layout, other,
+                com.termux.app.place.StackLanes.Where.BOTTOM_UNDER);
     }
 
     /**
@@ -18574,6 +18610,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
         if (terminalToolbarViewPager == null || accessoryStackContainer == null)
             return false;
+        // Home's keyboard shown or put away at rest changes which bands stand under it (#307):
+        // stand them before this pass measures the column, so its margin and the keyboard's foot
+        // follow in the same pass.
+        if (!mCrossing.crossing() && mUnderKeyboardTakesTerminals != underKeyboardTakesTerminals())
+            applyEdgeStacksAndInvalidate(arrangement().layout());
         // Not before setTerminalToolbarView() has read the pager's XML height: a pass this early
         // (a wall page restored during creation, an insets dispatch) would write a zero height
         // that the capture then reads back, and the row would stay collapsed for the session.
