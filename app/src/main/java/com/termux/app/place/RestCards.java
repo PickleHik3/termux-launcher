@@ -406,6 +406,8 @@ public final class RestCards {
         // its host keeps its keyboard-down rect at both keyboard states.
         RestCards answer = new RestCards(rest, frontHome ? drop : 0, !frontHome, frontHome);
         RestCards otherCards = new RestCards(other, frontHome ? 0 : drop, frontHome, !frontHome);
+        takeTerminalsColumn(frontHome ? answer : otherCards, home, terminal,
+            frontHome ? otherCards : answer);
         shareFoot(answer, otherCards);
         answer.adopt(otherCards, frontHome
             ? terminalCardView(half.floating, terminal.pass.dock.half(PageRef.TERMINAL).layout,
@@ -538,6 +540,61 @@ public final class RestCards {
             for (Card card : other.mCards)
                 if (card.view == StackView.KEYBOARD_COLUMN)
                     answer.mParked.add(onView(card, StackView.TERMINAL_KEYBOARD));
+        }
+    }
+
+    /**
+     * Home's keyboard-up column is the Terminal's (#307, 2026-11-25, {@link KeyboardColumn}): with
+     * the keyboard up at both rests and Home's under its cover, Home's rest lays the column out,
+     * and draws the keyboard's card, the bands under it and the foot under them, exactly as the
+     * Terminal's rest does. The column is then one shared card ({@link #splitKeyboard}) and a
+     * crossing moves no key. Home's held rows stay under the cover; whatever of them the column
+     * now draws over is covered. With the Terminal's keyboard down Home keeps its own column: the
+     * keyboard then leaves with Home, and one bands view laid out at two rects would step at the
+     * landing.
+     */
+    private static void takeTerminalsColumn(@NonNull RestCards homeCards, @NonNull Rest home,
+                                            @NonNull Rest terminal,
+                                            @NonNull RestCards terminalCards) {
+        final StackLayout.Input pass = home.pass;
+        final PlaceLayout terminalLayout = terminal.pass.dock.half(PageRef.TERMINAL).layout;
+        final boolean lifts = HomeKeyboardCover.liftsRows(pass.dock.rows.kind,
+            pass.homeKeyboardAlwaysOn);
+        if (!terminal.pass.keyboardShown || !KeyboardColumn.homeTakesTerminals(
+                pass.keyboardShown, lifts, terminalLayout.keyboardForm)) return;
+        final RestCards up = terminalCards;
+        final float w = home.screenWidthPx;
+        final List<Card> adopted = new ArrayList<>(3);
+        boolean keys = false;
+        for (Card card : up.mCards) {
+            // The foot the Terminal draws under its column across the screen, worn by its host or
+            // the keyboard, is the column's on Home: Home's own host is held under the cover.
+            boolean foot = card.id == CardId.FOOT && card.view != StackView.KEYBOARD_COLUMN
+                && card.box.left == 0f && card.box.right == w;
+            if (card.view != StackView.KEYBOARD_COLUMN && card.view != StackView.UNDER && !foot)
+                continue;
+            adopted.add(foot ? onView(card, StackView.KEYBOARD_COLUMN) : card);
+            keys |= card.id == CardId.KEYBOARD;
+        }
+        // The Terminal's keys on its own host (the unified Docked glass): no keyboard card to share.
+        if (!keys) return;
+        final int column = StackView.KEYBOARD_COLUMN.ordinal();
+        final int under = StackView.UNDER.ordinal();
+        for (int i = homeCards.mCards.size() - 1; i >= 0; i--) {
+            Card card = homeCards.mCards.get(i);
+            if (card.view != StackView.KEYBOARD_COLUMN && card.view != StackView.UNDER) continue;
+            homeCards.mCards.remove(i);
+            homeCards.mCovered.remove(card);
+        }
+        homeCards.mCards.addAll(adopted);
+        homeCards.mLaidOut[column] = up.mLaidOut[column];
+        homeCards.mLaidOut[under] = up.mLaidOut[under];
+        for (Card card : homeCards.mCards) {
+            if (adopted.contains(card) || card.id == CardId.STATUS
+                || homeCards.mCovered.contains(card)) continue;
+            boolean drawnOver = card.id == CardId.DOCK || card.id == CardId.PEEK;
+            for (Card over : adopted) drawnOver |= overlaps(card.box, over.box);
+            if (drawnOver) homeCards.mCovered.add(card);
         }
     }
 

@@ -394,6 +394,15 @@ public class RestCardsParityTest {
         return rest;
     }
 
+    /** The cards a rest draws off the keyboard's column: not its keys, bands under or a foot. */
+    private static List<RestCards.Card> besideColumn(RestCards cards) {
+        List<RestCards.Card> out = new java.util.ArrayList<>();
+        for (RestCards.Card card : cards.cards())
+            if (card.view != StackView.KEYBOARD_COLUMN && card.view != StackView.UNDER
+                && card.id != CardId.FOOT) out.add(card);
+        return out;
+    }
+
     private static void assertSameCard(String at, RestCards.Card want, RestCards.Card got) {
         assertEquals(at + " id", want.id, got.id);
         assertBox(at + " " + want.id, want.box, got.box);
@@ -433,9 +442,14 @@ public class RestCardsParityTest {
             StackView termView = RestCards.terminalCardView(true, f.window,
                 statusOnPlank(f.window));
             boolean keysCard = termView == StackView.KEYS_CARD;
-            assertEquals(at, homeSolo.cards().size(), homeRest.cards().size());
-            for (int i = 0; i < homeSolo.cards().size(); i++)
-                assertSameCard(at + " home", homeSolo.cards().get(i), homeRest.cards().get(i));
+            // With the keyboard up at both rests Home's column, its keys, the bands under them
+            // and the foot under those are the Terminal's (#307, 2026-11-25:
+            // KeyboardColumnParityTest); everything else Home draws is what it drew alone.
+            List<RestCards.Card> homeWant = up ? besideColumn(homeSolo) : homeSolo.cards();
+            List<RestCards.Card> homeGot = up ? besideColumn(homeRest) : homeRest.cards();
+            assertEquals(at, homeWant.size(), homeGot.size());
+            for (int i = 0; i < homeWant.size(); i++)
+                assertSameCard(at + " home", homeWant.get(i), homeGot.get(i));
             assertEquals(at, termSolo.cards().size(), termRest.cards().size());
             for (int i = 0; i < termSolo.cards().size(); i++) {
                 RestCards.Card want = termSolo.cards().get(i);
