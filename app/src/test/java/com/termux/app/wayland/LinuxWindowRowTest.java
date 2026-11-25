@@ -151,4 +151,22 @@ public class LinuxWindowRowTest {
         assertEquals(0.25f, LinuxWindowRow.fixedFrame(500, 500, 2000, 1000, out), 0f);
         assertArrayEquals(new int[] {0, 125, 500, 250}, out);
     }
+
+    /** About Xfce on pong: a 1552x1294 minimum in a 1231x1558 slot is cut off unless shown whole. */
+    @Test
+    public void aWindowOverItsSlotOnEitherAxisIsShownWholeAndOneThatFitsFillsIt() {
+        assertTrue(LinuxWindowRow.overflowsSlot(1231, 1558, 1552, 1294));
+        assertTrue(LinuxWindowRow.overflowsSlot(1231, 1558, 1000, 1600));
+        assertFalse(LinuxWindowRow.overflowsSlot(1231, 1558, 1231, 1558));
+        assertFalse(LinuxWindowRow.overflowsSlot(1231, 1558, 800, 600));
+        // Not drawn yet, or the slot not laid out: it fills the slot.
+        assertFalse(LinuxWindowRow.overflowsSlot(1231, 1558, 0, 0));
+        assertFalse(LinuxWindowRow.overflowsSlot(0, 0, 1552, 1294));
+        // The frame it is shown in is the Fixed one: uniformly scaled, centred.
+        int[] out = new int[4];
+        float scale = LinuxWindowRow.fixedFrame(1231, 1558, 1552, 1294, out);
+        assertEquals(1231f / 1552f, scale, 1e-6f);
+        assertEquals(1231, out[2]);
+        assertTrue(out[3] <= 1558);
+    }
 }

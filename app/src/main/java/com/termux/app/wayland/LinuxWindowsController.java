@@ -172,6 +172,22 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             return windowClass == ILinuxWindows.WINDOW_CLASS_FIXED;
         }
 
+        /**
+         * A Main window of the row whose drawn size is over its slot: shown whole as a Fixed one
+         * is, and still told the slot's size ({@link #sendConfigure}).
+         */
+        boolean fitting;
+
+        /** Its view is laid out at its drawn size by {@link #placeFixed}, not filling the slot. */
+        boolean placedAtDrawn() {
+            return isFixed() || fitting;
+        }
+
+        /** Its frame follows its slot: Fixed always, a Main window of the row for when it overflows. */
+        boolean followsSlot() {
+            return isFixed() || windowClass == ILinuxWindows.WINDOW_CLASS_MAIN && inRow && !inPane && !floating;
+        }
+
         boolean scales() {
             return (flags & ILinuxWindows.WINDOW_X11) == 0;
         }
@@ -266,7 +282,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         for (int i = 0; i < windows.size(); i++) {
             Win w = windows.valueAt(i);
             if (w.floating && w.overShown) placeDialog(w);
-            else if (w.isFixed()) placeFixed(w);
+            else if (w.followsSlot()) placeFixed(w);
         }
     };
     private final View.OnLayoutChangeListener slotWatcher = (v, l, t, r, b, ol, ot, or, ob) -> {
@@ -681,7 +697,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.width = width;
         w.height = height;
         if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
-        if (sized && w.isFixed()) placeFixed(w);
+        if (sized && w.followsSlot()) placeFixed(w);
         if (appChanged) rebuildChips();
     }
 
@@ -852,7 +868,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         FrameLayout slot = slotOf(w);
         TextureView v = w.view();
         if (v.getParent() != slot) {
-            if (w.isFixed()) {
+            if (w.placedAtDrawn()) {
                 // Laid out at its drawn size by placeFixed.
                 slot.addView(v, 0, new FrameLayout.LayoutParams(0, 0, Gravity.CENTER));
             } else {
@@ -860,7 +876,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
                     FrameLayout.LayoutParams.MATCH_PARENT));
             }
         }
-        if (w.isFixed()) placeFixed(w);
+        if (w.followsSlot()) placeFixed(w);
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
             if (d.parentId != w.id || d.inRow || d.floating) continue;
@@ -911,9 +927,14 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (v == null || !(v.getParent() instanceof FrameLayout) || w.id == fullscreen.fullscreenId()) return;
         FrameLayout slot = (FrameLayout) v.getParent();
         if (slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
-        float scale = LinuxWindowRow.fixedFrame(slot.getWidth(), slot.getHeight(), w.width, w.height, fixedFrame);
-        int lw = w.width > 0 && w.height > 0 ? w.width : slot.getWidth();
-        int lh = w.width > 0 && w.height > 0 ? w.height : slot.getHeight();
+        w.fitting = !w.isFixed()
+            && LinuxWindowRow.overflowsSlot(slot.getWidth(), slot.getHeight(), w.width, w.height);
+        boolean atDrawn = w.placedAtDrawn();
+        float scale = atDrawn
+            ? LinuxWindowRow.fixedFrame(slot.getWidth(), slot.getHeight(), w.width, w.height, fixedFrame) : 1f;
+        boolean drawn = atDrawn && w.width > 0 && w.height > 0;
+        int lw = drawn ? w.width : atDrawn ? slot.getWidth() : FrameLayout.LayoutParams.MATCH_PARENT;
+        int lh = drawn ? w.height : atDrawn ? slot.getHeight() : FrameLayout.LayoutParams.MATCH_PARENT;
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
         if (lp.width != lw || lp.height != lh || lp.gravity != Gravity.CENTER) {
             lp.width = lw;
@@ -923,6 +944,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         if (v.getScaleX() != scale) v.setScaleX(scale);
         if (v.getScaleY() != scale) v.setScaleY(scale);
+        // A whole-shown Main window's view does not follow its slot, so a slot change is told here.
+        if (w.fitting) reconfigure(w);
     }
 
     // ---- windows over the page in front -------------------------------------------------------
@@ -1541,7 +1564,19 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return kept > 0f ? kept : LinuxDisplayScale.windowScale(null, density, widthPx);
     }
 
+    /**
+     * Tells the host the size a window draws at: its view's, except a Main window shown whole at
+     * its drawn size, which is told its slot's so it can shrink back when it could. The drawn size
+     * would otherwise be sent back as its pane and it would never get smaller.
+     */
     private void sendConfigure(@NonNull Win w, int width, int height) throws RemoteException {
+        if (w.fitting && !w.isFixed() && w.view != null && w.view.getParent() instanceof FrameLayout) {
+            FrameLayout slot = (FrameLayout) w.view.getParent();
+            if (slot.getWidth() > 0 && slot.getHeight() > 0) {
+                width = slot.getWidth();
+                height = slot.getHeight();
+            }
+        }
         if (service == null || width <= 0 || height <= 0) return;
         float scale = scale(w, width);
         if (width == w.sentWidth && height == w.sentHeight && scale == w.sentScale) return;
