@@ -398,6 +398,41 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         requestApply();
     }
 
+    /**
+     * The Home page in front's own keyboard, held from a Home to Home landing
+     * ({@link #landHomePage}) until the keyboard's show or hide is laid out
+     * ({@link StackScene#pageKeyboardLaidOut}), so the keyboard that rode with its page is drawn
+     * where it arrived instead of standing at its old rest for the frames in between. A backstop
+     * lets it go if the layout never comes (the keyboard switched off, a show refused).
+     */
+    private int mRestPageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+    private static final long PAGE_KEYBOARD_BACKSTOP_MS = 160L;
+    private final Runnable mPageKeyboardBackstop = () -> {
+        if (mRestPageKeyboard == StackEnd.PAGE_KEYBOARD_REST) return;
+        mRestPageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+        requestApply();
+    };
+
+    /**
+     * Home's pager came to rest on a Home page whose keyboard is {@code pageKeyboard} (a
+     * {@code StackEnd.PAGE_KEYBOARD_*}): the pair of Home ends lets go, and the rest draws the
+     * keyboard as that page has it until its own show or hide is laid out. Called before that
+     * show or hide, on the landing's frame.
+     */
+    public void landHomePage(int pageKeyboard) {
+        mHasEnds = false;
+        mLeavesDirection = com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
+        restHomePageKeyboards();
+        mRestPageKeyboard = pageKeyboard;
+        View container = mViews.view(R.id.accessory_stack_container);
+        if (container != null) {
+            container.removeCallbacks(mPageKeyboardBackstop);
+            if (pageKeyboard != StackEnd.PAGE_KEYBOARD_REST)
+                container.postDelayed(mPageKeyboardBackstop, PAGE_KEYBOARD_BACKSTOP_MS);
+        }
+        requestApply();
+    }
+
     private void restHomePageKeyboards() {
         mEndHome.pageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
         mEndHomeArriving.pageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
@@ -522,8 +557,21 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         readGeometry(container);
         // A crossing's own travel carries the laid-out keyboard at the seam's reveal
         // (PlaceChromeTravel#keyboardLaidOutPx), so the rest's share joins only at rest.
+        // A Home page landed on by a Home to Home crossing draws its own keyboard until the
+        // keyboard's show or hide is laid out (landHomePage).
+        final int keysLaidOutPx = mGeometry.keyboardPresent && mGeometry.keyboardInColumn
+            ? com.termux.app.place.BottomInsets.keyboardKeysPx(mGeometry.keyboardHeightPx,
+                mGeometry.keyboardFootPx) : 0;
+        final int downLaidOutPx = mViews.keyboardDownLaidOutPx();
+        int restKeyboard = !mHasEnds && mViews.frontIsHome() ? mRestPageKeyboard
+            : StackEnd.PAGE_KEYBOARD_REST;
+        if (restKeyboard != StackEnd.PAGE_KEYBOARD_REST
+                && StackScene.pageKeyboardLaidOut(restKeyboard, downLaidOutPx, keysLaidOutPx)) {
+            mRestPageKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+            restKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+        }
         StackScene.withKeyboardRest(mMotion, mHasEnds ? 0f
-            : StackScene.keyboardTranslationPx(0f, mViews.keyboardDownLaidOutPx()), mEffective);
+            : StackScene.restKeyboardDownPx(restKeyboard, downLaidOutPx, keysLaidOutPx), mEffective);
         // Home's cover (#309): the rows stand at their keyboard-down rect whatever the keyboard
         // does, and the system keyboard does not raise Home's stack.
         final boolean covered = mHomeCovered;

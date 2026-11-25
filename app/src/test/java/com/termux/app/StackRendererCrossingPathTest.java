@@ -173,4 +173,23 @@ public class StackRendererCrossingPathTest {
         assertEquals("the landing's rest moves nothing", 0f, mKeyboard.getTranslationX(), 0f);
         assertEquals(StackEnd.PAGE_KEYBOARD_REST, mRenderer.end(true).pageKeyboard);
     }
+
+    /**
+     * Home's pager lands on a Home page that differs in its keyboard alone: the pair of Home ends
+     * lets go and both ends read the rest again; the page's own keyboard is the rest's hold
+     * (StackScene#restKeyboardDownPx), so nothing slides at the landing.
+     */
+    @Test public void aHomePageLandingLetsTheTwoHomeEndsGo() {
+        keyboardUpOnTheTerminal(StackView.KEYBOARD_COLUMN);
+        mFrontHome = true;
+        mRenderer.setHomePageKeyboards(StackEnd.PAGE_KEYBOARD_UP, StackEnd.PAGE_KEYBOARD_DOWN);
+        mRenderer.setEnds(true, true, 0.9f, com.termux.app.place.KeyboardColumn.LEAVES_LEFT);
+        assertTrue(mKeyboard.getTranslationX() < 0f);
+        mRenderer.landHomePage(StackEnd.PAGE_KEYBOARD_DOWN);
+        assertEquals("the landing's rest moves nothing sideways", 0f,
+            mKeyboard.getTranslationX(), 0f);
+        assertEquals(StackEnd.PAGE_KEYBOARD_REST, mRenderer.end(true).pageKeyboard);
+        assertEquals(StackEnd.PAGE_KEYBOARD_REST,
+            mRenderer.arrivingEnd(true, true).pageKeyboard);
+    }
 }

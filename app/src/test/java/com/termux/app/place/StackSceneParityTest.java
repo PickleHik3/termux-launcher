@@ -518,4 +518,33 @@ public class StackSceneParityTest {
         return f + (floating ? ", Floating" : ", Docked")
             + (keyboardUp ? ", keyboard up" : ", keyboard down");
     }
+
+    /**
+     * A Home page landed on by a Home to Home crossing draws its own keyboard until the show or
+     * hide is laid out, and the two phases agree: the landing frame's keyboard translation is the
+     * one the laid-out rest gives after it, up or down, so the keyboard that rode with its page
+     * never stands at its old rest for a frame (pong 2026-11-25 round 3).
+     */
+    @Test public void aHomePagesOwnKeyboardAtTheLandingIsTheLaidOutRestAfterIt() {
+        int keys = 640;
+        for (int foot : new int[] {0, 48}) {
+            int k = keys + foot;
+            // Down: the keyboard is still laid out up at the landing (no down share yet).
+            float landing = StackScene.restKeyboardDownPx(StackEnd.PAGE_KEYBOARD_DOWN, 0, k);
+            float after = StackScene.restKeyboardDownPx(StackEnd.PAGE_KEYBOARD_REST, k, k);
+            assertEquals("down", after, landing, 0f);
+            assertTrue(!StackScene.pageKeyboardLaidOut(StackEnd.PAGE_KEYBOARD_DOWN, 0, k));
+            assertTrue(StackScene.pageKeyboardLaidOut(StackEnd.PAGE_KEYBOARD_DOWN, k, k));
+            // Up: the keyboard is still laid out down at the landing.
+            landing = StackScene.restKeyboardDownPx(StackEnd.PAGE_KEYBOARD_UP, k, k);
+            after = StackScene.restKeyboardDownPx(StackEnd.PAGE_KEYBOARD_REST, 0, k);
+            assertEquals("up", after, landing, 0f);
+            assertTrue(!StackScene.pageKeyboardLaidOut(StackEnd.PAGE_KEYBOARD_UP, k, k));
+            assertTrue(StackScene.pageKeyboardLaidOut(StackEnd.PAGE_KEYBOARD_UP, 0, k));
+            // No keyboard laid out: nothing to hold.
+            assertTrue(StackScene.pageKeyboardLaidOut(StackEnd.PAGE_KEYBOARD_DOWN, 0, 0));
+            assertEquals(StackScene.restKeyboardDownPx(StackEnd.PAGE_KEYBOARD_REST, k, k),
+                StackScene.restKeyboardDownPx(StackEnd.PAGE_KEYBOARD_REST, k, 0), 0f);
+        }
+    }
 }
