@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Material Symbols Rounded style; drawn for the settings rows -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="960"
+    android:viewportHeight="960">
+    <group android:translateX="0" android:translateY="960">
+        <path android:fillColor="?attr/colorOnSurfaceVariant" android:pathData="M320 -620 V-700 Q320 -733 343.5 -756.5 T400 -780 H640 Q701 -780 718 -720 H744 Q784 -720 784 -680 V-620 H840 Q880 -620 880 -580 T840 -540 H784 V-480 Q784 -440 744 -440 H718 Q701 -380 640 -380 H400 Q367 -380 343.5 -403.5 T320 -460 V-540 H280 Q230 -540 195 -505 T160 -420 V-400 Q160 -350 195 -315 T280 -280 H440 Q480 -280 480 -240 T440 -200 H280 Q197 -200 138.5 -258.5 T80 -400 V-420 Q80 -503 138.5 -561.5 T280 -620 Z M400 -700 V-460 H640 V-700 Z" />
+    </group>
+</vector>
