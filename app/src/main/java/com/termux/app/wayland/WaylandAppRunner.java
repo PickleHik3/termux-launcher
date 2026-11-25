@@ -226,6 +226,12 @@ public final class WaylandAppRunner {
         public void onTextInput(long id, boolean active, int contentHint, int contentPurpose) {}
 
         @Override
+        public void onActivationRequest(long id) {}
+
+        @Override
+        public void onIdleInhibit(long id, boolean inhibited) {}
+
+        @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
             main.post(() -> {
                 windows++;

@@ -10,6 +10,7 @@ mod focus;
 mod host;
 mod java;
 mod probe;
+mod signals;
 mod source;
 mod text_input;
 mod window;
