@@ -40,6 +40,40 @@ public final class LinuxWindowRow {
         return parentId == 0L || !parentOpen;
     }
 
+    /** Where a window stands (see {@link #placement}). */
+    public static final int PLACE_ROW = 0;
+    public static final int PLACE_OVER_PARENT = 1;
+    public static final int PLACE_OVER_FRONT = 2;
+
+    /** The class in a window's flags: 0 Main, 1 Dialog, 2 Fixed, 3 Transient; anything unknown reads Main. */
+    public static int windowClass(int flags) {
+        int cls = (flags & ILinuxWindows.WINDOW_CLASS_MASK) >>> ILinuxWindows.WINDOW_CLASS_SHIFT;
+        return cls >= ILinuxWindows.WINDOW_CLASS_MAIN && cls <= ILinuxWindows.WINDOW_CLASS_TRANSIENT
+            ? cls : ILinuxWindows.WINDOW_CLASS_MAIN;
+    }
+
+    /**
+     * Where a window of {@code windowClass} stands: a place of its own in the row (Main, Fixed), over its open parent (a dialog with a parent, and today's
+     * rule for Main), or over the page in front (a Dialog without an open parent, and Transient).
+     */
+    public static int placement(int windowClass, long parentId, boolean parentOpen) {
+        switch (windowClass) {
+            case ILinuxWindows.WINDOW_CLASS_TRANSIENT:
+                return PLACE_OVER_FRONT;
+            case ILinuxWindows.WINDOW_CLASS_FIXED:
+                return PLACE_ROW;
+            case ILinuxWindows.WINDOW_CLASS_DIALOG:
+                return parentId != 0L && parentOpen ? PLACE_OVER_PARENT : PLACE_OVER_FRONT;
+            default:
+                return ownsPage(parentId, parentOpen) ? PLACE_ROW : PLACE_OVER_PARENT;
+        }
+    }
+
+    /** Whether a window of {@code windowClass} gets a page of its own in the row. */
+    public static boolean ownsPage(int windowClass, long parentId, boolean parentOpen) {
+        return placement(windowClass, parentId, parentOpen) == PLACE_ROW;
+    }
+
     /**
      * Whether the window bound to the Linux view holds its surface: only while its cell is the
      * one in front or next to it ({@code LiveNeighbourPolicy}'s reach). Any other window, and a
@@ -110,5 +144,33 @@ public final class LinuxWindowRow {
         out[1] = Math.max(0, (parentH - h) / 2);
         out[2] = Math.max(0, w);
         out[3] = Math.max(0, h);
+    }
+
+    /**
+     * Where a Fixed window of {@code drawnW} x {@code drawnH} stands in its slot of {@code slotW} x
+     * {@code slotH}: centred, at 1:1 when it fits, else scaled down uniformly until it does (never
+     * stretched, never larger than 1:1). {@code out} gets the visible frame's left, top, width and
+     * height; the result is the scale. A window that has not drawn yet (0) takes the slot, at 1.
+     * The view is laid out at the drawn size and scaled about its centre, so touches map through the
+     * view's own transform and a touch outside the frame never reaches it.
+     */
+    public static float fixedFrame(int slotW, int slotH, int drawnW, int drawnH, @NonNull int[] out) {
+        float scale = 1f;
+        int w = slotW;
+        int h = slotH;
+        if (drawnW > 0 && drawnH > 0) {
+            w = drawnW;
+            h = drawnH;
+            if (slotW > 0 && slotH > 0 && (drawnW > slotW || drawnH > slotH)) {
+                scale = Math.min((float) slotW / drawnW, (float) slotH / drawnH);
+                w = Math.max(1, Math.round(drawnW * scale));
+                h = Math.max(1, Math.round(drawnH * scale));
+            }
+        }
+        out[0] = Math.max(0, (slotW - w) / 2);
+        out[1] = Math.max(0, (slotH - h) / 2);
+        out[2] = Math.max(0, w);
+        out[3] = Math.max(0, h);
+        return scale;
     }
 }

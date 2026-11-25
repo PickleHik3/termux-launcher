@@ -94,4 +94,61 @@ public class LinuxWindowRowTest {
         LinuxWindowRow.dialogFrame(1000, 2000, 0, 0, out);
         assertArrayEquals(new int[] {0, 0, 1000, 2000}, out);
     }
+
+    @Test
+    public void theClassReadsFromBitsFourToSevenAndUnknownIsMain() {
+        assertEquals(0, LinuxWindowRow.windowClass(0));
+        assertEquals(0, LinuxWindowRow.windowClass(ILinuxWindows.WINDOW_X11));
+        assertEquals(1, LinuxWindowRow.windowClass(1 << 4));
+        assertEquals(2, LinuxWindowRow.windowClass(2 << 4 | ILinuxWindows.WINDOW_X11));
+        assertEquals(3, LinuxWindowRow.windowClass(3 << 4));
+        assertEquals(0, LinuxWindowRow.windowClass(9 << 4));
+    }
+
+    @Test
+    public void classDecidesWhoOwnsAPage() {
+        int main = ILinuxWindows.WINDOW_CLASS_MAIN;
+        int dialog = ILinuxWindows.WINDOW_CLASS_DIALOG;
+        int fixed = ILinuxWindows.WINDOW_CLASS_FIXED;
+        int transient_ = ILinuxWindows.WINDOW_CLASS_TRANSIENT;
+        // Main: today's rule.
+        assertTrue(LinuxWindowRow.ownsPage(main, 0L, false));
+        assertTrue(LinuxWindowRow.ownsPage(main, 4L, false));
+        assertFalse(LinuxWindowRow.ownsPage(main, 4L, true));
+        assertEquals(LinuxWindowRow.PLACE_OVER_PARENT, LinuxWindowRow.placement(main, 4L, true));
+        // Dialog: over an open parent, else over the front page.
+        assertEquals(LinuxWindowRow.PLACE_OVER_PARENT, LinuxWindowRow.placement(dialog, 4L, true));
+        assertEquals(LinuxWindowRow.PLACE_OVER_FRONT, LinuxWindowRow.placement(dialog, 4L, false));
+        assertEquals(LinuxWindowRow.PLACE_OVER_FRONT, LinuxWindowRow.placement(dialog, 0L, false));
+        assertFalse(LinuxWindowRow.ownsPage(dialog, 0L, false));
+        // Transient: always over the front page.
+        assertEquals(LinuxWindowRow.PLACE_OVER_FRONT, LinuxWindowRow.placement(transient_, 0L, false));
+        assertEquals(LinuxWindowRow.PLACE_OVER_FRONT, LinuxWindowRow.placement(transient_, 4L, true));
+        // Fixed: its own place.
+        assertEquals(LinuxWindowRow.PLACE_ROW, LinuxWindowRow.placement(fixed, 0L, false));
+        assertTrue(LinuxWindowRow.ownsPage(fixed, 0L, false));
+    }
+
+    @Test
+    public void aFixedWindowThatFitsIsCentredAtOneToOne() {
+        int[] out = new int[4];
+        assertEquals(1f, LinuxWindowRow.fixedFrame(1000, 2000, 600, 400, out), 0f);
+        assertArrayEquals(new int[] {200, 800, 600, 400}, out);
+        assertEquals(1f, LinuxWindowRow.fixedFrame(1000, 2000, 0, 0, out), 0f);
+        assertArrayEquals(new int[] {0, 0, 1000, 2000}, out);
+    }
+
+    @Test
+    public void aFixedWindowTooWideOrTooTallScalesDownUniformly() {
+        int[] out = new int[4];
+        // Too wide: width decides.
+        assertEquals(0.5f, LinuxWindowRow.fixedFrame(500, 2000, 1000, 400, out), 0f);
+        assertArrayEquals(new int[] {0, 900, 500, 200}, out);
+        // Too tall: height decides.
+        assertEquals(0.5f, LinuxWindowRow.fixedFrame(1000, 400, 600, 800, out), 0f);
+        assertArrayEquals(new int[] {350, 0, 300, 400}, out);
+        // Both: the tighter axis decides, the aspect stays.
+        assertEquals(0.25f, LinuxWindowRow.fixedFrame(500, 500, 2000, 1000, out), 0f);
+        assertArrayEquals(new int[] {0, 125, 500, 250}, out);
+    }
 }

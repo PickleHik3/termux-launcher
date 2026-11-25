@@ -215,6 +215,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     }
 
     private void syncLinux() {
+        mLinux.setFrontPage(mWall.currentPage(), mWall.currentPageId());
         if (mLinuxSync != null) mLinuxSync.run();
     }
 

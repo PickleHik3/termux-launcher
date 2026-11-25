@@ -1,7 +1,9 @@
 package com.termux.app.wall;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.PaneSurfaceStyle;
 
 /**
@@ -23,6 +25,12 @@ public interface WallLinux {
 
     /** The bound window is the one in front: the Terminal page is in front and so is it in the row. */
     default void setInFront(boolean front) { }
+
+    /**
+     * The page now in front (told on every landing): a Linux window drawn over a page hides when
+     * another page comes in front.
+     */
+    default void setFrontPage(@NonNull PageKind kind, int pageId) { }
 
     /** Dress the view from the surface style, as the panes beside it are. */
     default void applyStyle(@Nullable PaneSurfaceStyle style) { }
