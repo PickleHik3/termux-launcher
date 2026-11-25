@@ -27,12 +27,19 @@ pub const BTN_MIDDLE: i32 = 274;
 
 /// Window flags.
 pub const WINDOW_X11: i32 = 1;
+/// Bits 4-7 of the window flags hold the window class (`window_class::WindowClass`).
+pub const WINDOW_CLASS_SHIFT: i32 = 4;
+pub const WINDOW_CLASS_MASK: i32 = 0xF0;
+pub const WINDOW_CLASS_MAIN: i32 = 0;
+pub const WINDOW_CLASS_DIALOG: i32 = 1;
+pub const WINDOW_CLASS_FIXED: i32 = 2;
+pub const WINDOW_CLASS_TRANSIENT: i32 = 3;
 
 /// Touch pointers one call carries; more are dropped.
 pub const MAX_TOUCH_POINTERS: i32 = 10;
 
 /// `(name, value)` of every constant above, for the drift test.
-pub const TABLE: [(&str, i32); 16] = [
+pub const TABLE: [(&str, i32); 22] = [
     ("TOUCH_DOWN", TOUCH_DOWN),
     ("TOUCH_UP", TOUCH_UP),
     ("TOUCH_MOVE", TOUCH_MOVE),
@@ -48,6 +55,12 @@ pub const TABLE: [(&str, i32); 16] = [
     ("BTN_RIGHT", BTN_RIGHT),
     ("BTN_MIDDLE", BTN_MIDDLE),
     ("WINDOW_X11", WINDOW_X11),
+    ("WINDOW_CLASS_SHIFT", WINDOW_CLASS_SHIFT),
+    ("WINDOW_CLASS_MASK", WINDOW_CLASS_MASK),
+    ("WINDOW_CLASS_MAIN", WINDOW_CLASS_MAIN),
+    ("WINDOW_CLASS_DIALOG", WINDOW_CLASS_DIALOG),
+    ("WINDOW_CLASS_FIXED", WINDOW_CLASS_FIXED),
+    ("WINDOW_CLASS_TRANSIENT", WINDOW_CLASS_TRANSIENT),
     ("MAX_TOUCH_POINTERS", MAX_TOUCH_POINTERS),
 ];
 
@@ -66,7 +79,11 @@ mod tests {
             .filter_map(|line| {
                 let rest = line.trim().strip_prefix("const int ")?;
                 let (name, value) = rest.split_once('=')?;
-                let value = value.trim().strip_suffix(';')?.trim().parse().ok()?;
+                let value = value.trim().strip_suffix(';')?.trim();
+                let value = match value.strip_prefix("0x") {
+                    Some(hex) => i32::from_str_radix(hex, 16).ok()?,
+                    None => value.parse().ok()?,
+                };
                 Some((name.trim().to_string(), value))
             })
             .collect()

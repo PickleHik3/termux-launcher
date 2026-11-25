@@ -33,6 +33,7 @@ use smithay::wayland::xwayland_shell::{XWaylandShellHandler, XWaylandShellState}
 use smithay::xwayland::xwm::{Reorder, ResizeEdge, WmWindowProperty, XwmId};
 use smithay::xwayland::{X11Surface, X11Wm, XWayland, XWaylandClientData, XWaylandEvent, XwmHandler};
 
+use crate::window_class::WindowClass;
 use crate::xlock::{self, Owner};
 use crate::xscale;
 
@@ -264,6 +265,7 @@ impl XwmHandler for State {
         let _ = window.configure(Rectangle::new((0, 0).into(), size));
         self.add_toplevel(Shell::X11(window));
         let i = self.toplevels.len() - 1;
+        self.set_class(i);
         self.announce(i);
     }
 
@@ -316,9 +318,16 @@ impl XwmHandler for State {
         if let Some(h) = h {
             geo.size.h = i32::try_from(h).unwrap_or(i32::MAX);
         }
-        // A window shown in a view keeps the view's size.
-        if let Some((vw, vh)) = x11_index(self, &window).and_then(|i| self.view_size(i)) {
-            geo.size = (vw, vh).into();
+        // A window shown in a view: a Main window keeps the view's size, any other class gets
+        // the size it asked for, cut to the view.
+        if let Some(i) = x11_index(self, &window) {
+            if let Some((vw, vh)) = self.view_size(i) {
+                if self.toplevels[i].class() == WindowClass::Main {
+                    geo.size = (vw, vh).into();
+                } else {
+                    geo.size = (geo.size.w.min(vw), geo.size.h.min(vh)).into();
+                }
+            }
         }
         geo.loc = (0, 0).into();
         let _ = window.configure(geo);

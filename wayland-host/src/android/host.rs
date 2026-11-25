@@ -70,6 +70,7 @@ use smithay::wayland::shell::xdg::{
 use smithay::wayland::shm::{ShmHandler, ShmState};
 use smithay::wayland::viewporter::{ViewportCachedState, ViewporterState};
 use smithay::wayland::xwayland_shell::XWaylandShellState;
+use smithay::xwayland::xwm::WmWindowType;
 use smithay::xwayland::{X11Surface, XWaylandClientData};
 
 use smithay::backend::input::KeyState;
@@ -83,6 +84,7 @@ use crate::keymap::android_to_evdev;
 use crate::paced::Paced;
 use crate::pixels;
 use crate::png;
+use crate::window_class::{WindowClass, WindowHints, WindowKind};
 use crate::protocol::*;
 
 use super::focus::KeyboardFocus;
@@ -294,12 +296,14 @@ impl Shell {
         }
     }
 
-    /// Asks for a window of `size`: logical units for xdg, pixels for X11.
-    fn configure(&self, size: (i32, i32), activated: bool) {
+    /// Asks for a window of `size` (None: the client picks): logical units for xdg, pixels for
+    /// X11, which has no "client picks" and keeps its size. `bounds` is the pane, xdg only.
+    fn configure(&self, size: Option<(i32, i32)>, bounds: (i32, i32), activated: bool) {
         match self {
             Shell::Xdg(t) => {
                 t.with_pending_state(|s| {
-                    s.size = Some(size.into());
+                    s.size = size.map(Into::into);
+                    s.bounds = Some(bounds.into());
                     if activated {
                         s.states.set(xdg_toplevel::State::Activated);
                     } else {
@@ -315,8 +319,28 @@ impl Shell {
                 }
             }
             Shell::X11(w) => {
-                let loc = w.geometry().loc;
-                let _ = w.configure(Rectangle::new(loc, size.into()));
+                if let Some(size) = size {
+                    let loc = w.geometry().loc;
+                    let _ = w.configure(Rectangle::new(loc, size.into()));
+                }
+            }
+        }
+    }
+
+    /// The window's size limits in logical px (xdg) or px (X11); 0 on an axis is unset.
+    fn size_limits(&self) -> ((i32, i32), (i32, i32)) {
+        match self {
+            Shell::Xdg(t) => with_states(t.wl_surface(), |states| {
+                let mut guard = states.cached_state.get::<SurfaceCachedState>();
+                let c = guard.current();
+                ((c.min_size.w, c.min_size.h), (c.max_size.w, c.max_size.h))
+            }),
+            Shell::X11(w) => {
+                let h = w.size_hints();
+                let get = |f: fn(&smithay::reexports::x11rb::properties::WmSizeHints) -> Option<(i32, i32)>| {
+                    h.as_ref().and_then(f).unwrap_or((0, 0))
+                };
+                (get(|h| h.min_size), get(|h| h.max_size))
             }
         }
     }
@@ -359,6 +383,8 @@ pub struct Toplevel {
     /// The launcher's setVisible; drawn only while visible and with a window.
     visible: bool,
     view_size: Option<(i32, i32)>,
+    /// Decided once, before the first configure (xdg) or at the map request (X11).
+    class: WindowClass,
     /// The scale the launcher shows this toplevel at: its app's own, else the screen's density.
     scale: f64,
     /// The output's integer scale, which a client that reads only `wl_output` draws at.
@@ -398,6 +424,22 @@ pub struct Toplevel {
 }
 
 impl Toplevel {
+    /// The size the client last gave itself (xdg window geometry, logical; X11 geometry, px),
+    /// or None while it has none. A non-Main window keeps it when the pane changes.
+    pub fn class(&self) -> WindowClass {
+        self.class
+    }
+
+    fn own_size(&self) -> Option<(i32, i32)> {
+        match &self.shell {
+            Shell::Xdg(_) => self.geometry.map(|g| (g.2, g.3)),
+            Shell::X11(w) => {
+                let s = w.geometry().size;
+                (s.w > 0 && s.h > 0).then_some((s.w, s.h))
+            }
+        }
+    }
+
     fn is_shown(&self) -> bool {
         self.visible && self.window.is_some()
     }
@@ -934,7 +976,9 @@ impl State {
         t.scale = scale;
         let activated = self.focused == Some(t.id);
         let size = if t.shell.is_x11() { (width, height) } else { logical_size((width, height), scale) };
-        t.shell.configure(size, activated);
+        // Only a Main window is told the pane; the others keep their own size, cut to the pane.
+        let own = if t.class == WindowClass::Main { Some(size) } else { t.own_size().map(|o| (o.0.min(size.0), o.1.min(size.1))) };
+        t.shell.configure(own, size, activated);
         if scale_changed {
             self.apply_scale(i);
         }
@@ -1699,7 +1743,7 @@ impl State {
         let id = NEXT_ID.fetch_add(1, Ordering::Relaxed);
         let (title, app_id) = self.toplevels[i].shell.names();
         let pid = self.toplevels[i].shell.client_pid(&self.display_handle);
-        let flags = if self.toplevels[i].shell.is_x11() { WINDOW_X11 } else { 0 };
+        let flags = if self.toplevels[i].shell.is_x11() { WINDOW_X11 } else { 0 } | self.toplevels[i].class.flags();
         let parent = self.parent_of(i);
         let t = &mut self.toplevels[i];
         t.id = id;
@@ -1710,6 +1754,62 @@ impl State {
         }
         self.apply_scale(i);
         self.events.window_created(id, &title, &app_id, pid, flags, parent);
+    }
+
+    /// The pane toplevel `i` is shown in, in the units its client is configured in: the view
+    /// (logical for xdg, px for X11), or the output when no view size is known yet.
+    fn pane_of(&self, i: usize) -> (i32, i32) {
+        let t = &self.toplevels[i];
+        match t.view_size {
+            Some(v) if t.shell.is_x11() => v,
+            Some(v) => logical_size(v, t.scale),
+            None => self.output_size,
+        }
+    }
+
+    /// Classifies toplevel `i` from what its client has said so far.
+    pub fn classify(&self, i: usize) -> WindowClass {
+        let t = &self.toplevels[i];
+        let (min, max) = t.shell.size_limits();
+        let (has_parent, kind, modal) = match &t.shell {
+            Shell::Xdg(s) => (s.parent().is_some(), WindowKind::Normal, false),
+            Shell::X11(w) => (
+                w.is_transient_for().is_some(),
+                match w.window_type() {
+                    None | Some(WmWindowType::Normal) => WindowKind::Normal,
+                    Some(WmWindowType::Dialog) => WindowKind::Dialog,
+                    Some(WmWindowType::Utility) => WindowKind::Utility,
+                    Some(WmWindowType::Splash) => WindowKind::Splash,
+                    Some(WmWindowType::Toolbar) => WindowKind::Toolbar,
+                    Some(WmWindowType::Notification) => WindowKind::Notification,
+                    Some(_) => WindowKind::Unknown,
+                },
+                w.is_popup(),
+            ),
+        };
+        WindowClass::of(&WindowHints { has_parent, kind, modal, min, max, pane: self.pane_of(i) })
+    }
+
+    /// Sets toplevel `i`'s class from its hints; the X11 path calls it at the map request.
+    pub fn set_class(&mut self, i: usize) {
+        self.toplevels[i].class = self.classify(i);
+    }
+
+    /// The first xdg configure: classifies, then tells Main the pane (when a view size is known)
+    /// and every class the pane as bounds; Dialog, Fixed and Transient pick their own size.
+    fn send_first_configure(&mut self, i: usize) {
+        self.set_class(i);
+        let pane = self.pane_of(i);
+        let t = &self.toplevels[i];
+        if let Shell::Xdg(x) = &t.shell {
+            let size = if t.class == WindowClass::Main { t.view_size.map(|_| pane) } else { None };
+            x.with_pending_state(|s| {
+                s.size = size.map(Into::into);
+                s.bounds = Some(pane.into());
+                s.capabilities.replace([xdg_toplevel::WmCapabilities::Fullscreen, xdg_toplevel::WmCapabilities::Minimize]);
+            });
+        }
+        t.shell.send_configure();
     }
 
     /// The announced window toplevel `i` is a dialog of: its xdg parent, or the X window it is
@@ -1735,6 +1835,7 @@ impl State {
             window: None,
             visible: true,
             view_size: None,
+            class: WindowClass::Main,
             scale: self.output_scale,
             output_integer: integer_scale(self.output_scale),
             buffer_scale: 1,
@@ -2107,7 +2208,7 @@ impl CompositorHandler for State {
         if let Some(i) = root_index {
             let t = &mut self.toplevels[i];
             if !t.shell.is_initial_configure_sent() {
-                t.shell.send_configure();
+                self.send_first_configure(i);
             }
         }
 
