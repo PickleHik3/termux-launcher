@@ -66,9 +66,11 @@ impl FieldTracker {
     /// The field as it stands now (None: no enabled text input on the focused surface). Returns
     /// the window whose field the launcher should hear left, then the field it should hear
     /// focused; both None when nothing changed. A new content type on the same window's field is
-    /// told as focused again, without a left first.
-    pub fn update(&mut self, now: Option<Field>) -> (Option<i64>, Option<Field>) {
-        if now == self.told {
+    /// told as focused again, without a left first. `renewed`: the app enabled its text input
+    /// again in this commit (GTK does on a tap in a field that already has focus, to ask for the
+    /// keyboard back), so the field is told focused again even unchanged.
+    pub fn update(&mut self, now: Option<Field>, renewed: bool) -> (Option<i64>, Option<Field>) {
+        if now == self.told && !(renewed && now.is_some()) {
             return (None, None);
         }
         let left = match (self.told, now) {
@@ -212,32 +214,40 @@ mod tests {
     #[test]
     fn the_launcher_hears_a_field_once() {
         let mut t = FieldTracker::default();
-        assert_eq!(t.update(Some(field(3, 0))), (None, Some(field(3, 0))));
-        assert_eq!(t.update(Some(field(3, 0))), (None, None));
+        assert_eq!(t.update(Some(field(3, 0)), false), (None, Some(field(3, 0))));
+        assert_eq!(t.update(Some(field(3, 0)), false), (None, None));
         assert_eq!(t.told(), Some(3));
+    }
+
+    #[test]
+    fn enabling_again_tells_the_same_field_again() {
+        let mut t = FieldTracker::default();
+        t.update(Some(field(3, 0)), true);
+        assert_eq!(t.update(Some(field(3, 0)), true), (None, Some(field(3, 0))));
+        assert_eq!(t.update(None, true), (Some(3), None));
     }
 
     #[test]
     fn a_field_left_is_told_with_its_window() {
         let mut t = FieldTracker::default();
-        t.update(Some(field(3, 0)));
-        assert_eq!(t.update(None), (Some(3), None));
-        assert_eq!(t.update(None), (None, None));
+        t.update(Some(field(3, 0)), false);
+        assert_eq!(t.update(None, false), (Some(3), None));
+        assert_eq!(t.update(None, false), (None, None));
         assert_eq!(t.told(), None);
     }
 
     #[test]
     fn focus_moving_to_another_window_leaves_the_old_field_first() {
         let mut t = FieldTracker::default();
-        t.update(Some(field(3, 0)));
-        assert_eq!(t.update(Some(field(4, 0))), (Some(3), Some(field(4, 0))));
+        t.update(Some(field(3, 0)), false);
+        assert_eq!(t.update(Some(field(4, 0)), false), (Some(3), Some(field(4, 0))));
     }
 
     #[test]
     fn a_new_content_type_in_the_same_window_is_told_without_leaving() {
         let mut t = FieldTracker::default();
-        t.update(Some(field(3, 0)));
-        assert_eq!(t.update(Some(field(3, 8))), (None, Some(field(3, 8))));
+        t.update(Some(field(3, 0)), false);
+        assert_eq!(t.update(Some(field(3, 8)), false), (None, Some(field(3, 8))));
     }
 
     #[test]

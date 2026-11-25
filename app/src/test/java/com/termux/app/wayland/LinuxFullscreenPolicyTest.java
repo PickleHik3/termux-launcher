@@ -91,4 +91,18 @@ public class LinuxFullscreenPolicyTest {
         assertFalse(LinuxFullscreenPolicy.swipedUp(1990f, 1990f - 79f, density));
         assertFalse(LinuxFullscreenPolicy.swipedUp(1990f, 1995f, density));
     }
+
+    @Test
+    public void aFieldHoldingTheKeyboardSizesTheWindowAboveIt() {
+        assertEquals(1200, LinuxFullscreenPolicy.windowHeight(2000, true, 1200));
+    }
+
+    @Test
+    public void withoutAFieldOrAKeyboardTheWindowTakesTheWholeLayer() {
+        assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, false, 1200));
+        assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, true, 0));
+        assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, true, 2000));
+        assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, true, 2400));
+        assertEquals(2000, LinuxFullscreenPolicy.windowHeight(2000, true, -5));
+    }
 }

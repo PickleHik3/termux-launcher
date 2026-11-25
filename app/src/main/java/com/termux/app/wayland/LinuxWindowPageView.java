@@ -8,6 +8,8 @@ import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.inputmethod.EditorInfo;
+import android.view.inputmethod.InputConnection;
 import android.widget.FrameLayout;
 import android.widget.ImageView;
 
@@ -57,6 +59,11 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         default boolean beginCarry(float x, float y, int pointerId) { return false; }
         /** Back while the shown window is full screen: it leaves; false when it is not full screen. */
         default boolean leaveFullscreen() { return false; }
+        /**
+         * The phone keyboard's connection to the shown window's focused text field, filling
+         * {@code out}; null while the window has no field served through the phone's keyboard.
+         */
+        @Nullable default InputConnection textInput(@NonNull View view, @NonNull EditorInfo out) { return null; }
     }
 
     private final PaneGlassBackdropView glass;
@@ -315,6 +322,18 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     @Override
     public TerminalKeyEventHandler.KeyValueInterceptor typingKeys() {
         return host.keys();
+    }
+
+    /** A text editor only while the window's field takes the phone's keyboard. */
+    @Override
+    public boolean onCheckIsTextEditor() {
+        return isFocusable();
+    }
+
+    @Nullable
+    @Override
+    public InputConnection onCreateInputConnection(@NonNull EditorInfo out) {
+        return host.textInput(this, out);
     }
 
     @Override
