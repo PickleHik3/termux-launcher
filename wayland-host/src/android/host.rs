@@ -424,12 +424,13 @@ pub struct Toplevel {
 }
 
 impl Toplevel {
-    /// The size the client last gave itself (xdg window geometry, logical; X11 geometry, px),
-    /// or None while it has none. A non-Main window keeps it when the pane changes.
+    /// The class decided before the first configure; the X11 resize path reads it.
     pub fn class(&self) -> WindowClass {
         self.class
     }
 
+    /// The size the client last gave itself (xdg window geometry, logical; X11 geometry, px),
+    /// or None while it has none. A non-Main window keeps it when the pane changes.
     fn own_size(&self) -> Option<(i32, i32)> {
         match &self.shell {
             Shell::Xdg(_) => self.geometry.map(|g| (g.2, g.3)),
