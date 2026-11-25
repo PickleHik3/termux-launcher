@@ -82,11 +82,6 @@ impl<B: PartialEq + Clone, F> Paced<B, F> {
         self.releases.push(buffer);
     }
 
-    /// STALE296 diag: `buffer` waits for its release (replaced, not yet given back).
-    pub fn waits_release(&self, buffer: &B) -> bool {
-        self.releases.contains(buffer)
-    }
-
     /// The commit's frame callbacks wait for the tick (moved out of `frames`).
     pub fn add_frames(&mut self, frames: &mut Vec<F>) {
         self.frames.append(frames);
