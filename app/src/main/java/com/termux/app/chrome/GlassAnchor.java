@@ -288,6 +288,21 @@ public final class GlassAnchor {
         };
     }
 
+    /**
+     * {@link #layout(View, Lift)} moved {@code shiftX} across as well: a card whose owner poses it
+     * off its layout on purpose (the bottom stack's scene slides a side's card with its side), so
+     * its glass samples the wallpaper where it is drawn.
+     */
+    @NonNull
+    public static Origin layout(@NonNull View view, @NonNull Lift lift, @NonNull Lift shiftX) {
+        final int[] root = new int[2];
+        return out -> {
+            float slideX = layoutOriginOnScreen(view, out, root);
+            out[0] += Math.round(slideX + shiftX.px());
+            out[1] += Math.round(lift.px());
+        };
+    }
+
     /** The transform-inclusive anchor: exactly where the framework says {@code view} is. */
     @NonNull
     public static Origin screen(@NonNull View view) {

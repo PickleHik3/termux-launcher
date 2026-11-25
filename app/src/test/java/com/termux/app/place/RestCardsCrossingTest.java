@@ -48,6 +48,13 @@ import java.util.TreeSet;
  *       A pair where the keyboard's card draws over the other ({@link RestCards#covered}: on
  *       Home, with its keyboard raised on demand, the keyboard covers the dock) is skipped:
  *       the cards overlap by design and meet on no edge.</li>
+ *   <li>(e) Run through the scene ({@link StackScene#at}) with each end's card table
+ *       ({@link StackEnd#readCards}): the cards' poses at p = 0 and p = 1 are each end's rest's,
+ *       so the landing writes nothing; every card a rest draws stands on screen there (no slide)
+ *       and every card it parks a wall off; no view is handed a different card by the two ends.</li>
+ *   <li>(f) The A–Z bar, the foot and the keyboard are each a card of their rest (#307).</li>
+ *   <li>(g) A foot both ends draw at one rect is one view's: one owner draws the band under the
+ *       gesture pill.</li>
  * </ul>
  *
  * <p>Both ends wear one Style and one Dock design (a global setting). The pairs are Home to
@@ -61,18 +68,15 @@ public class RestCardsCrossingTest {
 
     /**
      * What fails today: (b) what re-sizes a view at the landing, (c) cards that meet on the
-     * wrong edges, (rows) the rows view's band; (a) has none. The comment
+     * wrong edges, (rows) the rows view's band, (e) a view handed two cards, (g) a foot two
+     * views wear; (a) and (f) have none. The comment
      * beside each entry says why, which fixtures hit it (any keyboard state) and one pair of
      * rects (the leaving rest's laid-out box, then the arriving rest's). A ticket that fixes a
-     * case removes its entry. A key ending in {@code SHARED-ROW} is a Floating case whose Terminal
-     * card carries a row Home shares (apps or A-Z beside the keys): the two-card rule refuses it
-     * ({@link SideCards.Refusal#ROWS_BESIDE_KEYS}) and the developer decides.
+     * case removes its entry. Since #305 a Terminal card with the apps row or A-Z beside the keys
+     * stands apart too, on the Terminal's own back host under either Style, so no case is left
+     * whose glass host is shared between Home and the Terminal.
      */
     static final Set<String> KNOWN_FAILURES = new TreeSet<>(Arrays.asList(
-        // Peek stands flush on Home (no edge gap) while the Terminal's Floating dock keeps its gap, so the container's bottom moves. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1466.0 - 1080.0,2400.0] -> [0.0,1450.0 - 1080.0,2384.0]
-        "(b) CONTAINER BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL SHARED-ROW",
-        // Peek stands flush on Home (no edge gap) while the Terminal's Floating dock keeps its gap, so the container's bottom moves. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1450.0 - 1080.0,2384.0] -> [0.0,1466.0 - 1080.0,2400.0]
-        "(b) CONTAINER BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME SHARED-ROW",
         // the Terminal's stack is taller than Home's (bottom status band, rows), so the container's top moves. Fixtures: status bar at the bottom. e.g. status bar at the bottom (GLASS_TRAY) up=false/false [0.0,1493.0 - 1080.0,2412.0] -> [0.0,1419.0 - 1080.0,2412.0]
         "(b) CONTAINER TOP DOCKED GLASS_TRAY HOME->TERMINAL",
         // the Terminal's stack is taller than Home's (bottom status band, rows), so the container's top moves. Fixtures: status bar at the bottom. e.g. status bar at the bottom (GLASS_TRAY) up=false/false [0.0,1419.0 - 1080.0,2412.0] -> [0.0,1493.0 - 1080.0,2412.0]
@@ -105,132 +109,6 @@ public class RestCardsCrossingTest {
         "(b) CONTAINER TOP FLOATING WALL_STRIP HOME->TERMINAL",
         // the Terminal's stack and Home's differ in height, so the container's top moves. Fixtures: floating keyboard, pong. e.g. pong (WALL_STRIP) up=false/false [0.0,1468.0 - 1080.0,2396.0] -> [0.0,1479.0 - 1080.0,2396.0]
         "(b) CONTAINER TOP FLOATING WALL_STRIP TERMINAL->HOME",
-        // Docked on Home the keyboard no longer shares the host (#309): keyboard down the host owns the foot under the gesture pill and runs to the screen's edge, keyboard up it stays above the column and the keyboard wears the foot. Fixtures: pong with a foot, tl16 with a foot. e.g. pong with a foot (GLASS_TRAY) up=false/true [0.0,1528.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,1679.0]
-        "(b) HOST BOTTOM DOCKED GLASS_TRAY HOME->HOME",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (GLASS_TRAY) up=false/false [0.0,1591.0 - 1080.0,1742.0] -> [0.0,1493.0 - 1080.0,1591.0]
-        "(b) HOST BOTTOM DOCKED GLASS_TRAY HOME->TERMINAL",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (GLASS_TRAY) up=false/false [0.0,1493.0 - 1080.0,1591.0] -> [0.0,1591.0 - 1080.0,1742.0]
-        "(b) HOST BOTTOM DOCKED GLASS_TRAY TERMINAL->HOME",
-        // Docked on Home the keyboard no longer shares the host (#309): keyboard down the host owns the foot under the gesture pill and runs to the screen's edge, keyboard up it stays above the column and the keyboard wears the foot. Fixtures: pong with a foot, tl16 with a foot. e.g. pong with a foot (LENS_BEADS) up=false/true [0.0,1528.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,1679.0]
-        "(b) HOST BOTTOM DOCKED LENS_BEADS HOME->HOME",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (LENS_BEADS) up=false/false [0.0,1591.0 - 1080.0,1742.0] -> [0.0,1493.0 - 1080.0,1591.0]
-        "(b) HOST BOTTOM DOCKED LENS_BEADS HOME->TERMINAL",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (LENS_BEADS) up=false/false [0.0,1493.0 - 1080.0,1591.0] -> [0.0,1591.0 - 1080.0,1742.0]
-        "(b) HOST BOTTOM DOCKED LENS_BEADS TERMINAL->HOME",
-        // Docked on Home the keyboard no longer shares the host (#309): keyboard down the host owns the foot under the gesture pill and runs to the screen's edge, keyboard up it stays above the column and the keyboard wears the foot. Fixtures: pong with a foot, tl16 with a foot. e.g. pong with a foot (PEEK_GLASS) up=false/true [0.0,1528.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,1679.0]
-        "(b) HOST BOTTOM DOCKED PEEK_GLASS HOME->HOME",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (PEEK_GLASS) up=false/false [0.0,1591.0 - 1080.0,1742.0] -> [0.0,1493.0 - 1080.0,1591.0]
-        "(b) HOST BOTTOM DOCKED PEEK_GLASS HOME->TERMINAL",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (PEEK_GLASS) up=false/false [0.0,1493.0 - 1080.0,1591.0] -> [0.0,1591.0 - 1080.0,1742.0]
-        "(b) HOST BOTTOM DOCKED PEEK_GLASS TERMINAL->HOME",
-        // Docked on Home the keyboard no longer shares the host (#309): keyboard down the host owns the foot under the gesture pill and runs to the screen's edge, keyboard up it stays above the column and the keyboard wears the foot. Fixtures: pong with a foot, tl16 with a foot. e.g. pong with a foot (WALL_STRIP) up=false/true [0.0,1528.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,1679.0]
-        "(b) HOST BOTTOM DOCKED WALL_STRIP HOME->HOME",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (WALL_STRIP) up=false/false [0.0,1591.0 - 1080.0,1742.0] -> [0.0,1493.0 - 1080.0,1591.0]
-        "(b) HOST BOTTOM DOCKED WALL_STRIP HOME->TERMINAL",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Fixtures: pong, tl16. e.g. pong (WALL_STRIP) up=false/false [0.0,1493.0 - 1080.0,1591.0] -> [0.0,1591.0 - 1080.0,1742.0]
-        "(b) HOST BOTTOM DOCKED WALL_STRIP TERMINAL->HOME",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (GLASS_TRAY) up=false/false [32.0,1502.0 - 1048.0,1651.0] -> [32.0,1374.0 - 1048.0,1636.0]
-        "(b) HOST BOTTOM FLOATING GLASS_TRAY HOME->TERMINAL SHARED-ROW",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (GLASS_TRAY) up=false/false [32.0,1374.0 - 1048.0,1636.0] -> [32.0,1502.0 - 1048.0,1651.0]
-        "(b) HOST BOTTOM FLOATING GLASS_TRAY TERMINAL->HOME SHARED-ROW",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (LENS_BEADS) up=false/false [32.0,1502.0 - 1048.0,1651.0] -> [32.0,1374.0 - 1048.0,1636.0]
-        "(b) HOST BOTTOM FLOATING LENS_BEADS HOME->TERMINAL SHARED-ROW",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (LENS_BEADS) up=false/false [32.0,1374.0 - 1048.0,1636.0] -> [32.0,1502.0 - 1048.0,1651.0]
-        "(b) HOST BOTTOM FLOATING LENS_BEADS TERMINAL->HOME SHARED-ROW",
-        // Floating Peek on Home owns the foot with the keyboard down (DockPlacement.floats is false while the card stands, so DockSpec.footExists), and the host runs to the screen's edge; keyboard up it stops at its column. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (PEEK_GLASS) up=false/true [0.0,1518.0 - 1080.0,2400.0] -> [0.0,1518.0 - 1080.0,1667.0]
-        "(b) HOST BOTTOM FLOATING PEEK_GLASS HOME->HOME SHARED-ROW",
-        // Peek card on Home stands on the screen's edge, the Floating card on the Terminal keeps its gap, so the host's bottom moves. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1581.0 - 1080.0,1730.0] -> [32.0,1467.0 - 1048.0,1714.0]
-        "(b) HOST BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL SHARED-ROW",
-        // Peek card on Home stands on the screen's edge, the Floating card on the Terminal keeps its gap, so the host's bottom moves. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [32.0,1467.0 - 1048.0,1714.0] -> [0.0,1581.0 - 1080.0,1730.0]
-        "(b) HOST BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME SHARED-ROW",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (WALL_STRIP) up=false/false [32.0,1502.0 - 1048.0,1651.0] -> [32.0,1374.0 - 1048.0,1636.0]
-        "(b) HOST BOTTOM FLOATING WALL_STRIP HOME->TERMINAL SHARED-ROW",
-        // the host stops at its column's top, which differs between Home and the Terminal (bands under the keyboard on the Terminal only). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: tl16 with a foot. e.g. tl16 with a foot (WALL_STRIP) up=false/false [32.0,1374.0 - 1048.0,1636.0] -> [32.0,1502.0 - 1048.0,1651.0]
-        "(b) HOST BOTTOM FLOATING WALL_STRIP TERMINAL->HOME SHARED-ROW",
-        // Peek spans the screen on Home, the Floating card on the Terminal is inset by Margin: one host view, two widths (ADR 0032). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1581.0 - 1080.0,1730.0] -> [32.0,1467.0 - 1048.0,1714.0]
-        "(b) HOST SIDES FLOATING PEEK_GLASS HOME->TERMINAL SHARED-ROW",
-        // Peek spans the screen on Home, the Floating card on the Terminal is inset by Margin: one host view, two widths (ADR 0032). Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=false/false [32.0,1467.0 - 1048.0,1714.0] -> [0.0,1581.0 - 1080.0,1730.0]
-        "(b) HOST SIDES FLOATING PEEK_GLASS TERMINAL->HOME SHARED-ROW",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (GLASS_TRAY) up=false/false [0.0,1579.0 - 1080.0,1730.0] -> [0.0,1481.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED GLASS_TRAY HOME->TERMINAL",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (GLASS_TRAY) up=false/false [0.0,1481.0 - 1080.0,1730.0] -> [0.0,1579.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED GLASS_TRAY TERMINAL->HOME",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (LENS_BEADS) up=false/false [0.0,1579.0 - 1080.0,1730.0] -> [0.0,1481.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED LENS_BEADS HOME->TERMINAL",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (LENS_BEADS) up=false/false [0.0,1481.0 - 1080.0,1730.0] -> [0.0,1579.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED LENS_BEADS TERMINAL->HOME",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1579.0 - 1080.0,1730.0] -> [0.0,1481.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED PEEK_GLASS HOME->TERMINAL",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (PEEK_GLASS) up=false/false [0.0,1481.0 - 1080.0,1730.0] -> [0.0,1579.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED PEEK_GLASS TERMINAL->HOME",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (WALL_STRIP) up=false/false [0.0,1579.0 - 1080.0,1730.0] -> [0.0,1481.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED WALL_STRIP HOME->TERMINAL",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Fixtures: tl16. e.g. tl16 (WALL_STRIP) up=false/false [0.0,1481.0 - 1080.0,1730.0] -> [0.0,1579.0 - 1080.0,1730.0]
-        "(b) HOST TOP DOCKED WALL_STRIP TERMINAL->HOME",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (GLASS_TRAY) up=false/false [32.0,1565.0 - 1048.0,1714.0] -> [32.0,1467.0 - 1048.0,1714.0]
-        "(b) HOST TOP FLOATING GLASS_TRAY HOME->TERMINAL SHARED-ROW",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (GLASS_TRAY) up=false/false [32.0,1467.0 - 1048.0,1714.0] -> [32.0,1565.0 - 1048.0,1714.0]
-        "(b) HOST TOP FLOATING GLASS_TRAY TERMINAL->HOME SHARED-ROW",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (LENS_BEADS) up=false/false [32.0,1565.0 - 1048.0,1714.0] -> [32.0,1467.0 - 1048.0,1714.0]
-        "(b) HOST TOP FLOATING LENS_BEADS HOME->TERMINAL SHARED-ROW",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (LENS_BEADS) up=false/false [32.0,1467.0 - 1048.0,1714.0] -> [32.0,1565.0 - 1048.0,1714.0]
-        "(b) HOST TOP FLOATING LENS_BEADS TERMINAL->HOME SHARED-ROW",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (WALL_STRIP) up=false/false [32.0,1565.0 - 1048.0,1714.0] -> [32.0,1467.0 - 1048.0,1714.0]
-        "(b) HOST TOP FLOATING WALL_STRIP HOME->TERMINAL SHARED-ROW",
-        // the host starts below the status band, slab inset and lane slack, which differ per page. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (WALL_STRIP) up=false/false [32.0,1467.0 - 1048.0,1714.0] -> [32.0,1565.0 - 1048.0,1714.0]
-        "(b) HOST TOP FLOATING WALL_STRIP TERMINAL->HOME SHARED-ROW",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED GLASS_TRAY HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (GLASS_TRAY) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED GLASS_TRAY TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED LENS_BEADS HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (LENS_BEADS) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED LENS_BEADS TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED PEEK_GLASS HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (PEEK_GLASS) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED PEEK_GLASS TERMINAL->HOME",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=true/true [0.0,1679.0 - 1080.0,2412.0] -> [0.0,1528.0 - 1080.0,2349.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED WALL_STRIP HOME->TERMINAL",
-        // the Terminal's bands under the keyboard stand above the kept band, so its column ends at the band's top, while Home's keyboard (a card of its own since #309) wears the band and its column runs to the screen's edge. Fixtures: pong with a foot. e.g. pong with a foot (WALL_STRIP) up=true/true [0.0,1528.0 - 1080.0,2349.0] -> [0.0,1679.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN BOTTOM DOCKED WALL_STRIP TERMINAL->HOME",
-        // Peek's flush edge on Home against the Floating gap on the Terminal moves the column's bottom. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=true/true [0.0,1730.0 - 1080.0,2400.0] -> [0.0,1714.0 - 1080.0,2384.0]
-        "(b) KEYBOARD_COLUMN BOTTOM FLOATING PEEK_GLASS HOME->TERMINAL SHARED-ROW",
-        // Peek's flush edge on Home against the Floating gap on the Terminal moves the column's bottom. Left for the developer to decide: the Terminal's card carries a row Home shares. Fixtures: a-z on the dock, tl16, tl16 with a foot. e.g. tl16 (PEEK_GLASS) up=true/true [0.0,1714.0 - 1080.0,2384.0] -> [0.0,1730.0 - 1080.0,2400.0]
-        "(b) KEYBOARD_COLUMN BOTTOM FLOATING PEEK_GLASS TERMINAL->HOME SHARED-ROW",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED GLASS_TRAY HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED GLASS_TRAY TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED LENS_BEADS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED LENS_BEADS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED PEEK_GLASS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED PEEK_GLASS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1742.0 - 1080.0,2412.0] -> [0.0,1591.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED WALL_STRIP HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (Home's Docked keyboard has a card of its own since #309, no longer one surface with the dock). Fixtures: pong, split keyboard, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1591.0 - 1080.0,2412.0] -> [0.0,1742.0 - 1080.0,2412.0]
-        "(b) KEYBOARD_COLUMN TOP DOCKED WALL_STRIP TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING GLASS_TRAY HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (GLASS_TRAY) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING GLASS_TRAY TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING LENS_BEADS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (LENS_BEADS) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING LENS_BEADS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (the Peek design's bottom step no longer hides it). Fixtures: pong, pong with a foot, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING PEEK_GLASS HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves (the Peek design's bottom step no longer hides it). Fixtures: pong, pong with a foot, split keyboard, split pane, status bar at the bottom. e.g. pong (PEEK_GLASS) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING PEEK_GLASS TERMINAL->HOME",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1726.0 - 1080.0,2396.0] -> [0.0,1566.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING WALL_STRIP HOME->TERMINAL",
-        // the column holds the bands under the keyboard on the Terminal only, so its top moves. Fixtures: pong, split pane, status bar at the bottom. e.g. pong (WALL_STRIP) up=true/true [0.0,1566.0 - 1080.0,2396.0] -> [0.0,1726.0 - 1080.0,2396.0]
-        "(b) KEYBOARD_COLUMN TOP FLOATING WALL_STRIP TERMINAL->HOME",
         // The shape model parts a split keyboard into two halves 0.4 of the width each, so the extra-keys row's bottom over the parting is a rim, while the keyboard's one host across both halves joins it. Fixtures: split keyboard. e.g. split keyboard (GLASS_TRAY) up=true [0.0,1493.0 - 1080.0,1591.0] RIM | [0.0,1591.0 - 1080.0,2261.0] JOIN
         "(c) DOCK/KEYBOARD EDGES DOCKED GLASS_TRAY TERMINAL",
         // The shape model parts a split keyboard into two halves 0.4 of the width each, so the extra-keys row's bottom over the parting is a rim, while the keyboard's one host across both halves joins it. Fixtures: split keyboard. e.g. split keyboard (LENS_BEADS) up=true [0.0,1493.0 - 1080.0,1591.0] RIM | [0.0,1591.0 - 1080.0,2261.0] JOIN
@@ -254,7 +132,55 @@ public class RestCardsCrossingTest {
         // The rows view with the A-Z row on both sides' docks lays Home's apps and A-Z rows (219, its apps band the page ticks taller) under the Terminal's extra keys in their lane: 317, taller than either side's own rows (Home 219, the Terminal 291). Fixtures: a-z on the dock. e.g. a-z on the dock (PEEK_GLASS) front HOME band 317 home 219 terminal 291
         "(rows) BAND PEEK_GLASS front HOME",
         // The rows view with the A-Z row on both sides' docks lays Home's apps and A-Z rows (219, its apps band the page ticks taller) under the Terminal's extra keys in their lane: 317, taller than either side's own rows (Home 219, the Terminal 291). Fixtures: a-z on the dock. e.g. a-z on the dock (WALL_STRIP) front HOME band 317 home 219 terminal 291
-        "(rows) BAND WALL_STRIP front HOME"));
+        "(rows) BAND WALL_STRIP front HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM DOCKED GLASS_TRAY HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM DOCKED LENS_BEADS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM DOCKED PEEK_GLASS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM DOCKED WALL_STRIP HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM FLOATING GLASS_TRAY HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM FLOATING LENS_BEADS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM FLOATING PEEK_GLASS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(b) AZ_EDGE BOTTOM FLOATING WALL_STRIP HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE DOCKED GLASS_TRAY HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE DOCKED LENS_BEADS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE DOCKED PEEK_GLASS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE DOCKED WALL_STRIP HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE FLOATING GLASS_TRAY HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE FLOATING LENS_BEADS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE FLOATING PEEK_GLASS HOME->HOME",
+        // Home to Home with the keyboard up at one end only: the A-Z bar on a side edge runs down to the stack's top, which Home's keyboard moves, and both ends are Home's side, so one card per side (#307 round 3) cannot part them; holding Home's bar at its keyboard-down length would change Home's look with the keyboard up. Fixtures: a-z on the left edge, a-z on Home's left edge only.
+        "(e) MORPH AZ_EDGE FLOATING WALL_STRIP HOME->HOME",
+        // Where the Terminal's keyboard is up on the Terminal's host (the unified Docked glass) the host wears the foot with the container undrawn, while Home's keyboard-down host wears it with the container drawn the keyboard's height lower: one foot view would be laid out at two rects (tl16 1667..1730 vs 2337..2400) and a crossing between them moves the container under it, so each host keeps its own foot there (#307). Fixtures: tl16 with a foot, Terminal keyboard up.
+        "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED GLASS_TRAY HOME->TERMINAL",
+        // As above: the Terminal's unified keyboard-up host and Home's keyboard-down host lay a foot out at two rects. Fixtures: tl16 with a foot, Terminal keyboard up.
+        "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED LENS_BEADS HOME->TERMINAL",
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
+        "(g) FOOT OWNERS HOST/TERMINAL_HOST DOCKED WALL_STRIP HOME->TERMINAL",
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
+        "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED GLASS_TRAY TERMINAL->HOME",
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
+        "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED LENS_BEADS TERMINAL->HOME",
+        // As above. Fixtures: tl16 with a foot, Terminal keyboard up.
+        "(g) FOOT OWNERS TERMINAL_HOST/HOST DOCKED WALL_STRIP TERMINAL->HOME",
+        // Home's Peek card wears no foot, so with Home's keyboard up the keyboard wears it, at the rect the Terminal's host's foot stands at: two owners. The foot's own view (#307) takes the hosts' feet only; the keyboard's foot is the keyboard's material and stays the keyboard's. Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        "(g) FOOT OWNERS KEYBOARD_COLUMN/TERMINAL_HOST DOCKED PEEK_GLASS HOME->TERMINAL",
+        // Home's Peek card wears no foot, so with Home's keyboard up the keyboard wears it, at the rect the Terminal's host's foot stands at: two owners. The foot's own view (#307) takes the hosts' feet only; the keyboard's foot is the keyboard's material and stays the keyboard's. Fixtures: pong with a foot, tl16 with a foot, floating keyboard with a foot.
+        "(g) FOOT OWNERS TERMINAL_HOST/KEYBOARD_COLUMN DOCKED PEEK_GLASS TERMINAL->HOME"));
 
     private static final PageRef[][] PAIRS = {
         {PageRef.HOME, PageRef.TERMINAL},
@@ -279,24 +205,18 @@ public class RestCardsCrossingTest {
         return RestCards.of(f.cardsRest(page, up, otherUp, floating));
     }
 
-    /** The dock's glass drawn on screen: the host's, or the extra-keys card while it stands apart. */
+    /**
+     * The dock's glass drawn on screen: the host's, or the Terminal's card while it stands apart
+     * (the extra-keys card under Floating, the Terminal's own host under Docked).
+     */
     @Nullable
     private static Card hostCard(RestCards cards) {
         for (Card card : cards.cards())
-            if (card.view == StackView.HOST || card.view == StackView.KEYS_CARD) return card;
+            if (card.view == StackView.HOST || card.view == StackView.KEYS_CARD
+                || card.view == StackView.TERMINAL_HOST) return card;
         return null;
     }
 
-    /**
-     * Under Floating, the cases whose Terminal card carries a row Home shares (apps or A-Z beside
-     * the keys): the two-card rule refuses them and the developer decides. Their keys end in
-     * {@code SHARED-ROW}, apart from the ones the two cards fixed.
-     */
-    private static String sharedRow(LayoutFixtures.Fixture f, boolean floating) {
-        return floating && SideCards.refusal(f.layoutOf(PageRef.HOME),
-            f.layoutOf(PageRef.TERMINAL), true, false) == SideCards.Refusal.ROWS_BESIDE_KEYS
-            ? " SHARED-ROW" : "";
-    }
 
     private static String style(boolean floating) {
         return floating ? "FLOATING" : "DOCKED";
@@ -336,6 +256,10 @@ public class RestCardsCrossingTest {
                                   boolean floating, RestCards cards) {
         StackEnd end = new StackEnd(page);
         end.floating = floating;
+        end.readCards(cards);
+        end.homeDropPx = cards.homeSideDropPx();
+        end.terminalLiftPx = cards.terminalSideLiftPx();
+        end.rest.containerWidthPx = f.widthPx;
         Card host = hostCard(cards);
         StackGeometry g = end.rest;
         if (host != null) {
@@ -346,7 +270,8 @@ public class RestCardsCrossingTest {
         }
         // The stack's keyboard; a floating-form keyboard is its own frame, not the column's.
         Card keyboard = cards.card(CardId.KEYBOARD);
-        if (keyboard != null && keyboard.view != StackView.KEYBOARD_COLUMN) keyboard = null;
+        if (keyboard != null && keyboard.view != StackView.KEYBOARD_COLUMN
+            && keyboard.view != StackView.TERMINAL_KEYBOARD) keyboard = null;
         boolean unified = host != null && host.pieces.contains(PieceId.KEYBOARD);
         int kb = keyboard != null ? Math.round(keyboard.box.height())
             : unified ? f.pass(page, up, floating).keyboardHeightPx : 0;
@@ -358,6 +283,7 @@ public class RestCardsCrossingTest {
     }
 
     @Test public void everyCardIsItsRestsAtTheEndsOfACrossing() {
+        Found found = new Found();
         for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
             for (boolean floating : BOOLS)
                 for (PageRef[] pair : PAIRS)
@@ -384,10 +310,34 @@ public class RestCardsCrossingTest {
                 StackScene.homeShare(pair[0].isHome(), pair[1].isHome(), 0f), 0f);
             assertEquals(at + " home share at 1", pair[1].isHome() ? 1f : 0f,
                 StackScene.homeShare(pair[0].isHome(), pair[1].isHome(), 1f), 0f);
-            // A Peek card is Home's.
-            if (a.card(CardId.PEEK) != null) assertTrue(at, pair[0].isHome());
-            if (b.card(CardId.PEEK) != null) assertTrue(at, pair[1].isHome());
+            // A Peek card is Home's: on the Terminal only as Home's own, on the one host (#305).
+            if (a.card(CardId.PEEK) != null) assertTrue(at, pair[0].isHome() || !a.apart());
+            if (b.card(CardId.PEEK) != null) assertTrue(at, pair[1].isHome() || !b.apart());
+            String tail = " " + style(floating) + " " + f.homeDesign + " " + name(pair[0]) + "->"
+                + name(pair[1]);
+            StackScene.Frame rest = new StackScene.Frame();
+            for (float p : new float[] {0f, 0.5f, 1f}) {
+                StackScene.at(from, to, p, motion, from.rest, frame);
+                StackEnd end = p == 0f ? from : p == 1f ? to : null;
+                if (end != null) StackScene.at(end, end, 0f, motion, end.rest, rest);
+                for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                    String view = " " + StackView.values()[v];
+                    if (frame.cardMorphs[v]) found.add("(e) MORPH" + view + tail, at);
+                    if (end == null) continue;
+                    if (frame.cardTx[v] != rest.cardTx[v] || frame.cardTy[v] != rest.cardTy[v])
+                        found.add("(e) LANDING" + view + tail, at + " p=" + p);
+                    if (end.cardOn[v] != StackEnd.NO_CARD && frame.cardTx[v] != 0f)
+                        found.add("(e) OFF SCREEN" + view + tail, at + " p=" + p);
+                    if (end.cardOn[v] == StackEnd.NO_CARD && end.viewSide[v] >= 0
+                        && end.viewSide[v] < Side.COUNT
+                        && Math.abs(frame.cardTx[v]) != f.widthPx)
+                        found.add("(e) PARKED ON SCREEN" + view + tail, at + " p=" + p);
+                }
+                if (end != null && frame.slabView != rest.slabView)
+                    found.add("(e) SLAB" + tail, at + " p=" + p);
+            }
         }
+        assertKnown("(e)", found);
     }
 
     // ---- (b) ---------------------------------------------------------------------------
@@ -413,7 +363,7 @@ public class RestCardsCrossingTest {
                 Box now = b.laidOut(view);
                 if (was == null || now == null || !carries(a, view) || !carries(b, view)) continue;
                 String tail = " " + style(floating) + " " + f.homeDesign + " " + name(pair[0])
-                    + "->" + name(pair[1]) + sharedRow(f, floating);
+                    + "->" + name(pair[1]);
                 String where = f.name + " up=" + fromUp + "/" + toUp + " " + was + " -> " + now;
                 if (was.left != now.left || was.right != now.right)
                     found.add("(b) " + view + " SIDES" + tail, where);
@@ -464,18 +414,142 @@ public class RestCardsCrossingTest {
                     - Math.max(upper.box.left, lower.box.left);
                 if (across <= 0f) continue;
                 float gap = lower.box.top - upper.box.bottom;
-                EdgeKind a = upper.edge(Edge.BOTTOM);
-                EdgeKind b = lower.edge(Edge.TOP);
+                // The kinds over the stretch the two share: a card's edge has runs (a Docked
+                // A-Z column joins the status bar's bottom over its own width only, #307).
+                float from = Math.max(upper.box.left, lower.box.left);
+                float to = Math.min(upper.box.right, lower.box.right);
+                EdgeKind a = upper.kindOver(Edge.BOTTOM, from, to);
+                EdgeKind b = lower.kindOver(Edge.TOP, from, to);
                 String kind = null;
                 if (gap > 0f && gap < 2f * f.density) kind = "HAIRLINE";
                 else if (gap <= 0f && (a == EdgeKind.JOIN) != (b == EdgeKind.JOIN)) kind = "EDGES";
                 if (kind == null) continue;
                 found.add("(c) " + upper.id + "/" + lower.id + " " + kind + " " + style(floating)
-                    + " " + f.homeDesign + " " + name(page) + sharedRow(f, floating), f.name + " up=" + up + " "
+                    + " " + f.homeDesign + " " + name(page), f.name + " up=" + up + " "
                     + upper.box + " " + a + " | " + lower.box + " " + b);
             }
         }
         assertKnown("(c)", found);
+    }
+
+    // ---- (d) ---------------------------------------------------------------------------
+
+    /**
+     * Where the on-screen cards reach the screen's bottom edge, as merged runs along x: a card
+     * whose box runs down to the edge covers its width there.
+     */
+    private static List<float[]> bottomCover(RestCards cards, int heightPx) {
+        List<float[]> runs = new ArrayList<>();
+        for (Card card : cards.cards()) {
+            if (card.box.bottom < heightPx || card.box.top >= heightPx) continue;
+            runs.add(new float[] {card.box.left, card.box.right});
+        }
+        runs.sort((a, b) -> Float.compare(a[0], b[0]));
+        List<float[]> merged = new ArrayList<>();
+        for (float[] run : runs) {
+            float[] last = merged.isEmpty() ? null : merged.get(merged.size() - 1);
+            if (last != null && run[0] <= last[1]) last[1] = Math.max(last[1], run[1]);
+            else merged.add(new float[] {run[0], run[1]});
+        }
+        return merged;
+    }
+
+    private static boolean covers(List<float[]> runs, float left, float right) {
+        for (float[] run : runs) if (run[0] <= left && run[1] >= right) return true;
+        return false;
+    }
+
+    /**
+     * (d) A card against the screen's edge: wherever a rest standing alone (one side, as before
+     * the two cards) covers the screen's bottom edge, the same rest with the other side beside it
+     * covers it too. A side's card that stops short of the edge leaves a strip of bare wallpaper
+     * under the gesture pill that no pair of cards in (c) can see.
+     */
+    @Test public void aCardThatReachesTheScreensBottomEdgeAloneStillReachesItBesideTheOtherSide() {
+        Found found = new Found();
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : BOOLS)
+                for (PageRef page : new PageRef[] {PageRef.HOME, PageRef.TERMINAL})
+                    for (boolean up : BOOLS) {
+            RestCards alone = RestCards.of(f.cardsRestOf(page, up, floating));
+            RestCards beside = rest(f, page, up, floating);
+            List<float[]> was = bottomCover(alone, f.heightPx);
+            List<float[]> now = bottomCover(beside, f.heightPx);
+            for (float[] run : was) {
+                if (covers(now, run[0], run[1])) continue;
+                found.add("(d) BOTTOM " + style(floating) + " " + f.homeDesign + " " + name(page),
+                    f.name + " up=" + up + " alone " + alone.cards()
+                    + " | beside " + beside.cards());
+                break;
+            }
+        }
+        assertKnown("(d)", found);
+    }
+
+    // ---- (f) the pieces --------------------------------------------------------------------
+
+    /**
+     * (f) The A–Z bar, the foot and the keyboard are each a card of the answer (#307): wherever a
+     * rest stands the A–Z bar as a band (on the dock or on an edge of its own) a card carries it,
+     * and as its pull tab none does; a keyboard up has a card; a rest has at most one foot.
+     */
+    @Test public void theAzBarTheFootAndTheKeyboardAreEachACardOfTheirRest() {
+        Found found = new Found();
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : BOOLS)
+                for (PageRef page : new PageRef[] {PageRef.HOME, PageRef.TERMINAL})
+                    for (boolean up : BOOLS) {
+            RestCards cards = rest(f, page, up, floating);
+            String tail = " " + style(floating) + " " + f.homeDesign + " " + name(page);
+            String at = f.name + " up=" + up + " " + cards.cards();
+            RestCards.AzPlacement az = cards.azPlacement();
+            boolean band = az == RestCards.AzPlacement.DOCK_ROW
+                || az == RestCards.AzPlacement.EDGE;
+            boolean carried = cards.carrierOf(PieceId.AZ) != null;
+            if (band && !carried) found.add("(f) AZ NO CARD " + az + tail, at);
+            if (!band && carried) found.add("(f) AZ CARD " + az + tail, at);
+            if (az == RestCards.AzPlacement.EDGE && carried
+                    && cards.carrierOf(PieceId.AZ).id != CardId.AZ)
+                found.add("(f) AZ NOT ITS OWN" + tail, at);
+            int feet = 0;
+            // A foot the keyboard's card draws over (Home's held host under its cover) is hidden.
+            for (Card card : cards.cards())
+                if (card.id == CardId.FOOT && !cards.covered().contains(card)) feet++;
+            if (feet > 1) found.add("(f) TWO FEET" + tail, at);
+            // A keyboard the fixture lays out: the floating-form fixture's Home wears the
+            // docked form at no height, which no real rest has.
+            boolean keyboardLaidOut = f.keyboardLaidOutPx() > 0
+                || f.layoutOf(page).keyboardForm == PlaceLayout.KeyboardForm.FLOATING;
+            if (up && keyboardLaidOut && cards.card(CardId.KEYBOARD) == null
+                    && (cards.carrierOf(PieceId.KEYBOARD) == null
+                        && cards.carrierOf(PieceId.KEYBOARD_LEFT) == null))
+                found.add("(f) KEYBOARD NO CARD" + tail, at);
+        }
+        assertKnown("(f)", found);
+    }
+
+    /**
+     * (g) One owner draws the band under the gesture pill through a crossing: where both ends
+     * draw a foot at one rect, one view carries it at both, so it is a shared card that stays
+     * put, never two feet sliding over each other.
+     */
+    @Test public void aFootBothEndsDrawIsOneCardOnOneView() {
+        Found found = new Found();
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : BOOLS)
+                for (PageRef[] pair : PAIRS)
+                    for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
+            RestCards a = end(f, pair[0], fromUp, pair[1], toUp, floating);
+            RestCards b = end(f, pair[1], toUp, pair[0], fromUp, floating);
+            Card fa = a.card(CardId.FOOT);
+            Card fb = b.card(CardId.FOOT);
+            if (fa == null || fb == null || !fa.box.equals(fb.box)) continue;
+            if (fa.view != fb.view)
+                found.add("(g) FOOT OWNERS " + fa.view + "/" + fb.view + " " + style(floating)
+                    + " " + f.homeDesign + " " + name(pair[0]) + "->" + name(pair[1]),
+                    f.name + " up=" + fromUp + "/" + toUp);
+        }
+        assertKnown("(g)", found);
     }
 
     // ---- accessory_row_stack -----------------------------------------------------------

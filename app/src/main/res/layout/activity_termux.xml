@@ -793,6 +793,39 @@
                  what pinned it above the dock whatever order the user gave it. -->
         </com.termux.app.chrome.LiveBackdropLinearLayout>
 
+        <!-- The A–Z bar's other side's card (#307): where Home's rest and the Terminal's draw the
+             bar off the dock at different rects, the other side's bar is laid out here once, at
+             the rest, and slides in with its side while place_az_bar_host slides out with the
+             front. Invisible at a rest; AzEdgeCrossingCard lays it out, StackRenderer moves it. -->
+        <FrameLayout
+            android:id="@+id/place_az_bar_crossing_host"
+            android:layout_width="0dp"
+            android:layout_height="0dp"
+            android:clipChildren="false"
+            android:clipToPadding="false"
+            android:importantForAccessibility="no"
+            android:visibility="gone">
+
+            <FrameLayout
+                android:id="@+id/place_az_bar_crossing_host_glass"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent">
+
+                <ImageView
+                    android:id="@+id/place_az_bar_crossing_host_frost"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:importantForAccessibility="no"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/place_az_bar_crossing_host_surface"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent" />
+            </FrameLayout>
+        </FrameLayout>
+
         <!-- The deck look's band behind the system navigation bar (wave 8): from the bottom of the
              accessory stack (the keyboard's foot) to the screen's bottom edge, the keyboard's
              opaque slab while a terminal effect is drawn. Owned by applyDeckBands alone; gone off
@@ -890,6 +923,84 @@
                     android:layout_gravity="center"
                     android:visibility="gone" />
             </com.termux.app.DockSurfaceHostLayout>
+
+            <!-- The Terminal's Docked card while it stands apart from Home's (ADR 0032, #304): a
+                 second back host beside the glass host, laid out once per Terminal rest from the
+                 rest's answer (SideCardsController) and carried on the Terminal's lane by the
+                 stack's renderer. Gone whenever the cards stand together or the dock floats. -->
+            <FrameLayout
+                android:id="@+id/terminal_dock_host"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_alignParentBottom="true"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/terminal_dock_blur_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_dock_top_edge_fx"
+                    android:layout_width="match_parent"
+                    android:layout_height="12dp"
+                    android:layout_gravity="top"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_dock_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    android:background="?attr/termuxColorSurfacePanelHigh"/>
+
+                <com.termux.app.DockEdgeGlowView
+                    android:id="@+id/terminal_dock_edge_glow_fx"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/terminal_dock_specular_fx"
+                    android:layout_width="300dp"
+                    android:layout_height="300dp"
+                    android:layout_gravity="center"
+                    android:visibility="gone" />
+            </FrameLayout>
+
+            <!-- The foot under the gesture pill as a card of its own (ADR 0032, #307): while the
+                 cards stand apart under Docked and both hosts wear the foot at one rect, the band
+                 is this one shared card, laid out once per rest from the rest's answer
+                 (SideCardsController) and left still by a crossing; both hosts stop at its top.
+                 Before the keyboard's column, so a keyboard wearing its own foot draws over it. -->
+            <FrameLayout
+                android:id="@+id/dock_foot_host"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_alignParentBottom="true"
+                android:clipChildren="true"
+                android:clipToPadding="true"
+                android:importantForAccessibility="no"
+                android:visibility="gone">
+
+                <ImageView
+                    android:id="@+id/dock_foot_blur_backdrop"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:scaleType="fitXY"
+                    android:visibility="gone" />
+
+                <View
+                    android:id="@+id/dock_foot_background"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:visibility="gone"
+                    android:background="?attr/termuxColorSurfacePanelHigh"/>
+            </FrameLayout>
 
             <!-- The whole bottom edge: the pinned apps, the alphabets index, the extra keys and —
                  when the place stands it here — the status bar, in the order

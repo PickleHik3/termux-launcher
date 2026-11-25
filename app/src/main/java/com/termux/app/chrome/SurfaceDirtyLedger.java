@@ -41,7 +41,19 @@ public final class SurfaceDirtyLedger {
          * The Terminal's extra-keys card crop (ADR 0032): the dock capsule's own glass on a view of
          * its own, so it keeps its own record. Whatever dirties {@link #ACCESSORY} dirties it too.
          */
-        KEYS_CARD
+        KEYS_CARD,
+        /**
+         * The Terminal's Docked card crop while the cards stand apart (ADR 0032, #304): the dock
+         * slab's glass on a second back host, so it keeps its own record. Whatever dirties
+         * {@link #ACCESSORY} dirties it too.
+         */
+        TERMINAL_HOST,
+        /**
+         * The foot under the gesture pill as a card of its own (ADR 0032, #307): the dock slab's
+         * glass on the band both hosts stop at, so it keeps its own record. Whatever dirties
+         * {@link #ACCESSORY} dirties it too.
+         */
+        FOOT
     }
 
     /** Wallpaper-frost crop targets. */
@@ -53,7 +65,9 @@ public final class SurfaceDirtyLedger {
         TERMINAL_SHEET,
         APP_DRAWER,
         OFF_DOCK_PLANK,
-        AZ_BAR_HOST
+        AZ_BAR_HOST,
+        /** The A–Z bar's other side's card while a crossing carries it (#307). */
+        AZ_BAR_CROSSING_HOST
     }
 
     /** Radius groups for the frost crops: surfaces tuned by the same slider share an entry. */
@@ -95,7 +109,11 @@ public final class SurfaceDirtyLedger {
     public void markDirty(@NonNull Backdrop backdrop) {
         entry(backdrop).dirty = true;
         // The card wears the dock capsule's glass: a re-cut of the one is a re-cut of the other.
-        if (backdrop == Backdrop.ACCESSORY) entry(Backdrop.KEYS_CARD).dirty = true;
+        if (backdrop == Backdrop.ACCESSORY) {
+            entry(Backdrop.KEYS_CARD).dirty = true;
+            entry(Backdrop.TERMINAL_HOST).dirty = true;
+            entry(Backdrop.FOOT).dirty = true;
+        }
         mDirtyGeneration++;
     }
 

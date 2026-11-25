@@ -180,7 +180,9 @@ public class RestCardsTest {
         RestCards cards = rest(TRAY, PageRef.TERMINAL, true, true);
         RestCards.Card keyboard = cards.card(CardId.KEYBOARD);
         assertNotNull(keyboard);
-        assertEquals(StackView.KEYBOARD_COLUMN, keyboard.view);
+        // The Terminal's keyboard card is its own column's while the cards stand apart (#307).
+        assertEquals(cards.apart() ? StackView.TERMINAL_KEYBOARD : StackView.KEYBOARD_COLUMN,
+            keyboard.view);
         for (Edge edge : Edge.values()) assertEquals(EdgeKind.RIM, keyboard.edge(edge));
     }
 
@@ -196,7 +198,9 @@ public class RestCardsTest {
         assertEquals(top, dock.box.bottom, 0f);
         assertEquals(top, card.box.top, 0f);
         assertEquals(foot.heightPx, card.box.bottom, 0f);
-        assertEquals(StackView.HOST, card.view);
+        // The Terminal's host wears the same foot at its rest: one shared card on its own view.
+        assertEquals(StackView.FOOT, card.view);
+        assertEquals(EdgeKind.JOIN, dock.edge(Edge.BOTTOM));
         assertEquals(EdgeKind.JOIN, card.edge(Edge.TOP));
         assertEquals(EdgeKind.SCREEN, card.edge(Edge.BOTTOM));
     }
@@ -322,13 +326,17 @@ public class RestCardsTest {
                             assertTrue(at + " covered " + card, up.covered().contains(card));
             } else {
                 together++;
+                // Together only where the Terminal's rest wears Home's Peek card (#305).
+                assertNotNull(at, RestCards.of(f.cardsRestOf(PageRef.TERMINAL, false, floating))
+                    .card(CardId.PEEK));
                 assertEquals(at + " top", was.top, now.top, 0f);
                 if (was.bottom != now.bottom)
                     assertTrue(at + " only the foot changes hands", f.keptBandPx > 0);
             }
         }
         assertTrue("some fixtures stand apart", apart > 0);
-        assertTrue("and some do not", together > 0);
+        // Since #305 every fixture stands apart but a Terminal wearing Home's Peek card.
+        assertTrue("a Terminal wearing the Peek card stands together", together > 0);
     }
 
     private static String hostCards(RestCards cards) {
@@ -336,5 +344,311 @@ public class RestCardsTest {
         for (RestCards.Card card : cards.cards())
             if (card.view == StackView.HOST) out.append(card).append(' ');
         return out.toString();
+    }
+
+    /** A view's cards as the dress reads them: box, corners, each edge's kind and the pieces. */
+    private static String cardsOn(java.util.List<RestCards.Card> cards, StackView view) {
+        StringBuilder out = new StringBuilder();
+        for (RestCards.Card card : cards) {
+            if (card.view != view) continue;
+            out.append(card.id).append('@').append(card.box).append(' ').append(card.corners);
+            for (Edge edge : Edge.values()) out.append(' ').append(card.edge(edge));
+            out.append(' ').append(card.pieces).append("; ");
+        }
+        return out.toString();
+    }
+
+    /**
+     * Docked, while the cards stand apart (#304): the Terminal's own host carries the card the one
+     * host wore at the Terminal's rest, box, corners, edges and pieces alike (the flush air above
+     * the keys and the foot under the gesture pill included), whichever page is in front; Home's
+     * host keeps Home's with the keyboard down.
+     */
+    @Test public void dockedTheTerminalsHostIsTheOneHostsCardAtTheTerminalsRest() {
+        int cases = 0;
+        int feet = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures()) {
+            for (DockStyle design : DockStyle.CHOICES) {
+                LayoutFixtures.Fixture f = base.withHomeDesign(design);
+                for (boolean up : new boolean[] {false, true}) {
+                    RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false,
+                        false));
+                    if (!terminal.apart()) continue;
+                    String label = f.name + " " + design + " terminal kb=" + up;
+                    RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, false));
+                    String want = cardsOn(alone.cards(), StackView.HOST);
+                    // A Terminal with no card at its rest (#305) shows none.
+                    // A foot both hosts wear at one rect is the foot's own view's (#307), shared.
+                    assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST)
+                        + cardsOn(terminal.cards(), StackView.FOOT));
+                    assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
+                    // Parked with the Terminal while Home is in front, at the same rest.
+                    RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, false));
+                    assertEquals(label + " parked", want,
+                        cardsOn(home.parked(), StackView.TERMINAL_HOST)
+                            + cardsOn(home.cards(), StackView.FOOT));
+                    assertEquals(label + " laid out", terminal.laidOut(StackView.TERMINAL_HOST),
+                        home.laidOut(StackView.TERMINAL_HOST));
+                    // Home's card at Home's rest is the one host's there.
+                    RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, false));
+                    assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
+                        cardsOn(home.cards(), StackView.HOST) + cardsOn(home.cards(),
+                            StackView.FOOT));
+                    if (want.contains("FOOT")) feet++;
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some Docked rests stand apart", cases > 0);
+        assertTrue("some wear the foot", feet > 0);
+    }
+
+    /**
+     * Floating with the apps row or A-Z beside the keys (#305): the cards stand apart and the
+     * Terminal's card is its own back host, the one host's Floating card at the Terminal's rest
+     * (box, corners, edges, pieces: the rows beside the keys included), never the keys row's
+     * card; Home's host keeps Home's card (the Peek card, or the apps row's) at Home's rest.
+     */
+    @Test public void floatingWithRowsBesideTheKeysTheTerminalsHostIsTheOneHostsCard() {
+        int cases = 0;
+        int peeks = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures()) {
+            if (SideCards.keysAlone(base.layoutOf(PageRef.TERMINAL))) continue;
+            for (DockStyle design : DockStyle.CHOICES) {
+                LayoutFixtures.Fixture f = base.withHomeDesign(design);
+                for (boolean up : new boolean[] {false, true}) {
+                    RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false,
+                        true));
+                    if (!terminal.apart()) continue;
+                    String label = f.name + " " + design + " terminal kb=" + up;
+                    RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, true));
+                    String want = cardsOn(alone.cards(), StackView.HOST);
+                    assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
+                    assertEquals(label, "", cardsOn(terminal.cards(), StackView.KEYS_CARD));
+                    assertEquals(label, null, terminal.laidOut(StackView.KEYS_CARD));
+                    assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
+                    RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, true));
+                    assertEquals(label + " parked", want,
+                        cardsOn(home.parked(), StackView.TERMINAL_HOST));
+                    RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, true));
+                    assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
+                        cardsOn(home.cards(), StackView.HOST));
+                    if (home.card(CardId.PEEK) != null) peeks++;
+                    cases++;
+                }
+            }
+        }
+        assertTrue("some Floating rests with rows beside the keys stand apart", cases > 0);
+        assertTrue("Home wears the Peek card in some", peeks > 0);
+    }
+
+    /**
+     * The three layouts that still shared the glass host after #305's first round stand apart
+     * too (#305): a Terminal with no keys row, its keys under the keyboard, and its status bar on
+     * the dock's plank. Home's card travels with Home and is Home's rest's; the Terminal's card,
+     * where it has one, is its own host's, the one host's card at the Terminal's rest (box,
+     * corners, edges, pieces), under either Style. A Terminal with no card of its own shows none.
+     * The one case left on the one host: a Terminal whose rest wears the Peek card, which is
+     * Home's card at Home's rect, so it stays put.
+     */
+    @Test public void theLayoutsThatSharedTheHostStandApartEachSideWithItsOwnCard() {
+        int own = 0;
+        int none = 0;
+        int peek = 0;
+        LayoutFixtures.Fixture[] shared = {LayoutFixtures.NO_KEYS_ROW, LayoutFixtures.KEYS_UNDER,
+            LayoutFixtures.STATUS_ON_PLANK};
+        assertTrue(LayoutFixtures.STATUS_ON_PLANK.cardsRestOf(PageRef.TERMINAL, false, false)
+            .statusOnDockPlank);
+        for (LayoutFixtures.Fixture base : shared)
+            for (DockStyle design : DockStyle.CHOICES)
+                for (boolean floating : new boolean[] {false, true})
+                    for (boolean up : new boolean[] {false, true}) {
+            LayoutFixtures.Fixture f = base.withDesign(design);
+            String label = f.name + (floating ? " FLOATING" : " DOCKED") + " kb=" + up;
+            RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, up, false, floating));
+            RestCards alone = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, floating));
+            String want = cardsOn(alone.cards(), StackView.HOST);
+            if (alone.card(CardId.PEEK) != null) {
+                // The Terminal's rest wears the Peek card, Home's at Home's rect: one card both
+                // ends draw in one place, so it stays put on the one host (ADR 0032, 3).
+                assertTrue(label + " together", !terminal.apart());
+                assertEquals(label, want, cardsOn(terminal.cards(), StackView.HOST));
+                RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, floating));
+                assertEquals(label + " Home's card", cardsOn(homeAlone.cards(), StackView.HOST),
+                    want);
+                peek++;
+                continue;
+            }
+            assertTrue(label + " apart", terminal.apart());
+            assertEquals(label, StackView.TERMINAL_HOST, RestCards.terminalCardView(floating,
+                f.window, f.cardsRestOf(PageRef.TERMINAL, up, floating).statusOnDockPlank));
+            assertEquals(label, want, cardsOn(terminal.cards(), StackView.TERMINAL_HOST));
+            assertEquals(label, "", cardsOn(terminal.cards(), StackView.HOST));
+            assertNull(label, terminal.laidOut(StackView.KEYS_CARD));
+            RestCards home = RestCards.of(f.cardsRest(PageRef.HOME, false, up, floating));
+            assertTrue(label + " apart from Home", home.apart());
+            assertEquals(label + " parked", want, cardsOn(home.parked(), StackView.TERMINAL_HOST));
+            RestCards homeAlone = RestCards.of(f.cardsRestOf(PageRef.HOME, false, floating));
+            assertEquals(label + " home", cardsOn(homeAlone.cards(), StackView.HOST),
+                cardsOn(home.cards(), StackView.HOST));
+            if (want.isEmpty()) none++;
+            else own++;
+        }
+        assertTrue("some Terminals carry a card of their own", own > 0);
+        assertTrue("some Terminals have none", none > 0);
+        assertTrue("some Terminals wear Home's Peek card", peek > 0);
+    }
+    /**
+     * The one host stays shared only while the Terminal's Peek card is Home's card at Home's rect
+     * (ADR 0032, 2026-11-24): wherever Home's rest draws no Peek card, or draws it elsewhere (its
+     * own design or its keyboard up), the two cards stand apart, whichever page is in front.
+     */
+    @Test public void theTerminalsPeekCardStaysSharedOnlyAtHomesRect() {
+        int together = 0;
+        int apart = 0;
+        for (LayoutFixtures.Fixture base : LayoutFixtures.cardFixtures())
+            for (DockStyle homeDesign : DockStyle.CHOICES)
+                for (DockStyle terminalDesign : DockStyle.CHOICES)
+                    for (boolean floating : new boolean[] {false, true})
+                        for (boolean homeUp : new boolean[] {false, true}) {
+            LayoutFixtures.Fixture f = base.withDesign(terminalDesign).withHomeDesign(homeDesign);
+            RestCards.Card mine = RestCards.of(f.cardsRestOf(PageRef.TERMINAL, false, floating))
+                .card(CardId.PEEK);
+            if (mine == null) continue;
+            RestCards.Card home = RestCards.of(f.cardsRestOf(PageRef.HOME, homeUp, floating))
+                .card(CardId.PEEK);
+            boolean shared = home != null && home.toString().equals(mine.toString());
+            String label = f.name + " " + homeDesign + "/" + terminalDesign
+                + (floating ? " FLOATING" : " DOCKED") + " home kb=" + homeUp;
+            RestCards terminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, false, homeUp,
+                floating));
+            RestCards front = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, false, floating));
+            assertEquals(label, !shared, terminal.apart());
+            assertEquals(label + " Home in front", !shared, front.apart());
+            // Apart, the Terminal's own host wears the Peek dress: its cut, whichever page is in
+            // front, the same cut its own rest makes, and its card's box is that cut's.
+            if (!shared) {
+                PeekGlassGeometry.Card cut = terminal.terminalPeekCut();
+                assertNotNull(label, cut);
+                assertEquals(label + " parked", cut, front.terminalPeekCut());
+                RestCards.Card card = terminal.cardOn(StackView.TERMINAL_HOST);
+                assertNotNull(label, card);
+                assertEquals(label, CardId.PEEK, card.id);
+                assertEquals(label, cut.left, card.box.left, 0f);
+                assertEquals(label, cut.right, card.box.right, 0f);
+            } else {
+                assertNull(label, terminal.terminalPeekCut());
+            }
+            if (shared) together++;
+            else apart++;
+        }
+        assertTrue("some Terminals wear Home's Peek card at Home's rect", together > 0);
+        assertTrue("some Terminals wear a Peek card Home's rest does not draw there", apart > 0);
+    }
+    /**
+     * While the cards stand apart with two keyboard cards, each keyboard view is one side's at
+     * both rests (#307): {@link StackView#KEYBOARD_COLUMN} is laid out at Home's rest and carries
+     * Home's keyboard card, parked while the Terminal is in front, and
+     * {@link StackView#TERMINAL_KEYBOARD} at the Terminal's, parked while Home is in front.
+     */
+    @Test public void apartTheKeyboardColumnIsHomesAndTheTerminalKeyboardTheTerminalsAtBothRests() {
+        int cases = 0;
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : new boolean[] {false, true})
+                for (boolean homeUp : new boolean[] {false, true})
+                    for (boolean terminalUp : new boolean[] {false, true}) {
+            RestCards atTerminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, terminalUp, homeUp,
+                floating));
+            if (atTerminal.laidOut(StackView.TERMINAL_KEYBOARD) == null) continue;
+            String label = f.name + (floating ? " FLOATING" : " DOCKED") + " home kb=" + homeUp
+                + " terminal kb=" + terminalUp;
+            RestCards atHome = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, terminalUp,
+                floating));
+            assertEquals(label + " Home's column",
+                String.valueOf(atHome.laidOut(StackView.KEYBOARD_COLUMN)),
+                String.valueOf(atTerminal.homeKeyboardColumn()));
+            assertEquals(label + " Home's column, by its view",
+                String.valueOf(atHome.laidOut(StackView.KEYBOARD_COLUMN)),
+                String.valueOf(atTerminal.laidOut(StackView.KEYBOARD_COLUMN)));
+            assertEquals(label + " the Terminal's keyboard",
+                String.valueOf(atHome.laidOut(StackView.TERMINAL_KEYBOARD)),
+                String.valueOf(atTerminal.laidOut(StackView.TERMINAL_KEYBOARD)));
+            for (RestCards.Card card : atTerminal.cards())
+                assertTrue(label + " " + card, card.view != StackView.KEYBOARD_COLUMN);
+            for (RestCards.Card card : atHome.cards())
+                assertTrue(label + " " + card, card.view != StackView.TERMINAL_KEYBOARD);
+            StringBuilder homeKeys = new StringBuilder();
+            for (RestCards.Card card : atHome.cards())
+                if (card.view == StackView.KEYBOARD_COLUMN) homeKeys.append(card).append(' ');
+            StringBuilder parked = new StringBuilder();
+            for (RestCards.Card card : atTerminal.parked())
+                if (card.view == StackView.KEYBOARD_COLUMN) parked.append(card).append(' ');
+            assertEquals(label + " Home's keyboard card parked", homeKeys.toString(),
+                parked.toString());
+            cases++;
+        }
+        assertTrue("some rests draw two keyboard cards", cases > 0);
+    }
+
+    /**
+     * The foot under the gesture pill that both sides' hosts wear at one rect while the cards
+     * stand apart is one shared card on a view of its own (#307, ADR 0032 2026-11-24): laid out
+     * the same at both rests, each host laid out to stop at its top and drawn meeting it there
+     * (no line, no gap), and never under Floating, where no host wears a foot.
+     */
+    @Test public void aFootBothHostsWearIsOneSharedCardOnItsOwnViewAndEachHostStopsAtItsTop() {
+        int shared = 0;
+        for (LayoutFixtures.Fixture f : LayoutFixtures.cardFixtures())
+            for (boolean floating : new boolean[] {false, true})
+                for (boolean homeUp : new boolean[] {false, true})
+                    for (boolean terminalUp : new boolean[] {false, true}) {
+            String label = f.name + " " + f.homeDesign + (floating ? " FLOATING" : " DOCKED")
+                + " home kb=" + homeUp + " terminal kb=" + terminalUp;
+            RestCards atHome = RestCards.of(f.cardsRest(PageRef.HOME, homeUp, terminalUp,
+                floating));
+            RestCards atTerminal = RestCards.of(f.cardsRest(PageRef.TERMINAL, terminalUp, homeUp,
+                floating));
+            if (floating) {
+                assertNull(label, atHome.laidOut(StackView.FOOT));
+                assertNull(label, atTerminal.laidOut(StackView.FOOT));
+                continue;
+            }
+            assertEquals(label + " one foot view at both rests",
+                String.valueOf(atHome.laidOut(StackView.FOOT)),
+                String.valueOf(atTerminal.laidOut(StackView.FOOT)));
+            if (atHome.laidOut(StackView.FOOT) == null) {
+                // Not shared: no foot on the foot's view, a host's foot stays on its host.
+                assertNull(label, atHome.cardOn(StackView.FOOT));
+                assertNull(label, atTerminal.cardOn(StackView.FOOT));
+                continue;
+            }
+            shared++;
+            for (RestCards cards : new RestCards[] {atHome, atTerminal}) {
+                RestCards.Card foot = cards.cardOn(StackView.FOOT);
+                assertNotNull(label, foot);
+                assertEquals(label, CardId.FOOT, foot.id);
+                for (StackView host : new StackView[] {StackView.HOST, StackView.TERMINAL_HOST}) {
+                    RestCards.Card card = cards.cardOn(host);
+                    ChromeShape.Box laid = cards.laidOut(host);
+                    assertNotNull(label + " " + host, card);
+                    assertNotNull(label + " " + host, laid);
+                    // Each host stops at the foot's top: drawn meeting it, laid out no taller.
+                    assertEquals(label + " " + host + " meets the foot", foot.box.top,
+                        card.box.bottom, 0f);
+                    assertEquals(label + " " + host + " stops at the foot", card.box.height(),
+                        laid.height(), 0f);
+                    assertEquals(label + " " + host, EdgeKind.JOIN, card.edge(Edge.BOTTOM));
+                }
+            }
+        }
+        assertTrue("some Docked rests share the foot", shared > 0);
+    }
+
+    /** The foot a host of {@code cards} draws on its own view, or null. */
+    private static RestCards.Card hostFoot(RestCards cards) {
+        for (RestCards.Card card : cards.cards())
+            if (card.id == CardId.FOOT && (card.view == StackView.HOST
+                || card.view == StackView.TERMINAL_HOST)) return card;
+        return null;
     }
 }

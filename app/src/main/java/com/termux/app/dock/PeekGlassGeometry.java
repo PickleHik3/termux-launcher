@@ -86,8 +86,8 @@ public final class PeekGlassGeometry {
     }
 
     /**
-     * The x a reflection view draws the row from, its origin in the host plus the host's published
-     * motion beyond its layout ({@code GlassAnchor}): the row's lane offset is drawn in across
+     * The x a reflection view draws the row from, its origin in the host plus the host's drawn
+     * offset beyond its layout (the stack's scene's pose of its card): the row's lane offset is drawn in across
      * ({@link #rowDrawX}) and carries the host's slide while the cards stand apart, so the
      * host's share of it is taken off once.
      */

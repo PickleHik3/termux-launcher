@@ -331,4 +331,36 @@ public class GlassAnchorTest {
         row.getLocationOnScreen(onScreen);
         assertFalse("the travel moves the row on screen", onScreen[1] == atRest.top);
     }
+
+    /**
+     * A bottom-stack card samples where the stack's scene draws it (ADR 0032 section 5): its
+     * laid-out origin moved by the pose its owner hands in, across and down, read on every draw.
+     * The views' own translations (the scene's writes, the plank's press) never reach it.
+     */
+    @Test
+    public void aStackCardSamplesAtItsLayoutMovedByTheScenesPose() {
+        FrameLayout stack = new FrameLayout(mActivity);
+        View card = new View(mActivity);
+        stack.addView(card);
+        mAboveWall.addView(stack);
+        stack.layout(0, 1400, 1080, 2160);
+        card.layout(21, 40, 1059, 138);
+        int[] atRest = new int[2];
+        GlassAnchor.layoutOriginOnScreen(card, atRest, new int[2]);
+        float[] pose = {0f, 0f};
+        GlassAnchor.Origin origin = GlassAnchor.layout(card, () -> pose[1], () -> pose[0]);
+        int[] out = new int[2];
+        origin.originOnScreen(out);
+        assertEquals(atRest[0], out[0]);
+        assertEquals(atRest[1], out[1]);
+
+        pose[0] = -540f;
+        pose[1] = 16f;
+        stack.setTranslationY(300f);
+        card.setTranslationX(-540f);
+        card.setTranslationY(5f);
+        origin.originOnScreen(out);
+        assertEquals("across by the pose alone", atRest[0] - 540, out[0]);
+        assertEquals("down by the pose alone", atRest[1] + 16, out[1]);
+    }
 }

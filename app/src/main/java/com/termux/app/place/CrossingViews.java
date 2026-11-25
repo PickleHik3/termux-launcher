@@ -12,7 +12,7 @@ import com.termux.app.page.PageKind;
 /**
  * What a crossing moves ({@link Crossing}'s adapter), and the last values it wrote, so a frame that
  * repeats one touches no view: the accessory stack's translation, its rows' sink into the
- * keyboard, the travel alphas, the status bar's ride, the travel cover the pane
+ * keyboard, the status content's travel alpha, the status bar's ride, the travel cover the pane
  * controller holds for the window in front, and the keyboard brought up for a slide. Only
  * views are written here; every decision is the crossing's.
  *
@@ -45,9 +45,8 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     @NonNull private final Host mHost;
     /** The sink the stack's rows are handed the renderer, reused by every frame. */
     private final StackScene.Motion mSinkMotion = new StackScene.Motion();
-    /** The alphas the travel last wrote, 1 when it has put everything back. */
+    /** The alpha the travel last wrote, 1 when it has put everything back. */
     private float mStatusAlpha = 1f;
-    private float mSideAlpha = 1f;
 
     /** @param context the window the adapter moves views of */
     public CrossingViews(@NonNull Context context, @NonNull Host host) {
@@ -97,29 +96,19 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     }
 
     /**
-     * Fades the status bar's content toward a minimal place's strip, and the bars minimal mode
-     * takes off the sides and the top with the dock. Alpha only, on views whose alpha nothing
-     * else writes; 1 puts them back.
+     * Fades the status bar's content toward a page that wears no bar where the bar cannot ride.
+     * Alpha only, on views whose alpha nothing else writes; 1 puts them back. The bars off the
+     * dock are cards (RestCards, #307): the edge stacks stand still through a crossing, so a bar
+     * both ends stand alike stays put and nothing fades it.
      */
     @Override
-    public void alpha(float statusAlpha, float sideAlpha) {
+    public void alpha(float statusAlpha) {
         // Most frames of most slides move between two places that look alike here; those cost
         // nothing past this comparison.
-        if (statusAlpha == mStatusAlpha && sideAlpha == mSideAlpha) return;
+        if (statusAlpha == mStatusAlpha) return;
         mStatusAlpha = statusAlpha;
-        mSideAlpha = sideAlpha;
         setTravelAlpha(R.id.terminal_status_row, statusAlpha);
         setTravelAlpha(R.id.terminal_status_lens, statusAlpha);
-        setTravelAlpha(edgeHost(Element.APPS), sideAlpha);
-        setTravelAlpha(edgeHost(Element.EXTRA_KEYS), sideAlpha);
-        setTravelAlpha(edgeHost(Element.AZ), sideAlpha);
-        setTravelAlpha(R.id.place_off_dock_plank_host, sideAlpha);
-    }
-
-    /** {@code element}'s portable host on a side edge, through its side. */
-    private static int edgeHost(@NonNull Element element) {
-        return com.termux.app.dock.SideRowViews.id(element,
-            com.termux.app.dock.SideRowViews.Part.EDGE_HOST);
     }
 
     private void setTravelAlpha(int viewId, float alpha) {

@@ -79,6 +79,8 @@ final class DockSurface {
 
     // ------------------------------------------------------------------ Shape
 
+    /** Home's card's outline while the host is pinned as Home's under Docked (#304). */
+    private final TerminalHostDress.CardOutline mHomeOutline = new TerminalHostDress.CardOutline();
     /** The dock's clip: its slice of the Docked frame, or its own card under Floating. */
     private final com.termux.app.chrome.ChromeShapeOutlineProvider mDockOutline =
         new com.termux.app.chrome.ChromeShapeOutlineProvider();
@@ -106,22 +108,6 @@ final class DockSurface {
      *                 the dock does, the same line the window bar keeps along its bottom; the
      *                 strip under the pill has no inner edge and draws none
      */
-    /**
-     * The slab's cut over {@code host} as {@link #applyDockSurfaceShape} last cut it, as a
-     * {@link com.termux.app.chrome.RoundCut}: the capsule under Floating, the dock's slice of the
-     * frame under Docked. What a crossing blends the Peek card from or to.
-     */
-    void slabCut(@NonNull View host, @NonNull float[] out) {
-        int width = host.getWidth();
-        int height = host.getHeight();
-        if (mDockShapeCapsule) {
-            com.termux.app.chrome.RoundCut.set(out, 0f, 0f, width, height,
-                resolveDockCapsuleCornerRadiusPx(mDockShapeHeightPx > 0 ? mDockShapeHeightPx : height));
-            return;
-        }
-        mDockOutline.cut(width, height, out);
-    }
-
     void applyDockSurfaceShape(@NonNull View surface, boolean capsule, int surfaceHeightPx,
                                boolean ownsInnerEdge, boolean innerRim) {
         if (surface.getId() == R.id.accessory_surface_host) {
@@ -145,6 +131,26 @@ final class DockSurface {
                     surface.setClipToOutline(false);
                 return;
             }
+        }
+        com.termux.app.place.RestCards.Card home = !capsule
+            && surface.getId() == R.id.accessory_surface_host ? mHost.pinnedHomeDockCard() : null;
+        if (home != null) {
+            // Apart under Docked (#304) the host is Home's card at every rest: it wears Home's
+            // cut from Home's rest's answer, never the page in front's, so the Terminal's rest
+            // leaves it as Home's.
+            int strokeEdges = innerRim && !dockGlassDrawsEdge()
+                ? TerminalHostDress.rimEdges(home) : com.termux.app.chrome.ChromeEdgeRule.NONE;
+            surface.setBackground(mHost.chrome().glass().rimUnderGlass(0f, strokeEdges));
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.LOLLIPOP) {
+                boolean changed = mHomeOutline.set(home.corners.topLeft, home.corners.topRight,
+                    home.corners.bottomRight, home.corners.bottomLeft);
+                if (surface.getOutlineProvider() != mHomeOutline)
+                    surface.setOutlineProvider(mHomeOutline);
+                else if (changed)
+                    surface.invalidateOutline();
+                surface.setClipToOutline(true);
+            }
+            return;
         }
         if (!capsule) {
             // Docked, the dock is a slice of the one frame. The model says which of its edges

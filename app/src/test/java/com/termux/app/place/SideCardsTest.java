@@ -2,14 +2,12 @@ package com.termux.app.place;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 
 import com.termux.app.place.PlaceLayout.Edge;
 import com.termux.app.place.PlaceLayout.KeyboardForm;
 import com.termux.app.place.PlaceLayout.KeyboardMode;
 import com.termux.app.place.PlaceLayout.RowPlacement;
-import com.termux.app.place.SideCards.Refusal;
 
 import org.junit.Test;
 
@@ -26,52 +24,29 @@ public class SideCardsTest {
         layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.BOTTOM);
     private static final PlaceLayout HOME = LayoutFixtures.HOME;
 
-    @Test public void aNewInstallsTerminalStandsApart() {
-        assertNull(SideCards.refusal(HOME, DEFAULT_TERMINAL, true, false));
-        assertTrue(SideCards.apart(HOME, DEFAULT_TERMINAL, true, false));
+    /** #305: the apps row or A-Z beside the keys is no row of the keys' own card. */
+    @Test public void anAppsRowBesideTheKeysIsNotTheKeysAlone() {
+        assertFalse(SideCards.keysAlone(LayoutFixtures.TL16.window));
     }
 
-    @Test public void pongsAppsUnderTheKeyboardStandApart() {
-        assertNull(SideCards.refusal(LayoutFixtures.PONG.home, LayoutFixtures.PONG.window, true,
-            false));
+    @Test public void anAzRowBesideTheKeysIsNotTheKeysAlone() {
+        assertFalse(SideCards.keysAlone(LayoutFixtures.AZ_ON_DOCK.window));
+        assertFalse(SideCards.keysAlone(
+            layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM)));
     }
 
-    @Test public void dockedRefuses() {
-        assertEquals(Refusal.DOCKED, SideCards.refusal(HOME, DEFAULT_TERMINAL, false, false));
-        assertFalse(SideCards.apart(HOME, DEFAULT_TERMINAL, false, false));
+    @Test public void theKeysAloneAreTheKeysRowsOwnCard() {
+        assertTrue(SideCards.keysAlone(DEFAULT_TERMINAL));
+        assertTrue(SideCards.keysAlone(LayoutFixtures.PONG.window));
     }
 
-    @Test public void aTerminalWithoutKeysRefuses() {
-        assertEquals(Refusal.NO_KEYS_ROW, SideCards.refusal(HOME,
-            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN), true, false));
-    }
-
-    @Test public void keysOnASideRefuse() {
-        assertEquals(Refusal.NO_KEYS_ROW, SideCards.refusal(HOME,
-            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.LEFT), true, false));
-    }
-
-    @Test public void keysUnderTheKeyboardRefuse() {
-        PlaceLayout under = DEFAULT_TERMINAL.withSlot(Element.EXTRA_KEYS,
-            new Slot(false, Edge.BOTTOM, 0, true));
-        assertEquals(Refusal.KEYS_NOT_OVER_KEYBOARD, SideCards.refusal(HOME, under, true, false));
-    }
-
-    @Test public void anAppsRowBesideTheKeysRefuses() {
-        assertEquals(Refusal.ROWS_BESIDE_KEYS, SideCards.refusal(LayoutFixtures.TL16.home,
-            LayoutFixtures.TL16.window, true, false));
-    }
-
-    @Test public void anAzRowBesideTheKeysRefuses() {
-        assertEquals(Refusal.ROWS_BESIDE_KEYS, SideCards.refusal(LayoutFixtures.AZ_ON_DOCK.home,
-            LayoutFixtures.AZ_ON_DOCK.window, true, false));
-        assertEquals(Refusal.ROWS_BESIDE_KEYS, SideCards.refusal(HOME,
-            layout(Edge.TOP, RowPlacement.HIDDEN, true, RowPlacement.BOTTOM), true, false));
-    }
-
-    @Test public void aStatusBarOnThePlankRefuses() {
-        assertEquals(Refusal.STATUS_ON_PLANK,
-            SideCards.refusal(HOME, DEFAULT_TERMINAL, true, true));
+    /** #305: no keys row, keys on a side or under the keyboard: no keys card of their own. */
+    @Test public void keysThatAreNotOverTheKeyboardAreNotTheKeysAlone() {
+        assertFalse(SideCards.keysAlone(
+            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.HIDDEN)));
+        assertFalse(SideCards.keysAlone(
+            layout(Edge.TOP, RowPlacement.HIDDEN, false, RowPlacement.LEFT)));
+        assertFalse(SideCards.keysAlone(LayoutFixtures.KEYS_UNDER.window));
     }
 
     @Test public void theMarginIsTheTerminalsWhileApartAndTheFrontsOtherwise() {

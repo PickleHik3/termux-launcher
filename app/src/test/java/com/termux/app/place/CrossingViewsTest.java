@@ -188,7 +188,7 @@ public class CrossingViewsTest {
             float translation = crossing.stack(answers, answers.dockReveal(), 300, 200, 150);
             if (crossing.holdsContent()) crossing.coverAt(translation);
             crossing.rideBar(frame, true, WIDTH);
-            crossing.fade(frame.statusReveal, frame.dockReveal);
+            crossing.fade(frame.statusReveal);
         }
     }
 

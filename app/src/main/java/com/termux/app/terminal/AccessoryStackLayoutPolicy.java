@@ -32,6 +32,17 @@ public final class AccessoryStackLayoutPolicy {
     }
 
     /**
+     * Whether {@code layout}'s status bar stands along the bottom as a band of the dock's plank:
+     * it is in the bottom stack and does not keep a sheet of its own ({@link #statusKeepsOwnGlass}).
+     * The one rule the activity's pass and the rest answers read for each side's own layout.
+     */
+    public static boolean statusOnDockPlank(@NonNull com.termux.app.place.PlaceLayout layout) {
+        List<Element> bottom = com.termux.app.place.EdgeStackPolicy.stack(layout,
+            com.termux.app.place.PlaceLayout.Edge.BOTTOM);
+        return bottom.contains(Element.STATUS) && !statusKeepsOwnGlass(bottom);
+    }
+
+    /**
      * The bands standing on the dock's own sheet of glass, outermost (against the dock's rim)
      * first — {@code EdgeStackPolicy.stack(layout, BOTTOM)}'s order, less a status bar that kept a
      * sheet of its own ({@link #statusKeepsOwnGlass}). It is what the hairlines are counted over,

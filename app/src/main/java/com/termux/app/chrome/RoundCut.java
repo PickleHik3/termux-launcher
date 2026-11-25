@@ -18,18 +18,6 @@ public final class RoundCut {
 
     private RoundCut() {}
 
-    /**
-     * {@code from} at {@code share} 0, {@code to} at 1, a straight blend between and clamped
-     * outside, into {@code out} (which may be either input).
-     */
-    public static void blend(@NonNull float[] from, @NonNull float[] to, float share,
-                             @NonNull float[] out) {
-        float w = share <= 0f ? 0f : share >= 1f ? 1f : share;
-        for (int i = 0; i < SIZE; i++) {
-            out[i] = w <= 0f ? from[i] : w >= 1f ? to[i] : from[i] + (to[i] - from[i]) * w;
-        }
-    }
-
     /** Sets {@code out} to the cut given. */
     public static void set(@NonNull float[] out, float left, float top, float right, float bottom,
                            float radius) {

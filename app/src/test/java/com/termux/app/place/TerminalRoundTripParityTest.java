@@ -63,7 +63,7 @@ public class TerminalRoundTripParityTest {
             Crossing.Keyboard {
         @Override public void translate(float dockPx, float keyboardPx) {}
         @Override public void sink(float px) {}
-        @Override public void alpha(float status, float side) {}
+        @Override public void alpha(float status) {}
         @Override public void rideX(float px) {}
         @Override public void cover(int px) {}
         @Override public void preRoll(@NonNull PageKind target) {}

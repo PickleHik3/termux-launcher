@@ -56,11 +56,17 @@ public final class StackScene {
         public float rowsCutPx;
         public float sheetSinkPx;
         public float sheetCutPx;
+        /**
+         * How far below the container Home's rows and Home's card stand under the keyboard's cover
+         * on this frame ({@link HomeKeyboardCover#rowsDropPx}); 0 where the keyboard lifts them.
+         */
+        public float homeCoverPx;
 
         /** Nothing moved; the IME's lift is kept, a rest's own. */
         public void rest() {
             dockTravelPx = 0f;
             keyboardSharePx = 0f;
+            homeCoverPx = 0f;
             sink(0f);
         }
 
@@ -80,6 +86,7 @@ public final class StackScene {
             dockTravelPx = o.dockTravelPx;
             keyboardSharePx = o.keyboardSharePx;
             imeLiftPx = o.imeLiftPx;
+            homeCoverPx = o.homeCoverPx;
             layerSink(o.rowsSinkPx, o.rowsCutPx, o.sheetSinkPx, o.sheetCutPx);
         }
     }
@@ -194,6 +201,34 @@ public final class StackScene {
         public final float[] sideTx = new float[Side.COUNT];
         public final float[] sideTy = new float[Side.COUNT];
 
+        /**
+         * Each card view's pose ({@link RestCards.StackView}, by ordinal; ADR 0032 section 5): whose
+         * card it carries on this frame ({@link StackEnd#viewSide}: a {@link Side} ordinal while a
+         * side's card slides with its side, {@link StackEnd#STACK_SIDE} while a card both ends draw
+         * alike, or the stack's own, keeps its rest, {@link StackEnd#NO_SIDE} for none), and how
+         * far across and down from its layout the card is drawn, the plank's tilt not counted.
+         * Glass samples the wallpaper there. {@code cardCoverPx} is the part of {@code cardTy} the
+         * keyboard's cover on Home adds. {@code cardMorphs} marks a view both ends draw a different
+         * card on: no card may change on one view (ADR 0032 section 1); 0 at both ends, it keeps
+         * the stack's pose.
+         */
+        public final int[] cardSide = new int[StackEnd.VIEW_COUNT];
+        public final float[] cardTx = new float[StackEnd.VIEW_COUNT];
+        public final float[] cardTy = new float[StackEnd.VIEW_COUNT];
+        public final float[] cardCoverPx = new float[StackEnd.VIEW_COUNT];
+        public final boolean[] cardMorphs = new boolean[StackEnd.VIEW_COUNT];
+        /**
+         * The view that carries the dock's card of the end nearer on this frame (the one at rest):
+         * the plank tilts it. {@link StackEnd#NO_CARD} while that end draws no dock card on a card
+         * view.
+         */
+        public int slabView = StackEnd.NO_CARD;
+        /** Home's share of the scene ({@link #homeShare}): 1 at Home's rest, 0 at the Terminal's. */
+        public float homeShare;
+        /** The cover's drop on Home's side and on the stack's own layers ({@link HomeKeyboardCover}). */
+        public float coverHomePx;
+        public float coverSharedPx;
+
         public Frame() {
             for (int i = 0; i < StackEnd.REGION_COUNT; i++) look[i] = new RegionLook();
         }
@@ -236,6 +271,11 @@ public final class StackScene {
             for (int s = 0; s < Side.COUNT; s++) {
                 if (sideTx[s] != o.sideTx[s] || sideTy[s] != o.sideTy[s]) return false;
             }
+            if (slabView != o.slabView) return false;
+            for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                if (cardSide[v] != o.cardSide[v] || cardTx[v] != o.cardTx[v]
+                    || cardTy[v] != o.cardTy[v]) return false;
+            }
             for (int r = 0; r < StackEnd.REGION_COUNT; r++) {
                 boolean shows = visible(r);
                 if (shows != o.visible(r)) return false;
@@ -269,6 +309,126 @@ public final class StackScene {
         regions(from, to, materialShare(p), live, out);
         sides(from, to, p, live, out);
         shape(from, to, materialShare(p), out);
+        cards(from, to, p, motion, live, out);
+    }
+
+    // ---- Cards -----------------------------------------------------------------------------
+
+    /** The views the stack's writer poses a card on, and the layer each rides. */
+    private static final int[] CARD_VIEWS = {RestCards.StackView.HOST.ordinal(),
+        RestCards.StackView.TERMINAL_HOST.ordinal(), RestCards.StackView.KEYS_CARD.ordinal(),
+        RestCards.StackView.KEYBOARD_COLUMN.ordinal(),
+        RestCards.StackView.FLOATING_KEYBOARD.ordinal(), RestCards.StackView.AZ_EDGE.ordinal(),
+        RestCards.StackView.TERMINAL_AZ_EDGE.ordinal(),
+        RestCards.StackView.TERMINAL_KEYBOARD.ordinal(), RestCards.StackView.FOOT.ordinal()};
+    private static final int FOOT_VIEW = RestCards.StackView.FOOT.ordinal();
+
+    /**
+     * Whether view {@code v} rides the glass host's sheet layer: the host, and the foot's own view
+     * (#307), the bottom of what the host wore, posed as the host's sheet is with no side's slide.
+     */
+    private static boolean sheet(int v) {
+        return v == HOST_VIEW || v == FOOT_VIEW;
+    }
+    /**
+     * The card views no layer of the stack carries (#307): the keyboard's column, the floating
+     * keyboard's frame and the A–Z bar's edge host. Their cards are the stack's own, so the scene
+     * keeps each at its rest; their own writers place the views.
+     */
+    private static boolean ownPlace(int v) {
+        return v == RestCards.StackView.KEYBOARD_COLUMN.ordinal()
+            || v == RestCards.StackView.TERMINAL_KEYBOARD.ordinal()
+            || v == RestCards.StackView.FLOATING_KEYBOARD.ordinal()
+            || edgeHost(v);
+    }
+
+    /**
+     * The A–Z bar's edge hosts (#307 round 3): in the content column, beside the container, so a
+     * side's card there slides with its side but wears neither Home's drop nor the keyboard's cover.
+     */
+    private static boolean edgeHost(int v) {
+        return v == RestCards.StackView.AZ_EDGE.ordinal()
+            || v == RestCards.StackView.TERMINAL_AZ_EDGE.ordinal();
+    }
+    private static final int HOST_VIEW = RestCards.StackView.HOST.ordinal();
+    private static final int DOCK_CARD = RestCards.CardId.DOCK.ordinal();
+    private static final int PEEK_CARD = RestCards.CardId.PEEK.ordinal();
+
+    /**
+     * The cards of the two rests paired by id (ADR 0032 sections 3 and 5): a card both ends draw
+     * on one view at one rect is shared and keeps its rest; any other card is its side's and
+     * slides with that side ({@link #sideSlide}), riding the layer its side's rows ride (the glass
+     * host's sink for Home's card, the rows' for the Terminal's, which stand on the keyboard's top
+     * as it is drawn, ADR 0030 section 4). Each side's card stands its rest's own offset below its
+     * layout (Home's drop, the Terminal's lift), and Home's the keyboard's cover on Home. Pure:
+     * the frame at p = 0 is the leaving rest's and at p = 1 the arriving rest's, so a landing
+     * writes nothing.
+     */
+    private static void cards(@Nullable StackEnd from, @Nullable StackEnd to, float p,
+                              @NonNull Motion m, @NonNull StackGeometry g, @NonNull Frame out) {
+        for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+            out.cardSide[v] = StackEnd.NO_SIDE;
+            out.cardTx[v] = 0f;
+            out.cardTy[v] = 0f;
+            out.cardCoverPx[v] = 0f;
+            out.cardMorphs[v] = false;
+        }
+        out.slabView = StackEnd.NO_CARD;
+        if (from == null || to == null) {
+            out.homeShare = 0f;
+            out.coverHomePx = out.coverSharedPx = 0f;
+            return;
+        }
+        boolean fromHome = from.page.isHome();
+        boolean toHome = to.page.isHome();
+        out.homeShare = homeShare(fromHome, toHome, p);
+        out.coverHomePx = Math.max(0f, m.homeCoverPx);
+        out.coverSharedPx = HomeKeyboardCover.sharedDropPx(out.homeShare, out.coverHomePx);
+        Side a = Side.of(fromHome);
+        Side b = Side.of(toHome);
+        int width = Math.max(0, g.containerWidthPx);
+        StackEnd near = p < 0.5f ? from : to;
+        for (int v : CARD_VIEWS) {
+            boolean host = v == HOST_VIEW;
+            float base = sheet(v) ? out.ty[V_HOST] : ownPlace(v) ? 0f : out.ty[V_ROWS];
+            int sideFrom = from.viewSide[v];
+            int sideTo = to.viewSide[v];
+            boolean shared = from.sameCard(to, v);
+            out.cardMorphs[v] = !shared && from.cardOn[v] != StackEnd.NO_CARD
+                && to.cardOn[v] != StackEnd.NO_CARD;
+            int side = isSide(sideFrom) ? sideFrom : isSide(sideTo) ? sideTo : StackEnd.STACK_SIDE;
+            if (isSide(sideFrom) && isSide(sideTo) && sideFrom != sideTo) out.cardMorphs[v] = true;
+            if (shared || out.cardMorphs[v] || !isSide(side)) {
+                if (sideFrom == StackEnd.NO_SIDE && sideTo == StackEnd.NO_SIDE && !host) continue;
+                // The stack's own, or a card both ends draw alike: it keeps its rest.
+                float rest = edgeHost(v) ? 0f : blend(from.sideRestTyPx(sideFrom),
+                    to.sideRestTyPx(sideTo), materialShare(p));
+                float cover = sheet(v) ? out.coverSharedPx : 0f;
+                out.cardSide[v] = shared ? side : StackEnd.STACK_SIDE;
+                out.cardTy[v] = base + rest + cover;
+                out.cardCoverPx[v] = cover;
+            } else {
+                StackEnd owner = isSide(sideFrom) ? from : to;
+                boolean edge = edgeHost(v);
+                // The keyboard's cover on Home drops Home's rows and host, never the keyboard.
+                float cover = side == Side.HOME.ordinal() && !ownPlace(v) ? out.coverHomePx : 0f;
+                out.cardSide[v] = side;
+                out.cardTx[v] = sideSlide(SIDES[side], a, b, p, width);
+                // A column's card one end does not draw (the keyboard down there) takes that
+                // end's offset there, so each end's frame is its rest's.
+                float rest = edge ? 0f : ownPlace(v) ? blend(from.sideRestTyPx(sideFrom),
+                    to.sideRestTyPx(sideTo), materialShare(p)) : owner.sideRestTyPx(side);
+                out.cardTy[v] = base + rest + cover;
+                out.cardCoverPx[v] = cover;
+            }
+            int nearCard = near.cardOn[v];
+            if (out.slabView == StackEnd.NO_CARD && (nearCard == DOCK_CARD || nearCard == PEEK_CARD))
+                out.slabView = v;
+        }
+    }
+
+    private static boolean isSide(int side) {
+        return side >= 0 && side < Side.COUNT;
     }
 
     /**
@@ -357,6 +517,11 @@ public final class StackScene {
      * {@code toHome}'s: 1 at Home's rest, 0 at the Terminal's, the material curve between. What
      * only Home's rest draws on the shared slab (the Peek card) blends by it.
      */
+    public static float homeShare(@NonNull StackEnd from, @NonNull StackEnd to, float p) {
+        return homeShare(from.page.isHome(), to.page.isHome(), p);
+    }
+
+    /** {@link #homeShare(StackEnd, StackEnd, float)} by the ends' sides. */
     public static float homeShare(boolean fromHome, boolean toHome, float p) {
         if (fromHome == toHome) return fromHome ? 1f : 0f;
         float w = materialShare(p);

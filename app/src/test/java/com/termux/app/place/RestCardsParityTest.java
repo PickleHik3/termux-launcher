@@ -335,7 +335,12 @@ public class RestCardsParityTest {
         PlaceLayout layout = f.layoutOf(page).withKeyboardShown(up);
         float status = StatusBarEdgeGeometry.thicknessPx(Edge.TOP, floating, false, f.density);
         float apps = bandOf(Element.APPS, dock, pass);
-        float az = bandOf(Element.AZ, dock, pass);
+        // The activity measures the A-Z bar's own host off the dock (chromeThicknessPx): its
+        // letter band there, the dock's band on it.
+        float az = PlaceChromePolicy.azRowOnDock(layout) ? bandOf(Element.AZ, dock, pass)
+            : PlaceChromePolicy.azRowShown(layout)
+                ? com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+                    false, false, f.density) : 0f;
         float keys = bandOf(Element.EXTRA_KEYS, dock, pass);
         float keyboard = up ? pass.keyboardHeightPx : 0f;
         return LiveChromeShape.of(layout, floating ? LayoutStyle.FLOATING : LayoutStyle.DOCKED,
@@ -402,17 +407,18 @@ public class RestCardsParityTest {
         final int w = f.widthPx;
         for (boolean up : new boolean[] {false, true}) {
             String at = f.name + " " + (up ? "kbUp" : "kbDown");
-            boolean apart = SideCards.apart(f.home, f.window, true, statusOnPlank(f.window));
             RestCards homeRest = RestCards.of(restWithOther(PageRef.HOME, up));
             RestCards termRest = RestCards.of(restWithOther(PageRef.TERMINAL, up));
             RestCards homeSolo = RestCards.of(restAlone(PageRef.HOME, up));
             RestCards termSolo = RestCards.of(restAlone(PageRef.TERMINAL, up));
-            if (!apart) {
-                // Not apart: byte for byte the one side alone.
+            assertEquals(at, termRest.apart(), homeRest.apart());
+            if (!termRest.apart()) {
+                // Together only where the Terminal's rest wears Home's Peek card (#305): byte for
+                // byte the one side alone.
+                assertNotNull(at, termSolo.card(CardId.PEEK));
                 for (RestCards[] pair : new RestCards[][] {{homeRest, homeSolo},
                         {termRest, termSolo}}) {
                     assertTrue(at, pair[0].parked().isEmpty());
-                    assertNull(at, pair[0].laidOut(StackView.KEYS_CARD));
                     assertEquals(at, pair[1].cards().size(), pair[0].cards().size());
                     for (int i = 0; i < pair[1].cards().size(); i++)
                         assertSameCard(at, pair[1].cards().get(i), pair[0].cards().get(i));
@@ -422,7 +428,11 @@ public class RestCardsParityTest {
                 }
                 continue;
             }
-            // (i) Home draws what it drew alone; the Terminal's dock card is the keys card.
+            // (i) Home draws what it drew alone; the Terminal's dock card is the keys card, or
+            // with rows beside the keys (#305) its own back host, the one host's card.
+            StackView termView = RestCards.terminalCardView(true, f.window,
+                statusOnPlank(f.window));
+            boolean keysCard = termView == StackView.KEYS_CARD;
             assertEquals(at, homeSolo.cards().size(), homeRest.cards().size());
             for (int i = 0; i < homeSolo.cards().size(); i++)
                 assertSameCard(at + " home", homeSolo.cards().get(i), homeRest.cards().get(i));
@@ -430,7 +440,7 @@ public class RestCardsParityTest {
             for (int i = 0; i < termSolo.cards().size(); i++) {
                 RestCards.Card want = termSolo.cards().get(i);
                 RestCards.Card got = termRest.cards().get(i);
-                if (want.id == CardId.DOCK && !up) {
+                if (want.id == CardId.DOCK && !up && keysCard) {
                     // The keys card is the keys band only (ADR 0032, the developer's 2026-11-21
                     // decision): with the keyboard down the capsule alone stands the flush
                     // padding taller, and the card does not. The keys stand where they stood in
@@ -447,22 +457,41 @@ public class RestCardsParityTest {
                 } else {
                     assertSameCard(at + " terminal", want, got);
                 }
-                assertEquals(at, want.view == StackView.HOST ? StackView.KEYS_CARD : want.view,
-                    got.view);
+                // An A-Z bar off the dock is the Terminal's own card on its own edge host unless
+                // Home draws it at the same rect (#307 round 3).
+                // The keyboard is the Terminal's own card on its own column unless both rests draw
+                // it alike (#307 round 3).
+                StackView wantView = want.view == StackView.HOST ? termView
+                    : want.view == StackView.AZ_EDGE && !sameAz(homeRest, got)
+                    ? StackView.TERMINAL_AZ_EDGE
+                    : want.view == StackView.KEYBOARD_COLUMN
+                        && termRest.laidOut(StackView.TERMINAL_KEYBOARD) != null
+                    ? StackView.TERMINAL_KEYBOARD : want.view;
+                assertEquals(at, wantView, got.view);
             }
-            // Each side parks the other's glass, on screen it draws none of it.
-            assertFalse(at, homeRest.parked().isEmpty());
+            // Each side parks the other's glass, on screen it draws none of it; a Terminal with
+            // no card at its rest (#305) has none to park.
+            boolean termHostCard = false;
+            for (RestCards.Card c : termSolo.cards()) termHostCard |= c.view == StackView.HOST;
+            for (RestCards.Card c : termRest.cards())
+                termHostCard |= StackEnd.sideOf(c.view, true) == com.termux.app.page.Side.TERMINAL.ordinal();
+            assertEquals(at, !termHostCard, homeRest.parked().isEmpty());
             assertFalse(at, termRest.parked().isEmpty());
+            // Each side's parked cards stand on that side's own views (#307: its A-Z edge host
+            // and keyboard column too).
             for (RestCards.Card c : homeRest.parked())
-                assertEquals(at, StackView.KEYS_CARD, c.view);
+                assertEquals(at + " " + c, com.termux.app.page.Side.TERMINAL.ordinal(),
+                    StackEnd.sideOf(c.view, true));
             for (RestCards.Card c : termRest.parked())
-                assertEquals(at, StackView.HOST, c.view);
+                assertEquals(at + " " + c, com.termux.app.page.Side.HOME.ordinal(),
+                    StackEnd.sideOf(c.view, true));
             for (RestCards.Card c : homeRest.cards())
-                assertTrue(at + " Home draws no keys card", c.view != StackView.KEYS_CARD);
-            // (ii) The keys card is the extra-keys row's band inset by the dock's side margin,
-            // its corners Corners clamped to half its height, a rim on every edge.
+                assertTrue(at + " Home draws no Terminal card", c.view != termView);
             StackLayout.Input termPass = f.pass(PageRef.TERMINAL, up, true);
             Views tv = views(PageRef.TERMINAL, up, true, termPass);
+            if (keysCard) {
+            // (ii) The keys card is the extra-keys row's band inset by the dock's side margin,
+            // its corners Corners clamped to half its height, a rim on every edge.
             RestCards.Card keys = termRest.card(CardId.DOCK);
             assertNotNull(at, keys);
             assertEquals(at, StackView.KEYS_CARD, keys.view);
@@ -483,11 +512,16 @@ public class RestCardsParityTest {
                 assertEquals(at + " keys card " + e, EdgeKind.RIM, keys.edge(e));
             assertEquals(at + " keys card pieces",
                 java.util.Collections.singletonList(PieceId.EXTRA_KEYS), keys.pieces);
+            }
             // (iii) A view is laid out the same at both rests.
             assertBox(at + " HOST laid out at both", homeRest.laidOut(StackView.HOST),
                 termRest.laidOut(StackView.HOST));
-            assertBox(at + " KEYS_CARD laid out at both", homeRest.laidOut(StackView.KEYS_CARD),
-                termRest.laidOut(StackView.KEYS_CARD));
+            assertEquals(at + " KEYS_CARD laid out at both",
+                String.valueOf(homeRest.laidOut(StackView.KEYS_CARD)),
+                String.valueOf(termRest.laidOut(StackView.KEYS_CARD)));
+            assertEquals(at + " TERMINAL_HOST laid out at both",
+                String.valueOf(homeRest.laidOut(StackView.TERMINAL_HOST)),
+                String.valueOf(termRest.laidOut(StackView.TERMINAL_HOST)));
             // (iv) One container margin, and Home's drawn cards that much lower than laid out.
             int homeMargin = Math.max(0, f.settle(PageRef.HOME, up, true).bottomMarginPx);
             int termMargin = Math.max(0, f.settle(PageRef.TERMINAL, up, true).bottomMarginPx);
@@ -816,7 +850,10 @@ public class RestCardsParityTest {
                     kb.edge(e).drawsRim());
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.LEFT));
             assertEquals(at, EdgeKind.SCREEN, kb.edge(Edge.RIGHT));
-            assertEquals(at, EdgeKind.JOIN, kb.edge(Edge.TOP));
+            // Joined to the rows over it; a rim with nothing over the keyboard (its keys under
+            // it, #305's fixture).
+            if (!EdgeStackPolicy.overKeyboard(f.layoutOf(page)).isEmpty())
+                assertEquals(at, EdgeKind.JOIN, kb.edge(Edge.TOP));
             // Under the keyboard stand the bands, or the foot the keyboard's card joins (Home's
             // Docked keyboard has a card of its own since #309, and a foot with the kept band).
             assertEquals(at, v.r.bandsUnderKeyboard || !Float.isNaN(footTop)
@@ -897,9 +934,22 @@ public class RestCardsParityTest {
             } else {
                 wantCarrier = CardId.DOCK;
             }
+        } else if (want == RestCards.AzPlacement.EDGE) {
+            // Off the dock the bar stands on its own edge host with a glass sheet of its own
+            // (place_az_bar_host), a card of its own (#307).
+            wantCarrier = CardId.AZ;
         }
         assertEquals(at + " a-z carrier", wantCarrier, carrier == null ? null : carrier.id);
-        if (carrier != null && carrier.id != CardId.PEEK)
+        // A carrier on the stack stands on the dock's A-Z band; the edge card is its host's own.
+        if (carrier != null && carrier.id != CardId.PEEK && carrier.id != CardId.AZ)
             assertTrue(at + " a-z band laid out", bandOf(Element.AZ, v.dock, pass) > 0);
     }
+
+    /** Whether Home's rest draws the A-Z card at {@code card}'s rect: one shared card (#307). */
+    private static boolean sameAz(@androidx.annotation.NonNull RestCards home,
+                                  @androidx.annotation.NonNull RestCards.Card card) {
+        RestCards.Card az = home.card(CardId.AZ);
+        return az != null && az.box.equals(card.box);
+    }
+
 }

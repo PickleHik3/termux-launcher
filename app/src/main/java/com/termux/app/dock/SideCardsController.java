@@ -49,8 +49,15 @@ public final class SideCardsController {
                                                     @NonNull PageKind rowsPage);
         /** The screen's width, height and density; the window is edge to edge. */
         @NonNull android.util.DisplayMetrics displayMetrics();
-        /** The extra-keys row's measured height. */
-        int measuredExtraKeysRowPx();
+        /**
+         * A row's band as the activity measures it on {@code layout}: the extra-keys row's
+         * height ({@link com.termux.app.place.Element#EXTRA_KEYS}), or the A–Z bar's thickness
+         * off the dock ({@link com.termux.app.place.Element#AZ}: its edge host's height on the
+         * top, width on a side, the one measure the shape model reads; 0 where the bar is on the
+         * dock, a tab, hidden or not laid out yet). 0 for any other element.
+         */
+        int measuredBandPx(@NonNull com.termux.app.place.Element element,
+                           @NonNull PlaceLayout layout);
         /** The keyboard as the stack lays it out while it is down, its foot included. */
         int measuredKeyboardPx();
         /**
@@ -65,14 +72,20 @@ public final class SideCardsController {
         int bottomStatusBandPx(@NonNull PlaceLayout layout);
         /** The navigation band the content keeps clear at the screen's bottom. */
         int keptBandPx();
+
         /** The Terminal's flush padding at its own rest, known or worked out. */
         int terminalRestFlushPaddingPx();
         /** Whether the Terminal lays its dock padding at all (one pane, no IME). */
         boolean terminalFlushAllowed();
-        boolean statusOnDockPlank();
         boolean keyboardGlassShared();
         /** The renderer's side numbers: whether the cards stand apart, Home's drop, the Terminal's lift. */
         void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx);
+        /**
+         * Each side's rest's cards for the stack's scene (Home's, the Terminal's), worked out at
+         * this rest; null for a side with no answer.
+         */
+        default void restCards(@Nullable RestCards home, @Nullable RestCards terminal) {
+        }
     }
 
     @NonNull private final Host mHost;
@@ -140,6 +153,22 @@ public final class SideCardsController {
     @Nullable
     public Box keysCardRestRect() {
         return mKeysCardRestRect;
+    }
+
+    @Nullable private RestCards.Card mHomeDockCard;
+
+    /** Docked: the Terminal's card is its own host, so Home's host wears Home's Docked cut. */
+    private static boolean standsOnItsOwnHost(@NonNull RestCards answer) {
+        return answer.laidOut(RestCards.StackView.TERMINAL_HOST) != null;
+    }
+
+    /**
+     * Home's Docked card on the pinned host while the cards stand apart under Docked (#304), as
+     * Home's rest's answer cuts it, whichever page is in front; null otherwise.
+     */
+    @Nullable
+    public RestCards.Card homeDockCard() {
+        return mHomeDockCard;
     }
 
     /** Whether the glass host is laid out from the answer: Home's card, while the cards stand apart. */
@@ -232,6 +261,17 @@ public final class SideCardsController {
         }
         mHostLook = look;
         mHostRestRect = pinned && look != null ? answer.homeHostRect() : null;
+        RestCards.Card homeDock = null;
+        if (pinned && standsOnItsOwnHost(answer)) {
+            RestCards.Card card = answer.cardOn(RestCards.StackView.HOST);
+            if (card != null && card.id == RestCards.CardId.DOCK) homeDock = card;
+        }
+        if (!java.util.Objects.equals(homeDock == null ? null : homeDock.box,
+                mHomeDockCard == null ? null : mHomeDockCard.box)) {
+            moved = true;
+            mHostLookRevision++;
+        }
+        mHomeDockCard = homeDock;
         moved |= pinned != mHostPinned || left != mHostLeftPx || right != mHostRightPx
             || height != mHostHeightPx || above != mHostAboveContainerBottomPx;
         mHostPinned = pinned;
@@ -242,16 +282,20 @@ public final class SideCardsController {
 
         mTerminalLiftPx = apart ? answer.terminalSideLiftPx() : 0;
         applyKeysCard(answer);
+        moved |= applyTerminalHost(answer, margin);
+        moved |= applyFoot(answer, margin);
+        boolean frontHome = answer != null && answer.page().isHome();
+        mHost.restCards(frontHome ? answer : mOtherAnswer, frontHome ? mOtherAnswer : answer);
         mHost.sidesApart(apart, drop, mTerminalLiftPx);
         return moved;
     }
 
     /**
      * The container's bottom padding ({@link com.termux.app.place.SideCards#containerPaddingPx}):
-     * none while apart, else {@code flushBottomInsetPx}, the pass's.
+     * none while apart, else {@code stackPaddingPx}, the rest's ({@code BottomInsets#stackPaddingPx}).
      */
-    public int containerPaddingPx(int flushBottomInsetPx) {
-        return com.termux.app.place.SideCards.containerPaddingPx(flushBottomInsetPx, mApart);
+    public int containerPaddingPx(int stackPaddingPx) {
+        return com.termux.app.place.SideCards.containerPaddingPx(stackPaddingPx, mApart);
     }
 
     /**
@@ -297,6 +341,173 @@ public final class SideCardsController {
         if (card.getVisibility() != View.VISIBLE) card.setVisibility(View.VISIBLE);
     }
 
+    /**
+     * The Terminal's Docked host (#304): laid out from the answer while the cards stand apart
+     * under Docked, pinned to the container's bottom (which pads nothing while apart) at the
+     * answer's height, and gone otherwise. Compares before it writes.
+     *
+     * @return whether its bounds or its standing moved
+     */
+    private boolean applyTerminalHost(@Nullable RestCards answer, int containerMarginPx) {
+        Box box = answer != null && answer.apart()
+            ? answer.laidOut(RestCards.StackView.TERMINAL_HOST) : null;
+        RestCards.Card dock = null;
+        int foot = 0;
+        if (box != null) {
+            for (RestCards.Card card : answer.cards()) collectTerminalHost(card);
+            for (RestCards.Card card : answer.parked()) collectTerminalHost(card);
+            dock = mCollectedDock;
+            foot = mCollectedFootPx;
+            mCollectedDock = null;
+            mCollectedFootPx = 0;
+            // A foot shared on its own view (#307) is still the band under the host's bottom: the
+            // host's backdrop reaches past that seam as it did while it wore the foot itself.
+            Box shared = answer.laidOut(RestCards.StackView.FOOT);
+            if (foot == 0 && shared != null) foot = Math.round(shared.height());
+        }
+        boolean on = box != null && dock != null;
+        boolean moved = on != mTerminalHostOn || !java.util.Objects.equals(
+            on ? dock.box : null, mTerminalHostRestRect);
+        mTerminalHostOn = on;
+        mTerminalHostCard = on ? dock : null;
+        mTerminalHostRestRect = on ? dock.box : null;
+        mTerminalHostFootPx = on ? foot : 0;
+        mTerminalPeekCut = on && dock.id == RestCards.CardId.PEEK ? answer.terminalPeekCut() : null;
+        View view = mHost.view(R.id.terminal_dock_host);
+        if (view == null) return moved;
+        if (!on) {
+            if (view.getVisibility() != View.GONE) view.setVisibility(View.GONE);
+            return moved;
+        }
+        if (view.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) view.getLayoutParams();
+            int left = Math.round(box.left);
+            int right = Math.round(mHost.displayMetrics().widthPixels - box.right);
+            int height = Math.round(box.height());
+            int bottom = Math.max(0, Math.round(mHost.displayMetrics().heightPixels
+                - containerMarginPx - box.bottom));
+            if (params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) != RelativeLayout.TRUE
+                || params.leftMargin != left || params.rightMargin != right
+                || params.bottomMargin != bottom || params.height != height
+                || params.width != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM, RelativeLayout.TRUE);
+                params.leftMargin = left;
+                params.rightMargin = right;
+                params.topMargin = 0;
+                params.bottomMargin = bottom;
+                params.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+                params.height = height;
+                view.setLayoutParams(params);
+                moved = true;
+            }
+        }
+        if (view.getVisibility() != View.VISIBLE) view.setVisibility(View.VISIBLE);
+        return moved;
+    }
+
+    /**
+     * The foot's own view (#307): laid out from the answer while both hosts share the foot (the
+     * cards apart under Docked), pinned to the container's bottom like the Terminal's host, and
+     * gone otherwise. Compares before it writes.
+     *
+     * @return whether its bounds or its standing moved
+     */
+    private boolean applyFoot(@Nullable RestCards answer, int containerMarginPx) {
+        Box box = answer != null && answer.apart() ? answer.laidOut(RestCards.StackView.FOOT)
+            : null;
+        RestCards.Card card = box == null ? null : answer.cardOn(RestCards.StackView.FOOT);
+        boolean on = box != null && card != null;
+        boolean moved = on != (mFootCard != null) || !java.util.Objects.equals(
+            on ? card.box : null, mFootCard == null ? null : mFootCard.box);
+        mFootCard = on ? card : null;
+        View view = mHost.view(R.id.dock_foot_host);
+        if (view == null) return moved;
+        if (!on) {
+            if (view.getVisibility() != View.GONE) view.setVisibility(View.GONE);
+            return moved;
+        }
+        if (view.getLayoutParams() instanceof RelativeLayout.LayoutParams) {
+            RelativeLayout.LayoutParams params = (RelativeLayout.LayoutParams) view.getLayoutParams();
+            int left = Math.round(box.left);
+            int right = Math.round(mHost.displayMetrics().widthPixels - box.right);
+            int height = Math.round(box.height());
+            int bottom = Math.max(0, Math.round(mHost.displayMetrics().heightPixels
+                - containerMarginPx - box.bottom));
+            if (params.getRule(RelativeLayout.ALIGN_PARENT_BOTTOM) != RelativeLayout.TRUE
+                || params.leftMargin != left || params.rightMargin != right
+                || params.bottomMargin != bottom || params.height != height
+                || params.width != android.view.ViewGroup.LayoutParams.MATCH_PARENT) {
+                params.addRule(RelativeLayout.ALIGN_PARENT_BOTTOM, RelativeLayout.TRUE);
+                params.leftMargin = left;
+                params.rightMargin = right;
+                params.topMargin = 0;
+                params.bottomMargin = bottom;
+                params.width = android.view.ViewGroup.LayoutParams.MATCH_PARENT;
+                params.height = height;
+                view.setLayoutParams(params);
+                moved = true;
+            }
+        }
+        if (view.getVisibility() != View.VISIBLE) view.setVisibility(View.VISIBLE);
+        return moved;
+    }
+
+    @Nullable private RestCards.Card mFootCard;
+    @Nullable private PeekGlassGeometry.Card mTerminalPeekCut;
+
+    /**
+     * The Terminal's own Peek cut while its host carries a Peek card apart from Home's (host
+     * coordinates, as the Terminal's rest cuts it); null otherwise. Its host wears the Peek dress.
+     */
+    @Nullable
+    public PeekGlassGeometry.Card terminalPeekCut() {
+        return mTerminalPeekCut;
+    }
+
+    /** The foot shared on its own view at the last rest (screen px); null while none stands. */
+    @Nullable
+    public RestCards.Card footCard() {
+        return mFootCard;
+    }
+
+    private void collectTerminalHost(@NonNull RestCards.Card card) {
+        if (card.view != RestCards.StackView.TERMINAL_HOST) return;
+        if (card.id == RestCards.CardId.FOOT) mCollectedFootPx = Math.round(card.box.height());
+        else mCollectedDock = card;
+    }
+
+    @Nullable private RestCards.Card mCollectedDock;
+    private int mCollectedFootPx;
+    private boolean mTerminalHostOn;
+    @Nullable private RestCards.Card mTerminalHostCard;
+    @Nullable private Box mTerminalHostRestRect;
+    private int mTerminalHostFootPx;
+
+    /** Whether the Terminal's Docked host stands now (the last rest): apart, under Docked. */
+    public boolean terminalHostOn() {
+        return mTerminalHostOn;
+    }
+
+    /**
+     * The Terminal's Docked card on its host at the Terminal's rest (box in screen px, corners,
+     * each edge's kind), the shape its dress cuts; null unless {@link #terminalHostOn}.
+     */
+    @Nullable
+    public RestCards.Card terminalHostCard() {
+        return mTerminalHostCard;
+    }
+
+    /** Where the Terminal's Docked card is drawn at its rest; null unless {@link #terminalHostOn}. */
+    @Nullable
+    public Box terminalHostRestRect() {
+        return mTerminalHostRestRect;
+    }
+
+    /** The foot under the gesture pill the Terminal's Docked host wears, px; 0 for none. */
+    public int terminalHostFootPx() {
+        return mTerminalHostFootPx;
+    }
+
     /** Whether the keys card stands now (the last rest). */
     public boolean keysCardOn() {
         return mKeysCardOn;
@@ -304,8 +515,12 @@ public final class SideCardsController {
 
     // ---- The rests ---------------------------------------------------------------------------
 
+    /** The other side's own rest's answer, worked out beside the front's ({@link #answerOf}). */
+    @Nullable private RestCards mOtherAnswer;
+
     @Nullable
     private RestCards answerOf(@NonNull StackLayout.Input frontPass) {
+        mOtherAnswer = null;
         PageRef front = mHost.frontPage();
         if (front == null) return null;
         boolean frontHome = front.isHome();
@@ -316,6 +531,9 @@ public final class SideCardsController {
         RestCards.Rest otherRest = restOf(otherPassOf(frontPass, otherLayout, otherPage),
             otherPage);
         frontRest.other = otherRest;
+        otherRest.other = frontRest;
+        // The side parked off screen at its own rest, for the next crossing's arriving end.
+        mOtherAnswer = RestCards.of(otherRest);
         return RestCards.of(frontRest);
     }
 
@@ -327,7 +545,8 @@ public final class SideCardsController {
         StackLayout.Input in = new StackLayout.Input(mHost.dockSnapshot(layout, kind));
         in.toolbarShown = PlaceChromePolicy.dockShown(layout);
         in.extraKeysRowEnabled = PlaceChromePolicy.extraKeysRowShown(layout);
-        in.toolbarHeightPx = in.extraKeysRowEnabled ? mHost.measuredExtraKeysRowPx() : 0;
+        in.toolbarHeightPx = in.extraKeysRowEnabled
+            ? mHost.measuredBandPx(com.termux.app.place.Element.EXTRA_KEYS, layout) : 0;
         // The other side's own keyboard, not the front's: toggling the Terminal's keyboard leaves
         // Home's parked rest where it was, and each side is laid out at the rest it lands at.
         int keyboard = mHost.restKeyboardPx(page);
@@ -349,13 +568,18 @@ public final class SideCardsController {
         android.util.DisplayMetrics metrics = mHost.displayMetrics();
         float density = metrics.density;
         RestCards.Rest rest = new RestCards.Rest(pass, page, metrics.widthPixels,
-            metrics.heightPixels, density, mHost.measuredExtraKeysRowPx(),
+            metrics.heightPixels, density,
+            mHost.measuredBandPx(com.termux.app.place.Element.EXTRA_KEYS, pass.dock.arrangement),
             mHost.measuredKeyboardPx(),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, false, false, density),
             StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false, density));
         rest.keptBandPx = mHost.keptBandPx();
+        rest.azEdgeThicknessPx = mHost.measuredBandPx(com.termux.app.place.Element.AZ,
+            pass.dock.arrangement);
         rest.restFlushPaddingPx = mHost.terminalRestFlushPaddingPx();
-        rest.statusOnDockPlank = mHost.statusOnDockPlank();
+        // Each side's own layout: the other side's status bar is not the front's.
+        rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy
+            .statusOnDockPlank(pass.dock.arrangement);
         rest.keyboardGlassShared = mHost.keyboardGlassShared();
         return rest;
     }

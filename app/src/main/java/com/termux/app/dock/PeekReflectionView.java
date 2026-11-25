@@ -83,16 +83,10 @@ public final class PeekReflectionView extends View {
     @Override
     protected void onDraw(@NonNull Canvas canvas) {
         // The row this draws stands with its lane, which carries the host's own offset (Home's
-        // slide and drop while the cards stand apart): the host's published motion is not counted
-        // a second time (PeekGlassGeometry#drawOriginX, #drawOriginY).
-        float hostX = 0f;
-        float hostY = 0f;
-        if (getParent() instanceof View) {
-            hostX = com.termux.app.chrome.GlassAnchor.motionX((View) getParent());
-            hostY = com.termux.app.chrome.GlassAnchor.motionY((View) getParent());
-        }
-        mSource.drawOn(canvas, PeekGlassGeometry.drawOriginX(mOriginX, hostX),
-            PeekGlassGeometry.drawOriginY(mOriginY, hostY));
+        // slide while the cards stand apart): the scene's pose of the host's card is not counted
+        // a second time (PeekGlassGeometry#drawOriginX).
+        mSource.drawOn(canvas, PeekGlassGeometry.drawOriginX(mOriginX, mSource.hostTx()),
+            PeekGlassGeometry.drawOriginY(mOriginY, 0f));
     }
 
     @Override

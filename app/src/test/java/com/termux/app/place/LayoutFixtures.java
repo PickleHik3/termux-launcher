@@ -295,6 +295,15 @@ public final class LayoutFixtures {
                 com.termux.app.statusbar.StatusBarEdgeGeometry.thicknessPx(Edge.TOP, true, false,
                     density));
             rest.keptBandPx = keptBandPx;
+            // The A-Z bar off the dock, as the activity measures its edge host: the letter band.
+            rest.azEdgeThicknessPx = RestCards.azPlacementOf(layoutOf(page))
+                == RestCards.AzPlacement.EDGE
+                ? com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+                    false, false, density) : 0;
+            // A bottom status bar that is a band of the dock's plank, as the activity reads it
+            // for each side's own layout (the status bar at the bottom is one).
+            rest.statusOnDockPlank = com.termux.app.terminal.AccessoryStackLayoutPolicy
+                .statusOnDockPlank(layoutOf(page));
             rest.restFlushPaddingPx = settle(PageRef.TERMINAL, false, dockFloating).flushPaddingPx;
             if (floatingForm) {
                 rest.floatingKeyboardRoom = floatingKeyboardRoom();
@@ -369,9 +378,56 @@ public final class LayoutFixtures {
             KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), HOME, 1);
 
     /**
-     * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot
-     * and flush padding, a split keyboard and the A–Z bar on the dock, each in every design. Kept
-     * apart from {@link #ALL}, whose numbers other tests pin.
+     * A Terminal with no extra-keys row: its pinned apps along the bottom, the status bar on top
+     * (#305: its card, the apps row's, stands apart on its own host).
+     */
+    public static final Fixture NO_KEYS_ROW = new Fixture("no keys row", 1080, 2412,
+        new PlaceLayout(Edge.TOP, RowPlacement.BOTTOM, false, Edge.BOTTOM, RowPlacement.HIDDEN,
+            KeyboardMode.RESIZE, KeyboardForm.DOCKED, 4, 5), HOME, 1);
+
+    /**
+     * A new install's Terminal with its extra keys standing under the keyboard, in the bands
+     * under it, and nothing over it (#305: the Terminal has no card of its own over the keyboard).
+     */
+    public static final Fixture KEYS_UNDER = new Fixture("keys under the keyboard", 1080, 2412,
+        DEFAULT_INSTALL.window.withSlot(Element.EXTRA_KEYS, new Slot(false, Edge.BOTTOM, 0, true)),
+        HOME, 1);
+
+    /**
+     * Pong with its status bar along the bottom as the outermost band, a band of the dock's plank
+     * ({@code AccessoryStackLayoutPolicy#statusOnDockPlank}; #305: the Terminal's card spans it).
+     */
+    public static final Fixture STATUS_ON_PLANK = new Fixture("status bar on the plank", 1080,
+        2412, STATUS_BOTTOM.window.withSlot(Element.STATUS, Slot.on(Edge.BOTTOM, 0))
+            .withSlot(Element.EXTRA_KEYS, Slot.on(Edge.BOTTOM, 9)), 1);
+
+    /**
+     * The A–Z bar off the dock on {@code edge} on both sides: a bar of its own with a glass sheet
+     * of its own (#307), the rest of each side's layout as on pong.
+     */
+    private static Fixture azOn(@NonNull String name, @NonNull Edge edge) {
+        return new Fixture(name, 1080, 2412,
+            PONG.window.withSlot(Element.AZ, Slot.on(edge, 0)),
+            HOME.withSlot(Element.AZ, Slot.on(edge, 0)), 1);
+    }
+
+    /** The A–Z bar along the left edge on both sides (#307). */
+    public static final Fixture AZ_LEFT = azOn("a-z on the left edge", Edge.LEFT);
+    /** The A–Z bar along the top edge on both sides, under the status bar (#307). */
+    public static final Fixture AZ_TOP = azOn("a-z on the top edge", Edge.TOP);
+    /** The A–Z bar along the left edge on Home only: the Terminal shows none (#307). */
+    public static final Fixture AZ_LEFT_HOME_ONLY = new Fixture("a-z on Home's left edge only",
+        1080, 2412, PONG.window, HOME.withSlot(Element.AZ, Slot.on(Edge.LEFT, 0)), 1);
+    /** The A–Z bar as its pull tab on both sides: no band and no glass at rest (#307). */
+    public static final Fixture AZ_TAB = new Fixture("a-z as a pull tab", 1080, 2412,
+        AZ_ON_DOCK.window.withAzTab(true), AZ_ON_DOCK.home.withAzTab(true), 1);
+
+    /**
+     * The fixtures the per-rest card answer is held to: {@link #ALL}, pong and tl16 with a foot and flush padding, a split
+     * keyboard, the A–Z bar on the dock, on the left and the top edge, on Home's left edge alone
+     * and as its pull tab, the floating keyboard with a foot, a new install, a Terminal with no
+     * keys row, one with its keys under the keyboard and one with its status bar on the plank,
+     * each in every design. Kept apart from {@link #ALL}, whose numbers other tests pin.
      */
     @NonNull
     public static List<Fixture> cardFixtures() {
@@ -380,7 +436,15 @@ public final class LayoutFixtures {
         base.add(TL16.withFoot(KEPT_BAND_PX, FLUSH_PX));
         base.add(SPLIT_KEYBOARD);
         base.add(AZ_ON_DOCK);
+        base.add(AZ_LEFT);
+        base.add(AZ_TOP);
+        base.add(AZ_LEFT_HOME_ONLY);
+        base.add(AZ_TAB);
+        base.add(FLOATING_KEYBOARD.withFoot(KEPT_BAND_PX, FLUSH_PX));
         base.add(DEFAULT_INSTALL);
+        base.add(NO_KEYS_ROW);
+        base.add(KEYS_UNDER);
+        base.add(STATUS_ON_PLANK);
         List<Fixture> out = new ArrayList<>();
         for (Fixture fixture : base)
             for (DockStyle design : DockStyle.CHOICES) out.add(fixture.withDesign(design));

@@ -101,6 +101,9 @@ public class SideCardsParityTest {
         });
     }
 
+    /** Views the controller lays out besides the keys card (the foot, the Terminal's host). */
+    private static final SparseArray<View> sHostViews = new SparseArray<>();
+
     private static DisplayMetrics metrics(@NonNull Fixture f) {
         DisplayMetrics metrics = new DisplayMetrics();
         metrics.widthPixels = f.widthPx;
@@ -131,7 +134,7 @@ public class SideCardsParityTest {
             f.keyboardLaidOutPx() > 0));
         return new SideCardsController.Host() {
             @Nullable @Override public View view(int id) {
-                return id == R.id.extra_keys_card ? keysCard : null;
+                return id == R.id.extra_keys_card ? keysCard : sHostViews.get(id);
             }
             @Nullable @Override public PageRef frontPage() { return front; }
             @Nullable @Override public PlaceLayout layoutOf(@NonNull PageRef page) {
@@ -142,7 +145,17 @@ public class SideCardsParityTest {
                 return f.snapshot(rows == PageKind.HOME ? PageRef.HOME : PageRef.TERMINAL, floating);
             }
             @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
-            @Override public int measuredExtraKeysRowPx() { return f.extraKeysRowPx; }
+            @Override public int measuredBandPx(@NonNull com.termux.app.place.Element element,
+                                                @NonNull PlaceLayout layout) {
+                if (element == com.termux.app.place.Element.EXTRA_KEYS) return f.extraKeysRowPx;
+                // The A-Z bar off the dock, as the activity measures its edge host.
+                return element == com.termux.app.place.Element.AZ
+                    && com.termux.app.place.PlaceChromePolicy.azRowShown(layout)
+                    && !com.termux.app.place.PlaceChromePolicy.azRowOnDock(layout)
+                    && !com.termux.app.place.PlaceChromePolicy.azTabShown(layout)
+                    ? com.termux.app.terminal.AccessoryStackLayoutPolicy.computeAzRowHeightPx(true,
+                        false, false, f.density) : 0;
+            }
             @Override public int measuredKeyboardPx() {
                 return f.keyboardLaidOutPx() > 0 ? f.keyboardLaidOutPx() + foot : 0;
             }
@@ -157,8 +170,10 @@ public class SideCardsParityTest {
             @Override public int keptBandPx() { return f.keptBandPx; }
             @Override public int terminalRestFlushPaddingPx() { return flush; }
             @Override public boolean terminalFlushAllowed() { return f.paneCount <= 1; }
-            @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
+            @Override public void restCards(@Nullable RestCards home, @Nullable RestCards terminal) {
+                renderer.setCards(home, terminal);
+            }
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) {
                 renderer.setSidesApart(apart, homeDropPx, terminalLiftPx);
             }
@@ -167,9 +182,11 @@ public class SideCardsParityTest {
 
     /**
      * The container's inner box has one owner while apart: no padding at either rest, and the
-     * Terminal's flush inset carried as its own lift, the Terminal's own rest's whichever page is
-     * in front, so Home's pinned card stands on the container's true bottom and nothing the
-     * landing lays out carries the Terminal's lift.
+     * padding the Terminal's own rest pads ({@link RestCards#stackPaddingPx}, its
+     * {@link BottomInsets#stackPaddingPx}) carried as its own lift, whichever page is in front,
+     * so Home's pinned card stands on the container's true bottom and nothing the landing lays
+     * out carries the Terminal's lift. Under Docked with the dock's foot that padding stands in
+     * the keyboard column's margin, so the lift is none there.
      */
     @Test public void whileApartTheContainerPadsNothingAndTheTerminalCarriesItsInset() {
         int lifted = 0;
@@ -181,10 +198,9 @@ public class SideCardsParityTest {
                         SideCardsController controller = new SideCardsController(
                             hostOf(f, page, up, floating, rendererFor(page.isHome())));
                         controller.update(f.pass(page, up, floating));
-                        int inset = f.settle(page, up, floating).flushBottomInsetPx;
+                        int inset = stackPaddingPx(f, page, up, floating);
                         // The Terminal's own rest (hostOf gives both sides this keyboard).
-                        int terminalInset = f.settle(PageRef.TERMINAL, up, floating)
-                            .flushBottomInsetPx;
+                        int terminalInset = stackPaddingPx(f, PageRef.TERMINAL, up, floating);
                         boolean apart = controller.apart();
                         int padding = controller.containerPaddingPx(inset);
                         int lift = controller.terminalSideLiftPx();
@@ -196,6 +212,12 @@ public class SideCardsParityTest {
             }
         }
         assertTrue("some Terminal rests stand a lift", lifted > 0);
+    }
+
+    /** What {@code page}'s own rest pads the container by, as the activity pads it. */
+    private static int stackPaddingPx(@NonNull Fixture f, @NonNull PageRef page, boolean up,
+                                      boolean floating) {
+        return RestCards.of(f.cardsRestOf(page, up, floating)).stackPaddingPx();
     }
 
     @Test public void everyFixtureTheControllerAndTheRendererAgreeWithTheRule() {
@@ -216,8 +238,9 @@ public class SideCardsParityTest {
                         // The rule, from the two rests' own margins.
                         int homeMargin = f.settle(PageRef.HOME, up, floating).bottomMarginPx;
                         int terminalMargin = f.settle(PageRef.TERMINAL, up, floating).bottomMarginPx;
-                        boolean apart = SideCards.apart(f.layoutOf(PageRef.HOME),
-                            f.layoutOf(PageRef.TERMINAL), floating, false);
+                        // Every layout stands apart since #305, but a Terminal whose rest
+                        // wears Home's Peek card at Home's rect (RestCards#sharesHomesPeek).
+                        boolean apart = RestCards.of(f.cardsRest(page, up, floating)).apart();
                         assertEquals(label, apart, controller.apart());
                         int frontMargin = page.isHome() ? homeMargin : terminalMargin;
                         assertEquals(label, SideCards.containerMarginPx(homeMargin, terminalMargin,
@@ -228,14 +251,13 @@ public class SideCardsParityTest {
                         assertEquals(label, drop, mUnderlay.getTranslationY(), 0f);
                         assertEquals(label, drop, mHomeRow.getTranslationY(), 0f);
                         // The Terminal's lane: its own rest's lift, at both rests.
-                        float lift = SideCards.terminalSideLiftPx(f.settle(PageRef.TERMINAL, up,
-                            floating).flushBottomInsetPx, apart);
+                        float lift = SideCards.terminalSideLiftPx(stackPaddingPx(f,
+                            PageRef.TERMINAL, up, floating), apart);
                         assertEquals(label, -lift, mKeysRow.getTranslationY(), 0f);
                         assertEquals(label, lift, controller.terminalSideLiftPx(), 0f);
                         // Home's slide: 0 at Home's rest, a container's width to the left otherwise.
                         float tx = apart && !page.isHome() ? -WIDTH : 0f;
                         assertEquals(label, tx, mHost.getTranslationX(), 0f);
-                        assertEquals(label, 0f, renderer.hostShiftPx(), 0f);
                         if (apart) apartCases++;
                         else assertFalse(label, controller.hostPinned());
                     }
@@ -243,7 +265,8 @@ public class SideCardsParityTest {
             }
         }
         assertTrue("some fixtures stand apart", apartCases > 0);
-        assertTrue("and some do not", apartCases < cases);
+        // Since #305 the apps row or A-Z beside the keys stands apart too; the refusals left
+        // (no keys row, keys under the keyboard, a status band on the plank) are in no fixture.
     }
 
     /**
@@ -322,6 +345,9 @@ public class SideCardsParityTest {
         for (Fixture base : LayoutFixtures.cardFixtures()) {
             for (DockStyle design : DockStyle.CHOICES) {
                 Fixture f = base.withHomeDesign(design);
+                // A Terminal wearing the Peek card at one keyboard state stands together with
+                // Home there (#305), so Home's host is pinned at one state only.
+                if (wearsPeekAtEither(f)) continue;
                 String[] layouts = new String[2];
                 for (boolean up : new boolean[] {false, true}) {
                     StackRenderer renderer = rendererFor(true);
@@ -360,6 +386,8 @@ public class SideCardsParityTest {
     @Test public void homesParkedHostIsHomesOwnRestWhateverTheTerminalsKeyboard() {
         int cases = 0;
         for (Fixture f : LayoutFixtures.cardFixtures()) {
+            // Together where the Terminal's rest wears the Peek card (#305): no parked host.
+            if (wearsPeekAtEither(f)) continue;
             for (boolean homeUp : new boolean[] {false, true}) {
                 SideCardsController atHome = new SideCardsController(hostOf(f, PageRef.HOME,
                     homeUp, false, true, rendererFor(true), null));
@@ -388,7 +416,8 @@ public class SideCardsParityTest {
     @Test public void theCoverDropsHomesLaneAndTheStacksShareAndNotTheTerminals() {
         assertEquals(7f + 40f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, 5, 0.5f, 40f, 20f), 0f);
         assertEquals(-5f, SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, 5, 0.5f, 40f, 20f), 0f);
-        assertEquals(-2.5f + 20f, SideCards.laneTyPx(StackLanes.STACK, true, 7f, 5, 0.5f, 40f, 20f), 0f);
+        assertEquals(-2.5f + 3.5f + 20f,
+            SideCards.laneTyPx(StackLanes.STACK, true, 7f, 5, 0.5f, 40f, 20f), 0f);
         for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})
             assertEquals(0f, SideCards.laneTyPx(lane, false, 7f, 5, 0.5f, 40f, 20f), 0f);
     }
@@ -396,8 +425,9 @@ public class SideCardsParityTest {
     /**
      * The lanes' numbers have one owner (SideCards#laneTyPx): Home's lane draws its drop and the
      * Terminal's its lift at every share of the scene, so neither moves at a landing; only the
-     * stack's own lane and the keyboard's column, the front page's, follow the share, and the
-     * scene's value at each end is that end's rest.
+     * stack's own lane (Home's drop and the Terminal's lift, each by its side's share) and the
+     * keyboard's column, the front page's, follow the share, and the scene's value at each end is
+     * that end's rest.
      */
     @Test public void eachLaneDrawsItsOwnSidesNumberAtEveryShare() {
         for (float share : new float[] {0f, 0.25f, 0.5f, 1f}) {
@@ -406,7 +436,10 @@ public class SideCardsParityTest {
                 assertEquals(label, 7f, SideCards.laneTyPx(StackLanes.HOME, true, 7f, lift, share), 0f);
                 assertEquals(label, -lift,
                     SideCards.laneTyPx(StackLanes.TERMINAL, true, 7f, lift, share), 0f);
-                assertEquals(label, -lift * share,
+                // The stack's lane holds the rows both sides show (#305: the apps row or A-Z
+                // beside the keys): Home's drop by Home's share, the Terminal's lift by its own,
+                // so at each rest a shared row stands where that side's own rows stand.
+                assertEquals(label, -lift * share + 7f * (1f - share),
                     SideCards.laneTyPx(StackLanes.STACK, true, 7f, lift, share), 0f);
                 assertEquals(label, lift * share, SideCards.columnLiftPx(true, lift, share), 0f);
                 for (int lane : new int[] {StackLanes.STACK, StackLanes.HOME, StackLanes.TERMINAL})
@@ -488,7 +521,11 @@ public class SideCardsParityTest {
                 if (!answer.apart()) continue;
                 String label = f.name + " terminal kb=" + up;
                 com.termux.app.place.ChromeShape.Box keys = answer.laidOut(RestCards.StackView.KEYS_CARD);
-                com.termux.app.place.ChromeShape.Box column = answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
+                // The Terminal's own column while the keyboard is two cards (#307 round 3).
+                com.termux.app.place.ChromeShape.Box column =
+                    answer.laidOut(RestCards.StackView.TERMINAL_KEYBOARD) != null
+                    ? answer.laidOut(RestCards.StackView.TERMINAL_KEYBOARD)
+                    : answer.laidOut(RestCards.StackView.KEYBOARD_COLUMN);
                 if (keys == null || column == null) continue;
                 assertEquals(label, column.top, keys.bottom, 0f);
                 if (answer.terminalSideLiftPx() > 0) lifted++;
@@ -574,7 +611,8 @@ public class SideCardsParityTest {
                 return base.dockSnapshot(layout, rows);
             }
             @NonNull @Override public DisplayMetrics displayMetrics() { return metrics(f); }
-            @Override public int measuredExtraKeysRowPx() { return 0; }
+            @Override public int measuredBandPx(@NonNull com.termux.app.place.Element element,
+                                                @NonNull PlaceLayout layout) { return 0; }
             @Override public int measuredKeyboardPx() { return 0; }
             @Override public int restKeyboardPx(@NonNull PageRef page) {
                 return SideCards.KEYBOARD_DOWN;
@@ -583,12 +621,99 @@ public class SideCardsParityTest {
             @Override public int keptBandPx() { return 0; }
             @Override public int terminalRestFlushPaddingPx() { return 0; }
             @Override public boolean terminalFlushAllowed() { return false; }
-            @Override public boolean statusOnDockPlank() { return false; }
             @Override public boolean keyboardGlassShared() { return true; }
             @Override public void sidesApart(boolean apart, int homeDropPx, int terminalLiftPx) { }
         });
         controller.update(f.pass(PageRef.HOME, false, true));
         assertFalse(controller.apart());
         assertEquals(7, controller.containerMarginPx(7));
+    }
+
+    /** Whether the Terminal's rest wears the Peek card with its keyboard down or up. */
+    private static boolean wearsPeekAtEither(@NonNull Fixture f) {
+        for (boolean up : new boolean[] {false, true})
+            for (boolean floating : new boolean[] {false, true})
+                if (com.termux.app.place.RestCards.of(f.cardsRestOf(PageRef.TERMINAL, up, floating))
+                    .card(com.termux.app.place.RestCards.CardId.PEEK) != null) return true;
+        return false;
+    }
+
+    /** A view that counts the layouts asked of it. */
+    private static final class CountingFrame extends FrameLayout {
+        int layouts;
+
+        CountingFrame() {
+            super(RuntimeEnvironment.getApplication());
+            super.setLayoutParams(new android.widget.RelativeLayout.LayoutParams(0, 0));
+        }
+
+        @Override public void setLayoutParams(android.view.ViewGroup.LayoutParams params) {
+            layouts++;
+            super.setLayoutParams(params);
+        }
+    }
+
+    /**
+     * The foot's own view (#307 views A): where both hosts share the foot, it is laid out at the
+     * answer's foot, Home's pinned host and the Terminal's own host stop at its top, and a second
+     * pass at the same rest lays out nothing.
+     */
+    @Test public void theSharedFootIsLaidOutOnceAndBothHostsStopAtItsTop() {
+        int shared = 0;
+        try {
+            for (Fixture base : LayoutFixtures.cardFixtures())
+                for (DockStyle design : DockStyle.CHOICES)
+                    for (PageRef front : new PageRef[] {PageRef.HOME, PageRef.TERMINAL})
+                        for (boolean up : new boolean[] {false, true}) {
+                Fixture f = base.withHomeDesign(design);
+                CountingFrame foot = new CountingFrame();
+                CountingFrame terminalHost = new CountingFrame();
+                sHostViews.clear();
+                sHostViews.put(R.id.dock_foot_host, foot);
+                sHostViews.put(R.id.terminal_dock_host, terminalHost);
+                StackRenderer renderer = rendererFor(front.isHome());
+                SideCardsController controller = new SideCardsController(
+                    hostOf(f, front, up, false, renderer));
+                controller.update(f.pass(front, up, false));
+                RestCards.Card card = controller.footCard();
+                String label = f.name + " " + design + " " + front + " up=" + up;
+                if (card == null) {
+                    assertEquals(label, View.GONE, foot.getVisibility());
+                    continue;
+                }
+                shared++;
+                assertEquals(label, View.VISIBLE, foot.getVisibility());
+                android.widget.RelativeLayout.LayoutParams footParams =
+                    (android.widget.RelativeLayout.LayoutParams) foot.getLayoutParams();
+                int footTop = footParams.bottomMargin + footParams.height;
+                assertEquals(label, f.widthPx - footParams.leftMargin - footParams.rightMargin,
+                    Math.round(card.box.width()));
+                assertTrue(label + " the foot has a band", footParams.height > 0);
+                // Home's pinned host stands on the foot's top, measured from the container's bottom.
+                if (controller.hostPinned()) {
+                    android.widget.RelativeLayout.LayoutParams host =
+                        new android.widget.RelativeLayout.LayoutParams(0, 0);
+                    controller.layOutHost(host, 0);
+                    assertEquals(label + " Home's host stops at the foot's top", footTop,
+                        host.bottomMargin, 1);
+                }
+                if (terminalHost.getVisibility() == View.VISIBLE) {
+                    android.widget.RelativeLayout.LayoutParams host =
+                        (android.widget.RelativeLayout.LayoutParams) terminalHost.getLayoutParams();
+                    assertEquals(label + " the Terminal's host stops at the foot's top", footTop,
+                        host.bottomMargin, 1);
+                }
+                int footLayouts = foot.layouts;
+                int hostLayouts = terminalHost.layouts;
+                controller.update(f.pass(front, up, false));
+                assertEquals(label + " the foot is laid out once per rest", footLayouts,
+                    foot.layouts);
+                assertEquals(label + " the Terminal's host is laid out once per rest",
+                    hostLayouts, terminalHost.layouts);
+            }
+        } finally {
+            sHostViews.clear();
+        }
+        assertTrue("some Docked rests share the foot", shared > 0);
     }
 }

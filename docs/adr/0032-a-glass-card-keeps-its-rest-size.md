@@ -100,6 +100,69 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
 - **The keyboard's card is built once, in the Terminal's look, as the crossing begins.** Dressed
   at landing instead, its glass arrives about a second late.
 
+- **2026-11-24, Docked (#304), option A.** Under Docked the Terminal's card is a second back
+  host beside the glass host (`terminal_surface_host`, `RestCards.StackView.TERMINAL_HOST`),
+  laid out once per Terminal rest with the Docked dock formula: the one host's rect at that
+  rest, the flush air above the keys and the foot under the gesture pill included. The renderer
+  carries it on the Terminal's lane; Home's host stays Home's card and travels with Home, wearing
+  Home's cut. Neither host changes size in a crossing. A keys card in the row host was tried
+  first and refused: it dropped the flush air and left a bare strip under the pill. Layouts the
+  two-card rule refuses (the apps row or A–Z beside the keys) keep the one host.
+- **2026-11-24, shared rows (#305).** With the apps row or A–Z beside the keys the cards stand
+  apart too: the Terminal's card is its own host (`terminal_dock_host`) under either Style, and
+  a row both pages show stays put while the two cards slide under it. This replaces the
+  2026-11-21 decision "shared-row layouts keep the old morph". To be checked on pong.
+- **2026-11-24, the last shared host (#305).** A Terminal with no keys row, with its keys under
+  the keyboard, or with its status bar on the dock's plank stands apart as well, and a Terminal
+  with no card at its rest shows none. The one layout left on the one host is a Terminal whose
+  rest wears the Peek card (no keys row, its apps row alone, keyboard down): it is Home's card at
+  Home's rect, a shared card that stays put (§3). The Peek card's blend toward the slab is gone.
+- **2026-11-24, the pieces (#307).** The A–Z bar off the dock is its own card on its edge host
+  (`RestCards.CardId.AZ` on `StackView.AZ_EDGE`), the shape model's piece; the edge stacks stand
+  in the content column, which no crossing moves, so the scene keeps it, the keyboard's column
+  and the floating keyboard at their rest as the stack's own cards. The side bars' travel fade is
+  deleted: no place is ever minimal, so it never ran. The status content's fade stays: it hides
+  the bar's content on the way to a Home that wears none, where the bar cannot ride. Two cases
+  the property test names stay open for a decision: an A–Z bar on a side edge runs down to the
+  stack's top and so changes length between rests; and under Docked the foot is worn by Home's
+  host and by the Terminal's own host (#304 option A), two cards at one rect where §3 wants one
+  shared card. One owner for the foot needs a view of its own for the band.
+- **2026-11-24, the developer's answers to #307's open cases.**
+  - An A–Z bar on a side edge is one card per side, each its own length: Home's is laid out
+    once at Home's rest and slides out with Home, the Terminal's once at its rest and slides in
+    with the Terminal; neither re-sizes. Where both rests draw it at one rect it stays one shared
+    card (§3). Two A–Z cards on screen mid-crossing are accepted.
+  - The foot under the gesture pill becomes a view of its own: one shared card that stays put,
+    with one owner. Home's host and the Terminal's host (`terminal_dock_host`) both stop at the
+    foot's top, and each joins the foot seamlessly (no line, no 1 px gap, the same glass sample).
+    This revises #304's "the foot under the gesture pill included" for the Terminal's host.
+  - 2026-11-24, revised: the keyboard is two cards, one per side. Sharing one card would raise
+    Home's keyboard about 151 px on pong (Docked, keyboard up: Home's column 1742–2412, the
+    Terminal's 1591–2412 over its bands under the keyboard), so each side keeps its own keyboard
+    rest. Each side's keyboard card is laid out once at its rest and travels with its side; it
+    never re-sizes at the landing. With the keyboard up at both ends, Home's keyboard card slides
+    out with Home while the Terminal's slides in. The arriving keyboard's card is dressed in its
+    look as the crossing begins, not at landing (the Accepted note above). A second keyboard card
+    holds no second keyboard's pixels at rest.
+  - A Docked A–Z column meets the status bar and the dock on a join over its own width only: a
+    card's edge keeps the shape model's runs (`RestCards.Card#kindOver`). Built in #307 round 2.
+- **2026-11-24, #307 round 3.** The per-rest answer stands each side's A–Z card on an edge host
+  of its own (`StackView.AZ_EDGE` Home's, `TERMINAL_AZ_EDGE` the Terminal's), one shared card
+  where both rests draw it at one rect. A Home to Home crossing with Home's keyboard up at one
+  end only still re-sizes Home's bar: both ends are Home's side, so one card per side cannot part
+  them. The views (the second edge host, the foot's own view, the second keyboard card) are not
+  built yet.
+- **2026-11-25, what the crossing test still names.** `RestCardsCrossingTest.KNOWN_FAILURES`
+  holds 52 entries after the review fixes (the one host is shared only while the Terminal's
+  Peek card is Home's at Home's rect; none of the fixes moved the list): the container's top
+  moving where the two sides' stacks differ in height (×16); the dock/keyboard and
+  keyboard/under-band edges; the split keyboard's and the floating keyboard's edges against the
+  rows and bands beside them; the rows band with the A–Z row on both docks; the foot's two owners
+  under Docked (×8); and an A–Z bar on a side edge from Home to Home with the keyboard up at one
+  end only (×16). The foot's entries wait on the foot's own view (#307). The A–Z Home to Home
+  entries wait on a decision, not a view: both ends are Home's side. The others are layout and
+  shape-model cases no #307 view removes.
+
 ## Consequences
 
 - The Floating crossing machinery goes once the extra-keys bar has its own card:
@@ -140,3 +203,19 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
 - **Drop Peek under Floating.** Rejected: it is the new-install default design and the setup every
   Floating snap above was found on. It also only removes this one case: any two rests with different cards on one host
   would snap the same way.
+- **2026-11-25, two answers from the code review.** A row both rests show in the stack's lane
+  keeps its vertical blend: Home drops its rows 16 px under Floating while the Terminal lifts 0 (0
+  and 15 px with a foot), so the shared row eases that difference over the crossing and stands
+  with each side's own rows at its rest. "Stays put" means it does not slide sideways. A Terminal
+  Peek card that stands apart from Home's (the two rests draw it at different rects) wears the
+  Peek dress and reflection on the Terminal's own host; that is built with #307's views.
+- **2026-11-25, #307 views A.** The foot is a view of its own (`dock_foot_host`,
+  `StackView.FOOT`) wherever both hosts wear it at one rect and lay it out alike; both hosts stop
+  at its top, and its frost is the standing host's at a rest and blends between the two hosts'
+  on the crossing's share. Two cases keep a foot per owner: the Terminal's keyboard up on its own
+  host (the unified Docked glass), where the container is drawn the keyboard's height lower at
+  Home's keyboard-down rest, so one view would be laid out at two rects (tl16 1667..1730 against
+  2337..2400) and a crossing moves the container under it; and the keyboard's own foot (Peek with
+  Home's keyboard up), which is the keyboard's material. The Terminal's own Peek card wears the
+  Peek cut, rim and reflection; its reflection is drawn on the Live path only, so it holds no
+  bitmap, and shows none without it.

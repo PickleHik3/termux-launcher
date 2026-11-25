@@ -1,60 +1,42 @@
 package com.termux.app.place;
 
 import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
 
 import com.termux.app.page.PageKind;
 
 /**
- * When Home and the Terminal each wear a glass card of their own under Floating (ADR 0032, #302),
+ * When Home and the Terminal each wear a glass card of their own (ADR 0032: #302 under Floating,
+ * #304 under Docked),
  * and the two numbers that follow: the one bottom margin the stack's container keeps at both
  * rests, and how far below its layout Home's side is drawn to make up the difference. Pure: the
  * activity's rest pass and the stack's renderer both read these, so the margin and the drop have
  * one owner.
  *
- * <p>The two cards stand "apart" when the Terminal's card carries the extra-keys row and nothing
- * else: it then travels with the Terminal, and Home's card travels with Home. Every Dock design
- * is the same here (the rule reads layouts, never the design).
+ * <p>The two cards always stand "apart" between Home and the Terminal (#305): the Terminal's
+ * card, if it has one, travels with the Terminal, and Home's card (the Peek card or the apps
+ * row's) travels with Home; nothing shares the glass host. Every layout, Dock design and Style
+ * is the same here. Under Floating with the keys alone the Terminal's card is the extra-keys band
+ * ({@link #keysAlone}); otherwise it is a second back host cut by its Style's dock formula
+ * ({@code RestCards.StackView#TERMINAL_HOST}), the same card the one host wore at that rest, and
+ * a Terminal with no card at its rest shows none.
  */
 public final class SideCards {
 
     private SideCards() {}
 
-    /** Why the two cards do not stand apart; the first reason that holds. */
-    public enum Refusal {
-        /** The dock is Docked: its slab is not a card. */
-        DOCKED,
-        /** The Terminal's layout shows no extra-keys row along the bottom. */
-        NO_KEYS_ROW,
-        /** The Terminal's extra-keys row stands under the keyboard, in a view of its own. */
-        KEYS_NOT_OVER_KEYBOARD,
-        /** The Terminal's card over the keyboard carries the apps row or A-Z too, a row Home shares. */
-        ROWS_BESIDE_KEYS,
-        /** The Terminal's status bar is a band of the dock's plank, so the card spans it too. */
-        STATUS_ON_PLANK
-    }
-
     /**
-     * Why Home's card and the Terminal's extra-keys card do not stand apart, null when they do.
-     * {@code home} is a parameter for symmetry and the diag lines; the rule reads the Terminal's.
+     * Whether the Terminal's extra-keys row is its only row over the keyboard: Floating then
+     * carries its card in the keys row's own host ({@code RestCards.StackView#KEYS_CARD}). With
+     * the apps row or A-Z beside the keys (#305) the card spans those rows too and stands on the
+     * Terminal's own back host under either Style.
      */
-    @Nullable
-    public static Refusal refusal(@NonNull PlaceLayout home, @NonNull PlaceLayout terminal,
-                                  boolean floating, boolean statusOnDockPlank) {
-        if (!floating) return Refusal.DOCKED;
-        if (!PlaceChromePolicy.extraKeysRowShown(terminal)) return Refusal.NO_KEYS_ROW;
-        if (StackLanes.where(terminal, Element.EXTRA_KEYS) != StackLanes.Where.BOTTOM_OVER)
-            return Refusal.KEYS_NOT_OVER_KEYBOARD;
+    public static boolean keysAlone(@NonNull PlaceLayout terminal) {
+        if (!PlaceChromePolicy.extraKeysRowShown(terminal)
+            || StackLanes.where(terminal, Element.EXTRA_KEYS) != StackLanes.Where.BOTTOM_OVER)
+            return false;
         for (Element element : EdgeStackPolicy.overKeyboard(terminal))
-            if (element == Element.APPS || element == Element.AZ) return Refusal.ROWS_BESIDE_KEYS;
-        if (statusOnDockPlank) return Refusal.STATUS_ON_PLANK;
-        return null;
-    }
-
-    /** Whether the two cards stand apart: {@link #refusal} is null. */
-    public static boolean apart(@NonNull PlaceLayout home, @NonNull PlaceLayout terminal,
-                                boolean floating, boolean statusOnDockPlank) {
-        return refusal(home, terminal, floating, statusOnDockPlank) == null;
+            if (element == Element.APPS || element == Element.AZ) return false;
+        return true;
     }
 
     /**
@@ -79,17 +61,19 @@ public final class SideCards {
     /**
      * The container's bottom padding: none while the cards stand apart, so its inner box is the
      * same at both rests and Home's card, pinned to its bottom, stands at Home's rest whichever
-     * page is in front; else the pass's flush inset ({@code StackLayout.Result#flushBottomInsetPx}).
+     * page is in front; else the rest's own ({@code BottomInsets#stackPaddingPx},
+     * {@code RestCards#stackPaddingPx}: the pass's flush inset unless the dock wears the foot).
      */
-    public static int containerPaddingPx(int flushBottomInsetPx, boolean apart) {
-        return apart ? 0 : Math.max(0, flushBottomInsetPx);
+    public static int containerPaddingPx(int stackPaddingPx, boolean apart) {
+        return apart ? 0 : Math.max(0, stackPaddingPx);
     }
 
     /**
      * How far above its layout the Terminal's side is drawn while the cards stand apart: the
      * padding the container no longer pads at the Terminal's own rest
-     * ({@code BottomInsets#stackPaddingPx} of that rest: the lower half of its flush
-     * padding while its keyboard is down), so the Terminal's lane rows, its extra-keys card and its
+     * ({@code BottomInsets#stackPaddingPx} of that rest, {@code RestCards#stackPaddingPx}: the
+     * lower half of its flush padding while its keyboard is down, none while the Docked dock
+     * wears the foot and the keyboard column's margin holds that padding), so the Terminal's lane rows, its extra-keys card and its
      * keyboard column are drawn where the padding stood them. 0 otherwise. Like
      * {@link #homeSideDropPx}, a number of one side's rest, read from the Terminal's rest whichever
      * page is in front: nothing in the layout carries it (the keyboard column, which Home's rows
@@ -102,8 +86,10 @@ public final class SideCards {
     /**
      * The translation the stack's renderer draws a lane's rows at while the cards stand apart
      * ({@code lane} a {@link StackLanes} constant): Home's lane its drop, the Terminal's lane its
-     * lift (up), and the stack's own lane, which is the front page's, its share of the lift
-     * ({@link #columnLiftPx}). 0 while the cards do not stand apart.
+     * lift (up), and the stack's own lane, which is the front page's and holds the rows both
+     * sides show (#305), Home's drop by Home's share and the lift by the Terminal's
+     * ({@link #columnLiftPx}), so a shared row stands at each rest where that side's rows stand.
+     * 0 while the cards do not stand apart.
      *
      * @param terminalShare how much of the scene is the Terminal's: 1 at its rest, 0 at Home's,
      *                      between across a crossing
@@ -125,7 +111,9 @@ public final class SideCards {
         if (!apart) return 0f;
         if (lane == StackLanes.HOME) return homeDropPx + coverHomePx;
         if (lane == StackLanes.TERMINAL) return -Math.max(0, terminalLiftPx);
-        return -columnLiftPx(true, terminalLiftPx, terminalShare) + coverSharedPx;
+        float share = terminalShare < 0f ? 0f : terminalShare > 1f ? 1f : terminalShare;
+        return homeDropPx * (1f - share) - columnLiftPx(true, terminalLiftPx, terminalShare)
+            + coverSharedPx;
     }
 
     /**
