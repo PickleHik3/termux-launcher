@@ -2909,6 +2909,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // A display that comes up after the user has started doing something does not pull
             // them over to it (Start in = Display).
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
+            // A Linux window lifted with Move owns every finger until it is set down (#386).
+            if (mLinuxWindows != null && mLinuxWindows.carryTouch(ev)) return true;
             // A hold on the Home pill picks it up: the surface long-press never sees that stream.
             int pillAction = ev.getActionMasked();
             if (pillAction == MotionEvent.ACTION_DOWN) mHomePillStream = homePillClaimsDown(ev);
@@ -3475,6 +3477,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onPause() {
         LauncherSettings.onLauncherPaused();
+        if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
         mStatusRow.endStatusRowEnlargement();
         if (mPageBar != null) mPageBar.close();
         cancelReturnWait();
@@ -17736,6 +17739,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         boolean frontHome = frontSide == com.termux.app.page.Side.HOME;
         mAppsRowNextToCanvas = com.termux.app.dock.DockGeometry.appsRowNextToCanvas(layout,
             frontHome ? laneFront : other, frontHome ? other : laneFront);
+        // The bands under the keyboard, Home's own or, with the keyboard up at both rests, the
+        // Terminal's (#307): a host they take is not stood over the keyboard as well.
+        List<Element> underKeyboard = underKeyboardElements(layout, other, frontHome);
         PlaceLayout.Edge plankEdge = mDock.offDockPlankEdge(layout);
         View plankHost = findViewById(R.id.place_off_dock_plank_host);
         com.termux.app.place.EdgeStackView plankBars =
@@ -17755,6 +17761,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 : EdgeStackPolicy.stack(layout, edge)) {
                 View host = edgeStackHost(element, edge);
                 if (host == null || stack == null) continue;
+                if (edge == PlaceLayout.Edge.BOTTOM && underKeyboard.contains(element)) continue;
                 if (onPlank.contains(element)) {
                     // The plank stands where its outermost bar would have, and the bars it holds
                     // are its children instead of the stack's.
@@ -17770,7 +17777,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             if (stack != null) moved |= stack.setStack(bars);
         }
-        moved |= applyUnderKeyboardStack(layout, other);
+        moved |= applyUnderKeyboardStack(underKeyboard);
         moved |= applyStackLanes(laneFront, other, frontSide);
         // A joined Docked frame is one continuous sheet of glass: no hairline between its bands.
         if (hasDockedFrameCard()) {
@@ -17806,14 +17813,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      *
      * @return whether anything moved
      */
-    private boolean applyUnderKeyboardStack(@NonNull PlaceLayout layout,
-                                            @NonNull PlaceLayout other) {
+    private boolean applyUnderKeyboardStack(@NonNull List<Element> elements) {
         com.termux.app.place.EdgeStackView under =
             findViewById(R.id.accessory_under_keyboard_stack);
         com.termux.app.place.EdgeStackView rows = findViewById(R.id.accessory_row_stack);
         if (under == null || rows == null) return false;
-        List<Element> elements = com.termux.app.place.StackLanes.hostsOn(layout, other,
-            com.termux.app.place.StackLanes.Where.BOTTOM_UNDER);
         List<View> hosts = new ArrayList<>(elements.size());
         for (Element element : elements) {
             View host = edgeStackHost(element, PlaceLayout.Edge.BOTTOM);
@@ -17830,6 +17834,41 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Shown only while it holds a band: Dock rows writes it and announces it.
         moved |= mDockRows.setUnderKeyboardBands(!hosts.isEmpty());
         return moved;
+    }
+
+    /** Whether the under-keyboard stack last stood the Terminal's bands on Home. */
+    private boolean mUnderKeyboardTakesTerminals;
+
+    /**
+     * Whether Home's rest, in front, stands the Terminal's bands under its keyboard now: the
+     * shared answer ({@link com.termux.app.place.KeyboardColumn#homeStandsTerminalsBands}) from
+     * both sides' rest keyboards.
+     */
+    private boolean underKeyboardTakesTerminals() {
+        PlaceLayout terminal = terminalPlaceLayout();
+        return terminal != null && com.termux.app.place.KeyboardColumn.homeStandsTerminalsBands(
+            mLastWallPage == com.termux.app.page.PageKind.HOME,
+            sideRestKeyboardUp(com.termux.app.page.PageKind.HOME), !homeRowsCovered(),
+            terminal.keyboardForm, sideRestKeyboardUp(com.termux.app.page.PageKind.TERMINAL));
+    }
+
+    /**
+     * The bands the stack stands under the keyboard, outermost first: the front layout's own, or,
+     * while Home in front takes the Terminal's keyboard column with the keyboard up at both rests
+     * ({@link com.termux.app.place.KeyboardColumn#homeStandsTerminalsBands}), the Terminal's, so
+     * the keys stand where the Terminal's do and a crossing between the two moves no key. Read at
+     * rest from the committed keyboard states; Home's keyboard going down gives Home its own back.
+     */
+    @NonNull
+    private List<Element> underKeyboardElements(@NonNull PlaceLayout layout,
+                                                @NonNull PlaceLayout other, boolean frontHome) {
+        boolean terminals = frontHome && underKeyboardTakesTerminals();
+        mUnderKeyboardTakesTerminals = terminals;
+        return terminals
+            ? com.termux.app.place.StackLanes.hostsOn(other, layout,
+                com.termux.app.place.StackLanes.Where.BOTTOM_UNDER)
+            : com.termux.app.place.StackLanes.hostsOn(layout, other,
+                com.termux.app.place.StackLanes.Where.BOTTOM_UNDER);
     }
 
     /**
@@ -18574,6 +18613,11 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         View accessoryStackContainer = findViewById(R.id.accessory_stack_container);
         if (terminalToolbarViewPager == null || accessoryStackContainer == null)
             return false;
+        // Home's keyboard shown or put away at rest changes which bands stand under it (#307):
+        // stand them before this pass measures the column, so its margin and the keyboard's foot
+        // follow in the same pass.
+        if (!mCrossing.crossing() && mUnderKeyboardTakesTerminals != underKeyboardTakesTerminals())
+            applyEdgeStacksAndInvalidate(arrangement().layout());
         // Not before setTerminalToolbarView() has read the pager's XML height: a pass this early
         // (a wall page restored during creation, an insets dispatch) would write a zero height
         // that the capture then reads back, and the row would stay collapsed for the session.
@@ -21162,6 +21206,22 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      */
     private com.termux.app.chrome.OverlayRegistry createOverlayRegistry() {
         com.termux.app.chrome.OverlayRegistry registry = new com.termux.app.chrome.OverlayRegistry();
+        // A lifted Linux window goes back first: Back or a home press is a cancelled carry.
+        registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
+            @Override public boolean onBack() {
+                if (mLinuxWindows == null || !mLinuxWindows.isCarrying()) return false;
+                mLinuxWindows.cancelCarry();
+                return true;
+            }
+            @Override public boolean isOpen() {
+                return mLinuxWindows != null && mLinuxWindows.isCarrying();
+            }
+            @Override public void closeImmediately(@NonNull com.termux.app.chrome.OverlayRegistry.CloseReason reason) {
+                if (mLinuxWindows != null) mLinuxWindows.cancelCarry();
+            }
+            // The lifted picture is a drawing over the wall, not a card: nothing exits with it.
+            @Override public void exitViews(@NonNull java.util.List<View> out) { }
+        });
         // The key's page bar popup stands over the wall and nothing else: Back puts it away first.
         registry.register(new com.termux.app.chrome.OverlayRegistry.Overlay() {
             @Override public boolean onBack() {
@@ -31165,11 +31225,62 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
                 }
+                @Nullable @Override public com.termux.app.wayland.LinuxCarry.Host carryHost() {
+                    return linuxCarryHost();
+                }
             });
         mLinuxWindows.page().setTopInsetPx(mStatusRowRoomPx);
         mPaneWallController.setLinuxWindows(mLinuxWindows.page(), mLinuxWindows, this::syncLinuxFront);
         com.termux.app.wayland.WaylandAppRunner.shared(this).setWindowsSurface(mLinuxWindows::showWindow);
         mLinuxWindows.start();
+    }
+
+    /** Scratch for the carry's wall span: a move reads it, so it allocates nothing. */
+    private final int[] mCarryWallAt = new int[2];
+
+    /** What a carried Linux window asks of the wall and the row (#386). */
+    @NonNull
+    private com.termux.app.wayland.LinuxCarry.Host linuxCarryHost() {
+        return new com.termux.app.wayland.LinuxCarry.Host() {
+            @NonNull @Override public android.view.ViewGroup overlay() {
+                return com.termux.app.window.WindowLayers.host(TermuxActivity.this,
+                    com.termux.app.window.WindowLayer.NOTICES);
+            }
+            @Override public int frontPlace() {
+                return mPaneWallController != null
+                    && mPaneWallController.currentPage() == com.termux.app.page.PageKind.TERMINAL
+                    ? rowCurrentIndex() : -1;
+            }
+            @Override public int placeCount() { return rowWindowCount(); }
+            @Override public int placeOf(long id) {
+                WSession ws = mCurrentWSession;
+                return ws == null ? -1 : ws.row.indexOfLinux(ws.windows, id);
+            }
+            @Override public void wallSpan(@NonNull float[] out) {
+                if (mPaneWallController == null) {
+                    out[0] = 0f;
+                    out[1] = 0f;
+                    return;
+                }
+                com.termux.app.wall.PaneWallLayout wall = mPaneWallController.wall();
+                wall.getLocationInWindow(mCarryWallAt);
+                out[0] = mCarryWallAt[0];
+                out[1] = mCarryWallAt[0] + wall.getWidth();
+            }
+            @Override public boolean canPage(int steps) {
+                return mPaneWallController != null && mPaneWallController.wall().canPage(steps);
+            }
+            @Override public void page(int steps) {
+                if (mPaneWallController != null) mPaneWallController.wall().pageOnce(steps);
+            }
+            @Override public void drop(long id, int from, int to) {
+                moveWindow(from, to);
+                goToLinuxWindow(id);
+            }
+            @Override public void putBack(long id) {
+                goToLinuxWindow(id);
+            }
+        };
     }
 
     /** The room the Terminal's top pane holds for the status row; a Linux window's page holds the same. */

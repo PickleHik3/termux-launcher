@@ -124,6 +124,11 @@ public final class CrossingViews implements Crossing.Stack, Crossing.Bar, Crossi
     }
 
     @Override
+    public void sides(boolean fromHome, boolean toHome, float progress, int leavesDirection) {
+        mHost.stackRenderer().setEnds(fromHome, toHome, progress, leavesDirection);
+    }
+
+    @Override
     public void endSides() {
         mHost.stackRenderer().clearEnds();
     }

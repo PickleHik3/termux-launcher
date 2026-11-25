@@ -327,9 +327,23 @@ public class X11LinuxAppRunnerTest {
             Collections.emptyList(), null);
         assertTrue(xfce.contains("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]"
             + " && command -v dbus-launch > /dev/null 2>&1; then\n"
-            + "exec dbus-launch --exit-with-session startxfce4\n"
+            + X11LinuxAppRunner.OWN_BUS_BLOCK
             + "fi\n"
             + "exec startxfce4\n"));
+    }
+
+    @Test public void theBusTheScriptStartsIsOwnedAndEndedWithItsChildren() {
+        // #391: dbus-launch --exit-with-session exec'd into the desktop left the bus, and the
+        // xfconfd it had activated, running after the desktop closed. The script keeps the bus's
+        // pid, and a watcher ends the bus's children, then the bus, once the session's pid is gone.
+        String block = X11LinuxAppRunner.OWN_BUS_BLOCK;
+        assertTrue(block.contains("eval \"$(dbus-launch --sh-syntax)\"\n"));
+        assertFalse(block.contains("--exit-with-session"));
+        assertTrue(block.contains("tl_bus=$DBUS_SESSION_BUS_PID\n"));
+        assertTrue(block.contains("while kill -0 $$ 2>/dev/null; do sleep "));
+        assertTrue(block.contains("PPid:"));
+        assertTrue(block.indexOf("PPid:") < block.indexOf("kill \"$tl_bus\""));
+        assertTrue(block.contains("unset tl_bus\n"));
 
         // LXQt and MATE start their own; a second bus is a second bus, not a spare.
         for (LinuxAppCatalog.LinuxApp own : Arrays.asList(

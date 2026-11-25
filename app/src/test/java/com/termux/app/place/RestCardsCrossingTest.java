@@ -392,7 +392,9 @@ public class RestCardsCrossingTest {
     }
 
     private static boolean drawsOver(Card over, RestCards cards, Card under) {
-        boolean keyboards = over.id == CardId.KEYBOARD
+        // On Home the keyboard's column is the Terminal's (#307, 2026-11-25): the bands under the
+        // keys draw over Home's held rows too.
+        boolean keyboards = over.id == CardId.KEYBOARD || over.id == CardId.UNDER
             || over.id == CardId.FOOT && over.view == StackView.KEYBOARD_COLUMN;
         return keyboards && cards.covered().contains(under);
     }
@@ -541,8 +543,8 @@ public class RestCardsCrossingTest {
                     for (boolean fromUp : BOOLS) for (boolean toUp : BOOLS) {
             RestCards a = end(f, pair[0], fromUp, pair[1], toUp, floating);
             RestCards b = end(f, pair[1], toUp, pair[0], fromUp, floating);
-            Card fa = a.card(CardId.FOOT);
-            Card fb = b.card(CardId.FOOT);
+            Card fa = shownFoot(a);
+            Card fb = shownFoot(b);
             if (fa == null || fb == null || !fa.box.equals(fb.box)) continue;
             if (fa.view != fb.view)
                 found.add("(g) FOOT OWNERS " + fa.view + "/" + fb.view + " " + style(floating)
@@ -550,6 +552,16 @@ public class RestCardsCrossingTest {
                     f.name + " up=" + fromUp + "/" + toUp);
         }
         assertKnown("(g)", found);
+    }
+
+    /**
+     * The foot a rest draws under the pill: the column's shared foot where one stands (it draws
+     * over Home's held host and its foot, #307 2026-11-25), else the rest's first foot.
+     */
+    @Nullable
+    private static Card shownFoot(RestCards cards) {
+        Card column = cards.columnFoot();
+        return column != null ? column : cards.card(CardId.FOOT);
     }
 
     // ---- accessory_row_stack -----------------------------------------------------------

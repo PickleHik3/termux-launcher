@@ -373,6 +373,14 @@ public final class PaneWallLayout extends ViewGroup
      */
     private final Handler mHoldHandler = new Handler(Looper.getMainLooper());
     private final Runnable mHoldElapsed = this::onBorderHoldElapsed;
+    /** The border hold that pages the row once ({@link BorderHold}), and the glyph it fills. */
+    private final BorderHold mPageHold = new BorderHold();
+    private final BorderHoldGlyph mPageHoldGlyph = new BorderHoldGlyph();
+    private final Runnable mPageHoldElapsed = this::onPageHoldElapsed;
+    private final Runnable mPageHoldGlyphStart = this::invalidate;
+    /** Frame-source counter for the idle audit: borderHold. */
+    private static final com.termux.terminal.FrameProbe.Source BORDERHOLD =
+        com.termux.terminal.FrameProbe.source("borderHold");
     /** True only inside {@link #cancelChildGesture()}: that cancel is the child's, not the stream's. */
     private boolean mCancellingChild;
     /**
@@ -1721,6 +1729,11 @@ public final class PaneWallLayout extends ViewGroup
         // The wall's own speed at the release, which the settle carries on from.
         float velocity = PaneWallPolicy.wallVelocity(mOffsetPx, velocityPxPerSec, previousExists,
             nextExists);
+        settleSteps(steps, velocity);
+    }
+
+    /** Lands the wall {@code steps} away (0: back where it was), carrying on at {@code velocity}. */
+    private void settleSteps(int steps, float velocity) {
         if (steps == 0) {
             if (mReducedMotion) settleImmediately();
             else startSlide(velocity);
@@ -1732,6 +1745,28 @@ public final class PaneWallLayout extends ViewGroup
         }
         int id = neighbourId(steps);
         if (id != NO_PAGE) goToCell(id, true, velocity);
+    }
+
+    /**
+     * Pages the wall one step toward {@code steps} (-1 the previous page or window, +1 the next)
+     * as a flick would, from the rest or from a border drag in progress: the border hold's page
+     * and a carried window's. False where there is nothing on that side or the wall is not free.
+     */
+    public boolean pageOnce(int steps) {
+        if (!mGesturesEnabled || steps == 0 || !canStep(steps)) return false;
+        if (!mDragging) {
+            if (isMoving()) return false;
+            beginDrag(false, 0f);
+        }
+        mDragging = false;
+        riseSink();
+        settleSteps(steps, 0f);
+        return true;
+    }
+
+    /** Whether {@link #pageOnce} has a page to land on {@code steps} away. */
+    public boolean canPage(int steps) {
+        return steps != 0 && canStep(steps);
     }
 
     /** Whether a drag {@code steps} away from the current page has a page to land on. */
@@ -1862,6 +1897,13 @@ public final class PaneWallLayout extends ViewGroup
                 armBorderDrag(event);
                 break;
             case MotionEvent.ACTION_MOVE:
+                // A finger that moves is a border drag, never a border hold.
+                if (mPageHold.isFilling()) {
+                    mPageHold.moved(event.getX(), event.getY(),
+                        ViewConfiguration.get(getContext()).getScaledTouchSlop(), false,
+                        SystemClock.uptimeMillis());
+                    if (!mPageHold.isFilling()) endPageHold();
+                }
                 if (mBorderDrag.isPaging()) {
                     if (mBorderVelocity != null) mBorderVelocity.addMovement(event);
                     dragTo(mBorderDrag.travel(event.getX()));
@@ -2164,6 +2206,7 @@ public final class PaneWallLayout extends ViewGroup
         mBorderDownY = event.getY();
         long holdMs = HoldTiming.holdTimeoutMs();
         mHoldHandler.postDelayed(mHoldElapsed, holdMs);
+        armPageHold(event.getX(), event.getY());
         // A press that could page lights its border at once: full where a slide pages at once,
         // and filling over the hold where only the hold does.
         if (mBorderDrag.holdPages()) {
@@ -2362,6 +2405,87 @@ public final class PaneWallLayout extends ViewGroup
         if (strip <= 0) return Float.NEGATIVE_INFINITY;
         getLocationInWindow(mWindowLocation);
         return strip - mWindowLocation[1];
+    }
+
+    /**
+     * A finger down on a side border starts the border hold ({@link BorderHold}) when the row has
+     * a window on that side: it pages the row once after {@link BorderHold#HOLD_MS} and shows its
+     * glyph as it fills. The glyph asks for frames only from its start to the page.
+     */
+    private void armPageHold(float x, float y) {
+        mPageHold.end();
+        mHoldHandler.removeCallbacks(mPageHoldElapsed);
+        mHoldHandler.removeCallbacks(mPageHoldGlyphStart);
+        if (!mBorderDrag.holdPages()) return;
+        BorderDrag.Border side = mBorderDrag.border();
+        if (!canStep(BorderHold.steps(side))) return;
+        long now = SystemClock.uptimeMillis();
+        mPageHold.begin(side, x, y, now);
+        if (!mPageHold.isFilling()) return;
+        mHoldHandler.postDelayed(mPageHoldElapsed, BorderHold.HOLD_MS);
+        if (!mReducedMotion) {
+            mHoldHandler.postDelayed(mPageHoldGlyphStart,
+                (long) (BorderHold.GLYPH_FROM * BorderHold.HOLD_MS) + 1L);
+        }
+    }
+
+    /** The border hold ended unpaged (the finger moved, lifted or was taken): the glyph goes. */
+    private void endPageHold() {
+        mHoldHandler.removeCallbacks(mPageHoldElapsed);
+        mHoldHandler.removeCallbacks(mPageHoldGlyphStart);
+        if (mPageHold.side() == BorderDrag.Border.NONE) return;
+        mPageHold.end();
+        invalidate();
+    }
+
+    /**
+     * The border hold ran its time on a finger that never moved: the row pages once toward that
+     * side, with a vibration, and the border's drag is over; the finger's lift then does nothing.
+     */
+    private void onPageHoldElapsed() {
+        BorderDrag.Claim claim = mBorderDrag.claim();
+        if (claim != BorderDrag.Claim.PAGING && claim != BorderDrag.Claim.PENDING) {
+            endPageHold();
+            return;
+        }
+        int steps = BorderHold.steps(mPageHold.side());
+        if (!mPageHold.fires(SystemClock.uptimeMillis(), canStep(steps))) {
+            endPageHold();
+            return;
+        }
+        Haptics.tick(this, HapticFeedbackConstants.LONG_PRESS);
+        cancelChildGestureIfNeeded(claim);
+        releaseBorderDrag();
+        pageOnce(steps);
+        syncBorderGlow();
+        invalidate();
+    }
+
+    /** A hold that fires before the hold claim owes the content its cancel, as the claim does. */
+    private void cancelChildGestureIfNeeded(@NonNull BorderDrag.Claim claim) {
+        if (claim == BorderDrag.Claim.PENDING) cancelChildGesture();
+    }
+
+    /**
+     * The border hold's glyph at the held border of the page the press landed on, drawn only while
+     * it fills; it asks for the next frame only then.
+     */
+    private void drawPageHoldGlyph(@NonNull android.graphics.Canvas canvas) {
+        if (!mPageHold.isFilling()) return;
+        long now = SystemClock.uptimeMillis();
+        float strength = mPageHold.glyph(now);
+        View page = mGlowPage;
+        if (page == null || strength <= 0f) return;
+        float edgeX = mPageHold.side() == BorderDrag.Border.LEFT
+            ? page.getLeft() + page.getTranslationX()
+            : page.getRight() + page.getTranslationX();
+        float density = getResources().getDisplayMetrics().density;
+        mPageHoldGlyph.draw(canvas, mPageHold.side(), edgeX, mBorderDownY, strength, density,
+            BorderGrabber.accent(getContext()));
+        if (mPageHold.fill(now) < 1f) {
+            BORDERHOLD.tick();
+            postInvalidateOnAnimation();
+        }
     }
 
     /**
@@ -2936,6 +3060,7 @@ public final class PaneWallLayout extends ViewGroup
     /** Everything the wall draws over its pages: the border glow, then the grabbers. */
     private void drawDecor(@NonNull android.graphics.Canvas canvas) {
         drawBorderGlow(canvas);
+        drawPageHoldGlyph(canvas);
         boolean bottom = isGrabberShown();
         boolean top = isStatusGrabberShown();
         if (!bottom && !top) return;
@@ -2998,6 +3123,7 @@ public final class PaneWallLayout extends ViewGroup
 
     private void releaseBorderDrag() {
         mHoldHandler.removeCallbacks(mHoldElapsed);
+        endPageHold();
         mBorderDrag.reset();
         mStatusEngageDeferred = false;
         if (mBorderVelocity != null) {
