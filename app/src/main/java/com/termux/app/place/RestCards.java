@@ -1383,7 +1383,7 @@ public final class RestCards {
         float below = 0f;
         for (Element e : rows) {
             int i = CrossingPath.rowOf(e);
-            int height = bandPx(e, dock, pass);
+            int height = rowBandPx(e, dock, pass);
             if (i >= 0 && height > 0) mRows.set(i, band, -(below + height), height);
             below += height;
         }
@@ -1590,6 +1590,18 @@ public final class RestCards {
             default:
                 return 0;
         }
+    }
+
+    /**
+     * The height an element takes in its band of the bottom rows, as the stack lays it out: its
+     * row ({@link #bandPx}), and for the status bar along the bottom (on the dock's plank) the
+     * status band the stack lays out for it ({@code StackLayout.Base#dockContentPx}), so a row
+     * standing above it is recorded where it is laid out.
+     */
+    static int rowBandPx(@NonNull Element element, @NonNull DockLayout dock,
+                         @NonNull StackLayout.Input pass) {
+        if (element == Element.STATUS) return Math.max(0, pass.statusBandPx);
+        return bandPx(element, dock, pass);
     }
 
     /**

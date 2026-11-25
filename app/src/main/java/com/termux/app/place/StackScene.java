@@ -326,6 +326,32 @@ public final class StackScene {
         }
     }
 
+    /**
+     * How far down the laid-out keyboard is drawn at a rest whose page carries its own keyboard
+     * ({@link StackEnd#pageKeyboard}): a Home page landed on by a Home to Home crossing, before the
+     * keyboard's show or hide has been laid out. Up: 0, where the keyboard rode in. Down: its keys'
+     * height ({@code keysPx}), off the screen where it rode out. Otherwise the laid-out down
+     * keyboard's own share ({@code downLaidOutPx}). Once laid out, both agree, so the landing and
+     * the pass after it draw one keyboard.
+     */
+    public static float restKeyboardDownPx(int pageKeyboard, int downLaidOutPx, int keysPx) {
+        if (pageKeyboard == StackEnd.PAGE_KEYBOARD_UP) return 0f;
+        if (pageKeyboard == StackEnd.PAGE_KEYBOARD_DOWN)
+            return keyboardTranslationPx(0f, downLaidOutPx > 0 ? downLaidOutPx : Math.max(0, keysPx));
+        return keyboardTranslationPx(0f, downLaidOutPx);
+    }
+
+    /**
+     * Whether a page's own keyboard at a rest is laid out as the page has it, so the rest's cards
+     * answer again ({@link #restKeyboardDownPx}): up with no down share, down with one, or no
+     * keyboard laid out to draw.
+     */
+    public static boolean pageKeyboardLaidOut(int pageKeyboard, int downLaidOutPx, int keysPx) {
+        if (pageKeyboard == StackEnd.PAGE_KEYBOARD_UP) return downLaidOutPx == 0;
+        if (pageKeyboard == StackEnd.PAGE_KEYBOARD_DOWN) return downLaidOutPx > 0 || keysPx <= 0;
+        return true;
+    }
+
     /** {@code end} at rest: nothing travels, the IME's lift as given. */
     public static void rest(@NonNull StackEnd end, float imeLiftPx, @NonNull Motion scratch,
                             @NonNull Frame out) {

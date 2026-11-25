@@ -1778,4 +1778,21 @@ public class PlaceLayoutStoreTest {
         if (view != null) prefs = view;
         return store;
     }
+
+    /** Each Home page keeps its own keyboard; a page never written answers with Home's memory. */
+    @Test
+    public void eachHomePageRemembersItsOwnKeyboard() {
+        PlaceLayoutStore store = store();
+        assertFalse(store.wasHomePageKeyboardOpen(3));
+        store.setKeyboardOpen(PageKind.HOME, true);
+        assertTrue("Home's shared memory until the page writes its own",
+            store.wasHomePageKeyboardOpen(3));
+        store.setHomePageKeyboardOpen(3, false);
+        store.setHomePageKeyboardOpen(7, true);
+        assertFalse(store.wasHomePageKeyboardOpen(3));
+        assertTrue(store.wasHomePageKeyboardOpen(7));
+        store.setKeyboardOpen(PageKind.HOME, false);
+        assertTrue("the page's own", store.wasHomePageKeyboardOpen(7));
+        assertFalse("the terminal keeps its own", store.wasKeyboardOpen(PageKind.TERMINAL));
+    }
 }

@@ -1,11 +1,14 @@
 # Crossing transitions: Stay, Glide or Ride (proposal, 2026-11-25)
 
-Status: **approved 2026-11-25 (section 6); steps 1–6 of the migration order built**
+Status: **approved 2026-11-25 (section 6); steps 1–7 of the migration order built**
 (`place/CrossingPath`: rows, keyboard, glass cards by element, the status bar's verb, two Home
-ends) and Home's keyboard as an overlay for the side A–Z bar (`HomeKeyboardCover.sideRailKeyboardPx`).
-Not built yet: the per-Home-page keyboard memory and its feed into the two Home ends
-(`StackRenderer.setHomePageKeyboards` has no caller), the status bar riding on an edge change off
-the top edge, and the Terminal-only rows under the keyboard riding with their page.
+ends), Home's keyboard as an overlay for the side A–Z bar (`HomeKeyboardCover.sideRailKeyboardPx`)
+and, round 3, the keyboard kept per Home page (`PlaceLayoutStore.wasHomePageKeyboardOpen`, up only
+on a page holding a floating or widget terminal) riding with its page on Home's pager
+(`CrossingController.rideHomePagesKeyboard`, landing held by `StackRenderer.landHomePage`).
+Not built yet: a tap outside the terminal putting Home's keyboard down, the status bar riding on
+an edge change off the top edge, and the Terminal-only rows under the keyboard riding with their
+page.
 Base: v2-redesign 3f0366d37.
 Paths are under `app/src/main/java/com/termux/app/` unless they say otherwise.
 

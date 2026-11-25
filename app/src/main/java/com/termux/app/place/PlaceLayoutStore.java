@@ -1833,6 +1833,28 @@ public final class PlaceLayoutStore {
     }
 
     /**
+     * Whether Home page {@code pageId} was left with the keyboard up (the crossing rule's Q1: on
+     * Home the keyboard is kept per page). A page never written answers with Home's own memory,
+     * which every Home page shared before.
+     */
+    public boolean wasHomePageKeyboardOpen(int pageId) {
+        String key = homePageKeyboardKey(pageId);
+        if (mStore != null && mStore.contains(key)) return mStore.getBoolean(key, false);
+        return wasKeyboardOpen(PageKind.HOME);
+    }
+
+    public void setHomePageKeyboardOpen(int pageId, boolean open) {
+        writeBoolean(homePageKeyboardKey(pageId), open);
+    }
+
+    /** {@code place.home.keyboard_open.<page id>}: one Home page's keyboard memory. */
+    @VisibleForTesting
+    @NonNull
+    static String homePageKeyboardKey(int pageId) {
+        return memoryKey(PageKind.HOME, KEY_KEYBOARD_OPEN) + "." + pageId;
+    }
+
+    /**
      * Whether the launcher is in minimal mode (CONTEXT.md). One flag for every place, remembered
      * until it is turned off: paging to another place never leaves the mode, since the mode is
      * not any place's. It does not overwrite the keyboard memory: a place simply comes back with

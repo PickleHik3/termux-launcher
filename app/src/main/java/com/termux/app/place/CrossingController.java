@@ -87,6 +87,30 @@ public final class CrossingController {
         /** Runs {@code action} once Home's page settles. */
         void runWhenHomePageSettles(@NonNull Runnable action);
 
+        /**
+         * Home page {@code pageId}'s own keyboard as a crossing end carries it
+         * ({@link PlaceKeyboard#pageKeyboard}); the crossing rule's Q1. Read once per pager step.
+         */
+        default int homePageKeyboard(int pageId) { return StackEnd.PAGE_KEYBOARD_REST; }
+
+        /**
+         * The two Home ends of a crossing between Home pages carry {@code leaving}'s and
+         * {@code arriving}'s keyboards ({@code StackRenderer#setHomePageKeyboards}).
+         */
+        default void setHomePagesKeyboards(int leaving, int arriving) {}
+
+        /**
+         * Two Home pages that differ only in their keyboard, which no crossing pairs: the stack's
+         * scene reads the pager's travel for them, so the keyboard rides with its page and
+         * everything else stays ({@code StackRenderer#setEnds}). {@code progress} 0 is the page
+         * in front, 1 its neighbour.
+         */
+        default void rideHomePagesKeyboard(int leaving, int arriving, float progress,
+                                           int leavesDirection) {}
+
+        /** Home's pager is at rest on the page in front: it takes its own keyboard. */
+        default void onHomePageAtRest() {}
+
         /** Whether the app drawer is engaged. */
         boolean isAppDrawerEngaged();
 
@@ -537,8 +561,10 @@ public final class CrossingController {
         // last one (the drawer, a keyboard swipe, reduced motion) having maybe let go.
         if (!running && fraction == 0f) {
             mHomeStepTried = false;
+            if (mHomePagerMoved && !mHost.isHomePageSettling()) homePageAtRest();
             return;
         }
+        mHomePagerMoved = true;
         if (!running && mCrossing.crossing()) return;
         boolean settling = mHost.isHomePageSettling();
         // The shift came back to rest with no settle to wait for: the crossing lands here.
@@ -556,6 +582,9 @@ public final class CrossingController {
         }
         int front = mHomeStepFrontId;
         int toward = mHomeStepTowardId;
+        // Two Home pages that differ in their keyboard alone pair no crossing: the scene reads the
+        // pager's travel for them (a running crossing hands the scene its own).
+        if (!running) rideHomePagesKeyboard(side, Math.abs(fraction));
         if (running) {
             // At rest mid-settle the page in front's partner is the crossing's other end.
             if (side == 0) toward = front == mHomeCrossHereId ? mHomeCrossThereId
@@ -592,6 +621,51 @@ public final class CrossingController {
         }
     }
 
+    /** Whether Home's pager moved since it last came to rest: a rest after it is a landing. */
+    private boolean mHomePagerMoved;
+    /** Whether the pager's travel drives the stack's two Home ends for the keyboard alone. */
+    private boolean mHomeKeyboardRides;
+    /** The step's pages' own keyboards ({@link Host#homePageKeyboard}); REST for none. */
+    private int mHomeStepFrontKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+    private int mHomeStepTowardKeyboard = StackEnd.PAGE_KEYBOARD_REST;
+
+    /**
+     * The keyboard rides with its Home page on a pager step no crossing pairs: where the page in
+     * front and its neighbour differ in their own keyboard, the stack's two Home ends carry them
+     * and the pager's progress is the scene's p. Elsewhere a pairing left from an earlier frame
+     * lets go.
+     */
+    private void rideHomePagesKeyboard(int side, float progress) {
+        int a = mHomeStepFrontKeyboard;
+        int b = mHomeStepTowardKeyboard;
+        boolean rides = side != 0 && mHomeStepTowardId >= 0 && a != StackEnd.PAGE_KEYBOARD_REST
+            && b != StackEnd.PAGE_KEYBOARD_REST && a != b;
+        if (!rides) {
+            if (mHomeKeyboardRides) {
+                mHomeKeyboardRides = false;
+                mHost.setHomePagesKeyboards(StackEnd.PAGE_KEYBOARD_REST,
+                    StackEnd.PAGE_KEYBOARD_REST);
+                mHost.rideHomePagesKeyboard(StackEnd.PAGE_KEYBOARD_REST,
+                    StackEnd.PAGE_KEYBOARD_REST, 0f, KeyboardColumn.LEAVES_UNKNOWN);
+            }
+            return;
+        }
+        mHomeKeyboardRides = true;
+        mHost.rideHomePagesKeyboard(a, b, progress > 1f ? 1f : progress,
+            KeyboardColumn.leavesDirectionOf(side));
+    }
+
+    /** Home's pager at rest: a keyboard pairing lets go and the page in front takes its keyboard. */
+    private void homePageAtRest() {
+        mHomePagerMoved = false;
+        if (mHomeKeyboardRides) {
+            mHomeKeyboardRides = false;
+            mHost.rideHomePagesKeyboard(StackEnd.PAGE_KEYBOARD_REST, StackEnd.PAGE_KEYBOARD_REST,
+                0f, KeyboardColumn.LEAVES_UNKNOWN);
+        }
+        mHost.onHomePageAtRest();
+    }
+
     /** The pager's step read once (mHomeStep*): which Home pages its frames name. */
     private void readHomeStep(@NonNull com.termux.app.wall.WallPages pages, int index, int side,
                               int revision) {
@@ -608,6 +682,10 @@ public final class CrossingController {
             || (neighbour >= mHost.homeRunFirst() && neighbour <= mHost.homeRunLast());
         mHomeStepTowardId = side != 0 && inRun && neighbour >= 0 && neighbour < ids.size()
             ? ids.get(neighbour) : -1;
+        mHomeStepFrontKeyboard = mHomeStepFrontId >= 0 ? mHost.homePageKeyboard(mHomeStepFrontId)
+            : StackEnd.PAGE_KEYBOARD_REST;
+        mHomeStepTowardKeyboard = mHomeStepTowardId >= 0
+            ? mHost.homePageKeyboard(mHomeStepTowardId) : StackEnd.PAGE_KEYBOARD_REST;
     }
 
     /**
@@ -668,6 +746,10 @@ public final class CrossingController {
         // Two Home pages that dress alike are a plain flip.
         if (!com.termux.app.place.SeamCrossing.crosses(here, there)) return false;
         mHomeCrossRest = mHost.chromeRestOf(com.termux.app.page.PageKind.HOME);
+        // The crossing hands the scene its ends; each Home end carries its own page's keyboard.
+        mHomeKeyboardRides = false;
+        mHost.setHomePagesKeyboards(mHost.homePageKeyboard(hereId),
+            mHost.homePageKeyboard(thereId));
         mHomeCrossHereId = hereId;
         mHomeCrossThereId = thereId;
         // A bar only one of them wears rides with its page while Home's pages slide flat, and
@@ -735,7 +817,8 @@ public final class CrossingController {
         if (landedId != committedId) {
             mHost.setAppliedChromeVariant(null);
             mHost.syncChromeArrangement();
-        }
+        }        // The landed page takes its own keyboard on the landing's frame.
+        homePageAtRest();
     }
 
     /**

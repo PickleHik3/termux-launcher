@@ -1013,7 +1013,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         PlaceLayoutStore store = placeLayoutStore();
         boolean home = place == com.termux.app.page.PageKind.HOME;
         return new com.termux.app.page.Rest.Inputs.Builder()
-            .keyboardRemembered(store != null && place != null && store.wasKeyboardOpen(place))
+            .keyboardRemembered(store != null && place != null && (home
+                ? homePageKeyboardRemembered(store) : store.wasKeyboardOpen(place)))
             .minimal(isMinimalMode())
             .homeAlwaysOn(store != null && store.isHomeKeyboardAlwaysOn())
             .overviewPreviewing(mOverviewPreviewing)
@@ -25411,6 +25412,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     private void syncWallKeyboard(@NonNull com.termux.app.page.PageKind page,
                                   boolean leavingKeyboardUp, boolean remember) {
         if (page != mLastWallPage && remember) rememberPlaceKeyboard(mLastWallPage, leavingKeyboardUp);
+        // Home's keyboard is the page in front's from this landing on.
+        mHomeKeyboardPageId = page == com.termux.app.page.PageKind.HOME ? mHomeSeam.pageInFront() : -1;
         // A first settle on the seeded page commits nothing new; the arrangement is still checked
         // (it only acts on a change), as the settle from the Terminal's window always did.
         if (!commitWallPage(page) && !remember) syncChromeArrangement();
@@ -26462,6 +26465,20 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         @Override public boolean isHomePageSettling() { return mWidgetPaneController.isHomePageSettling(); }
         @Override public int homePageIndex() { return mWidgetPaneController.homePageIndex(); }
         @Override public void runWhenHomePageSettles(@NonNull Runnable action) { mWidgetPaneController.runWhenHomePageSettles(action); }
+        @Override public int homePageKeyboard(int pageId) { return TermuxActivity.this.homePageKeyboard(pageId); }
+        @Override public void setHomePagesKeyboards(int leaving, int arriving) {
+            mStackRenderer.setHomePageKeyboards(leaving, arriving);
+        }
+        @Override public void rideHomePagesKeyboard(int leaving, int arriving, float progress,
+                                                    int leavesDirection) {
+            if (leaving == com.termux.app.place.StackEnd.PAGE_KEYBOARD_REST) {
+                mStackRenderer.clearEnds();
+                return;
+            }
+            mStackRenderer.setHomePageKeyboards(leaving, arriving);
+            mStackRenderer.setEnds(true, true, progress, leavesDirection);
+        }
+        @Override public void onHomePageAtRest() { TermuxActivity.this.onHomePageAtRest(); }
         @Override public boolean isAppDrawerEngaged() { return mSheets.isAppDrawerEngaged(); }
         @Override public boolean surfaceEditorActive() { return mSurfaceEditor.isActive(); }
         // ---- arrangement and dress -------------------------------------------------
@@ -26899,10 +26916,109 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // place had before, which is what leaving minimal mode is meant to bring back. So did the
         // page overview, whose cards show every place with its keyboard down.
         if (store.isMinimal() || mOverviewPreviewing) return;
+        // On Home the keyboard is kept per page (the crossing rule's Q1): the page that owns it.
+        if (place == com.termux.app.page.PageKind.HOME) {
+            rememberHomePageKeyboard(homeKeyboardPageId(), keyboardUp);
+            return;
+        }
         // Up on the drawer search's behalf (raised by it, not claimed since) it is not the place's.
         store.setKeyboardOpen(place, com.termux.app.place.PlaceKeyboard.keyboardToRemember(keyboardUp,
             mSheets.drawerRaisedKeyboard() && !mSheets.drawerRaisedKeyboardClaimed(),
             store.wasKeyboardOpen(place)));
+    }
+
+    // ---- The keyboard per Home page (the crossing rule's Q1) ----------------------------------
+
+    /**
+     * The Home page that owns the keyboard on screen: the one the wall or Home's pager last came
+     * to rest on, -1 off Home. A pager step names its pages by id; this one's keyboard is the
+     * keyboard as it is now, every other page's is its memory.
+     */
+    private int mHomeKeyboardPageId = -1;
+    /** One page's answer to {@link #homePageHoldsTerminal}, read once per pager step or rest. */
+    private int mHomeTerminalPageId = -1;
+    private boolean mHomeTerminalPageHolds;
+
+    private int homeKeyboardPageId() {
+        return mHomeKeyboardPageId >= 0 ? mHomeKeyboardPageId : mHomeSeam.pageInFront();
+    }
+
+    /** Whether Home page {@code pageId} holds a floating or widget terminal to type into. */
+    private boolean homePageHoldsTerminal(int pageId) {
+        if (pageId == mHomeTerminalPageId) return mHomeTerminalPageHolds;
+        int index = wallPages().homePageIdsForRepository().indexOf(pageId);
+        boolean holds = index >= 0 && mPaneController != null
+            && mPaneController.homeFloatCountOn(index) > 0;
+        if (!holds && index >= 0 && mWidgetHostController != null) {
+            for (com.termux.app.launcher.widget.LauncherWidgetRecord record
+                    : mWidgetHostController.repository().records()) {
+                if (record.page == index && com.termux.app.launcher.widget.builtin.BuiltinWidgetKind
+                        .TERMINAL.id.equals(record.builtinKind)) {
+                    holds = true;
+                    break;
+                }
+            }
+        }
+        mHomeTerminalPageId = pageId;
+        mHomeTerminalPageHolds = holds;
+        return holds;
+    }
+
+    /** Whether the Home page in front was left with its keyboard up and keeps it. */
+    private boolean homePageKeyboardRemembered(@NonNull PlaceLayoutStore store) {
+        int front = mHomeSeam.pageInFront();
+        return front >= 0 && com.termux.app.place.PlaceKeyboard.homePageKeyboardUp(false,
+            store.wasHomePageKeyboardOpen(front), homePageHoldsTerminal(front));
+    }
+
+    /**
+     * Home page {@code pageId}'s keyboard as a crossing end carries it: the keyboard on screen for
+     * the page that owns it, every other page's memory, up only where it holds a terminal (or
+     * always on).
+     */
+    private int homePageKeyboard(int pageId) {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || mInAppKeyboard == null || pageId < 0)
+            return com.termux.app.place.StackEnd.PAGE_KEYBOARD_REST;
+        if (pageId == homeKeyboardPageId())
+            return com.termux.app.place.PlaceKeyboard.pageKeyboard(committedKeyboardVisible());
+        return com.termux.app.place.PlaceKeyboard.pageKeyboard(
+            com.termux.app.place.PlaceKeyboard.homePageKeyboardUp(store.isHomeKeyboardAlwaysOn(),
+                store.wasHomePageKeyboardOpen(pageId), homePageHoldsTerminal(pageId)));
+    }
+
+    /** Records Home page {@code pageId} as left with {@code keyboardUp}, kept only with a terminal. */
+    private void rememberHomePageKeyboard(int pageId, boolean keyboardUp) {
+        PlaceLayoutStore store = placeLayoutStore();
+        if (store == null || mInAppKeyboard == null || pageId < 0) return;
+        if (store.isMinimal() || mOverviewPreviewing) return;
+        mHomeTerminalPageId = -1;
+        boolean up = com.termux.app.place.PlaceKeyboard.keyboardToRemember(keyboardUp,
+            mSheets.drawerRaisedKeyboard() && !mSheets.drawerRaisedKeyboardClaimed(),
+            store.wasHomePageKeyboardOpen(pageId));
+        store.setHomePageKeyboardOpen(pageId, com.termux.app.place.PlaceKeyboard
+            .homePageKeyboardToRemember(up, homePageHoldsTerminal(pageId)));
+    }
+
+    /**
+     * Home's pager came to rest on the page in front. Landed on another page, the page left
+     * records its keyboard and the one in front takes its own: the stack draws it as the page has
+     * it from this frame (StackRenderer#landHomePage), then it is shown or hidden.
+     */
+    private void onHomePageAtRest() {
+        if (mLastWallPage != com.termux.app.page.PageKind.HOME) {
+            mHomeKeyboardPageId = -1;
+            return;
+        }
+        int front = mHomeSeam.pageInFront();
+        if (front < 0 || front == mHomeKeyboardPageId) return;
+        int left = mHomeKeyboardPageId;
+        mHomeKeyboardPageId = front;
+        if (left < 0) return;
+        rememberHomePageKeyboard(left, committedKeyboardVisible());
+        boolean wanted = restWantsKeyboard(com.termux.app.page.PageKind.HOME);
+        mStackRenderer.landHomePage(com.termux.app.place.PlaceKeyboard.pageKeyboard(wanted));
+        applyPlaceKeyboard(com.termux.app.page.PageKind.HOME);
     }
 
     /**
@@ -30872,6 +30988,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void onWidgetPageRendered() {
                     refreshPageGlyphs();
+                    // A widget added or removed may change which Home page holds a terminal.
+                    mHomeTerminalPageId = -1;
                     // A Terminal widget gone from Home takes its shell with it, however it went.
                     mTerminalWidgets.reconcile();
                     // Another Home page in front may wear another ground, on screen or beside it.

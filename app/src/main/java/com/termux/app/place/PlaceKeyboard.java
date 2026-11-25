@@ -73,6 +73,32 @@ public final class PlaceKeyboard {
     }
 
     /**
+     * Whether a Home page has its keyboard up as it comes to rest (the crossing rule's Q1): on Home
+     * the keyboard is an overlay owned by one page, kept per page, and only a page that holds a
+     * floating or widget terminal keeps it up. Always on keeps it up on every Home page.
+     */
+    public static boolean homePageKeyboardUp(boolean alwaysOn, boolean remembered,
+                                             boolean pageHoldsTerminal) {
+        return alwaysOn || (remembered && pageHoldsTerminal);
+    }
+
+    /**
+     * What a Home page is recorded as leaving with: up only where the page holds a terminal to
+     * type into, so a page without one never brings the keyboard back.
+     */
+    public static boolean homePageKeyboardToRemember(boolean keyboardUp, boolean pageHoldsTerminal) {
+        return keyboardUp && pageHoldsTerminal;
+    }
+
+    /**
+     * A Home page's keyboard as a crossing end carries it ({@code StackEnd.PAGE_KEYBOARD_UP} or
+     * {@code PAGE_KEYBOARD_DOWN}).
+     */
+    public static int pageKeyboard(boolean up) {
+        return up ? StackEnd.PAGE_KEYBOARD_UP : StackEnd.PAGE_KEYBOARD_DOWN;
+    }
+
+    /**
      * How many of the grid's rows always on gives the keyboard: as many whole rows as the keyboard
      * covers, from a grid {@code gridHeightPx} tall cut into {@code gridRows} rows. Zero when the
      * grid or the keyboard is not measured yet, or when nothing would be left of the grid.

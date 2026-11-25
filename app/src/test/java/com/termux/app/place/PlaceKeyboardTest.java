@@ -85,4 +85,20 @@ public class PlaceKeyboardTest {
         assertFalse(PlaceKeyboard.tapReclaimsFromExternalInput(false, true));
         assertFalse(PlaceKeyboard.tapReclaimsFromExternalInput(false, false));
     }
+
+    /**
+     * On Home the keyboard is kept per page (the crossing rule's Q1): only a page that holds a
+     * floating or widget terminal keeps it up, and always on keeps it up on every page.
+     */
+    @Test public void aHomePageKeepsItsKeyboardOnlyWithATerminal() {
+        assertTrue(PlaceKeyboard.homePageKeyboardUp(false, true, true));
+        assertFalse("no terminal, no keyboard", PlaceKeyboard.homePageKeyboardUp(false, true, false));
+        assertFalse(PlaceKeyboard.homePageKeyboardUp(false, false, true));
+        assertTrue("always on", PlaceKeyboard.homePageKeyboardUp(true, false, false));
+        assertTrue(PlaceKeyboard.homePageKeyboardToRemember(true, true));
+        assertFalse(PlaceKeyboard.homePageKeyboardToRemember(true, false));
+        assertFalse(PlaceKeyboard.homePageKeyboardToRemember(false, true));
+        assertEquals(StackEnd.PAGE_KEYBOARD_UP, PlaceKeyboard.pageKeyboard(true));
+        assertEquals(StackEnd.PAGE_KEYBOARD_DOWN, PlaceKeyboard.pageKeyboard(false));
+    }
 }
