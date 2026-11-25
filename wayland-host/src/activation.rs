@@ -1,108 +1,62 @@
 //! Which `xdg_activation_v1` tokens bring a window in front.
 //!
-//! The host hands a token to any client that asks, but acts on it only when the client that
-//! asked was one the user was just using: it holds keyboard focus now, or took focus or input in
-//! the last `GRACE`. A token also expires `TOKEN_TTL` after it was made and works once. The
-//! rule is pure; `android/signals.rs` feeds it the clock and the focus.
+//! On a phone one window is in front, so a Linux app taking it from another costs far less than
+//! an app asking for its window and nothing happening. The rule is loose on purpose: a token
+//! counts when it is fresh (made within `TOKEN_TTL`) and the client that uses it owns a Linux
+//! window, or the token carried an input serial (`set_serial`, as a click or key gives).
+//! Where the token was made does not matter: a second `firefox` launched from a terminal makes
+//! its own, with no window of its own, and hands it to the running Firefox, which uses it.
+//! A token works once. The rule is pure; `android/signals.rs` feeds it the clock and the window.
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
-/// How long after its last focus or input a client may still get an activation token.
-pub const GRACE: Duration = Duration::from_secs(5);
 /// How long a token lives; an app passes it to its running instance within a moment.
-pub const TOKEN_TTL: Duration = Duration::from_secs(15);
+pub const TOKEN_TTL: Duration = Duration::from_secs(10);
 
-/// Most clients remembered; the least recent goes first.
-const MAX_RECENT: usize = 8;
-
-/// A token made by a client that `focused` (holds the keyboard now) or was last active
-/// `since_active` ago is honoured.
-pub fn token_valid(focused: bool, since_active: Option<Duration>) -> bool {
-    focused || since_active.map_or(false, |d| d <= GRACE)
-}
-
-/// Whether a token made `age` ago is still good.
+/// Whether a token made `age` ago still counts.
 pub fn token_fresh(age: Duration) -> bool {
     age <= TOKEN_TTL
 }
 
-/// The clients that last had focus or input, with when.
-pub struct Recent<K> {
-    seen: Vec<(K, Instant)>,
-}
-
-impl<K> Default for Recent<K> {
-    fn default() -> Self {
-        Recent { seen: Vec::new() }
-    }
-}
-
-impl<K: PartialEq> Recent<K> {
-    /// `who` took focus, lost it, or got input at `now`.
-    pub fn note(&mut self, who: K, now: Instant) {
-        if let Some(entry) = self.seen.iter_mut().find(|(k, _)| *k == who) {
-            entry.1 = now;
-            return;
-        }
-        if self.seen.len() == MAX_RECENT {
-            let oldest = (0..self.seen.len()).min_by_key(|&i| self.seen[i].1).unwrap_or(0);
-            self.seen.swap_remove(oldest);
-        }
-        self.seen.push((who, now));
-    }
-
-    /// How long ago `who` was last noted, None when it never was (or was forgotten).
-    pub fn since(&self, who: &K, now: Instant) -> Option<Duration> {
-        self.seen.iter().find(|(k, _)| k == who).map(|(_, at)| now.saturating_duration_since(*at))
-    }
+/// A token made `age` ago, used by a client that `owns_window` (a Linux window of its own),
+/// carrying an input serial or not, is honoured.
+pub fn token_valid(age: Duration, owns_window: bool, has_serial: bool) -> bool {
+    token_fresh(age) && (owns_window || has_serial)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    const NOW: Duration = Duration::from_secs(1);
+
     #[test]
-    fn a_focused_client_is_honoured_however_long_ago_it_typed() {
-        assert!(token_valid(true, None));
-        assert!(token_valid(true, Some(Duration::from_secs(600))));
+    fn a_fresh_token_used_by_a_client_with_a_window_is_honoured() {
+        assert!(token_valid(NOW, true, false));
+        assert!(token_valid(TOKEN_TTL, true, false));
     }
 
     #[test]
-    fn a_client_without_focus_is_honoured_only_within_the_grace() {
-        assert!(token_valid(false, Some(Duration::from_secs(1))));
-        assert!(token_valid(false, Some(GRACE)));
-        assert!(!token_valid(false, Some(GRACE + Duration::from_millis(1))));
-        assert!(!token_valid(false, None));
+    fn a_fresh_token_with_an_input_serial_is_honoured_without_a_window() {
+        assert!(token_valid(NOW, false, true));
     }
 
     #[test]
-    fn a_token_expires() {
-        assert!(token_fresh(Duration::from_secs(1)));
-        assert!(!token_fresh(TOKEN_TTL + Duration::from_millis(1)));
+    fn a_client_with_no_window_and_no_serial_is_ignored() {
+        assert!(!token_valid(NOW, false, false));
     }
 
     #[test]
-    fn recent_remembers_when_a_client_was_last_seen() {
-        let t0 = Instant::now();
-        let mut r = Recent::default();
-        assert_eq!(r.since(&1, t0), None);
-        r.note(1, t0);
-        r.note(2, t0 + Duration::from_secs(1));
-        assert_eq!(r.since(&1, t0 + Duration::from_secs(3)), Some(Duration::from_secs(3)));
-        r.note(1, t0 + Duration::from_secs(4));
-        assert_eq!(r.since(&1, t0 + Duration::from_secs(5)), Some(Duration::from_secs(1)));
+    fn a_stale_token_is_ignored_whatever_it_carries() {
+        let old = TOKEN_TTL + Duration::from_millis(1);
+        assert!(!token_valid(old, true, true));
+        assert!(!token_valid(old, true, false));
+        assert!(!token_valid(old, false, true));
     }
 
     #[test]
-    fn recent_forgets_the_least_recent_when_full() {
-        let t0 = Instant::now();
-        let mut r = Recent::default();
-        for k in 0..MAX_RECENT as u32 {
-            r.note(k, t0 + Duration::from_secs(k as u64));
-        }
-        r.note(100, t0 + Duration::from_secs(50));
-        assert_eq!(r.since(&0, t0 + Duration::from_secs(60)), None);
-        assert!(r.since(&1, t0 + Duration::from_secs(60)).is_some());
-        assert!(r.since(&100, t0 + Duration::from_secs(60)).is_some());
+    fn a_token_expires_after_ten_seconds() {
+        assert!(token_fresh(Duration::from_secs(9)));
+        assert!(!token_fresh(Duration::from_secs(11)));
     }
 }

@@ -607,8 +607,6 @@ pub struct State {
     pub text_inputs: super::text_input::TextInputs,
     /// `xdg_activation_v1`: the tokens clients made.
     pub activation_state: XdgActivationState,
-    /// The clients that last had focus or input, which decides whose activation tokens count.
-    pub recent: crate::activation::Recent<ClientId>,
     /// `zwp_idle_inhibit_v1`, held only to keep its global alive.
     #[allow(dead_code)]
     idle_inhibit_state: IdleInhibitManagerState,
@@ -836,7 +834,6 @@ fn setup(
         clip: super::clipboard::ClipState::new(clip_tx),
         text_inputs: Default::default(),
         activation_state,
-        recent: Default::default(),
         idle_inhibit_state,
         inhibitors: Default::default(),
         presentation_state,
@@ -1145,8 +1142,6 @@ impl State {
         }
         self.release_all_keys();
         let old = std::mem::replace(&mut self.focused, new);
-        self.note_active(old);
-        self.note_active(new);
         if let Some(i) = old.and_then(|id| self.toplevel_index(id)) {
             self.toplevels[i].shell.set_activated(false);
             // A grab ends when its window loses the keyboard.
@@ -1181,9 +1176,6 @@ impl State {
         }
         let Some(i) = self.toplevel_index(id) else { return };
         let Some(touch) = self.seat.get_touch() else { return };
-        if action == TOUCH_DOWN {
-            self.note_active(Some(id));
-        }
         if action == TOUCH_CANCEL {
             self.toplevels[i].swallow_touch = false;
             touch.cancel(self);
@@ -1235,9 +1227,6 @@ impl State {
         }
         let Some(evdev) = android_to_evdev(android_keycode) else { return };
         let Some(keyboard) = self.seat.get_keyboard() else { return };
-        if down {
-            self.note_active(Some(id));
-        }
         let state = if down { KeyState::Pressed } else { KeyState::Released };
         // xkb key codes are evdev codes + 8.
         keyboard.input::<(), _>(self, Keycode::new(evdev + 8), state, SERIAL_COUNTER.next_serial(), time, |_, _, _| {
@@ -1272,7 +1261,6 @@ impl State {
                 // Outside a grabbing popup a press only dismisses the popups, and its release
                 // goes nowhere either.
                 if action == POINTER_BUTTON_DOWN {
-                    self.note_active(Some(id));
                     let at = self.toplevels[i].pointer_at;
                     if self.press_dismisses(i, at) {
                         self.toplevels[i].swallow_button = true;
