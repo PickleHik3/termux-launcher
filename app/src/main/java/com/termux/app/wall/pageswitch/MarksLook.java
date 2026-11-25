@@ -72,8 +72,15 @@ public final class MarksLook implements PageMarkLook {
         canvas.translate(cx, cy);
         int back = canvas.save();
         canvas.translate(shift, -shift);
-        mark(canvas, kind, 0, false, size * STACK_SCALE,
-            PageGlyphPainter.scaleAlpha(plateInk, BACK_ALPHA));
+        int backInk = PageGlyphPainter.scaleAlpha(plateInk, BACK_ALPHA);
+        if (current) {
+            // The front is a disc: its back card is a bare disc too, so the glyph of the back mark
+            // (a prompt's underscore) never pokes out past the disc's edge into the next cell.
+            mFill.setColor(backInk);
+            canvas.drawCircle(0f, 0f, PageMarkShapes.discRadius(size * STACK_SCALE), mFill);
+        } else {
+            mark(canvas, kind, 0, false, size * STACK_SCALE, backInk);
+        }
         canvas.restoreToCount(back);
         canvas.translate(-shift, shift);
         mark(canvas, kind, count, current, size * STACK_SCALE, ink);
