@@ -21,7 +21,7 @@ import java.util.List;
 public class OverlayExitStatedTest {
 
     /** The registrations in {@code createOverlayRegistry}, so a new one has to be counted here. */
-    private static final int REGISTERED = 17;
+    private static final int REGISTERED = 18;
 
     @Test
     public void everyRegisteredOverlayStatesItsExitViews() throws IOException {
@@ -38,8 +38,14 @@ public class OverlayExitStatedTest {
         String[] parts = text.substring(start, end).split("registry\\.register\\(");
 
         List<String> silent = new ArrayList<>();
-        for (int i = 1; i < parts.length; i++)
-            if (!parts[i].contains("exitViews(")) silent.add("registration #" + i);
+        // Overview registers its controller, which states its own (checked below).
+        boolean controllerStates = new String(
+            Files.readAllBytes(file.resolveSibling("overview/OverviewController.java")),
+            StandardCharsets.UTF_8).contains("void exitViews(");
+        for (int i = 1; i < parts.length; i++) {
+            boolean viaController = parts[i].startsWith("overview())") && controllerStates;
+            if (!viaController && !parts[i].contains("exitViews(")) silent.add("registration #" + i);
+        }
         assertEquals("overlays that have not stated their exit views: " + silent,
             0, silent.size());
         assertEquals("a registration was added or removed; state its exit views and count it",
