@@ -1243,9 +1243,6 @@ impl State {
         }
     }
 
-    /// Copies `buffer` into toplevel `i`'s window and reports a new shown size. A window whose
-    /// post fails (its consumer is gone) is dropped, as if detached, so nothing is drawn into it
-    /// again until the launcher hands a new Surface.
     /// The content hash of a dmabuf toplevel's held buffer, for the settle reads (see
     /// `Paced::copied`). None for shm, which is complete at commit, and for a window with
     /// subsurfaces or popups, whose copy is a tree the root alone does not describe.
@@ -1257,6 +1254,9 @@ impl State {
         content_hash(&self.toplevels[i], buffer, output, &mut self.maps)
     }
 
+    /// Copies `buffer` into toplevel `i`'s window and reports a new shown size. A window whose
+    /// post fails (its consumer is gone) is dropped, as if detached, so nothing is drawn into it
+    /// again until the launcher hands a new Surface.
     fn copy(&mut self, i: usize, buffer: &WlBuffer) {
         if !buffer.is_alive() {
             return;
