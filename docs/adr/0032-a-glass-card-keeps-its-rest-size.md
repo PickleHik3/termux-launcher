@@ -235,3 +235,12 @@ What the prototype and the crossing test (#301, `RestCardsCrossingTest`) settled
   Home's keyboard up), which is the keyboard's material. The Terminal's own Peek card wears the
   Peek cut, rim and reflection; its reflection is drawn on the Live path only, so it holds no
   bitmap, and shows none without it.
+- **2026-11-25, Stay, Glide or Ride supersedes "stays put or rides".** The developer approved rule
+  C of `project-docs/active/crossing-transitions-stay-glide-ride-2026-11-25.md`: this ADR's "a card
+  both ends draw at one rect stays put, any other rides with its side" becomes three verbs, chosen
+  once per crossing by `place/CrossingPath` from the two rests: STAY (same rect), GLIDE (same size,
+  same band, order kept: laid out once, each rest an offset, blended on the material curve) and
+  RIDE (anything else, sliding with its page, never re-sized). Built so far: the bands-under apps
+  row and the shared row's ease GLIDE, and the keyboard up at one end only RIDEs sideways with its
+  page instead of sinking (up at both ends it stays, #307's shared column). Pairing by element, the
+  status bar and side-to-crossing-end come next (the proposal's steps 4–6).

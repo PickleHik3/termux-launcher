@@ -1,6 +1,7 @@
 # Crossing transitions: Stay, Glide or Ride (proposal, 2026-11-25)
 
-Status: **proposal for the developer to approve**. Nothing is built. Base: v2-redesign 3f0366d37.
+Status: **approved 2026-11-25 (section 6); steps 1–3 of the migration order built**
+(`place/CrossingPath`), steps 4–6 next. Base: v2-redesign 3f0366d37.
 Paths are under `app/src/main/java/com/termux/app/` unless they say otherwise.
 
 ## The problem
