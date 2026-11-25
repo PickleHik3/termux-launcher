@@ -348,6 +348,18 @@ impl XwmHandler for State {
         }
     }
 
+    fn fullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(i) = x11_index(self, &window) {
+            self.request_fullscreen(i, true);
+        }
+    }
+
+    fn unfullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(i) = x11_index(self, &window) {
+            self.request_fullscreen(i, false);
+        }
+    }
+
     fn resize_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32, _resize_edge: ResizeEdge) {}
 
     fn move_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32) {}

@@ -249,6 +249,17 @@ pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetVisible<
     guarded("nativeSetVisible", (), || send(Command::SetVisible { id, visible: visible != JNI_FALSE }))
 }
 
+/// Shows window `id` full screen, or not; its next configure carries the size.
+#[no_mangle]
+pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetFullscreen<'l>(
+    _env: JNIEnv<'l>,
+    _class: JClass<'l>,
+    id: jlong,
+    on: jboolean,
+) {
+    guarded("nativeSetFullscreen", (), || send(Command::SetFullscreen { id, on: on != JNI_FALSE }))
+}
+
 /// Gives window `id` keyboard focus; 0 takes it from every window.
 #[no_mangle]
 pub extern "system" fn Java_com_termux_app_wayland_WaylandHost_nativeSetFocus<'l>(_env: JNIEnv<'l>, _class: JClass<'l>, id: jlong) {

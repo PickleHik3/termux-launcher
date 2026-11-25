@@ -43,6 +43,7 @@ use smithay::reexports::wayland_protocols::xdg::shell::server::xdg_toplevel;
 use smithay::reexports::wayland_server::backend::{ClientData, ClientId, DisconnectReason};
 use smithay::reexports::wayland_server::protocol::wl_buffer::WlBuffer;
 use smithay::reexports::wayland_server::protocol::wl_callback::WlCallback;
+use smithay::reexports::wayland_server::protocol::wl_output::WlOutput;
 use smithay::reexports::wayland_server::protocol::wl_seat::WlSeat;
 use smithay::reexports::wayland_server::protocol::wl_surface::WlSurface;
 use smithay::reexports::wayland_server::{Client, Display, DisplayHandle, ListeningSocket, Resource};
@@ -128,6 +129,9 @@ pub enum Command {
     PageSize { width: i32, height: i32, scale: f64 },
     SetVisible { id: i64, visible: bool },
     SetFocus { id: i64 },
+    /// The launcher gave the window the whole screen, or took it back: the Fullscreen state (xdg)
+    /// or `_NET_WM_STATE_FULLSCREEN` (X11); the size follows in the next Configure.
+    SetFullscreen { id: i64, on: bool },
     Touch { id: i64, action: i32, action_index: i32, time: u32, points: TouchPoints },
     Pointer { id: i64, action: i32, button: i32, x: f32, y: f32, time: u32 },
     /// An Android key code; the host maps it to evdev.
@@ -388,6 +392,10 @@ pub struct Toplevel {
     view_size: Option<(i32, i32)>,
     /// Decided once, before the first configure (xdg) or at the map request (X11).
     class: WindowClass,
+    /// The launcher shows it full screen (its SetFullscreen).
+    fullscreen: bool,
+    /// It asked for full screen before it was announced; the launcher hears it at announce.
+    asked_fullscreen: bool,
     /// The scale the launcher shows this toplevel at: its app's own, else the screen's density.
     scale: f64,
     /// The output's integer scale, which a client that reads only `wl_output` draws at.
@@ -936,6 +944,7 @@ impl State {
             }
             Command::SetVisible { id, visible } => self.set_visible(id, visible),
             Command::SetFocus { id } => self.set_focus(id),
+            Command::SetFullscreen { id, on } => self.set_fullscreen(id, on),
             Command::Touch { id, action, action_index, time, points } => self.touch(id, action, action_index, time, &points),
             Command::Pointer { id, action, button, x, y, time } => self.pointer(id, action, button, x, y, time),
             Command::Key { id, android_keycode, down, time } => self.key(id, android_keycode, down, time),
@@ -970,6 +979,46 @@ impl State {
         }
         // Shown again: what was committed while hidden is still dirty and is copied now.
         self.schedule();
+    }
+
+    /// Sets or clears the full-screen state the launcher decided; the size comes with the view's
+    /// next configure.
+    fn set_fullscreen(&mut self, id: i64, on: bool) {
+        let Some(i) = self.toplevel_index(id) else { return };
+        let t = &mut self.toplevels[i];
+        if t.fullscreen == on {
+            return;
+        }
+        t.fullscreen = on;
+        match &t.shell {
+            Shell::Xdg(x) => {
+                x.with_pending_state(|s| {
+                    if on {
+                        s.states.set(xdg_toplevel::State::Fullscreen);
+                    } else {
+                        s.states.unset(xdg_toplevel::State::Fullscreen);
+                    }
+                });
+                if x.is_initial_configure_sent() {
+                    x.send_pending_configure();
+                }
+            }
+            Shell::X11(w) => {
+                let _ = w.set_fullscreen(on);
+            }
+        }
+    }
+
+    /// A client asked to be full screen or to leave it: the launcher decides (`set_fullscreen`).
+    /// A window not yet announced is heard at its announce.
+    pub fn request_fullscreen(&mut self, i: usize, on: bool) {
+        let t = &mut self.toplevels[i];
+        if !t.announced {
+            t.asked_fullscreen = on;
+            return;
+        }
+        let id = t.id;
+        self.events.fullscreen_request(id, on);
     }
 
     fn configure(&mut self, id: i64, width: i32, height: i32, scale: f64) {
@@ -1764,6 +1813,9 @@ impl State {
         }
         self.apply_scale(i);
         self.events.window_created(id, &title, &app_id, pid, flags, parent);
+        if std::mem::take(&mut self.toplevels[i].asked_fullscreen) {
+            self.events.fullscreen_request(id, true);
+        }
     }
 
     /// The pane toplevel `i` is shown in, in the units its client is configured in: the view
@@ -1856,6 +1908,8 @@ impl State {
             visible: true,
             view_size: None,
             class: WindowClass::Main,
+            fullscreen: false,
+            asked_fullscreen: false,
             scale: self.output_scale,
             output_integer: integer_scale(self.output_scale),
             buffer_scale: 1,
@@ -1893,6 +1947,7 @@ impl State {
         t.visible = true;
         t.view_size = None;
         t.clamp_logged = false;
+        t.fullscreen = false;
         if self.focused == Some(id) && id > 0 {
             self.release_all_keys();
             self.focused = None;
@@ -2364,6 +2419,25 @@ impl XdgShellHandler for State {
         }
         self.refocus();
         self.schedule();
+    }
+
+    fn fullscreen_request(&mut self, surface: ToplevelSurface, _output: Option<WlOutput>) {
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.request_fullscreen(i, true);
+        }
+        // Answered at once with the state as it stands; the launcher's choice follows.
+        if surface.is_initial_configure_sent() {
+            surface.send_configure();
+        }
+    }
+
+    fn unfullscreen_request(&mut self, surface: ToplevelSurface) {
+        if let Some(i) = self.toplevel_index_for(surface.wl_surface()) {
+            self.request_fullscreen(i, false);
+        }
+        if surface.is_initial_configure_sent() {
+            surface.send_configure();
+        }
     }
 
     fn toplevel_destroyed(&mut self, surface: ToplevelSurface) {

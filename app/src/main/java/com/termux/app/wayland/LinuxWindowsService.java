@@ -120,6 +120,11 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         }
 
         @Override
+        public void setFullscreen(long id, boolean fullscreen) {
+            if (mRunning) WaylandHost.nativeSetFullscreen(id, fullscreen);
+        }
+
+        @Override
         public void setFocus(long id) {
             if (mRunning) WaylandHost.nativeSetFocus(id);
         }
@@ -409,6 +414,12 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     public void onClipboardText(String text) {
         if (!mRunning || !LinuxClipboardText.acceptable(text)) return;
         broadcast(cb -> cb.onClipboardText(text));
+    }
+
+    @Override
+    public void onFullscreenRequest(long id, boolean fullscreen) {
+        if (!mRunning || mWindows.get(id) == null) return;
+        broadcast(cb -> cb.onFullscreenRequest(id, fullscreen));
     }
 
     @Override

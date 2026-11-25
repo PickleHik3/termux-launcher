@@ -25,6 +25,12 @@ oneway interface ILinuxWindowsCallback {
      * addCallback after onHostState.
      */
     void onXDisplay(String display);
+    /**
+     * The window asked to be full screen (xdg set_fullscreen, _NET_WM_STATE_FULLSCREEN), or to
+     * leave it. The launcher decides and answers with setFullscreen. A window that asked before
+     * it was announced is heard right after onWindowCreated.
+     */
+    void onFullscreenRequest(long id, boolean fullscreen);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }

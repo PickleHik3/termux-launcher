@@ -55,6 +55,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
          * window's coordinates; false when it cannot be carried.
          */
         default boolean beginCarry(float x, float y, int pointerId) { return false; }
+        /** Back while the shown window is full screen: it leaves; false when it is not full screen. */
+        default boolean leaveFullscreen() { return false; }
     }
 
     private final PaneGlassBackdropView glass;
@@ -288,6 +290,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     }
 
     @Override public boolean onBack() {
+        if (host.leaveFullscreen()) return true;
         if (menu.isOpen()) {
             menu.dismiss();
             return true;

@@ -108,6 +108,11 @@ oneway interface ILinuxWindows {
     void setPageSize(int width, int height, float scale);
     /** Whether the window's view is on screen. Windows start visible. */
     void setVisible(long id, boolean visible);
+    /**
+     * Shows the window full screen (the Fullscreen state, _NET_WM_STATE_FULLSCREEN), or takes it
+     * back; the size comes with the next configure. The launcher's answer to onFullscreenRequest.
+     */
+    void setFullscreen(long id, boolean fullscreen);
     /** Gives the window keyboard focus; 0 takes focus from every window. Keys held at the change are released. */
     void setFocus(long id);
 

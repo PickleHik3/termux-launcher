@@ -22,6 +22,7 @@ struct Methods {
     ended: JStaticMethodID,
     x_display: JStaticMethodID,
     clipboard: JStaticMethodID,
+    fullscreen: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -40,6 +41,8 @@ pub trait HostEvents {
     fn x_display(&mut self, display: &str);
     /// Text a Linux client copied.
     fn clipboard_text(&mut self, text: &str);
+    /// The window asked to be full screen (`on`) or to leave it.
+    fn fullscreen_request(&mut self, id: i64, on: bool);
 }
 
 impl JavaCallbacks {
@@ -53,6 +56,7 @@ impl JavaCallbacks {
             ended: env.get_static_method_id(&local, "onHostEnded", "(Z)V")?,
             x_display: env.get_static_method_id(&local, "onXDisplay", "(Ljava/lang/String;)V")?,
             clipboard: env.get_static_method_id(&local, "onClipboardText", "(Ljava/lang/String;)V")?,
+            fullscreen: env.get_static_method_id(&local, "onFullscreenRequest", "(JZ)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -141,6 +145,12 @@ impl HostEvents for AttachedCallbacks {
     fn clipboard_text(&mut self, text: &str) {
         let m = self.methods.clipboard;
         call(&mut self.env, &self.class, m, |env| Ok(vec![jvalue { l: env.new_string(text)?.into_raw() }]));
+    }
+
+    fn fullscreen_request(&mut self, id: i64, on: bool) {
+        let m = self.methods.fullscreen;
+        let flag = if on { JNI_TRUE } else { JNI_FALSE };
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }, jvalue { z: flag }]));
     }
 }
 
