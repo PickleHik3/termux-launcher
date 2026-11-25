@@ -253,7 +253,28 @@ public class LauncherCtlNotificationListener extends NotificationListenerService
         TopPaneFeed.setControls(null);
         TopPaneFeed.setListenerConnected(false);
         Logger.logWarn(LOG_TAG, "Notification listener disconnected");
+        requestRebindUnlessDestroyed();
     }
+
+    /**
+     * The system unbinds a listener on its own (a crash of its host, a rebind sweep) and only
+     * brings it back when asked: without this the media row and the dots stay off until the user
+     * grants access again. A destroyed instance is the system letting go, so it asks nothing.
+     */
+    private void requestRebindUnlessDestroyed() {
+        if (mDestroyed) return;
+        try {
+            sRebinder.accept(new ComponentName(this, LauncherCtlNotificationListener.class));
+            Logger.logInfo(LOG_TAG, "Asked the system to rebind the notification listener");
+        } catch (RuntimeException e) {
+            Logger.logWarn(LOG_TAG, "Could not ask for a listener rebind: " + e);
+        }
+    }
+
+    /** Test seam: what asks the system for a rebind. */
+    @androidx.annotation.VisibleForTesting
+    static volatile java.util.function.Consumer<ComponentName> sRebinder =
+        NotificationListenerService::requestRebind;
 
     /** Whether this instance is the connection the process listens through. */
     private boolean isLive() {
