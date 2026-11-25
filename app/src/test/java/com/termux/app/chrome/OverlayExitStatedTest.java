@@ -39,9 +39,9 @@ public class OverlayExitStatedTest {
 
         List<String> silent = new ArrayList<>();
         // Overview registers its controller, which states its own (checked below).
-        boolean controllerStates = Files.readAllBytes(file.resolveSibling("overview/OverviewController.java")).length > 0
-            && new String(Files.readAllBytes(file.resolveSibling("overview/OverviewController.java")),
-                StandardCharsets.UTF_8).contains("void exitViews(");
+        boolean controllerStates = new String(
+            Files.readAllBytes(file.resolveSibling("overview/OverviewController.java")),
+            StandardCharsets.UTF_8).contains("void exitViews(");
         for (int i = 1; i < parts.length; i++) {
             boolean viaController = parts[i].startsWith("overview())") && controllerStates;
             if (!viaController && !parts[i].contains("exitViews(")) silent.add("registration #" + i);
