@@ -312,8 +312,18 @@ public final class StackRenderer implements DockPlankController.SlabSink {
      * ({@link StackScene#sideSlide}); the shared rows do not. The landing clears it.
      */
     public void setEnds(boolean fromHome, boolean toHome, float progress) {
+        setEnds(fromHome, toHome, progress, com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN);
+    }
+
+    /**
+     * {@link #setEnds(boolean, boolean, float)} with the way the leaving page slides out, the
+     * wall's own direction ({@code KeyboardColumn#LEAVES_*}), handed to the scene in its motion
+     * ({@code StackScene.Motion#leavesDirection}) so a Home to Home crossing knows it (#307).
+     */
+    public void setEnds(boolean fromHome, boolean toHome, float progress, int leavesDirection) {
         if (mHasEnds && mFromHome == fromHome && mToHome == toHome && mEndsProgress == progress
-            && mApplied) return;
+            && mLeavesDirection == leavesDirection && mApplied) return;
+        mLeavesDirection = leavesDirection;
         mHasEnds = true;
         mFromHome = fromHome;
         mToHome = toHome;
@@ -391,9 +401,13 @@ public final class StackRenderer implements DockPlankController.SlabSink {
     }
 
     /** The crossing is over without a landing's own call: the lanes stand at the front rest. */
+    /** The way the leaving page slides out on the crossing in progress; see {@link #setEnds}. */
+    private int mLeavesDirection = com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
+
     public void clearEnds() {
         if (!mHasEnds) return;
         mHasEnds = false;
+        mLeavesDirection = com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
         requestApply();
     }
 
@@ -482,6 +496,8 @@ public final class StackRenderer implements DockPlankController.SlabSink {
         final float coverShare = mEffective.keyboardSharePx;
         mEffective.homeCoverPx = covered && keyboardInColumn ? HomeKeyboardCover.rowsDropPx(false,
             mGeometry.keyboardHeightPx, mGeometry.keyboardFootPx, coverShare) : 0f;
+        mEffective.leavesDirection = mHasEnds ? mLeavesDirection
+            : com.termux.app.place.KeyboardColumn.LEAVES_UNKNOWN;
         StackScene.at(from, to, p, mEffective, mGeometry, mFrame);
         mPlankTarget = plankTarget();
         mFrameTerminalHost = mViews.view(R.id.terminal_dock_host);

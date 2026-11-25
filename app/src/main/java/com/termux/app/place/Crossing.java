@@ -57,6 +57,15 @@ public final class Crossing {
          */
         default void sides(boolean fromHome, boolean toHome, float progress) {}
 
+        /**
+         * {@link #sides(boolean, boolean, float)} with the way the leaving page slides out
+         * ({@link KeyboardColumn#LEAVES_LEFT} or {@link KeyboardColumn#LEAVES_RIGHT}, the wall's
+         * direction), which a Home to Home crossing has no side to tell (#307).
+         */
+        default void sides(boolean fromHome, boolean toHome, float progress, int leavesDirection) {
+            sides(fromHome, toHome, progress);
+        }
+
         /** The crossing is over: the lanes stand at the front side's rest again. */
         default void endSides() {}
     }
@@ -215,8 +224,10 @@ public final class Crossing {
         SeamCrossing.Endpoint here = mHere;
         SeamCrossing.Endpoint there = mThere;
         if (here != null && there != null) {
+            // The wall moves toward the arriving side, so the leaving page slides the other way.
             mStack.sides(here.page.isHome(), there.page.isHome(),
-                SeamTravel.otherEndFraction(wallFrame, here.page));
+                SeamTravel.otherEndFraction(wallFrame, here.page),
+                KeyboardColumn.leavesDirectionOf(wallFrame.towardSide));
         }
         return answers;
     }

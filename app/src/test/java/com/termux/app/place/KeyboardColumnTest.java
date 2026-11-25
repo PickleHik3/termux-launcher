@@ -39,4 +39,22 @@ public class KeyboardColumnTest {
     @Test public void anUnknownDirectionKeepsTheScenesPose() {
         assertEquals(0f, KeyboardColumn.leavingTxPx(KeyboardColumn.LEAVES_UNKNOWN, 0.6f, W), 0f);
     }
+
+    /** The wall moves toward the arriving page, so the leaving page and its keyboard go the other way. */
+    @Test public void theLeavingPageSlidesAwayFromTheWallsDirection() {
+        assertEquals(KeyboardColumn.LEAVES_LEFT, KeyboardColumn.leavesDirectionOf(1));
+        assertEquals(KeyboardColumn.LEAVES_RIGHT, KeyboardColumn.leavesDirectionOf(-1));
+        assertEquals(KeyboardColumn.LEAVES_UNKNOWN, KeyboardColumn.leavesDirectionOf(0));
+    }
+
+    /** The scene's motion carries the direction and a rest clears it (#307, Home to Home). */
+    @Test public void theScenesMotionCarriesTheDirectionAndARestClearsIt() {
+        StackScene.Motion a = new StackScene.Motion();
+        a.leavesDirection = KeyboardColumn.LEAVES_RIGHT;
+        StackScene.Motion b = new StackScene.Motion();
+        b.set(a);
+        assertEquals(KeyboardColumn.LEAVES_RIGHT, b.leavesDirection);
+        b.rest();
+        assertEquals(KeyboardColumn.LEAVES_UNKNOWN, b.leavesDirection);
+    }
 }

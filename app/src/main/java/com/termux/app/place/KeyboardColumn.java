@@ -65,6 +65,15 @@ public final class KeyboardColumn {
     public static final int LEAVES_UNKNOWN = 0;
 
     /**
+     * The way the leaving page slides out for a wall moving toward {@code towardSide} (1 the
+     * arriving page is to the right, -1 to the left, 0 unknown;
+     * {@code PlaceChromeTravel.Frame#towardSide}): the opposite way.
+     */
+    public static int leavesDirectionOf(int towardSide) {
+        return towardSide > 0 ? LEAVES_LEFT : towardSide < 0 ? LEAVES_RIGHT : LEAVES_UNKNOWN;
+    }
+
+    /**
      * How far across the keyboard's column is drawn at progress {@code p} while it leaves with
      * its page ({@link #leavesWithPage}): the leaving page's own slide, a wall {@code widthPx}
      * wide in {@code direction} ({@link #LEAVES_LEFT} or {@link #LEAVES_RIGHT}). 0 at p = 0 (the

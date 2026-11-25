@@ -61,12 +61,19 @@ public final class StackScene {
          * on this frame ({@link HomeKeyboardCover#rowsDropPx}); 0 where the keyboard lifts them.
          */
         public float homeCoverPx;
+        /**
+         * Which way the leaving page slides out on this crossing ({@link KeyboardColumn#LEAVES_LEFT},
+         * {@link KeyboardColumn#LEAVES_RIGHT}), the wall's own direction, so a Home to Home crossing
+         * knows it too (#307); {@link KeyboardColumn#LEAVES_UNKNOWN} at rest.
+         */
+        public int leavesDirection;
 
         /** Nothing moved; the IME's lift is kept, a rest's own. */
         public void rest() {
             dockTravelPx = 0f;
             keyboardSharePx = 0f;
             homeCoverPx = 0f;
+            leavesDirection = KeyboardColumn.LEAVES_UNKNOWN;
             sink(0f);
         }
 
@@ -87,6 +94,7 @@ public final class StackScene {
             keyboardSharePx = o.keyboardSharePx;
             imeLiftPx = o.imeLiftPx;
             homeCoverPx = o.homeCoverPx;
+            leavesDirection = o.leavesDirection;
             layerSink(o.rowsSinkPx, o.rowsCutPx, o.sheetSinkPx, o.sheetCutPx);
         }
     }
