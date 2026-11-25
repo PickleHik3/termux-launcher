@@ -374,6 +374,12 @@ public final class TaiRuntimeServiceClient {
             }
         }
         synchronized (connectionLock) {
+            // A bind that never called back would leave binding true for good, and every later
+            // call would wait on this dead attempt. Give it up so the next call binds afresh.
+            if (service == null && binding && connectingLatch == latch) {
+                releaseBindingLocked();
+                binding = false;
+            }
             return service;
         }
     }
