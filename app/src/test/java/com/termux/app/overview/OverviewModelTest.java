@@ -82,6 +82,17 @@ public class OverviewModelTest {
         assertEquals(1, model(in).originIndex());
     }
 
+    @Test public void noCurrentPageRingsTheNearestTerminalWindowNotTheFirstCard() {
+        // The wall on a page the strip does not hold: the window to return to, the nearest terminal.
+        PageBarModel.Input in = wall("HHT", "a", "b", "c");
+        in.currentPageId = -1;
+        in.currentWindow = 2;
+        OverviewModel m = model(in);
+        assertEquals(4, m.originIndex());
+        assertTrue(m.cards().get(4).origin);
+        assertFalse(m.cards().get(0).origin);
+    }
+
     @Test public void originFallsBackToTheFirstCard() {
         PageBarModel.Input in = wall("HH");
         in.currentPageId = -1;
