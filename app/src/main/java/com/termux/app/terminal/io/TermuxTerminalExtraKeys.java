@@ -119,9 +119,9 @@ public class TermuxTerminalExtraKeys extends TerminalExtraKeys {
             if (mTermuxTerminalViewClient != null)
                 mTermuxTerminalViewClient.onToggleSoftKeyboardRequest();
         } else if ("DRAWER".equals(key)) {
-            // The drawer this key pulls out is the sessions drawer; the name is what existing
-            // extra-keys rows already carry, so it stays.
-            com.termux.app.terminal.TerminalSessionBrowser.toggle(mActivity);
+            // The key opens Overview; the name is what existing extra-keys rows already carry,
+            // so it stays.
+            mActivity.toggleOverview();
         } else if ("PASTE".equals(key)) {
             pasteWhereTheKeyboardPastes(mActivity);
         } else if ("SCROLL".equals(key)) {
