@@ -272,12 +272,25 @@ public final class WaylandDesktopServer {
      */
     @NonNull
     public static List<String> scaleEnv(float scale) {
+        return scaleEnv(scale, null);
+    }
+
+    /**
+     * {@link #scaleEnv(float)} for a desktop of {@code kind}. An XFCE desktop gets no
+     * {@code GDK_SCALE}/{@code GDK_DPI_SCALE}: its settings daemon serves the scale from xfconf
+     * ({@link #xfconfWrites}), so GTK divides {@code Xft/DPI} by the window scale once and follows
+     * a new Scale stop live; with the exports GTK would take both and draw text twice too big. Pure.
+     */
+    @NonNull
+    public static List<String> scaleEnv(float scale, @Nullable String kind) {
         float s = sane(scale);
         int whole = windowScale(s);
         List<String> env = new ArrayList<>();
-        env.add("GDK_SCALE=" + whole);
-        env.add("GDK_DPI_SCALE=" + String.format(java.util.Locale.ROOT, "%.4f", s / whole)
-            .replaceAll("0+$", "").replaceAll("\\.$", ""));
+        if (!KIND_XFCE.equals(kind)) {
+            env.add("GDK_SCALE=" + whole);
+            env.add("GDK_DPI_SCALE=" + String.format(java.util.Locale.ROOT, "%.4f", s / whole)
+                .replaceAll("0+$", "").replaceAll("\\.$", ""));
+        }
         env.add("XCURSOR_SIZE=" + Math.round(BASE_CURSOR_SIZE * s));
         return Collections.unmodifiableList(env);
     }
