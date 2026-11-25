@@ -25,6 +25,19 @@ oneway interface ILinuxWindowsCallback {
      * addCallback after onHostState.
      */
     void onXDisplay(String display);
+    /**
+     * The window asked to be full screen (xdg set_fullscreen, _NET_WM_STATE_FULLSCREEN), or to
+     * leave it. The launcher decides and answers with setFullscreen. A window that asked before
+     * it was announced is heard right after onWindowCreated.
+     */
+    void onFullscreenRequest(long id, boolean fullscreen);
+    /**
+     * The window asked to be moved (xdg_toplevel.move, _NET_WM_MOVERESIZE move: a drag on its own
+     * title bar) while a finger or button is down on it. Resize requests are not passed on.
+     */
+    void onMoveRequest(long id);
+    /** The window asked for its window menu (xdg show_window_menu: a right-click on its title bar). */
+    void onWindowMenuRequest(long id);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
 }

@@ -348,9 +348,26 @@ impl XwmHandler for State {
         }
     }
 
+    fn fullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(i) = x11_index(self, &window) {
+            self.request_fullscreen(i, true);
+        }
+    }
+
+    fn unfullscreen_request(&mut self, _xwm: XwmId, window: X11Surface) {
+        if let Some(i) = x11_index(self, &window) {
+            self.request_fullscreen(i, false);
+        }
+    }
+
     fn resize_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32, _resize_edge: ResizeEdge) {}
 
-    fn move_request(&mut self, _xwm: XwmId, _window: X11Surface, _button: u32) {}
+    /// `_NET_WM_MOVERESIZE` move: the launcher lifts the window as a carry.
+    fn move_request(&mut self, _xwm: XwmId, window: X11Surface, _button: u32) {
+        if let Some(i) = x11_index(self, &window) {
+            self.request_move(i);
+        }
+    }
 
     /// The X connection is gone (Xwayland crashed or was killed): every X window goes, and the
     /// display is freed. Xwayland is not restarted; X clients have no display until the host

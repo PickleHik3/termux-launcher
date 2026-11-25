@@ -30,6 +30,12 @@ public final class WaylandHost {
         void onXDisplay(String display);
         /** Text a Linux app copied. */
         void onClipboardText(String text);
+        /** The window asked to be full screen, or to leave it. */
+        void onFullscreenRequest(long id, boolean fullscreen);
+        /** The window asked to be moved (a drag on its own title bar). */
+        void onMoveRequest(long id);
+        /** The window asked for its window menu. */
+        void onWindowMenuRequest(long id);
         /** The compositor ended without being asked; {@link #stop()} clears it. */
         void onHostEnded(boolean crashed);
     }
@@ -75,8 +81,11 @@ public final class WaylandHost {
     private static native void nativeStop();
     public static native void nativeSetSurface(long id, @Nullable Surface surface);
     public static native void nativeConfigure(long id, int width, int height, float scale);
+    /** The page slot a new full-page window gets, and its scale. */
+    public static native void nativeSetPageSize(int width, int height, float scale);
     public static native void nativeSetVisible(long id, boolean visible);
     public static native void nativeSetFocus(long id);
+    public static native void nativeSetFullscreen(long id, boolean fullscreen);
     public static native void nativeTouch(long id, int action, int actionIndex, long eventTimeMs, int count,
                                           int[] pointerIds, float[] xs, float[] ys);
     public static native void nativePointer(long id, int action, int button, float x, float y, long eventTimeMs);
@@ -137,6 +146,33 @@ public final class WaylandHost {
         MAIN.post(() -> {
             Listener l = sListener;
             if (l != null && generation == sGeneration) l.onClipboardText(text);
+        });
+    }
+
+    @Keep
+    static void onFullscreenRequest(long id, boolean fullscreen) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onFullscreenRequest(id, fullscreen);
+        });
+    }
+
+    @Keep
+    static void onMoveRequest(long id) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onMoveRequest(id);
+        });
+    }
+
+    @Keep
+    static void onWindowMenuRequest(long id) {
+        final int generation = sGeneration;
+        MAIN.post(() -> {
+            Listener l = sListener;
+            if (l != null && generation == sGeneration) l.onWindowMenuRequest(id);
         });
     }
 

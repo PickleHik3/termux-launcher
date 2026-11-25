@@ -56,6 +56,12 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         new java.util.HashMap<>();
     /** The Linux windows' seam (spec #384, #392); NONE without them. */
     @NonNull private WallLinux mLinux = WallLinux.NONE;
+    /** The Terminal page the Linux windows' page size follows; null while none is watched. */
+    @Nullable private View mLinuxSizeSource;
+    /** Tells the Linux windows the Terminal page's size when its layout changes it. */
+    private final View.OnLayoutChangeListener mLinuxSizeWatcher = (v, l, t, r, b, ol, ot, or, ob) -> {
+        if (r - l != or - ol || b - t != ob - ot) mLinux.setPageSize(r - l, b - t);
+    };
     /** Re-reads where the row's Linux windows stand: run on every landing and cell change. */
     @Nullable private Runnable mLinuxSync;
     /** The cover the Linux window in front shows; null without Linux windows. */
@@ -206,7 +212,19 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         mLinux = linux == null ? WallLinux.NONE : linux;
         mLinuxSync = sync;
         mLinux.applyStyle(mStyle);
+        watchLinuxPageSize();
         syncLinux();
+    }
+
+    /** Follows the Terminal page's size for the Linux windows (the cover takes the same frame). */
+    private void watchLinuxPageSize() {
+        View terminal = mLinux == WallLinux.NONE ? null : mWall.pageView(PageKind.TERMINAL);
+        if (terminal == mLinuxSizeSource) return;
+        if (mLinuxSizeSource != null) mLinuxSizeSource.removeOnLayoutChangeListener(mLinuxSizeWatcher);
+        mLinuxSizeSource = terminal;
+        if (terminal == null) return;
+        terminal.addOnLayoutChangeListener(mLinuxSizeWatcher);
+        if (terminal.getWidth() > 0) mLinux.setPageSize(terminal.getWidth(), terminal.getHeight());
     }
 
     /** Whether the cover stands in the Terminal page's place: a Linux window is in front of the row. */
@@ -369,6 +387,7 @@ public final class PaneWallController implements PaneWallLayout.Listener {
     /** The terminal's pane host is the Terminal's page while a terminal window is in front. */
     public void attachTerminalPage(@NonNull View paneHost) {
         mWall.setPageView(PageKind.TERMINAL, paneHost);
+        watchLinuxPageSize();
     }
 
     /**

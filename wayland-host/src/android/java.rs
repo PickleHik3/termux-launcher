@@ -22,6 +22,9 @@ struct Methods {
     ended: JStaticMethodID,
     x_display: JStaticMethodID,
     clipboard: JStaticMethodID,
+    fullscreen: JStaticMethodID,
+    move_request: JStaticMethodID,
+    window_menu: JStaticMethodID,
 }
 
 pub struct JavaCallbacks {
@@ -40,6 +43,12 @@ pub trait HostEvents {
     fn x_display(&mut self, display: &str);
     /// Text a Linux client copied.
     fn clipboard_text(&mut self, text: &str);
+    /// The window asked to be full screen (`on`) or to leave it.
+    fn fullscreen_request(&mut self, id: i64, on: bool);
+    /// The window asked to be moved (a drag on its own title bar).
+    fn move_request(&mut self, id: i64);
+    /// The window asked for its window menu (a right-click on its own title bar).
+    fn window_menu_request(&mut self, id: i64);
 }
 
 impl JavaCallbacks {
@@ -53,6 +62,9 @@ impl JavaCallbacks {
             ended: env.get_static_method_id(&local, "onHostEnded", "(Z)V")?,
             x_display: env.get_static_method_id(&local, "onXDisplay", "(Ljava/lang/String;)V")?,
             clipboard: env.get_static_method_id(&local, "onClipboardText", "(Ljava/lang/String;)V")?,
+            fullscreen: env.get_static_method_id(&local, "onFullscreenRequest", "(JZ)V")?,
+            move_request: env.get_static_method_id(&local, "onMoveRequest", "(J)V")?,
+            window_menu: env.get_static_method_id(&local, "onWindowMenuRequest", "(J)V")?,
         };
         let class = env.new_global_ref(&local)?;
         Ok(JavaCallbacks { vm: env.get_java_vm()?, class, methods })
@@ -141,6 +153,22 @@ impl HostEvents for AttachedCallbacks {
     fn clipboard_text(&mut self, text: &str) {
         let m = self.methods.clipboard;
         call(&mut self.env, &self.class, m, |env| Ok(vec![jvalue { l: env.new_string(text)?.into_raw() }]));
+    }
+
+    fn fullscreen_request(&mut self, id: i64, on: bool) {
+        let m = self.methods.fullscreen;
+        let flag = if on { JNI_TRUE } else { JNI_FALSE };
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }, jvalue { z: flag }]));
+    }
+
+    fn move_request(&mut self, id: i64) {
+        let m = self.methods.move_request;
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
+    }
+
+    fn window_menu_request(&mut self, id: i64) {
+        let m = self.methods.window_menu;
+        call(&mut self.env, &self.class, m, |_| Ok(vec![jvalue { j: id }]));
     }
 }
 

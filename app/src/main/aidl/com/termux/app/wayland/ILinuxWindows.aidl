@@ -28,7 +28,7 @@ import com.termux.app.wayland.ILinuxWindowsCallback;
  */
 oneway interface ILinuxWindows {
     /** Raised with every change to this interface or its callback. */
-    const int VERSION = 5;
+    const int VERSION = 6;
 
     // Host states, ILinuxWindowsCallback.onHostState.
     /** Asked to start; running or stopped follows. */
@@ -100,8 +100,19 @@ oneway interface ILinuxWindows {
     void setSurface(long id, in Surface surface);
     /** The view's size in pixels and the display density it is shown at. */
     void configure(long id, int width, int height, float scale);
+    /**
+     * The page slot a new full-page window gets, in pixels, and the scale it would be shown at:
+     * a Main window's first configure uses it while the window has no view yet (since VERSION 6).
+     * Sent whenever it changes.
+     */
+    void setPageSize(int width, int height, float scale);
     /** Whether the window's view is on screen. Windows start visible. */
     void setVisible(long id, boolean visible);
+    /**
+     * Shows the window full screen (the Fullscreen state, _NET_WM_STATE_FULLSCREEN), or takes it
+     * back; the size comes with the next configure. The launcher's answer to onFullscreenRequest.
+     */
+    void setFullscreen(long id, boolean fullscreen);
     /** Gives the window keyboard focus; 0 takes focus from every window. Keys held at the change are released. */
     void setFocus(long id);
 

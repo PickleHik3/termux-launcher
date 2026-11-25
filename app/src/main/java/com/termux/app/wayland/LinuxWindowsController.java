@@ -255,6 +255,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     };
     private final View.OnLayoutChangeListener slotWatcher = (v, l, t, r, b, ol, ot, or, ob) -> {
         if (r - l == or - ol && b - t == ob - ot) return;
+        if (v == LinuxWindowsController.this.page.slot()) sendPageSize();
         // Posted: a layout pass must not ask for another.
         if (!replacePosted) {
             replacePosted = true;
@@ -262,6 +263,22 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
     };
     private final List<Chip> chips = new ArrayList<>();
+    /** Which window is full screen, and which asked while it was not in front. */
+    private final LinuxFullscreenPolicy fullscreen = new LinuxFullscreenPolicy();
+    /** A finger that went down at the bottom edge of the full-screen window: it may show the keys. */
+    private boolean edgeSwipe;
+    private float edgeDownY;
+    /** The extra-keys row shows under the full-screen window, which is lifted for it. */
+    private boolean revealed;
+    private final int[] revealAt = new int[2];
+    private final Runnable hideReveal = this::hideReveal;
+    /** The Terminal page's size as the wall last told ({@link #setPageSize}); 0 before. */
+    private int pageWidth;
+    private int pageHeight;
+    /** The page size last sent to the host; reset on every attach. */
+    private int sentPageWidth;
+    private int sentPageHeight;
+    private float sentPageScale;
 
     private final LinuxWindowKeys.Sink keySink = (keyCode, down) -> sendKey(keyCode, down);
     private final TerminalKeyEventHandler.KeyValueInterceptor keys =
@@ -300,6 +317,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             Log.i(LOG_TAG, "launcher attached to the Linux windows host");
             try {
                 b.linkToDeath(death, 0);
+                sentPageWidth = 0;
+                sendPageSize();
                 service.addCallback(callback);
             } catch (RemoteException e) {
                 hostGone();
@@ -358,6 +377,21 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override
         public void onXDisplay(String display) {}
+
+        @Override
+        public void onFullscreenRequest(long id, boolean fullscreen) {
+            main.post(() -> fullscreenRequested(id, fullscreen));
+        }
+
+        @Override
+        public void onMoveRequest(long id) {
+            main.post(() -> moveRequested(id));
+        }
+
+        @Override
+        public void onWindowMenuRequest(long id) {
+            main.post(() -> windowMenuRequested(id));
+        }
 
         @Override
         public void onClipboardText(String text) {
@@ -422,6 +456,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** Stops listening; the apps keep running in the host. */
     public void stop() {
         cancelCarry();
+        if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         if (service != null) {
@@ -546,6 +581,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             return;
         }
         boolean replayed = SystemClock.uptimeMillis() - attachedAt < REPLAY_MS;
+        // This launcher hid no chrome for a window an earlier one showed full screen: it leaves.
+        if (replayed) sendFullscreen(id, false);
         w.inRow = true;
         rebuildChips();
         Log.i(LOG_TAG, "Linux window " + id + " (" + w.appId + ") joins the row" + (replayed ? ", replayed" : ""));
@@ -569,6 +606,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private void windowDestroyed(long id) {
         Win w = windows.get(id);
         if (w == null) return;
+        if (fullscreen.gone(id)) hideReveal();
         detachViews(w);
         windows.remove(id);
         if (focusedId == id) focusedId = 0;
@@ -599,6 +637,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The host stopped or died: its windows leave the row, with a notice when it died. */
     private void dropWindows(boolean died) {
         boolean had = windows.size() > 0;
+        if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         windows.clear();
@@ -656,6 +695,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             setVisible(now, true);
             focus(now.id);
         }
+        syncFullscreen();
         rebuildChips();
     }
 
@@ -677,6 +717,38 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     @Override
+    public void setPageSize(int width, int height) {
+        pageWidth = width;
+        pageHeight = height;
+        sendPageSize();
+    }
+
+    /**
+     * Tells the host the slot a new full-page window gets, with the scale it would draw at: the
+     * slot's own size once it is laid out, else the one the Terminal page's size gives it.
+     * Compares first.
+     */
+    private void sendPageSize() {
+        ILinuxWindows s = service;
+        if (s == null) return;
+        FrameLayout slot = page.slot();
+        boolean laidOut = slot.getWidth() > 0 && slot.getHeight() > 0;
+        int width = laidOut ? slot.getWidth() : pageWidth;
+        int height = laidOut ? slot.getHeight() : page.slotHeightFor(pageHeight);
+        if (width <= 0 || height <= 0) return;
+        float scale = LinuxDisplayScale.windowScale(null, context.getResources().getDisplayMetrics().density, width);
+        if (width == sentPageWidth && height == sentPageHeight && scale == sentPageScale) return;
+        try {
+            s.setPageSize(width, height, scale);
+        } catch (RemoteException e) {
+            return;
+        }
+        sentPageWidth = width;
+        sentPageHeight = height;
+        sentPageScale = scale;
+    }
+
+    @Override
     public void applyStyle(@Nullable PaneSurfaceStyle style) {
         page.applyStyle(style);
         paneStyle = style;
@@ -687,6 +759,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     /** Puts {@code w}'s view, then its dialogs' centred over it, in the page's slot. */
     private void attachViews(@NonNull Win w) {
+        if (w.id == fullscreen.fullscreenId()) {
+            showFullscreen(w);
+            return;
+        }
         FrameLayout slot = slotOf(w);
         TextureView v = w.view();
         if (v.getParent() != slot) {
@@ -746,7 +822,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
      */
     private void placeFixed(@NonNull Win w) {
         TextureView v = w.view;
-        if (v == null || !(v.getParent() instanceof FrameLayout)) return;
+        if (v == null || !(v.getParent() instanceof FrameLayout) || w.id == fullscreen.fullscreenId()) return;
         FrameLayout slot = (FrameLayout) v.getParent();
         if (slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
         float scale = LinuxWindowRow.fixedFrame(slot.getWidth(), slot.getHeight(), w.width, w.height, fixedFrame);
@@ -771,6 +847,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         frontKind = kind;
         frontPageId = pageId;
         hideOverElsewhere();
+        syncFullscreen();
     }
 
     /** The Linux window in front of the row, 0 for none: a window over it is over that page. */
@@ -880,9 +957,73 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         return carry != null;
     }
 
-    /** One touch of the window during a carry; false when none is under way. */
+    /**
+     * Every touch of the activity, first: during a carry it is the carry's (true); otherwise the
+     * first finger is followed, so an app's own move request can lift its window from where that
+     * finger is now (false: the touch goes on as usual).
+     */
     public boolean carryTouch(@NonNull MotionEvent ev) {
-        return isCarrying() && carry.onTouch(ev);
+        if (isCarrying()) return carry.onTouch(ev);
+        followFinger(ev);
+        return false;
+    }
+
+    /** The first finger down, in window coordinates; {@link #fingerDown} while it stays down. */
+    private boolean fingerDown;
+    private boolean fingerIsMouse;
+    private int fingerId;
+    private float fingerX;
+    private float fingerY;
+
+    private void followFinger(@NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                fingerDown = true;
+                fingerIsMouse = ev.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE;
+                fingerId = ev.getPointerId(0);
+                fingerX = ev.getX();
+                fingerY = ev.getY();
+                break;
+            case MotionEvent.ACTION_MOVE: {
+                int i = fingerDown ? ev.findPointerIndex(fingerId) : -1;
+                if (i >= 0) {
+                    fingerX = ev.getX(i);
+                    fingerY = ev.getY(i);
+                }
+                break;
+            }
+            case MotionEvent.ACTION_POINTER_UP:
+                if (ev.getPointerId(ev.getActionIndex()) == fingerId) fingerDown = false;
+                break;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                fingerDown = false;
+                break;
+            default:
+                break;
+        }
+    }
+
+    /**
+     * The app asked to move window {@code id} (a drag on its own title bar): the same carry as
+     * holding Move on the rim tab, from the finger as it is now. The app's touch, or button, ends
+     * there; the carry takes the rest of the stream. Only a window shown in its row or pane, and
+     * not full screen, is lifted; with no finger down nothing happens.
+     */
+    private void moveRequested(long id) {
+        Win w = windows.get(id);
+        if (w == null || !fingerDown || id == fullscreen.fullscreenId()) return;
+        boolean shown = w.inRow && w.id == boundId && front || w.inPane && terminalShown;
+        if (!shown || !beginCarryOf(w, fingerX, fingerY, fingerId)) return;
+        long now = SystemClock.uptimeMillis();
+        if (fingerIsMouse) {
+            sendPointer(w, ILinuxWindows.POINTER_BUTTON_UP, w.mouseButton, 0f, 0f, now);
+        } else if (service != null) {
+            try {
+                service.touch(w.id, ILinuxWindows.TOUCH_CANCEL, 0, now, 0, w.slots, w.xs, w.ys);
+            } catch (RemoteException ignored) {
+            }
+        }
     }
 
     /** Back or a home press took the carry: the window goes back where it was. */
@@ -914,6 +1055,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     public void minimiseWindow() {
         Win w = shownWindow();
         if (w == null) return;
+        if (fullscreen.gone(w.id)) {
+            sendFullscreen(w.id, false);
+            leftFullscreen(w);
+        }
         w.placeWhenMinimised = host.placeOf(w.id);
         detachViews(w);
         setVisible(w, false);
@@ -942,6 +1087,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (w != null) setVisible(w, isFront);
         if (isFront && w != null) focus(w.id);
         if (!isFront) focus(0);
+        syncFullscreen();
         rebuildChips();
     }
 
@@ -1023,6 +1169,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (w == null || w.minimised) return null;
         if (w.inPane && w.paneFrame != null) return w.paneFrame;
         boolean wasRow = w.inRow;
+        if (fullscreen.gone(id)) {
+            sendFullscreen(id, false);
+            leftFullscreen(w);
+        }
         detachViews(w);
         if (boundId == id) boundId = 0;
         w.inRow = false;
@@ -1120,6 +1270,160 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
     }
 
+    /**
+     * The app asked for its window menu (a right-click on its own title bar): the rim tab's menu
+     * opens for that window, on its page or its pane. A window with no rim tab (a dialog, a window
+     * over the page, one full screen) gets none.
+     */
+    private void windowMenuRequested(long id) {
+        Win w = windows.get(id);
+        if (w == null || id == fullscreen.fullscreenId()) return;
+        if (w.inRow && w.id == boundId && front) page.openMenu();
+        else if (w.inPane && terminalShown && w.paneFrame != null) w.paneFrame.openMenu();
+    }
+
+    // ---- full screen ----------------------------------------------------------------------------
+
+    /** Window {@code id} asked to be full screen or to leave it; only a row window takes the screen. */
+    private void fullscreenRequested(long id, boolean on) {
+        Win w = windows.get(id);
+        if (w == null || on && !w.inRow) return;
+        long old = fullscreen.fullscreenId();
+        apply(fullscreen.request(id, on, rowFrontId()), old);
+    }
+
+    /** The row window in front: the bound one while the Linux page is in front; 0 for none. */
+    private long rowFrontId() {
+        Win w = shownWindow();
+        return front && w != null ? w.id : 0L;
+    }
+
+    /** Re-reads what is in front: a full-screen window paged away from leaves, one that asked enters. */
+    private void syncFullscreen() {
+        long old = fullscreen.fullscreenId();
+        apply(fullscreen.frontChanged(rowFrontId()), old);
+    }
+
+    @Override
+    public boolean leaveFullscreen() {
+        long old = fullscreen.fullscreenId();
+        if (!fullscreen.back()) return false;
+        sendFullscreen(old, false);
+        Win w = windows.get(old);
+        if (w != null) leftFullscreen(w);
+        return true;
+    }
+
+    private void apply(int action, long oldId) {
+        if (action == LinuxFullscreenPolicy.NOTHING) return;
+        if (action == LinuxFullscreenPolicy.LEAVE || action == LinuxFullscreenPolicy.SWITCH) {
+            sendFullscreen(oldId, false);
+            Win old = windows.get(oldId);
+            if (old != null) leftFullscreen(old);
+        }
+        if (action == LinuxFullscreenPolicy.ENTER || action == LinuxFullscreenPolicy.SWITCH) {
+            Win w = windows.get(fullscreen.fullscreenId());
+            if (w == null) return;
+            sendFullscreen(w.id, true);
+            showFullscreen(w);
+        }
+    }
+
+    /**
+     * Gives {@code w} the whole screen: its view leaves the page's slot for the sheets' layer, over
+     * the status bar, the dock, the extra-keys row and the rim, and the size it gets there reaches
+     * the app with the full-screen state.
+     */
+    private void showFullscreen(@NonNull Win w) {
+        ViewGroup layer = overlayHost();
+        if (!(layer instanceof FrameLayout)) return;
+        TextureView v = w.view();
+        if (v.getParent() != layer) {
+            removeView(v);
+            layer.addView(v, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT));
+        } else {
+            WindowLayers.raiseWithin(v);
+        }
+        if (v.getScaleX() != 1f) v.setScaleX(1f);
+        if (v.getScaleY() != 1f) v.setScaleY(1f);
+        page.dismissRail();
+    }
+
+    /** {@code w} gave the screen back: its view returns to its slot when it still shows there. */
+    private void leftFullscreen(@NonNull Win w) {
+        hideReveal();
+        edgeSwipe = false;
+        removeView(w.view);
+        if (w.inRow && w.id == boundId && nearFront || w.inPane) attachViews(w);
+    }
+
+    private void sendFullscreen(long id, boolean on) {
+        if (service == null || id == 0) return;
+        try {
+            service.setFullscreen(id, on);
+        } catch (RemoteException ignored) {
+        }
+    }
+
+    /**
+     * A finger that starts at the bottom edge of the full-screen window is the launcher's: a swipe
+     * up shows the extra-keys row for a moment. True when the touch is taken.
+     */
+    private boolean edgeTouch(@NonNull Win w, @NonNull MotionEvent e) {
+        TextureView v = w.view;
+        if (v == null) return false;
+        float density = context.getResources().getDisplayMetrics().density;
+        switch (e.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                edgeSwipe = LinuxFullscreenPolicy.startsAtBottomEdge(e.getY(), v.getHeight(), density);
+                edgeDownY = e.getY();
+                return edgeSwipe;
+            case MotionEvent.ACTION_MOVE:
+                if (!edgeSwipe) return false;
+                if (LinuxFullscreenPolicy.swipedUp(edgeDownY, e.getY(), density)) reveal(w);
+                return true;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL: {
+                boolean was = edgeSwipe;
+                edgeSwipe = false;
+                return was;
+            }
+            default:
+                return edgeSwipe;
+        }
+    }
+
+    /**
+     * Lifts the full-screen window by the band below the Linux page (the extra-keys row and what
+     * stands with it), so that row shows and takes presses; it hides again {@link
+     * LinuxFullscreenPolicy#REVEAL_MS} after the last press. A translation: the app keeps its size.
+     */
+    private void reveal(@NonNull Win w) {
+        TextureView v = w.view;
+        if (v == null || !(v.getParent() instanceof View)) return;
+        View layer = (View) v.getParent();
+        page.getLocationInWindow(revealAt);
+        int pageBottom = revealAt[1] + page.getHeight();
+        layer.getLocationInWindow(revealAt);
+        int band = revealAt[1] + layer.getHeight() - pageBottom;
+        if (band <= 0) return;
+        if (v.getTranslationY() != -band) v.setTranslationY(-band);
+        revealed = true;
+        main.removeCallbacks(hideReveal);
+        main.postDelayed(hideReveal, LinuxFullscreenPolicy.REVEAL_MS);
+    }
+
+    private void hideReveal() {
+        main.removeCallbacks(hideReveal);
+        if (!revealed) return;
+        revealed = false;
+        for (int i = 0; i < windows.size(); i++) {
+            TextureView v = windows.valueAt(i).view;
+            if (v != null && v.getTranslationY() != 0f) v.setTranslationY(0f);
+        }
+    }
+
     // ---- to the host --------------------------------------------------------------------------
 
     @NonNull
@@ -1180,6 +1484,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     private void sendKey(int keyCode, boolean down) {
+        if (revealed) {
+            main.removeCallbacks(hideReveal);
+            main.postDelayed(hideReveal, LinuxFullscreenPolicy.REVEAL_MS);
+        }
         if (service == null || focusedId == 0 || windows.get(focusedId) == null) return;
         try {
             service.key(focusedId, keyCode, down, SystemClock.uptimeMillis());
@@ -1207,6 +1515,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     /** The whole MotionEvent in one call: a second finger going down is one wl_touch frame. */
     private boolean onTouch(@NonNull Win w, @NonNull MotionEvent e) {
         if (e.getToolType(0) == MotionEvent.TOOL_TYPE_MOUSE) return onMouse(w, e);
+        if (w.id == fullscreen.fullscreenId() && edgeTouch(w, e)) return true;
         int action = e.getActionMasked();
         if (action == MotionEvent.ACTION_DOWN) tapped(w);
         int n = Math.min(e.getPointerCount(), MAX_POINTS);

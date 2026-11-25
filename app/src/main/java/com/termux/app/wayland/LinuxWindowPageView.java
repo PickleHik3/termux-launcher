@@ -55,6 +55,8 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
          * window's coordinates; false when it cannot be carried.
          */
         default boolean beginCarry(float x, float y, int pointerId) { return false; }
+        /** Back while the shown window is full screen: it leaves; false when it is not full screen. */
+        default boolean leaveFullscreen() { return false; }
     }
 
     private final PaneGlassBackdropView glass;
@@ -145,6 +147,12 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         placeTab();
     }
 
+    /** The slot's height on a page {@code pageHeight} px high: below the band and the status row's room. */
+    int slotHeightFor(int pageHeight) {
+        return Math.max(0, pageHeight - LinuxWindowRow.slotTopPx(getResources().getDisplayMetrics().density,
+            topInsetPx));
+    }
+
     /** Where the controller puts the bound window's views. */
     @NonNull
     FrameLayout slot() {
@@ -223,6 +231,11 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
         menu.show(host.windowScales());
     }
 
+    /** Opens the rim tab's menu, as a tap on the tab does; the app asked for its window menu. */
+    void openMenu() {
+        if (!menu.isOpen()) showMenu();
+    }
+
     private boolean isOnTab(float x, float y) {
         return x >= tab.getLeft() && x <= tab.getRight() && y >= tab.getTop() && y <= tab.getBottom();
     }
@@ -282,6 +295,7 @@ public final class LinuxWindowPageView extends PaneContentFrame implements Page,
     }
 
     @Override public boolean onBack() {
+        if (host.leaveFullscreen()) return true;
         if (menu.isOpen()) {
             menu.dismiss();
             return true;
