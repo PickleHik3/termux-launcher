@@ -1,5 +1,6 @@
 package com.termux.app.wayland;
 
+import android.app.Activity;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -19,15 +20,19 @@ import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.TextureView;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.FrameLayout;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.termux.R;
+import com.termux.app.page.PageKind;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 import com.termux.app.wall.WallLinux;
+import com.termux.app.window.WindowLayer;
+import com.termux.app.window.WindowLayers;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -113,6 +118,18 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         String appId = "";
         int flags;
         long parentId;
+        /** {@link LinuxWindowRow#windowClass}: 0 Main, 1 Dialog, 2 Fixed, 3 Transient. */
+        int windowClass;
+        /**
+         * A Dialog without an open parent, or a Transient: no place in the row, drawn over the page
+         * in front while {@link #overShown}.
+         */
+        boolean floating;
+        boolean overShown;
+        /** The page it was shown over; it hides when another comes in front. */
+        @Nullable PageKind overKind;
+        int overPageId;
+        long overLinuxFront;
         int width;
         int height;
         /** It stands in a row (a dialog with a parent and a minimised window do not). */
@@ -135,6 +152,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         Win(long id) {
             this.id = id;
+        }
+
+        boolean isFixed() {
+            return windowClass == ILinuxWindows.WINDOW_CLASS_FIXED;
         }
 
         boolean scales() {
@@ -162,7 +183,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             try {
                 sendConfigure(this, w, h);
                 service.setSurface(id, surface);
-                service.setVisible(id, inPane ? terminalShown : front);
+                service.setVisible(id, floating ? overShown : inPane ? terminalShown : front);
             } catch (RemoteException ignored) {
             }
         }
@@ -217,6 +238,29 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Nullable private com.termux.app.x11.X11AppSettingsStore appSettings;
     private final LinuxClipboardBridge clipboard;
     private final int[] dialogFrame = new int[4];
+    private final int[] fixedFrame = new int[4];
+    /** The page in front, as the wall last told ({@link #setFrontPage}). */
+    @Nullable private PageKind frontKind;
+    private int frontPageId = -1;
+    private boolean overlayWatched;
+    private boolean replacePosted;
+    /** Re-places the windows whose frame follows their slot, once per layout pass of it. */
+    private final Runnable replaceAll = () -> {
+        replacePosted = false;
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (w.floating && w.overShown) placeDialog(w);
+            else if (w.isFixed()) placeFixed(w);
+        }
+    };
+    private final View.OnLayoutChangeListener slotWatcher = (v, l, t, r, b, ol, ot, or, ob) -> {
+        if (r - l == or - ol && b - t == ob - ot) return;
+        // Posted: a layout pass must not ask for another.
+        if (!replacePosted) {
+            replacePosted = true;
+            main.post(replaceAll);
+        }
+    };
     private final List<Chip> chips = new ArrayList<>();
 
     private final LinuxWindowKeys.Sink keySink = (keyCode, down) -> sendKey(keyCode, down);
@@ -225,7 +269,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             @Override
             public boolean interceptKeyValue(@NonNull juloo.keyboard2.KeyValue value, boolean ctrl,
                                              boolean alt, boolean shift) {
-                if (shownWindow() == null && !focusedIsPane()) return false;
+                if (shownWindow() == null && !focusedIsPane() && !focusedIsFloating()) return false;
                 LinuxWindowKeys.send(value, ctrl, alt, shift, false, keySink);
                 return true;
             }
@@ -325,6 +369,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         this.context = context;
         this.host = host;
         this.page = new LinuxWindowPageView(context, this);
+        page.slot().addOnLayoutChangeListener(slotWatcher);
         this.clipboard = new LinuxClipboardBridge(context, this::sendClipboardText);
     }
 
@@ -398,6 +443,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     public boolean showWindow(long id) {
         Win w = windows.get(id);
         if (w == null) return false;
+        if (w.floating) {
+            showOver(w);
+            return true;
+        }
         if (w.parentId != 0 && windows.get(w.parentId) != null) w = windows.get(w.parentId);
         if (w.minimised) restore(w);
         else if (w.inRow) host.goToWindow(w.id);
@@ -459,11 +508,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         for (int pass = 0; pass < 2; pass++) {
             for (int i = 0; i < windows.size(); i++) {
                 Win w = windows.valueAt(i);
-                boolean listed = pass == 0 ? w.inRow : w.minimised;
+                // An open window over the front page waits past the row, as a minimised one does.
+                boolean listed = pass == 0 ? w.inRow : w.minimised || w.floating;
                 if (!listed) continue;
                 String name = w.appId.isEmpty() ? null : host.appName(w.appId);
                 chips.add(new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId, fallback), w.appId,
-                    w.minimised, w.inRow && w.id == boundId && front));
+                    w.minimised || w.floating, w.inRow && w.id == boundId && front));
             }
         }
         host.chipsChanged();
@@ -478,11 +528,21 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.appId = appId == null ? "" : appId;
         w.flags = flags;
         w.parentId = parentId;
+        w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
-        if (!LinuxWindowRow.ownsPage(parentId, windows.get(parentId) != null)) {
+        int placement = LinuxWindowRow.placement(w.windowClass, parentId, windows.get(parentId) != null);
+        if (placement == LinuxWindowRow.PLACE_OVER_PARENT) {
             // A dialog: drawn over its parent's window, which shows it when bound.
             Win parent = windows.get(parentId);
             if (parent != null && (parent.inPane || parent.id == boundId && nearFront)) attachViews(parent);
+            return;
+        }
+        if (placement == LinuxWindowRow.PLACE_OVER_FRONT) {
+            // A parentless dialog or a transient: over the page in front, with a chip while it is open.
+            w.parentId = 0;
+            w.floating = true;
+            Log.i(LOG_TAG, "Linux window " + id + " (" + w.appId + ") opens over the page in front");
+            showOver(w);
             return;
         }
         boolean replayed = SystemClock.uptimeMillis() - attachedAt < REPLAY_MS;
@@ -501,7 +561,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         boolean sized = w.width != width || w.height != height;
         w.width = width;
         w.height = height;
-        if (sized && isDialogOfBound(w)) placeDialog(w);
+        if (sized && (isDialogOfBound(w) || w.floating && w.overShown)) placeDialog(w);
+        if (sized && w.isFixed()) placeFixed(w);
         if (appChanged) rebuildChips();
     }
 
@@ -524,6 +585,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             if (d.parentId != id) continue;
             d.parentId = 0;
             detachViews(d);
+            if (LinuxWindowRow.placement(d.windowClass, 0L, false) == LinuxWindowRow.PLACE_OVER_FRONT) {
+                d.floating = true;
+                showOver(d);
+                continue;
+            }
             d.inRow = true;
             host.addWindow(d.id, false);
         }
@@ -583,6 +649,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         page.dismissRail();
         boundId = id;
+        hideOverElsewhere();
         Win now = shownWindow();
         if (now != null && nearFront) attachViews(now);
         if (now != null && front) {
@@ -623,12 +690,18 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         FrameLayout slot = slotOf(w);
         TextureView v = w.view();
         if (v.getParent() != slot) {
-            slot.addView(v, 0, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
-                FrameLayout.LayoutParams.MATCH_PARENT));
+            if (w.isFixed()) {
+                // Laid out at its drawn size by placeFixed.
+                slot.addView(v, 0, new FrameLayout.LayoutParams(0, 0, Gravity.CENTER));
+            } else {
+                slot.addView(v, 0, new FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT,
+                    FrameLayout.LayoutParams.MATCH_PARENT));
+            }
         }
+        if (w.isFixed()) placeFixed(w);
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
-            if (d.parentId != w.id || d.inRow) continue;
+            if (d.parentId != w.id || d.inRow || d.floating) continue;
             if (d.view().getParent() != slot) {
                 slot.addView(d.view(), new FrameLayout.LayoutParams(0, 0, Gravity.CENTER));
             }
@@ -641,7 +714,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         removeView(w.view);
         for (int i = 0; i < windows.size(); i++) {
             Win d = windows.valueAt(i);
-            if (d.parentId == w.id && !d.inRow) removeView(d.view);
+            if (d.parentId == w.id && !d.inRow && !d.floating) removeView(d.view);
         }
     }
 
@@ -653,7 +726,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private void placeDialog(@NonNull Win d) {
         TextureView v = d.view;
         Win parent = windows.get(d.parentId);
-        FrameLayout slot = parent == null ? page.slot() : slotOf(parent);
+        FrameLayout slot = d.floating && v != null && v.getParent() instanceof FrameLayout
+            ? (FrameLayout) v.getParent() : parent == null ? page.slot() : slotOf(parent);
         if (v == null || v.getParent() != slot) return;
         LinuxWindowRow.dialogFrame(slot.getWidth(), slot.getHeight(), d.width, d.height, dialogFrame);
         FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
@@ -662,6 +736,101 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         lp.height = dialogFrame[3];
         lp.gravity = Gravity.CENTER;
         v.setLayoutParams(lp);
+    }
+
+    /**
+     * Lays a Fixed window out at its drawn size, centred in its slot, scaled down about its centre
+     * when it is bigger ({@link LinuxWindowRow#fixedFrame}). The view's own transform maps a touch
+     * into the app's coordinates, and a touch outside the frame never reaches the view. Compares
+     * first.
+     */
+    private void placeFixed(@NonNull Win w) {
+        TextureView v = w.view;
+        if (v == null || !(v.getParent() instanceof FrameLayout)) return;
+        FrameLayout slot = (FrameLayout) v.getParent();
+        if (slot.getWidth() <= 0 || slot.getHeight() <= 0) return;
+        float scale = LinuxWindowRow.fixedFrame(slot.getWidth(), slot.getHeight(), w.width, w.height, fixedFrame);
+        int lw = w.width > 0 && w.height > 0 ? w.width : slot.getWidth();
+        int lh = w.width > 0 && w.height > 0 ? w.height : slot.getHeight();
+        FrameLayout.LayoutParams lp = (FrameLayout.LayoutParams) v.getLayoutParams();
+        if (lp.width != lw || lp.height != lh || lp.gravity != Gravity.CENTER) {
+            lp.width = lw;
+            lp.height = lh;
+            lp.gravity = Gravity.CENTER;
+            v.setLayoutParams(lp);
+        }
+        if (v.getScaleX() != scale) v.setScaleX(scale);
+        if (v.getScaleY() != scale) v.setScaleY(scale);
+    }
+
+    // ---- windows over the page in front -------------------------------------------------------
+
+    /** The wall told which page is in front (every landing): a window over another page hides. */
+    @Override
+    public void setFrontPage(@NonNull PageKind kind, int pageId) {
+        frontKind = kind;
+        frontPageId = pageId;
+        hideOverElsewhere();
+    }
+
+    /** The Linux window in front of the row, 0 for none: a window over it is over that page. */
+    private long linuxFrontId() {
+        return front ? boundId : 0L;
+    }
+
+    @Nullable
+    private ViewGroup overlayHost() {
+        if (!(context instanceof Activity)) return null;
+        return WindowLayers.host((Activity) context, WindowLayer.SHEETS);
+    }
+
+    /** Shows {@code w} centred over the page in front: its layer's host, else the Linux page's slot. */
+    private void showOver(@NonNull Win w) {
+        w.overKind = frontKind;
+        w.overPageId = frontPageId;
+        w.overLinuxFront = linuxFrontId();
+        ViewGroup layer = overlayHost();
+        FrameLayout hostView = layer instanceof FrameLayout ? (FrameLayout) layer : page.slot();
+        if (hostView == layer && !overlayWatched) {
+            overlayWatched = true;
+            hostView.addOnLayoutChangeListener(slotWatcher);
+        }
+        TextureView v = w.view();
+        if (v.getParent() != hostView) {
+            removeView(v);
+            hostView.addView(v, new FrameLayout.LayoutParams(0, 0, Gravity.CENTER));
+        } else {
+            WindowLayers.raiseWithin(v);
+        }
+        w.overShown = true;
+        placeDialog(w);
+        setVisible(w, true);
+        rebuildChips();
+    }
+
+    /** Takes {@code w} off the page it covered: its texture, and so its buffers, go; its chip stays. */
+    private void hideOver(@NonNull Win w) {
+        if (!w.overShown) return;
+        w.overShown = false;
+        removeView(w.view);
+        setVisible(w, false);
+        if (focusedId == w.id) focus(0);
+        rebuildChips();
+    }
+
+    private void hideOverElsewhere() {
+        for (int i = 0; i < windows.size(); i++) {
+            Win w = windows.valueAt(i);
+            if (!w.floating || !w.overShown) continue;
+            if (w.overKind != frontKind || w.overPageId != frontPageId || w.overLinuxFront != linuxFrontId()) {
+                hideOver(w);
+            }
+        }
+    }
+
+    private boolean focusedIsFloating() {
+        Win w = focusedId == 0 ? null : windows.get(focusedId);
+        return w != null && w.floating && w.overShown;
     }
 
     private boolean isDialogOfBound(@NonNull Win w) {
@@ -767,6 +936,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Override
     public void frontChanged(boolean isFront) {
         front = isFront;
+        hideOverElsewhere();
         clipboard.setInFront(isFront);
         Win w = shownWindow();
         if (w != null) setVisible(w, isFront);
@@ -859,6 +1029,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         w.inPane = true;
         LinuxWindowPageView frame = new LinuxWindowPageView(context, new PaneHost(w));
         frame.setEmbedded(true);
+        frame.slot().addOnLayoutChangeListener(slotWatcher);
         frame.applyStyle(paneStyle);
         w.paneFrame = frame;
         attachViews(w);
@@ -992,7 +1163,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             service.setVisible(w.id, visible);
             for (int i = 0; i < windows.size(); i++) {
                 Win d = windows.valueAt(i);
-                if (d.parentId == w.id && !d.inRow) service.setVisible(d.id, visible);
+                if (d.parentId == w.id && !d.inRow && !d.floating) service.setVisible(d.id, visible);
             }
         } catch (RemoteException ignored) {
         }

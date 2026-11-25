@@ -71,6 +71,13 @@ oneway interface ILinuxWindows {
     // Window flags, onWindowCreated.
     /** An X11 window from Xwayland; otherwise a Wayland xdg_toplevel. */
     const int WINDOW_X11 = 1;
+    /** Bits 4-7 of the flags hold the window's class (0 Main, 1 Dialog, 2 Fixed, 3 Transient). */
+    const int WINDOW_CLASS_SHIFT = 4;
+    const int WINDOW_CLASS_MASK = 0xF0;
+    const int WINDOW_CLASS_MAIN = 0;
+    const int WINDOW_CLASS_DIALOG = 1;
+    const int WINDOW_CLASS_FIXED = 2;
+    const int WINDOW_CLASS_TRANSIENT = 3;
 
     /** Registers a listener: onAttached, then the host state and every live window. */
     void addCallback(ILinuxWindowsCallback callback);
