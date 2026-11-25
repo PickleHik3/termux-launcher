@@ -1201,8 +1201,24 @@ impl State {
         for i in 0..self.toplevels.len() {
             let shown = self.toplevels[i].is_shown();
             if let Some(buffer) = self.toplevels[i].paced.tick(shown, keepalive, &mut releases, &mut frames) {
-                self.copy(i, &buffer);
-                copied = true;
+                // The hash is taken before the copy: a write landing in between shows as a change
+                // on the next read, never as a missed one.
+                let hash = self.settle_hash(i, &buffer);
+                // A dmabuf still holding what it last posted has not been written yet: it is not
+                // posted, the window keeps the previous frame and the settle posts the change.
+                // Its release and the frame callbacks below still go out on this tick.
+                if self.toplevels[i].paced.first_read(hash) {
+                    self.copy(i, &buffer);
+                    copied = true;
+                }
+            } else if let Some(buffer) = self.toplevels[i].paced.settle_due(shown, now) {
+                // The dmabuf copy may have run before the client's GPU finished (no fence on
+                // KGSL): copy again only when its pixels changed since.
+                let hash = self.settle_hash(i, &buffer);
+                if self.toplevels[i].paced.settled(hash) {
+                    self.copy(i, &buffer);
+                    copied = true;
+                }
             }
         }
         releases.append(&mut self.loose_releases);
@@ -1229,6 +1245,17 @@ impl State {
         } else {
             self.next_deadline()
         }
+    }
+
+    /// The content hash of a dmabuf toplevel's held buffer, for the settle reads (see
+    /// `Paced::copied`). None for shm, which is complete at commit, and for a window with
+    /// subsurfaces or popups, whose copy is a tree the root alone does not describe.
+    fn settle_hash(&mut self, i: usize, buffer: &WlBuffer) -> Option<u64> {
+        if !buffer.is_alive() || !self.toplevels[i].parts.is_empty() {
+            return None;
+        }
+        let output = self.output_size;
+        content_hash(&self.toplevels[i], buffer, output, &mut self.maps)
     }
 
     /// Copies `buffer` into toplevel `i`'s window and reports a new shown size. A window whose
@@ -1944,6 +1971,32 @@ fn shown_rect(l: Layout, desc: &Desc) -> Option<(Rect, Rect, RectF)> {
     let full = map.to_buffer(map.logical_content(l.geometry), w, h);
     let shown = clamp_to_limit(full, post_limit(l.post_view, l.output));
     Some((shown, full, map.to_logical(shown)))
+}
+
+/// A hash of the part of a dmabuf `buffer` a copy shows (about 1 ms for a full frame); None for
+/// shm or when it cannot be read.
+fn content_hash(t: &Toplevel, buffer: &WlBuffer, output: (i32, i32), maps: &mut DmabufMaps) -> Option<u64> {
+    let layout = Layout::of(t, output);
+    source::with_pixels(buffer, maps, |ptr, len, desc| {
+        if desc.kind != Kind::Dmabuf {
+            return None;
+        }
+        let (shown, _, _) = shown_rect(layout, desc)?;
+        let stride = desc.stride as usize;
+        let (start, bytes) = content_span(usize::try_from(desc.offset).ok()?, stride, shown, len)?;
+        // SAFETY: as in post_buffer: the mapping lives for this closure, the range is checked.
+        let src = unsafe { std::slice::from_raw_parts(ptr.add(start), bytes) };
+        let row = shown.2 as usize * 4;
+        let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+        for y in 0..shown.3 as usize {
+            for c in src[y * stride..y * stride + row].chunks_exact(8) {
+                h = (h ^ u64::from_ne_bytes([c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]])).wrapping_mul(0x0100_0000_01b3);
+            }
+        }
+        Some(h)
+    })
+    .ok()
+    .flatten()
 }
 
 /// Copies the shown part of `buffer` (shm or dmabuf) into the toplevel's window. Err with the
