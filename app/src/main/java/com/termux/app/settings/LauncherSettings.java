@@ -13,6 +13,7 @@ import com.termux.shared.termux.settings.registry.SettingDeclaration;
 import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingRefresh;
 import com.termux.shared.termux.settings.registry.SettingStore;
+import com.termux.shared.termux.settings.registry.SharedPreferencesSettingStore;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
 
@@ -99,7 +100,7 @@ public final class LauncherSettings {
     /** The app's shared preferences as a registry store, for an adapter that reads them itself. */
     @NonNull
     public static SettingStore preferencesStore(@Nullable SharedPreferences prefs) {
-        return new PreferencesStore(prefs);
+        return new SharedPreferencesSettingStore(prefs);
     }
 
     /** The device's stores: the app's shared preferences, and termux.properties. */
@@ -122,51 +123,13 @@ public final class LauncherSettings {
             if (mPreferences == null) {
                 TermuxAppSharedPreferences preferences =
                     TermuxAppSharedPreferences.build(mContext, false);
-                mPreferences = new PreferencesStore(preferences == null ? null
+                mPreferences = new SharedPreferencesSettingStore(preferences == null ? null
                     : preferences.getSharedPreferences());
             }
             return mPreferences;
         }
     }
 
-    /**
-     * The app's shared preferences. A read of a key holding another type answers the default, and
-     * with no preferences every read is the default and every write is dropped.
-     */
-    private static final class PreferencesStore implements SettingStore {
-        @Nullable private final SharedPreferences mPrefs;
-
-        PreferencesStore(@Nullable SharedPreferences prefs) {
-            mPrefs = prefs;
-        }
-
-        @Nullable @Override public String getString(@NonNull String key) {
-            if (mPrefs == null) return null;
-            try { return mPrefs.getString(key, null); } catch (ClassCastException e) { return null; }
-        }
-
-        @Override public int getInt(@NonNull String key, int defaultValue) {
-            if (mPrefs == null) return defaultValue;
-            try { return mPrefs.getInt(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
-        }
-
-        @Override public boolean getBoolean(@NonNull String key, boolean defaultValue) {
-            if (mPrefs == null) return defaultValue;
-            try { return mPrefs.getBoolean(key, defaultValue); } catch (ClassCastException e) { return defaultValue; }
-        }
-
-        @Override public void putBoolean(@NonNull String key, boolean value) {
-            if (mPrefs != null) mPrefs.edit().putBoolean(key, value).apply();
-        }
-
-        @Override public void putString(@NonNull String key, @NonNull String value) {
-            if (mPrefs != null) mPrefs.edit().putString(key, value).apply();
-        }
-
-        @Override public void putInt(@NonNull String key, int value) {
-            if (mPrefs != null) mPrefs.edit().putInt(key, value).apply();
-        }
-    }
 
     /** termux.properties, read from disk each time and written as the Settings rows write it. */
     private static final class PropertiesStore implements SettingStore {

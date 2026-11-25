@@ -263,8 +263,18 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
 
     @NonNull private final Host mHost;
 
+    /** Hands the Settings applier Done's changes; null (tests, no applier) just writes the draft. */
+    @Nullable private final java.util.function.Supplier<com.termux.shared.termux.settings.registry.SettingsApplier> mApplier;
+
     public SurfaceEditorController(@NonNull Host host) {
+        this(host, null);
+    }
+
+    /** {@code applier} is asked only on Done, so building it stays off the start-up path. */
+    public SurfaceEditorController(@NonNull Host host, @Nullable java.util.function.Supplier<
+            com.termux.shared.termux.settings.registry.SettingsApplier> applier) {
         mHost = host;
+        mApplier = applier;
     }
 
     /** The Text size was saved outside the editor: the panes and the keyboard re-stamp at it. */
@@ -2674,8 +2684,8 @@ public final class SurfaceEditorController implements AppearanceSurfaceControlle
         mRegistry = null;
         if (draft != null) {
             // The applier refreshes what the draft changed that the registry declares.
-            if (registry != null)
-                registry.commit(draft, com.termux.app.settings.LauncherSettings.applier());
+            if (registry != null && mApplier != null)
+                registry.commit(draft, mApplier.get());
             else
                 draft.commit();
         }

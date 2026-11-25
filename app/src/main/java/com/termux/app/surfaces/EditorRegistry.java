@@ -5,7 +5,6 @@ import android.content.SharedPreferences;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
-import com.termux.app.settings.LauncherSettings;
 import com.termux.shared.settings.preferences.PreferenceDraft;
 import com.termux.shared.termux.settings.registry.FontSizeSettingsAdapter;
 import com.termux.shared.termux.settings.registry.SettingAdapter;
@@ -14,6 +13,7 @@ import com.termux.shared.termux.settings.registry.SettingDeclarations;
 import com.termux.shared.termux.settings.registry.SettingStore;
 import com.termux.shared.termux.settings.registry.SettingsApplier;
 import com.termux.shared.termux.settings.registry.SettingsRegistry;
+import com.termux.shared.termux.settings.registry.SharedPreferencesSettingStore;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -59,9 +59,9 @@ final class EditorRegistry {
     EditorRegistry(@Nullable SharedPreferences editing, @Nullable SharedPreferences store,
                    float density, @NonNull String display) {
         FontSizeSettingsAdapter editingFonts = new FontSizeSettingsAdapter(
-            LauncherSettings.preferencesStore(editing), density, display);
+            new SharedPreferencesSettingStore(editing), density, display);
         FontSizeSettingsAdapter storedFonts = new FontSizeSettingsAdapter(
-            LauncherSettings.preferencesStore(store), density, display);
+            new SharedPreferencesSettingStore(store), density, display);
         mEditing = over(editing, editingFonts);
         mStored = over(store, storedFonts);
         List<SettingDeclaration> all = new ArrayList<>(SettingDeclarations.ALL);
@@ -72,9 +72,9 @@ final class EditorRegistry {
     @NonNull
     private static SettingsRegistry over(@Nullable SharedPreferences prefs,
                                          @NonNull SettingAdapter fonts) {
-        SettingStore preferences = LauncherSettings.preferencesStore(prefs);
+        SettingStore preferences = new SharedPreferencesSettingStore(prefs);
         // The editor writes no termux.properties key: that store drops writes and reads defaults.
-        SettingStore properties = LauncherSettings.preferencesStore(null);
+        SettingStore properties = new SharedPreferencesSettingStore(null);
         SettingStore.Stores stores = which ->
             which == SettingDeclaration.Store.PROPERTIES ? properties : preferences;
         return new SettingsRegistry(stores, SettingDeclarations.ALL,

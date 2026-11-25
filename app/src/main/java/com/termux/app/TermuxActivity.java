@@ -1134,7 +1134,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * controller; the activity lends it {@link SurfaceEditorHost} and keeps only the entry points.
      */
     private final SurfaceEditorController mSurfaceEditor =
-        new SurfaceEditorController(new SurfaceEditorHost());
+        new SurfaceEditorController(new SurfaceEditorHost(), LauncherSettings::applier);
 
     /** The Settings applier's way onto this screen while it is resumed ({@link LauncherSettings}). */
     private final SettingsRefreshScreen mSettingsScreen =
