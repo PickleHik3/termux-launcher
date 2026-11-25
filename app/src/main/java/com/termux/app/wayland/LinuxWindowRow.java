@@ -183,4 +183,15 @@ public final class LinuxWindowRow {
         if (slotW <= 0 || slotH <= 0 || drawnW <= 0 || drawnH <= 0) return false;
         return drawnW > slotW || drawnH > slotH;
     }
+
+    /**
+     * A touch at {@code v} px along an axis of a view {@code viewPx} long, in the units of the size
+     * the host was told ({@code sentPx}), which it maps onto the app. They differ for a Main window
+     * shown whole at its drawn size while it is told its slot's ({@link #fixedFrame}); otherwise
+     * they are equal and the touch passes unchanged, as it does before either size is known.
+     */
+    public static float toConfigured(float v, int viewPx, int sentPx) {
+        if (viewPx <= 0 || sentPx <= 0 || viewPx == sentPx) return v;
+        return v * sentPx / viewPx;
+    }
 }

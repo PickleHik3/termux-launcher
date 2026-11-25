@@ -1833,10 +1833,22 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     private void sendPointer(@NonNull Win w, int action, int button, float x, float y, long time) {
         if (service == null) return;
+        if (action != ILinuxWindows.POINTER_SCROLL) {
+            x = LinuxWindowRow.toConfigured(x, viewWidth(w), w.sentWidth);
+            y = LinuxWindowRow.toConfigured(y, viewHeight(w), w.sentHeight);
+        }
         try {
             service.pointer(w.id, action, button, x, y, time);
         } catch (RemoteException ignored) {
         }
+    }
+
+    private static int viewWidth(@NonNull Win w) {
+        return w.view == null ? 0 : w.view.getWidth();
+    }
+
+    private static int viewHeight(@NonNull Win w) {
+        return w.view == null ? 0 : w.view.getHeight();
     }
 
     /** The whole MotionEvent in one call: a second finger going down is one wl_touch frame. */
@@ -1848,8 +1860,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         int n = Math.min(e.getPointerCount(), MAX_POINTS);
         for (int i = 0; i < n; i++) {
             w.slots[i] = e.getPointerId(i);
-            w.xs[i] = e.getX(i);
-            w.ys[i] = e.getY(i);
+            w.xs[i] = LinuxWindowRow.toConfigured(e.getX(i), viewWidth(w), w.sentWidth);
+            w.ys[i] = LinuxWindowRow.toConfigured(e.getY(i), viewHeight(w), w.sentHeight);
         }
         if (service == null) return true;
         try {
