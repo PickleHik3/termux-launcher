@@ -104,6 +104,8 @@ public final class SideCards {
      * (#309): Home's lane stands {@code coverHomePx} lower still, so its rows stand at their
      * keyboard-down rect, and the stack's lane {@code coverSharedPx} (Home's share of that drop),
      * which it carries for the front page; the Terminal's lane rides the keyboard and gets none.
+     * The stack's lane is the crossing rule's GLIDE ({@link CrossingPath#glide}) between the two
+     * sides' rest offsets.
      * While the cards do not stand apart the layers carry the cover and every lane is 0.
      */
     public static float laneTyPx(int lane, boolean apart, float homeDropPx, int terminalLiftPx,
@@ -111,8 +113,10 @@ public final class SideCards {
         if (!apart) return 0f;
         if (lane == StackLanes.HOME) return homeDropPx + coverHomePx;
         if (lane == StackLanes.TERMINAL) return -Math.max(0, terminalLiftPx);
-        float share = terminalShare < 0f ? 0f : terminalShare > 1f ? 1f : terminalShare;
-        return homeDropPx * (1f - share) - columnLiftPx(true, terminalLiftPx, terminalShare)
+        // A row both sides show in one place GLIDEs (CrossingPath): laid out once, each side's
+        // rest an offset from that layout (Home's drop, the Terminal's lift), blended by the
+        // Terminal's share, which is already on the material curve.
+        return CrossingPath.glide(homeDropPx, -Math.max(0, terminalLiftPx), terminalShare)
             + coverSharedPx;
     }
 
