@@ -705,6 +705,36 @@ public class RestCardsCrossingTest {
                     same &= frame.rowGlideTyPx[i] == forward[k][i];
                 if (!same) found.add("(path) BACKWARD" + tail, at + " p=" + SAMPLES[k]);
             }
+            // Step 4: each card view's verb, its cards paired by element, is symmetric; a card
+            // that stays never slides, one that rides stands at its rest at both ends.
+            StackScene.Frame back = new StackScene.Frame();
+            for (float p : SAMPLES) {
+                StackScene.at(from, to, p, motion, from.rest, frame);
+                StackScene.at(to, from, 1f - p, motion, to.rest, back);
+                for (int v = 0; v < StackEnd.VIEW_COUNT; v++) {
+                    CrossingPath.Verb verb = CrossingPath.of(frame.cardVerb[v]);
+                    String view = " " + StackEnd.VIEWS[v];
+                    if (verb != CrossingPath.of(back.cardVerb[v]))
+                        found.add("(path) CARD ASYMMETRIC" + view + tail, at);
+                    if (verb == CrossingPath.Verb.STAY && frame.cardTx[v] != 0f)
+                        found.add("(path) CARD STAY MOVED" + view + tail, at + " p=" + p);
+                    if (verb == CrossingPath.Verb.STAY && from.sameElementAt(to, v)
+                        && from.viewOf(from.cardOn[v]) != v)
+                        found.add("(path) CARD PAIRED BY VIEW" + view + tail, at);
+                }
+            }
+            // Step 5: the status bar's verb is symmetric and STAYs only at one rect.
+            Card barA = a.card(CardId.STATUS);
+            Card barB = b.card(CardId.STATUS);
+            boolean samePlace = barA != null && barB != null && barA.box.top == barB.box.top
+                && barA.box.bottom == barB.box.bottom && barA.box.left == barB.box.left
+                && barA.box.right == barB.box.right;
+            CrossingPath.Verb bar = CrossingPath.status(barA != null, barB != null, samePlace,
+                true);
+            if (bar != CrossingPath.status(barB != null, barA != null, samePlace, true))
+                found.add("(path) STATUS ASYMMETRIC" + tail, at);
+            if (bar == CrossingPath.Verb.STAY && !samePlace)
+                found.add("(path) STATUS STAY MOVED" + tail, at);
             for (StackEnd end : new StackEnd[] {from, to}) {
                 StackScene.Motion rest = new StackScene.Motion();
                 StackScene.rest(end, 0f, rest, frame);

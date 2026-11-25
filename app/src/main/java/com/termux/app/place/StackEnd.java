@@ -162,6 +162,27 @@ public final class StackEnd {
         return apart && view.side != null ? view.side.ordinal() : STACK_SIDE;
     }
 
+    /**
+     * The view this rest draws card {@code cardId} ({@link CardId} ordinal) on, or -1 where it
+     * draws none: the crossing pairs the two rests' cards by element through it.
+     */
+    public int viewOf(int cardId) {
+        if (cardId == NO_CARD) return -1;
+        for (int v = 0; v < VIEW_COUNT; v++) if (cardOn[v] == cardId) return v;
+        return -1;
+    }
+
+    /**
+     * Whether the element this rest draws on view {@code v} is drawn by {@code o} on that same
+     * view at the same rect: one card, paired by element ({@link CrossingPath#card}).
+     */
+    boolean sameElementAt(@NonNull StackEnd o, int v) {
+        int id = cardOn[v];
+        if (id == NO_CARD) return false;
+        int there = o.cardOn[v] == id ? v : o.viewOf(id);
+        return there == v && sameCard(o, v);
+    }
+
     /** Whether {@code o} draws the same card on view {@code v} at the same rect. */
     boolean sameCard(@NonNull StackEnd o, int v) {
         return cardOn[v] != NO_CARD && cardOn[v] == o.cardOn[v]

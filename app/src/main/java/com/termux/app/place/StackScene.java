@@ -226,6 +226,11 @@ public final class StackScene {
         public final float[] cardCoverPx = new float[StackEnd.VIEW_COUNT];
         public final boolean[] cardMorphs = new boolean[StackEnd.VIEW_COUNT];
         /**
+         * Each card view's verb across this crossing ({@link CrossingPath#card}, an ordinal), its
+         * cards paired by element: STAY keeps the rest, RIDE slides with its side.
+         */
+        public final int[] cardVerb = new int[StackEnd.VIEW_COUNT];
+        /**
          * The view that carries the dock's card of the end nearer on this frame (the one at rest):
          * the plank tilts it. {@link StackEnd#NO_CARD} while that end draws no dock card on a card
          * view.
@@ -453,6 +458,7 @@ public final class StackScene {
             out.cardTy[v] = 0f;
             out.cardCoverPx[v] = 0f;
             out.cardMorphs[v] = false;
+            out.cardVerb[v] = NONE;
         }
         out.slabView = StackEnd.NO_CARD;
         if (from == null || to == null) {
@@ -474,18 +480,22 @@ public final class StackScene {
             float base = sheet(v) ? out.ty[V_HOST] : ownPlace(v) ? 0f : out.ty[V_ROWS];
             int sideFrom = from.viewSide[v];
             int sideTo = to.viewSide[v];
-            boolean shared = from.sameCard(to, v);
-            out.cardMorphs[v] = !shared && from.cardOn[v] != StackEnd.NO_CARD
-                && to.cardOn[v] != StackEnd.NO_CARD;
+            // Paired by element: the card the leaving rest draws here, where the arriving rest
+            // draws that same element (StackEnd#viewOf); STAY only for one element at one rect.
+            boolean sameRect = from.sameElementAt(to, v);
+            CrossingPath.Verb verb = CrossingPath.card(from.cardOn[v], to.cardOn[v], sideFrom,
+                sideTo, sameRect);
+            out.cardVerb[v] = verb.ordinal();
+            out.cardMorphs[v] = CrossingPath.morphs(from.cardOn[v], to.cardOn[v], sideFrom, sideTo,
+                sameRect);
             int side = isSide(sideFrom) ? sideFrom : isSide(sideTo) ? sideTo : StackEnd.STACK_SIDE;
-            if (isSide(sideFrom) && isSide(sideTo) && sideFrom != sideTo) out.cardMorphs[v] = true;
-            if (shared || out.cardMorphs[v] || !isSide(side)) {
-                if (sideFrom == StackEnd.NO_SIDE && sideTo == StackEnd.NO_SIDE && !host) continue;
+            if (verb == CrossingPath.Verb.NONE && !host) continue;
+            if (verb != CrossingPath.Verb.RIDE) {
                 // The stack's own, or a card both ends draw alike: it keeps its rest.
                 float rest = edgeHost(v) ? 0f : blend(from.sideRestTyPx(sideFrom),
                     to.sideRestTyPx(sideTo), materialShare(p));
                 float cover = sheet(v) ? out.coverSharedPx : 0f;
-                out.cardSide[v] = shared ? side : StackEnd.STACK_SIDE;
+                out.cardSide[v] = sameRect ? side : StackEnd.STACK_SIDE;
                 out.cardTy[v] = base + rest + cover;
                 out.cardCoverPx[v] = cover;
             } else {
