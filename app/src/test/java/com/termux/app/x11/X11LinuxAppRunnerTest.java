@@ -296,7 +296,9 @@ public class X11LinuxAppRunnerTest {
             ":1", Collections.emptyList(), null);
 
         // Everything an app's script does, first and unchanged.
+        // Then the inherited bus is dropped (#391) before the input method may hand one.
         assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+            + X11LinuxAppRunner.DROP_INHERITED_BUS
             + X11LinuxAppRunner.inputMethodBlock(":1") + X11LinuxAppRunner.menuDirsBlock()
             + "cd \"$HOME\"\n"));
         // Then what only a desktop needs. The runtime directory stays the shells' own, so a
@@ -332,18 +334,18 @@ public class X11LinuxAppRunnerTest {
             + "exec startxfce4\n"));
     }
 
-    @Test public void theBusTheScriptStartsIsOwnedAndEndedWithItsChildren() {
+    @Test public void theBusTheScriptStartsIsTheSessionsOwn() {
         // #391: dbus-launch --exit-with-session exec'd into the desktop left the bus, and the
-        // xfconfd it had activated, running after the desktop closed. The script keeps the bus's
-        // pid, and a watcher ends the bus's children, then the bus, once the session's pid is gone.
+        // xfconfd it had activated, running after the desktop closed. The script starts the bus
+        // itself, after the session's marker is exported, so the bus and every service it
+        // activates carry the marker and end with the session's sweep.
         String block = X11LinuxAppRunner.OWN_BUS_BLOCK;
         assertTrue(block.contains("eval \"$(dbus-launch --sh-syntax)\"\n"));
+        assertTrue(block.contains("export DBUS_SESSION_BUS_ADDRESS\n"));
         assertFalse(block.contains("--exit-with-session"));
-        assertTrue(block.contains("tl_bus=$DBUS_SESSION_BUS_PID\n"));
-        assertTrue(block.contains("while kill -0 $$ 2>/dev/null; do sleep "));
-        assertTrue(block.contains("PPid:"));
-        assertTrue(block.indexOf("PPid:") < block.indexOf("kill \"$tl_bus\""));
-        assertTrue(block.contains("unset tl_bus\n"));
+        String body = X11LinuxAppRunner.sessionBody(session("xfce", "startxfce4", "XFCE"));
+        assertTrue("the marker and the sweep come before the bus",
+            body.indexOf(X11LinuxAppRunner.SESSION_END_BLOCK) < body.indexOf(block));
 
         // LXQt and MATE start their own; a second bus is a second bus, not a spare.
         for (LinuxAppCatalog.LinuxApp own : Arrays.asList(
@@ -358,6 +360,56 @@ public class X11LinuxAppRunnerTest {
         assertTrue(X11LinuxAppRunner.needsOwnBus(session("xfce", "/usr/bin/startxfce4", "XFCE")));
         // An ordinary app is never wrapped, whatever it is called.
         assertFalse(X11LinuxAppRunner.needsOwnBus(app("startxfce4")));
+    }
+
+    @Test public void aDesktopIgnoresAnInheritedBus() {
+        // #391 on pong: xfce4-session inherited the launcher's own bus (termux-launcher-bus), so
+        // the bus of its own never started and xfconfd lived on the launcher's. Every desktop
+        // drops the inherited address before anything else picks one; only the display's fcitx5
+        // bus (the input-method block, after it) may hand it one, and otherwise it starts its own.
+        String drop = "unset DBUS_SESSION_BUS_ADDRESS DBUS_SESSION_BUS_PID DBUS_SESSION_BUS_WINDOWID "
+            + com.termux.app.sound.LauncherSound.DISTRO_BUS_VARIABLE + "\n";
+        String xfce = X11LinuxAppRunner.sessionScript(session("xfce", "startxfce4", "XFCE"), ":1",
+            Collections.emptyList(), null);
+        assertTrue(xfce, xfce.contains(drop));
+        assertTrue("dropped before the input-method block may set one",
+            xfce.indexOf(drop) < xfce.indexOf(X11LinuxAppRunner.inputMethodBlock(":1")));
+        assertTrue("and before the guard that starts the desktop's own",
+            xfce.indexOf(drop) < xfce.indexOf("if [ -z \"$DBUS_SESSION_BUS_ADDRESS\" ]"));
+        // A desktop that starts its own bus is left without one, so it does.
+        String lxqt = X11LinuxAppRunner.sessionScript(session("lxqt", "startlxqt", "LXQt"), ":1",
+            Collections.emptyList(), null);
+        assertTrue(lxqt.contains(drop));
+        // An app keeps the launcher's bus (media controls, the input method).
+        assertFalse(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList())
+            .contains("unset DBUS_SESSION_BUS_ADDRESS"));
+    }
+
+    @Test public void everythingTheDesktopLeftBehindEndsWithIt() {
+        // #391: xfconfd daemonised (ppid 1) and outlived the desktop, as did its panel. Every
+        // process of the session carries the marker, so once the desktop's process is gone the
+        // sweep ends each one by the marker in its environment, wherever it was reparented.
+        String block = X11LinuxAppRunner.SESSION_END_BLOCK;
+        String marker = X11LinuxAppRunner.SESSION_MARKER_VAR;
+        assertTrue("the desktop's world carries the marker (a container's too)",
+            block.startsWith("export " + marker + "=$$\n"));
+        assertTrue(block.contains("while kill -0 $$ 2>/dev/null; do sleep 1; done\n"));
+        assertTrue(block.contains("tl_me=$(exec sh -c 'echo \"$PPID\"')\n"));
+        assertTrue("the sweep spares itself",
+            block.contains("[ \"${d#/proc/}\" = \"$tl_me\" ] && continue\n"));
+        assertTrue(block, block.contains("tr '\\0' '\\n' 2>/dev/null < \"$d/environ\" | grep -qx \""
+            + marker + "=$$\" && kill -\"$tl_sig\" \"${d#/proc/}\" 2>/dev/null\n"));
+        assertTrue("asked first, then insisted", block.contains("for tl_sig in TERM KILL; do\n"));
+        assertTrue(block.endsWith(") &\n"));
+
+        // Every desktop gets it, in the prefix and in a container's login alike.
+        for (LinuxAppCatalog.LinuxApp desktop : Arrays.asList(
+                session("xfce", "startxfce4", "XFCE"), session("lxqt", "startlxqt", "LXQt"),
+                session("i3", "i3", ""))) {
+            String body = X11LinuxAppRunner.sessionBody(desktop);
+            assertTrue(desktop.name, body.contains(block));
+            assertTrue("before the desktop starts", body.indexOf(block) < body.indexOf("exec " + desktop.exec));
+        }
     }
 
     @Test public void ourOwnWindowManagerStandsDownBeforeTheDesktopStarts() {
