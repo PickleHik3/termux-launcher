@@ -45,6 +45,47 @@ public final class DesktopsPage {
         return rows;
     }
 
+    /** A catalogue desktop installed in a {@code proot-distro} container: listed, never managed. */
+    public static final class ContainerRow {
+        @NonNull public final String desktopId;
+        /** {@code XFCE · Debian}. */
+        @NonNull public final String name;
+        /** The session entry its settings page is keyed by ({@link LinuxAppCatalog.LinuxApp#id}). */
+        @NonNull public final String appId;
+
+        ContainerRow(@NonNull String desktopId, @NonNull String name, @NonNull String appId) {
+            this.desktopId = desktopId;
+            this.name = name;
+            this.appId = appId;
+        }
+
+        @NonNull
+        public DesktopCatalogue.State state() {
+            return DesktopCatalogue.State.INSTALLED_IN_CONTAINER;
+        }
+    }
+
+    /**
+     * One row per catalogue desktop session the app catalogue found in a distro container. The
+     * caller passes what {@link LinuxAppCatalog#scan} already read, so a removed container takes
+     * its rows with it.
+     */
+    @NonNull
+    public static List<ContainerRow> containerRows(@NonNull List<LinuxAppCatalog.LinuxApp> apps) {
+        List<ContainerRow> rows = new ArrayList<>();
+        for (LinuxAppCatalog.LinuxApp app : apps) {
+            if (!app.session || app.container.kind != ProotDistro.Container.Kind.DISTRO) continue;
+            for (DesktopCatalogue.Desktop desktop : DesktopCatalogue.offered()) {
+                if (!isSessionOf(desktop, app.desktopNames)) continue;
+                rows.add(new ContainerRow(desktop.id,
+                    desktop.name + " · " + DisplayStartWith.distroLabel(app.container.name),
+                    app.id));
+                break;
+            }
+        }
+        return rows;
+    }
+
     /**
      * Whether a session whose {@code DesktopNames} is {@code desktopNames} (semicolon separated)
      * is {@code desktop}: how the page finds the app entry its settings page is keyed by.
