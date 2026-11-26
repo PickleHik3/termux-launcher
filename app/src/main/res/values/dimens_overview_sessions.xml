@@ -1,12 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Overview's session rows (#357): a session card is smaller than a wall card. -->
-    <dimen name="overview_session_card_width">112dp</dimen>
-    <dimen name="overview_session_card_height">216dp</dimen>
-    <!-- Between the rows, and between a row's title and its cards. -->
-    <dimen name="overview_row_gap">16dp</dimen>
-    <dimen name="overview_row_title_gap">8dp</dimen>
-    <!-- The line that ties a row to its Workspace card, and where it ends before the title. -->
-    <dimen name="overview_connector">1.5dp</dimen>
-    <dimen name="overview_connector_inset">6dp</dimen>
+    <!-- Overview's row blocks (#357, #359): between the wall and a block and between blocks, and
+         between a block's title and its cards. A row card's size is OverviewBoard.ROW_SCALE of a
+         wall card's. -->
+    <dimen name="overview_row_gap">12dp</dimen>
+    <dimen name="overview_row_title_gap">4dp</dimen>
 </resources>
