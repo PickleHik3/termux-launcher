@@ -205,8 +205,32 @@ public final class StatusBarSwipeLayout extends FrameLayout implements NestedScr
     protected void dispatchDraw(@NonNull android.graphics.Canvas canvas) {
         if (mRowPresented && !mRowRect.isEmpty()) {
             if (mRowBandArgb != 0) canvas.drawRect(mRowRect, mRowBandPaint);
+            if (hairline(mHairlineRect)) {
+                // The Marks line's ink, at its low alpha: it repaints with the row and follows
+                // the ink the line solved on its band.
+                View marks = findViewById(R.id.terminal_status_marks_row);
+                int ink = marks instanceof MarksLineView ? ((MarksLineView) marks).hairlineInk()
+                    : 0xFFFFFFFF;
+                mHairlinePaint.setColor(PaneRowPolicy.hairlineArgb(ink));
+                canvas.drawRect(mHairlineRect, mHairlinePaint);
+            }
         }
         super.dispatchDraw(canvas);
+    }
+
+    private final android.graphics.Rect mHairlineRect = new android.graphics.Rect();
+    private final android.graphics.Paint mHairlinePaint = new android.graphics.Paint();
+
+    /**
+     * Whether the hairline stands under the thin row, and where: only while the host presents as
+     * the row in the pane, and not over the Display page's dark band, which already separates it.
+     * Written into {@code out}.
+     */
+    boolean hairline(@NonNull android.graphics.Rect out) {
+        if (!mRowPresented || mRowRect.isEmpty() || mRowBandArgb != 0) return false;
+        PaneRowPolicy.hairlineRect(mRowRect.left, mRowRect.top, mRowRect.right, mRowRect.bottom,
+            out);
+        return true;
     }
 
     @Override

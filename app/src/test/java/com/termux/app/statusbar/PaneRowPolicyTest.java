@@ -149,4 +149,17 @@ public class PaneRowPolicyTest {
         assertFalse(PaneRowPolicy.hitsRow(-1f, top, 0, top, 400, DENSITY));
         assertFalse(PaneRowPolicy.hitsRow(400f, top, 0, top, 400, DENSITY));
     }
+
+    @Test public void theHairlineIsTheRowsLastPixelOverItsContentExtentAndTakesNoRoom() {
+        android.graphics.Rect out = new android.graphics.Rect();
+        PaneRowPolicy.hairlineRect(30, 100, 350, 100 + PaneRowPolicy.rowHeightPx(DENSITY), out);
+        assertEquals(30, out.left);
+        assertEquals(350, out.right);
+        assertEquals(PaneRowPolicy.HAIRLINE_PX, out.height());
+        assertEquals("inside the row", 100 + PaneRowPolicy.rowHeightPx(DENSITY), out.bottom);
+        assertTrue(out.top >= 100);
+        assertEquals(0.14f, PaneRowPolicy.HAIRLINE_ALPHA, 0f);
+        assertEquals(Math.round(0.14f * 255f) << 24 | 0x00FFFFFF,
+            PaneRowPolicy.hairlineArgb(0xFFFFFFFF));
+    }
 }

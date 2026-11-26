@@ -308,6 +308,11 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         if (syncInk()) invalidate();
     }
 
+    /** The ink the thin row's hairline wears: the line's other ink as solved on its band. */
+    int hairlineInk() {
+        return mInk.other;
+    }
+
     /** The inks held now, for tests. */
     @NonNull
     MarksLineInk ink() {

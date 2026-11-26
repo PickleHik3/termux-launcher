@@ -46,6 +46,26 @@ public final class PaneRowPolicy {
      */
     public static final int DISPLAY_BAND_ARGB = 0x9E0A101A;
 
+    /** The hairline under the thin row: one physical pixel, inside the row's own height. */
+    public static final int HAIRLINE_PX = 1;
+    /** The hairline's alpha, as a share of the row's legibility ink. */
+    public static final float HAIRLINE_ALPHA = 0.14f;
+
+    /**
+     * The hairline's rect for a row at [{@code left}, {@code right}) by [{@code top},
+     * {@code bottom}) (the row's content extent, insets already applied): the last
+     * {@link #HAIRLINE_PX} of the row, so it takes no room. Written into {@code out}.
+     */
+    public static void hairlineRect(int left, int top, int right, int bottom,
+                                    @NonNull android.graphics.Rect out) {
+        out.set(left, Math.max(top, bottom - HAIRLINE_PX), right, bottom);
+    }
+
+    /** {@code ink} at the hairline's alpha. */
+    public static int hairlineArgb(int ink) {
+        return (ink & 0x00FFFFFF) | (Math.round(HAIRLINE_ALPHA * android.graphics.Color.alpha(ink)) << 24);
+    }
+
     public static int rowHeightPx(float density) {
         return Math.round(REST_HEIGHT_DP * density);
     }

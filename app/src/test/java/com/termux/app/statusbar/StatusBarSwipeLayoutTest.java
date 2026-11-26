@@ -384,4 +384,26 @@ public class StatusBarSwipeLayoutTest {
     private static int exact(int size) {
         return View.MeasureSpec.makeMeasureSpec(size, View.MeasureSpec.EXACTLY);
     }
+
+    @Test
+    public void theHairlineStandsOnlyUnderTheThinRowInThePaneNotAsAStripNorOverADisplayBand() {
+        StatusBarSwipeLayout view = createView();
+        android.graphics.Rect out = new android.graphics.Rect();
+        // The strip (Home, or the strip place): no hairline.
+        view.setRowRect(20, 120, 180, 136, 0);
+        assertFalse(view.hairline(out));
+        // The row in the pane: the last pixel of the row, over its content extent.
+        view.setRowPresented(true);
+        assertTrue(view.hairline(out));
+        assertEquals(20, out.left);
+        assertEquals(180, out.right);
+        assertEquals(136, out.bottom);
+        assertEquals(1, out.height());
+        // Over a Display page the dark band already separates it.
+        view.setRowRect(20, 120, 180, 136, PaneRowPolicy.DISPLAY_BAND_ARGB);
+        assertFalse(view.hairline(out));
+        view.setRowRect(20, 120, 180, 136, 0);
+        view.setRowPresented(false);
+        assertFalse(view.hairline(out));
+    }
 }
