@@ -2514,6 +2514,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        com.termux.app.overview.NightOvDiag.log("onCreate", null);
         LifecycleTrail.activity("create", "saved=" + (savedInstanceState != null)
             + " intent=" + (getIntent() == null ? null : getIntent().getAction())
             + " home=" + (getIntent() != null && getIntent().hasCategory(Intent.CATEGORY_HOME)));
@@ -11700,6 +11701,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onStop() {
         super.onStop();
+        nightov("onStop");
         mStatusBar.setBatteryWindowStarted(false);
         releaseKeyboardFrost();
         mSurfaceLongPress.dismiss();
@@ -11865,6 +11867,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
 
     @Override
     public void onDestroy() {
+        nightov("onDestroy changing=" + isChangingConfigurations());
         LifecycleTrail.activity("destroy", "finishing=" + isFinishing() + " configChange=" + isChangingConfigurations());
         com.termux.app.place.layout.LayoutStore.shared(this).removeListener(mLayoutsListener);
         com.termux.app.wall.pageswitch.PageGlyphSource.uninstall(mPageGlyphProvider);
@@ -12087,6 +12090,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         // Every open surface measured the old orientation's geometry. The palette alone needs a
         // refresh pass afterwards; a sheet's glass is built per show(), so the next one already
         // picks up the new configuration.
+        nightov("onConfigurationChanged new.uiMode=0x" + Integer.toHexString(newConfig.uiMode));
         mHomeExitController.finishNow();
         // A day/night or scheme change delivered here is a look change; any other is geometry.
         mOverlays.closeAll(mThemeFlip.moved(themeSignature())
@@ -12108,7 +12112,24 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     protected void onNightModeChanged(int mode) {
         super.onNightModeChanged(mode);
+        nightov("onNightModeChanged mode=" + mode);
         closeOverlaysIfThemeMoved();
+    }
+
+    /** DIAG (revert): one NIGHTOV line with the look and Overview's view state. */
+    private void nightov(@NonNull String where) {
+        View pages = com.termux.app.window.WindowLayers.host(this,
+            com.termux.app.window.WindowLayer.PAGES);
+        View chrome = com.termux.app.window.WindowLayers.host(this,
+            com.termux.app.window.WindowLayer.CHROME);
+        com.termux.app.overview.NightOvDiag.log(where, "uiMode=0x"
+            + Integer.toHexString(getResources().getConfiguration().uiMode)
+            + " app.uiMode=0x" + Integer.toHexString(
+                getApplicationContext().getResources().getConfiguration().uiMode)
+            + " sig=" + themeSignature()
+            + " pages.a=" + (pages == null ? "null" : pages.getAlpha() + "/" + pages.getVisibility())
+            + " chrome.a=" + (chrome == null ? "null" : chrome.getAlpha() + "/" + chrome.getVisibility())
+            + " overview=" + (mOverview == null ? "unbuilt" : mOverview.diagState()));
     }
 
     /**
@@ -12131,7 +12152,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
      * instead of staying attached and focused over a page restyled under them.
      */
     private void closeOverlaysIfThemeMoved() {
-        if (!mThemeFlip.moved(themeSignature())) return;
+        boolean moved = mThemeFlip.moved(themeSignature());
+        nightov("themeCheck moved=" + moved);
+        if (!moved) return;
         mHomeExitController.finishNow();
         mOverlays.closeAll(com.termux.app.chrome.OverlayRegistry.CloseReason.THEME);
         restoreInAppKeyboardTypingClaim();
@@ -37371,6 +37394,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     @Override
     public void onWindowFocusChanged(boolean hasFocus) {
         super.onWindowFocusChanged(hasFocus);
+        nightov("windowFocus=" + hasFocus);
         // The focus applies the fullscreen flags and moves the insets. A return wait armed at
         // resume stays (it releases on the first frame with focus); only a hold with no wait
         // yet arms one here.
@@ -38236,6 +38260,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             // Update NightMode.APP_NIGHT_MODE
             TermuxThemeUtils.setAppNightMode(effectiveNightMode());
         }
+        nightov("reloadActivityStyling recreate=" + recreateActivity);
         // Before the restyle below re-lays the chrome under any overlay still open.
         closeOverlaysIfThemeMoved();
         setMargins();

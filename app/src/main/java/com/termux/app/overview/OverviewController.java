@@ -398,6 +398,15 @@ public final class OverviewController implements OverlayRegistry.Overlay {
             return null;
         }
         mView = view;
+        NightOvDiag.log("overview.show", NightOvDiag.describe(view));
+        view.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
+            @Override public void onViewAttachedToWindow(@NonNull View v) {
+                NightOvDiag.log("overview.attached", NightOvDiag.describe(v));
+            }
+            @Override public void onViewDetachedFromWindow(@NonNull View v) {
+                NightOvDiag.log("overview.detached", NightOvDiag.describe(v));
+            }
+        });
         readSaved(view);
         // The conversation sits in a database: read off the main thread, drawn when it arrives
         // if Overview is still the same screen.
@@ -1204,6 +1213,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     /** Removes the screen and shows the layers under it again; the wall is where it was. */
     public void close() {
         OverviewView view = mView;
+        NightOvDiag.log("overview.close", NightOvDiag.describe(view));
         if (view == null) return;
         dismissMenu();
         if (mTyping) {
@@ -1257,7 +1267,14 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         return mView != null;
     }
 
+    /** DIAG (revert): Overview's view as NIGHTOV prints it. */
+    @NonNull
+    public String diagState() {
+        return "typing=" + mTyping + " " + NightOvDiag.describe(mView);
+    }
+
     @Override public void closeImmediately(@NonNull OverlayRegistry.CloseReason reason) {
+        if (mView != null) NightOvDiag.log("overview.closeImmediately " + reason, null);
         close();
     }
 
