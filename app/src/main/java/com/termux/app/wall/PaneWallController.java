@@ -1382,6 +1382,19 @@ public final class PaneWallController implements PaneWallLayout.Listener {
         goToHomePage(Math.max(0, mHome.pressPage()), animate, true);
     }
 
+    /**
+     * Whether {@link #goHome} now turns the wall to a Home page from a page of another kind: the
+     * press whose landing is held behind a frame with no pages
+     * ({@link com.termux.app.chrome.HomeLandingGate}). False wherever the press lands on a
+     * Display, the Assistant or the Terminal, and on a Home page already.
+     */
+    public boolean goHomeTurnsToHomePage() {
+        if (DisplayPagePolicy.homeDisplayPage(mFacts.wallPages()) >= 0) return false;
+        if (homeIsAssistantPage() || homeIsTerminalPage()) return false;
+        if (!mFacts.useAs().showsHomePage()) return false;
+        return mWall.currentPage() != PageKind.HOME;
+    }
+
     private boolean homeIsAssistantPage() {
         WallPages pages = mFacts.wallPages();
         WallPages.Page home = pages == null ? null : pages.home();

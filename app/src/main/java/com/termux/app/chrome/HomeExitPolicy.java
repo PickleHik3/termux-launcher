@@ -45,6 +45,22 @@ public final class HomeExitPolicy {
         return launcherVisible && !gestureNavigation;
     }
 
+    /**
+     * Whether the press's landing is held behind a frame with no pages ({@link HomeLandingGate}):
+     * it turns the wall to a Home page from a page of another kind while the window is shown, and
+     * the wall lands at once. The system fades the window in under the gesture with the last frame
+     * it drew, so without the hold the page left showed under the fade and Home cut in after it:
+     * two motions for one press. A wall that springs to Home (buttons) plays its own slide and is
+     * not held.
+     *
+     * @param turnsToHomePage the press lands on a Home page and the wall is on another kind of page
+     */
+    public static boolean holdsLanding(Step step, boolean turnsToHomePage, boolean launcherVisible,
+                                       boolean gestureNavigation) {
+        return step == Step.GO_HOME && turnsToHomePage && launcherVisible
+            && !animatesWall(launcherVisible, gestureNavigation);
+    }
+
     /** The step after the question: continue leaves, stay changes nothing. */
     public static Step afterAnswer(boolean leave) {
         return leave ? Step.CLOSE_STAY : Step.NONE;
