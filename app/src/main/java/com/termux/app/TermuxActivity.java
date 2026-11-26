@@ -3121,8 +3121,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) mStartOnDisplayPending = false;
             // Maximised, a swipe from the top or the bottom edge is the system's (and brings the
             // row back from the top): none of it reaches the window under the edge.
-            if (mMaximise.onWindowTouch(ev.getActionMasked(), ev.getY(),
-                getWindow().getDecorView().getHeight())) return true;
+            if (mTermuxActivityRootView != null && mMaximise.onWindowTouch(ev.getActionMasked(),
+                ev.getY(), mTermuxActivityRootView.getRootView().getHeight())) return true;
             // A Linux window lifted with Move owns every finger until it is set down (#386).
             if (mLinuxWindows != null && mLinuxWindows.carryTouch(ev)) return true;
             // A stream that starts on the notice pill is the pill's whole: it can rest over the
