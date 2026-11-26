@@ -37,6 +37,10 @@ public final class MarksLineController {
         /** Global's glass at {@code cornerRadiusPx} for {@code anchor}, over the stored wallpaper frame; null for none. */
         @Nullable android.graphics.drawable.Drawable globalGlass(float cornerRadiusPx,
                                                                  @NonNull View anchor);
+        /** Where a held window mark's controls go; null and no mark opens them. */
+        @Nullable default MarksLineView.WindowControls windowControls() {
+            return null;
+        }
     }
 
     /** The title capsule's glass, asked of the host at each touch-down. */
@@ -204,6 +208,7 @@ public final class MarksLineController {
             }, mHost::isReducedMotionEnabled);
         }
         line.setNavigator(mMarksNavigator);
+        line.setWindowControls(mHost.windowControls());
         line.setVertical(vertical);
         line.setAccent(mHost.marksAccent());
         line.setMarkIcons(mHost.pageMarkIcons());
