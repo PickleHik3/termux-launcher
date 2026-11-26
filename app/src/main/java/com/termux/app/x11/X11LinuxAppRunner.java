@@ -407,6 +407,7 @@ public final class X11LinuxAppRunner {
             Logger.logWarn(LOG_TAG, "No activity to run " + app.id + " from; nothing was started");
             return;
         }
+        noticeDesktopPiecesOnce(app);
         // D2: a desktop takes the whole display, so a second one asks first. Two desktops on one
         // display is nothing X or the desktops themselves refuse — it just leaves two panels and
         // two settings daemons fighting over the same screen — so this is the only thing standing
@@ -751,6 +752,9 @@ public final class X11LinuxAppRunner {
         android.util.Log.i("PIECES", "runUnderWayland " + app.id + " backend=" + backend
             + " running=" + (runningSession == null ? null : runningSession.id));
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
+        // On every open, not only a start: a desktop that is already running (one that outlived
+        // the launcher's process, too) is gone to without a launch.
+        noticeDesktopPiecesOnce(app);
         // D2 as on X11 Display: one desktop at a time, and a second one asks first. A tap on the
         // running desktop goes on to the launch below, which shows its window.
         if (app.session && runningSession != null && !runningSession.id.equals(app.id)) {
@@ -852,7 +856,6 @@ public final class X11LinuxAppRunner {
             android.util.Log.i("PIECES", app.id + " already running: no launch, no check");
             return;
         }
-        noticeDesktopPiecesOnce(app);
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
         sound.onNeed();
         EXECUTOR.execute(() -> {
@@ -1029,11 +1032,8 @@ public final class X11LinuxAppRunner {
             + " noticed=" + PIECES_NOTICED.get() + " kind=" + app.container.kind
             + " edition=" + com.termux.app.AppEdition.of(context.getPackageName())
             + " exec=" + app.exec + " names=" + app.desktopNames + " scaleKind=" + scaleKind(app));
-        if (!app.session || PIECES_NOTICED.get()
-            || app.container.kind != ProotDistro.Container.Kind.PREFIX
-            || com.termux.app.AppEdition.of(context.getPackageName())
-                != com.termux.app.AppEdition.TERMUX
-            || !WaylandDesktopServer.KIND_XFCE.equals(scaleKind(app))) {
+        if (PIECES_NOTICED.get() || !checksDesktopPieces(app,
+                com.termux.app.AppEdition.of(context.getPackageName()))) {
             return;
         }
         EXECUTOR.execute(() -> {
@@ -1052,6 +1052,17 @@ public final class X11LinuxAppRunner {
                     // Long enough to read the offer and reach for it; INFO's hold was gone first.
                 }, com.termux.app.notice.AppNoticeItem.Hold.UNDO.ms));
         });
+    }
+
+    /**
+     * Whether opening {@code app} checks for the missing pieces of a whole desktop: a Termux XFCE
+     * session in the prefix, on the Termux edition. Pure.
+     */
+    static boolean checksDesktopPieces(@NonNull LinuxAppCatalog.LinuxApp app,
+                                       @NonNull com.termux.app.AppEdition edition) {
+        return app.session && app.container.kind == ProotDistro.Container.Kind.PREFIX
+            && edition == com.termux.app.AppEdition.TERMUX
+            && WaylandDesktopServer.KIND_XFCE.equals(scaleKind(app));
     }
 
     /** One notice per launcher process per state when the graphics add-on is missing or out of date. */
