@@ -33330,6 +33330,27 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     endOverviewTextInput(field);
                 }
             });
+            // The sessions of each Workspace's place, for its row under the wall (#357).
+            mOverview.setSessionRows(new com.termux.app.overview.OverviewController.SessionRows() {
+                @Override @NonNull
+                public java.util.List<com.termux.app.overview.OverviewModel.Waiting> waiting(int place) {
+                    return overviewWaiting(place);
+                }
+                @Override @Nullable
+                public com.termux.app.overview.CardFacts facts(int place, int slot,
+                        @NonNull com.termux.app.overview.TextBudget budget) {
+                    com.termux.app.terminal.TerminalPaneController.Window w = waitingAt(place, slot);
+                    return w == null || mPaneController == null ? null
+                        : mPaneController.overviewFacts(w, budget);
+                }
+                @Override public void bringToFront(int place, int slot) {
+                    com.termux.app.terminal.TerminalPaneController.Window w = waitingAt(place, slot);
+                    if (w != null && bringSessionToFront(w)) rebuildDrawerSessions();
+                }
+                @Override public void newSession(int place) {
+                    overviewNewSession(place);
+                }
+            });
             // The swipe back to the first page is the wall's own drag (#356).
             mOverview.setWallReturn(new com.termux.app.overview.OverviewController.WallReturn() {
                 @Override public boolean begin() {
@@ -33384,6 +33405,63 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
         int terminal = terminalAtPlace(card.target.index);
         java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = rowWindows();
         return terminal >= 0 && terminal < windows.size() ? windows.get(terminal) : null;
+    }
+
+    /** The window in front of the Workspace at row place {@code place}; null for none or a Linux window. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window placeWindow(int place) {
+        int terminal = terminalAtPlace(place);
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> windows = rowWindows();
+        return terminal >= 0 && terminal < windows.size() ? windows.get(terminal) : null;
+    }
+
+    /** The session waiting at {@code slot} of the place at row place {@code place}; null for none. */
+    @Nullable
+    private com.termux.app.terminal.TerminalPaneController.Window waitingAt(int place, int slot) {
+        com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+        if (front == null) return null;
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
+            mPlaceSessions.waiting(front);
+        return slot >= 0 && slot < waiting.size() ? waiting.get(slot) : null;
+    }
+
+    /** The sessions waiting in the place at row place {@code place}, for its Overview row. */
+    @NonNull
+    private java.util.List<com.termux.app.overview.OverviewModel.Waiting> overviewWaiting(int place) {
+        com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+        if (front == null || mPaneController == null) return java.util.Collections.emptyList();
+        java.util.List<com.termux.app.terminal.TerminalPaneController.Window> waiting =
+            mPlaceSessions.waiting(front);
+        if (waiting.isEmpty()) return java.util.Collections.emptyList();
+        java.util.List<com.termux.app.overview.OverviewModel.Waiting> out =
+            new java.util.ArrayList<>(waiting.size());
+        for (int slot = 0; slot < waiting.size(); slot++) {
+            out.add(new com.termux.app.overview.OverviewModel.Waiting(
+                mPaneController.windowName(waiting.get(slot)),
+                mPlaceSessions.waitingNumber(front, slot)));
+        }
+        return out;
+    }
+
+    /**
+     * Overview's New session on a Workspace card (#357): a fresh shell where the place's focused
+     * pane is stands in front of that place, and the one it replaces waits in the row. The wall
+     * then goes there (the caller); on the place in view it is shown at once.
+     */
+    private void overviewNewSession(int place) {
+        com.termux.app.terminal.TerminalPaneController.Window front = placeWindow(place);
+        if (front == null || mPaneController == null || !isSplitPanesEnabled()) return;
+        TerminalSession focused = mPaneController.windowActiveSession(front);
+        TerminalSession shell = createShellForCwd(focused != null ? focused.getCwd() : null);
+        if (shell == null) return;
+        com.termux.app.terminal.TerminalPaneController.Window w = mPaneController.newWindow(shell);
+        if (!addSessionInFront(front, w)) return;
+        WSession ws = wsessionOwning(w);
+        if (ws != null && ws == mCurrentWSession && ws.windows.indexOf(w) == ws.current) {
+            mPaneController.showWindow(w);
+            mPaneController.focusSession(shell);
+        }
+        rebuildDrawerSessions();
     }
 
     /** What an Overview card holds, which decides whether its removal asks for Undo. */
