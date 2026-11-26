@@ -81,6 +81,24 @@ final class LinuxAppWindowMatcher {
         list.add(id);
     }
 
+    /**
+     * Window {@code id} is known to belong to {@code key}: the host's note for it, replayed to a
+     * launcher that restarted while the app ran. Replaces whatever the window was matched to.
+     */
+    void restore(long id, @NonNull String key) {
+        String was = owner.get(id);
+        if (key.equals(was)) return;
+        if (was != null) windowDestroyed(id);
+        owner.put(id, key);
+        unclaimed.remove(key);
+        List<Long> list = windows.get(key);
+        if (list == null) {
+            list = new ArrayList<>();
+            windows.put(key, list);
+        }
+        list.add(id);
+    }
+
     /** The host closed window {@code id}. Its app is forgotten with its last window. */
     void windowDestroyed(long id) {
         String key = owner.remove(id);

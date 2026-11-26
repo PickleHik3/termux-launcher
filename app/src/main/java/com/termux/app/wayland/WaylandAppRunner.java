@@ -141,6 +141,48 @@ public final class WaylandAppRunner {
     private boolean connectionWaiting;
     /** Scales chosen on the rail for windows with no app to keep them (started from a shell); by window id. Main thread. */
     @NonNull private final java.util.Map<Long, Float> windowScales = new java.util.HashMap<>();
+    /** The host's replay after this binding's addCallback is over; launches wait for it. Main thread. */
+    private boolean replayEnded;
+    /** Apps this process asked the host to run ({@link #runInHost}), by token, until they exit. Main thread. */
+    @NonNull private final java.util.Map<Long, AppRun> runs = new java.util.HashMap<>();
+    /** Apps the host runs that an earlier launcher process started: token to tag. Main thread. */
+    @NonNull private final java.util.Map<Long, String> survivors = new java.util.HashMap<>();
+    @Nullable private WindowAppListener windowAppListener;
+    @Nullable private SurvivorListener survivorListener;
+    /** Makes tokens unique within this process; the clock makes them unique across processes. */
+    private int tokenCount;
+
+    /** The exit code a run is told when the host went away before it heard the app's own. */
+    public static final int EXIT_HOST_GONE = -2;
+
+    /** One app run in the host ({@link #runInHost}). Main thread. */
+    public interface AppRun {
+        /** Its process is running as {@code pid}. */
+        void started(int pid);
+
+        /**
+         * It ended with {@code exitCode} (128 + n for signal n), -1 when it could not start, or
+         * {@link #EXIT_HOST_GONE} when the host went before its exit was heard.
+         */
+        void exited(int exitCode);
+    }
+
+    /** Told when a window's app or kept scale comes back from the host after a restart. Main thread. */
+    public interface WindowAppListener {
+        void windowAppRestored(long id);
+    }
+
+    /**
+     * Told of the apps the host runs that an earlier launcher process started ({@link LinuxAppTag}),
+     * so a restarted launcher can know them again. Main thread.
+     */
+    public interface SurvivorListener {
+        /** Running as {@code pid}; may be told again for the same token after a reconnect. */
+        void survivorRunning(long token, @NonNull String tag, int pid);
+
+        /** Ended with {@code exitCode}, or {@link #EXIT_HOST_GONE}. */
+        void survivorExited(long token, @NonNull String tag, int exitCode);
+    }
 
     private final Runnable startTimeout = () -> {
         if (!pending.isEmpty()) {
@@ -172,9 +214,10 @@ public final class WaylandAppRunner {
             binder = b;
             service = ILinuxWindows.Stub.asInterface(b);
             windows = 0;
-            // The host replays its live windows next.
+            // The host replays its live windows next, with their notes and its processes.
             matcher.clearWindows();
             windowScales.clear();
+            replayEnded = false;
             try {
                 b.linkToDeath(death, 0);
                 service.addCallback(callback);
@@ -238,6 +281,9 @@ public final class WaylandAppRunner {
                 main.removeCallbacks(idleStop);
                 matcher.windowCreated(id, clientPid, (flags & ILinuxWindows.WINDOW_X11) != 0,
                     SystemClock.uptimeMillis());
+                // The host keeps the match for a launcher that restarts while the app runs; a
+                // replayed window's own note follows it.
+                if ((flags & ILinuxWindows.WINDOW_REPLAYED) == 0 && matcher.keyFor(id) != null) sendNote(id);
                 // A new window gets its place in the row from the Linux windows' controller,
                 // which hears the host itself (spec #384).
             });
@@ -255,7 +301,172 @@ public final class WaylandAppRunner {
                 if (windows == 0) armIdleStop();
             });
         }
+
+        @Override
+        public void onAppStarted(long token, String tag, int pid) {
+            main.post(() -> appStarted(token, tag, pid));
+        }
+
+        @Override
+        public void onAppExited(long token, String tag, int exitCode) {
+            main.post(() -> appExited(token, tag, exitCode));
+        }
+
+        @Override
+        public void onWindowNote(long id, String note) {
+            main.post(() -> windowNote(id, note));
+        }
+
+        @Override
+        public void onReplayEnd() {
+            main.post(() -> {
+                if (service == null) return;
+                replayEnded = true;
+                if (running) dispatchPending();
+            });
+        }
     };
+
+    private void appStarted(long token, @Nullable String tag, int pid) {
+        if (service == null) return;
+        AppRun run = runs.get(token);
+        if (run != null) {
+            if (pid > 0) run.started(pid);
+            return;
+        }
+        if (tag == null) return;
+        LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+        if (parsed == null) return;
+        // Started by an earlier launcher process: its windows come back by their notes, and a
+        // native window by its pid as well.
+        if (!parsed.desktop && pid > 0) matcher.started(parsed.key, pid);
+        survivors.put(token, tag);
+        if (survivorListener != null) survivorListener.survivorRunning(token, tag, pid);
+    }
+
+    private void appExited(long token, @Nullable String tag, int exitCode) {
+        AppRun run = runs.remove(token);
+        if (run != null) {
+            run.exited(exitCode);
+            return;
+        }
+        String known = survivors.remove(token);
+        if (known != null && survivorListener != null) survivorListener.survivorExited(token, known, exitCode);
+    }
+
+    /** A replayed window's note: the app it was opened for, or the scale kept for it. */
+    private void windowNote(long id, @Nullable String note) {
+        if (service == null) return;
+        LinuxAppTag.Note parsed = LinuxAppTag.parseNote(note);
+        if (parsed == null) return;
+        if (parsed.key != null) matcher.restore(id, parsed.key);
+        if (parsed.scale > 0f) windowScales.put(id, parsed.scale);
+        if (windowAppListener != null) windowAppListener.windowAppRestored(id);
+    }
+
+    /** Tells the host what to keep for window {@code id}: its app, or the scale kept for it. */
+    private void sendNote(long id) {
+        ILinuxWindows s = service;
+        if (s == null) return;
+        Float scale = windowScales.get(id);
+        String note = LinuxAppTag.note(matcher.keyFor(id), scale == null ? 0f : scale);
+        try {
+            s.setWindowNote(id, note);
+        } catch (RemoteException ignored) {
+        }
+    }
+
+    /** Every run and survivor still waiting for its exit hears that the host went. */
+    private void endRuns() {
+        if (!runs.isEmpty()) {
+            List<AppRun> gone = new ArrayList<>(runs.values());
+            runs.clear();
+            for (AppRun run : gone) run.exited(EXIT_HOST_GONE);
+        }
+        if (!survivors.isEmpty()) {
+            java.util.Map<Long, String> gone = new java.util.HashMap<>(survivors);
+            survivors.clear();
+            if (survivorListener == null) return;
+            for (java.util.Map.Entry<Long, String> e : gone.entrySet()) {
+                survivorListener.survivorExited(e.getKey(), e.getValue(), EXIT_HOST_GONE);
+            }
+        }
+    }
+
+    /**
+     * Runs {@code script} for the app tagged {@code tag} ({@link LinuxAppTag}) as a child of the
+     * host's process, with the environment a Termux task gets, so it outlives the launcher's
+     * process; {@code run} hears its pid and exit. False, with nothing started, when the host does
+     * not run or cannot be reached: the caller runs it its own way. Main thread.
+     */
+    public boolean runInHost(@NonNull String tag, @NonNull String logPath, @NonNull String script,
+                             @NonNull AppRun run) {
+        ILinuxWindows s = service;
+        if (s == null || !running) return false;
+        String[][] command;
+        try {
+            command = taskCommand(context, script);
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "cannot prepare " + tag + ": " + e);
+            return false;
+        }
+        long token = (System.currentTimeMillis() << 12) | (tokenCount++ & 0xFFF);
+        runs.put(token, run);
+        try {
+            s.runApp(token, tag, command[0], command[1], TermuxConstants.TERMUX_HOME_DIR_PATH, logPath);
+        } catch (RemoteException e) {
+            runs.remove(token);
+            return false;
+        }
+        return true;
+    }
+
+    /**
+     * The argv and environment {@code script} runs with, the same a Termux task gets
+     * ({@code TermuxService#createTermuxTask}): the host's shell, Termux's environment and the
+     * launcher's sound server.
+     */
+    @NonNull
+    private static String[][] taskCommand(@NonNull Context context, @NonNull String script) {
+        String shell = com.termux.app.x11.NixProfile.hostShellPath();
+        String[] args = {"-c", script};
+        com.termux.shared.shell.command.ExecutionCommand command =
+            new com.termux.shared.shell.command.ExecutionCommand(
+                com.termux.shared.termux.shell.TermuxShellManager.getNextShellId(), shell, args, null,
+                TermuxConstants.TERMUX_HOME_DIR_PATH,
+                com.termux.shared.shell.command.ExecutionCommand.Runner.APP_SHELL.getName(), false);
+        command.setShellCommandShellEnvironment = true;
+        com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment environment =
+            new com.termux.shared.termux.shell.command.environment.TermuxShellEnvironment();
+        String[] argv = environment.setupShellCommandArguments(shell, args);
+        java.util.HashMap<String, String> env = environment.setupShellCommandEnvironment(context, command);
+        java.util.HashMap<String, String> sound =
+            com.termux.app.sound.LauncherSound.get(context).environmentForNewShell();
+        if (sound != null) env.putAll(sound);
+        List<String> list = com.termux.shared.shell.command.environment.ShellEnvironmentUtils
+            .convertEnvironmentToEnviron(env);
+        java.util.Collections.sort(list);
+        return new String[][]{argv, list.toArray(new String[0])};
+    }
+
+    /** The one listener for windows whose app comes back after a restart; the Linux windows' controller. */
+    public void setWindowAppListener(@Nullable WindowAppListener listener) {
+        windowAppListener = listener;
+    }
+
+    /** Clears {@code listener} if it is still the one set. */
+    public void clearWindowAppListener(@NonNull WindowAppListener listener) {
+        if (windowAppListener == listener) windowAppListener = null;
+    }
+
+    /** The one listener for apps an earlier launcher process started; told at once of those known. */
+    public void setSurvivorListener(@Nullable SurvivorListener listener) {
+        survivorListener = listener;
+        if (listener == null || survivors.isEmpty()) return;
+        for (java.util.Map.Entry<Long, String> e : new java.util.HashMap<>(survivors).entrySet()) {
+            listener.survivorRunning(e.getKey(), e.getValue(), 0);
+        }
+    }
 
     private WaylandAppRunner(@NonNull Context context) {
         this.context = context.getApplicationContext();
@@ -370,6 +581,8 @@ public final class WaylandAppRunner {
         running = false;
         startAsked = false;
         stateKnown = false;
+        replayEnded = false;
+        endRuns();
         windows = 0;
         matcher.clear();
         windowScales.clear();
@@ -391,6 +604,9 @@ public final class WaylandAppRunner {
     public void setWaylandChosen(boolean chosen) {
         waylandChosen = chosen;
         if (chosen) {
+            // A host an earlier launcher process left running holds its Linux apps: listen to it
+            // now, so they are known again (their apps, scales, a desktop) before any tap.
+            if (!bound && hostProcessRunning()) connect();
             if (socketOwner == null) socketOwner = new WaylandSocketOwner(socketPath(), main, this::onConnectionWaiting);
             if (prepareSocketDir() && socketOwner.open() && !running && !startAsked) socketOwner.arm();
         } else {
@@ -603,7 +819,9 @@ public final class WaylandAppRunner {
     }
 
     private void dispatchPending() {
-        if (pending.isEmpty()) return;
+        // A host that was already running is still replaying what it runs (onReplayEnd runs this
+        // again): an app whose window it replays is gone to, not started a second time.
+        if (pending.isEmpty() || !replayEnded) return;
         main.removeCallbacks(startTimeout);
         if (xDisplay == null && !xWaitExpired && xwaylandBinary() != null) {
             // Xwayland was asked for and has not reported its display yet; the report runs this again.
@@ -618,6 +836,11 @@ public final class WaylandAppRunner {
         String x = xwaylandDisplay();
         for (Launch launch : launches) {
             String key = launch.key();
+            long open = key == null ? -1L : matcher.windowFor(key);
+            if (open >= 0) {
+                if (windowsSurface != null) windowsSurface.showWindow(open);
+                continue;
+            }
             if (key != null) matcher.launched(key, SystemClock.uptimeMillis());
             launch.run(wayland, x);
         }
@@ -687,6 +910,7 @@ public final class WaylandAppRunner {
     public void setWindowScale(long windowId, float scale) {
         if (scale > 0f) windowScales.put(windowId, scale);
         else windowScales.remove(windowId);
+        sendNote(windowId);
     }
 
     /** A launch started process {@code pid} for the app {@code key}; main thread. */

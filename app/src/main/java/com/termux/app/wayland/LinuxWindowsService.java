@@ -44,6 +44,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         long parentId;
         int width;
         int height;
+        /** The launcher's note for this window (ILinuxWindows#setWindowNote); null for none. */
+        String note;
     }
 
     private interface Call {
@@ -67,6 +69,20 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     private String mMessage = "";
     /** Xwayland's display for replay; empty when there is none. Main thread. */
     private String mXDisplay = "";
+    /** The Linux apps this host runs for the launcher. Main thread. */
+    /** The session bus the apps run on; it ends with them when the host stops. */
+    private final LinuxAppBus mBus = new LinuxAppBus(mMain);
+    private final LinuxAppChildren mChildren = new LinuxAppChildren(mMain, new LinuxAppChildren.Listener() {
+        @Override
+        public void started(long token, String tag, int pid) {
+            broadcast(cb -> cb.onAppStarted(token, tag, pid));
+        }
+
+        @Override
+        public void exited(long token, String tag, int exitCode) {
+            broadcast(cb -> cb.onAppExited(token, tag, exitCode));
+        }
+    });
 
     private final ILinuxWindows.Stub mBinder = new ILinuxWindows.Stub() {
         @Override
@@ -161,6 +177,28 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
         @Override
         public void commitText(long id, String text) {
             if (mRunning && text != null && !text.isEmpty()) WaylandHost.nativeCommitText(id, text);
+        }
+
+        @Override
+        public void runApp(long token, String tag, String[] argv, String[] env, String cwd, String logPath) {
+            mMain.post(() -> {
+                // A desktop drops any bus it is given and starts its own; an app is put on the
+                // host's, so it does not end with the launcher's (LinuxAppBus).
+                LinuxAppTag.Parsed parsed = LinuxAppTag.parse(tag);
+                if (parsed != null && parsed.desktop) {
+                    mChildren.run(token, tag, argv, env, cwd, logPath);
+                } else {
+                    mBus.ensure(env, busEnv -> mChildren.run(token, tag, argv, busEnv, cwd, logPath));
+                }
+            });
+        }
+
+        @Override
+        public void setWindowNote(long id, String note) {
+            mMain.post(() -> {
+                Window w = mWindows.get(id);
+                if (w != null) w.note = note == null || note.isEmpty() ? null : note;
+            });
         }
 
         @Override
@@ -316,6 +354,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     }
 
     private void doStop() {
+        mBus.stop();
+        mChildren.endAll();
         if (mRunning) {
             WaylandHost.stop();
             mRunning = false;
@@ -364,7 +404,14 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
                 Window w = mWindows.valueAt(i);
                 callback.onWindowCreated(id, w.title, w.appId, w.clientPid, w.flags | ILinuxWindows.WINDOW_REPLAYED, w.parentId);
                 callback.onWindowChanged(id, w.title, w.appId, w.width, w.height);
+                if (w.note != null) callback.onWindowNote(id, w.note);
             }
+            LongSparseArray<LinuxAppChildren.Child> live = mChildren.live();
+            for (int i = 0; i < live.size(); i++) {
+                LinuxAppChildren.Child child = live.valueAt(i);
+                callback.onAppStarted(live.keyAt(i), child.tag, child.pid);
+            }
+            callback.onReplayEnd();
         } catch (RemoteException e) {
             Log.w(LOG_TAG, "replay to a gone listener: " + e);
         }
@@ -471,6 +518,8 @@ public final class LinuxWindowsService extends Service implements WaylandHost.Li
     public void onHostEnded(boolean crashed) {
         if (!mRunning) return;
         Log.e(LOG_TAG, "the compositor ended without being asked" + (crashed ? " (panic)" : ""));
+        mBus.stop();
+        mChildren.endAll();
         // Joins the finished thread and clears it, so a later start works.
         WaylandHost.stop();
         mRunning = false;

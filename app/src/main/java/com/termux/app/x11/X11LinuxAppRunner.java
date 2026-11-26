@@ -195,8 +195,7 @@ public final class X11LinuxAppRunner {
          * desktop takes the display from the one running. {@code onYes} runs on the main thread,
          * and only if they say yes; saying no is simply the end of it.
          */
-        void askBeforeReplacingSession(@NonNull String message, @NonNull Runnable onYes);
-    }
+        void askBeforeReplacingSession(@NonNull String message, @NonNull Runnable onYes);    }
 
     /** Told a background script task's exit code, on the main thread, once it has one. */
     public interface ScriptExitListener {
@@ -222,7 +221,11 @@ public final class X11LinuxAppRunner {
     /** The process's runner, built the first time it is asked for. Main thread only. */
     @NonNull
     public static X11LinuxAppRunner shared(@NonNull Context context) {
-        if (sShared == null) sShared = new X11LinuxAppRunner(context, null, false);
+        if (sShared == null) {
+            sShared = new X11LinuxAppRunner(context, null, false);
+            // Apps the Linux windows host runs for an earlier launcher process (a desktop above all).
+            WaylandAppRunner.shared(context).setSurvivorListener(sShared.survivorListener);
+        }
         return sShared;
     }
 
@@ -398,6 +401,7 @@ public final class X11LinuxAppRunner {
             Logger.logWarn(LOG_TAG, "No activity to run " + app.id + " from; nothing was started");
             return;
         }
+        noticeDesktopPiecesOnce(app);
         // D2: a desktop takes the whole display, so a second one asks first. Two desktops on one
         // display is nothing X or the desktops themselves refuse — it just leaves two panels and
         // two settings daemons fighting over the same screen — so this is the only thing standing
@@ -577,6 +581,8 @@ public final class X11LinuxAppRunner {
         // will hear of its exit any more, so the bookkeeping goes rather than growing stale.
         setRunningSession(null);
         takeOver = null;
+        survivingDesktop = null;
+        survivingDesktopToken = null;
         // Cancels giveUp and any quick-fail watch left over from a launch this runner will never
         // hear the result of.
         handler.removeCallbacksAndMessages(null);
@@ -649,6 +655,7 @@ public final class X11LinuxAppRunner {
      * first attempt already needs the flag.
      */
     private void launch(@NonNull LinuxAppCatalog.LinuxApp app, boolean displayJustStarted) {
+        noticeDesktopPiecesOnce(app);
         // A Linux app is a first need for sound: the launcher's server starts if it has not, and
         // the app's task is handed its address like every shell (LauncherSound).
         com.termux.app.sound.LauncherSound sound = com.termux.app.sound.LauncherSound.get(context);
@@ -737,6 +744,9 @@ public final class X11LinuxAppRunner {
         LinuxDisplayBackend backend = LinuxDisplayBackend.forApp(LinuxDisplayBackend.current(context),
             app.session, app.container.kind == ProotDistro.Container.Kind.DISTRO);
         if (backend != LinuxDisplayBackend.WAYLAND) return false;
+        // On every open, not only a start: a desktop that is already running (one that outlived
+        // the launcher's process, too) is gone to without a launch.
+        noticeDesktopPiecesOnce(app);
         // D2 as on X11 Display: one desktop at a time, and a second one asks first. A tap on the
         // running desktop goes on to the launch below, which shows its window.
         if (app.session && runningSession != null && !runningSession.id.equals(app.id)) {
@@ -797,7 +807,8 @@ public final class X11LinuxAppRunner {
                     Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display in "
                         + app.container.name + (noSandbox ? " with --no-sandbox" : ""));
                     runAndWatch(app, script, noSandbox, display, none, null,
-                        pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), login);
+                        pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), login,
+                        com.termux.app.wayland.LinuxAppTag.app(app.id));
                 });
                 return;
             }
@@ -817,7 +828,8 @@ public final class X11LinuxAppRunner {
                     notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
                 }
                 runAndWatch(app, script, noSandbox, display, env, null,
-                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
+                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), null,
+                    com.termux.app.wayland.LinuxAppTag.app(app.id));
             });
         });
     }
@@ -849,8 +861,9 @@ public final class X11LinuxAppRunner {
                 return;
             }
             GpuChoice gpu = appGraphics(app);
-            // The desktop is drawn at the screen's pixels and told its scale as DPI: its app's
-            // Scale (the rail's stop) or the default for the screen's shorter side, read once, at start.
+            // The desktop draws at the whole factor at or above its app's Scale (the rail's stop)
+            // or the default for the screen's shorter side, and its window shows it scaled down
+            // to the stop (WaylandDesktopServer.hostScale).
             android.util.DisplayMetrics metrics = context.getResources().getDisplayMetrics();
             float scale = com.termux.app.wayland.LinuxDisplayScale.windowScale(
                 appSettings.scale(app.id), metrics.density,
@@ -880,10 +893,77 @@ public final class X11LinuxAppRunner {
                 X11AppSettingsStore.sScaleListener = scaleListener;
                 WaylandDesktopServer.named(number, app.name);
                 runAndWatch(app, script, false, display, env, null,
-                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
+                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), null,
+                    com.termux.app.wayland.LinuxAppTag.desktop(number, app.id));
             });
         });
     }
+
+    /**
+     * The desktop the Linux windows host runs for an earlier launcher process, by the host's token;
+     * null when none is known. Main thread.
+     */
+    @Nullable private Long survivingDesktopToken;
+
+    /**
+     * The host runs an app an earlier launcher process started. A desktop among them is this
+     * runner's running desktop again, as if this process had started it: a second tap shows it,
+     * its Scale reaches it live, and its end is heard. Apps need nothing here (their windows come
+     * back through the host's notes). The catalogue is read on the worker.
+     */
+    private void survivorRunning(long token, @NonNull String tag) {
+        com.termux.app.wayland.LinuxAppTag.Parsed parsed = com.termux.app.wayland.LinuxAppTag.parse(tag);
+        if (parsed == null || !parsed.desktop) return;
+        if (runningSession != null || (survivingDesktopToken != null && survivingDesktopToken == token)) return;
+        EXECUTOR.execute(() -> {
+            LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.find(
+                LinuxAppCatalog.scan(LinuxAppCatalog.roots()), parsed.key);
+            handler.post(() -> adoptDesktop(token, parsed, app));
+        });
+    }
+
+    private void adoptDesktop(long token, @NonNull com.termux.app.wayland.LinuxAppTag.Parsed parsed,
+                              @Nullable LinuxAppCatalog.LinuxApp app) {
+        if (app == null || !app.session) {
+            Logger.logWarn(LOG_TAG, "The running desktop " + parsed.key + " is not in the catalogue");
+            return;
+        }
+        // Started here meanwhile, or already ended: nothing to take back.
+        if (runningSession != null || !survivorTokens.contains(token)) return;
+        Logger.logInfo(LOG_TAG, "Desktop " + app.id + " on :" + parsed.display + " is still running");
+        survivingDesktopToken = token;
+        survivingDesktop = app;
+        setRunningSession(app);
+        waylandDesktopDisplay = parsed.display;
+        X11AppSettingsStore.sScaleListener = scaleListener;
+        WaylandDesktopServer.named(parsed.display, app.name);
+    }
+
+    /** Tokens of the survivors the host reports as running; main thread. */
+    @NonNull private final java.util.Set<Long> survivorTokens = new java.util.HashSet<>();
+
+    private final com.termux.app.wayland.WaylandAppRunner.SurvivorListener survivorListener =
+        new com.termux.app.wayland.WaylandAppRunner.SurvivorListener() {
+            @Override
+            public void survivorRunning(long token, @NonNull String tag, int pid) {
+                survivorTokens.add(token);
+                X11LinuxAppRunner.this.survivorRunning(token, tag);
+            }
+
+            @Override
+            public void survivorExited(long token, @NonNull String tag, int exitCode) {
+                survivorTokens.remove(token);
+                if (survivingDesktopToken == null || survivingDesktopToken != token) return;
+                LinuxAppCatalog.LinuxApp app = survivingDesktop;
+                survivingDesktopToken = null;
+                survivingDesktop = null;
+                // Only while it is still the running desktop (onSessionExited checks).
+                if (app != null) onSessionExited(app, exitCode, null);
+            }
+        };
+
+    /** The desktop {@link #survivingDesktopToken} names; main thread. */
+    @Nullable private LinuxAppCatalog.LinuxApp survivingDesktop;
 
     /** Reaches the running desktop when its app's Scale changes; set while a desktop runs. */
     private final java.util.function.Consumer<String> scaleListener =
@@ -891,8 +971,9 @@ public final class X11LinuxAppRunner {
 
     /**
      * The desktop's Scale was read once, at its start; a new stop reaches an XFCE desktop already
-     * running by writing the same settings into it ({@link WaylandDesktopServer#liveScaleScript}),
-     * in the desktop's own world. Anything else keeps its scale until it starts again. Main thread.
+     * running by writing the new factor into it ({@link WaylandDesktopServer#liveScaleScript}),
+     * in the desktop's own world, while its window's new configure resizes the root. Anything
+     * else keeps its factor until it starts again. Main thread.
      */
     private void applyScaleToRunningDesktop(@NonNull String appId) {
         LinuxAppCatalog.LinuxApp app = runningSession;
@@ -924,6 +1005,68 @@ public final class X11LinuxAppRunner {
         com.termux.app.notice.AppNotice.show(context, com.termux.app.notice.AppNoticeItem.Kind.INFO,
             context.getString(com.termux.R.string.linux_xwayland_missing_title),
             context.getString(com.termux.R.string.linux_xwayland_missing_sub), true);
+    }
+
+    private static final java.util.concurrent.atomic.AtomicBoolean PIECES_NOTICED =
+        new java.util.concurrent.atomic.AtomicBoolean();
+
+    /**
+     * One notice per launcher process when a Termux XFCE session opens on a prefix missing pieces
+     * of a whole desktop (an install from before the full list): its tap installs them in a
+     * visible terminal. The desktop starts as it is meanwhile. The distro desktops bring their
+     * own, and VAJ's repository is not checked for these packages.
+     */
+    private void noticeDesktopPiecesOnce(@NonNull LinuxAppCatalog.LinuxApp app) {
+        if (PIECES_NOTICED.get() || !checksDesktopPieces(app,
+                com.termux.app.AppEdition.of(context.getPackageName()))) {
+            return;
+        }
+        EXECUTOR.execute(() -> {
+            java.io.File prefix = new java.io.File(
+                com.termux.shared.termux.TermuxConstants.TERMUX_PREFIX_DIR_PATH);
+            String command = DesktopPieces.installCommand(DesktopPieces.missingFromInstalledDesktop(
+                GuiAppsSetup.DESKTOP_TERMUX_PACKAGES, file -> new java.io.File(prefix, file).exists()));
+            if (command == null || !PIECES_NOTICED.compareAndSet(false, true)) return;
+            handler.post(() -> com.termux.app.notice.AppNotice.shell(context,
+                context.getString(com.termux.R.string.linux_desktop_pieces_title),
+                context.getString(com.termux.R.string.linux_desktop_pieces_sub), null, true, () -> {
+                    openDesktopSetupWindow(command);
+                    // Long enough to read the offer and reach for it; INFO's hold was gone first.
+                }, com.termux.app.notice.AppNoticeItem.Hold.UNDO.ms));
+        });
+    }
+
+    /**
+     * The notice's action: {@code command} in a window of its own, in front, by the route
+     * {@code launcherctl window open} takes. Through the dispatcher rather than the runner's
+     * host, which is null between a detach and the next attach.
+     */
+    private void openDesktopSetupWindow(@NonNull String command) {
+        com.termux.app.terminal.TerminalActionDispatcher dispatcher =
+            com.termux.app.terminal.TerminalActionDispatcher.getInstance();
+        if (!dispatcher.isAttached()) return;
+        try {
+            dispatcher.execute(com.termux.app.terminal.TerminalActionDispatcher.TOOL_WINDOW_OPEN,
+                new org.json.JSONObject()
+                    .put("command", new org.json.JSONArray(DesktopPieces.windowCommand(
+                        com.termux.shared.termux.TermuxConstants.TERMUX_BIN_PREFIX_DIR_PATH + "/bash",
+                        command)))
+                    .put("title", context.getString(com.termux.R.string.linux_desktop_pieces_window_title))
+                    .put("focus", true));
+        } catch (org.json.JSONException e) {
+            // put() throws only for a non-finite number; there is none.
+        }
+    }
+
+    /**
+     * Whether opening {@code app} checks for the missing pieces of a whole desktop: a Termux XFCE
+     * session in the prefix, on the Termux edition. Pure.
+     */
+    static boolean checksDesktopPieces(@NonNull LinuxAppCatalog.LinuxApp app,
+                                       @NonNull com.termux.app.AppEdition edition) {
+        return app.session && app.container.kind == ProotDistro.Container.Kind.PREFIX
+            && edition == com.termux.app.AppEdition.TERMUX
+            && WaylandDesktopServer.KIND_XFCE.equals(scaleKind(app));
     }
 
     /** One notice per launcher process per state when the graphics add-on is missing or out of date. */
@@ -1016,7 +1159,21 @@ public final class X11LinuxAppRunner {
                       @Nullable String windowManagerRestart,
                       @Nullable java.util.function.IntConsumer onPid,
                       @Nullable ProotDistro.LoginExtras login) {
-        new Watch(app, display, env, windowManagerRestart, onPid, login).start(script, noSandbox);
+        runAndWatch(app, script, noSandbox, display, env, windowManagerRestart, onPid, login, null);
+    }
+
+    /**
+     * As above; {@code hostTag} ({@link com.termux.app.wayland.LinuxAppTag}) runs the app in the
+     * Linux windows host's process rather than as a task of the launcher's, so it lives on when
+     * the launcher's process dies. Under Wayland Display only; null runs it as a task.
+     */
+    @VisibleForTesting
+    void runAndWatch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String script, boolean noSandbox,
+                      @NonNull String display, @NonNull List<String> env,
+                      @Nullable String windowManagerRestart,
+                      @Nullable java.util.function.IntConsumer onPid,
+                      @Nullable ProotDistro.LoginExtras login, @Nullable String hostTag) {
+        new Watch(app, display, env, windowManagerRestart, onPid, login, hostTag).start(script, noSandbox);
         if (app.session && windowManagerRestart != null) {
             handler.postDelayed(() -> windowManagerSafetyNet(app, windowManagerRestart),
                 WM_SAFETY_NET_MS);
@@ -1057,6 +1214,8 @@ public final class X11LinuxAppRunner {
         @Nullable private final String windowManagerRestart;
         @Nullable private final java.util.function.IntConsumer onPid;
         @Nullable private final ProotDistro.LoginExtras login;
+        /** Runs the app in the Linux windows host under this tag; null runs it as a task. */
+        @Nullable private final String hostTag;
         private final Runnable timeout = () -> resolve(false);
         private boolean noSandbox;
         private boolean decided;
@@ -1064,18 +1223,27 @@ public final class X11LinuxAppRunner {
         Watch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
               @NonNull List<String> env, @Nullable String windowManagerRestart,
               @Nullable java.util.function.IntConsumer onPid,
-              @Nullable ProotDistro.LoginExtras login) {
+              @Nullable ProotDistro.LoginExtras login, @Nullable String hostTag) {
             this.login = login;
             this.onPid = onPid;
             this.app = app;
             this.display = display;
             this.env = env;
             this.windowManagerRestart = windowManagerRestart;
+            this.hostTag = hostTag;
         }
 
         void start(@NonNull String script, boolean noSandbox) {
             this.noSandbox = noSandbox;
-            boolean started = runScript(script, exitCode -> {
+            ScriptExitListener onExit = exitCode -> {
+                if (exitCode == com.termux.app.wayland.WaylandAppRunner.EXIT_HOST_GONE) {
+                    // The host went, and the app with it: nothing about the app to learn or retry.
+                    Logger.logInfo(LOG_TAG, app.id + " ended with the Linux windows host");
+                    if (app.session) onSessionExited(app, exitCode, windowManagerRestart);
+                    decided = true;
+                    handler.removeCallbacks(timeout);
+                    return;
+                }
                 // Said for every app, at info so a release build's logcat has it: 128 + n is the
                 // app ended by signal n (143 SIGTERM, 137 SIGKILL), anything else is its own exit.
                 if (!app.session) Logger.logInfo(LOG_TAG, app.id + " exited with " + exitCode);
@@ -1094,7 +1262,9 @@ public final class X11LinuxAppRunner {
                     return;
                 }
                 resolve(isQuickFailure(exitCode));
-            }, onPid);
+            };
+            boolean started = hostTag != null && runInHost(script, onExit);
+            if (!started) started = runScript(script, onExit, onPid);
             if (started) {
                 if (app.session) setRunningSession(app);
                 handler.postDelayed(timeout, QUICK_FAIL_MS);
@@ -1106,6 +1276,28 @@ public final class X11LinuxAppRunner {
             decided = true;
             Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
             notice(failureNotice(app));
+        }
+
+        /**
+         * Runs {@code script} as a child of the Linux windows host, its output in its own log
+         * file; false when the host cannot take it, and the caller runs it as a task instead.
+         */
+        private boolean runInHost(@NonNull String script, @NonNull ScriptExitListener onExit) {
+            String tag = hostTag;
+            if (tag == null) return false;
+            return com.termux.app.wayland.WaylandAppRunner.shared(context).runInHost(tag,
+                com.termux.app.wayland.LinuxAppTag.logPath(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, app.id),
+                script, new com.termux.app.wayland.WaylandAppRunner.AppRun() {
+                    @Override
+                    public void started(int pid) {
+                        if (onPid != null) onPid.accept(pid);
+                    }
+
+                    @Override
+                    public void exited(int exitCode) {
+                        onExit.onExit(exitCode);
+                    }
+                });
         }
 
         /** The desktop's X server did not start: settle, and say so even after the window. */
@@ -1161,7 +1353,7 @@ public final class X11LinuxAppRunner {
                 return;
             }
             Logger.logInfo(LOG_TAG, "Retrying " + app.id + " on the display with --no-sandbox");
-            new Watch(app, display, env, null, onPid, login)
+            new Watch(app, display, env, null, onPid, login, hostTag)
                 .start(script(app, display, env, true, null, login), true);
         }
     }
@@ -1336,8 +1528,8 @@ public final class X11LinuxAppRunner {
                          @Nullable ProotDistro.LoginExtras login) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
-        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
-        for (String line : env) script.append("export ").append(line).append('\n');
+        for (String line : TOUCH_ENV) script.append(exportLine(line));
+        for (String line : env) script.append(exportLine(line));
         // The prefix's fcitx5 and its modules are the prefix's: a container has neither, and its
         // apps keep the cursor guess until that follow-up is verified on a phone.
         if (app.container.isPrefix()) script.append(cursorBlock()).append(inputMethodBlock(display));
@@ -1350,6 +1542,29 @@ public final class X11LinuxAppRunner {
         script.append("exec ").append(noSandbox || login != null ? app.commandWith(extraArgs, login) : app.command())
             .append('\n');
         return script.toString();
+    }
+
+    /**
+     * {@code line} ({@code NAME=value}) as the shell line that exports it. A value the shell would
+     * split or end early ({@code QT_QPA_PLATFORM=wayland;xcb} ran {@code xcb} as a command) is
+     * quoted: single quotes, or double quotes when it expands a variable such as
+     * {@code ${LD_LIBRARY_PATH:+...}}. A plain value is written as it is. Pure.
+     */
+    @NonNull
+    static String exportLine(@NonNull String line) {
+        int eq = line.indexOf('=');
+        if (eq <= 0) return "export " + line + "\n";
+        String value = line.substring(eq + 1);
+        boolean needsQuotes = false;
+        for (int i = 0; i < value.length() && !needsQuotes; i++) {
+            needsQuotes = " \t;&|<>()*?[]#`!\"'\\".indexOf(value.charAt(i)) >= 0;
+        }
+        if (!needsQuotes) return "export " + line + "\n";
+        String name = line.substring(0, eq + 1);
+        if (value.indexOf('$') < 0) return "export " + name + ProotDistro.singleQuote(value) + "\n";
+        // Expanded on purpose: escape only what ends or changes a double-quoted word.
+        String escaped = value.replace("\\", "\\\\").replace("\"", "\\\"").replace("`", "\\`");
+        return "export " + name + "\"" + escaped + "\"\n";
     }
 
     /**
@@ -1457,8 +1672,8 @@ public final class X11LinuxAppRunner {
                                 @Nullable String beforeDesktop, @Nullable Float scale) {
         StringBuilder script = new StringBuilder();
         script.append("export DISPLAY=").append(display).append('\n');
-        for (String line : TOUCH_ENV) script.append("export ").append(line).append('\n');
-        for (String line : env) script.append("export ").append(line).append('\n');
+        for (String line : TOUCH_ENV) script.append(exportLine(line));
+        for (String line : env) script.append(exportLine(line));
         script.append(DROP_INHERITED_BUS);
         // The prefix desktop's apps are the prefix's, like a prefix app: give them fcitx5 so a
         // focused text field opens the Android keyboard. A container has neither it nor its modules.

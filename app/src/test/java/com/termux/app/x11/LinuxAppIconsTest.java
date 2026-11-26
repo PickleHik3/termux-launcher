@@ -186,6 +186,69 @@ public class LinuxAppIconsTest {
             LinuxAppIcons.find(session(distroContainer("debian", rootfs), "lxqt", "", "LXQt")));
     }
 
+    @Test public void aContainerAppFindsItsHicolorIconInTheRootfs() throws IOException {
+        // Debian's thunar.desktop: Icon=org.xfce.thunar, shipped under /usr/share/icons/hicolor.
+        File rootfs = temp.newFolder("debian");
+        File dir = new File(rootfs, "usr/share/icons/hicolor/48x48/apps");
+        assertTrue(dir.mkdirs());
+        File png = writePng(dir, "org.xfce.thunar.png", 48, 48);
+
+        assertEquals(png, LinuxAppIcons.find(
+            application(distroContainer("debian", rootfs), "thunar", "org.xfce.thunar")));
+    }
+
+    @Test public void aContainerAppFindsAnIconOnlyAFullThemeShips() throws IOException {
+        // pavucontrol's Icon=multimedia-volume-control lives in Adwaita and HighContrast only.
+        File rootfs = temp.newFolder("debian");
+        File icons = new File(rootfs, "usr/share/icons");
+        assertTrue(new File(icons, "hicolor/48x48/apps").mkdirs());
+        File contrast = new File(icons, "HighContrast/48x48/apps");
+        File adwaita = new File(icons, "Adwaita/48x48/apps");
+        assertTrue(contrast.mkdirs());
+        assertTrue(adwaita.mkdirs());
+        writePng(contrast, "multimedia-volume-control.png", 48, 48);
+        File png = writePng(adwaita, "multimedia-volume-control.png", 48, 48);
+
+        assertEquals(png, LinuxAppIcons.find(application(distroContainer("debian", rootfs),
+            "org.pulseaudio.pavucontrol", "multimedia-volume-control")));
+    }
+
+    @Test public void hicolorAndPixmapsStillWinOverAnyOtherTheme() throws IOException {
+        File rootfs = temp.newFolder("debian");
+        File icons = new File(rootfs, "usr/share/icons");
+        File adwaita = new File(icons, "Adwaita/256x256/apps");
+        File pixmaps = new File(rootfs, "usr/share/pixmaps");
+        assertTrue(adwaita.mkdirs());
+        assertTrue(pixmaps.mkdirs());
+        writePng(adwaita, "debian-logo.png", 256, 256);
+        File pixmap = writePng(pixmaps, "debian-logo.png", 48, 48);
+
+        assertEquals(pixmap, LinuxAppIcons.find(
+            application(distroContainer("debian", rootfs), "logo", "debian-logo")));
+    }
+
+    @Test public void anXpmOnlyIconFindsNothingSoTheCallerFallsBack() throws IOException {
+        // debian-xterm.desktop: Icon=mini.xterm, shipped only as pixmaps/mini.xterm_48x48.xpm etc.
+        File rootfs = temp.newFolder("debian");
+        File pixmaps = new File(rootfs, "usr/share/pixmaps");
+        assertTrue(pixmaps.mkdirs());
+        writeText(pixmaps, "mini.xterm.xpm", "/* XPM */");
+
+        assertNull(LinuxAppIcons.find(
+            application(distroContainer("debian", rootfs), "debian-xterm", "mini.xterm")));
+    }
+
+    @Test public void otherThemesSkipTheOnesSearchedFirstAndPutHighContrastLast() throws IOException {
+        File icons = temp.newFolder("icons");
+        for (String theme : new String[]{"hicolor", "locolor", "Tango", "HighContrast", "Adwaita"}) {
+            assertTrue(new File(icons, theme).mkdirs());
+        }
+        writeText(icons, "index.theme", "");
+
+        assertEquals(java.util.Arrays.asList("Adwaita", "Tango", "HighContrast"),
+            LinuxAppIcons.otherThemes(icons));
+    }
+
     @Test public void desktopIconNamesReadDesktopNamesFirstThenTheFileName() {
         ProotDistro.Container prefix = prefixContainer(new File("/unused"));
         assertEquals(Collections.singletonList("mate-desktop"),
@@ -216,6 +279,64 @@ public class LinuxAppIconsTest {
         assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getHeight());
     }
 
+    /** Debian's mini.xterm.svg is 16px with no viewBox: it must fill the bitmap, not its corner. */
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void aTinySvgWithoutAViewBoxFillsTheBitmap() throws IOException {
+        File dir = temp.newFolder("icons");
+        File svg = writeText(dir, "mini.xterm.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\">"
+                + "<rect width=\"16\" height=\"16\" fill=\"#f00\"/></svg>");
+
+        Bitmap bitmap = ((BitmapDrawable) LinuxAppIcons.load(resources(), svg)).getBitmap();
+
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getWidth());
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getHeight());
+        int far = LinuxAppIcons.MAX_EDGE_PX - 4;
+        assertEquals(0xFFFF0000, bitmap.getPixel(far, far));
+        assertEquals(0xFFFF0000, bitmap.getPixel(LinuxAppIcons.MAX_EDGE_PX / 2, 2));
+    }
+
+    /** Only a viewBox, no width/height: drawn from the viewBox, filling the bitmap. */
+    @Test @org.robolectric.annotation.GraphicsMode(org.robolectric.annotation.GraphicsMode.Mode.NATIVE)
+    public void anSvgWithOnlyAViewBoxFillsTheBitmap() throws IOException {
+        File dir = temp.newFolder("icons");
+        File svg = writeText(dir, "boxed.svg",
+            "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"10 10 24 12\">"
+                + "<rect x=\"10\" y=\"10\" width=\"24\" height=\"12\" fill=\"#f00\"/></svg>");
+
+        Bitmap bitmap = ((BitmapDrawable) LinuxAppIcons.load(resources(), svg)).getBitmap();
+
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX, bitmap.getWidth());
+        assertEquals(LinuxAppIcons.MAX_EDGE_PX / 2, bitmap.getHeight());
+        assertEquals(0xFFFF0000, bitmap.getPixel(bitmap.getWidth() - 3, bitmap.getHeight() - 3));
+    }
+
+    @Test public void theContentBoxPrefersTheViewBoxThenTheDocumentSize() {
+        float[] fromViewBox = LinuxAppIcons.svgContentBox(16f, 16f, 2f, 3f, 48f, 24f);
+        assertEquals(2f, fromViewBox[0], 0f);
+        assertEquals(3f, fromViewBox[1], 0f);
+        assertEquals(48f, fromViewBox[2], 0f);
+        assertEquals(24f, fromViewBox[3], 0f);
+        float[] fromSize = LinuxAppIcons.svgContentBox(16f, 20f, 0f, 0f, 0f, 0f);
+        assertEquals(0f, fromSize[0], 0f);
+        assertEquals(0f, fromSize[1], 0f);
+        assertEquals(16f, fromSize[2], 0f);
+        assertEquals(20f, fromSize[3], 0f);
+        assertNull(LinuxAppIcons.svgContentBox(-1f, -1f, 0f, 0f, 0f, 0f));
+    }
+
+    @Test public void theBitmapPutsTheLongerSideAtTheEdgeKeepingAspect() {
+        int[] tiny = LinuxAppIcons.svgBitmapSize(16f, 16f, 192);
+        assertEquals(192, tiny[0]);
+        assertEquals(192, tiny[1]);
+        int[] wide = LinuxAppIcons.svgBitmapSize(48f, 24f, 192);
+        assertEquals(192, wide[0]);
+        assertEquals(96, wide[1]);
+        int[] tall = LinuxAppIcons.svgBitmapSize(300f, 600f, 192);
+        assertEquals(96, tall[0]);
+        assertEquals(192, tall[1]);
+    }
+
     @Test public void aMalformedSvgReturnsNullRatherThanThrowing() throws IOException {
         File dir = temp.newFolder("icons");
         File svg = writeText(dir, "broken.svg", "<svg><this is not><valid");
@@ -240,5 +361,41 @@ public class LinuxAppIconsTest {
         Bitmap bitmap = ((BitmapDrawable) drawable).getBitmap();
         assertTrue(bitmap.getWidth() <= LinuxAppIcons.MAX_EDGE_PX);
         assertTrue(bitmap.getHeight() <= LinuxAppIcons.MAX_EDGE_PX);
+    }
+
+    @Test public void aTinyRasterIsSkippedForALargerOneAndForTheFallbackWhenAlone() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File small = new File(prefix, "share/icons/hicolor/32x32/apps");
+        File pixmaps = new File(prefix, "share/pixmaps");
+        assertTrue(small.mkdirs());
+        assertTrue(pixmaps.mkdirs());
+        writePng(small, "xterm.png", 16, 16);
+        File big = writePng(pixmaps, "xterm.png", 48, 48);
+
+        assertEquals(big, LinuxAppIcons.find("xterm", prefix));
+        assertTrue(big.delete());
+        assertNull(LinuxAppIcons.find("xterm", prefix));
+    }
+
+    @Test public void theLargestSizeAvailableWins() throws IOException {
+        File prefix = temp.newFolder("prefix");
+        File a = new File(prefix, "share/icons/hicolor/48x48/apps");
+        File b = new File(prefix, "share/icons/hicolor/512x512/apps");
+        assertTrue(a.mkdirs());
+        assertTrue(b.mkdirs());
+        writePng(a, "t.png", 48, 48);
+        File large = writePng(b, "t.png", 512, 512);
+
+        assertEquals(large, LinuxAppIcons.find("t", prefix));
+    }
+
+    @Test public void aSmallRasterIsScaledUpToFillItsCell() throws IOException {
+        File dir = temp.newFolder("icons");
+        File png = writePng(dir, "mini.png", 32, 32);
+
+        Bitmap bitmap = ((BitmapDrawable) LinuxAppIcons.load(resources(), png)).getBitmap();
+
+        assertEquals(128, bitmap.getWidth());
+        assertEquals(128, bitmap.getHeight());
     }
 }

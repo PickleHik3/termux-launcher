@@ -290,7 +290,7 @@ public class DockIconCacheTest {
         assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.NONE, pack),
             DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.CLONE, pack));
         assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.CLONE, pack),
-            DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.LINUX, pack));
+            DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.DISTRO, pack));
         // "Treated at all" is not "which pack": it still selects the saturation nudge.
         assertNotEquals(DockIconCache.renderKey(untreated, 48, DockIconCache.Badge.NONE, pack),
             DockIconCache.renderKey(treated, 48, DockIconCache.Badge.NONE, pack));
@@ -331,6 +331,23 @@ public class DockIconCacheTest {
         assertEquals(DockIconCache.Badge.NONE, DockIconCache.badgeFor(entry("a")));
         assertEquals(DockIconCache.Badge.CLONE, DockIconCache.badgeFor(new LauncherAppEntry(
             new AppRef("com.example.a", "Main", -1, 7L, true, "clone"), "a", null)));
+    }
+
+    @Test
+    public void aDistroAppEarnsItsDistrosBadgeAndAPrefixAppDoesNot() {
+        LauncherAppEntry debian = new LauncherAppEntry(
+            com.termux.app.x11.X11Apps.ref("distro:debian:session:xfce"), "Xfce Session", null);
+        LauncherAppEntry prefix = new LauncherAppEntry(
+            com.termux.app.x11.X11Apps.ref("xfce4-about.desktop"), "About", null);
+        assertEquals(DockIconCache.Badge.DISTRO, DockIconCache.badgeFor(debian));
+        assertEquals(com.termux.app.x11.DistroGlyph.DEBIAN, DockIconCache.glyphFor(debian));
+        assertEquals(DockIconCache.Badge.NONE, DockIconCache.badgeFor(prefix));
+        assertNull(DockIconCache.glyphFor(prefix));
+        assertNotEquals(
+            DockIconCache.renderKey(debian, 48, DockIconCache.Badge.DISTRO,
+                com.termux.app.x11.DistroGlyph.DEBIAN, false, ""),
+            DockIconCache.renderKey(debian, 48, DockIconCache.Badge.DISTRO,
+                com.termux.app.x11.DistroGlyph.DEBIAN, true, ""));
     }
 
     // ------------------------------------------------------------------ binding off the main thread

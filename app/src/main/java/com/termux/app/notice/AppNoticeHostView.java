@@ -523,6 +523,22 @@ public final class AppNoticeHostView extends LinearLayout {
         if (action != null) action.run();
     }
 
+    /** The pill's origin in the window, read once per down the window asks about. */
+    private final int[] mWindowLocation = new int[2];
+
+    /**
+     * Whether a down at ({@code x}, {@code y}), in window coordinates as the activity gets it, lands
+     * on the pill while it holds a notice. The activity asks before anything that takes a window
+     * stream ahead of the views (the thin status row, the page bar, the surface long-press): the
+     * pill can rest over them, and its tap and swipe are its own. Allocates nothing.
+     */
+    public boolean claimsWindowDown(float x, float y) {
+        if (mActive == null || !isShown() || getAlpha() <= 0f) return false;
+        getLocationInWindow(mWindowLocation);
+        return x >= mWindowLocation[0] && x < mWindowLocation[0] + getWidth()
+            && y >= mWindowLocation[1] && y < mWindowLocation[1] + getHeight();
+    }
+
     /**
      * Swipe to dismiss, either way: the pill is centred, so neither direction is "off the edge it
      * came from". Interactive rather than only tap-and-wait because these are frequent and one may
