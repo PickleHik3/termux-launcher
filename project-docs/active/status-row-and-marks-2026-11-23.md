@@ -22,7 +22,15 @@ slide and bubble stay as they are. What changes is the look, the place, and the 
     readings stay on the right.
   - *In the pane*: the status bar becomes a thin row inside the top pane (top-left in a
     side-by-side split). On a Display page it lies over the display's top edge on a dark band.
-  - Home has no pane, so Home shows the strip under either choice.
+  - Home has no pane, so a Home that shows the status bar shows the strip under either choice,
+    and wears it through every slide that can show that Home, swapping back to the row at the
+    commit on a page with a pane.
+  - A Home that shows no status bar (the fresh-install default) never wears the strip: the host
+    stays the row at rest on Home (not shown there), and through a Home ⇄ Terminal slide in
+    either direction, landed or sprung back, the row rides in and out with the Terminal's top
+    pane at its rest offset, height and insets, with its hairline and marks, and nothing swaps
+    at the crossing's start or at settle (`StatusPresentation.of`, `StatusPresentation.rowPage`;
+    built 11-26, not yet seen on pong).
 - **The thin row.** As thin as it can be at rest; it enlarges on touch.
   - Rest: 16dp, marks at 12dp, readings at 9sp, no divider.
   - Pressed: 32dp, marks at 18dp, readings spelled out. It grows over the pane on a solid ground;
