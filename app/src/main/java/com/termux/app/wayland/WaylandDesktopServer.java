@@ -39,20 +39,25 @@ import java.util.concurrent.ConcurrentHashMap;
  *       the desktop, whose own sweep ends everything it left ({@link #startBlock}).</li>
  * </ul>
  *
- * <p>Size and scale: the server runs with {@code -hidpi}. Xwayland 24.1 then takes the host's
- * fractional scale (wp_fractional_scale with a viewport) for its window and makes its root the
- * configured logical size times that scale: the window's own pixels, drawn 1:1, sharp. (Without
- * {@code -hidpi} the root is the logical size and the view magnifies it.) It resizes the root to
- * each configure, so the desktop follows the window (rotation, keyboard). The desktop is told how
- * big to draw the way an X desktop is told on a dense monitor, with the maths the host's shared
- * Xwayland uses ({@code wayland-host/src/xscale.rs}), all of it read once at start
+ * <p>Size and scale: X toolkits scale widgets by whole factors only (GTK's window scale, Qt's
+ * device pixel ratio), so a desktop at a Scale stop between two (175%) would draw its panel and
+ * icons at the lower one. The desktop is therefore drawn at the whole factor at or above the stop
+ * ({@link #drawFactor}: 175% draws at 2) and shown scaled down by the rest:
+ * <ul>
+ *   <li>The server runs without {@code -hidpi}, so its root is the window's logical size, which
+ *       Xwayland follows at each configure (rotation, keyboard).</li>
+ *   <li>The launcher configures the desktop's window ({@link #isRootfulTitle}) at
+ *       {@link #hostScale}, stop / factor (0.875 at 175%), not at the stop: its logical size, and
+ *       so the root, is the view's pixels x factor / stop, and the view shows that buffer scaled
+ *       to its own pixels. Panel, icons, decorations and text all come out at the stop together;
+ *       a whole stop is drawn 1:1, as before.</li>
+ * </ul>
+ * The desktop is told the factor the way an X desktop is told on a dense monitor
  * ({@link #scaleEnv}, {@link #startBlock}):
  * <ul>
- *   <li>{@code GDK_SCALE} (the whole part of the scale) and {@code GDK_DPI_SCALE} (the rest):
- *       GTK 3 and 4 take these over any XSETTINGS, so XFCE's and MATE's own settings daemons,
- *       which own XSETTINGS in their session, cannot undo them. GTK multiplies the desktop's
- *       {@code Xft/DPI} (96 unless the user set one) by {@code GDK_DPI_SCALE}.</li>
- *   <li>{@code Xft.dpi} on the root window (96 x scale), through {@code xrdb} when it is there:
+ *   <li>{@code GDK_SCALE} (the factor) and {@code GDK_DPI_SCALE=1}: GTK 3 and 4 take these over
+ *       any XSETTINGS, so MATE's own settings daemon cannot undo them.</li>
+ *   <li>{@code Xft.dpi} on the root window (96 x factor), through {@code xrdb} when it is there:
  *       Qt 6 on X11 draws at Xft.dpi / 96 (LXQt), Xft clients size their fonts by it. XFCE's
  *       settings daemon writes its own value there later.</li>
  *   <li>{@code XCURSOR_SIZE}, so the pointer is not a speck.</li>
@@ -60,16 +65,19 @@ import java.util.concurrent.ConcurrentHashMap;
  * <ul>
  *   <li>XFCE's own settings: its settings daemon (xfsettingsd) owns XSETTINGS and writes
  *       {@code Xft/DPI} from xfconf ({@code xsettings /Xft/DPI}, 96 unless set) over the root
- *       window's, so the desktop's start sets {@code /Xft/DPI} and {@code /Gdk/WindowScalingFactor}
- *       there ({@link #desktopScaleBlock}), once its session bus is up. A new Scale stop writes the
- *       same two values into the running desktop ({@link #liveScaleScript}) through the bus
- *       address the start recorded ({@link #busFile}); xfsettingsd then hands them to every client.
- *       MATE and LXQt are not set this way: their bus and settings come up inside their own
- *       session, after the start block could write them.</li>
+ *       window's, so the desktop's start sets {@code /Xft/DPI} to 96 and
+ *       {@code /Gdk/WindowScalingFactor} to the factor there ({@link #desktopScaleBlock}), once
+ *       its session bus is up, with no exports for GTK to take on top. A new Scale stop writes
+ *       the same two values into the running desktop ({@link #liveScaleScript}) through the bus
+ *       address the start recorded ({@link #busFile}); xfsettingsd then hands them to every
+ *       client, while the window's new configure resizes the root. MATE and LXQt are not set
+ *       this way: their bus and settings come up inside their own session, after the start block
+ *       could write them, so they keep the factor they started with.</li>
  * </ul>
  * The scale is the desktop app's Scale (the rail's stop) or the screen's density; a new stop
- * reaches an XFCE desktop at once, and any other the next time it starts. {@code -geometry} starts the server at the
- * screen's logical size so the first configure is a small step.
+ * reaches an XFCE desktop at once, and any other the next time it starts. {@code -geometry}
+ * starts the server at the screen's size at {@link #hostScale} so the first configure is a small
+ * step.
  */
 public final class WaylandDesktopServer {
 
@@ -184,11 +192,14 @@ public final class WaylandDesktopServer {
         return new int[] {Math.max(1, Math.round(width / s)), Math.max(1, Math.round(height / s))};
     }
 
-    /** The size a desktop's server starts at: the screen's logical size now, at {@code scale}. */
+    /**
+     * The size a desktop's server starts at: the screen's size now as the logical size its window
+     * is configured at for {@code scale} ({@link #hostScale}).
+     */
     @NonNull
     public static int[] startSize(@NonNull Context context, float scale) {
         WaylandAppRunner.HostStart start = WaylandAppRunner.hostStart(context);
-        return logicalSize(start.width, start.height, scale);
+        return logicalSize(start.width, start.height, hostScale(scale));
     }
 
     /** {@code scale} when usable, else 1. */
@@ -210,8 +221,9 @@ public final class WaylandDesktopServer {
     }
 
     /**
-     * The xfconf writes that make XFCE's settings daemon carry {@code scale}: {@code /Xft/DPI}
-     * ({@link #xfconfDpi}) and {@code /Gdk/WindowScalingFactor} (the whole part), both ints, created when
+     * The xfconf writes that make XFCE's settings daemon draw at {@code scale}'s factor:
+     * {@code /Xft/DPI} 96 (GTK draws text at the window scale already) and
+     * {@code /Gdk/WindowScalingFactor} ({@link #drawFactor}), both ints, created when
      * missing ({@code -n}), so running it again changes nothing. Nothing at all without
      * {@code xfconf-query}. Pure.
      */
@@ -219,8 +231,8 @@ public final class WaylandDesktopServer {
     static String xfconfWrites(float scale) {
         String q = "xfconf-query -c xsettings -n -t int";
         return "if command -v xfconf-query >/dev/null 2>&1; then\n"
-            + q + " -p /Xft/DPI -s " + xfconfDpi(scale) + " 2>/dev/null\n"
-            + q + " -p /Gdk/WindowScalingFactor -s " + windowScale(scale) + " 2>/dev/null\n"
+            + q + " -p /Xft/DPI -s " + BASE_DPI + " 2>/dev/null\n"
+            + q + " -p /Gdk/WindowScalingFactor -s " + drawFactor(scale) + " 2>/dev/null\n"
             + "fi\n";
     }
 
@@ -255,30 +267,39 @@ public final class WaylandDesktopServer {
             + "exit 0\n";
     }
 
-    /** {@code GDK_SCALE}: the whole part of {@code scale}, at least 1. Pure. */
-    static int windowScale(float scale) {
-        return Math.max(1, (int) Math.floor(sane(scale)));
-    }
+    /** How far below a whole number a scale may sit and still count as it (float stops). */
+    private static final float WHOLE_SLACK = 0.01f;
 
     /**
-     * XFCE's {@code /Xft/DPI} at {@code scale}: GTK already draws everything, text included, at
-     * {@code /Gdk/WindowScalingFactor} (the whole part), so the DPI carries only the rest:
-     * 96 x scale / whole, rounded. 96 x scale would draw text twice too big. Pure.
+     * The whole factor a desktop at {@code scale} draws at ({@code GDK_SCALE}, XFCE's window
+     * scale, Qt's pixel ratio): the stop rounded up, at least 1. 175% and 125% draw at 2, 250% at
+     * 3; the view scales the result down by {@link #hostScale}. Pure.
      */
-    static int xfconfDpi(float scale) {
-        float s = sane(scale);
-        return Math.round(BASE_DPI * s / windowScale(s));
-    }
-
-    /** The {@code Xft.dpi} a desktop at {@code scale} is told: 96 x scale, rounded. Pure. */
-    static int xftDpi(float scale) {
-        return Math.round(BASE_DPI * sane(scale));
+    public static int drawFactor(float scale) {
+        return Math.max(1, (int) Math.ceil(sane(scale) - WHOLE_SLACK));
     }
 
     /**
-     * The exports a desktop at {@code scale} gets so its toolkits draw at that scale (see the class
-     * comment): {@code GDK_SCALE}, {@code GDK_DPI_SCALE} (the rest of the scale, so text comes out
-     * at the whole scale) and {@code XCURSOR_SIZE}. Pure.
+     * The scale the launcher configures a desktop's window at for the Scale {@code scale}: stop /
+     * {@link #drawFactor}, in (0.5, 1]. The window's logical size, and so the root of a server
+     * without {@code -hidpi}, is then its view's pixels x factor / stop: drawn at the factor, the
+     * desktop shows at the stop. Whole stops give 1 (drawn 1:1); every rail stop gives a multiple
+     * of 1/120, which the host carries exactly. Pure.
+     */
+    public static float hostScale(float scale) {
+        float s = sane(scale);
+        return s / drawFactor(s);
+    }
+
+    /** The {@code Xft.dpi} a desktop at {@code scale} is told: 96 x its factor. Pure. */
+    static int xftDpi(float scale) {
+        return BASE_DPI * drawFactor(scale);
+    }
+
+    /**
+     * The exports a desktop at {@code scale} gets so its toolkits draw at its factor (see the class
+     * comment): {@code GDK_SCALE} ({@link #drawFactor}), {@code GDK_DPI_SCALE=1} (text at the same
+     * factor, over any inherited value) and {@code XCURSOR_SIZE}. Pure.
      */
     @NonNull
     public static List<String> scaleEnv(float scale) {
@@ -288,20 +309,17 @@ public final class WaylandDesktopServer {
     /**
      * {@link #scaleEnv(float)} for a desktop of {@code kind}. An XFCE desktop gets no
      * {@code GDK_SCALE}/{@code GDK_DPI_SCALE}: its settings daemon serves the scale from xfconf
-     * ({@link #xfconfWrites}), so GTK divides {@code Xft/DPI} by the window scale once and follows
-     * a new Scale stop live; with the exports GTK would take both and draw text twice too big. Pure.
+     * ({@link #xfconfWrites}) and follows a new Scale stop live, which the exports would pin. Pure.
      */
     @NonNull
     public static List<String> scaleEnv(float scale, @Nullable String kind) {
-        float s = sane(scale);
-        int whole = windowScale(s);
+        int factor = drawFactor(scale);
         List<String> env = new ArrayList<>();
         if (!KIND_XFCE.equals(kind)) {
-            env.add("GDK_SCALE=" + whole);
-            env.add("GDK_DPI_SCALE=" + String.format(java.util.Locale.ROOT, "%.4f", s / whole)
-                .replaceAll("0+$", "").replaceAll("\\.$", ""));
+            env.add("GDK_SCALE=" + factor);
+            env.add("GDK_DPI_SCALE=1");
         }
-        env.add("XCURSOR_SIZE=" + Math.round(BASE_CURSOR_SIZE * s));
+        env.add("XCURSOR_SIZE=" + BASE_CURSOR_SIZE * factor);
         return Collections.unmodifiableList(env);
     }
 
@@ -313,7 +331,7 @@ public final class WaylandDesktopServer {
 
     /**
      * The server's arguments after its program: the display, the start size ({@code -geometry},
-     * rootful, logical), {@code -hidpi} (the root at the window's real pixels, see the class
+     * rootful, logical; no {@code -hidpi}, so the root is the window's logical size, see the class
      * comment) and {@code -noreset}, so the server does not reset (and drop its window) whenever
      * its last client leaves, as it would between a desktop's start-up helpers. Size below 1 is
      * left out. Pure.
@@ -326,7 +344,6 @@ public final class WaylandDesktopServer {
             args.add("-geometry");
             args.add(width + "x" + height);
         }
-        args.add("-hidpi");
         args.add("-noreset");
         return Collections.unmodifiableList(args);
     }
@@ -416,6 +433,17 @@ public final class WaylandDesktopServer {
     /** The desktop on {@code display} ended. */
     public static void forget(int display) {
         NAMES.remove(display);
+    }
+
+    /**
+     * Whether {@code title} is a rootful Xwayland's window ({@link #ROOTFUL_TITLE_PREFIX} and a
+     * digit): a desktop's, which the launcher configures at {@link #hostScale}. Read from the title
+     * alone, so a desktop still running after the launcher restarted is known too. Pure.
+     */
+    public static boolean isRootfulTitle(@Nullable String title) {
+        return title != null && title.length() > ROOTFUL_TITLE_PREFIX.length()
+            && title.startsWith(ROOTFUL_TITLE_PREFIX)
+            && Character.isDigit(title.charAt(ROOTFUL_TITLE_PREFIX.length()));
     }
 
     /** Whether {@code title} is a running desktop's server window. */

@@ -685,7 +685,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private void windowChanged(long id, String title, String appId, int width, int height) {
         Win w = windows.get(id);
         if (w == null) return;
+        boolean wasDesktop = WaylandDesktopServer.isRootfulTitle(w.title);
         w.title = title == null ? "" : title;
+        // A title that names the window a desktop late changes the scale it is configured at.
+        if (wasDesktop != WaylandDesktopServer.isRootfulTitle(w.title)) reconfigure(w);
         boolean appChanged = !w.appId.equals(appId == null ? "" : appId);
         w.appId = appId == null ? "" : appId;
         boolean sized = w.width != width || w.height != height;
@@ -1574,6 +1577,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         }
         if (service == null || width <= 0 || height <= 0) return;
         float scale = scale(w, width);
+        // A desktop draws at a whole factor and its view shows it scaled down to the stop.
+        if (WaylandDesktopServer.isRootfulTitle(w.title)) scale = WaylandDesktopServer.hostScale(scale);
         if (width == w.sentWidth && height == w.sentHeight && scale == w.sentScale) return;
         service.configure(w.id, width, height, scale);
         w.sentWidth = width;
