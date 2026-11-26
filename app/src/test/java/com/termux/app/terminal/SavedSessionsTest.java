@@ -7,8 +7,6 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
-import com.termux.app.overview.CardFacts;
-
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
@@ -78,46 +76,6 @@ public class SavedSessionsTest {
             Collections.singletonList(session(homeFloat())));
         assertTrue(SavedSessions.windows(floatsOnly).isEmpty());
         assertNull(SavedSessions.forOpening(floatsOnly));
-        assertNull(SavedSessions.facts(floatsOnly));
-    }
-
-    @Test public void theCardIsDrawnFromTheFrontWindowsSavedTree() {
-        TerminalWorkspace.Pane left = new TerminalWorkspace.Pane("/home/a", null,
-            Collections.singletonList("/usr/bin/nvim"));
-        TerminalWorkspace.Pane right = new TerminalWorkspace.Pane("/home/proj/", null, null);
-        TerminalWorkspace.Window split = new TerminalWorkspace.Window(1,
-            new TerminalWorkspace.Split(TerminalWorkspace.Split.HORIZONTAL, 1f, 2f, left, right));
-        TerminalWorkspace saved = new TerminalWorkspace("two", 1L, 0,
-            Collections.singletonList(session(split, window("/other"))));
-
-        CardFacts.Workspace facts = SavedSessions.facts(saved);
-        assertNotNull(facts);
-        CardFacts.Split root = (CardFacts.Split) facts.root;
-        assertTrue(root.sideBySide);
-        assertEquals(1f, root.weightA, 0f);
-        assertEquals(2f, root.weightB, 0f);
-        CardFacts.Pane a = (CardFacts.Pane) root.a;
-        CardFacts.Pane b = (CardFacts.Pane) root.b;
-        assertFalse(a.active);
-        assertTrue(b.active);
-        assertEquals(Collections.singletonList("nvim"), Arrays.asList(a.lines));
-        assertEquals(Collections.singletonList("proj"), Arrays.asList(b.lines));
-    }
-
-    @Test public void aStackedSplitAndFloatsAreDrawnToo() {
-        TerminalWorkspace.FloatingPane floating = new TerminalWorkspace.FloatingPane(
-            new TerminalWorkspace.Pane("/x", null, null), .2f, .1f, .5f, .4f);
-        TerminalWorkspace.Window w = new TerminalWorkspace.Window(0,
-            new TerminalWorkspace.Split(TerminalWorkspace.Split.VERTICAL, 1f, 1f,
-                new TerminalWorkspace.Pane("/a", null, null),
-                new TerminalWorkspace.Pane("/b", null, null)),
-            Collections.singletonList(floating));
-
-        CardFacts.Workspace facts = SavedSessions.facts(w);
-        assertFalse(((CardFacts.Split) facts.root).sideBySide);
-        assertEquals(1, facts.floats.size());
-        assertEquals(.7f, facts.floats.get(0).right, .0001f);
-        assertEquals(.5f, facts.floats.get(0).bottom, .0001f);
     }
 
     @Test public void renameKeepsTheDocumentAsItWasWrittenAndFreesTheOldName() throws Exception {

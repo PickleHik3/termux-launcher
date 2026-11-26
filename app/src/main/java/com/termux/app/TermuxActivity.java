@@ -33591,7 +33591,7 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 for (com.termux.app.terminal.TerminalWorkspaceStore.Entry entry : store.list()) {
                     com.termux.app.overview.CardFacts facts = null;
                     try {
-                        facts = com.termux.app.terminal.SavedSessions.facts(store.load(entry.name));
+                        facts = com.termux.app.SavedCardFacts.facts(store.load(entry.name));
                     } catch (com.termux.app.terminal.TerminalWorkspace.WorkspaceException ignored) {
                         // Listed anyway: deleting it is still the user's call.
                     }
