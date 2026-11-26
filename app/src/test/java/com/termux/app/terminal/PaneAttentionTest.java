@@ -43,4 +43,18 @@ public class PaneAttentionTest {
         attention.retain(Collections.<Integer>emptySet());
         assertFalse(attention.isSet(3));
     }
+
+    @Test
+    public void aLinuxWindowsUrgencyIsOneCauseAnsweredByClear() {
+        PaneAttention attention = new PaneAttention();
+        int[] calls = {0};
+        attention.setListener(id -> calls[0]++);
+        attention.set(7, PaneAttention.Cause.URGENT, true);
+        assertTrue(attention.isSet(7));
+        attention.set(7, PaneAttention.Cause.URGENT, true);
+        assertEquals("asking twice is not news", 1, calls[0]);
+        attention.clear(7);
+        assertFalse(attention.isSet(7));
+        assertEquals(2, calls[0]);
+    }
 }

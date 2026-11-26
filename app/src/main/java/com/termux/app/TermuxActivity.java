@@ -20063,16 +20063,19 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             int[] terminalAt = new int[places];
             java.util.List<String> linuxLabels = new java.util.ArrayList<>();
             java.util.List<Long> linuxIds = new java.util.ArrayList<>();
+            java.util.List<Boolean> linuxAsking = new java.util.ArrayList<>();
             for (int i = 0; i < places; i++) {
                 terminalAt[i] = ws.row.terminalAt(ws.windows, i);
                 if (terminalAt[i] < 0) {
                     long id = ws.row.linuxAt(ws.windows, i);
                     linuxLabels.add(linuxWindowName(id));
                     linuxIds.add(id);
+                    com.termux.app.wayland.LinuxWindowsController.Chip chip = mLinuxWindows.chip(id);
+                    linuxAsking.add(chip != null && chip.attention);
                 }
             }
             entries = com.termux.app.dock.WallStripModel.withLinux(entries, terminalAt,
-                linuxLabels, rowCurrentIndex());
+                linuxLabels, linuxAsking, rowCurrentIndex());
             java.util.List<float[]> mixedShapes = new java.util.ArrayList<>(entries.size());
             java.util.List<Long> mixedKeys = new java.util.ArrayList<>(entries.size());
             int linuxSeen = 0;
@@ -31401,6 +31404,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void notice(@NonNull String text) { showToast(text, true); }
                 @Override public void chipsChanged() { refreshTerminalWindowBarChips(); }
+                @Override public void attentionChanged() {
+                    if (mPaneController != null) mPaneController.repaintLinuxPaneBorders();
+                }
+                @Override public void offerForceClose(@NonNull String appName, @NonNull Runnable forceClose) {
+                    com.termux.app.notice.AppNotice.undoable(TermuxActivity.this,
+                        getString(R.string.linux_window_force_close_title, appName),
+                        getString(R.string.linux_window_force_close_hint), forceClose,
+                        com.termux.app.notice.AppNoticeHostView.HOLD_LONG_MS, R.drawable.ic_rl_close);
+                }
                 @Nullable @Override public String appName(@NonNull String appId) {
                     com.termux.app.x11.X11WindowIconResolver apps = displayWindowIcons();
                     return apps == null ? null : apps.nameFor(appId);
@@ -31429,6 +31441,9 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                 }
                 @Override public void close(long windowId) {
                     if (mLinuxWindows != null) mLinuxWindows.closeChip(windowId);
+                }
+                @Override public boolean asking(long windowId) {
+                    return mLinuxWindows != null && mLinuxWindows.asksForUser(windowId);
                 }
             });
         }
@@ -31712,7 +31727,8 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             mLinuxWindows == null ? null : mLinuxWindows.chip(id);
         String label = chip != null ? chip.label : getString(R.string.linux_window_app);
         String appId = chip != null ? chip.appId : "";
-        return new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label)
+        boolean asking = chip != null && chip.attention;
+        return new com.termux.app.terminal.TerminalWindowBar.WindowItem(label, label, false, asking)
             .withIcon(apps == null || appId.isEmpty() ? null : apps.iconFor(appId));
     }
 

@@ -274,6 +274,18 @@ public class WallStripModelTest {
     }
 
     @Test
+    public void aLinuxWindowThatAsksForTheUserCarriesTheAttentionMark() {
+        List<WallStripModel.Entry> base = build(Arrays.asList(chip("nvim")), 0, 1, null);
+        List<WallStripModel.Entry> mixed = WallStripModel.withLinux(base, new int[] {0, -1},
+            Collections.singletonList("xeyes"), Collections.singletonList(true), 0);
+        assertFalse(mixed.get(0).attention);
+        assertTrue(mixed.get(1).attention);
+        List<WallStripModel.Entry> calm = WallStripModel.withLinux(base, new int[] {0, -1},
+            Collections.singletonList("xeyes"), 0);
+        assertFalse(calm.get(1).attention);
+    }
+
+    @Test
     public void linuxWindowsStandAmongTheTerminalsInRowOrder() {
         // Row: [nvim] [xeyes] [htop], a float, then +.
         List<WallStripModel.Entry> base = build(

@@ -230,6 +230,16 @@ public final class WallStripModel {
     public static List<Entry> withLinux(@NonNull List<Entry> entries,
                                         @NonNull int[] terminalAtPlace,
                                         @NonNull List<String> linuxLabels, int currentPlace) {
+        return withLinux(entries, terminalAtPlace, linuxLabels, java.util.Collections.emptyList(),
+            currentPlace);
+    }
+
+    /** As above; {@code linuxAsking} says which of the Linux windows ask for the user (the attention mark). */
+    @NonNull
+    public static List<Entry> withLinux(@NonNull List<Entry> entries,
+                                        @NonNull int[] terminalAtPlace,
+                                        @NonNull List<String> linuxLabels,
+                                        @NonNull List<Boolean> linuxAsking, int currentPlace) {
         List<Entry> row = rowEntries(entries);
         int linuxCount = 0;
         for (int terminal : terminalAtPlace) if (terminal < 0) linuxCount++;
@@ -248,9 +258,10 @@ public final class WallStripModel {
                 out.add(new Entry(e.kind, e.chipIndex, number, e.label, e.glyph, e.shortLabel,
                     e.spokenLabel, current, e.minimised, e.attention, e.busy));
             } else {
+                boolean asking = linux < linuxAsking.size() && Boolean.TRUE.equals(linuxAsking.get(linux));
                 String label = linuxLabels.get(linux++);
                 out.add(new Entry(Kind.LINUX_WINDOW, linuxChip(place), number, label, "", label,
-                    label, current, false, false, false));
+                    label, current, false, asking, false));
             }
         }
         for (Entry entry : entries) if (entry.kind != Kind.WINDOW) out.add(entry);

@@ -22,6 +22,10 @@ Pruned 2026-11-25: every line was re-judged. Done and superseded items are liste
 `project-docs/verification/device-checks-pruned-2026-11-25.md`. More than twenty items are genuinely
 still owed, so they are kept, grouped by area and merged where they shared a feature.
 
+### Linux windows: attention and Force close
+
+2026-11-26 · feat/389-attention (#389) · build with `-Pwayland=true`. (1) An xterm in a split pane, another pane focused: `xdotool set_window --urgency 1` on it makes its rim glow in the attention colour and its chip (bar and Wall strip) show the attention mark; going to it (tap the pane or the chip) clears both, and nothing repaints after. The window is never brought forward by itself. (2) A Wayland client asking activation with a stale token marks the same way. (3) Close on an app that ignores it (`xterm -e sleep 999` handles it; or a stopped process): after 5 s a notice "Force close <app>?" appears; tapping it ends the app and the window goes. An app that shows its own unsaved-changes dialog gets no notice · pong or emulator.
+
 ### Distro icon badge
 
 2026-11-26 · feat/distro-icon-badge · drawer shows the distro logo badge (bottom-end corner) on distro apps, none on Android or termux apps. Seen on pong 11-26 (b22164eea): Debian and Alpine badges in the drawer, none on termux or Android apps. Owed: large Icon size, search, a folder, light, RTL (badge bottom-left) · pong or emulator.

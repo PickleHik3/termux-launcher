@@ -32,6 +32,7 @@ import androidx.annotation.Nullable;
 import com.termux.R;
 import com.termux.app.page.PageHost;
 import com.termux.app.page.PageKind;
+import com.termux.app.terminal.PaneAttention;
 import com.termux.app.terminal.PaneSurfaceStyle;
 import com.termux.app.terminal.inappkeyboard.TerminalKeyEventHandler;
 import com.termux.app.wall.WallLinux;
@@ -82,6 +83,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         void notice(@NonNull String text);
         /** The Linux windows' chips changed. */
         void chipsChanged();
+        /** A Linux window started or stopped asking for the user: panes of a split re-dress their rims. */
+        default void attentionChanged() {}
+        /**
+         * Window {@code appName}'s app did not close when asked: offers Force close, which runs
+         * {@code forceClose} when the user takes it.
+         */
+        default void offerForceClose(@NonNull String appName, @NonNull Runnable forceClose) {}
         /** The app's name from its desktop entry, for an app id (the X11 class); null when unknown. */
         @Nullable String appName(@NonNull String appId);
         /** Pane window {@code id} was destroyed or taken out: its pane leaves the split, which collapses. */
@@ -110,13 +118,17 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         @NonNull public final String appId;
         public final boolean minimised;
         public final boolean front;
+        /** The app asks for the user, and the user has not gone to the window since. */
+        public final boolean attention;
 
-        Chip(long id, @NonNull String label, @NonNull String appId, boolean minimised, boolean front) {
+        Chip(long id, @NonNull String label, @NonNull String appId, boolean minimised, boolean front,
+             boolean attention) {
             this.id = id;
             this.label = label;
             this.appId = appId;
             this.minimised = minimised;
             this.front = front;
+            this.attention = attention;
         }
     }
 
@@ -127,6 +139,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         String appId = "";
         int flags;
         long parentId;
+        /** The app's process id, 0 when unknown ({@link LinuxForceClosePolicy}). */
+        int clientPid;
         /** {@link LinuxWindowRow#windowClass}: 0 Main, 1 Dialog, 2 Fixed, 3 Transient. */
         int windowClass;
         /**
@@ -245,6 +259,12 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @NonNull private final Host host;
     @NonNull private final LinuxWindowPageView page;
     private final Handler main = new Handler(Looper.getMainLooper());
+    /** The compositor's process id (onAttached), 0 before it said. */
+    private int hostPid;
+    /** Which windows ask for the user (rim and chip glow); keyed by window id. */
+    private final PaneAttention attention = new PaneAttention();
+    /** Close asked and not yet answered, per window: the offer of Force close waits on it. */
+    private final LongSparseArray<Runnable> forceCloseDue = new LongSparseArray<>();
     private final LongSparseArray<Win> windows = new LongSparseArray<>();
     @Nullable private ILinuxWindows service;
     @Nullable private IBinder binder;
@@ -393,6 +413,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         @Override
         public void onAttached(int interfaceVersion, int hostPid) {
             main.post(() -> {
+                LinuxWindowsController.this.hostPid = hostPid;
                 if (interfaceVersion == ILinuxWindows.VERSION) return;
                 Log.w(LOG_TAG, "host speaks version " + interfaceVersion + ", the launcher " + ILinuxWindows.VERSION);
                 hostGone();
@@ -409,7 +430,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override
         public void onWindowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
-            main.post(() -> windowCreated(id, title, appId, flags, parentId));
+            main.post(() -> windowCreated(id, title, appId, clientPid, flags, parentId));
         }
 
         @Override
@@ -463,6 +484,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
         @Override
         public void onAttention(long id, boolean on) {
+            main.post(() -> attentionAsked(id, on));
         }
 
         @Override
@@ -503,6 +525,10 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         page.slot().addOnLayoutChangeListener(slotWatcher);
         this.clipboard = new LinuxClipboardBridge(context, this::sendClipboardText);
         this.idle = new LinuxIdleInhibit(on -> host.keepScreenOn(on));
+        attention.setListener(id -> {
+            rebuildChips();
+            host.attentionChanged();
+        });
     }
 
     /** The one view every Linux page shows; also the page registered for them. */
@@ -559,6 +585,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (fullscreen.gone(fullscreen.fullscreenId())) hideReveal();
         applyTextField(textFields.dropped());
         idle.clear();
+        for (int i = forceCloseDue.size() - 1; i >= 0; i--) main.removeCallbacks(forceCloseDue.valueAt(i));
+        forceCloseDue.clear();
+        attention.retain(java.util.Collections.emptySet());
         dropPanes();
         for (int i = 0; i < windows.size(); i++) detachViews(windows.valueAt(i));
         if (service != null) {
@@ -632,11 +661,70 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     /** The × on a Linux window's chip asks its app to close, as the rim tab's Close does. */
     public void closeChip(long id) {
-        if (service == null || windows.get(id) == null) return;
+        askClose(id);
+    }
+
+    /**
+     * Asks window {@code id}'s app to close, and watches for it not to: {@link
+     * LinuxForceClosePolicy#OFFER_AFTER_MS} later a window still open with no dialog of its own
+     * is offered Force close. A second Close starts the wait again.
+     */
+    private void askClose(long id) {
+        Win w = windows.get(id);
+        if (service == null || w == null) return;
         try {
             service.close(id);
         } catch (RemoteException ignored) {
+            return;
         }
+        cancelForceClose(id);
+        Runnable due = () -> {
+            forceCloseDue.remove(id);
+            Win still = windows.get(id);
+            if (!LinuxForceClosePolicy.shouldOffer(still != null, still != null && hasOwnDialog(id),
+                    still == null ? 0 : still.clientPid, android.os.Process.myPid(), hostPid)) return;
+            String name = still.appId.isEmpty() ? null : host.appName(still.appId);
+            host.offerForceClose(LinuxWindowRow.chipLabel(name, still.appId,
+                context.getString(R.string.linux_window_app)), () -> forceClose(id));
+        };
+        forceCloseDue.put(id, due);
+        main.postDelayed(due, LinuxForceClosePolicy.OFFER_AFTER_MS);
+    }
+
+    private void cancelForceClose(long id) {
+        Runnable due = forceCloseDue.get(id);
+        if (due == null) return;
+        main.removeCallbacks(due);
+        forceCloseDue.remove(id);
+    }
+
+    /** The app shows a toplevel of its own over this window: it is asking the user, not hanging. */
+    private boolean hasOwnDialog(long id) {
+        for (int i = 0; i < windows.size(); i++) if (windows.valueAt(i).parentId == id) return true;
+        return false;
+    }
+
+    /** Ends the process of window {@code id}'s app; the compositor then sees the window go. */
+    private void forceClose(long id) {
+        Win w = windows.get(id);
+        if (w == null || !LinuxForceClosePolicy.canKill(w.clientPid, android.os.Process.myPid(), hostPid)) return;
+        try {
+            android.os.Process.killProcess(w.clientPid);
+        } catch (RuntimeException e) {
+            Log.w(LOG_TAG, "force close of window " + id + " failed", e);
+        }
+    }
+
+    /** An app asks for the user without being brought forward; nothing happens for the window the user is on. */
+    private void attentionAsked(long id, boolean on) {
+        if (windows.get(id) == null) return;
+        if (on && focusedId == id) return;
+        attention.set((int) id, PaneAttention.Cause.URGENT, on);
+    }
+
+    /** Whether Linux window {@code id} asks for the user (its pane's rim glows). */
+    public boolean asksForUser(long id) {
+        return attention.isSet((int) id);
     }
 
     /**
@@ -670,7 +758,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
                 if (!listed) continue;
                 String name = w.appId.isEmpty() ? null : host.appName(w.appId);
                 chips.add(new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId, fallback), w.appId,
-                    w.minimised || w.floating, w.inRow && w.id == boundId && front));
+                    w.minimised || w.floating, w.inRow && w.id == boundId && front,
+                    attention.isSet((int) w.id)));
             }
         }
         host.chipsChanged();
@@ -678,12 +767,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
 
     // ---- host events --------------------------------------------------------------------------
 
-    private void windowCreated(long id, String title, String appId, int flags, long parentId) {
+    private void windowCreated(long id, String title, String appId, int clientPid, int flags, long parentId) {
         if (windows.get(id) != null) return;
         Win w = new Win(id);
         w.title = title == null ? "" : title;
         w.appId = appId == null ? "" : appId;
         w.flags = flags;
+        w.clientPid = clientPid;
         w.parentId = parentId;
         w.windowClass = LinuxWindowRow.windowClass(flags);
         windows.put(id, w);
@@ -736,6 +826,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (fullscreen.gone(id)) hideReveal();
         detachViews(w);
         windows.remove(id);
+        cancelForceClose(id);
+        attention.clear((int) id);
         idle.forget(id);
         applyTextField(textFields.left(id));
         if (focusedId == id) focusedId = 0;
@@ -1182,11 +1274,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     private void closeWin(@Nullable Win w) {
-        if (w == null || service == null) return;
-        try {
-            service.close(w.id);
-        } catch (RemoteException ignored) {
-        }
+        if (w != null) askClose(w.id);
     }
 
     @Override
@@ -1638,6 +1726,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     }
 
     private void focus(long id) {
+        // Going to the window answers what it asked.
+        if (id != 0) attention.clear((int) id);
         if (focusedId == id) return;
         focusedId = id;
         if (service == null) return;
