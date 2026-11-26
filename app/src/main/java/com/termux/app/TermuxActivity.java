@@ -33065,6 +33065,12 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                             @NonNull com.termux.app.overview.OverviewModel.Card card) {
                         overviewRemove(card);
                     }
+                    @Override public void moveWallPage(int pageId, int refPageId, boolean after) {
+                        overviewMovePage(pageId, refPageId, after);
+                    }
+                    @Override public void moveWindow(int from, int to) {
+                        TermuxActivity.this.moveWindow(from, to);
+                    }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
                         return new com.termux.app.overview.OverviewLook(
@@ -33178,6 +33184,25 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             default:
                 break;
         }
+    }
+
+    /**
+     * Wall page {@code pageId} stands just before (or after) wall page {@code refPageId}; the wall
+     * saves and announces the new order ({@link com.termux.app.wall.WallPages#move}).
+     */
+    private void overviewMovePage(int pageId, int refPageId, boolean after) {
+        editWallPages(pages -> {
+            int to = 0;
+            for (com.termux.app.wall.WallPages.Page page : pages.pages()) {
+                if (page.id == pageId) continue;
+                if (page.id == refPageId) {
+                    if (after) to++;
+                    break;
+                }
+                to++;
+            }
+            return pages.move(pageId, to);
+        });
     }
 
     /** Whether Overview, which the old sessions doors open now, is on screen. */

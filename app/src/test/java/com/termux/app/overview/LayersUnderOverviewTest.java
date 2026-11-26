@@ -86,6 +86,8 @@ public class LayersUnderOverviewTest {
             @Override public void rename(@NonNull OverviewModel.Card card,
                                          @NonNull Runnable renamed) { }
             @Override public void remove(@NonNull OverviewModel.Card card) { }
+            @Override public void moveWallPage(int pageId, int refPageId, boolean after) { }
+            @Override public void moveWindow(int from, int to) { }
             @Override @NonNull public OverviewLook look() {
                 return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444,
                     0xFF0000FF);
