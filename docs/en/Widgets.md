@@ -8,11 +8,11 @@ App icons share the same grid: each takes one cell beside the widgets, moves and
 way, and follows the same pages and Margin. See
 [App icons on Home](Home_Screen_And_Apps.md#app-icons-on-home).
 
-The home button always brings you to Home (Home page 1 until Edit pages marks another page, a
-terminal window or the display as Home). From the Terminal you can also tap **Home** at
-the bottom of the sessions drawer, or drag right from the first window's border.
+The home button always brings you to Home (Home page 1 until Overview marks another page, a
+terminal window or the display as Home). From the Terminal you can also open Overview and tap
+a Home page, or drag right from the first window's border.
 
-The wall is the page list that Edit pages arranges. Two Display pages may be neighbours.
+The wall is the page list that Overview arranges. Two Display pages may be neighbours.
 
 ## Add a widget
 

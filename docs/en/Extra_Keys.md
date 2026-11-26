@@ -14,7 +14,7 @@ label above a key shows what that is.
 | Keyboard | Show or hide the keyboard | **Next keyboard type** (docked, floating, split) |
 | Mouse | **Mouse mode** on or off | |
 | New pane | **New pane** | **New window** |
-| Sessions | **Sessions** (the sessions drawer) | **New session** |
+| Sessions | **Sessions** (Overview) | **New session** |
 
 The go-to keys for Home, Terminal and Display are not on the row, but they are still in the key
 picker (the launcher group) if you want them. The second page ships empty, and an empty page is not
@@ -65,7 +65,7 @@ hide it, drop it on the **Hidden** column or tap it and tap **Hide**; drag its c
 screen to show it again. See
 [Layout and full screen](Layout_And_Full_Screen.md).
 
-The wall is the list of pages in the order Edit pages arranged them. Two Display pages may sit next
+The wall is the list of pages in the order Overview arranged them. Two Display pages may sit next
 to each other. Go-to keys you add yourself work for any page kind the wall has: Home, Terminal and
 Display. A key that cannot act on the page you are on goes faint and stops responding. On the Display place, pane, window and session keys are dimmed. On Widgets,
 typing keys, the modifiers, **PASTE** and **SCROLL** are dimmed.
@@ -103,7 +103,7 @@ later.
 Launcher actions not on the shipped row can be added this way too. For example, **App drawer**
 ("Open the app drawer.", with an apps-grid icon) is in the launcher group of the action search. It
 opens the app drawer from the apps row's current edge. Do not confuse it with `app.open_drawer` (**Open sessions**),
-which opens the sessions drawer.
+which opens Overview.
 
 Next to the editor row, **Uppercase key labels** ("Show ESC, TAB and other labels in capitals.")
 is on by default.

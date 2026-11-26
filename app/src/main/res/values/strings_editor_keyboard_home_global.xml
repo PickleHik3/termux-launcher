@@ -44,7 +44,6 @@
     <string name="editor_st_page_bar_glyphs">Glyphs</string>
     <string name="editor_st_page_bar_marks">Marks</string>
     <!-- Link rows (overhaul §4): a one-fact line for a card (›), the page's path for Settings (↗). -->
-    <string name="editor_link_pages_summary">Add, remove and reorder pages</string>
     <string name="editor_link_pane_borders_summary">Frames, focus and glow around panes</string>
     <string name="editor_link_gestures_summary">Settings › Home › Gestures</string>
     <string name="editor_link_layouts_summary">Settings › Keyboard › Layouts</string>
@@ -75,7 +74,6 @@
     <string name="editor_row_columns">Columns</string>
     <string name="editor_row_rows">Rows</string>
     <string name="editor_row_home_icon_size">Icon size</string>
-    <string name="editor_chip_edit_pages">Edit pages</string>
 
     <!-- Global card. -->
     <string name="editor_row_change_wallpaper">Change wallpaper</string>

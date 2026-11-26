@@ -29,7 +29,7 @@ place.
 
 ## Tap targets
 
-- The **session number** opens the sessions manager. See
+- The **session number** opens Overview. See
   [Panes, windows and sessions](Panes_Windows_And_Sessions.md).
 - A **window chip** switches to that window, sliding there from Home too; the × closes it. `+` makes a new one. A minimised Home float shows dimmed with a dot; tap it to bring the float back.
 - **CPU**, **memory** or **weather** opens a detail card. The weather card credits Open-Meteo.

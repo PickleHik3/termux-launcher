@@ -17,8 +17,6 @@
     <string name="msg_max_terminals_reached">Закройте существующие, прежде чем создавать новые.</string>
     <string name="title_rename_session">Установить имя сеанса</string>
     <string name="action_rename_session_confirm">Набор</string>
-    <string name="title_create_named_session">Новый именованный сеанс</string>
-    <string name="action_create_named_session_confirm">Создавать</string>
     <string name="action_toggle_soft_keyboard">Клавиатура</string>
     <string name="msg_enabling_terminal_toolbar">Включение панели инструментов терминала</string>
     <string name="title_share_transcript_with">Отправить расшифровку по адресу:</string>

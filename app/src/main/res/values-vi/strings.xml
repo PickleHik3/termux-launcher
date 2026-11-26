@@ -8,8 +8,6 @@
 <resources>
     <string name="title_rename_session">Đặt tên phiên</string>
     <string name="action_rename_session_confirm">Đặt</string>
-    <string name="title_create_named_session">Đặt tên phiên mới</string>
-    <string name="action_create_named_session_confirm">Tạo</string>
     <string name="action_toggle_soft_keyboard">Bàn phím</string>
     <string name="msg_enabling_terminal_toolbar">Bật Thanh công cụ đầu cuối</string>
     <string name="msg_disabling_terminal_toolbar">Tắt thanh công cụ đầu cuối</string>

@@ -8,7 +8,7 @@ Most of these settings are on **Settings → Apps** and **Settings → Home**.
 
 ## Home and the Terminal
 
-The launcher is one row of pages. That row is the wall, and **Edit pages** sets its order. Two Display pages may be neighbours. The extra keys row shows a go-to key for each page kind the wall has. **Home** comes first: your widget pages, which you swipe through
+The launcher is one row of pages. That row is the wall, and **Overview** sets its order. Two Display pages may be neighbours. The extra keys row shows a go-to key for each page kind the wall has. **Home** comes first: your widget pages, which you swipe through
 anywhere on the page, as on any home screen. The **Terminal** follows: your terminal windows, then
 any [Linux display](X11_Display.md). Swiping left past the last Home page reaches the first window;
 dragging right from the first window's border comes back. The home button always lands on the
@@ -98,22 +98,22 @@ nothing on your Home pages can be moved by accident. While it is on:
 - Holding an icon, a folder or a widget does not pick it up; a short note says the layout is
   locked. Taps still open apps and folders.
 - The menu's rows that add or change things (Add a widget, Add an app, Add a page, Edit widgets,
-  Edit pages, Remove page) step aside for **Unlock layout**, right under Terminal.
+  Overview, Remove page) step aside for **Unlock layout**, right under Terminal.
 - An open folder cannot be renamed and offers no Remove from folder.
 - **Add to Home** from the app drawer's app menu still works: it is a deliberate act, so the lock
   lets it through and the new icon goes on the page with room.
 
-### Edit pages
+### Overview
 
 The page list is the wall. A swipe or a key moves to the next page in this list, whatever its kind.
 
-**Edit pages** (Home's long-press menu, or Settings › Home) lists your Home pages: move each up
-or down, choose the one Home opens on (the house, which also stands on the first terminal window
-and on the display: the page it fills is where the Home button and a restart land), add a page at
-the end, or remove one. Removing
-a page that holds something asks first; its widgets, icons and folders go with it, and a floating
-terminal on it moves to another page with its shell still running. The last page cannot be
-removed.
+**Overview** (pinch in on a Home page, Home's long-press menu, the status bar's session number, or
+Settings › Home) shows every page as a card, and every session of a Workspace under it. Tap a card
+to go there. Hold a card to lift it: drag it to move the page anywhere on the wall, or use its menu
+to **Set as home** (the page the Home button and a restart land on), **Rename** or **Remove** it.
+The **+** adds a Home page, a Workspace or the Assistant. Removing a page that holds something can
+be undone from the notice; its widgets, icons and folders go with it, and a floating terminal on it
+moves to another page with its shell still running. The last Home page cannot be removed.
 
 ## The Terminal entry
 

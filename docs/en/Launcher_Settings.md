@@ -19,7 +19,7 @@ Settings is grouped in three: **Your launcher** (Home, Dock, Terminal, Linux app
 ### Home
 
 "Pages, widgets, gestures and where you start". **Appearance** opens the Appearance editor on
-Home. Then **Gestures**, **Home widgets** and **Pages** (**Edit pages** (the order of the wall's pages), **Lock Home layout** and **Start in**). Icon and label sizes, folders, the page dots and wallpaper scrolling are on the editor's Home card.
+Home. Then **Gestures**, **Home widgets** and **Pages** (**Overview** (the order of the wall's pages), **Lock Home layout** and **Start in**). Icon and label sizes, folders, the page dots and wallpaper scrolling are on the editor's Home card.
 
 **Gestures** holds every gesture in one place: the five on a Home page's free area (swipe up,
 swipe down, double-tap, two-finger swipe up and down), then **Double-tap to lock** (its page picks
