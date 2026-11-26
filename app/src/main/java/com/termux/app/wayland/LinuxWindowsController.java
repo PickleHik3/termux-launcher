@@ -160,6 +160,9 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         boolean minimised;
         /** It is a pane of a terminal window's split (#387), shown in {@link #paneFrame}. */
         boolean inPane;
+        /** The pane is a Float on Home (#388) rather than a split's: it draws while the Float is shown. */
+        boolean inFloat;
+        boolean floatShown;
         @Nullable LinuxWindowPageView paneFrame;
         /** Where it stood when it was minimised ({@link Host#placeOf}); null for none. */
         @Nullable Object placeWhenMinimised;
@@ -222,7 +225,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
             try {
                 sendConfigure(this, w, h);
                 service.setSurface(id, surface);
-                service.setVisible(id, floating ? overShown : inPane ? terminalShown : front);
+                service.setVisible(id, floating ? overShown : inPane ? paneDrawing(this) : front);
             } catch (RemoteException ignored) {
             }
         }
@@ -623,7 +626,13 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     @Nullable
     public Chip chip(long id) {
         for (int i = 0; i < chips.size(); i++) if (chips.get(i).id == id) return chips.get(i);
-        return null;
+        // A pane or a Float has no chip of the row's; Home's chip for a Float reads the same name and icon.
+        Win w = windows.get(id);
+        if (w == null) return null;
+        String name = w.appId.isEmpty() ? null : host.appName(w.appId);
+        return new Chip(w.id, LinuxWindowRow.chipLabel(name, w.appId,
+            context.getString(R.string.linux_window_app)), w.appId, false, false,
+            attention.isSet((int) w.id));
     }
 
     /**
@@ -741,7 +750,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
     private boolean inFrontNow(long id) {
         Win w = windows.get(id);
         if (w == null || !front) return false;
-        if (w.inPane) return true;
+        if (w.inPane) return !w.inFloat || w.floatShown;
         if (w.inRow) return w.id == boundId;
         return w.floating ? w.overShown : isDialogOfBound(w);
     }
@@ -1379,6 +1388,11 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         @Override public void closeWindow() { closeWin(w); }
         @Override public void minimiseWindow() { minimisePane(w); }
         @Override public void frontChanged(boolean isFront) {}
+        @Override public void shownChanged(boolean shown) {
+            if (!w.inFloat || w.floatShown == shown || windows.get(w.id) != w) return;
+            w.floatShown = shown;
+            setVisible(w, shown);
+        }
         @NonNull @Override public TerminalKeyEventHandler.KeyValueInterceptor keys() { return keys; }
         @Override public boolean beginCarry(float x, float y, int pointerId) {
             return beginCarryOf(w, x, y, pointerId);
@@ -1400,9 +1414,32 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
      */
     @Nullable
     public LinuxWindowPageView takeIntoPane(long id) {
+        return takeIntoPane(id, false);
+    }
+
+    /** Whether pane window {@code w} draws now: a split's while the Terminal shows, a Float's while the Float does. */
+    private boolean paneDrawing(@NonNull Win w) {
+        return w.inFloat ? w.floatShown : terminalShown;
+    }
+
+    /**
+     * {@link #takeIntoPane(long)}, as a Float's picture when {@code floating} (#388): the frame
+     * wears no rim tab and the window draws while its Float is shown, not while the Terminal is.
+     * A window already a pane changes between the two in place.
+     */
+    @Nullable
+    public LinuxWindowPageView takeIntoPane(long id, boolean floating) {
         Win w = windows.get(id);
         if (w == null || w.minimised) return null;
-        if (w.inPane && w.paneFrame != null) return w.paneFrame;
+        if (w.inPane && w.paneFrame != null) {
+            if (w.inFloat != floating) {
+                w.inFloat = floating;
+                w.floatShown = false;
+                w.paneFrame.setFloating(floating);
+                setVisible(w, paneDrawing(w));
+            }
+            return w.paneFrame;
+        }
         boolean wasRow = w.inRow;
         if (fullscreen.gone(id)) {
             sendFullscreen(id, false);
@@ -1412,13 +1449,16 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (boundId == id) boundId = 0;
         w.inRow = false;
         w.inPane = true;
+        w.inFloat = floating;
+        w.floatShown = false;
         LinuxWindowPageView frame = new LinuxWindowPageView(context, new PaneHost(w));
         frame.setEmbedded(true);
+        frame.setFloating(floating);
         frame.slot().addOnLayoutChangeListener(slotWatcher);
         frame.applyStyle(paneStyle);
         w.paneFrame = frame;
         attachViews(w);
-        setVisible(w, terminalShown);
+        setVisible(w, paneDrawing(w));
         if (wasRow) host.removeWindow(id);
         rebuildChips();
         return frame;
@@ -1430,6 +1470,8 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         if (w == null || !w.inPane) return;
         detachViews(w);
         w.inPane = false;
+        w.inFloat = false;
+        w.floatShown = false;
         w.paneFrame = null;
         if (focusedId == id) focus(0);
         if (toRow) {
@@ -1445,7 +1487,7 @@ public final class LinuxWindowsController implements WallLinux, LinuxWindowPageV
         terminalShown = shown;
         for (int i = 0; i < windows.size(); i++) {
             Win w = windows.valueAt(i);
-            if (w.inPane) setVisible(w, shown);
+            if (w.inPane && !w.inFloat) setVisible(w, shown);
         }
     }
 

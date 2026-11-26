@@ -32,7 +32,9 @@ public final class LinuxCarryPolicy {
         /** The window becomes its own window at {@link Drop#to}, between two windows. */
         BETWEEN,
         /** The window becomes a pane beside the pane under the finger, on {@link Drop#side}. */
-        SPLIT
+        SPLIT,
+        /** The window becomes a Float on the Home page in front (#388). */
+        FLOAT
     }
 
     /** The carried window is a pane of a split, not a row window: there is no row place to leave. */
@@ -54,6 +56,7 @@ public final class LinuxCarryPolicy {
     }
 
     private static final Drop RETURN = new Drop(Kind.RETURN, -1, -1);
+    private static final Drop FLOAT = new Drop(Kind.FLOAT, -1, -1);
 
     /**
      * The side strip the finger at {@code x} is in over the window spanning {@code left..right}:
@@ -105,6 +108,21 @@ public final class LinuxCarryPolicy {
     @NonNull
     public static Drop decide(float x, float y, float left, float right, float stripPx, int front,
                               int count, int carried, @Nullable float[] pane) {
+        return decide(x, y, left, right, stripPx, front, count, carried, pane, null);
+    }
+
+    /**
+     * {@link #decide(float, float, float, float, float, int, int, int, float[])} with the Float
+     * drop (#388): while a Home page is in front ({@code floatRoom} non-null: left, top, right,
+     * bottom of the room its Floats live in) a drop inside the room makes the window a Float there,
+     * and one over the dock or the status bar returns it. With a row window in front
+     * {@code floatRoom} is null.
+     */
+    @NonNull
+    public static Drop decide(float x, float y, float left, float right, float stripPx, int front,
+                              int count, int carried, @Nullable float[] pane,
+                              @Nullable float[] floatRoom) {
+        if (floatRoom != null) return contains(floatRoom, x, y) ? FLOAT : RETURN;
         if (front < 0) return RETURN;
         int edge = front >= count ? 0 : edgeAt(x, left, right, stripPx);
         if (edge != 0) {

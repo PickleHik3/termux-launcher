@@ -151,4 +151,32 @@ public final class LinuxCarryPolicyTest {
         assertEquals(200f, out[2], 0f);
         assertEquals(0f, out[0], 0f);
     }
+
+    private static final float[] FLOAT_ROOM = {0f, 100f, 400f, 700f};
+
+    @Test
+    public void overTheFloatRoomOfAHomePageTheDropIsAFloat() {
+        // Home in front: no row window (front -1), a pane never splits.
+        assertEquals(LinuxCarryPolicy.Kind.FLOAT,
+            LinuxCarryPolicy.decide(200f, 300f, 0f, 400f, STRIP, -1, 3, 1, null, FLOAT_ROOM).kind);
+        assertEquals(LinuxCarryPolicy.Kind.FLOAT,
+            LinuxCarryPolicy.decide(5f, 105f, 0f, 400f, STRIP, -1, 3, LinuxCarryPolicy.FROM_PANE,
+                null, FLOAT_ROOM).kind);
+    }
+
+    @Test
+    public void overTheDockOrTheStatusBarOfAHomePageTheWindowGoesBack() {
+        assertEquals(LinuxCarryPolicy.Kind.RETURN,
+            LinuxCarryPolicy.decide(200f, 750f, 0f, 400f, STRIP, -1, 3, 1, null, FLOAT_ROOM).kind);
+        assertEquals(LinuxCarryPolicy.Kind.RETURN,
+            LinuxCarryPolicy.decide(200f, 50f, 0f, 400f, STRIP, -1, 3, 1, null, FLOAT_ROOM).kind);
+    }
+
+    @Test
+    public void noFloatRoomLeavesEveryOtherDropAsItWas() {
+        assertEquals(LinuxCarryPolicy.Kind.RETURN,
+            LinuxCarryPolicy.decide(200f, 300f, 0f, 400f, STRIP, -1, 3, 1, null, null).kind);
+        assertEquals(LinuxCarryPolicy.Kind.BETWEEN,
+            LinuxCarryPolicy.decide(10f, 300f, 0f, 400f, STRIP, 1, 3, 2, null, null).kind);
+    }
 }

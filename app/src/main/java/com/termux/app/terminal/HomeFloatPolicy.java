@@ -229,6 +229,26 @@ public final class HomeFloatPolicy {
         return new RectF(left, top, Math.min(1f, left + width), Math.min(1f, top + height));
     }
 
+    /**
+     * The shape a Linux window dropped on a Home page takes (#388): {@code size} (its width and
+     * height as fractions of the room, the size a Float is born at) centred on the finger at
+     * ({@code fingerX}, {@code fingerY}) in room pixels, held inside the room as a move is
+     * ({@link #clampInRoom}). The titlebar band is the float's top, so the finger lands on the
+     * title strip rather than the middle of the picture: {@code titlebarPx} is where it rests.
+     */
+    @NonNull
+    public static RectF dropFrac(@NonNull RectF size, float fingerX, float fingerY,
+                                 float roomWidthPx, float roomHeightPx, float minWidthPx,
+                                 float minHeightPx, float titlebarPx) {
+        if (roomWidthPx <= 0f || roomHeightPx <= 0f) return new RectF(size);
+        float width = size.width();
+        float height = size.height();
+        float left = fingerX / roomWidthPx - width / 2f;
+        float top = (fingerY - titlebarPx / 2f) / roomHeightPx;
+        return clampInRoom(new RectF(left, top, left + width, top + height), roomWidthPx,
+            roomHeightPx, minWidthPx, minHeightPx, false);
+    }
+
     private static float clamp(float value, float low, float high) {
         return Math.max(low, Math.min(high, value));
     }

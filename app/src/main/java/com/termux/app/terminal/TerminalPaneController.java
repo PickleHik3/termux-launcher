@@ -393,6 +393,8 @@ public class TerminalPaneController {
         void close(long windowId);
         /** Whether window {@code id}'s app asks for the user (its pane wears the attention glow). */
         default boolean asking(long windowId) { return false; }
+        /** Window {@code id}'s Float was docked (#388): it stands in the row again and the wall pages to it. */
+        default void floatDocked(long windowId) {}
     }
 
     @Nullable private LinuxPanes mLinuxPanes;
@@ -536,6 +538,12 @@ public class TerminalPaneController {
 
         /** Whether a Home float is tucked into its chip. */
         public boolean isMinimised() { return minimised; }
+
+        /** Whether this Home float holds a Linux window (#388) rather than a shell. */
+        public boolean isLinuxFloat() { return homePageId >= 0 && active != null && active.isLinux(); }
+
+        /** The Linux window a Linux Float holds, else 0. */
+        public long linuxWindowId() { return isLinuxFloat() ? active.linuxWindowId : 0L; }
     }
 
     private final Host mHost;
@@ -2524,6 +2532,7 @@ public class TerminalPaneController {
 
     /** The Linux window whose pane is focused in the window on screen, 0 when a terminal is. */
     public long activeLinuxPaneId() {
+        if (mFocusedHomeFloat != null) return mFocusedHomeFloat.linuxWindowId();
         Leaf active = mActiveWindow == null ? null : mActiveWindow.active;
         return active != null && active.isLinux() ? active.linuxWindowId : 0L;
     }
@@ -2531,6 +2540,9 @@ public class TerminalPaneController {
     /** The focused pane's page while it is a Linux window's, for the keys to follow; else null. */
     @Nullable
     public PaneContentFrame activeLinuxPaneFrame() {
+        if (mFocusedHomeFloat != null) {
+            return mFocusedHomeFloat.isLinuxFloat() ? frameOf(mFocusedHomeFloat.active) : null;
+        }
         Leaf active = mActiveWindow == null ? null : mActiveWindow.active;
         return active != null && active.isLinux() ? frameOf(active) : null;
     }
@@ -2544,6 +2556,9 @@ public class TerminalPaneController {
     private Leaf findLinuxLeaf(long id) {
         for (Window w : mWindows) {
             for (Leaf leaf : allLeavesOf(w)) if (leaf.linuxWindowId == id && id != 0L) return leaf;
+        }
+        for (Window w : mHomeFloats) {
+            if (w.isLinuxFloat() && w.active.linuxWindowId == id) return w.active;
         }
         return null;
     }
@@ -2625,6 +2640,7 @@ public class TerminalPaneController {
     @Nullable
     private Window windowHolding(@NonNull Leaf leaf) {
         for (Window w : mWindows) if (allLeavesOf(w).contains(leaf)) return w;
+        for (Window w : mHomeFloats) if (w.active == leaf) return w;
         return null;
     }
 
@@ -2635,6 +2651,10 @@ public class TerminalPaneController {
     public boolean removeLinuxPane(long id) {
         Leaf leaf = findLinuxLeaf(id);
         Window owner = leaf == null ? null : windowHolding(leaf);
+        if (owner != null && owner.isLinuxFloat()) {
+            removeHomeFloat(owner);
+            return true;
+        }
         if (leaf == null || owner == null || leaf.parent == null) return false;
         if (mMaximizedLeaf == leaf) mMaximizedLeaf = null;
         detachLeaf(owner, leaf);
@@ -2651,6 +2671,12 @@ public class TerminalPaneController {
 
     /** The focus moves to Linux window {@code id}'s pane in the window on screen (a finger landed on it). */
     public void focusLinuxPane(long id) {
+        Leaf floated = findLinuxLeaf(id);
+        Window floatOwner = floated == null ? null : windowHolding(floated);
+        if (floatOwner != null && floatOwner.isLinuxFloat()) {
+            if (mFocusedHomeFloat != floatOwner) focusHomeFloat(floatOwner);
+            return;
+        }
         if (mActiveWindow == null) return;
         Leaf leaf = findLinuxLeaf(id);
         if (leaf == null || !allLeavesOf(mActiveWindow).contains(leaf) || mActiveWindow.active == leaf) return;
@@ -3842,13 +3868,20 @@ public class TerminalPaneController {
 
     /** What a float's titlebar button does to it. */
     private void onTitlebarAction(@NonNull Leaf leaf, int action) {
-        Window homeFloat = homeFloatOf(leaf.session);
+        Window homeFloat = homeFloatOfLeaf(leaf);
         if (homeFloat != null) {
             switch (action) {
                 case FloatTitlebarPolicy.ACTION_MINIMISE: minimiseHomeFloat(homeFloat); break;
                 case FloatTitlebarPolicy.ACTION_MAXIMISE: toggleFloatMaximised(leaf); break;
                 case FloatTitlebarPolicy.ACTION_DOCK: dockHomeFloat(homeFloat); break;
-                case FloatTitlebarPolicy.ACTION_CLOSE: leaf.session.finishIfRunning(); break;
+                case FloatTitlebarPolicy.ACTION_CLOSE:
+                    // A Linux window's app is asked to close; its end removes the Float.
+                    if (leaf.isLinux()) {
+                        if (mLinuxPanes != null) mLinuxPanes.close(leaf.linuxWindowId);
+                    } else {
+                        leaf.session.finishIfRunning();
+                    }
+                    break;
                 default: break;
             }
             return;
@@ -3867,7 +3900,7 @@ public class TerminalPaneController {
      * chip, and the scratchpad hides, as its toggle does. A window's floating pane has nowhere.
      */
     private boolean hasMinimiseTarget(@NonNull Leaf leaf) {
-        return isScratchpadLeaf(leaf) || homeFloatOf(leaf.session) != null;
+        return isScratchpadLeaf(leaf) || homeFloatOfLeaf(leaf) != null;
     }
 
     /** Close a float from its titlebar: its shell ends, as closing a pane's does. */
@@ -3889,7 +3922,7 @@ public class TerminalPaneController {
      * float stays a float: chrome, focus and its place in the z-order are untouched.
      */
     void toggleFloatMaximised(@NonNull Leaf leaf) {
-        Window window = homeFloatOf(leaf.session);
+        Window window = homeFloatOfLeaf(leaf);
         if (window == null) window = mActiveWindow;
         if (window == null || !window.floating.contains(leaf)) return;
         // From what is on screen when the float is currently clamped, as a drag would.
@@ -3905,7 +3938,7 @@ public class TerminalPaneController {
             applyFloatBounds(leaf, container);
         }
         // With the keyboard up a maximised Home float shrinks above it and a restored one lifts.
-        if (homeFloatOf(leaf.session) != null) applyHomeFloatLift();
+        if (homeFloatOfLeaf(leaf) != null) applyHomeFloatLift();
     }
 
     /** The handle's menu on screen, so a second long press replaces it rather than stacking. */
@@ -3981,11 +4014,12 @@ public class TerminalPaneController {
      */
     @NonNull
     private String handleMenuTitle(@NonNull Leaf leaf) {
-        Window homeFloat = homeFloatOf(leaf.session);
+        Window homeFloat = homeFloatOfLeaf(leaf);
         if (homeFloat != null && homeFloat.name != null && !homeFloat.name.isEmpty())
             return homeFloat.name;
         String session = leaf.session == null ? null : leaf.session.mSessionName;
         if (session != null && !session.isEmpty()) return session;
+        if (leaf.isLinux()) return mHostView.getContext().getString(R.string.linux_window_app);
         return TerminalWindowBar.titleOf(TerminalWindowBar.itemFor(leaf.session, 0).label);
     }
 
@@ -4073,6 +4107,8 @@ public class TerminalPaneController {
                 // titlebar moves the float, and the resize corner sizes it.
                 boolean onChrome = y < titlebarBandPx() || container.buttonReachAt(x, y) != null
                     || container.dragModeAt(x, y) == FloatingPaneContainer.DRAG_RESIZE;
+                // A swipe on a Linux window's picture is the app's; beside it and on the titlebar Home pages.
+                if (container.mLeaf.isLinux()) return onChrome;
                 return terminalYieldsSideways(mPaneViews.get(container.mLeaf.session), onChrome);
             }
         });
@@ -4117,6 +4153,74 @@ public class TerminalPaneController {
     }
 
     /**
+     * Opens a Home float around Linux window {@code id} on Home page {@code page} (#388): the
+     * window's page ({@link LinuxPanes#frameOf}, which the caller made with the window a pane)
+     * is the float's picture. It takes the size a float is born at, centred on the finger at
+     * ({@code fingerX}, {@code fingerY}) in window coordinates ({@link HomeFloatPolicy#dropFrac}),
+     * raised and focused. Null, changing nothing, when the layer or the page is missing. Not in
+     * {@link #mWindows}: it has no shell for the Terminal's lists to read.
+     */
+    @Nullable
+    public Window openLinuxHomeFloat(long id, int page, float fingerX, float fingerY) {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null || mLinuxPanes == null || mLinuxPanes.frameOf(id) == null
+            || hasLinuxFloat(id)) return null;
+        layer.getLocationInWindow(mLinuxPaneAt);
+        Leaf leaf = Leaf.linux(id);
+        leaf.floatFrac = linuxDropFrac(fingerX - mLinuxPaneAt[0], fingerY - mLinuxPaneAt[1]);
+        Window w = new Window(leaf);
+        w.root = null;
+        w.floating.add(leaf);
+        setHomePage(w, Math.max(0, page));
+        mHomeFloats.add(w);
+        mPendingFloatEntryLeaf = leaf;
+        attachHomeFloatContainer(w);
+        if (mPendingFloatEntryLeaf == leaf) mPendingFloatEntryLeaf = null;
+        focusHomeFloat(w);
+        mHost.onTreesChanged();
+        mHost.onHomeFloatsChanged();
+        return w;
+    }
+
+    /** The shape a Linux window dropped at ({@code layerX}, {@code layerY}) in the float layer takes, as fractions of the float room. */
+    @NonNull
+    private RectF linuxDropFrac(float layerX, float layerY) {
+        Rect room = homeFloatRoom();
+        RectF birth = HomeFloatPolicy.birthFrac(room, homeFloatEdgeTopPx(),
+            raisedKeyboardTopInLayerPx(), keyboardGapPx(),
+            dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP), titlebarBandPx());
+        return HomeFloatPolicy.dropFrac(birth, layerX - room.left, layerY - room.top,
+            room.width(), room.height(), dp(FLOAT_MIN_WIDTH_DP), dp(FLOAT_MIN_HEIGHT_DP),
+            titlebarBandPx());
+    }
+
+    /**
+     * The room Linux Floats live in and the bounds one dropped at ({@code x}, {@code y}) would
+     * take, in window coordinates (left, top, right, bottom), into {@code room} and {@code
+     * bounds}; false while there is no float layer. Writes the arrays only.
+     */
+    public boolean linuxFloatBounds(float x, float y, @NonNull float[] room, @Nullable float[] bounds) {
+        HomeFloatLayer layer = mHomeFloatLayer;
+        if (layer == null || layer.getWidth() <= 0) return false;
+        Rect r = homeFloatRoom();
+        layer.getLocationInWindow(mLinuxPaneAt);
+        float ox = mLinuxPaneAt[0];
+        float oy = mLinuxPaneAt[1];
+        room[0] = ox + r.left;
+        room[1] = oy + r.top;
+        room[2] = ox + r.right;
+        room[3] = oy + r.bottom;
+        if (bounds != null) {
+            RectF frac = linuxDropFrac(x - ox, y - oy);
+            bounds[0] = ox + r.left + frac.left * r.width();
+            bounds[1] = oy + r.top + frac.top * r.height();
+            bounds[2] = ox + r.left + frac.right * r.width();
+            bounds[3] = oy + r.top + frac.bottom * r.height();
+        }
+        return true;
+    }
+
+    /**
      * The shape a float born on Home page {@code page} takes: a window inside the room
      * ({@link HomeFloatPolicy#birthFrac(Rect, int, int, int, int, int, int)}) on a page that shows
      * no float, else the first position of the stepping sequence no float shown there stands on
@@ -4148,7 +4252,21 @@ public class TerminalPaneController {
     /** Every Home float, across all pages, in z-order (last on top). */
     @NonNull
     public List<Window> homeFloats() {
+        List<Window> out = new ArrayList<>(mHomeFloats.size());
+        for (Window w : mHomeFloats) if (!w.isLinuxFloat()) out.add(w);
+        return out;
+    }
+
+    /** Every Home float, Linux windows' too (#388), in z-order: what Home's chips stand for. */
+    @NonNull
+    public List<Window> allHomeFloats() {
         return new ArrayList<>(mHomeFloats);
+    }
+
+    /** Whether any Home float holds Linux window {@code id}. */
+    public boolean hasLinuxFloat(long id) {
+        for (Window w : mHomeFloats) if (w.isLinuxFloat() && w.active.linuxWindowId == id) return true;
+        return false;
     }
 
     /** The Home float with this window id, or null. */
@@ -4164,6 +4282,13 @@ public class TerminalPaneController {
         if (session == null) return null;
         for (Window w : mHomeFloats)
             if (w.active != null && w.active.session == session) return w;
+        return null;
+    }
+
+    /** The Home float whose pane is {@code leaf} (a shell's or a Linux window's), or null. */
+    @Nullable
+    private Window homeFloatOfLeaf(@NonNull Leaf leaf) {
+        for (Window w : mHomeFloats) if (w.active == leaf) return w;
         return null;
     }
 
@@ -4279,6 +4404,13 @@ public class TerminalPaneController {
         if (!mHomeFloats.contains(w) || w.active == null) return;
         Leaf leaf = w.active;
         boolean wasFocused = w == mFocusedHomeFloat;
+        if (leaf.isLinux()) {
+            // A Linux window has no tree of its own: it goes back to the row as its own window.
+            long id = leaf.linuxWindowId;
+            removeHomeFloat(w);
+            if (mLinuxPanes != null) mLinuxPanes.floatDocked(id);
+            return;
+        }
         mHomeFloats.remove(w);
         removeFloatContainer(leaf);
         w.floating.remove(leaf);
@@ -4657,7 +4789,15 @@ public class TerminalPaneController {
         mWindows.remove(w);
         if (leaf != null) {
             removeFloatContainer(leaf);
-            detachPaneView(leaf.session);
+            if (leaf.isLinux()) {
+                mBorderStates.remove(leaf);
+                // The window's page outlives the Float (a dock or a carry reuses it): it leaves the container.
+                PaneContentFrame frame = frameOf(leaf);
+                if (frame != null && frame.getParent() instanceof ViewGroup)
+                    ((ViewGroup) frame.getParent()).removeView(frame);
+            } else {
+                detachPaneView(leaf.session);
+            }
         }
         w.floating.clear();
         if (wasFocused) {
@@ -4685,17 +4825,18 @@ public class TerminalPaneController {
             if (container == null || frame == null) continue;
             boolean focused = w == mFocusedHomeFloat;
             // Counted as a split, as a window's floats are: a float is never a lone bare pane.
+            Object key = leaf.isLinux() ? leaf : leaf.session;
             PaneBorderStyle.Decision border = PaneBorderStyle.decide(2, focused,
-                mPaneAttention.isSet(leaf.session.getPid()), palette);
+                !leaf.isLinux() && mPaneAttention.isSet(leaf.session.getPid()), palette);
             frame.setPaneShape(radiusPx, glassShape);
             frame.setRimStrokePx(paneBorderStrokePx(glassShape, true, density));
             frame.setBezelFill(bezelFill());
-            PaneRim rim = mBorderStates.get(leaf.session);
+            PaneRim rim = mBorderStates.get(key);
             if (rim == null) rim = new PaneRim();
             if (rim.apply(frame, glassShape, radiusPx, border, mSurfaceStyle)) {
-                mBorderStates.put(leaf.session, rim);
+                mBorderStates.put(key, rim);
             } else {
-                mBorderStates.remove(leaf.session);
+                mBorderStates.remove(key);
             }
             container.titlebar().applyRim(glassShape, radiusPx, border, mSurfaceStyle, 1f, focused);
             container.invalidate();
@@ -8374,7 +8515,10 @@ public class TerminalPaneController {
                     outline.setRoundRect(0, 0, view.getWidth(), view.getHeight(), cornerRadiusPx);
                 }
             });
-            content.addView(paneFrameFor(leaf.session), new LayoutParams(
+            FrameLayout held = leaf.isLinux() ? frameOf(leaf) : paneFrameFor(leaf.session);
+            // A Linux window's page may still hang in the split it was carried out of.
+            if (held.getParent() instanceof ViewGroup) ((ViewGroup) held.getParent()).removeView(held);
+            content.addView(held, new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
             LayoutParams contentParams = new LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT);
@@ -8632,7 +8776,7 @@ public class TerminalPaneController {
             }
             // Held still on the handle, the press opens the handle's menu instead of moving.
             if (mDragMode == DRAG_MOVE) {
-                holdPaneVeils(mLeaf.session);
+                if (mLeaf.session != null) holdPaneVeils(mLeaf.session);
                 postDelayed(mHandleLongPress, ViewConfiguration.getLongPressTimeout());
             }
             getParent().requestDisallowInterceptTouchEvent(true);
