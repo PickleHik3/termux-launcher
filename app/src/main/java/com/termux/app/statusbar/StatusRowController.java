@@ -132,6 +132,8 @@ public final class StatusRowController {
         // A wall that leaves its rest ends a touch on the marks: it is gone before the page moves.
         if (!atRest) endMarksTouch();
         PageRef other = mHost.crossingOtherEnd();
+        boolean crossingBegun = other != null && !mDiagCrossing;
+        mDiagCrossing = other != null;
         boolean homeInView = committed == PageKind.HOME
             || wallPage == PageKind.HOME
             || (other != null && other.isHome());
@@ -144,7 +146,14 @@ public final class StatusRowController {
         if (presentation == mStatusPresentation) {
             // A slide from Home toward another page than the one the row stood over: placed once.
             if (rowPageMoved && presentation.isRow()) syncStatusRowPlace();
+            if (crossingBegun) logRow("crossing-begin");
             return;
+        }
+        if (com.termux.app.chrome.MotionLog.enabled) {
+            com.termux.app.chrome.MotionLog.log("status-presentation", "value=" + presentation
+                + " rowStands=" + mPaneRowStands + " committed=" + committed
+                + " atRest=" + atRest + " homeInView=" + homeInView
+                + " homeShowsBar=" + homeShowsBar + " rowPage=" + rowPage);
         }
         mStatusPresentation = presentation;
         endMarksTouch();
@@ -168,6 +177,28 @@ public final class StatusRowController {
         syncStatusRowPlace();
         // The chips stand in the strip only (chipsKeptAway).
         mHost.refreshTerminalWindowBar();
+        if (crossingBegun) logRow("crossing-begin");
+    }
+
+    /** Whether the last presentation sync saw a crossing in flight (diag: its begin is logged). */
+    private boolean mDiagCrossing;
+
+    /**
+     * Diag: one motion-log line naming the status row at a crossing's begin or landing: the
+     * presentation, the host's frame and translation, and the row's frame in the host. Not per frame.
+     */
+    public void logRow(@NonNull String when) {
+        if (!com.termux.app.chrome.MotionLog.enabled) return;
+        View host = find(R.id.terminal_window_bar_host);
+        String hostKv = host == null ? "none" : host.getLeft() + "," + host.getTop() + ","
+            + host.getRight() + "," + host.getBottom() + " tx=" + host.getTranslationX()
+            + " vis=" + host.getVisibility();
+        String rowKv = host instanceof StatusBarSwipeLayout
+            ? ((StatusBarSwipeLayout) host).rowRect().toShortString()
+                + " presented=" + ((StatusBarSwipeLayout) host).isRowPresented() : "none";
+        com.termux.app.chrome.MotionLog.log("status-row", "when=" + when
+            + " presentation=" + mStatusPresentation + " rowPage=" + mRowPage
+            + " committed=" + mHost.wallPage() + " host=" + hostKv + " row=" + rowKv);
     }
 
     /**
