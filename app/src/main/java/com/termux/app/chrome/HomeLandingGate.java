@@ -42,6 +42,12 @@ public final class HomeLandingGate {
     public static final long REVEAL_BACKSTOP_MS = 160L;
     /** Frames past the settle the views wait for one with no layout pending before they show. */
     public static final int REVEAL_FRAMES = 3;
+    /**
+     * How long Home fades in once it has drawn, so it lands as part of Android's return motion
+     * rather than cutting in after the frame with no pages. Only the frame reveals fade; a backstop,
+     * a finish or a failure shows everything at once.
+     */
+    public static final long REVEAL_FADE_MS = 120L;
 
     /** How the gate ended ({@link #lastEnd}). */
     public static final String BY_FRAME = "frame";
@@ -65,6 +71,10 @@ public final class HomeLandingGate {
     /** The views hidden, and the transition alpha each had: given back even if one left its parent. */
     private final ArrayList<View> mHidden = new ArrayList<>();
     private float[] mHiddenAlpha = new float[8];
+    /** The views fading back in after a frame reveal, with the transition alpha each returns to. */
+    private final ArrayList<View> mFading = new ArrayList<>();
+    private float[] mFadingAlpha = new float[8];
+    @Nullable private android.animation.ValueAnimator mFade;
     @Nullable private FirstLayout.Handle mDrawWait;
     @Nullable private FirstLayout.Handle mRevealWait;
     private int mFrames;
@@ -102,6 +112,7 @@ public final class HomeLandingGate {
      */
     public boolean begin(@Nullable ViewGroup root, @NonNull Runnable settle) {
         if (mPhase != IDLE) finishNow();
+        endFade();
         if (root == null || !root.isAttachedToWindow() || !root.getViewTreeObserver().isAlive()) {
             return false;
         }
@@ -128,6 +139,12 @@ public final class HomeLandingGate {
     public void finishNow() {
         if (mPhase == HIDDEN) settle(BY_FINISH);
         reveal(BY_FINISH);
+        endFade();
+    }
+
+    /** Whether Home is still fading in after a frame reveal. */
+    public boolean isFading() {
+        return mFade != null;
     }
 
     /** The hidden frame drew (inside its draw): the settle runs after it. */
@@ -189,12 +206,54 @@ public final class HomeLandingGate {
         FirstLayout.Handle revealWait = mRevealWait;
         mRevealWait = null;
         if (revealWait != null) revealWait.cancel();
-        for (int i = 0, n = mHidden.size(); i < n; i++) {
-            mHidden.get(i).setTransitionAlpha(mHiddenAlpha[i]);
+        boolean fade = BY_FRAME.equals(by) || BY_FRAMES.equals(by);
+        if (fade) startFade();
+        else {
+            for (int i = 0, n = mHidden.size(); i < n; i++) {
+                mHidden.get(i).setTransitionAlpha(mHiddenAlpha[i]);
+            }
         }
         mHidden.clear();
         mRoot = null;
         mSettle = null;
+    }
+
+    /** Fades the hidden views back to their own transition alpha over {@link #REVEAL_FADE_MS}. */
+    private void startFade() {
+        endFade();
+        int count = mHidden.size();
+        if (count == 0) return;
+        if (mFadingAlpha.length < count) mFadingAlpha = new float[count];
+        mFading.addAll(mHidden);
+        System.arraycopy(mHiddenAlpha, 0, mFadingAlpha, 0, count);
+        android.animation.ValueAnimator fade = android.animation.ValueAnimator.ofFloat(0f, 1f);
+        fade.setDuration(REVEAL_FADE_MS);
+        fade.setInterpolator(new android.view.animation.DecelerateInterpolator());
+        fade.addUpdateListener(animation -> {
+            if (mFade != animation) return;
+            float f = (float) animation.getAnimatedValue();
+            for (int i = 0, n = mFading.size(); i < n; i++) {
+                mFading.get(i).setTransitionAlpha(mFadingAlpha[i] * f);
+            }
+        });
+        fade.addListener(new android.animation.AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(android.animation.Animator animation) {
+                if (mFade == animation) endFade();
+            }
+        });
+        mFade = fade;
+        fade.start();
+    }
+
+    /** Ends a fade at once: every faded view at its own transition alpha. A fade can never strand a view. */
+    private void endFade() {
+        android.animation.ValueAnimator fade = mFade;
+        mFade = null;
+        if (fade != null) fade.cancel();
+        for (int i = 0, n = mFading.size(); i < n; i++) {
+            mFading.get(i).setTransitionAlpha(mFadingAlpha[i]);
+        }
+        mFading.clear();
     }
 
     private void cancelHiddenWait() {

@@ -86,10 +86,27 @@ public class HomeLandingGateTest {
     }
 
     private void assertShown() {
+        // A frame reveal fades Home in; the views reach their own alpha when it ends.
+        idleFor(HomeLandingGate.REVEAL_FADE_MS + 20);
+        assertFalse("the fade has ended", gate.isFading());
         assertEquals(1f, pages.getTransitionAlpha(), 0f);
         assertEquals(1f, chrome.getTransitionAlpha(), 0f);
         assertEquals(1f, strip.getTransitionAlpha(), 0f);
         assertEquals(1f, wallpaper.getTransitionAlpha(), 0f);
+    }
+
+    @Test public void aFrameRevealFadesHomeInAndAFinishEndsTheFadeAtOnce() {
+        assertTrue(gate.begin(root, settle));
+        gate.onHiddenFrameDrawn();
+        idle();
+        assertTrue(gate.onRevealFrame());
+        assertTrue("Home fades in", gate.isFading());
+        assertTrue("not shown at once", pages.getTransitionAlpha() < 1f);
+        gate.finishNow();
+        assertFalse(gate.isFading());
+        assertEquals(1f, pages.getTransitionAlpha(), 0f);
+        assertEquals(1f, chrome.getTransitionAlpha(), 0f);
+        assertEquals(1f, strip.getTransitionAlpha(), 0f);
     }
 
     @Test public void hidesEverythingButTheWallpaperAndSettlesAfterTheHiddenFrame() {
