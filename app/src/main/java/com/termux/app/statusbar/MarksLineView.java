@@ -20,6 +20,7 @@ import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.FrameLayout;
 
+import androidx.annotation.ColorInt;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.core.content.ContextCompat;
@@ -191,6 +192,65 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
 
     public void setNavigator(@Nullable PageSwitchTargets.Navigator navigator) {
         mNavigator = navigator;
+    }
+
+    /** Whether the page's name shows while a finger slides; true until a line that wants none (Home's pill) turns it off. */
+    private boolean mTitleShown = true;
+    /** Told when the zoom comes up and goes away: Home's pill stands aside while the ground stands for it. */
+    @Nullable private Runnable mZoomListener;
+    /** The opaque ground the line stands on, when its owner measured it (Home's pill); 0 for the chrome's band. */
+    private boolean mFixedGround;
+    private int mFixedBand;
+    private boolean mFixedPale;
+
+    /**
+     * Whether a slide names the page under the finger at the row's end and fades the readings
+     * away. On by default; a line with no status row around it (Home's pill) turns it off, and the
+     * name shows where its owner puts it. Takes effect from the next touch.
+     */
+    public void setTitleShown(boolean shown) {
+        mTitleShown = shown;
+    }
+
+    /** Whether {@link #setTitleShown} is on; for tests. */
+    boolean titleShown() {
+        return mTitleShown;
+    }
+
+    /** {@code listener} runs when the zoom comes up and when it goes away; null for none. */
+    public void setZoomListener(@Nullable Runnable listener) {
+        mZoomListener = listener;
+    }
+
+    /** Whether the touch's zoom stands now: the ground the zoom draws is on screen. */
+    public boolean isZoomShown() {
+        return mZoomShown;
+    }
+
+    /**
+     * Solves the inks on {@code band}, the opaque ground the line stands on as its owner measured
+     * it, instead of the status bar's band. Compares before it repaints.
+     *
+     * @param pale whether the pale ink is the legible one on this ground
+     */
+    public void setGroundInk(@ColorInt int band, boolean pale) {
+        int opaque = OnGlass.opaque(band);
+        if (mFixedGround && mFixedBand == opaque && mFixedPale == pale) return;
+        mFixedGround = true;
+        mFixedBand = opaque;
+        mFixedPale = pale;
+        if (syncInk()) invalidate();
+    }
+
+    /** The inks held now, for tests. */
+    @NonNull
+    MarksLineInk ink() {
+        return mInk;
+    }
+
+    private void zoomChanged() {
+        Runnable listener = mZoomListener;
+        if (listener != null) listener.run();
     }
 
     /**
@@ -464,6 +524,20 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
      * @return whether the inks changed
      */
     private boolean syncInk() {
+        if (mFixedGround) {
+            // Home's pill: its own glass is the ground, measured by its owner.
+            mBandSurface = mFixedBand;
+            int surfaceBase = MaterialColors.getColor(this,
+                com.termux.shared.R.attr.termuxColorSurfaceBase,
+                ContextCompat.getColor(getContext(), R.color.termux_surface_base));
+            MarksLineInk solved = MarksLineInk.onBand(mFixedBand, mFixedPale,
+                WindowChipInk.neutralSeed(mNeutral, surfaceBase, mFixedPale), mAccent, mError);
+            boolean changed = !sameInk(solved, mInk);
+            mInk = solved;
+            mInkMeasured = true;
+            mAuthored = false;
+            return changed;
+        }
         ChromeInk chrome = mChromeInk;
         OnGlass.Resolution resolved = chrome == null ? null
             : chrome.resolution(GlassBackdropCache.Band.STATUS_BAR);
@@ -759,7 +833,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
         mFinger = pos;
         View readings = mVertical || row == null ? null : row.findViewById(R.id.terminal_status_widgets);
         if (readings != null && !readings.isShown()) readings = null;
-        float titleMax = mVertical ? 0f : MarksZoomPlan.titleMaxPx(
+        float titleMax = mVertical || !mTitleShown ? 0f : MarksZoomPlan.titleMaxPx(
             readings == null ? 0f : readings.getWidth(), lineEnd - lineStart);
         // Which side across the line the screen's edge is: the ground reaches that way by the
         // row's touch reach at most, and the rest the other way, over the pane.
@@ -923,6 +997,7 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             return;
         }
         mZoomShown = true;
+        zoomChanged();
         // The ground, once for the touch: the Live picture of what is beneath when Live blur is
         // granted, else Global's glass carrying the stored wallpaper frame.
         ZoomGround glass = mZoomGround;
@@ -979,8 +1054,10 @@ public final class MarksLineView extends View implements MarksZoomView.Painter {
             detachZoom(zoom);
             zoom.release();
         }
+        boolean wasShown = mZoomShown;
         mZoomShown = false;
         mZoomInk = mInk;
+        if (wasShown) zoomChanged();
         if (had) invalidate();
     }
 

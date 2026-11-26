@@ -18,12 +18,12 @@ public final class PageBarBand {
     private PageBarBand() {}
 
     /**
-     * Whether Home keeps a band for the pill: the indicator is on and the status bar's look is
-     * Glyphs. Under Marks the status bar's line marks the pages and Home gives the band to its
-     * grid, as with the indicator off. A missing look reads as Glyphs.
+     * Whether Home keeps a band for the pill: the indicator is on, under either look. The Glyphs
+     * look draws its glyph pill there, the Marks look a pill fitted to the marks
+     * ({@link MarksPillPolicy}).
      */
-    public static boolean bandOn(boolean indicatorOn, @androidx.annotation.Nullable PageBarLook look) {
-        return indicatorOn && (look == null || !look.marksShown());
+    public static boolean bandOn(boolean indicatorOn) {
+        return indicatorOn;
     }
 
     /** Whether dock rows stand below the pill: the pane keeps a reserve for them. */

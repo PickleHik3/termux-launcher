@@ -30819,14 +30819,15 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
     }
 
     /**
-     * Tells Home's pane the status bar's page bar look: under Marks the pill's band goes to the
-     * grid. Called when the look can have changed (settings return, the editor's row), never per
+     * Tells Home's pane the status bar's page bar look: Marks fits the pill to its marks. Called when the look can have changed (settings return, the editor's row), never per
      * page change; the pane compares before it resizes.
      */
     private void syncHomeBandLook() {
         if (mWidgetPaneController == null || mPreferences == null) return;
         mWidgetPaneController.setPageBarLook(com.termux.app.wall.pageswitch.PageBarLook
             .fromValue(mPreferences.getPageBarLook()));
+        // Home's pill under Marks holds a line of its own; it is fed with the status bar's.
+        mMarksLine.syncMarksLine();
     }
 
     /** The window count and current window the glyphs were last given. */

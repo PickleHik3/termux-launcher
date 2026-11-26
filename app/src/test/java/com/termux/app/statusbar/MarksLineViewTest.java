@@ -525,4 +525,53 @@ public class MarksLineViewTest {
         marks.cancelTouch();
         assertEquals("cancelled from outside", 0, chrome.getChildCount());
     }
+
+    @Test public void aLineThatWantsNoTitleKeepsTheReadingsAndTellsWhenTheZoomComesAndGoes() {
+        Activity activity = Robolectric.buildActivity(Activity.class).setup().get();
+        FrameLayout root = new FrameLayout(activity);
+        FrameLayout chrome = new FrameLayout(activity);
+        chrome.setId(R.id.window_layer_chrome);
+        LinearLayout row = new LinearLayout(activity);
+        row.setId(R.id.terminal_status_row);
+        MarksLineView marks = new MarksLineView(activity, null);
+        row.addView(marks, new LinearLayout.LayoutParams(LinearLayout.LayoutParams.WRAP_CONTENT,
+            LinearLayout.LayoutParams.MATCH_PARENT));
+        View readings = new View(activity);
+        readings.setId(R.id.terminal_status_widgets);
+        row.addView(readings, new LinearLayout.LayoutParams(80, LinearLayout.LayoutParams.MATCH_PARENT));
+        root.addView(row, new FrameLayout.LayoutParams(400, 40));
+        root.addView(chrome, new FrameLayout.LayoutParams(400, 400));
+        activity.setContentView(root);
+        assertTrue("the title is on until a line turns it off", marks.titleShown());
+        marks.setTitleShown(false);
+        assertFalse(marks.titleShown());
+        List<Boolean> told = new ArrayList<>();
+        marks.setZoomListener(() -> told.add(marks.isZoomShown()));
+        marks.setSlideSupport(null, () -> true);
+        marks.setPages(model("HTA", 2, 1, -1), null);
+        root.measure(View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+            View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY));
+        root.layout(0, 0, 400, 400);
+        long t = SystemClock.uptimeMillis();
+        MotionEvent down = MotionEvent.obtain(t, t, MotionEvent.ACTION_DOWN,
+            marks.rowLayout().centreAt(1), 20f, 0);
+        marks.dispatchTouchEvent(down);
+        down.recycle();
+        assertTrue(marks.zoomShown());
+        assertEquals("no title: the readings stay", 1f, readings.getAlpha(), 0f);
+        marks.cancelTouch();
+        assertFalse(marks.zoomShown());
+        assertEquals(java.util.Arrays.asList(true, false), told);
+    }
+
+    @Test public void aLineOnAGroundItWasGivenSolvesItsInksOnThatGround() {
+        view.setAccent(Color.rgb(0x40, 0x80, 0xFF));
+        view.setGroundInk(0xFF101010, true);
+        assertTrue("pale ink on a dark glass", Color.red(view.ink().other) > 0x80);
+        view.setGroundInk(0xFFF0F0F0, false);
+        assertTrue("dark ink on a pale glass", Color.red(view.ink().other) < 0x80);
+        MarksLineInk held = view.ink();
+        view.setGroundInk(0xFFF0F0F0, false);
+        assertSame("the same ground again changes nothing", held, view.ink());
+    }
 }

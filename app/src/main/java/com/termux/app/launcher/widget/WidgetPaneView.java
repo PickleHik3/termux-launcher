@@ -204,6 +204,11 @@ public final class WidgetPaneView extends FrameLayout
     private final WidgetPickerSheetView picker;
     /** The page bar: the band under the grid ({@link PageBarBand}), the pill in it. */
     private final PageBarView dots;
+    /**
+     * The Marks look's line, inside the pill ({@link PageBarView#setFittedContent}): fed by the
+     * activity's marks controller, a title of its own never shown (the pill has no row to end in).
+     */
+    private final com.termux.app.statusbar.MarksLineView marks;
     /** The empty page's hint stands on the wallpaper: its ink follows it. */
     private final HomeLabelInk hintInk = new HomeLabelInk();
     private final Runnable hideNotice;
@@ -340,6 +345,13 @@ public final class WidgetPaneView extends FrameLayout
         dotsParams.bottomMargin = 0;
         addView(dots, dotsParams);
         dots.setVisibility(INVISIBLE);
+        marks = new com.termux.app.statusbar.MarksLineView(context, null);
+        marks.setId(R.id.widget_page_marks);
+        marks.setTitleShown(false);
+        marks.setZoomListener(() -> dots.setZoomStands(marks.isZoomShown()));
+        dots.setGroundInkListener(marks::setGroundInk);
+        dots.setFittedContent(marks);
+        dots.setFitted(pageBarLook.marksShown());
 
         notice = new TextView(context); notice.setId(R.id.widget_pane_notice); notice.setGravity(Gravity.CENTER);
         hideNotice = () -> notice.setVisibility(GONE);
@@ -476,17 +488,19 @@ public final class WidgetPaneView extends FrameLayout
     }
 
     /**
-     * Status bar card › Page bar: under Marks Home gives the pill's band to the grid, as with the
-     * indicator off. Compared before it applies, so only a change of look resizes the grid.
+     * Status bar card › Page bar: Marks fits the pill to the marks, Glyphs keeps one slot a glyph.
+     * The band stands under both looks. Compared before it applies.
      */
     public void setPageBarLook(@NonNull PageBarLook value) {
         if (pageBarLook == value) return;
         pageBarLook = value;
+        marks.cancelTouch();
+        dots.setFitted(value.marksShown());
         setPageState(pageCount, currentPage);
     }
 
     private boolean bandOn() {
-        return PageBarBand.bandOn(indicator.glyphsShown(), pageBarLook);
+        return PageBarBand.bandOn(indicator.glyphsShown());
     }
 
     /**
@@ -528,7 +542,10 @@ public final class WidgetPaneView extends FrameLayout
         int visibility = shown ? VISIBLE : INVISIBLE;
         if (dots.getVisibility() != visibility) {
             // A touch already down on the pill is given back before it goes.
-            if (!shown) dots.release();
+            if (!shown) {
+                dots.release();
+                marks.cancelTouch();
+            }
             dots.setVisibility(visibility);
         }
     }

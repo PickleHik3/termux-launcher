@@ -104,6 +104,18 @@ public final class MarksLineController {
             vertical, false);
         syncLine(R.id.terminal_status_home_marks_row, R.id.terminal_status_home_marks_column,
             marks, vertical, true);
+        syncHomeLine(marks);
+    }
+
+    /**
+     * Home's pill's line, fed as the status bar's is (the pane shows or hides it with the look):
+     * the navigator, haptics and reduced motion, the scheme's accent, the icons, the zoom's ground
+     * and the pages with their attention. Its ink is the pill's glass, which the pill tells it.
+     */
+    private void syncHomeLine(boolean marks) {
+        MarksLineView line = find(R.id.widget_page_marks);
+        if (line == null || !marks) return;
+        feed(line, false);
     }
 
     /**
@@ -137,6 +149,13 @@ public final class MarksLineController {
             line.setPages(twin, null);
             return;
         }
+        feed(line, vertical);
+        line.setChromeInk(mHost.chromeInk());
+        line.refreshInk();
+    }
+
+    /** What a line that marks the pages is given, wherever it stands. */
+    private void feed(@NonNull MarksLineView line, boolean vertical) {
         if (mMarksNavigator == null) mMarksNavigator = mHost.pageSwitchNavigator();
         if (!line.hasSlideSupport()) {
             // The slide's tick and its lift read the page bar's own switches.
@@ -147,13 +166,11 @@ public final class MarksLineController {
         }
         line.setNavigator(mMarksNavigator);
         line.setVertical(vertical);
-        line.setChromeInk(mHost.chromeInk());
         line.setAccent(mHost.marksAccent());
         line.setMarkIcons(mHost.pageMarkIcons());
         line.setZoomGround(mZoomGround);
         com.termux.app.wall.pageswitch.PageBarModel model = mHost.pageBarModel();
         line.setPages(model, marksAttention(model));
-        line.refreshInk();
     }
 
     /** Per entry of {@code model}: whether the Terminal window it stands for wants the user; null when none does. */
