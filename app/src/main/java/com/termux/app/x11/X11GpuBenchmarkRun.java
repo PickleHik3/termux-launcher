@@ -68,7 +68,7 @@ public final class X11GpuBenchmarkRun {
     }
 
     /** The script's output is a few hundred lines; this keeps all of it, and no more. */
-    static final int TRANSCRIPT_ROWS = 600;
+    static final int TRANSCRIPT_ROWS = com.termux.app.fragments.settings.termux.WatchOnlyTerminal.TRANSCRIPT_ROWS;
     /** The grid the run starts on before any page has measured one. */
     private static final int START_COLUMNS = 80;
     private static final int START_ROWS = 24;
