@@ -34,6 +34,24 @@ jobs:
         uses: mlugg/setup-zig@v2
         with:
           version: 0.17.0
+      - name: Setup Rust for the Wayland compositor host (on by default, -Pwayland=false turns it off)
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,x86_64-linux-android,armv7-linux-androideabi
+      - name: Install the Wayland host's build tools
+        run: sudo apt-get install -y --no-install-recommends meson ninja-build bison
+      - name: Cache the Wayland host build (cargo, cargo-ndk, libxkbcommon)
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            ~/.cargo/bin/cargo-ndk
+            wayland-host/target
+          key: wayland-host-${{ runner.os }}-${{ hashFiles('wayland-host/Cargo.lock', 'wayland-host/patches/*', 'scripts/build-wayland-host.sh') }}
+          restore-keys: wayland-host-${{ runner.os }}-
+      - name: Install cargo-ndk
+        run: command -v cargo-ndk >/dev/null || cargo install cargo-ndk --locked
 
       - name: Build and attach APKs to release
         shell: bash {0}

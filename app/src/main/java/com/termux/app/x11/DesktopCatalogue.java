@@ -86,6 +86,12 @@ public final class DesktopCatalogue {
             return out;
         }
 
+        /** The pieces, in install order. */
+        @NonNull
+        public List<Piece> pieces() {
+            return java.util.Arrays.asList(pieces.clone());
+        }
+
         @NonNull
         public String[] settingsFolders() {
             return settingsFolders.clone();
@@ -143,8 +149,38 @@ public final class DesktopCatalogue {
         new String[]{"usr/bin/startxfce4", "usr/bin/xfce4-session"},
         new String[]{".config/xfce4"}, "startxfce4", null, true);
 
+    /**
+     * LXQt from Termux's x11 repository. {@code lxqt} is a metapackage (checked against
+     * termux-packages x11-packages/lxqt/build.sh, 2026-11-26) that depends on lxqt-session,
+     * lxqt-panel, lxqt-runner, lxqt-config, pcmanfm-qt, qterminal and the rest of a usable
+     * desktop; it ships no files of its own, so its proof of install is the session's:
+     * {@code bin/startlxqt} and {@code share/xsessions/lxqt.desktop} from lxqt-session (upstream's
+     * install layout; the drawer finds the desktop through that xsessions entry).
+     */
+    public static final Desktop LXQT = new Desktop("lxqt", "LXQt", Kind.X11,
+        new Piece[]{
+            new Piece("lxqt", "bin/startlxqt", "share/xsessions/lxqt.desktop")},
+        new String[]{"usr/bin/startlxqt", "usr/bin/lxqt-session"},
+        new String[]{".config/lxqt"}, "startlxqt", null, true);
+
     /** Every desktop, in the order they are listed. */
-    private static final Desktop[] ALL = {XFCE};
+    private static final Desktop[] ALL = {XFCE, LXQT};
+
+    /**
+     * Where a desktop's install manifest is, relative to the prefix, beside the launcher's other
+     * set-up state ({@code GuiAppsSetup.markerFile}). One file per desktop, named by
+     * {@link #manifestFileName}: UTF-8 text, one package name per line, the packages of the
+     * desktop that were not present before its first install attempt, in install order. The
+     * file is written before anything is installed and a retry only adds names; an empty file
+     * means everything was there already, and no file means no install ran through the page.
+     */
+    public static final String MANIFEST_DIR = "var/lib/termux-launcher/desktops";
+
+    /** The manifest's file name in {@link #MANIFEST_DIR}. */
+    @NonNull
+    public static String manifestFileName(@NonNull Desktop desktop) {
+        return desktop.id + ".manifest";
+    }
 
     /** Every entry, offered or not. */
     @NonNull

@@ -16,6 +16,7 @@ import androidx.preference.PreferenceScreen;
 import com.termux.R;
 import com.termux.app.fragments.settings.MaterialPreferenceFragment;
 import com.termux.app.fragments.settings.SettingsLayoutUtils;
+import com.termux.app.wayland.LinuxDisplayBackend;
 import com.termux.app.x11.X11AppSettings;
 import com.termux.app.x11.X11AppSettingsStore;
 import com.termux.app.x11.X11Apps;
@@ -45,6 +46,10 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
     /** True when the app is a whole desktop session. */
     public static final String ARG_DESKTOP = "x11_app_desktop";
 
+    /** True when the app is a whole desktop made for Wayland. */
+    public static final String ARG_WAYLAND_DESKTOP = "x11_app_wayland_desktop";
+
+    static final String KEY_DISPLAY = "x11_app_display";
     static final String KEY_GRAPHICS = "x11_app_graphics";
     static final String KEY_TOUCH = "x11_app_touch_mode";
     static final String KEY_SCALE = "x11_app_scale";
@@ -86,6 +91,8 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
         store = new X11AppSettingsStore(context);
 
         boolean desktop = args != null && args.getBoolean(ARG_DESKTOP, false);
+        addDisplayRow(context, screen, desktop,
+            args != null && args.getBoolean(ARG_WAYLAND_DESKTOP, false));
         // A desktop in a container has no Graphics row; an ordinary app and a Termux desktop do.
         boolean graphics = !desktop || X11Apps.containerOf(appId).isEmpty();
         if (graphics) {
@@ -245,6 +252,56 @@ public final class X11AppPreferencesFragment extends MaterialPreferenceFragment 
             drawer.setValue(hidden ? HIDE : FOLLOW);
             drawer.setSummary(drawer.getEntry());
         }
+        refreshDisplayRow(context, screen, kept, id);
+    }
+
+    /**
+     * Display: Default, X11 Display or Wayland Display, where {@link LinuxDisplayBackend#choosable}
+     * says the choice can change a launch. Kept apart from the other rows: it has its own store
+     * call and listener.
+     */
+    private void addDisplayRow(@NonNull Context context, @NonNull PreferenceScreen screen,
+                               boolean desktop, boolean waylandDesktop) {
+        String id = appId;
+        X11AppSettingsStore kept = store;
+        if (id == null || kept == null || !LinuxDisplayBackend.choosable(
+                com.termux.BuildConfig.WAYLAND_DISPLAY, desktop, waylandDesktop,
+                !X11Apps.containerOf(id).isEmpty())) {
+            return;
+        }
+        ListPreference row = new ListPreference(context);
+        row.setKey(KEY_DISPLAY);
+        row.setPersistent(false);
+        row.setTitle(R.string.settings_x11_app_display_title);
+        row.setDialogTitle(R.string.settings_x11_app_display_title);
+        row.setEntryValues(new CharSequence[] {VALUE_DEFAULT, LinuxDisplayBackend.VALUE_X11,
+            LinuxDisplayBackend.VALUE_WAYLAND});
+        row.setOnPreferenceChangeListener((preference, newValue) -> {
+            kept.setDisplay(id, LinuxDisplayBackend.Choice.parse(String.valueOf(newValue)));
+            handler.post(this::refreshRows);
+            return true;
+        });
+        screen.addPreference(row);
+    }
+
+    private static final String VALUE_DEFAULT = "default";
+
+    private static void refreshDisplayRow(@NonNull Context context, @NonNull PreferenceScreen screen,
+                                          @NonNull X11AppSettingsStore kept, @NonNull String id) {
+        ListPreference row = screen.findPreference(KEY_DISPLAY);
+        if (row == null) return;
+        LinuxDisplayBackend.Choice choice = kept.display(id);
+        String x11 = context.getString(R.string.settings_linux_display_x11);
+        String wayland = context.getString(R.string.settings_linux_display_wayland);
+        // Default names the display it means now.
+        String meant = LinuxDisplayBackend.current(context) == LinuxDisplayBackend.WAYLAND
+            ? wayland : x11;
+        row.setEntries(new CharSequence[] {
+            context.getString(R.string.settings_x11_app_follow_named,
+                context.getString(R.string.settings_x11_app_display_default), meant),
+            x11, wayland});
+        row.setValue(choice.value == null ? VALUE_DEFAULT : choice.value);
+        row.setSummary(row.getEntry());
     }
 
     /** Follow, software, then each offered profile, and the app's own pick even if the phone no longer fits it. */

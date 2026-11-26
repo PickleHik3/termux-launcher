@@ -40,7 +40,8 @@ public class X11LinuxAppRunnerTest {
         String script = X11LinuxAppRunner.script(app("firefox --new-window"), ":1",
             Arrays.asList("MESA_LOADER_DRIVER_OVERRIDE=zink", "TU_DEBUG=noconform"));
 
-        assertEquals("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+        assertEquals("export DISPLAY=:1\n" + RuntimeFolderProfile.prefixLaunchBlock()
+            + "export MOZ_USE_XINPUT2=1\n"
             + "export MESA_LOADER_DRIVER_OVERRIDE=zink\n"
             + "export TU_DEBUG=noconform\n" + X11LinuxAppRunner.cursorBlock()
             + X11LinuxAppRunner.inputMethodBlock(":1")
@@ -297,20 +298,21 @@ public class X11LinuxAppRunnerTest {
 
         // Everything an app's script does, first and unchanged.
         // Then the inherited bus is dropped (#391) before the input method may hand one.
-        assertTrue(script.startsWith("export DISPLAY=:1\nexport MOZ_USE_XINPUT2=1\n"
+        assertTrue(script.startsWith("export DISPLAY=:1\n" + RuntimeFolderProfile.prefixLaunchBlock()
+            + "export MOZ_USE_XINPUT2=1\n"
             + X11LinuxAppRunner.DROP_INHERITED_BUS
             + X11LinuxAppRunner.inputMethodBlock(":1") + X11LinuxAppRunner.menuDirsBlock()
             + "cd \"$HOME\"\n"));
         // Then what only a desktop needs. The runtime directory stays the shells' own, so a
         // socket kept there (herdr-core's) is the same one inside the desktop and outside it.
-        assertFalse(script.contains("XDG_RUNTIME_DIR"));
+        assertFalse(script.contains("export XDG_RUNTIME_DIR=\""));
         assertTrue(script.contains(
             "export XDG_SESSION_TYPE=x11\n"
             + "export XDG_CURRENT_DESKTOP='XFCE'\n"));
         assertTrue("the desktop is what the shell becomes", script.endsWith("exec startxfce4\n"));
         // An app's own script exports none of it.
         assertFalse(X11LinuxAppRunner.script(app("firefox"), ":1", Collections.emptyList())
-            .contains("export XDG_"));
+            .contains("export XDG_SESSION_TYPE"));
     }
 
     @Test public void aDesktopThatNamesNoDesktopNamesIsToldNothingAboutItself() {
@@ -460,7 +462,8 @@ public class X11LinuxAppRunnerTest {
         assertTrue("and XDG_CURRENT_DESKTOP inside it",
             script.indexOf("XDG_CURRENT_DESKTOP") > login);
         // The whole body is one quoted word for the container's own shell.
-        assertTrue(script.contains("-- /bin/sh -c 'export XDG_RUNTIME_DIR="));
+        assertTrue(script.contains("-- /bin/sh -c 'export XDG_RUNTIME_DIR=\""
+            + RuntimeFolderProfile.CONTAINER_FOLDER + "\"\n"));
         assertTrue(script.endsWith("exec startxfce4\n'\n"));
     }
 
