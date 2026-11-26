@@ -182,4 +182,60 @@ public class LayersUnderOverviewTest {
         assertEquals(PAGES_REST, mPages.getAlpha(), 0f);
         assertEquals(CHROME_REST, mChrome.getAlpha(), 0f);
     }
+
+    // ---- The swipe past the first page (#356) -------------------------------------------------
+
+    private static final int WIDTH = 1000;
+
+    @Test public void aPullBringsOverviewInOverTheChromeAndOpensInPlace() {
+        com.termux.app.wall.OverviewEdge edge = mController.wallEdge();
+        assertTrue(edge.available());
+        assertTrue(edge.beginPull(WIDTH));
+        assertFalse("one pull at a time", edge.available());
+        OverviewView view = (OverviewView) mSheets.getChildAt(0);
+        assertEquals("out of sight beyond the first page", -WIDTH, view.getTranslationX(), 0f);
+        assertEquals(PAGES_REST, mPages.getAlpha(), 0f);
+        assertEquals(CHROME_REST, mChrome.getAlpha(), 0f);
+
+        edge.pose(250f, WIDTH);
+        assertEquals(-750f, view.getTranslationX(), 0.001f);
+        assertEquals("the page slides beside it, shown", PAGES_REST, mPages.getAlpha(), 0f);
+        assertEquals("the chrome goes as Overview covers it", CHROME_REST * 0.75f,
+            mChrome.getAlpha(), 0.001f);
+
+        edge.pose(WIDTH, WIDTH);
+        edge.end(true);
+        assertHidden();
+        assertEquals(0f, view.getTranslationX(), 0f);
+        mController.close();
+        assertAtRest();
+    }
+
+    @Test public void aPullThatSpringsBackLeavesNothingBehind() {
+        com.termux.app.wall.OverviewEdge edge = mController.wallEdge();
+        assertTrue(edge.beginPull(WIDTH));
+        edge.pose(300f, WIDTH);
+        edge.pose(0f, WIDTH);
+        edge.end(false);
+        assertAtRest();
+        assertTrue(edge.available());
+    }
+
+    @Test public void overviewClosedUnderThePullShowsTheLayersAtItsEnd() {
+        com.termux.app.wall.OverviewEdge edge = mController.wallEdge();
+        assertTrue(edge.beginPull(WIDTH));
+        edge.pose(400f, WIDTH);
+        mController.closeImmediately(OverlayRegistry.CloseReason.HOME);
+        edge.pose(500f, WIDTH);
+        edge.end(true);
+        assertAtRest();
+    }
+
+    @Test public void overviewOpenInPlaceIsNotAvailableToPull() {
+        mController.open();
+        assertFalse(mController.wallEdge().available());
+        assertFalse(mController.wallEdge().beginPull(WIDTH));
+        assertEquals(0f, mSheets.getChildAt(0).getTranslationX(), 0f);
+        assertHidden();
+    }
 }

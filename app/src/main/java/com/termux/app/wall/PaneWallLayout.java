@@ -315,6 +315,17 @@ public final class PaneWallLayout extends ViewGroup
     /** Where the slide under way started, from the current page's rest; NaN while none runs. */
     private float mSlideFromPx = Float.NaN;
     private boolean mDragging;
+    /** Overview before the first page (#356); null where nothing stands there. */
+    @Nullable private OverviewEdge mOverviewEdge;
+    /**
+     * The swipe between the first page and Overview under way: {@link OverviewEdgePolicy#PULL},
+     * {@link OverviewEdgePolicy#RETURN}, or 0 for none. While it runs the offset is the reveal.
+     */
+    private int mOverviewSwipe;
+    /** This drag already asked Overview to come in, so a refusal is asked once, not per move. */
+    private boolean mOverviewAsked;
+    /** The settle of a swipe to or from Overview; null while none runs. */
+    @Nullable private ValueAnimator mOverviewSettle;
     /** One page slid in from beside its place on top of wherever the wall puts it. */
     @Nullable private PageKind mNudgePage;
     private float mNudgePx;
@@ -1321,7 +1332,7 @@ public final class PaneWallLayout extends ViewGroup
 
     /** True while the wall is anywhere but at rest on its current page. */
     public boolean isMoving() {
-        return mDragging || mSliding;
+        return mDragging || mSliding || mOverviewSettle != null;
     }
 
     /** True while a finger is driving the wall. */
@@ -1666,6 +1677,7 @@ public final class PaneWallLayout extends ViewGroup
             settleStatusFoldNow();
             mDragging = true;
             mDragHeading = 0;
+            mOverviewAsked = false;
             stopSlide();
             stopNudge();
             if (mJumpFromId != NO_PAGE) {
@@ -1701,6 +1713,15 @@ public final class PaneWallLayout extends ViewGroup
                 mDragHeading = heading;
                 if (mListener != null) mListener.onWallDragHeading(mCurrent, heading);
             }
+            // Past the first page Overview comes in under the finger instead of the edge resisting.
+            if (mOverviewSwipe == 0 && !mOverviewAsked && dxPx > 0f && overviewBefore()) {
+                mOverviewAsked = true;
+                if (mOverviewEdge.beginPull(width)) mOverviewSwipe = OverviewEdgePolicy.PULL;
+            }
+            if (mOverviewSwipe != 0) {
+                poseOverviewSwipe(OverviewEdgePolicy.reveal(mOverviewSwipe, dxPx, width));
+                return;
+            }
             mOffsetPx = PaneWallPolicy.offsetForDrag(dxPx, width, canStep(-1), canStep(1));
             applyPagePositions();
         } finally {
@@ -1722,6 +1743,14 @@ public final class PaneWallLayout extends ViewGroup
         mDragging = false;
         // The finger let go: a sunk page springs back up as the wall carries it.
         riseSink();
+        if (mOverviewSwipe != 0) {
+            int width = getWidth();
+            boolean open = OverviewEdgePolicy.settlesOpen(mOverviewSwipe, mOffsetPx,
+                velocityPxPerSec, width, getResources().getDisplayMetrics().density, leadPx);
+            // The wall moved one to one with the finger, so the settle carries on at its speed.
+            settleOverviewSwipe(open, velocityPxPerSec);
+            return;
+        }
         boolean previousExists = canStep(-1);
         boolean nextExists = canStep(1);
         int steps = PaneWallPolicy.settle(mOffsetPx, velocityPxPerSec, getWidth(),
@@ -1762,6 +1791,124 @@ public final class PaneWallLayout extends ViewGroup
         riseSink();
         settleSteps(steps, 0f);
         return true;
+    }
+
+    // ---- Overview before the first page (#356) ------------------------------------------------
+
+    /**
+     * Overview stands before the first page: a drag past the first page brings it in under the
+     * finger instead of resisting, and {@link #beginOverviewReturn} swipes back from it. Null
+     * keeps the edge's resistance. The far end of the row always resists.
+     */
+    public void setOverviewEdge(@Nullable OverviewEdge edge) {
+        mOverviewEdge = edge;
+    }
+
+    /**
+     * Whether a drag toward the left from here would bring Overview in: the wall is on its first
+     * page (nothing to step to on the left, window or cell) and Overview may come now.
+     */
+    public boolean overviewBefore() {
+        return mOverviewEdge != null && mGesturesEnabled && !canStep(-1)
+            && mOverviewEdge.available();
+    }
+
+    /**
+     * The swipe from Overview back to the first page starts, with the first page one width to
+     * the right, under Overview. The wall must already rest on its first page; the finger then
+     * drives {@link #dragTo}, {@link #endDrag} and {@link #cancelDrag} as for any drag. False
+     * when the wall is moving, not on its first page, or has no Overview before it.
+     */
+    public boolean beginOverviewReturn() {
+        if (mOverviewEdge == null || !mGesturesEnabled || isMoving() || canStep(-1)) return false;
+        beginDrag(false, 0f);
+        if (!mDragging) return false;
+        mOverviewAsked = true;
+        mOverviewSwipe = OverviewEdgePolicy.RETURN;
+        poseOverviewSwipe(OverviewEdgePolicy.startReveal(mOverviewSwipe, getWidth()));
+        return true;
+    }
+
+    /** The first page and Overview at {@code revealPx}: moved only, nothing laid out. */
+    private void poseOverviewSwipe(float revealPx) {
+        mOffsetPx = OverviewEdgePolicy.pageOffset(revealPx);
+        applyPagePositions();
+        if (mOverviewEdge != null) mOverviewEdge.pose(revealPx, getWidth());
+    }
+
+    /** Where the settle under way lands: Overview open, or the first page. */
+    private boolean mOverviewSettleOpen;
+
+    /**
+     * Lands the swipe with Overview {@code open} or not, on the wall's page spring from where the
+     * finger left it, carrying on at {@code velocityPxPerSec}.
+     */
+    private void settleOverviewSwipe(boolean open, float velocityPxPerSec) {
+        final int width = getWidth();
+        final float rest = OverviewEdgePolicy.restReveal(open, width);
+        float from = mOffsetPx - rest;
+        if (mReducedMotion || width <= 0 || from == 0f) {
+            landOverviewSwipe(open, true);
+            return;
+        }
+        final SettleSpring spring = SettleSpring.page(from, velocityPxPerSec,
+            com.termux.app.AnimationSpeed.springTime(getContext()));
+        final long duration = spring.durationMs(SettleSpring.PAGE_REST_PX);
+        // As the wall's own slide: the animator is the ticker, the clock a bounded step per frame.
+        ValueAnimator settle = ValueAnimator.ofFloat(0f, 1f);
+        settle.setDuration(duration * SLIDE_STRETCH_CEILING);
+        settle.setInterpolator(null);
+        settle.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
+            private long mLastPlayTimeMs;
+            private long mElapsedMs;
+
+            @Override public void onAnimationUpdate(ValueAnimator animation) {
+                if (mOverviewSettle != animation) return;
+                long playTime = animation.getCurrentPlayTime();
+                mElapsedMs = WallSlideClock.advance(mElapsedMs, playTime - mLastPlayTimeMs);
+                mLastPlayTimeMs = playTime;
+                if (mElapsedMs >= duration) {
+                    landOverviewSwipe(open, true);
+                    return;
+                }
+                poseOverviewSwipe(rest + spring.displacementAt(mElapsedMs / 1000f));
+            }
+        });
+        settle.addListener(new AnimatorListenerAdapter() {
+            @Override public void onAnimationEnd(Animator animation) {
+                if (mOverviewSettle == animation) landOverviewSwipe(open, true);
+            }
+        });
+        mOverviewSettle = settle;
+        mOverviewSettleOpen = open;
+        settle.start();
+    }
+
+    /** A settle to or from Overview still running lands where it was going, now. */
+    private void finishOverviewSettle() {
+        if (mOverviewSettle != null) landOverviewSwipe(mOverviewSettleOpen, true);
+    }
+
+    /**
+     * The swipe ends with Overview {@code open} or gone. Overview is told first, so an opening
+     * one hides the layers under it before the page goes back to its rest under them.
+     *
+     * @param settle report the rest as any settle does; false where another move takes over
+     */
+    private void landOverviewSwipe(boolean open, boolean settle) {
+        ValueAnimator running = mOverviewSettle;
+        mOverviewSettle = null;
+        if (running != null) running.cancel();
+        if (mOverviewSwipe == 0) return;
+        mOverviewSwipe = 0;
+        int width = getWidth();
+        if (mOverviewEdge != null) {
+            mOverviewEdge.pose(OverviewEdgePolicy.restReveal(open, width), width);
+            mOverviewEdge.end(open);
+        }
+        mOffsetPx = 0f;
+        if (settle && !mDragging) settleImmediately();
+        else applyPagePositions();
     }
 
     /** Whether {@link #pageOnce} has a page to land on {@code steps} away. */
@@ -1827,6 +1974,11 @@ public final class PaneWallLayout extends ViewGroup
         if (!mDragging) return;
         mDragging = false;
         riseSink();
+        if (mOverviewSwipe != 0) {
+            // Back where the swipe started: Overview out of sight, or Overview still open.
+            settleOverviewSwipe(mOverviewSwipe == OverviewEdgePolicy.RETURN, 0f);
+            return;
+        }
         if (mReducedMotion) settleImmediately();
         else startSlide(0f);
     }
@@ -1839,6 +1991,10 @@ public final class PaneWallLayout extends ViewGroup
         if (!mDragging) return;
         mDragging = false;
         riseSink();
+        // Whoever takes over finds the wall at a rest: Overview lands where the swipe started.
+        if (mOverviewSwipe != 0) {
+            landOverviewSwipe(mOverviewSwipe == OverviewEdgePolicy.RETURN, false);
+        }
         // The wall's own border drag is a claimant like the others: the rest of its finger's
         // travel is swallowed and moves nothing.
         mBorderDrag.abandon();
@@ -3584,6 +3740,7 @@ public final class PaneWallLayout extends ViewGroup
     }
 
     private void stopSlide() {
+        finishOverviewSettle();
         mSliding = false;
         // The grabbers fade in from the first frame drawn at rest: make sure one follows a landing
         // whose last offset frame was already drawn (also the fail-safe for a cancelled slide).
