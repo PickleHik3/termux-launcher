@@ -43,7 +43,7 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     static final long UNDO_MS = 5000L;
 
     /** The launcher's side: what the wall is, how it travels, and the look. */
-    public interface Host {
+    public interface Host extends TextInput {
         @NonNull PageBarModel wall();
         @NonNull PageSwitchTargets.Navigator navigator();
         @NonNull OverviewLook look();
@@ -82,6 +82,23 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         void moveWallPage(int pageId, int refPageId, boolean after);
         /** The Workspace's window at row place {@code from} moves to place {@code to}. */
         void moveWindow(int from, int to);
+        /**
+         * What runs in front in {@code card}'s window where the terminal already knows it (a
+         * cached reading, never a new one); null for none.
+         */
+        @Nullable String commandOf(@NonNull OverviewModel.Card card);
+    }
+
+    /** The keyboard for Go to's field. */
+    public interface TextInput {
+        /**
+         * Go to's {@code field} took focus: the keyboard comes up for it the way the drawer's
+         * search brings it (the system IME, after {@code onSystemImeRequested()}; the in-app
+         * keyboard yields).
+         */
+        void beginTextInput(@NonNull android.widget.EditText field);
+        /** The field is done with the keyboard: it goes, and the in-app keyboard is released. */
+        void endTextInput(@NonNull android.widget.EditText field);
     }
 
     /** A removal waiting behind the Undo bar. */
@@ -104,6 +121,8 @@ public final class OverviewController implements OverlayRegistry.Overlay {
     @Nullable private Pending mPending;
     @Nullable private AnchoredMenu mMenu;
     private int mLifted = -1;
+    /** Go to's field holds the keyboard (begun, not yet ended). */
+    private boolean mTyping;
     /** The strip's cards as the drop policy reads them; built when a drag starts. */
     @NonNull private final List<OverviewDropPolicy.Stop> mStops = new ArrayList<>();
     /** The Assistant card's facts once read, kept so a rebuilt strip draws them again. */
@@ -125,6 +144,19 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         if (mView != null) return;
         OverviewView view = new OverviewView(mActivity, mHost.look(), this::choose, this::close);
         view.setOnHold(this::onHold);
+        view.setGoToHost(new OverviewView.GoToHost() {
+            @Override public void queryChanged(@NonNull String text) { showMatches(text); }
+            @Override public void go(int card) { goTo(card); }
+            @Override public void fieldFocus(@NonNull android.widget.EditText field, boolean focused) {
+                if (focused && !mTyping) {
+                    mTyping = true;
+                    mHost.beginTextInput(field);
+                } else if (!focused && mTyping) {
+                    mTyping = false;
+                    mHost.endTextInput(field);
+                }
+            }
+        });
         view.setDragHost(new OverviewView.DragHost() {
             @Override public boolean start(int index) { return startDrag(index); }
             @Override public int landing(int from, int gap) {
@@ -184,6 +216,37 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         mModel = OverviewModel.of(mHost.wall(), mHost.homePageId());
         view.apply(mModel, factsFor(mModel), true);
         if (mAssistantFacts != null) view.setAssistantFacts(mAssistantFacts);
+        // A rename or a move while the list is up: the matches are read again.
+        if (view.hasQuery()) showMatches(view.query());
+    }
+
+    // ---- Go to -------------------------------------------------------------------------------
+
+    /** The list of matches for {@code text} replaces the strip; blank brings the strip back. */
+    private void showMatches(@NonNull String text) {
+        OverviewView view = mView;
+        OverviewModel model = mModel;
+        if (view == null || model == null) return;
+        if (text.trim().isEmpty()) {
+            view.showMatches(null);
+            return;
+        }
+        List<OverviewModel.Card> cards = model.cards();
+        List<OverviewGoTo.Entry> entries = new ArrayList<>(cards.size());
+        for (int i = 0; i < cards.size(); i++) {
+            // A card standing aside for Undo is not a place to go to.
+            if (mPending != null && mPending.index == i) continue;
+            OverviewModel.Card card = cards.get(i);
+            String command = card.kind == PageKind.TERMINAL ? mHost.commandOf(card) : null;
+            entries.add(new OverviewGoTo.Entry(i, card.kind, card.label, command));
+        }
+        view.showMatches(OverviewGoTo.match(entries, text));
+    }
+
+    private void goTo(int index) {
+        OverviewModel model = mModel;
+        if (model == null || index < 0 || index >= model.cards().size()) return;
+        choose(model.cards().get(index));
     }
 
     // ---- Tap ---------------------------------------------------------------------------------
@@ -423,6 +486,10 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         OverviewView view = mView;
         if (view == null) return;
         dismissMenu();
+        if (mTyping) {
+            mTyping = false;
+            mHost.endTextInput(view.field());
+        }
         // Closing Overview commits a removal still waiting.
         commitPending(false);
         mView = null;
@@ -438,6 +505,11 @@ public final class OverviewController implements OverlayRegistry.Overlay {
         // A menu closes first; the next Back closes Overview.
         if (mMenu != null) {
             dismissMenu();
+            return true;
+        }
+        // Text in Go to clears first, and the strip comes back.
+        if (mView.hasQuery()) {
+            mView.clearQuery();
             return true;
         }
         close();

@@ -15,6 +15,7 @@ import android.widget.HorizontalScrollView;
 import android.widget.LinearLayout;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.termux.R;
 import com.termux.app.chrome.OverlayRegistry;
@@ -88,6 +89,11 @@ public class LayersUnderOverviewTest {
             @Override public void remove(@NonNull OverviewModel.Card card) { }
             @Override public void moveWallPage(int pageId, int refPageId, boolean after) { }
             @Override public void moveWindow(int from, int to) { }
+            @Override @Nullable public String commandOf(@NonNull OverviewModel.Card card) {
+                return null;
+            }
+            @Override public void beginTextInput(@NonNull android.widget.EditText field) { }
+            @Override public void endTextInput(@NonNull android.widget.EditText field) { }
             @Override @NonNull public OverviewLook look() {
                 return new OverviewLook(new ColorDrawable(0x99000000), 0xFF000000, 0xFF444444,
                     0xFF0000FF);

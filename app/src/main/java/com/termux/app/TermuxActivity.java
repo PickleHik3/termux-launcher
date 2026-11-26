@@ -33071,6 +33071,16 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
                     @Override public void moveWindow(int from, int to) {
                         TermuxActivity.this.moveWindow(from, to);
                     }
+                    @Override @Nullable public String commandOf(
+                            @NonNull com.termux.app.overview.OverviewModel.Card card) {
+                        return overviewCardCommand(card);
+                    }
+                    @Override public void beginTextInput(@NonNull EditText field) {
+                        beginOverviewTextInput(field);
+                    }
+                    @Override public void endTextInput(@NonNull EditText field) {
+                        endOverviewTextInput(field);
+                    }
                     @Override @NonNull public com.termux.app.overview.OverviewLook look() {
                         // A sheet: Global's glass at the sheets' opacity floor (ADR 0031).
                         return new com.termux.app.overview.OverviewLook(
@@ -33203,6 +33213,45 @@ public final class TermuxActivity extends AppCompatActivity implements ServiceCo
             }
             return pages.move(pageId, to);
         });
+    }
+
+    /**
+     * What runs in front in an Overview window card, from the resolver's last reading; null while
+     * the shell is idle or nothing was read yet. Reads the cache only.
+     */
+    @Nullable
+    private String overviewCardCommand(@NonNull com.termux.app.overview.OverviewModel.Card card) {
+        com.termux.app.terminal.TerminalPaneController.Window window = overviewWindow(card);
+        if (window == null || mPaneController == null || mWindowForegroundResolver == null) return null;
+        TerminalSession session = mPaneController.windowActiveSession(window);
+        if (session == null || session.getPid() <= 0) return null;
+        com.termux.app.statusbar.WindowForegroundResolver.ForegroundInfo info =
+            mWindowForegroundResolver.get(session.getPid());
+        return info == null || info.idle ? null : glyphProcessFor(info);
+    }
+
+    /**
+     * Overview's Go to field took focus: the drawer search's way of bringing the keyboard. The
+     * in-app keyboard yields where it stands, the system IME is requested first, then shown.
+     */
+    private void beginOverviewTextInput(@NonNull EditText field) {
+        if (mInAppKeyboard != null && mInAppKeyboard.isEnabled()) {
+            mInAppKeyboard.beginExternalTextInput(true);
+        }
+        onSystemImeRequested();
+        field.post(() -> {
+            if (!isSessionsPanelShowing()) return;
+            if (!field.hasFocus()) field.requestFocus();
+            KeyboardUtils.showSoftKeyboard(TermuxActivity.this, field);
+        });
+    }
+
+    private void endOverviewTextInput(@NonNull EditText field) {
+        if (getWindow() != null) {
+            WindowCompat.getInsetsController(getWindow(), field).hide(Type.ime());
+        }
+        if (field.hasFocus()) field.clearFocus();
+        if (mInAppKeyboard != null) mInAppKeyboard.endExternalTextInput();
     }
 
     /** Whether Overview, which the old sessions doors open now, is on screen. */

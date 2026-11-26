@@ -4,15 +4,22 @@ import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.Canvas;
 import android.graphics.drawable.GradientDrawable;
+import android.text.Editable;
+import android.text.InputType;
+import android.text.TextWatcher;
+import android.view.inputmethod.EditorInfo;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.KeyEvent;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewGroup;
+import android.widget.EditText;
 import android.widget.FrameLayout;
 import android.widget.HorizontalScrollView;
 import android.widget.ImageView;
+import android.widget.ScrollView;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
@@ -56,6 +63,16 @@ final class OverviewView extends FrameLayout {
         void released(int index);
     }
 
+    /** What Go to asks of Overview; the view only shows the field and the list. */
+    interface GoToHost {
+        /** The field's text changed. */
+        void queryChanged(@NonNull String text);
+        /** Enter, or a match tapped: go to the card at strip position {@code card}. */
+        void go(int card);
+        /** The field took or lost focus: the keyboard follows it. */
+        void fieldFocus(@NonNull EditText field, boolean focused);
+    }
+
     @NonNull private final OverviewLook mLook;
     /** A card was tapped: Overview closes, and the wall goes to its page. */
     @NonNull private final Consumer<OverviewModel.Card> mOnCard;
@@ -72,6 +89,14 @@ final class OverviewView extends FrameLayout {
     /** Where the undo bar sits above the bottom edge: the system bar's height. */
     private int mBottomInset;
     @Nullable private DragHost mDragHost;
+    @Nullable private GoToHost mGoTo;
+    @NonNull private final EditText mField;
+    @NonNull private final ScrollView mResults;
+    @NonNull private final LinearLayout mResultRows;
+    /** The strip position the first match goes to; -1 while no match is shown. */
+    private int mTopMatch = -1;
+    /** The bar's room above the bottom edge: the field's block. */
+    private int mFieldBlock;
     /** The card of the hold in progress and where its touch began; a drag follows from it. */
     @Nullable private View mHeldView;
     private int mHeldIndex = -1;
@@ -137,20 +162,208 @@ final class OverviewView extends FrameLayout {
         mContent.addView(mScroll, new LinearLayout.LayoutParams(
             ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
+        mResults = new ScrollView(context);
+        mResults.setVisibility(GONE);
+        mResultRows = new LinearLayout(context);
+        mResultRows.setOrientation(LinearLayout.VERTICAL);
+        mResultRows.setPadding(mGutter, 0, mGutter, 0);
+        mResults.addView(mResultRows, new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        mContent.addView(mResults, new LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
+        mField = buildField(context);
+
         // Clear the system bars and the cutout; the strip itself never reaches the bottom edge.
+        // The field and the undo bar stand above the bottom bar, or the keyboard when it is up.
         ViewCompat.setOnApplyWindowInsetsListener(this, (v, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars()
                 | WindowInsetsCompat.Type.displayCutout());
+            int ime = insets.isVisible(WindowInsetsCompat.Type.ime())
+                ? insets.getInsets(WindowInsetsCompat.Type.ime()).bottom : 0;
+            int bottom = Math.max(bars.bottom, ime);
+            // The results end above the field.
+            int below = bottom + mFieldBlock;
+            if (mResults.getPaddingBottom() != below) mResults.setPadding(0, 0, 0, below);
             // Compared first: an equal padding would still ask for a layout.
             if (mContent.getPaddingLeft() != bars.left || mContent.getPaddingTop() != bars.top
                     || mContent.getPaddingRight() != bars.right || mContent.getPaddingBottom() != 0)
                 mContent.setPadding(bars.left, bars.top, bars.right, 0);
-            if (mBottomInset != bars.bottom) {
-                mBottomInset = bars.bottom;
+            if (mBottomInset != bottom) {
+                mBottomInset = bottom;
                 placeUndoBar();
+                placeField();
             }
             return insets;
         });
+    }
+
+    /** The one field, over the bottom edge where the thumb is; not focused until tapped. */
+    @NonNull
+    private EditText buildField(@NonNull Context context) {
+        EditText field = new EditText(context);
+        field.setHint(R.string.overview_goto_hint);
+        field.setHintTextColor(mLook.onSurfaceVariant);
+        field.setTextColor(mLook.onSurface);
+        field.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        field.setSingleLine(true);
+        field.setMinWidth(0);
+        field.setImeOptions(EditorInfo.IME_ACTION_GO | EditorInfo.IME_FLAG_NO_EXTRACT_UI);
+        field.setInputType(InputType.TYPE_CLASS_TEXT | InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS);
+        field.setFocusableInTouchMode(true);
+        // The keyboard is shown by the activity's seam when the field takes focus, not by the view.
+        field.setShowSoftInputOnFocus(false);
+        GradientDrawable plate = new GradientDrawable();
+        plate.setCornerRadius(resF(R.dimen.overview_card_corner));
+        plate.setColor(OverviewLook.cardFace(mLook.onSurface));
+        field.setBackground(plate);
+        int pad = mGutter;
+        field.setPadding(pad, 0, pad, 0);
+        field.setGravity(Gravity.CENTER_VERTICAL);
+        mFieldBlock = res(R.dimen.overview_field_height) + res(R.dimen.overview_gutter);
+        field.addTextChangedListener(new TextWatcher() {
+            @Override public void beforeTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void onTextChanged(CharSequence s, int a, int b, int c) { }
+            @Override public void afterTextChanged(Editable s) {
+                if (mGoTo != null) mGoTo.queryChanged(s.toString());
+            }
+        });
+        field.setOnFocusChangeListener((v, focused) -> {
+            if (mGoTo != null) mGoTo.fieldFocus(field, focused);
+        });
+        field.setOnEditorActionListener((v, action, event) -> {
+            if (mGoTo != null && mTopMatch >= 0) mGoTo.go(mTopMatch);
+            return true;
+        });
+        field.setOnKeyListener((v, keyCode, event) -> {
+            if (keyCode != KeyEvent.KEYCODE_ENTER) return false;
+            if (event.getAction() == KeyEvent.ACTION_UP && mGoTo != null && mTopMatch >= 0) {
+                mGoTo.go(mTopMatch);
+            }
+            return true;
+        });
+        FrameLayout.LayoutParams params = new FrameLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, res(R.dimen.overview_field_height),
+            Gravity.BOTTOM);
+        addView(field, params);
+        return field;
+    }
+
+    private void placeField() {
+        FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) mField.getLayoutParams();
+        int side = res(R.dimen.overview_gutter);
+        int bottom = mBottomInset + side;
+        if (p.leftMargin != side || p.rightMargin != side || p.bottomMargin != bottom) {
+            p.setMargins(side, 0, side, bottom);
+            mField.setLayoutParams(p);
+        }
+    }
+
+    void setGoToHost(@Nullable GoToHost host) {
+        mGoTo = host;
+    }
+
+    /** The field's text. */
+    @NonNull
+    String query() {
+        return mField.getText().toString();
+    }
+
+    @NonNull
+    EditText field() {
+        return mField;
+    }
+
+    boolean hasQuery() {
+        return mField.length() > 0;
+    }
+
+    /** Empties the field; the strip comes back through the text change. */
+    void clearQuery() {
+        mField.setText("");
+    }
+
+    /** The field takes focus, which brings the keyboard. */
+    void focusField() {
+        mField.requestFocus();
+    }
+
+    /** Matches replace the strip; {@code null} brings the strip back. */
+    void showMatches(@Nullable List<OverviewGoTo.Match> matches) {
+        if (matches == null) {
+            mTopMatch = -1;
+            mResultRows.removeAllViews();
+            if (mResults.getVisibility() != GONE) mResults.setVisibility(GONE);
+            if (mScroll.getVisibility() != VISIBLE) mScroll.setVisibility(VISIBLE);
+            return;
+        }
+        mResultRows.removeAllViews();
+        Context context = getContext();
+        mTopMatch = matches.isEmpty() ? -1 : matches.get(0).entry.card;
+        if (matches.isEmpty()) {
+            TextView none = new TextView(context);
+            none.setText(R.string.overview_goto_empty);
+            none.setTextColor(mLook.onSurfaceVariant);
+            none.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            mResultRows.addView(none);
+        }
+        for (int i = 0; i < matches.size(); i++) {
+            mResultRows.addView(buildMatch(matches.get(i), i == 0));
+        }
+        if (mScroll.getVisibility() != GONE) mScroll.setVisibility(GONE);
+        if (mResults.getVisibility() != VISIBLE) mResults.setVisibility(VISIBLE);
+    }
+
+    @NonNull
+    private View buildMatch(@NonNull OverviewGoTo.Match match, boolean top) {
+        Context context = getContext();
+        LinearLayout row = new LinearLayout(context);
+        row.setOrientation(LinearLayout.HORIZONTAL);
+        row.setGravity(Gravity.CENTER_VERTICAL);
+        row.setMinimumHeight(res(R.dimen.overview_close_target));
+        int pad = res(R.dimen.overview_glyph_gap);
+        row.setPadding(pad * 2, 0, pad * 2, 0);
+        if (top) {
+            // The one Enter goes to.
+            GradientDrawable mark = new GradientDrawable();
+            mark.setCornerRadius(resF(R.dimen.overview_card_corner));
+            mark.setColor((mLook.accent & 0x00FFFFFF) | (0x33 << 24));
+            row.setBackground(mark);
+        }
+        row.setClickable(true);
+        row.setFocusable(true);
+        final int card = match.entry.card;
+        row.setOnClickListener(v -> {
+            if (mGoTo != null) mGoTo.go(card);
+        });
+        int glyph = res(R.dimen.overview_glyph);
+        row.addView(new GlyphView(context, match.entry.kind, top ? mLook.accent : mLook.onSurfaceVariant),
+            new LinearLayout.LayoutParams(glyph, glyph));
+        TextView name = new TextView(context);
+        name.setText(match.entry.name);
+        name.setTextColor(top ? mLook.accent : mLook.onSurface);
+        name.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+        name.setSingleLine(true);
+        name.setEllipsize(android.text.TextUtils.TruncateAt.END);
+        name.setMinWidth(0);
+        LinearLayout.LayoutParams nameParams = new LinearLayout.LayoutParams(0,
+            ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
+        nameParams.setMarginStart(pad);
+        row.addView(name, nameParams);
+        if (match.entry.command != null) {
+            TextView command = new TextView(context);
+            command.setText(match.entry.command);
+            command.setTextColor(mLook.onSurfaceVariant);
+            command.setTextSize(TypedValue.COMPLEX_UNIT_PX, resF(R.dimen.overview_label_text));
+            command.setSingleLine(true);
+            command.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            command.setMinWidth(0);
+            LinearLayout.LayoutParams commandParams = new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            commandParams.setMarginStart(pad);
+            row.addView(command, commandParams);
+        }
+        return row;
     }
 
     @NonNull
@@ -304,7 +517,8 @@ final class OverviewView extends FrameLayout {
         if (mUndoBar == null) return;
         FrameLayout.LayoutParams p = (FrameLayout.LayoutParams) mUndoBar.getLayoutParams();
         int side = res(R.dimen.overview_gutter);
-        int bottom = mBottomInset + side;
+        // Above the field.
+        int bottom = mBottomInset + side + mFieldBlock;
         if (p.leftMargin != side || p.rightMargin != side || p.bottomMargin != bottom) {
             p.setMargins(side, 0, side, bottom);
             mUndoBar.setLayoutParams(p);

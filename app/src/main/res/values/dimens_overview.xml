@@ -34,4 +34,6 @@
     <dimen name="overview_drag_bar">4dp</dimen>
     <dimen name="overview_drag_edge">56dp</dimen>
     <dimen name="overview_drag_scroll_speed">480dp</dimen>
+    <!-- Go to's field, over the bottom edge. -->
+    <dimen name="overview_field_height">48dp</dimen>
 </resources>
