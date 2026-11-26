@@ -105,6 +105,21 @@ final class OverviewView extends FrameLayout {
     @Nullable private OverviewGoTo.Entry mTopMatch;
     /** A session card was tapped (#357). */
     @Nullable private Consumer<OverviewModel.Session> mOnSession;
+    /** A row's + was tapped (#358): the strip position of its Workspace card. */
+    @Nullable private Consumer<Integer> mOnSessionAdd;
+    /** A session card was held (#358): the session and its view, which the menu stands against. */
+    @Nullable private java.util.function.BiConsumer<OverviewModel.Session, View> mOnSessionHold;
+    @Nullable private SessionDragHost mSessionDragHost;
+    /** The session card of the hold in progress, its session and its row's strip. */
+    @Nullable private View mSHeld;
+    @Nullable private OverviewModel.Session mSHeldSession;
+    @Nullable private LinearLayout mSHeldStrip;
+    private boolean mSDragging;
+    private float mSDownX;
+    private float mSDownY;
+    private int mSDownScroll;
+    private int mSGap = -1;
+    @Nullable private View mSBar;
     /**
      * The session rows under the wall (#357): stood at the bottom, within the thumb's reach, and
      * pushed up as rows are added; with more than fit they scroll up and down on their own.
@@ -707,6 +722,48 @@ final class OverviewView extends FrameLayout {
         applyRows(model.rows(), sessionFacts, keepScroll);
     }
 
+    /** The drag of a held session card within its row (#358). */
+    interface SessionDragHost {
+        /** The held card starts to move; false refuses (it stays a hold only). */
+        boolean start(@NonNull OverviewModel.Session session);
+        /** The gap the card would land in, or {@link OverviewDropPolicy#NONE}. */
+        int landing(@NonNull OverviewModel.Session session, int count, int gap);
+        /** The card was let go at {@code gap}, one of {@code count}. */
+        void drop(@NonNull OverviewModel.Session session, int count, int gap);
+        /** The hold ended without a drag. */
+        void released();
+    }
+
+    /** A row's + was tapped; the argument is its Workspace card's strip position. */
+    void setOnSessionAdd(@Nullable Consumer<Integer> onSessionAdd) {
+        mOnSessionAdd = onSessionAdd;
+    }
+
+    void setOnSessionHold(@Nullable java.util.function.BiConsumer<OverviewModel.Session, View> hold) {
+        mOnSessionHold = hold;
+    }
+
+    void setSessionDragHost(@Nullable SessionDragHost host) {
+        mSessionDragHost = host;
+    }
+
+    /** A held session card lifts while its menu is up, or sets back down. */
+    void setSessionLifted(@Nullable View card, boolean lifted) {
+        if (card == null) return;
+        float scale = lifted ? LIFT_SCALE : 1f;
+        card.animate().cancel();
+        card.animate().scaleX(scale).scaleY(scale).setDuration(120L).start();
+    }
+
+    /** The screen box of a session card; false when it is not laid out. */
+    boolean viewBoundsOnScreen(@NonNull View card, @NonNull android.graphics.Rect out) {
+        if (card.getWidth() == 0) return false;
+        int[] at = new int[2];
+        card.getLocationOnScreen(at);
+        out.set(at[0], at[1], at[0] + card.getWidth(), at[1] + card.getHeight());
+        return true;
+    }
+
     /** A session card was tapped. */
     void setOnSession(@Nullable Consumer<OverviewModel.Session> onSession) {
         mOnSession = onSession;
@@ -738,7 +795,26 @@ final class OverviewView extends FrameLayout {
             title.setMinWidth(0);
             // The connector comes in from the start: the title stands clear of its end.
             title.setPadding(mGutter + res(R.dimen.overview_glyph), 0, mGutter, 0);
-            block.addView(title, new LinearLayout.LayoutParams(
+            // The row's own + adds a session to this Workspace (#358), at the title's end.
+            LinearLayout head = new LinearLayout(context);
+            head.setOrientation(LinearLayout.HORIZONTAL);
+            head.setGravity(Gravity.CENTER_VERTICAL);
+            head.addView(title, new LinearLayout.LayoutParams(0,
+                ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            ImageView add = new ImageView(context);
+            add.setImageResource(R.drawable.ic_rl_add);
+            add.setColorFilter(mLook.onSurface);
+            add.setScaleType(ImageView.ScaleType.CENTER);
+            add.setContentDescription(context.getString(R.string.overview_menu_new_session));
+            final int card = row.card;
+            add.setOnClickListener(v -> {
+                if (mOnSessionAdd != null) mOnSessionAdd.accept(card);
+            });
+            int target = res(R.dimen.overview_close_target);
+            LinearLayout.LayoutParams addParams = new LinearLayout.LayoutParams(target, target);
+            addParams.setMarginEnd(mGutter / 2);
+            head.addView(add, addParams);
+            block.addView(head, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
             HorizontalScrollView scroller = new HorizontalScrollView(context);
@@ -796,6 +872,17 @@ final class OverviewView extends FrameLayout {
         item.setOnClickListener(v -> {
             if (mOnSession != null) mOnSession.accept(session);
         });
+        item.setOnLongClickListener(v -> {
+            if (mOnSessionHold == null || !(v.getParent() instanceof LinearLayout)) return false;
+            mSHeld = v;
+            mSHeldSession = session;
+            mSHeldStrip = (LinearLayout) v.getParent();
+            // The row and the rows' scroller must not take the stream from a card that may be dragged.
+            v.getParent().requestDisallowInterceptTouchEvent(true);
+            mOnSessionHold.accept(session, v);
+            return true;
+        });
+        item.setOnTouchListener(this::onSessionTouch);
 
         CardView block = new CardView(context, mLook.onSurface, mLook.accent);
         block.setFacts(facts);
@@ -1115,6 +1202,7 @@ final class OverviewView extends FrameLayout {
     /** Drops every card and the facts it drew from; Overview is closing. */
     void release() {
         if (mDragging) endDrag();
+        if (mSDragging) endSessionDrag();
         hideUndo();
         mStrip.removeAllViews();
         mPictures.clear();
@@ -1356,6 +1444,139 @@ final class OverviewView extends FrameLayout {
         if (mDropBar != null) mDropBar.setVisibility(GONE);
         mHeldView = null;
         mHeldIndex = -1;
+    }
+
+    // ---- Drag of a session card within its row (#358) -----------------------------------------
+
+    @Nullable
+    private HorizontalScrollView scrollerOf(@Nullable LinearLayout strip) {
+        return strip != null && strip.getParent() instanceof HorizontalScrollView
+            ? (HorizontalScrollView) strip.getParent() : null;
+    }
+
+    private boolean onSessionTouch(@NonNull View v, @NonNull MotionEvent ev) {
+        switch (ev.getActionMasked()) {
+            case MotionEvent.ACTION_DOWN:
+                mSHeld = null;
+                mSHeldSession = null;
+                mSDownX = ev.getRawX();
+                mSDownY = ev.getRawY();
+                HorizontalScrollView down = v.getParent() instanceof LinearLayout
+                    ? scrollerOf((LinearLayout) v.getParent()) : null;
+                mSDownScroll = down == null ? 0 : down.getScrollX();
+                return false;
+            case MotionEvent.ACTION_MOVE:
+                if (mSDragging) {
+                    mRawX = ev.getRawX();
+                    mRawY = ev.getRawY();
+                    updateSessionDrag();
+                    return true;
+                }
+                if (mSHeld == v && mSessionDragHost != null && mSHeldSession != null) {
+                    float slop = ViewConfiguration.get(getContext()).getScaledTouchSlop();
+                    if (Math.abs(ev.getRawX() - mSDownX) > slop
+                            || Math.abs(ev.getRawY() - mSDownY) > slop) {
+                        if (mSessionDragHost.start(mSHeldSession)) {
+                            beginSessionDrag(ev);
+                            return true;
+                        }
+                        // Refused: the hold goes on as a hold only.
+                        mSHeld = null;
+                    }
+                }
+                return false;
+            case MotionEvent.ACTION_UP:
+            case MotionEvent.ACTION_CANCEL:
+                if (mSDragging) {
+                    boolean up = ev.getActionMasked() == MotionEvent.ACTION_UP;
+                    OverviewModel.Session session = mSHeldSession;
+                    LinearLayout strip = mSHeldStrip;
+                    int gap = mSGap;
+                    endSessionDrag();
+                    if (up && session != null && strip != null && mSessionDragHost != null) {
+                        mSessionDragHost.drop(session, strip.getChildCount(), gap);
+                    }
+                    return true;
+                }
+                if (mSHeld == v && mSessionDragHost != null) mSessionDragHost.released();
+                mSHeld = null;
+                mSHeldSession = null;
+                return false;
+            default:
+                return false;
+        }
+    }
+
+    private void beginSessionDrag(@NonNull MotionEvent ev) {
+        mSDragging = true;
+        mRawX = ev.getRawX();
+        mRawY = ev.getRawY();
+        mSGap = -1;
+        setSessionLifted(mSHeld, true);
+        if (mSBar == null) {
+            View bar = new View(getContext());
+            GradientDrawable shape = new GradientDrawable();
+            shape.setCornerRadius(resF(R.dimen.overview_drag_bar) / 2f);
+            shape.setColor(mLook.accent);
+            bar.setBackground(shape);
+            bar.setVisibility(GONE);
+            addView(bar, new LayoutParams(res(R.dimen.overview_drag_bar),
+                res(R.dimen.overview_session_card_height), Gravity.TOP | Gravity.START));
+            mSBar = bar;
+        }
+        updateSessionDrag();
+    }
+
+    /** The held session follows the finger, the bar shows the gap it would land in. */
+    private void updateSessionDrag() {
+        View held = mSHeld;
+        LinearLayout strip = mSHeldStrip;
+        OverviewModel.Session session = mSHeldSession;
+        if (held == null || strip == null || session == null) return;
+        HorizontalScrollView scroller = scrollerOf(strip);
+        int scrolled = scroller == null ? 0 : scroller.getScrollX();
+        held.setTranslationX(mRawX - mSDownX + (scrolled - mSDownScroll));
+        held.setTranslationY(mRawY - mSDownY);
+        strip.getLocationOnScreen(mAt);
+        int contentX = Math.round(mRawX) - mAt[0];
+        int n = strip.getChildCount();
+        int gap = 0;
+        for (int i = 0; i < n; i++) {
+            View card = strip.getChildAt(i);
+            if (card.getLeft() + card.getWidth() / 2 < contentX) gap = i + 1;
+        }
+        mSGap = gap;
+        int landing = mSessionDragHost == null ? OverviewDropPolicy.NONE
+            : mSessionDragHost.landing(session, n, gap);
+        View bar = mSBar;
+        if (bar == null) return;
+        if (landing < 0 || n == 0) {
+            if (bar.getVisibility() != GONE) bar.setVisibility(GONE);
+            return;
+        }
+        int half = res(R.dimen.overview_card_gap) / 2;
+        int x = landing < n ? strip.getChildAt(landing).getLeft() - half
+            : strip.getChildAt(n - 1).getRight() + half;
+        getLocationOnScreen(mHere);
+        bar.setTranslationX(x + mAt[0] - mHere[0] - bar.getLayoutParams().width / 2f);
+        bar.setTranslationY(mAt[1] - mHere[1]);
+        if (bar.getVisibility() != VISIBLE) bar.setVisibility(VISIBLE);
+    }
+
+    private void endSessionDrag() {
+        mSDragging = false;
+        View held = mSHeld;
+        if (held != null) {
+            held.animate().cancel();
+            held.setTranslationX(0f);
+            held.setTranslationY(0f);
+            held.setScaleX(1f);
+            held.setScaleY(1f);
+        }
+        if (mSBar != null) mSBar.setVisibility(GONE);
+        mSHeld = null;
+        mSHeldSession = null;
+        mSHeldStrip = null;
     }
 
     /** One kind glyph, drawn by the page bar's painter; allocates nothing in onDraw. */

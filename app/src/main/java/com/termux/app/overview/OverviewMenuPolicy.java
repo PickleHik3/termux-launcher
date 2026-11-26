@@ -72,6 +72,12 @@ public final class OverviewMenuPolicy {
         }
     }
 
+    /** The rows of a held session card in a Workspace's row (#358): Rename and Close. */
+    @NonNull
+    public static List<Row> sessionRows() {
+        return java.util.Arrays.asList(Row.RENAME, Row.CLOSE);
+    }
+
     /**
      * How taking the card away goes: {@link PageOverviewPolicy.Removal#WITH_UNDO} when it holds
      * anything ({@code contents}: a Home page's items and floats, a window's panes), at once when

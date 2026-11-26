@@ -72,4 +72,8 @@ public class OverviewMenuPolicyTest {
         assertEquals(3, OverviewMenuPolicy.indexAfterRemoval(3, -1));
         assertEquals(1, OverviewMenuPolicy.indexAfterRemoval(1, 1));
     }
+
+    @Test public void aSessionCardOffersRenameAndClose() {
+        assertEquals(Arrays.asList(Row.RENAME, Row.CLOSE), OverviewMenuPolicy.sessionRows());
+    }
 }

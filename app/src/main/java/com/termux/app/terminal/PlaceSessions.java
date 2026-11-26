@@ -205,6 +205,21 @@ public final class PlaceSessions<T> {
         return next;
     }
 
+    /**
+     * The session waiting at {@code from} in {@code front}'s place moves to stand at {@code to} in
+     * the row (final places); each keeps its number. False when nothing moved.
+     */
+    public boolean move(@NonNull T front, int from, int to) {
+        Place<T> place = mPlaces.get(front);
+        if (place == null) return false;
+        int n = place.waiting.size();
+        if (from < 0 || from >= n || to < 0 || to >= n || from == to) return false;
+        place.waiting.add(to, place.waiting.remove(from));
+        place.numbers.add(to, place.numbers.remove(from));
+        changed();
+        return true;
+    }
+
     /** Waiting {@code session} leaves its place (closed); false when it waits nowhere. */
     public boolean removeWaiting(@NonNull T session) {
         T front = frontOf(session);
