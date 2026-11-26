@@ -59,4 +59,16 @@ oneway interface ILinuxWindowsCallback {
     void onIdleInhibit(long id, boolean inhibited);
     /** Plain text a Linux app copied, for Android's clipboard. Never longer than the host's cap. */
     void onClipboardText(String text);
+
+    /**
+     * A process ILinuxWindows.runApp started is running as pid (since VERSION 10); replayed for
+     * every live one to a new listener, which may not be the launcher process that started it.
+     */
+    void onAppStarted(long token, String tag, int pid);
+    /** That process ended with exitCode (128 + n for signal n), or could not start (-1). */
+    void onAppExited(long token, String tag, int exitCode);
+    /** The note kept for window id (ILinuxWindows.setWindowNote), replayed after the window. */
+    void onWindowNote(long id, String note);
+    /** The replay that follows addCallback is over: state, windows, notes and processes. */
+    void onReplayEnd();
 }

@@ -222,7 +222,11 @@ public final class X11LinuxAppRunner {
     /** The process's runner, built the first time it is asked for. Main thread only. */
     @NonNull
     public static X11LinuxAppRunner shared(@NonNull Context context) {
-        if (sShared == null) sShared = new X11LinuxAppRunner(context, null, false);
+        if (sShared == null) {
+            sShared = new X11LinuxAppRunner(context, null, false);
+            // Apps the Linux windows host runs for an earlier launcher process (a desktop above all).
+            WaylandAppRunner.shared(context).setSurvivorListener(sShared.survivorListener);
+        }
         return sShared;
     }
 
@@ -577,6 +581,8 @@ public final class X11LinuxAppRunner {
         // will hear of its exit any more, so the bookkeeping goes rather than growing stale.
         setRunningSession(null);
         takeOver = null;
+        survivingDesktop = null;
+        survivingDesktopToken = null;
         // Cancels giveUp and any quick-fail watch left over from a launch this runner will never
         // hear the result of.
         handler.removeCallbacksAndMessages(null);
@@ -797,7 +803,8 @@ public final class X11LinuxAppRunner {
                     Logger.logInfo(LOG_TAG, "Running " + app.id + " under Wayland Display in "
                         + app.container.name + (noSandbox ? " with --no-sandbox" : ""));
                     runAndWatch(app, script, noSandbox, display, none, null,
-                        pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), login);
+                        pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), login,
+                        com.termux.app.wayland.LinuxAppTag.app(app.id));
                 });
                 return;
             }
@@ -817,7 +824,8 @@ public final class X11LinuxAppRunner {
                     notice(context.getString(com.termux.R.string.termux_x11_gpu_pick_missing));
                 }
                 runAndWatch(app, script, noSandbox, display, env, null,
-                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
+                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), null,
+                    com.termux.app.wayland.LinuxAppTag.app(app.id));
             });
         });
     }
@@ -880,10 +888,77 @@ public final class X11LinuxAppRunner {
                 X11AppSettingsStore.sScaleListener = scaleListener;
                 WaylandDesktopServer.named(number, app.name);
                 runAndWatch(app, script, false, display, env, null,
-                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid));
+                    pid -> WaylandAppRunner.shared(context).processStarted(app.id, pid), null,
+                    com.termux.app.wayland.LinuxAppTag.desktop(number, app.id));
             });
         });
     }
+
+    /**
+     * The desktop the Linux windows host runs for an earlier launcher process, by the host's token;
+     * null when none is known. Main thread.
+     */
+    @Nullable private Long survivingDesktopToken;
+
+    /**
+     * The host runs an app an earlier launcher process started. A desktop among them is this
+     * runner's running desktop again, as if this process had started it: a second tap shows it,
+     * its Scale reaches it live, and its end is heard. Apps need nothing here (their windows come
+     * back through the host's notes). The catalogue is read on the worker.
+     */
+    private void survivorRunning(long token, @NonNull String tag) {
+        com.termux.app.wayland.LinuxAppTag.Parsed parsed = com.termux.app.wayland.LinuxAppTag.parse(tag);
+        if (parsed == null || !parsed.desktop) return;
+        if (runningSession != null || (survivingDesktopToken != null && survivingDesktopToken == token)) return;
+        EXECUTOR.execute(() -> {
+            LinuxAppCatalog.LinuxApp app = LinuxAppCatalog.find(
+                LinuxAppCatalog.scan(LinuxAppCatalog.roots()), parsed.key);
+            handler.post(() -> adoptDesktop(token, parsed, app));
+        });
+    }
+
+    private void adoptDesktop(long token, @NonNull com.termux.app.wayland.LinuxAppTag.Parsed parsed,
+                              @Nullable LinuxAppCatalog.LinuxApp app) {
+        if (app == null || !app.session) {
+            Logger.logWarn(LOG_TAG, "The running desktop " + parsed.key + " is not in the catalogue");
+            return;
+        }
+        // Started here meanwhile, or already ended: nothing to take back.
+        if (runningSession != null || !survivorTokens.contains(token)) return;
+        Logger.logInfo(LOG_TAG, "Desktop " + app.id + " on :" + parsed.display + " is still running");
+        survivingDesktopToken = token;
+        survivingDesktop = app;
+        setRunningSession(app);
+        waylandDesktopDisplay = parsed.display;
+        X11AppSettingsStore.sScaleListener = scaleListener;
+        WaylandDesktopServer.named(parsed.display, app.name);
+    }
+
+    /** Tokens of the survivors the host reports as running; main thread. */
+    @NonNull private final java.util.Set<Long> survivorTokens = new java.util.HashSet<>();
+
+    private final com.termux.app.wayland.WaylandAppRunner.SurvivorListener survivorListener =
+        new com.termux.app.wayland.WaylandAppRunner.SurvivorListener() {
+            @Override
+            public void survivorRunning(long token, @NonNull String tag, int pid) {
+                survivorTokens.add(token);
+                X11LinuxAppRunner.this.survivorRunning(token, tag);
+            }
+
+            @Override
+            public void survivorExited(long token, @NonNull String tag, int exitCode) {
+                survivorTokens.remove(token);
+                if (survivingDesktopToken == null || survivingDesktopToken != token) return;
+                LinuxAppCatalog.LinuxApp app = survivingDesktop;
+                survivingDesktopToken = null;
+                survivingDesktop = null;
+                // Only while it is still the running desktop (onSessionExited checks).
+                if (app != null) onSessionExited(app, exitCode, null);
+            }
+        };
+
+    /** The desktop {@link #survivingDesktopToken} names; main thread. */
+    @Nullable private LinuxAppCatalog.LinuxApp survivingDesktop;
 
     /** Reaches the running desktop when its app's Scale changes; set while a desktop runs. */
     private final java.util.function.Consumer<String> scaleListener =
@@ -1016,7 +1091,21 @@ public final class X11LinuxAppRunner {
                       @Nullable String windowManagerRestart,
                       @Nullable java.util.function.IntConsumer onPid,
                       @Nullable ProotDistro.LoginExtras login) {
-        new Watch(app, display, env, windowManagerRestart, onPid, login).start(script, noSandbox);
+        runAndWatch(app, script, noSandbox, display, env, windowManagerRestart, onPid, login, null);
+    }
+
+    /**
+     * As above; {@code hostTag} ({@link com.termux.app.wayland.LinuxAppTag}) runs the app in the
+     * Linux windows host's process rather than as a task of the launcher's, so it lives on when
+     * the launcher's process dies. Under Wayland Display only; null runs it as a task.
+     */
+    @VisibleForTesting
+    void runAndWatch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String script, boolean noSandbox,
+                      @NonNull String display, @NonNull List<String> env,
+                      @Nullable String windowManagerRestart,
+                      @Nullable java.util.function.IntConsumer onPid,
+                      @Nullable ProotDistro.LoginExtras login, @Nullable String hostTag) {
+        new Watch(app, display, env, windowManagerRestart, onPid, login, hostTag).start(script, noSandbox);
         if (app.session && windowManagerRestart != null) {
             handler.postDelayed(() -> windowManagerSafetyNet(app, windowManagerRestart),
                 WM_SAFETY_NET_MS);
@@ -1057,6 +1146,8 @@ public final class X11LinuxAppRunner {
         @Nullable private final String windowManagerRestart;
         @Nullable private final java.util.function.IntConsumer onPid;
         @Nullable private final ProotDistro.LoginExtras login;
+        /** Runs the app in the Linux windows host under this tag; null runs it as a task. */
+        @Nullable private final String hostTag;
         private final Runnable timeout = () -> resolve(false);
         private boolean noSandbox;
         private boolean decided;
@@ -1064,18 +1155,27 @@ public final class X11LinuxAppRunner {
         Watch(@NonNull LinuxAppCatalog.LinuxApp app, @NonNull String display,
               @NonNull List<String> env, @Nullable String windowManagerRestart,
               @Nullable java.util.function.IntConsumer onPid,
-              @Nullable ProotDistro.LoginExtras login) {
+              @Nullable ProotDistro.LoginExtras login, @Nullable String hostTag) {
             this.login = login;
             this.onPid = onPid;
             this.app = app;
             this.display = display;
             this.env = env;
             this.windowManagerRestart = windowManagerRestart;
+            this.hostTag = hostTag;
         }
 
         void start(@NonNull String script, boolean noSandbox) {
             this.noSandbox = noSandbox;
-            boolean started = runScript(script, exitCode -> {
+            ScriptExitListener onExit = exitCode -> {
+                if (exitCode == com.termux.app.wayland.WaylandAppRunner.EXIT_HOST_GONE) {
+                    // The host went, and the app with it: nothing about the app to learn or retry.
+                    Logger.logInfo(LOG_TAG, app.id + " ended with the Linux windows host");
+                    if (app.session) onSessionExited(app, exitCode, windowManagerRestart);
+                    decided = true;
+                    handler.removeCallbacks(timeout);
+                    return;
+                }
                 // Said for every app, at info so a release build's logcat has it: 128 + n is the
                 // app ended by signal n (143 SIGTERM, 137 SIGKILL), anything else is its own exit.
                 if (!app.session) Logger.logInfo(LOG_TAG, app.id + " exited with " + exitCode);
@@ -1094,7 +1194,9 @@ public final class X11LinuxAppRunner {
                     return;
                 }
                 resolve(isQuickFailure(exitCode));
-            }, onPid);
+            };
+            boolean started = hostTag != null && runInHost(script, onExit);
+            if (!started) started = runScript(script, onExit, onPid);
             if (started) {
                 if (app.session) setRunningSession(app);
                 handler.postDelayed(timeout, QUICK_FAIL_MS);
@@ -1106,6 +1208,28 @@ public final class X11LinuxAppRunner {
             decided = true;
             Logger.logWarn(LOG_TAG, "No shell to run " + app.id + " in; nothing was started");
             notice(failureNotice(app));
+        }
+
+        /**
+         * Runs {@code script} as a child of the Linux windows host, its output in its own log
+         * file; false when the host cannot take it, and the caller runs it as a task instead.
+         */
+        private boolean runInHost(@NonNull String script, @NonNull ScriptExitListener onExit) {
+            String tag = hostTag;
+            if (tag == null) return false;
+            return com.termux.app.wayland.WaylandAppRunner.shared(context).runInHost(tag,
+                com.termux.app.wayland.LinuxAppTag.logPath(TermuxConstants.TERMUX_TMP_PREFIX_DIR_PATH, app.id),
+                script, new com.termux.app.wayland.WaylandAppRunner.AppRun() {
+                    @Override
+                    public void started(int pid) {
+                        if (onPid != null) onPid.accept(pid);
+                    }
+
+                    @Override
+                    public void exited(int exitCode) {
+                        onExit.onExit(exitCode);
+                    }
+                });
         }
 
         /** The desktop's X server did not start: settle, and say so even after the window. */
@@ -1161,7 +1285,7 @@ public final class X11LinuxAppRunner {
                 return;
             }
             Logger.logInfo(LOG_TAG, "Retrying " + app.id + " on the display with --no-sandbox");
-            new Watch(app, display, env, null, onPid, login)
+            new Watch(app, display, env, null, onPid, login, hostTag)
                 .start(script(app, display, env, true, null, login), true);
         }
     }

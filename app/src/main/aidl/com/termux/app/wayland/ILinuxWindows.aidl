@@ -28,7 +28,7 @@ import com.termux.app.wayland.ILinuxWindowsCallback;
  */
 oneway interface ILinuxWindows {
     /** Raised with every change to this interface or its callback. */
-    const int VERSION = 9;
+    const int VERSION = 10;
 
     // Host states, ILinuxWindowsCallback.onHostState.
     /** Asked to start; running or stopped follows. */
@@ -147,4 +147,18 @@ oneway interface ILinuxWindows {
     void setPreeditText(long id, String text, int cursor);
     /** Deletes UTF-16 code units before and after the field's cursor. */
     void deleteSurroundingText(long id, int beforeLength, int afterLength);
+
+    /**
+     * Runs a Linux app as a child of the host's process (since VERSION 10), so it outlives the
+     * launcher's process and ends with the host's: argv and env exactly as exec takes them, stdin
+     * from /dev/null, stdout and stderr to logPath (truncated). tag is the launcher's own,
+     * replayed with the process; token names this run in onAppStarted and onAppExited.
+     */
+    void runApp(long token, String tag, in String[] argv, in String[] env, String cwd, String logPath);
+
+    /**
+     * Keeps note for window id while it is open (since VERSION 10), replayed after the window to
+     * a new listener (onWindowNote); null or empty clears it. Opaque to the host.
+     */
+    void setWindowNote(long id, String note);
 }
