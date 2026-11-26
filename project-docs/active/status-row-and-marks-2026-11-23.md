@@ -157,6 +157,14 @@ differs from "Decided" above, this section wins.
 - A Display or Linux window with no icon is a filled screen, with its number cut out when there are
   several. Overview's mark is two upright cards side by side.
 - A bar down a side edge shows no title.
+- Second look (2026-11-26, from the first phone run): the finger is held to the span from the first
+  mark's centre to the last mark's for focus and every mark's size, so past either end the end
+  mark stays focused at its full size and nothing moves (`MarksTouchLayout.clampedPos`); the
+  title's side follows the real finger and the focused mark. The title capsule's ground strip is
+  cut to the capsule's round rect by the ground itself (`GroundUnderGlass.round`), where it was a
+  flat rectangle behind the rounded glass. The status row is measured at its rect's size by the
+  host, so the marks are laid out once; the strip's layout params gave the row a second height
+  that the host's own placement then replaced on every pass.
 
 ### Open
 
