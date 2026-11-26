@@ -109,8 +109,7 @@ public class EditorCardSectionsTest {
             CARD, Arrays.asList(Row.HOME_COLUMNS, Row.HOME_ROWS, Row.LABEL_SIZE, Row.FOLDERS,
                 Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
                 Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON,
-                Row.ICON_PACK, Row.LINK_GESTURES,
-                Row.LINK_PAGES)));
+                Row.ICON_PACK, Row.LINK_GESTURES)));
     }
 
     @Test
@@ -150,12 +149,12 @@ public class EditorCardSectionsTest {
                 Row.LINK_FONT, Row.PANE_BORDERS)));
     }
 
-    /** Under Use as Terminal only, Pages is the Terminal card's (Home's card is gone). */
+    /** Overview and the editor do not link (#354): not even under Use as Terminal only. */
     @Test
-    public void terminalWithoutHomeLinksPages() {
+    public void terminalWithoutHomeHasNoPagesLink() {
         Map<String, List<Row>> got = sections(EditorCard.TERMINAL,
             new Offers(true, true, false, false));
-        assertTrue(got.get(CARD).contains(Row.LINK_PAGES));
+        assertFalse(got.get(CARD).contains(Row.LINK_PAGES));
     }
 
     @Test

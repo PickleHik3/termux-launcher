@@ -45,7 +45,7 @@
     <string name="home_folder_default_name">Folder</string>
     <string name="home_folder_remove_app">Remove from folder</string>
     <string name="home_actions_add_page">Add a page</string>
-    <string name="home_actions_edit_pages">Edit pages</string>
+    <string name="home_actions_edit_pages">Overview</string>
     <string name="home_actions_remove_page">Remove page</string>
     <string name="home_actions_wallpaper">Wallpaper</string>
     <string name="home_actions_appearance">Appearance</string>

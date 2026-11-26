@@ -198,7 +198,7 @@ public class EditorRowsTest {
             Row.FOLDERS, Row.NUMERALS, Row.TWO_LINE, Row.LABEL_SHADOW, Row.WALLPAPER_SCROLL,
             Row.GLASS_WIDGETS, Row.SEARCH_FIELD, Row.DRAWER_ICON),
             EditorRows.tier(EditorCard.HOME, ALL, 1));
-        assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES, Row.LINK_PAGES),
+        assertEquals(Arrays.asList(Row.ICON_PACK, Row.LINK_GESTURES),
             EditorRows.tier(EditorCard.HOME, ALL, 3));
         for (PageKind frame : PageKind.values()) {
             for (Row row : new Row[] {Row.FROST, Row.OPACITY, Row.TINT})
