@@ -47,6 +47,7 @@ import com.termux.app.chrome.CornerHold;
 import com.termux.app.chrome.CornerTabGeometry;
 import com.termux.app.chrome.CornerTabGlyphs;
 import com.termux.app.chrome.CornerZones;
+import com.termux.app.chrome.PaneCornerHold;
 import com.termux.app.chrome.LiveChromeShape;
 import com.termux.app.haptics.Haptics;
 import com.termux.app.launcher.popup.AnchoredMenu;
@@ -238,6 +239,14 @@ public class TerminalPaneController {
         default void openSettings() {}
         /** The pane corner's "More": the sheet a long press on the Terminal opens, for the active pane. */
         default void showMoreSheet() {}
+
+        /**
+         * Closes a pane's shell through {@code close}, asking first when the shell runs a
+         * foreground program other than itself; with no way to tell, it closes at once.
+         */
+        default void confirmClosePane(@NonNull TerminalSession session, @NonNull Runnable close) {
+            close.run();
+        }
         /** The corner tab turned automatic tiling (and focus growth with it) on or off; the host keeps both settings. */
         default void onAutoTilingChanged(boolean enabled) {}
         /**
@@ -7203,38 +7212,29 @@ public class TerminalPaneController {
 
     /**
      * Whether the pane tree answers touches at its corners at all. A split does, for its seams
-     * and each pane's move/maximize/close tab; a maximized pane does, for its own tab; and a
-     * lone pane does too, for the one thing its corner offers — the surface editor.
+     * and each pane's bottom-end corner hold (move/maximize/close); a maximized pane does, for its
+     * own tab. A lone pane does not: its window's mark covers it and its corners stay the
+     * terminal's, down to text selection.
      */
     static boolean shouldShowInteractionOverlay(int paneCount, boolean maximized) {
-        return maximized || paneCount >= 1;
+        return maximized || PaneCornerHold.offered(paneCount);
     }
 
     /**
-     * Whether the window is a single, unsplit pane. Its corner tab is a shortcut to the surface
-     * editor rather than the pane controls, which only mean something once there is a second pane
-     * to move against, cover or leave behind.
-     */
-    static boolean isLonePane(int paneCount, boolean maximized) {
-        return !maximized && paneCount == 1;
-    }
-
-    /**
-     * The buttons of a split pane's corner tab, in the order they are drawn: close, move and
-     * maximise, and nothing else. The grip needs a neighbour to move onto, so a maximised pane
+     * The buttons of a split pane's controls, in the order they are drawn: close, move and
+     * maximise, and nothing else (the terminal's More sheet is the long-press menu's). The grip needs a neighbour to move onto, so a maximised pane
      * has none. Minimal mode is a layout, not a pane state, so a split's tab is the same in it.
      *
      * @return the overlay's action ids
      */
     @NonNull
     static int[] splitTabActions(boolean maximised) {
-        int count = 1 + (maximised ? 0 : 1) + 1 + 1;
+        int count = 1 + (maximised ? 0 : 1) + 1;
         int[] ids = new int[count];
         int at = 0;
         ids[at++] = PaneInteractionOverlay.ACTION_CLOSE;
         if (!maximised) ids[at++] = PaneInteractionOverlay.ACTION_MOVE_PANE;
         ids[at++] = PaneInteractionOverlay.ACTION_MAXIMIZE;
-        ids[at++] = PaneInteractionOverlay.ACTION_MORE;
         return ids;
     }
 
@@ -7354,8 +7354,6 @@ public class TerminalPaneController {
         private static final int ACTION_APPEARANCE = 8;
         /** Minimal mode on or off for the terminal place; the glyph shows which. */
         private static final int ACTION_MINIMAL = 9;
-        /** The terminal's More sheet, for this pane; always the last button. */
-        private static final int ACTION_MORE = 10;
 
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG);
         /** Scratch for the handle pips, so a drag does not allocate a rect per frame. */
@@ -7465,100 +7463,25 @@ public class TerminalPaneController {
         private void applyControlActions() {
             List<PaneControlsView.Action> actions = new ArrayList<>(5);
             android.content.Context context = mHostView.getContext();
-            if (isLonePane()) {
-                actions.add(PaneControlsView.Action.glyph(ACTION_APPEARANCE,
-                    CornerTabGlyphs.APPEARANCE,
-                    context.getString(R.string.pane_controls_wallpaper_style)));
-                actions.add(PaneControlsView.Action.drawn(ACTION_MINIMAL, mMinimalMark,
-                    PaneControlsView.TINT_PRIMARY, () -> context.getString(
-                        mHost.isMinimalMode() ? R.string.pane_controls_leave_minimal_mode
-                            : R.string.pane_controls_enter_minimal_mode)));
-                actions.add(PaneControlsView.Action.drawn(ACTION_AUTO_TILING,
-                    this::drawAutoTilingMark, PaneControlsView.TINT_PRIMARY,
-                    () -> context.getString(isAutoTilingActive()
-                        ? R.string.pane_controls_turn_off_auto_tiling
-                        : R.string.pane_controls_turn_on_auto_tiling)));
-                // The launcher's settings, one tap from the tab on every place, as the display's
-                // tab already offers them.
-                actions.add(PaneControlsView.Action.glyph(ACTION_SETTINGS,
-                    CornerTabGlyphs.SETTINGS,
-                    context.getString(R.string.pane_controls_open_settings)));
-                actions.add(PaneControlsView.Action.label(ACTION_HELP,
-                    CornerTabGlyphs.help(getContext()),
-                    context.getString(R.string.pane_controls_help)));
-                actions.add(moreAction(context));
-            } else {
-                for (int id : splitTabActions(mMaximizedLeaf != null)) {
-                    if (id == ACTION_CLOSE) {
-                        actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE,
-                            this::drawCloseMark, PaneControlsView.TINT_ERROR,
-                            context.getString(R.string.pane_corner_tab_close_description)));
-                    } else if (id == ACTION_MOVE_PANE) {
-                        actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE,
-                            this::drawMoveMark, PaneControlsView.TINT_TERTIARY,
-                            context.getString(R.string.pane_corner_tab_move_description)));
-                    } else if (id == ACTION_MAXIMIZE) {
-                        actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
-                            this::drawMaximizeMark, PaneControlsView.TINT_PRIMARY,
-                            () -> context.getString(mMaximizedLeaf != null
-                                ? R.string.pane_controls_restore_pane
-                                : R.string.pane_corner_tab_maximise_description)));
-                    } else if (id == ACTION_MORE) {
-                        actions.add(moreAction(context));
-                    }
+            for (int id : splitTabActions(mMaximizedLeaf != null)) {
+                if (id == ACTION_CLOSE) {
+                    actions.add(PaneControlsView.Action.drawn(ACTION_CLOSE,
+                        this::drawCloseMark, PaneControlsView.TINT_ERROR,
+                        context.getString(R.string.pane_corner_tab_close_description)));
+                } else if (id == ACTION_MOVE_PANE) {
+                    actions.add(PaneControlsView.Action.drawn(ACTION_MOVE_PANE,
+                        this::drawMoveMark, PaneControlsView.TINT_TERTIARY,
+                        context.getString(R.string.pane_corner_tab_move_description)));
+                } else if (id == ACTION_MAXIMIZE) {
+                    actions.add(PaneControlsView.Action.drawn(ACTION_MAXIMIZE,
+                        this::drawMaximizeMark, PaneControlsView.TINT_PRIMARY,
+                        () -> context.getString(mMaximizedLeaf != null
+                            ? R.string.pane_controls_restore_pane
+                            : R.string.pane_corner_tab_maximise_description)));
                 }
             }
             mControls.setActions(actions);
         }
-
-        private PaneControlsView.Action moreAction(@NonNull android.content.Context context) {
-            return PaneControlsView.Action.drawn(ACTION_MORE, this::drawMoreMark,
-                PaneControlsView.TINT_PRIMARY, context.getString(R.string.pane_controls_more));
-        }
-
-        /** Three dots, in the tab's tint. */
-        private void drawMoreMark(@NonNull Canvas canvas, @NonNull RectF button,
-                                  @NonNull Paint paint, float density) {
-            if (mMoreIcon == null) {
-                Drawable icon = ContextCompat.getDrawable(getContext(), R.drawable.ic_pane_more);
-                if (icon == null) return;
-                mMoreIcon = icon.mutate();
-            }
-            int half = Math.round(dp(8));
-            int cx = Math.round(button.centerX());
-            int cy = Math.round(button.centerY());
-            mMoreIcon.setBounds(cx - half, cy - half, cx + half, cy + half);
-            mMoreIcon.setTint(paint.getColor());
-            mMoreIcon.draw(canvas);
-        }
-        @Nullable private Drawable mMoreIcon;
-
-        /** The minimal-mode glyph: out to minimal, or back in once the place is minimal. */
-        private final PaneControlsView.Mark mMinimalMark =
-            com.termux.app.chrome.MinimalModeGlyph.mark(getContext(), () -> mHost.isMinimalMode());
-
-        /** The tiling icon, crossed out while the window is laid out by hand, in the tab's tint. */
-        private void drawAutoTilingMark(@NonNull Canvas canvas, @NonNull RectF button,
-                                        @NonNull Paint paint, float density) {
-            boolean on = isAutoTilingActive();
-            Drawable icon = on ? mAutoTilingOnIcon : mAutoTilingOffIcon;
-            if (icon == null) {
-                icon = ContextCompat.getDrawable(getContext(),
-                    on ? R.drawable.ic_pane_auto_tiling_on : R.drawable.ic_pane_auto_tiling_off);
-                if (icon == null) return;
-                icon = icon.mutate();
-                if (on) mAutoTilingOnIcon = icon;
-                else mAutoTilingOffIcon = icon;
-            }
-            int half = Math.round(dp(8));
-            int cx = Math.round(button.centerX());
-            int cy = Math.round(button.centerY());
-            icon.setBounds(cx - half, cy - half, cx + half, cy + half);
-            icon.setTint(paint.getColor());
-            icon.draw(canvas);
-        }
-        @Nullable private Drawable mAutoTilingOnIcon;
-        @Nullable private Drawable mAutoTilingOffIcon;
 
         /** The grip: two rules, the handle a pane is dragged onto another by. */
         private void drawMoveMark(@NonNull Canvas canvas, @NonNull RectF button,
@@ -7852,27 +7775,9 @@ public class TerminalPaneController {
                 if (leaf.isLinux()) {
                     if (mLinuxPanes != null) mLinuxPanes.close(leaf.linuxWindowId);
                 } else {
-                    leaf.session.finishIfRunning();
+                    TerminalSession closing = leaf.session;
+                    mHost.confirmClosePane(closing, closing::finishIfRunning);
                 }
-            } else if (action == ACTION_MINIMAL) {
-                // The whole place re-lays out around the pane, so the tab goes first; opened again
-                // it shows the glyph for the way back.
-                dismissControls();
-                mHost.toggleMinimalMode();
-            } else if (action == ACTION_AUTO_TILING) {
-                // The tab stays up, so the icon flipping is the answer, and a second tap undoes it.
-                toggleAutoTiling();
-            } else if (action == ACTION_SETTINGS) {
-                dismissControls();
-                mHost.openSettings();
-            } else if (action == ACTION_APPEARANCE) {
-                dismissControls();
-                mHost.openSurfaceEditor();
-            } else if (action == ACTION_MORE) {
-                // The sheet acts on the active pane's session, so make it the corner's pane first.
-                focusLeaf(leaf);
-                dismissControls();
-                mHost.showMoreSheet();
             }
         }
 
@@ -8121,13 +8026,14 @@ public class TerminalPaneController {
                 leaves.add(leaf);
                 panes.add(rect);
             }
-            // The terminal's squares are the big ones: they are held rather than tapped, and a
-            // touch that does not rest costs the program nothing.
-            CornerZones.Hit hit = CornerZones.pick(panes, activeIndex, x, y,
-                CornerZones.paneSizePx(getResources().getDisplayMetrics().density), dp(6));
-            if (hit == null) return CornerZones.NONE;
-            mCornerTapLeaf = leaves.get(hit.index);
-            return hit.corner;
+            // Only a split's bottom-end arc is a hold: the corner is held rather than tapped, and
+            // a touch that does not rest costs the program nothing.
+            boolean rtl = getLayoutDirection() == LAYOUT_DIRECTION_RTL;
+            int hit = PaneCornerHold.pick(panes, leavesOf(mActiveWindow.root).size(), activeIndex,
+                x, y, getResources().getDisplayMetrics().density, rtl, dp(6));
+            if (hit < 0) return CornerZones.NONE;
+            mCornerTapLeaf = leaves.get(hit);
+            return PaneCornerHold.corner(rtl);
         }
 
         /**
@@ -8299,12 +8205,6 @@ public class TerminalPaneController {
             return !out.isEmpty();
         }
         private final RectF mHelpButtonBounds = new RectF();
-
-        private boolean isLonePane() {
-            return TerminalPaneController.isLonePane(
-                mActiveWindow == null ? 0 : leavesOf(mActiveWindow.root).size(),
-                mMaximizedLeaf != null);
-        }
 
         /** Whether this pane paints a rounded border at all — a split, a maximized pane, a float. */
         private boolean controlPaneRounded() {
