@@ -321,10 +321,11 @@ see Minimal mode); appearance is never per orientation.
 The screen that shows every page of the **wall** as one sideways strip of cards in wall order and
 goes to any of them: a tap on a card lands on its page, and the card of the page it was opened
 from wears the accent ring. Opened from the status bar's session number; Back and its ✕ return to
-that page. A sheet: it wears **Global**'s glass at the sheets' floor over the wallpaper. It is to
-replace the sessions manager and **Edit pages**. Spec: `project-docs/active/overview-2026-11-24.md`.
+that page. A sheet: it wears **Global**'s glass at the sheets' floor over the wallpaper. Under the
+strip, a row of session cards for each **Workspace** that holds several sessions, and a Saved row
+for saved sessions. It replaced the sessions manager and Edit pages (#360). Spec: `project-docs/active/overview-2026-11-24.md`.
 Code: `com.termux.app.overview`.
-_Avoid_: page overview (that is Edit pages, `PageOverviewView`), switcher, recents, sessions manager
+_Avoid_: page overview, Edit pages, sessions manager, sessions drawer, sessions panel, switcher, recents
 
 **Page**:
 One full-screen stop on the **wall**: a **Home page** or a **window**, each with a **page kind**, a **side**, a **rest** and its own **front** and **back** handling. Appearance is one look for
@@ -411,9 +412,9 @@ _Avoid_: pose table, layout pass
 
 **Saved sessions**:
 A named set of sessions, windows, splits and working directories kept under `~/.termux/workspaces/`
-and loaded back as new shells. The drawer's Saved tab lists them; Save sessions… adds one.
+and loaded back as new shells. Overview's Saved row lists them; a card's Save adds one.
 _Avoid_: workspace, saved workspace, durable workspace (the files and `launcherctl` keep the old
-name; prose and the drawer do not)
+name; prose and Overview do not)
 
 **Session**, **window**:
 The terminal's own layers: a session holds windows, and a window holds a tree of **panes**. A window
@@ -520,7 +521,7 @@ past the last Home page reaches the first window, opening a fresh one when the T
 dragging back before the first window returns to the last Home page. In code it is still `PaneWallController` and `PaneWallLayout`, and a page is a
 `PaneWallPage`. See ADR 0008.
 _Avoid_: pane wall (the retired name), pager, strip, carousel, home screen
-_ADR 0015 (proposed): the wall is one ordered list of pages of any **page kind**, in any order, arranged in Edit pages._
+_ADR 0015 (proposed): the wall is one ordered list of pages of any **page kind**, in any order, arranged in Overview._
 
 **Window chip**:
 The status bar's chip for one window, the display window or a **Home float**, the same chips in the
@@ -538,7 +539,7 @@ windows, under the full chrome. It exists while its row has at least one window;
 one returns to Home. A **Home float** is a session window that is not in the row and does not keep
 the Terminal alive. A home press on it goes to Home page 1; a home press from another app comes back
 to the window that was left. The drawer, the corner tab and the border drag also lead back to Home.
-_Avoid_: Workspace (the name before ADR 0031), usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
+_Avoid_: Workspace (an old name for this half; it is now the page kind), usage mode, Terminal place, terminal environment, saved workspace (that is **Saved
 sessions**)
 
 ### Pages (ADR 0015, proposed)
@@ -553,7 +554,7 @@ _Avoid_: page type, place
 
 **home page** (the one set as home):
 The one page, of any kind, that a cold start and a home press inside the launcher land on, chosen
-in Edit pages with Set as home. Written lower-case; a **Home page** (capitalised) is the kind. A
+in Overview with Set as home. Written lower-case; a **Home page** (capitalised) is the kind. A
 home press from another app returns to the page that was left first.
 _Avoid_: start page, default page, Start in
 
@@ -561,8 +562,16 @@ _Avoid_: start page, default page, Start in
 The one page (at most one) that holds the sessions: one session's row of windows side by side,
 extended sideways by windows (Ctrl+Alt+C) and vertically by sessions (Ctrl+Alt+Shift+C, swapped in
 place by Ctrl+Alt+Up/Down). It stays on the wall when its last window closes and starts a shell
-when landed on. Named "Terminal" in the UI.
-_Avoid_: Workspace, run, shell (that is what a pane runs)
+when landed on. Named "Terminal" in the UI; the **Workspace** page kind is what it becomes.
+_Avoid_: run, shell (that is what a pane runs)
+
+**Workspace** (the page kind):
+A page that is one split layout of terminal and Linux app panes, where a window was. Its place on
+the wall holds one or more **sessions** (a session is one such layout): the one in front is the
+page, the others wait in that Workspace's row in **Overview**, and choosing one swaps it in. Named
+"Workspace" in Overview's + card and menus.
+_Avoid_: Terminal page (the old kind), window (that is a pane tree inside a session), tab,
+saved workspace (that is **Saved sessions**)
 
 **Display page**:
 A page showing the one X display, either unbound (the screen as it is) or bound to a Linux app,
@@ -616,7 +625,7 @@ _Avoid_: background dim, wallpaper opacity
 _ADR 0031 (accepted, not yet built): as built the Home card sets a dim for Home's pages, the Terminal's pages read a wall-wide one that no card sets, and chrome glass does not show it._
 
 **Cell**:
-The stretch of the **wall** one page takes, in the order Edit pages arranged: every page has one,
+The stretch of the **wall** one page takes, in the order Overview arranged: every page has one,
 whatever its kind, and the wall pages from cell to cell. A cell shows its page **live** or as a
 **still**.
 _Avoid_: wall slot, place window (the retired list of at most one page per kind around the current
